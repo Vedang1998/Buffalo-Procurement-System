@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import date
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from .catalog import (
+    approve_recreated_variant, recompute_catalog_gate, reject_recreation_candidate,
+    retire_missing_variant,
+)
 from .config import load_rules
 from .economics import qualifying_quantity, target_cost
 from .health import full_health
@@ -40,6 +44,27 @@ class MatchRequest(BaseModel):
 
 class RolloverRequest(BaseModel):
     as_of: date
+
+
+class RecreationDecision(BaseModel):
+    old_variant_id: str
+    new_variant_id: str
+    actor: str
+    note: str = ""
+
+
+class RetireDecision(BaseModel):
+    variant_id: str
+    actor: str
+    note: str
+
+
+def _db_conn():
+    db = os.getenv("DATABASE_URL")
+    if not db:
+        raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
+    import psycopg
+    return psycopg.connect(db)
 
 
 @app.get("/health")
@@ -156,6 +181,197 @@ def matching_endpoint(req: MatchRequest):
         float(r["matching"]["review_min_score"]),
     )
     return {"score": result.score, "auto_match": result.auto_match, "review": result.review, "blocked": result.blocked, "reasons": result.reasons}
+
+
+@app.get("/reconciliation/items")
+def reconciliation_items(unresolved_only: bool = True):
+    """Reconciliation queue for the latest completed catalog sync run."""
+    with _db_conn() as conn, conn.cursor() as cur:
+        cur.execute("""SELECT catalog_sync_id,started_at,completed_at,shopify_api_version,
+                              shopify_reported_variant_count,live_rows_received,exact_current_ids,
+                              new_live_variants,missing_seed_variants,potential_recreations,
+                              unresolved_count,source_hash,pagination_complete
+                       FROM catalog_sync_runs WHERE status='COMPLETED'
+                       ORDER BY completed_at DESC NULLS LAST,started_at DESC LIMIT 1""")
+        run = cur.fetchone()
+        if not run:
+            return {"run": None, "items": []}
+        q = """SELECT reconciliation_item_id,classification,seed_variant_id,live_variant_id,
+                      blocking,evidence_json,resolution,resolved_by,resolved_at
+               FROM catalog_reconciliation_items WHERE catalog_sync_id=%s"""
+        if unresolved_only:
+            q += " AND blocking=TRUE AND resolved_at IS NULL"
+        q += " ORDER BY classification,reconciliation_item_id"
+        cur.execute(q, (run[0],))
+        items = [
+            {"item_id": r[0], "classification": r[1], "seed_variant_id": r[2],
+             "live_variant_id": r[3], "blocking": r[4], "evidence": r[5],
+             "resolution": r[6], "resolved_by": r[7],
+             "resolved_at": str(r[8]) if r[8] else None}
+            for r in cur.fetchall()
+        ]
+        # Old-side (historical) evidence for side-by-side display.
+        seed_ids = [i["seed_variant_id"] for i in items if i["seed_variant_id"]]
+        old_rows = {}
+        if seed_ids:
+            cur.execute("""SELECT variant_id,product_title,variant_title,sku,barcode,retail_price,
+                                  handle,shopify_vendor,variant_created_at,catalog_state
+                           FROM variants WHERE variant_id = ANY(%s)""", (seed_ids,))
+            for r in cur.fetchall():
+                old_rows[str(r[0])] = {"variant_id": str(r[0]), "product_title": r[1], "variant_title": r[2],
+                                       "sku": r[3], "barcode": r[4],
+                                       "price": str(r[5]) if r[5] is not None else None,
+                                       "handle": r[6], "vendor": r[7],
+                                       "created_at": str(r[8]) if r[8] else None, "catalog_state": r[9]}
+        for i in items:
+            i["historical_record"] = old_rows.get(i["seed_variant_id"])
+    return {
+        "run": {"catalog_sync_id": str(run[0]), "started_at": str(run[1]), "completed_at": str(run[2]),
+                "shopify_api_version": run[3], "shopify_reported_variant_count": run[4],
+                "live_rows_received": run[5], "exact_current_ids": run[6], "new_live_variants": run[7],
+                "missing_seed_variants": run[8], "potential_recreations": run[9],
+                "unresolved_count": run[10], "source_hash": run[11], "pagination_complete": run[12]},
+        "items": items,
+    }
+
+
+@app.post("/reconciliation/approve-recreation")
+def approve_recreation_endpoint(req: RecreationDecision):
+    with _db_conn() as conn:
+        try:
+            approve_recreated_variant(conn, req.old_variant_id, req.new_variant_id, actor=req.actor, note=req.note)
+            gate = recompute_catalog_gate(conn)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+    return {"decision": "APPROVED_RECREATION", "gate": gate}
+
+
+@app.post("/reconciliation/reject-recreation")
+def reject_recreation_endpoint(req: RecreationDecision):
+    with _db_conn() as conn:
+        try:
+            reject_recreation_candidate(conn, req.old_variant_id, req.new_variant_id, actor=req.actor, note=req.note)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+    return {"decision": "REJECTED_KEEP_SEPARATE"}
+
+
+@app.post("/reconciliation/retire")
+def retire_endpoint(req: RetireDecision):
+    with _db_conn() as conn:
+        try:
+            retire_missing_variant(conn, req.variant_id, actor=req.actor, note=req.note)
+            gate = recompute_catalog_gate(conn)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+    return {"decision": "CONFIRMED_RETIRED", "gate": gate}
+
+
+@app.post("/reconciliation/recompute-gate")
+def recompute_gate_endpoint():
+    with _db_conn() as conn:
+        return recompute_catalog_gate(conn)
+
+
+@app.get("/reconciliation", response_class=HTMLResponse)
+def reconciliation_page():
+    """Catalog Reconciliation review UI (read + explicit human decisions only)."""
+    data = reconciliation_items(unresolved_only=True)
+    run = data["run"]
+    if not run:
+        return "<h1>Catalog Reconciliation</h1><p>No completed catalog sync run yet.</p>"
+    items = data["items"]
+
+    def esc(v):
+        import html
+        return html.escape(str(v)) if v is not None else "—"
+
+    def side_by_side(i):
+        old = i.get("historical_record") or {}
+        ev = i.get("evidence") or {}
+        cands = ev.get("candidates") or []
+        rows = ""
+        for c in cands:
+            rows += f"""<table class='cand'><tr><th></th><th>Historical (old)</th><th>Live Shopify (new)</th></tr>
+<tr><td>Variant ID</td><td>{esc(old.get('variant_id'))}</td><td>{esc(c.get('new_variant_id'))}</td></tr>
+<tr><td>SKU</td><td>{esc(old.get('sku'))}</td><td>{esc(c.get('new_sku'))}</td></tr>
+<tr><td>Barcode</td><td>{esc(old.get('barcode'))}</td><td>{esc(c.get('new_barcode'))}</td></tr>
+<tr><td>Product</td><td>{esc(old.get('product_title'))}</td><td>{esc(c.get('new_product_title'))}</td></tr>
+<tr><td>Variant/size</td><td>{esc(old.get('variant_title'))}</td><td>{esc(c.get('new_variant_title'))}</td></tr>
+<tr><td>Handle</td><td>{esc(old.get('handle'))}</td><td>{esc(c.get('new_handle'))}</td></tr>
+<tr><td>Vendor</td><td>{esc(old.get('vendor'))}</td><td>{esc(c.get('new_vendor'))}</td></tr>
+<tr><td>Price</td><td>{esc(old.get('price'))}</td><td>{esc(c.get('new_price'))}</td></tr>
+<tr><td>Inventory item</td><td>—</td><td>{esc(c.get('new_inventory_item_gid'))}</td></tr>
+<tr><td>Created</td><td>{esc(old.get('created_at'))}</td><td>{esc(c.get('new_created_at'))}</td></tr>
+<tr><td>Matching evidence</td><td colspan=2>{esc(', '.join(c.get('matching_evidence') or []) or 'none')}</td></tr>
+<tr><td>Conflicting evidence</td><td colspan=2 class='warn'>{esc(', '.join(c.get('conflicting_evidence') or []) or 'none')}</td></tr>
+<tr><td>Evidence class</td><td colspan=2><b>{esc(c.get('confidence'))}</b></td></tr></table>
+<div class='actions'>
+<form method='post' action='decide'><input type=hidden name=action value=approve>
+<input type=hidden name=old value='{esc(old.get("variant_id"))}'><input type=hidden name=new value='{esc(c.get("new_variant_id"))}'>
+<input name=actor placeholder='your name' required><input name=note placeholder='note'>
+<button class='ok'>APPROVE RECREATION</button></form>
+<form method='post' action='decide'><input type=hidden name=action value=reject>
+<input type=hidden name=old value='{esc(old.get("variant_id"))}'><input type=hidden name=new value='{esc(c.get("new_variant_id"))}'>
+<input name=actor placeholder='your name' required><input name=note placeholder='why separate' required>
+<button class='bad'>REJECT / KEEP SEPARATE</button></form>
+</div>"""
+        rows += f"""<div class='actions'>
+<form method='post' action='decide'><input type=hidden name=action value=retire>
+<input type=hidden name=old value='{esc(old.get("variant_id"))}'>
+<input name=actor placeholder='your name' required><input name=note placeholder='retirement note' required>
+<button class='mid'>MARK HISTORICAL IDENTITY RETIRED</button></form>
+<span class='muted'>…or leave unresolved (remains a blocker).</span></div>"""
+        return rows
+
+    sections = ""
+    by_class: dict[str, list] = {}
+    for i in items:
+        by_class.setdefault(i["classification"], []).append(i)
+    for cls in ("AMBIGUOUS_IDENTITY", "POTENTIAL_RECREATION", "MISSING"):
+        group = by_class.get(cls, [])
+        if not group:
+            continue
+        sections += f"<h2>{cls} ({len(group)})</h2>"
+        for i in group:
+            old = i.get("historical_record") or {}
+            sections += f"<div class='item'><h3>{esc(old.get('product_title'))} — {esc(old.get('variant_title'))} <small>(old ID {esc(i['seed_variant_id'])})</small></h3>{side_by_side(i)}</div>"
+
+    return f"""<!doctype html><html><head><title>Catalog Reconciliation</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+table.cand{{border-collapse:collapse;width:100%;margin:8px 0}}td,th{{border:1px solid #d1d9e0;padding:5px 10px;font-size:13px;text-align:left}}
+th{{background:#f6f8fa}}.warn{{color:#82071e}}.item{{border:1px solid #d1d9e0;border-radius:8px;padding:12px 16px;margin:16px 0}}
+.actions{{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}}form{{display:flex;gap:6px}}input{{padding:4px 6px;font-size:13px}}
+button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-size:12px;font-weight:600}}
+.ok{{background:#dafbe1;color:#116329}}.bad{{background:#ffebe9;color:#82071e}}.mid{{background:#fff8c5;color:#7d4e00}}.muted{{color:#59636e;font-size:12px;align-self:center}}
+</style></head><body>
+<h1>Catalog Reconciliation — human review queue</h1>
+<p>Run {esc(run['catalog_sync_id'])} · API {esc(run['shopify_api_version'])} · live variants {esc(run['live_rows_received'])}
+(reported {esc(run['shopify_reported_variant_count'])}) · pagination complete: {esc(run['pagination_complete'])}
+· snapshot {esc((run['source_hash'] or '')[:16])}…</p>
+<p><b>{len(items)}</b> unresolved blocker(s). Identity decisions are permanent and audited. Nothing here writes to Shopify.</p>
+{sections or '<p>No unresolved blockers.</p>'}
+</body></html>"""
+
+
+@app.post("/reconciliation/decide", response_class=HTMLResponse)
+def reconciliation_decide(action: str = Form(...), old: str = Form(...), new: str = Form(None),
+                          actor: str = Form(...), note: str = Form("")):
+    with _db_conn() as conn:
+        try:
+            if action == "approve":
+                approve_recreated_variant(conn, old, new, actor=actor, note=note)
+                recompute_catalog_gate(conn)
+            elif action == "reject":
+                reject_recreation_candidate(conn, old, new, actor=actor, note=note)
+            elif action == "retire":
+                retire_missing_variant(conn, old, actor=actor, note=note)
+                recompute_catalog_gate(conn)
+            else:
+                raise HTTPException(status_code=400, detail="Unknown action")
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+    return '<meta http-equiv="refresh" content="0;url=../reconciliation"><p>Recorded. Returning to queue…</p>'
 
 
 @app.post("/pricing/rollover")

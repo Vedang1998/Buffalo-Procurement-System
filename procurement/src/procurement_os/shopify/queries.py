@@ -1,8 +1,21 @@
 """Validated Shopify GraphQL/ShopifyQL query contracts used by the foundation."""
 
+# Harmless read-only probe used to validate authentication before any sync work.
+SHOP_INFO_QUERY = r"""
+query ProcurementAuthProbe {
+  shop { name myshopifyDomain currencyCode }
+}
+"""
+
+# The purchasing catalog is defined by Shopify's explicit active-product filter,
+# not by an unfiltered variant count (Phase 3 requirement B).
+# Note: Shopify's search syntax requires the lowercase value; "product_status:ACTIVE"
+# silently matches nothing on productVariants while the count query tolerates it.
+ACTIVE_CATALOG_FILTER = "product_status:active"
+
 CATALOG_PAGE_QUERY = r"""
-query ProcurementCatalogPage($first: Int!, $after: String) {
-  productVariants(first: $first, after: $after) {
+query ProcurementCatalogPage($first: Int!, $after: String, $query: String) {
+  productVariants(first: $first, after: $after, query: $query) {
     pageInfo { hasNextPage endCursor }
     nodes {
       id
@@ -35,9 +48,21 @@ query ProcurementCatalogPage($first: Int!, $after: String) {
 }
 """
 
+# Independent verification of the retrieved record count: paginate active products
+# and sum their variantsCount. This does not rely on the productVariantsCount
+# search index, which can drift.
+ACTIVE_PRODUCT_VARIANT_TOTALS_QUERY = r"""
+query ProcurementActiveProductTotals($first: Int!, $after: String) {
+  products(first: $first, after: $after, query: "status:active") {
+    pageInfo { hasNextPage endCursor }
+    nodes { id variantsCount { count } }
+  }
+}
+"""
+
 CATALOG_COUNT_QUERY = r"""
-query ProcurementCatalogCount {
-  productVariantsCount { count }
+query ProcurementCatalogCount($query: String) {
+  productVariantsCount(query: $query) { count }
 }
 """
 

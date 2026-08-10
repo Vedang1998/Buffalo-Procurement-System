@@ -14,6 +14,7 @@ MIGRATION_ORDER = [
     "schema_postgres.sql",
     "001_v1_3_catalog_sales.sql",
     "002_seed_import_records.sql",
+    "003_phase3_reconciliation.sql",
 ]
 
 

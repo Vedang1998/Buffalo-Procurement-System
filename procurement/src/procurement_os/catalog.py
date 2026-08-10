@@ -4,7 +4,7 @@ from dataclasses import dataclass, asdict
 from decimal import Decimal
 from typing import Any, Iterable
 
-from .shopify.queries import CATALOG_COUNT_QUERY, CATALOG_PAGE_QUERY
+from .shopify.queries import ACTIVE_CATALOG_FILTER, CATALOG_COUNT_QUERY, CATALOG_PAGE_QUERY
 
 
 def numeric_shopify_id(value: str | int | None) -> str | None:
@@ -107,7 +107,60 @@ def _strong_recreation_candidates(seed: SeedVariant, by_sku: dict[str, list[Live
     return list(candidates.values())
 
 
-def reconcile_catalog(seed_rows: Iterable[SeedVariant], live_rows: Iterable[LiveVariant]) -> CatalogReconciliation:
+def _candidate_evidence(seed: SeedVariant, cand: LiveVariant) -> dict[str, Any]:
+    """Side-by-side evidence for a recreation candidate (Phase 3 requirement D)."""
+    matching, conflicting = [], []
+    for field in ("sku", "barcode"):
+        old, new = _clean(getattr(seed, field)), _clean(getattr(cand, field))
+        if old and new:
+            (matching if old == new else conflicting).append(field)
+    if _clean(seed.product_title) and _clean(cand.product_title):
+        (matching if _clean(seed.product_title) == _clean(cand.product_title) else conflicting).append("product_title")
+    if _clean(seed.variant_title) and _clean(cand.variant_title):
+        (matching if _clean(seed.variant_title) == _clean(cand.variant_title) else conflicting).append("variant_title")
+    if conflicting:
+        confidence = "CONFLICTING_EVIDENCE"
+    elif "barcode" in matching and "sku" in matching:
+        confidence = "STRONG"
+    elif matching:
+        confidence = "MODERATE"
+    else:
+        confidence = "WEAK"
+    return {
+        "new_variant_id": cand.variant_id,
+        "new_sku": cand.sku,
+        "new_barcode": cand.barcode,
+        "new_product_title": cand.product_title,
+        "new_variant_title": cand.variant_title,
+        "new_handle": cand.handle,
+        "new_vendor": cand.shopify_vendor,
+        "new_price": str(cand.retail_price) if cand.retail_price is not None else None,
+        "new_inventory_item_gid": cand.inventory_item_gid,
+        "new_created_at": cand.variant_created_at,
+        "new_updated_at": cand.variant_updated_at,
+        "matching_evidence": matching,
+        "conflicting_evidence": conflicting,
+        "confidence": confidence,
+    }
+
+
+def reconcile_catalog(
+    seed_rows: Iterable[SeedVariant],
+    live_rows: Iterable[LiveVariant],
+    *,
+    rejected_pairs: set[tuple[str, str]] | None = None,
+    approved_aliases: dict[str, str] | None = None,
+) -> CatalogReconciliation:
+    """Classify seed vs live identities.
+
+    - ``rejected_pairs``: (old_variant_id, new_variant_id) pairs a human explicitly
+      rejected; those candidates are never re-suggested.
+    - ``approved_aliases``: old_variant_id -> new_variant_id human-approved recreation
+      aliases; the old identity is treated as resolved continuity when the new ID is live.
+    No confidence score ever auto-promotes an identity decision.
+    """
+    rejected_pairs = rejected_pairs or set()
+    approved_aliases = approved_aliases or {}
     seed = list(seed_rows)
     live = list(live_rows)
     seed_by_id = {v.variant_id: v for v in seed}
@@ -119,6 +172,14 @@ def reconcile_catalog(seed_rows: Iterable[SeedVariant], live_rows: Iterable[Live
     changed = 0
 
     for sid, s in seed_by_id.items():
+        alias_target = approved_aliases.get(sid)
+        if alias_target and alias_target in live_by_id and sid not in live_by_id:
+            issues.append(CatalogIssue(
+                "RESOLVED", sid, alias_target, False,
+                {"rule": "Continuity established by previously human-approved recreation alias.",
+                 "alias_target": alias_target},
+            ))
+            continue
         l = live_by_id.get(sid)
         if l:
             exact += 1
@@ -140,16 +201,25 @@ def reconcile_catalog(seed_rows: Iterable[SeedVariant], live_rows: Iterable[Live
             issues.append(CatalogIssue("INACTIVE", sid, None, False, {"seed_active": False}))
             continue
 
-        candidates = _strong_recreation_candidates(s, live_by_sku, live_by_barcode)
+        candidates = [
+            c for c in _strong_recreation_candidates(s, live_by_sku, live_by_barcode)
+            if (sid, c.variant_id) not in rejected_pairs
+        ]
         if candidates:
+            cand_evidence = [_candidate_evidence(s, c) for c in candidates]
+            ambiguous = len(candidates) > 1 or any(e["conflicting_evidence"] for e in cand_evidence)
             issues.append(CatalogIssue(
-                "POTENTIAL_RECREATION",
+                "AMBIGUOUS_IDENTITY" if ambiguous else "POTENTIAL_RECREATION",
                 sid,
                 candidates[0].variant_id if len(candidates) == 1 else None,
                 True,
                 {
-                    "seed_sku": s.sku,
-                    "seed_barcode": s.barcode,
+                    "old_variant_id": sid,
+                    "old_sku": s.sku,
+                    "old_barcode": s.barcode,
+                    "old_product_title": s.product_title,
+                    "old_variant_title": s.variant_title,
+                    "candidates": cand_evidence,
                     "candidate_variant_ids": [c.variant_id for c in candidates],
                     "rule": "Exact SKU/barcode is evidence only; never auto-merge historical identity.",
                 },
@@ -172,7 +242,7 @@ def reconcile_catalog(seed_rows: Iterable[SeedVariant], live_rows: Iterable[Live
             {"sku": l.sku, "barcode": l.barcode, "product": l.product_title, "variant": l.variant_title},
         ))
 
-    potential = sum(i.classification == "POTENTIAL_RECREATION" for i in issues)
+    potential = sum(i.classification in ("POTENTIAL_RECREATION", "AMBIGUOUS_IDENTITY") for i in issues)
     missing = sum(i.classification == "MISSING" for i in issues)
     return CatalogReconciliation(exact, new_live, missing, potential, changed, tuple(issues))
 
@@ -212,7 +282,7 @@ def parse_live_variant(node: dict[str, Any]) -> LiveVariant:
 def fetch_live_catalog(client: Any, *, page_size: int = 250) -> tuple[int | None, list[LiveVariant]]:
     count: int | None = None
     try:
-        count_data = client.query(CATALOG_COUNT_QUERY)
+        count_data = client.query(CATALOG_COUNT_QUERY, {"query": ACTIVE_CATALOG_FILTER})
         count = int(count_data["productVariantsCount"]["count"])
     except Exception:
         # Count is a control statistic, not the data source. Pagination remains authoritative.
@@ -222,7 +292,7 @@ def fetch_live_catalog(client: Any, *, page_size: int = 250) -> tuple[int | None
     rows: list[LiveVariant] = []
     seen: set[str] = set()
     while True:
-        data = client.query(CATALOG_PAGE_QUERY, {"first": page_size, "after": after})
+        data = client.query(CATALOG_PAGE_QUERY, {"first": page_size, "after": after, "query": ACTIVE_CATALOG_FILTER})
         conn = data["productVariants"]
         for node in conn.get("nodes") or []:
             v = parse_live_variant(node)
@@ -251,7 +321,21 @@ def seed_variant_from_mapping(row: dict[str, Any]) -> SeedVariant:
     )
 
 
-def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[LiveVariant], reconciliation: CatalogReconciliation, *, api_version: str) -> str:
+def catalog_snapshot_hash(live_rows: list[LiveVariant]) -> str:
+    """Deterministic hash of the fetched live catalog for auditability."""
+    import hashlib
+    import json
+    canonical = sorted(
+        (
+            {k: (str(v) if v is not None else None) for k, v in asdict(r).items()}
+            for r in live_rows
+        ),
+        key=lambda d: d["variant_id"],
+    )
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[LiveVariant], reconciliation: CatalogReconciliation, *, api_version: str, pagination_complete: bool = True, started_at=None) -> str:
     """Persist a catalog sync atomically. `conn` is a psycopg-compatible connection."""
     import json
     with conn.transaction():
@@ -259,11 +343,12 @@ def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[
             cur.execute(
                 """INSERT INTO catalog_sync_runs(
                      shopify_api_version,shopify_reported_variant_count,live_rows_received,
-                     exact_current_ids,new_live_variants,missing_seed_variants,potential_recreations,unresolved_count,status
-                   ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'COMPLETED') RETURNING catalog_sync_id""",
+                     exact_current_ids,new_live_variants,missing_seed_variants,potential_recreations,unresolved_count,status,
+                     source_hash,pagination_complete,started_at,completed_at
+                   ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'COMPLETED',%s,%s,COALESCE(%s,now()),now()) RETURNING catalog_sync_id""",
                 (api_version, reported_count, len(live_rows), reconciliation.exact_ids,
                  reconciliation.new_live, reconciliation.missing_seed, reconciliation.potential_recreations,
-                 len(reconciliation.blockers)),
+                 len(reconciliation.blockers), catalog_snapshot_hash(live_rows), pagination_complete, started_at),
             )
             sync_id = str(cur.fetchone()[0])
 
@@ -372,6 +457,56 @@ def approve_recreated_variant(conn: Any, old_variant_id: str, new_variant_id: st
                    VALUES ('variant_aliases',%s,'APPROVE',%s::jsonb,%s)""",
                 (f"{old_variant_id}->{new_variant_id}", json.dumps(evidence), actor),
             )
+
+
+def reject_recreation_candidate(conn: Any, old_variant_id: str, new_variant_id: str, *, actor: str, note: str) -> None:
+    """Human decision: old and new identities are different products (PERMANENT, audited).
+
+    Persists the rejection so the same candidate pair is never re-suggested, without
+    resolving the underlying blocker (the old identity still needs disposition).
+    """
+    import json
+    if not note.strip():
+        raise ValueError("A rejection note is required")
+    old_variant_id, new_variant_id = str(old_variant_id), str(new_variant_id)
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute("SELECT product_title,variant_title,sku,barcode FROM variants WHERE variant_id=%s", (old_variant_id,))
+            old = cur.fetchone()
+            if not old:
+                raise ValueError(f"Unknown historical Variant ID {old_variant_id}")
+            cur.execute("SELECT 1 FROM variants WHERE variant_id=%s", (new_variant_id,))
+            if not cur.fetchone():
+                raise ValueError(f"Unknown live Variant ID {new_variant_id}")
+            evidence = {"old_variant_id": old_variant_id, "new_variant_id": new_variant_id,
+                        "old_product_title": old[0], "old_variant_title": old[1],
+                        "old_sku": old[2], "old_barcode": old[3], "note": note}
+            cur.execute("SELECT 1 FROM mapping_rejections WHERE mapping_type='HISTORICAL_VARIANT' AND source_key=%s AND rejected_variant_id=%s AND active",
+                        (old_variant_id, new_variant_id))
+            if not cur.fetchone():
+                cur.execute(
+                    """INSERT INTO mapping_rejections(mapping_type,source_key,rejected_variant_id,source_text,evidence_json,rejected_by)
+                       VALUES ('HISTORICAL_VARIANT',%s,%s,%s,%s::jsonb,%s)""",
+                    (old_variant_id, new_variant_id, f"{old[0]} / {old[1]}", json.dumps(evidence), actor),
+                )
+            cur.execute(
+                """INSERT INTO change_log(table_name,row_key,action,after_json,actor)
+                   VALUES ('mapping_rejections',%s,'REJECT',%s::jsonb,%s)""",
+                (f"{old_variant_id}-x->{new_variant_id}", json.dumps(evidence), actor),
+            )
+
+
+def load_rejected_pairs(conn: Any) -> set[tuple[str, str]]:
+    with conn.cursor() as cur:
+        cur.execute("SELECT source_key,rejected_variant_id FROM mapping_rejections WHERE mapping_type='HISTORICAL_VARIANT' AND active")
+        return {(str(a), str(b)) for a, b in cur.fetchall()}
+
+
+def load_approved_aliases(conn: Any) -> dict[str, str]:
+    """old_variant_id -> current canonical variant_id, approved human aliases only."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT old_variant_id,variant_id FROM variant_aliases WHERE approved AND old_variant_id IS NOT NULL")
+        return {str(o): str(n) for o, n in cur.fetchall()}
 
 
 def retire_missing_variant(conn: Any, variant_id: str, *, actor: str, note: str) -> None:
