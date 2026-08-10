@@ -48,6 +48,16 @@ Thumbs.db
 .cache/
 .local/
 
+# Environment-local secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Unapproved local agent skill installs
+/.agents/skills/
+/skills-lock.json
+
 # Python
 __pycache__/
 *.pyc
