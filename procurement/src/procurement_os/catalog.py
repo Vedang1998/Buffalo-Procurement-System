@@ -430,6 +430,28 @@ def approve_recreated_variant(conn: Any, old_variant_id: str, new_variant_id: st
                 raise ValueError("Both old and new Variant IDs must exist in the canonical table before approving recreation")
             if not bool(new[4]):
                 raise ValueError("The replacement Variant ID must be active/current")
+            # Decision must target an unresolved reconciliation blocker for this old ID.
+            cur.execute(
+                """SELECT evidence_json FROM catalog_reconciliation_items
+                   WHERE seed_variant_id=%s AND blocking=TRUE AND resolved_at IS NULL
+                   ORDER BY reconciliation_item_id DESC LIMIT 1""", (old_variant_id,))
+            item = cur.fetchone()
+            if not item:
+                raise ValueError(f"No unresolved reconciliation blocker exists for historical Variant ID {old_variant_id}")
+            # One approved continuity per historical identity, permanent.
+            cur.execute(
+                "SELECT variant_id FROM variant_aliases WHERE old_variant_id=%s AND approved AND source='CATALOG_RECONCILIATION'",
+                (old_variant_id,))
+            existing_alias = cur.fetchone()
+            if existing_alias:
+                raise ValueError(f"Historical Variant ID {old_variant_id} already has an approved continuity to {existing_alias[0]}")
+            # A pair the reviewer explicitly rejected cannot be silently approved later without clearing the rejection.
+            cur.execute(
+                """SELECT 1 FROM mapping_rejections WHERE mapping_type='HISTORICAL_VARIANT'
+                   AND source_key=%s AND rejected_variant_id=%s AND active""",
+                (old_variant_id, new_variant_id))
+            if cur.fetchone():
+                raise ValueError("This candidate pair was explicitly rejected; the rejection must be reviewed before approval")
 
             evidence = {
                 "old": {"variant_id": old_variant_id, "product_title": old[0], "variant_title": old[1], "sku": old[2], "barcode": old[3]},
@@ -503,10 +525,27 @@ def load_rejected_pairs(conn: Any) -> set[tuple[str, str]]:
 
 
 def load_approved_aliases(conn: Any) -> dict[str, str]:
-    """old_variant_id -> current canonical variant_id, approved human aliases only."""
+    """old_variant_id -> current canonical variant_id, approved human aliases only.
+
+    Deterministic and fail-closed: if an old ID somehow maps to conflicting targets,
+    that is a data-integrity violation and the sync must stop rather than pick one.
+    """
     with conn.cursor() as cur:
-        cur.execute("SELECT old_variant_id,variant_id FROM variant_aliases WHERE approved AND old_variant_id IS NOT NULL")
-        return {str(o): str(n) for o, n in cur.fetchall()}
+        cur.execute(
+            """SELECT old_variant_id, array_agg(DISTINCT variant_id ORDER BY variant_id)
+               FROM variant_aliases WHERE approved AND old_variant_id IS NOT NULL
+               GROUP BY old_variant_id""")
+        out: dict[str, str] = {}
+        conflicts = []
+        for old, targets in cur.fetchall():
+            if len(targets) > 1:
+                conflicts.append(str(old))
+            else:
+                out[str(old)] = str(targets[0])
+        if conflicts:
+            raise RuntimeError(
+                f"Conflicting approved continuity aliases for old Variant IDs: {conflicts[:10]} — resolve before syncing")
+        return out
 
 
 def retire_missing_variant(conn: Any, variant_id: str, *, actor: str, note: str) -> None:
@@ -521,6 +560,19 @@ def retire_missing_variant(conn: Any, variant_id: str, *, actor: str, note: str)
             row = cur.fetchone()
             if not row:
                 raise ValueError(f"Unknown Variant ID {variant_id}")
+            # Retirement is only a valid disposition for an unresolved reconciliation blocker
+            # (a historical identity absent from the live catalog) — never for a live variant.
+            cur.execute(
+                """SELECT classification FROM catalog_reconciliation_items
+                   WHERE seed_variant_id=%s AND blocking=TRUE AND resolved_at IS NULL
+                   ORDER BY reconciliation_item_id DESC LIMIT 1""", (variant_id,))
+            item = cur.fetchone()
+            if not item:
+                raise ValueError(f"No unresolved reconciliation blocker exists for Variant ID {variant_id}; retirement not applicable")
+            cur.execute("SELECT catalog_state FROM variants WHERE variant_id=%s", (variant_id,))
+            state = cur.fetchone()[0]
+            if state == 'LIVE':
+                raise ValueError(f"Variant ID {variant_id} is live in Shopify and cannot be retired")
             evidence = {"variant_id": variant_id, "product_title": row[0], "variant_title": row[1], "sku": row[2], "barcode": row[3], "note": note}
             cur.execute(
                 """UPDATE variants SET active=FALSE,catalog_state='RETIRED_CONFIRMED',catalog_resolution_note=%s

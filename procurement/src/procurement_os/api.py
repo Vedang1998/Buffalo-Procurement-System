@@ -51,12 +51,27 @@ class RecreationDecision(BaseModel):
     new_variant_id: str
     actor: str
     note: str = ""
+    review_token: str
 
 
 class RetireDecision(BaseModel):
     variant_id: str
     actor: str
     note: str
+    review_token: str
+
+
+def _require_review_token(supplied: str | None) -> None:
+    """Identity decisions are permanent; mutations are disabled unless the reviewer
+    presents the shared review token (fail-closed when the token is not configured).
+    The token value is never logged or echoed."""
+    import hmac
+    expected = os.getenv("RECONCILIATION_REVIEW_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=503,
+                            detail="Reconciliation decisions are disabled: RECONCILIATION_REVIEW_TOKEN is not configured")
+    if not supplied or not hmac.compare_digest(str(supplied), expected):
+        raise HTTPException(status_code=403, detail="Invalid review token")
 
 
 def _db_conn():
@@ -237,6 +252,7 @@ def reconciliation_items(unresolved_only: bool = True):
 
 @app.post("/reconciliation/approve-recreation")
 def approve_recreation_endpoint(req: RecreationDecision):
+    _require_review_token(req.review_token)
     with _db_conn() as conn:
         try:
             approve_recreated_variant(conn, req.old_variant_id, req.new_variant_id, actor=req.actor, note=req.note)
@@ -248,6 +264,7 @@ def approve_recreation_endpoint(req: RecreationDecision):
 
 @app.post("/reconciliation/reject-recreation")
 def reject_recreation_endpoint(req: RecreationDecision):
+    _require_review_token(req.review_token)
     with _db_conn() as conn:
         try:
             reject_recreation_candidate(conn, req.old_variant_id, req.new_variant_id, actor=req.actor, note=req.note)
@@ -258,6 +275,7 @@ def reject_recreation_endpoint(req: RecreationDecision):
 
 @app.post("/reconciliation/retire")
 def retire_endpoint(req: RetireDecision):
+    _require_review_token(req.review_token)
     with _db_conn() as conn:
         try:
             retire_missing_variant(conn, req.variant_id, actor=req.actor, note=req.note)
@@ -310,16 +328,19 @@ def reconciliation_page():
 <form method='post' action='decide'><input type=hidden name=action value=approve>
 <input type=hidden name=old value='{esc(old.get("variant_id"))}'><input type=hidden name=new value='{esc(c.get("new_variant_id"))}'>
 <input name=actor placeholder='your name' required><input name=note placeholder='note'>
+<input name=review_token type=password placeholder='review token' required>
 <button class='ok'>APPROVE RECREATION</button></form>
 <form method='post' action='decide'><input type=hidden name=action value=reject>
 <input type=hidden name=old value='{esc(old.get("variant_id"))}'><input type=hidden name=new value='{esc(c.get("new_variant_id"))}'>
 <input name=actor placeholder='your name' required><input name=note placeholder='why separate' required>
+<input name=review_token type=password placeholder='review token' required>
 <button class='bad'>REJECT / KEEP SEPARATE</button></form>
 </div>"""
         rows += f"""<div class='actions'>
 <form method='post' action='decide'><input type=hidden name=action value=retire>
 <input type=hidden name=old value='{esc(old.get("variant_id"))}'>
 <input name=actor placeholder='your name' required><input name=note placeholder='retirement note' required>
+<input name=review_token type=password placeholder='review token' required>
 <button class='mid'>MARK HISTORICAL IDENTITY RETIRED</button></form>
 <span class='muted'>…or leave unresolved (remains a blocker).</span></div>"""
         return rows
@@ -356,7 +377,8 @@ button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-
 
 @app.post("/reconciliation/decide", response_class=HTMLResponse)
 def reconciliation_decide(action: str = Form(...), old: str = Form(...), new: str = Form(None),
-                          actor: str = Form(...), note: str = Form("")):
+                          actor: str = Form(...), note: str = Form(""), review_token: str = Form("")):
+    _require_review_token(review_token)
     with _db_conn() as conn:
         try:
             if action == "approve":

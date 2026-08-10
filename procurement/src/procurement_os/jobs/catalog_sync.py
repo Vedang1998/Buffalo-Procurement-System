@@ -51,6 +51,32 @@ def main() -> None:
     print({"auth_probe": probe, "api_version": config.api_version})
 
     started_at = datetime.now(timezone.utc)
+    try:
+        _run_sync(database_url, config, client, started_at)
+    except Exception as exc:
+        # Fail closed: persist a FAILED run and force CATALOG_SYNC=FAIL so a prior
+        # gate state can never survive a failed/incomplete sync.
+        import json
+        with psycopg.connect(database_url) as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO catalog_sync_runs(shopify_api_version,status,pagination_complete,started_at,completed_at,notes)
+                           VALUES (%s,'FAILED',FALSE,%s,now(),%s)""",
+                        (config.api_version, started_at, f"{type(exc).__name__}: {exc}"[:2000]))
+                    cur.execute(
+                        """INSERT INTO readiness_gates(gate_name,status,severity,blocks_po,evidence_json,message,checked_at)
+                           VALUES ('CATALOG_SYNC','FAIL','CRITICAL',TRUE,%s::jsonb,%s,now())
+                           ON CONFLICT(gate_name,scope_type,scope_id) DO UPDATE SET
+                             status='FAIL',evidence_json=EXCLUDED.evidence_json,message=EXCLUDED.message,checked_at=now()""",
+                        (json.dumps({"failure": f"{type(exc).__name__}: {exc}"[:500]}),
+                         "Catalog sync failed or was incomplete; gate forced FAIL."))
+        raise
+
+
+def _run_sync(database_url: str, config: ShopifyConfig, client: ShopifyGraphQLClient, started_at) -> None:
+    import psycopg
+
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
             # Seed identities only: rows originating from the historical import.
