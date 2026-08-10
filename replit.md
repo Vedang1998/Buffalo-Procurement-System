@@ -1,6 +1,23 @@
-# [Project name]
+# Buffalo House Procurement OS
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Internal procurement operating system for Buffalo House Liquor & Wines — deterministic, fail-closed purchasing intelligence replacing Shopify Stocky. Python/FastAPI is the procurement-engine authority (lives in `procurement/`); the Node monorepo scaffold coexists but must never duplicate procurement business logic.
+
+## Authority order (mandatory)
+
+1. `procurement/docs/authority/01_CANONICAL_SYSTEM_SPEC_v2_1.md`
+2. `procurement/config/rules.toml` (machine-enforced)
+3. `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md` (sequencing)
+4. `procurement/docs/authority/05_CURRENT_BUILD_STATUS_v1_3.md`
+
+Do not simplify or reinterpret procurement business rules without explicit owner approval. CATALOG_SYNC and SALES_BACKFILL remain FAIL and PO generation stays disabled until proven against production data. Never auto-merge Variant identities. Owner approval is required between phases.
+
+## Procurement app — run & operate
+
+- Workflow `Procurement OS` runs uvicorn on port 8000 (`procurement/src/procurement_os/api.py`); `/admin/status` is the status page, `/health/full` machine-readable
+- Tests: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests` (40 tests)
+- Schema: `python3 tools/apply_schema.py --database-url "$DATABASE_URL"` (idempotent, transactional; order in MIGRATION_ORDER)
+- Seed: `tools/import_seed_csv.py` then `tools/verify_seed_import.py` (writes audit row to `seed_import_records`)
+- Object storage must go through `procurement_os/storage.py` adapter — never platform calls in domain logic
 
 ## Run & Operate
 

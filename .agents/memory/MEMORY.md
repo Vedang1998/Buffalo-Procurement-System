@@ -1,0 +1,1 @@
+- [Buffalo Procurement rules](buffalo-procurement-rules.md) — phase-gated approval workflow, fail-closed gates, Python-only procurement engine, prices.price_state quirk
