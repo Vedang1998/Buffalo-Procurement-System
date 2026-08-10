@@ -11,3 +11,5 @@ description: Non-negotiable process rules for working on the procurement system 
 - Schema quirk: `prices` table uses `price_state` ('current'/'future', lowercase), not `state`.
 - Seed audit trail lives in `seed_import_records` (migration 002). Seed CSVs validate against `procurement/seed/manifest.json` hashes; do not "fix" seed rows during import.
 - Shopify secrets (SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET) go in Replit Secrets only; never log tokens. Missing creds must not stop app startup.
+- Shopify search-syntax quirk: `product_status:active` must be lowercase — `product_status:ACTIVE` silently matches nothing on productVariants (count query tolerates it). Verify pagination totals via summing active products' variantsCount; the productVariantsCount index can drift (reported 2,003 vs 1,999 real).
+- Reconciliation identity decisions are token-gated via RECONCILIATION_REVIEW_TOKEN (fail-closed 503 when unset). One approved continuity per old Variant ID; decisions valid only against unresolved blockers; rejected pairs can never be silently approved.
