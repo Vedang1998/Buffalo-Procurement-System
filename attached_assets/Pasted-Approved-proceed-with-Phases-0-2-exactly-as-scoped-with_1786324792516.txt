@@ -1,0 +1,41 @@
+Approved — proceed with Phases 0–2 exactly as scoped, with the following requirements added.
+
+1. Preserve the existing v1.3 source intact as the starting point. Do not rewrite working catalog/sales logic merely for style or framework preference.
+2. After installing the declared dependencies, the baseline must return 40/40 passing tests before any functional changes are made. If anything still fails, stop and report it rather than treating the packaged baseline as sufficient.
+3. Create a clean Git commit immediately after the intact v1.3 import and passing baseline tests. This becomes our pre-production foundation checkpoint.
+4. PostgreSQL schema/application and seed import must be idempotent and transactional where appropriate. A failed seed import must not leave partially loaded production data.
+5. Validate the imported seed against manifest.json, including exact expected counts, hashes where applicable, foreign-key integrity and zero orphan relationships. Do not silently “fix” seed records during import.
+6. Persist an auditable seed import record containing at minimum manifest/version, import timestamp, expected/actual counts, validation result and source checksum/hash information. If the current schema lacks an appropriate table, add a narrowly scoped migration for this purpose.
+7. The startup/health layer must distinguish:
+    * application health,
+    * database connectivity,
+    * schema/migration state,
+    * seed state,
+    * Shopify credential availability,
+    * CATALOG_SYNC readiness,
+    * SALES_BACKFILL readiness.
+    Missing Shopify credentials must not prevent the app or Phase 0–2 admin/status UI from starting. It should show Shopify as not configured and leave the dependent gates failed.
+8. Preserve the no-SQLite production guard. SQLite may be used only where tests explicitly use it; production runtime must require PostgreSQL.
+9. App Storage must remain behind an adapter/interface. Do not make Replit-specific object-storage calls leak into procurement-domain logic.
+10. Do not log or display Shopify client secrets or generated access tokens. Secrets will be entered directly into Replit Secrets, not pasted into source code or committed to Git.
+11. Do not enable any real PO generation or purchasing action. CATALOG_SYNC and SALES_BACKFILL must remain FAIL after Phase 2 because neither has yet been proven against live production data.
+12. Do not auto-merge, retire, mutate or “clean up” any canonical Variant identity during these phases.
+13. The existing Node monorepo scaffold may coexist with the Python/FastAPI application, but do not introduce Node as a second procurement backend or duplicate business logic across Python and JavaScript. Python remains the procurement-engine authority.
+14. Keep the web deployment portable. Replit-specific infrastructure belongs in adapters/configuration, not inside forecasting, catalog, pricing, mapping or procurement-domain modules.
+15. At the end of Phase 2, stop and report:
+
+* final test count,
+* Git commit/checkpoint,
+* migration/schema status,
+* seed expected vs actual counts,
+* orphan/FK validation,
+* seed manifest/checksum validation,
+* readiness-gate states,
+* health-check results,
+* files/migrations added or changed,
+* any deviations from Documents 00/01/03/05,
+* exact proposed Phase 3 plan.
+
+Do not begin Phase 3 until I approve the Phase 2 report.
+
+You may now begin Phases 0–2

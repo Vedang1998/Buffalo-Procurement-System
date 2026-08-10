@@ -1,0 +1,31 @@
+{
+  "observed_at": "2026-08-09",
+  "shopify_connected_probe": {
+    "current_product_variant_count": 2003,
+    "historical_seed_variant_count": 2029,
+    "old_v0_1_failed_sync_observation": 1998,
+    "acceptance_rule": "counts are control statistics only; classify every identity delta"
+  },
+  "shopifyql_sales_probe": {
+    "earliest_tested_date": "2024-11-28",
+    "successful": true,
+    "dimensions": [
+      "day",
+      "product_variant_id",
+      "product_title_at_time_of_sale",
+      "product_variant_title_at_time_of_sale",
+      "product_variant_sku_at_time_of_sale"
+    ],
+    "measures": ["net_items_sold", "net_sales"],
+    "observed_identity_edge_cases": ["null product_variant_id", "product_variant_id = 0"]
+  },
+  "seed_validation": {
+    "variants": 2029,
+    "variant_aliases": 3301,
+    "vendors": 4,
+    "supplier_offers": 85,
+    "current_price_levels": 271,
+    "verified_current_price_levels": 263,
+    "unverified_current_price_levels": 8
+  }
+}

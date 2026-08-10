@@ -1,0 +1,132 @@
+[strategy]
+north_star = "maximize_sustainable_gross_profit_return_on_inventory_cash"
+one_vendor_one_po = true
+selling_price_auto_update = false
+cash_budget_allocator_enabled = false
+human_review_before_final_po = true
+runtime_llm_required = false
+
+[architecture]
+production_home = "replit"
+web_deployment = "autoscale"
+batch_deployment = "scheduled"
+database = "replit_postgresql"
+object_storage = "replit_app_storage"
+github_mirror_required = true
+off_platform_encrypted_backup_required = true
+emergency_packet_required = true
+
+[shopify]
+canonical_identity = "variant_id"
+authentication = "merchant_owned_client_credentials"
+api_version = "2026-07"
+prefer_shopifyql_sales_backfill = true
+own_daily_inventory_snapshots = true
+po_output = "native_purchase_order_csv"
+auto_write_supplier_sku_to_shopify = false
+
+[margin]
+wine_target = 0.33
+non_wine_target = 0.25
+flag_only_when_below_target = true
+calculate_target_cost = true
+target_cost_is_diagnostic_only = true
+
+[pricing]
+states = ["current", "future"]
+archive_enabled = false
+rollover_day = 1
+future_upload_day_start = 15
+future_upload_day_end = 20
+delete_old_current_on_rollover = true
+future_price_recheck_each_monday = true
+minor_cent_difference_is_blocker = false
+strict_normalized_import_contract = true
+staging_required = true
+transactional_promotion_required = true
+run_price_snapshot_for_reproducibility = true
+
+[assortment]
+default_scope = "same_product"
+book_restriction_wins = true
+cross_product_requires_explicit_evidence = true
+small_size_override_enabled = false
+gift_pack_requires_offer_level_assortment_rule = true
+supplier_program_group_for_explicit_cross_product = true
+
+[combos]
+auto_add = false
+human_approval_required = true
+compare_before_final_regular_deal = true
+whole_basket_economics_required = true
+
+[vendor_minimums]
+block_po = false
+auto_add_filler_to_reach_minimum = false
+flag_shortfall = true
+
+[allocated]
+collection_name = "Allocated Bourbon"
+auto_replenish = false
+
+[review]
+run_only_scope = true
+temporary_scope = true
+permanent_scope = true
+never_silently_change_global_rules = true
+structured_writeback_required = true
+
+[data_quality]
+material_ambiguity_blocks_affected_item = true
+penny_level_difference_blocks = false
+full_catalog_reconciliation_required_before_final_po = true
+historical_sales_backfill_required_before_final_po = true
+vendor_operating_rules_required_before_final_po = true
+current_prices_required_before_final_po = true
+never_auto_merge_recreated_variant = true
+raw_sales_before_canonical_aggregation = true
+
+[matching]
+sku_first = true
+accepted_alias_second = true
+negative_mapping_memory = true
+auto_match_min_score = 0.92
+review_min_score = 0.82
+size_conflict_blocks_auto_match = true
+pack_conflict_blocks_auto_match = true
+fuzzy_is_supporting_evidence_only = true
+
+[po]
+official_shopify_csv_target = true
+routine_line_comments = false
+strategic_line_comments = true
+procurement_po_ledger_required = true
+one_vendor_one_po = true
+
+[forecasting]
+stocky_60_15_is_benchmark_only = true
+abc_basis = "gross_profit_dollars"
+abc_a_share = 0.80
+abc_b_share = 0.15
+abc_c_share = 0.05
+force_a_policy_enabled = true
+xyz_enabled = true
+stockout_days_are_censored = true
+best_fit_modeling_enabled = true
+forecast_value_added_gate = true
+production_models = ["damped_ets", "seasonal_naive", "tsb", "category_shrinkage", "naive"]
+auto_arima_production_v1 = false
+demand_sensing_enabled = true
+demand_sensing_bounded = true
+outlier_handling_enabled = true
+seasonality_enabled = true
+category_seasonality_enabled = true
+same_period_last_year_is_input_not_forecast = true
+
+[economics]
+gp_per_100_bridge_cash_enabled = true
+time_adjusted_bridge_return_enabled = true
+immediate_purchase_savings_separate = true
+incremental_bridge_benefit_separate = true
+projected_run_rate_gp_is_secondary = true
+inventory_days_required = true

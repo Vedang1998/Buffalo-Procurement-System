@@ -1,0 +1,30 @@
+{
+  "source": "buffalo_procurement(1).db",
+  "source_sha256": "379ee8df2beeb387de308d16b107591935378a98a3d83e8dc8c1429872a88755",
+  "files": {
+    "variants.csv": {
+      "rows": 2029,
+      "sha256": "dd31f1852c0ea79f8a66f8a34e7b1dac892501183da7f83d4de025a2e1349509"
+    },
+    "variant_aliases.csv": {
+      "rows": 3301,
+      "sha256": "b9a2e862fcdff9e204f889ec277ae18201b78dc1197e53bb8876f5b520a68a21"
+    },
+    "vendors.csv": {
+      "rows": 4,
+      "sha256": "a544fdbbeec0f3fb18fee4052eb20f4b50d5e528d2778470980cf2da82316e79"
+    },
+    "supplier_offers.csv": {
+      "rows": 85,
+      "sha256": "e31f23c1a8f306efff4b2850d5299b84cca36ca92f2e744e6ec4f54f065c7253"
+    },
+    "current_prices.csv": {
+      "rows": 271,
+      "sha256": "44bacf203e19bd12071b616430a9091ca5c1c4b46da48ea1e6f04f7b8f7f8201"
+    },
+    "open_exceptions.csv": {
+      "rows": 4,
+      "sha256": "f7c12e0284636dad16f140e6133ddc9e6adde540d905fad3fde861ef9211d631"
+    }
+  }
+}

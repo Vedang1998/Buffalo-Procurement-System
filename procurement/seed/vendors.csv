@@ -1,0 +1,5 @@
+vendor_name,active,order_day,order_cycle_days,lead_time_days,delivery_case_threshold,delivery_dollar_threshold,threshold_logic,fee_below_threshold,fee_qualified,loose_unit_fee,notes
+Empire Merchants North,1,Monday,,1,,,,,,3.0,Order cycle and delivery-threshold details intentionally left for owner confirmation.
+Southern Glazers,1,Monday,,1,,,,,,3.0,Order cycle and delivery-threshold details intentionally left for owner confirmation.
+Try It Distribution,1,Monday,,1,,,,,,3.0,Order cycle and delivery-threshold details intentionally left for owner confirmation.
+Wright Distribution,1,Monday,,1,,,,,,3.0,Order cycle and delivery-threshold details intentionally left for owner confirmation.

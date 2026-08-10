@@ -1,0 +1,45 @@
+test_book_no_wins (test_assortment.T.test_book_no_wins) ... ok
+test_cross_default_no (test_assortment.T.test_cross_default_no) ... ok
+test_explicit_cross (test_assortment.T.test_explicit_cross) ... ok
+test_same_product (test_assortment.T.test_same_product) ... ok
+test_attribute_change_is_informational (test_catalog.CatalogTests.test_attribute_change_is_informational) ... ok
+test_exact_identity_passes (test_catalog.CatalogTests.test_exact_identity_passes) ... ok
+test_missing_seed_blocks (test_catalog.CatalogTests.test_missing_seed_blocks) ... ok
+test_new_live_does_not_fail_by_itself (test_catalog.CatalogTests.test_new_live_does_not_fail_by_itself) ... ok
+test_numeric_id (test_catalog.CatalogTests.test_numeric_id) ... ok
+test_parse_live_variant (test_catalog.CatalogTests.test_parse_live_variant) ... ok
+test_recreation_candidate_blocks_and_never_auto_merges (test_catalog.CatalogTests.test_recreation_candidate_blocks_and_never_auto_merges) ... ok
+test_bt (test_economics.T.test_bt) ... ok
+test_cs (test_economics.T.test_cs) ... ok
+test_gp_cash (test_economics.T.test_gp_cash) ... ok
+test_target_cost (test_economics.T.test_target_cost) ... ok
+test_close_title (test_matching.T.test_close_title) ... ok
+test_norm (test_matching.T.test_norm) ... ok
+test_size_conflict (test_matching.T.test_size_conflict) ... ok
+test_day (test_pricing.T.test_day) ... ok
+test_unverified (test_pricing.T.test_unverified) ... ok
+test_valid (test_pricing.T.test_valid) ... ok
+test_perm (test_review.T.test_perm) ... ok
+test_run (test_review.T.test_run) ... ok
+test_temp (test_review.T.test_temp) ... ok
+test_current_variant_id_resolves (test_sales.SalesTests.test_current_variant_id_resolves) ... ok
+test_date_chunks_no_gaps (test_sales.SalesTests.test_date_chunks_no_gaps) ... ok
+test_duplicate_sku_is_ambiguous (test_sales.SalesTests.test_duplicate_sku_is_ambiguous) ... ok
+test_explicit_exclusion_is_structured (test_sales.SalesTests.test_explicit_exclusion_is_structured) ... ok
+test_fetch_paginates_and_dedupes (test_sales.SalesTests.test_fetch_paginates_and_dedupes) ... ok
+test_hash_is_identity_of_group_not_metric_value (test_sales.SalesTests.test_hash_is_identity_of_group_not_metric_value) ... ok
+test_null_id_resolves_from_historical_sku_title (test_sales.SalesTests.test_null_id_resolves_from_historical_sku_title) ... ok
+test_old_variant_id_resolves (test_sales.SalesTests.test_old_variant_id_resolves) ... ok
+test_parse_shopifyql_null_id (test_sales.SalesTests.test_parse_shopifyql_null_id) ... ok
+test_unique_sku_is_allowed_when_title_changed (test_sales.SalesTests.test_unique_sku_is_allowed_when_title_changed) ... ok
+test_unknown_is_unresolved (test_sales.SalesTests.test_unknown_is_unresolved) ... ok
+test_zero_id_is_absent_and_resolves (test_sales.SalesTests.test_zero_id_is_absent_and_resolves) ... ok
+test_domain_normalization (test_shopify_auth.ShopifyAuthTests.test_domain_normalization) ... ok
+test_invalidate_forces_refresh (test_shopify_auth.ShopifyAuthTests.test_invalidate_forces_refresh) ... ok
+test_token_cached_until_margin (test_shopify_auth.ShopifyAuthTests.test_token_cached_until_margin) ... ok
+test_sales_query_preserves_historical_identity_evidence (test_shopify_queries.QueryTests.test_sales_query_preserves_historical_identity_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 40 tests in 0.002s
+
+OK
