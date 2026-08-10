@@ -60,6 +60,23 @@ query ProcurementActiveProductTotals($first: Int!, $after: String) {
 }
 """
 
+# Direct node lookup of a single historical variant by GID (read-only).
+VARIANT_NODE_LOOKUP_QUERY = r"""
+query ProcurementVariantNodeLookup($id: ID!) {
+  node(id: $id) {
+    __typename
+    ... on ProductVariant {
+      id
+      title
+      sku
+      barcode
+      price
+      product { id title status vendor productType handle }
+    }
+  }
+}
+"""
+
 CATALOG_COUNT_QUERY = r"""
 query ProcurementCatalogCount($query: String) {
   productVariantsCount(query: $query) { count }

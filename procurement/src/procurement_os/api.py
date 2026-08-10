@@ -375,6 +375,91 @@ button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-
 </body></html>"""
 
 
+@app.get("/reconciliation/investigation/items")
+def investigation_items():
+    """Persisted identity-investigation evidence for the latest completed sync (diagnostic only)."""
+    with _db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT catalog_sync_id FROM catalog_sync_runs WHERE status='COMPLETED' ORDER BY started_at DESC LIMIT 1")
+            row = cur.fetchone()
+            if not row:
+                return {"run": None, "missing": [], "new": []}
+            sync_id = str(row[0])
+            cur.execute(
+                """SELECT subject,variant_id,shopify_status,classification,evidence_json,heightened_review,looked_up_at
+                   FROM identity_investigations WHERE catalog_sync_id=%s ORDER BY subject,variant_id""", (sync_id,))
+            missing, new = [], []
+            for subj, vid, status, cls, ev, hr, at in cur.fetchall():
+                rec = {"variant_id": vid, "shopify_status": status, "classification": cls,
+                       "evidence": ev, "heightened_review": hr, "looked_up_at": str(at)}
+                (missing if subj == "MISSING_SEED" else new).append(rec)
+    return {"run": sync_id, "missing": missing, "new": new}
+
+
+@app.get("/reconciliation/investigation", response_class=HTMLResponse)
+def investigation_page():
+    """Identity Investigation report — groups the blockers with direct Shopify evidence.
+    Diagnostic only: no buttons here imply approval by confidence; all decisions
+    happen on /reconciliation and individually require the review token."""
+    data = investigation_items()
+    if not data["run"]:
+        return "<h1>Identity Investigation</h1><p>No completed catalog sync run yet.</p>"
+
+    def esc(v):
+        import html
+        return html.escape(str(v)) if v is not None else "—"
+
+    def row_html(rec, seed_key="seed"):
+        ev = rec.get("evidence") or {}
+        base = ev.get(seed_key) or ev.get("new") or {}
+        analysis = ev.get("recreation_analysis") or ev.get("analysis") or {}
+        cands = analysis.get("candidates") or analysis.get("predecessors") or []
+        cand_html = ""
+        for c in cands:
+            cand_html += (f"<div class='cand'>counterpart <b>{esc(c.get('new_variant_id') or c.get('seed_variant_id'))}</b>"
+                          f"<br>supporting: {esc('; '.join(c.get('supporting') or []) or 'none')}"
+                          f"<br><span class='warn'>conflicting: {esc('; '.join(c.get('conflicting') or []) or 'none')}</span>"
+                          f"<br>cautions: {esc('; '.join(c.get('cautions') or []) or 'none')}</div>")
+        flag = " <span class='flag'>HEIGHTENED REVIEW</span>" if rec.get("heightened_review") else ""
+        return (f"<tr><td>{esc(rec['variant_id'])}{flag}</td><td>{esc(base.get('product_title'))} — {esc(base.get('variant_title'))}</td>"
+                f"<td>{esc(base.get('sku'))}</td><td>{esc(base.get('barcode'))}</td><td>{esc(rec['shopify_status'])}</td>"
+                f"<td>{esc(rec['classification'])}<br><small>{esc(analysis.get('reason') or ev.get('existence') or '')}</small>{cand_html}</td></tr>")
+
+    m = data["missing"]
+    groups = {
+        "GROUP A — Still exist in Shopify but non-active (not recreation candidates)":
+            [r for r in m if r["classification"].startswith("STILL_EXISTS") and r["classification"] != "STILL_EXISTS_ACTIVE"],
+        "DEFECT — Marked missing but Shopify says ACTIVE (enumeration bug, investigate first)":
+            [r for r in m if r["classification"] == "STILL_EXISTS_ACTIVE"],
+        "GROUP B — Deleted with strong one-to-one recreation candidate (human may approve on the review queue)":
+            [r for r in m if r["classification"] == "DELETED/STRONG_RECREATION_CANDIDATE"],
+        "GROUP C — Deleted with possible or ambiguous candidate (must stay unresolved)":
+            [r for r in m if r["classification"] in ("DELETED/POSSIBLE_RECREATION_CANDIDATE", "DELETED/AMBIGUOUS")],
+        "GROUP D — Deleted with no candidate (potential retirement; explicit human approval required)":
+            [r for r in m if r["classification"] == "DELETED/NO_RECREATION_CANDIDATE"],
+    }
+    sections = ""
+    for title, rows in groups.items():
+        if not rows:
+            continue
+        sections += (f"<h2>{esc(title)} ({len(rows)})</h2><table><tr><th>Old Variant ID</th><th>Product / size</th>"
+                     f"<th>SKU</th><th>Barcode</th><th>Shopify status</th><th>Classification & evidence</th></tr>"
+                     + "".join(row_html(r) for r in rows) + "</table>")
+    sections += (f"<h2>Reverse view — {len(data['new'])} NEW live variants</h2><table><tr><th>New Variant ID</th>"
+                 f"<th>Product / size</th><th>SKU</th><th>Barcode</th><th>Status</th><th>Classification & evidence</th></tr>"
+                 + "".join(row_html(r, seed_key="new") for r in data["new"]) + "</table>")
+    return f"""<!doctype html><html><head><title>Identity Investigation</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+table{{border-collapse:collapse;width:100%;margin:8px 0}}td,th{{border:1px solid #d1d9e0;padding:5px 8px;font-size:13px;text-align:left;vertical-align:top}}
+th{{background:#f6f8fa}}.warn{{color:#82071e}}.flag{{background:#fff8c5;color:#7d4e00;font-size:11px;padding:1px 5px;border-radius:4px;font-weight:700}}
+.cand{{border-left:3px solid #d1d9e0;margin:4px 0;padding:3px 8px;font-size:12px;background:#f6f8fa}}</style></head><body>
+<h1>Phase 3 Identity Investigation — run {esc(data['run'])}</h1>
+<p>Diagnostic evidence only. Nothing on this page makes decisions or writes to Shopify.
+Decisions are made individually on <a href='../reconciliation'>the review queue</a> and require the review token.</p>
+{sections}
+</body></html>"""
+
+
 @app.post("/reconciliation/decide", response_class=HTMLResponse)
 def reconciliation_decide(action: str = Form(...), old: str = Form(...), new: str = Form(None),
                           actor: str = Form(...), note: str = Form(""), review_token: str = Form("")):

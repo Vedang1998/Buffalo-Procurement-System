@@ -16,6 +16,7 @@ MIGRATION_ORDER = [
     "002_seed_import_records.sql",
     "003_phase3_reconciliation.sql",
     "004_identity_decision_invariants.sql",
+    "005_identity_investigation.sql",
 ]
 
 

@@ -1,0 +1,259 @@
+Proceed with the next Phase 3 reconciliation step, but do NOT make any permanent identity decisions yet.
+
+We independently verified directly against the live Shopify store that:
+
+- Active product variants = 1,999
+- Store-wide product variant count = 2,003
+- The 4 non-active variants are exactly:
+  - 42953508126795 — Tip Top Negroni 100ML — DRAFT
+  - 42953521332299 — Tip Top Bee Knees 100ML — DRAFT
+  - 42953525067851 — Tip Top Whiskey Sour 100ML — DRAFT
+  - 41157278171211 — Horse Soldier Reserve Barrel Strength 750ML — ARCHIVED
+
+So the 1,999 active-catalog count is now independently confirmed and should be treated as authoritative for procurement.
+
+Your next job is to investigate the 46 MISSING historical Shopify Variant IDs before asking me to approve retirements or recreation mappings.
+
+GOAL
+
+Classify every one of the 46 currently-blocking MISSING historical Variant IDs using direct Shopify evidence and deterministic comparison against the 20 NEW live variants.
+
+Do not guess.
+Do not auto-merge.
+Do not retire anything automatically.
+Do not change Shopify.
+Do not loosen CATALOG_SYNC acceptance criteria.
+CATALOG_SYNC must remain FAIL until every blocking identity is explicitly resolved.
+
+STEP 1 — DIRECTLY CHECK ALL 46 MISSING IDS IN SHOPIFY
+
+For each missing historical Variant ID, query Shopify directly by exact Variant GID / node lookup.
+
+Classify it into one of:
+
+A. STILL_EXISTS_ACTIVE
+- If somehow still active, this means our catalog enumeration/reconciliation has a defect and must be investigated before anything else.
+
+B. STILL_EXISTS_DRAFT
+- Existing Shopify identity, but parent product is DRAFT.
+
+C. STILL_EXISTS_ARCHIVED
+- Existing Shopify identity, but parent product is ARCHIVED.
+
+D. STILL_EXISTS_OTHER_NONACTIVE
+- Any other legitimate non-active Shopify state.
+
+E. DELETED_OR_NO_LONGER_RESOLVABLE
+- Exact Shopify Variant ID returns null / no node / no longer exists.
+
+Persist the direct evidence used for each classification:
+- historical Variant ID
+- exact Shopify lookup result
+- product ID if present
+- product title
+- variant title
+- SKU
+- barcode
+- status
+- current Shopify URL/GID identifiers if available
+- timestamp of lookup
+
+Do not convert DRAFT/ARCHIVED identities into “deleted.”
+
+STEP 2 — ANALYZE ONLY THE TRULY DELETED IDS AGAINST THE 20 NEW LIVE VARIANTS
+
+For each historical ID classified DELETED_OR_NO_LONGER_RESOLVABLE, compare it against the 20 NEW active variants.
+
+Use deterministic evidence only.
+
+Comparison evidence should include, where available:
+- exact SKU
+- exact barcode
+- normalized product title
+- normalized variant title / size
+- vendor
+- product type
+- price
+- option values
+- inventory item metadata
+- historical aliases
+- known supplier mapping evidence
+- pack/size distinctions
+- any prior catalog metadata retained in the seed
+
+Important identity rule:
+Shopify Variant ID is canonical identity.
+A new Variant ID may be a recreation candidate, but even an exact SKU/barcode match is evidence only and MUST NOT auto-merge.
+
+Classify each deleted historical ID as:
+
+1. STRONG_RECREATION_CANDIDATE
+- One and only one new live variant has compelling deterministic evidence.
+- Still requires human approval.
+
+2. POSSIBLE_RECREATION_CANDIDATE
+- Some evidence matches, but not enough for safe approval.
+
+3. AMBIGUOUS
+- Multiple plausible new variants or conflicting evidence.
+
+4. NO_RECREATION_CANDIDATE
+- No credible corresponding new active variant.
+
+For every candidate comparison, show the actual conflicting/supporting fields side by side.
+
+Do not use fuzzy title similarity by itself to establish a recreation.
+
+Explicitly protect edge cases such as:
+- different bottle sizes
+- gift pack vs normal bottle
+- temporary supplier SKU
+- combo SKU
+- alternate pack
+- same brand with different expression
+- Black Velvet 1.5L vs 1.75L-type mistakes
+- duplicate SKUs
+- duplicate barcodes
+
+STEP 3 — ALSO EXPLAIN THE 20 NEW VARIANTS
+
+Create a reverse view for all 20 NEW live variants:
+
+- new Variant ID
+- product + variant title
+- SKU
+- barcode
+- whether it has any plausible historical predecessor
+- strongest historical candidate, if any
+- evidence
+- classification:
+  - LIKELY_RECREATION
+  - POSSIBLE_RECREATION
+  - GENUINELY_NEW
+  - AMBIGUOUS
+
+This is diagnostic only. No mappings are approved here.
+
+STEP 4 — CHECK DATA QUALITY CONFLICTS BEFORE RECOMMENDING ANYTHING
+
+You previously reported:
+- 5 duplicate SKUs
+- 2 duplicate barcodes among live variants
+
+For any of the 46 missing or 20 new variants that touch one of those duplicate SKU/barcode groups, explicitly mark that record as requiring heightened review.
+
+Never treat duplicated SKU/barcode evidence as unique identity evidence.
+
+STEP 5 — BUILD A HUMAN REVIEW REPORT
+
+Create a review screen/report that groups the 46 blockers into:
+
+GROUP A — Existing in Shopify but non-active
+- Draft / Archived / other
+- These should not be presented as recreation candidates unless there is a separate identity issue.
+
+GROUP B — Deleted with strong one-to-one recreation candidate
+- Show old vs new side by side.
+- Human may later approve recreation.
+
+GROUP C — Deleted with possible or ambiguous candidate
+- Must stay unresolved.
+
+GROUP D — Deleted with no candidate
+- Potential retirement candidate, but human must explicitly approve retirement.
+
+Also create a reverse section for the 20 new variants.
+
+For each row include:
+- old Variant ID
+- new Variant ID if applicable
+- product title
+- variant title / size
+- SKU
+- barcode
+- status
+- evidence
+- conflicts
+- confidence/classification
+- recommended human action
+- blocking state
+
+Do not create buttons that imply automatic approval by confidence score.
+
+Existing approve/reject/retire actions must still require RECONCILIATION_REVIEW_TOKEN individually.
+
+STEP 6 — VERIFY THE RECONCILIATION MATH
+
+At the end, account for every seed and live identity.
+
+Starting facts:
+- historical seed variants = 2,029
+- active Shopify variants = 1,999
+- exact active ID matches previously = 1,979
+- new live variants previously = 20
+- missing historical IDs previously = 46
+- inactive historical seed expected previously = 4
+
+Recalculate from the database after this investigation and explain any difference.
+
+Do not force the numbers to match the old report. If the investigation changes a classification, report the change and evidence.
+
+STEP 7 — TESTS
+
+Add adversarial tests covering at minimum:
+
+- missing historical ID actually exists as DRAFT
+- missing historical ID exists as ARCHIVED
+- deleted ID with one exact barcode recreation candidate
+- deleted ID with duplicate barcode candidates -> ambiguous
+- deleted ID with duplicate SKU candidates -> ambiguous
+- same SKU but different bottle size -> no automatic recreation
+- same title but different size -> no automatic recreation
+- gift-pack-like replacement -> no automatic recreation
+- candidate with exact SKU + exact barcode still requires human approval
+- node lookup returning null
+- no permanent decision without review token
+- no Shopify writes
+- CATALOG_SYNC remains FAIL while unresolved blockers remain
+
+Run the entire test suite, not only new tests.
+
+STOP CONDITION
+
+Stop after the diagnostic/review layer is complete.
+
+Do NOT:
+- approve any recreation
+- reject any mapping
+- retire any historical identity
+- begin Phase 4
+- begin sales backfill
+- enable PO generation
+
+Return a Phase 3 Identity Investigation Report containing:
+
+1. Test count/pass result
+2. Git commit(s)
+3. Exact breakdown of the 46 missing IDs:
+   - still active
+   - draft
+   - archived
+   - other non-active
+   - deleted/no longer resolvable
+4. Of the truly deleted IDs:
+   - strong recreation candidates
+   - possible candidates
+   - ambiguous
+   - no candidate
+5. Breakdown of the 20 new variants:
+   - likely recreation
+   - possible recreation
+   - genuinely new
+   - ambiguous
+6. Duplicate SKU/barcode conflicts touching these records
+7. Any reconciliation bugs discovered
+8. Updated CATALOG_SYNC gate state and exact blockers
+9. Confirmation that zero permanent identity decisions and zero Shopify writes occurred
+10. URL/path for the human review page
+
+Then STOP and wait for my approval.
