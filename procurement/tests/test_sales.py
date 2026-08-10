@@ -33,7 +33,7 @@ class SalesTests(unittest.TestCase):
 
     def test_current_variant_id_resolves(self):
         r=self.idx.resolve(sale(vid='100', sku='anything'))
-        self.assertEqual((r.status,r.canonical_variant_id,r.method),('RESOLVED','100','CURRENT_VARIANT_ID'))
+        self.assertEqual((r.status,r.canonical_variant_id,r.method),('RESOLVED','100','EXACT_ACTIVE_VARIANT_ID'))
 
     def test_old_variant_id_resolves(self):
         r=self.idx.resolve(sale(vid='50', sku='OLD', product='Old A'))
@@ -47,9 +47,10 @@ class SalesTests(unittest.TestCase):
         r=self.idx.resolve(sale(vid='0', sku='OLD', product='Old A'))
         self.assertEqual(r.canonical_variant_id,'100')
 
-    def test_unique_sku_is_allowed_when_title_changed(self):
+    def test_unique_sku_alone_does_not_resolve_when_title_changed(self):
         r=self.idx.resolve(sale(vid=None, sku='OLD', product='Renamed A'))
-        self.assertEqual((r.status,r.method),('RESOLVED','UNIQUE_SKU'))
+        self.assertEqual((r.status,r.canonical_variant_id,r.method),('UNRESOLVED',None,'SKU_EVIDENCE_ONLY'))
+        self.assertEqual(r.candidates,('100',))
 
     def test_duplicate_sku_is_ambiguous(self):
         idx=HistoricalIdentityIndex(
@@ -77,7 +78,7 @@ class SalesTests(unittest.TestCase):
 
     def test_parse_shopifyql_null_id(self):
         r=parse_shopifyql_row({'day':'2024-11-28','product_variant_id':'0','product_variant_sku_at_time_of_sale':'X','product_title_at_time_of_sale':'P','product_variant_title_at_time_of_sale':'750ML','net_items_sold':'3','net_sales':'17.97'})
-        self.assertIsNone(r.source_variant_id)
+        self.assertEqual(r.source_variant_id, '0')
         self.assertEqual(r.net_items_sold,Decimal('3'))
 
     def test_date_chunks_no_gaps(self):

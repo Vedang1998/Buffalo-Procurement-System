@@ -9,12 +9,12 @@ Internal procurement operating system for Buffalo House Liquor & Wines — deter
 3. `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md` (sequencing)
 4. `procurement/docs/authority/05_CURRENT_BUILD_STATUS_v1_3.md`
 
-Do not simplify or reinterpret procurement business rules without explicit owner approval. CATALOG_SYNC and SALES_BACKFILL remain FAIL and PO generation stays disabled until proven against production data. Never auto-merge Variant identities. Owner approval is required between phases.
+Do not simplify or reinterpret procurement business rules without explicit owner approval. Read actual readiness gates from PostgreSQL; at the current handoff `CATALOG_SYNC=PASS` and `SALES_BACKFILL=FAIL` pending historical-identity review. PO generation stays disabled while any blocking gate fails. Never auto-merge Variant identities. Owner approval is required between phases.
 
 ## Procurement app — run & operate
 
-- Workflow `Procurement OS` runs uvicorn on port 8000 (`procurement/src/procurement_os/api.py`); `/admin/status` is the status page, `/health/full` machine-readable
-- Tests: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests` (40 tests)
+- Workflow `Procurement OS` runs uvicorn on port 8000 (`procurement/src/procurement_os/api.py`); `/admin/status` is the status page, `/health/full` machine-readable, and `/historical-sales/review` is the Phase 4 owner queue
+- Tests: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests`
 - Schema: `python3 tools/apply_schema.py --database-url "$DATABASE_URL"` (idempotent, transactional; order in MIGRATION_ORDER)
 - Seed: `tools/import_seed_csv.py` then `tools/verify_seed_import.py` (writes audit row to `seed_import_records`)
 - Object storage must go through `procurement_os/storage.py` adapter — never platform calls in domain logic

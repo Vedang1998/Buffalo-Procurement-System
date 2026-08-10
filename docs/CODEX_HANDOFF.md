@@ -1,63 +1,68 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-10T15:37:13Z (UTC)
+**Updated:** 2026-08-10T17:10:56Z (UTC)
 
-**Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical sales backfill.
+**Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
-This is an operational checkpoint, not a replacement for the canonical specification or `procurement/config/rules.toml`. Current facts below were checked independently and read-only. Historical facts are labeled separately so future sessions do not mistake an earlier checkpoint for current database state.
+This is an operational checkpoint, not a replacement for the canonical specification or `procurement/config/rules.toml`. Verify repository and database state again before acting.
 
 ## Verified current state
 
 ### Repository and tests
 
 - Branch: `main`.
-- Inspected base HEAD before the durable-memory commit: `0cfe034979993de580890894f86c697c00f96f19` (`memory update`).
-- Worktree was clean before the initial durable-memory documentation task. The intended portability commit adds `AGENTS.md`, `CLAUDE.md`, `docs/CODEX_HANDOFF.md`, and the narrow `.gitignore` entries described below.
-- Unexpected `.agents/skills/` and `skills-lock.json` were traced to optional Replit-targeted installs by the third-party `skills` CLI. They are not application dependencies; they were preserved locally, ignored, and excluded from the durable-memory commit.
-- Current test command: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests -v`.
-- Current test result after the portability documentation changes: **89/89 PASS**, with 0 failures, errors, or skips (run on 2026-08-10; unittest time 0.643 seconds). No warnings were emitted.
+- Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). The Phase 4 checkpoint commit is the commit containing this update; use `git rev-parse HEAD` for its final SHA.
+- Test command: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests -v`.
+- Post-backfill test result: **142/142 PASS**, 0 failures, 0 errors, 0 skips; unittest time 2.410 seconds, measured wall time 3.181 seconds on 2026-08-10.
+- Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
 
-### Database and catalog
+### Phase 3 catalog checkpoint
 
-Read-only PostgreSQL inspection was performed on 2026-08-10. No database or Shopify data was changed.
+- `CATALOG_SYNC` is **PASS**, last checked `2026-08-10T14:55:53.634178Z`.
+- Independently verified ACTIVE Shopify catalog: **1,999 variants**. The unfiltered Shopify-reported count remains 2,003 because it also includes four inactive variants.
+- Current variants: 2,049 total = 1,999 `LIVE`/active + 46 `RETIRED_CONFIRMED`/inactive + 4 historical inactive-as-expected (`SEEDED`/inactive, archived in Shopify).
+- The 46 retirements remain individually audited. Phase 4 did not change catalog identity or retirement decisions.
 
-- The latest catalog sync completed with full pagination at `2026-08-10T14:55:53.634178Z`.
-- It fetched and independently verified **1,999 ACTIVE Shopify variants**. The stored Shopify-reported count is 2,003 because that store-wide count includes four inactive variants and must not be treated as the filtered ACTIVE count.
-- Latest sync results: 1,999 live rows, 1,999 exact current IDs, 0 new, 0 missing, 0 potential recreations, and 0 unresolved blockers.
-- Current `variants` state: 2,049 total = 1,999 `LIVE`/active + 46 `RETIRED_CONFIRMED`/inactive + 4 historical inactive-as-expected (`ARCHIVED` in Shopify; `SEEDED`/inactive locally).
-- The latest reconciliation contains 50 nonblocking `INACTIVE` rows: the 46 confirmed retirements plus the four expected inactive identities.
-- All 46 retirement decisions are persisted with 46 individual audit rows dated `2026-08-10T14:52:08Z`. No recreation aliases were created for them.
-- `CATALOG_SYNC` is **currently PASS** because the fresh post-retirement sync produced zero blockers. Future sessions must still read the actual database state; this file is not authority to assume that the gate remains PASS.
+### Phase 4 implementation and live run
 
-### Current global readiness gates
+- ShopifyQL access probe: **PASS** using configured Admin API `2026-07`; store timezone is `America/New_York`. No customer dimensions or Orders API fallback were used.
+- Additive migration `procurement/db/006_phase4_sales_backfill.sql` is applied. It adds durable run/chunk/page checkpoints, run-to-fact observations, restatement evidence, complete control fields, and append-only historical-sales review decisions.
+- Live run: `d389079c-eabf-49b5-a245-40a207025fd7`, started `2026-08-10T16:44:26.811525Z`, completed `2026-08-10T16:45:59.804015Z`.
+- Requested range: **2024-11-28 through 2026-08-10** (current store-local date at execution).
+- Coverage: **21/21 date chunks**, **70/70 structurally contiguous pages**, all pages/chunks complete; no parse error, duplicate observation, missing chunk, or coverage gap. Current-code local finalization re-proved page indexes, offsets, terminal-page structure, stored range, and run-creation date evidence without refetching Shopify.
+- Durable source: **59,083 source rows = 59,083 unique natural facts**.
+- Resolution: **55,971 resolved rows**, **3,112 unresolved rows**, **0 ambiguous rows**, **0 explicitly excluded rows**.
+- Owner review queue: **343 unresolved identity groups** ranked by materiality (**341 material**, 2 zero-impact but retained); one group has a SKU-only candidate, which remains evidence only and is not approved.
+- Browser review UI: `/procurement/historical-sales/review` (FastAPI route `/historical-sales/review`); JSON: `/procurement/historical-sales/review/items`. Decisions require actor, reason, and `RECONCILIATION_REVIEW_TOKEN`.
+- Shopify source totals exactly equal persisted raw totals:
+  - net items: **82,501.0000** source = **82,501.0000** raw;
+  - net sales: **$1,300,975.14** source = **$1,300,975.14** raw.
+- Canonical resolved totals: **78,815.0000 net items** and **$1,231,372.83 net sales**.
+- Unresolved totals: **3,686.0000 net items** and **$69,602.31 net sales**; materiality is **3,696.0000 absolute units** and **$72,616.29 absolute sales**.
+- Excluded totals: **0 items / $0.00**. There are zero review decisions and zero active historical exclusions at this checkpoint.
+- Coverage, source persistence, idempotency, source/raw controls, resolution accounting, and canonical controls all reconcile. The canonical aggregate was rebuilt from this run's durable facts.
+- Phase 4 workflow implementation is complete and the initial live fetch is complete, but **Phase 4 is not complete while human identity review and `SALES_BACKFILL` remain outstanding**.
 
-| Gate | Status | Blocks PO when failing | Last checked (UTC) |
-| --- | --- | --- | --- |
-| `CATALOG_SYNC` | `PASS` | Yes | 2026-08-10 14:55:53 |
-| `SALES_BACKFILL` | `FAIL` | Yes | 2026-08-10 01:25:59 |
-| `VENDOR_RULES` | `FAIL` | Yes | 2026-08-10 01:22:46 |
-| `INVENTORY_HISTORY` | `WARN` | No | 2026-08-10 01:22:46 |
-| `MAPPING_INTEGRITY` | `WARN` | No | 2026-08-10 01:22:46 |
-| `OPEN_PO_RECONCILIATION` | `WARN` | No | 2026-08-10 01:22:46 |
-| `PRICE_COVERAGE` | `WARN` | No | 2026-08-10 01:22:46 |
+### Current readiness and safety state
 
-- Runtime PO readiness is **disabled**, blocked by `SALES_BACKFILL` and `VENDOR_RULES`; the database contains zero purchase orders.
-- There are no scoped readiness-gate rows. Three scoped open exceptions remain (two HIGH and one MEDIUM); none is global.
-- `SALES_BACKFILL` remains **FAIL**. There are zero sales-backfill runs, zero raw Shopify sales rows, and zero canonical `sales_daily` rows.
-- Phase 4 historical sales backfill has not begun and is **not authorized**.
-- Shopify remains read-only.
+| Gate | Current status | Notes |
+| --- | --- | --- |
+| `CATALOG_SYNC` | `PASS` | Phase 3 catalog remains reconciled. |
+| `SALES_BACKFILL` | `FAIL` | 341 material unresolved identity groups (343 total groups) await owner decisions. |
+| `VENDOR_RULES` | `FAIL` | Phase not started. |
 
-## Verified historical checkpoint and transition
+- PO generation is **disabled**, blocked by `SALES_BACKFILL` and `VENDOR_RULES`; purchase-order count remains zero.
+- Shopify remained strictly read-only. Phase 4 stored no customer fields/PII and made zero Shopify writes.
+- No automatic historical alias approval or exclusion occurred.
 
-- Phase 0 and Phases 1–2 are complete. Repository history records the Phase 0 import/baseline and the production schema plus seed import; the latest database seed-import audit is `PASS`.
-- Historical seed: **2,029** identities.
-- The pre-retirement Phase 3 reconciliation had **1,979** exact active historical/current IDs, **20** genuinely new active variants, **46** missing historical identities, and **4** historical inactive-as-expected identities, against the independently verified 1,999 ACTIVE Shopify variants.
-- All 46 missing historical IDs were investigated through exact Shopify lookup and a full deterministic continuity sweep. The stored result for all 46 is deleted/not resolvable with no credible current counterpart.
-- Human retirement authorization was submitted. The current database evidence above proves that the 46 authorized retirements were subsequently executed and audited.
-- Phase 3 catalog reconciliation was therefore completed through human retirement review. The recorded pre-retirement suite checkpoint was **89/89**, and the fresh current suite is also **89/89**.
+## Historical checkpoint
+
+- Phases 0–2 are complete; the historical seed contains 2,029 identities.
+- Pre-retirement Phase 3 had 1,979 exact active historical/current IDs, 20 genuinely new active variants, 46 deleted historical identities, and 4 inactive-as-expected identities.
+- Exact lookup plus deterministic continuity review found no credible current counterpart for all 46 deleted identities; human-authorized retirement was executed and audited before the successful post-retirement catalog sync.
 
 ## Authorization boundary / next action
 
-The next task in the supplied pre-validation checkpoint was **Phase 3 post-retirement validation only**. Current database evidence shows that this validation already ran successfully and set `CATALOG_SYNC` to `PASS` from actual state.
+Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
 
-Stop at this phase boundary. Do not rerun identity decisions, begin Phase 4, write to Shopify, enable PO generation, or treat `CATALOG_SYNC = PASS` as authorization for later work. Wait for explicit owner authorization.
+Do not begin inventory history, vendor rules, forecasting, pricing ingestion, procurement optimization, or PO generation until the owner explicitly authorizes the next phase.

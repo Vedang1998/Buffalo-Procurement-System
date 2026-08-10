@@ -24,7 +24,9 @@ APP_VERSION = "1.3.0"
 CORE_TABLES = [
     "meta", "variants", "variant_aliases", "vendors", "supplier_offers",
     "prices", "readiness_gates", "catalog_sync_runs", "sales_backfill_runs",
-    "shopify_sales_daily_raw", "seed_import_records",
+    "sales_backfill_chunks", "sales_backfill_pages", "sales_backfill_run_facts",
+    "shopify_sales_daily_raw", "historical_sales_review_decisions",
+    "seed_import_records",
 ]
 
 SHOPIFY_ENV_VARS = ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]

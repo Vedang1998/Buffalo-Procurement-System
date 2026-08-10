@@ -1,9 +1,19 @@
-"""Validated Shopify GraphQL/ShopifyQL query contracts used by the foundation."""
+"""Validated, read-only Shopify GraphQL/ShopifyQL query contracts."""
+
+from datetime import date
 
 # Harmless read-only probe used to validate authentication before any sync work.
 SHOP_INFO_QUERY = r"""
 query ProcurementAuthProbe {
   shop { name myshopifyDomain currencyCode }
+}
+"""
+
+# The backfill end date is the current calendar date in the store's timezone,
+# not the worker's local timezone. This query contains no commerce/customer data.
+SHOP_TIMEZONE_QUERY = r"""
+query ProcurementShopTimezone {
+  shop { ianaTimezone }
 }
 """
 
@@ -96,10 +106,59 @@ query ProcurementShopifyQL($query: String!) {
 """
 
 
-def historical_sales_shopifyql(start_date: str, end_date: str, *, limit: int = 1000, offset: int = 0) -> str:
+HISTORICAL_SALES_DIMENSIONS = (
+    "day",
+    "product_variant_id",
+    "product_title_at_time_of_sale",
+    "product_variant_title_at_time_of_sale",
+    "product_variant_sku_at_time_of_sale",
+)
+HISTORICAL_SALES_METRICS = ("net_items_sold", "net_sales")
+HISTORICAL_SALES_REQUIRED_COLUMNS = HISTORICAL_SALES_DIMENSIONS + HISTORICAL_SALES_METRICS
+
+
+def _validated_date_range(start_date: str, end_date: str) -> tuple[str, str]:
+    """Return canonical ISO dates and reject malformed/reversed query ranges."""
+
+    try:
+        start = date.fromisoformat(start_date)
+        end = date.fromisoformat(end_date)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("ShopifyQL dates must use YYYY-MM-DD") from exc
+    if start > end:
+        raise ValueError("ShopifyQL start_date must not be after end_date")
+    return start.isoformat(), end.isoformat()
+
+
+def historical_sales_shopifyql(
+    start_date: str,
+    end_date: str,
+    *,
+    limit: int = 1000,
+    offset: int = 0,
+) -> str:
+    """Build a deterministic page of raw historical sales source facts."""
+
+    start_date, end_date = _validated_date_range(start_date, end_date)
+    limit = int(limit)
+    offset = int(offset)
+    if limit <= 0:
+        raise ValueError("ShopifyQL limit must be positive")
+    if offset < 0:
+        raise ValueError("ShopifyQL offset must not be negative")
+
     return f"""FROM sales
-SHOW net_items_sold, net_sales
-GROUP BY day, product_variant_id, product_title_at_time_of_sale, product_variant_title_at_time_of_sale, product_variant_sku_at_time_of_sale
+SHOW {", ".join(HISTORICAL_SALES_METRICS)}
+GROUP BY {", ".join(HISTORICAL_SALES_DIMENSIONS)}
 SINCE {start_date} UNTIL {end_date}
 ORDER BY day ASC, product_title_at_time_of_sale ASC, product_variant_title_at_time_of_sale ASC, product_variant_sku_at_time_of_sale ASC, product_variant_id ASC
-LIMIT {int(limit)} OFFSET {int(offset)}"""
+LIMIT {limit} OFFSET {offset}"""
+
+
+def historical_sales_control_totals_shopifyql(start_date: str, end_date: str) -> str:
+    """Build the independent, ungrouped source control-total query."""
+
+    start_date, end_date = _validated_date_range(start_date, end_date)
+    return f"""FROM sales
+SHOW {", ".join(HISTORICAL_SALES_METRICS)}
+SINCE {start_date} UNTIL {end_date}"""

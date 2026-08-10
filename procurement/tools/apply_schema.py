@@ -17,6 +17,7 @@ MIGRATION_ORDER = [
     "003_phase3_reconciliation.sql",
     "004_identity_decision_invariants.sql",
     "005_identity_investigation.sql",
+    "006_phase4_sales_backfill.sql",
 ]
 
 

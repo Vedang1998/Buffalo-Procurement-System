@@ -59,7 +59,7 @@ The database also supports scoped vendor/variant readiness gates so one bad item
 
 ### Scheduled job entrypoints
 - `python -m procurement_os.jobs.catalog_sync`
-- `python -m procurement_os.jobs.sales_backfill --start 2024-11-28 --end YYYY-MM-DD`
+- `python -m procurement_os.jobs.sales_backfill --start 2024-11-28` (discovers and enforces the current Shopify store-local end date; use `--resume RUN_ID` only for an interrupted durable run)
 
 ### Seed migration
 After applying `db/schema_postgres.sql`:
