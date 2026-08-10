@@ -409,21 +409,36 @@ def investigation_page():
         import html
         return html.escape(str(v)) if v is not None else "—"
 
-    def row_html(rec, seed_key="seed"):
+    def row_html(rec, seed_key="seed", counterparts=None):
         ev = rec.get("evidence") or {}
         base = ev.get(seed_key) or ev.get("new") or {}
         analysis = ev.get("recreation_analysis") or ev.get("analysis") or {}
         cands = analysis.get("candidates") or analysis.get("predecessors") or []
         cand_html = ""
         for c in cands:
-            cand_html += (f"<div class='cand'>counterpart <b>{esc(c.get('new_variant_id') or c.get('seed_variant_id'))}</b>"
-                          f"<br>supporting: {esc('; '.join(c.get('supporting') or []) or 'none')}"
+            cid = c.get("new_variant_id") if seed_key == "seed" else c.get("seed_variant_id")
+            other = (counterparts or {}).get(str(cid)) or {}
+            cand_html += (f"<div class='cand'><b>Proposed counterpart {esc(cid)}</b>: "
+                          f"{esc(other.get('product_title'))} — {esc(other.get('variant_title'))} · "
+                          f"SKU {esc(other.get('sku'))} · barcode {esc(other.get('barcode'))}"
+                          f"<br>matching: {esc('; '.join(c.get('matched') or c.get('supporting') or []) or 'none')}"
                           f"<br><span class='warn'>conflicting: {esc('; '.join(c.get('conflicting') or []) or 'none')}</span>"
                           f"<br>cautions: {esc('; '.join(c.get('cautions') or []) or 'none')}</div>")
         flag = " <span class='flag'>HEIGHTENED REVIEW</span>" if rec.get("heightened_review") else ""
+        action = analysis.get("recommended_action") or ("—" if not rec["classification"].startswith("DELETED/") else "")
         return (f"<tr><td>{esc(rec['variant_id'])}{flag}</td><td>{esc(base.get('product_title'))} — {esc(base.get('variant_title'))}</td>"
                 f"<td>{esc(base.get('sku'))}</td><td>{esc(base.get('barcode'))}</td><td>{esc(rec['shopify_status'])}</td>"
-                f"<td>{esc(rec['classification'])}<br><small>{esc(analysis.get('reason') or ev.get('existence') or '')}</small>{cand_html}</td></tr>")
+                f"<td>{esc(rec['classification'])}<br><small>{esc(analysis.get('reason') or ev.get('existence') or '')}</small>"
+                f"{cand_html}<br><small><b>Recommended:</b> {esc(action)}</small></td></tr>")
+
+    # counterpart detail lookup for side-by-side display
+    counterparts = {}
+    for r in data["new"]:
+        base = (r.get("evidence") or {}).get("new") or {}
+        counterparts[str(r["variant_id"])] = base
+    for r in data["missing"]:
+        base = (r.get("evidence") or {}).get("seed") or {}
+        counterparts[str(r["variant_id"])] = base
 
     m = data["missing"]
     groups = {
@@ -431,12 +446,16 @@ def investigation_page():
             [r for r in m if r["classification"].startswith("STILL_EXISTS") and r["classification"] != "STILL_EXISTS_ACTIVE"],
         "DEFECT — Marked missing but Shopify says ACTIVE (enumeration bug, investigate first)":
             [r for r in m if r["classification"] == "STILL_EXISTS_ACTIVE"],
-        "GROUP B — Deleted with strong one-to-one recreation candidate (human may approve on the review queue)":
-            [r for r in m if r["classification"] == "DELETED/STRONG_RECREATION_CANDIDATE"],
-        "GROUP C — Deleted with possible or ambiguous candidate (must stay unresolved)":
-            [r for r in m if r["classification"] in ("DELETED/POSSIBLE_RECREATION_CANDIDATE", "DELETED/AMBIGUOUS")],
-        "GROUP D — Deleted with no candidate (potential retirement; explicit human approval required)":
-            [r for r in m if r["classification"] == "DELETED/NO_RECREATION_CANDIDATE"],
+        "1 — HIGH-EVIDENCE RECREATION REVIEW (deterministic identity evidence; human approval required)":
+            [r for r in m if r["classification"] == "DELETED/HIGH_EVIDENCE_RECREATION_REVIEW"],
+        "2 — POSSIBLE RECREATION REVIEW (meaningful evidence, insufficient certainty)":
+            [r for r in m if r["classification"] == "DELETED/POSSIBLE_RECREATION_REVIEW"],
+        "3 — CONFLICT / AMBIGUOUS (must stay unresolved)":
+            [r for r in m if r["classification"] in ("DELETED/CONFLICT_AMBIGUOUS", "DELETED/AMBIGUOUS",
+                                                     "DELETED/POSSIBLE_RECREATION_CANDIDATE")],
+        "4 — NO CREDIBLE CURRENT COUNTERPART (potential retirement; explicit human approval required)":
+            [r for r in m if r["classification"] in ("DELETED/NO_CREDIBLE_CURRENT_COUNTERPART",
+                                                     "DELETED/NO_RECREATION_CANDIDATE")],
     }
     sections = ""
     for title, rows in groups.items():
@@ -444,10 +463,26 @@ def investigation_page():
             continue
         sections += (f"<h2>{esc(title)} ({len(rows)})</h2><table><tr><th>Old Variant ID</th><th>Product / size</th>"
                      f"<th>SKU</th><th>Barcode</th><th>Shopify status</th><th>Classification & evidence</th></tr>"
-                     + "".join(row_html(r) for r in rows) + "</table>")
+                     + "".join(row_html(r, counterparts=counterparts) for r in rows) + "</table>")
+    no_counterpart = [r for r in m if r["classification"] in ("DELETED/NO_CREDIBLE_CURRENT_COUNTERPART",
+                                                              "DELETED/NO_RECREATION_CANDIDATE")]
+    if no_counterpart:
+        checkboxes = ""
+        for r in no_counterpart:
+            base = (r.get("evidence") or {}).get("seed") or {}
+            checkboxes += (f"<label class='pick'><input type=checkbox name=variant_ids value='{esc(r['variant_id'])}'> "
+                           f"{esc(r['variant_id'])} — {esc(base.get('product_title'))} ({esc(base.get('variant_title'))})</label>")
+        sections += f"""<h2>Batch retirement authorization</h2>
+<p>Select the historical identities you have reviewed and wish to mark RETIRED. Nothing is pre-selected;
+each selected identity receives its own permanent audit record. This never runs automatically.</p>
+<form method='post' action='investigation/retire-batch'>{checkboxes}
+<div class='actions'><input name=actor placeholder='your name' required>
+<input name=note placeholder='retirement note (required)' required>
+<input name=review_token type=password placeholder='review token' required>
+<button class='mid'>RETIRE SELECTED HISTORICAL IDENTITIES</button></div></form>"""
     sections += (f"<h2>Reverse view — {len(data['new'])} NEW live variants</h2><table><tr><th>New Variant ID</th>"
                  f"<th>Product / size</th><th>SKU</th><th>Barcode</th><th>Status</th><th>Classification & evidence</th></tr>"
-                 + "".join(row_html(r, seed_key="new") for r in data["new"]) + "</table>")
+                 + "".join(row_html(r, seed_key="new", counterparts=counterparts) for r in data["new"]) + "</table>")
     return f"""<!doctype html><html><head><title>Identity Investigation</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
 table{{border-collapse:collapse;width:100%;margin:8px 0}}td,th{{border:1px solid #d1d9e0;padding:5px 8px;font-size:13px;text-align:left;vertical-align:top}}
@@ -458,6 +493,31 @@ th{{background:#f6f8fa}}.warn{{color:#82071e}}.flag{{background:#fff8c5;color:#7
 Decisions are made individually on <a href='../reconciliation'>the review queue</a> and require the review token.</p>
 {sections}
 </body></html>"""
+
+
+@app.post("/reconciliation/investigation/retire-batch", response_class=HTMLResponse)
+def retire_batch(variant_ids: list[str] = Form([]), actor: str = Form(...),
+                 note: str = Form(...), review_token: str = Form("")):
+    """Batch authorization of individually-audited retirements. One token-authorized
+    session may cover several explicitly selected identities; each ID still gets its
+    own permanent audit record via retire_missing_variant. Never retires unselected IDs."""
+    _require_review_token(review_token)
+    if not variant_ids:
+        raise HTTPException(status_code=400, detail="No historical Variant IDs selected")
+    results = []
+    with _db_conn() as conn:
+        for vid in variant_ids:
+            try:
+                retire_missing_variant(conn, vid, actor=actor, note=note)
+                results.append((vid, "RETIRED"))
+            except ValueError as exc:
+                results.append((vid, f"SKIPPED: {exc}"))
+        recompute_catalog_gate(conn)
+    import html as _html
+    rows = "".join(f"<li>{_html.escape(v)} — {_html.escape(r)}</li>" for v, r in results)
+    return (f"<h1>Batch retirement result</h1><ul>{rows}</ul>"
+            "<p><a href='../../reconciliation/investigation'>Back to investigation</a> · "
+            "<a href='../../reconciliation'>Review queue</a></p>")
 
 
 @app.post("/reconciliation/decide", response_class=HTMLResponse)

@@ -1,0 +1,154 @@
+Phase 3 investigation report accepted, but do NOT retire the 46 identities yet and do NOT begin Phase 4.
+
+The direct Shopify evidence is accepted:
+
+* 46/46 missing historical Variant IDs are genuinely deleted/no longer resolvable in Shopify.
+* 20 live Variant IDs are genuinely new IDs.
+* No unique SKU or barcode establishes continuity between the two groups.
+
+However, our canonical identity rules do not say recreation candidates may be generated only from SKU/barcode. Supplier SKU and barcode may change. Before I permanently retire all 46, perform one final non-authoritative deterministic continuity sweep using the full identity evidence defined in the Canonical Spec.
+
+This pass is candidate generation for human review only. It must not create aliases, approve recreations, retire anything, or change Shopify.
+
+1. Compare all 46 deleted historical identities against all 20 new live variants
+
+Evaluate deterministic evidence including, where available:
+
+* normalized product title;
+* normalized variant title;
+* exact normalized size / volume;
+* bottle count / pack;
+* brand;
+* vendor/manufacturer;
+* product type/category;
+* proof;
+* ABV;
+* vintage;
+* flavor/expression;
+* Shopify product handle/history where retained;
+* old product ID versus new product structure;
+* historical supplier aliases/mappings;
+* historical SKU;
+* current SKU;
+* barcode;
+* retail price only as weak supporting evidence;
+* creation/update timing where useful.
+
+SKU and barcode remain strong evidence, but their absence or change must not by itself force NO_RECREATION_CANDIDATE.
+
+2. Do not use loose fuzzy matching
+
+A vaguely similar title is not sufficient.
+
+Use explicit normalized identity components.
+
+Examples:
+
+* same brand + same exact expression + same exact size may justify a human-review candidate even if SKU/barcode changed;
+* same brand but different expression does not;
+* 750ML versus 1L/1.5L/1.75L is a conflict;
+* gift pack versus normal bottle is a conflict unless explicitly proven to represent the same Shopify sellable bottle;
+* different vintage may be material depending on the product;
+* different proof/ABV is material;
+* combo/alternate pack is not the same sellable identity by default.
+
+Keep the Black Velvet 1.5L vs 1.75L type of error explicitly protected against.
+
+3. Classification
+
+Reclassify the 46 into:
+
+A. HIGH-EVIDENCE RECREATION REVIEW
+
+* deterministic non-SKU identity evidence strongly suggests one old ID and one new ID represent the same sellable product;
+* still requires explicit human approval.
+
+B. POSSIBLE RECREATION REVIEW
+
+* some meaningful identity evidence exists but certainty is insufficient.
+
+C. CONFLICT / AMBIGUOUS
+
+* multiple possible candidates or material conflicting identity fields.
+
+D. NO CREDIBLE CURRENT COUNTERPART
+
+* after the full deterministic comparison, none of the 20 new variants credibly represents the historical product.
+
+Do not auto-merge any category.
+
+4. Reverse-check all 20 new variants
+
+For each new Variant ID, show whether any of the 46 historical identities shares:
+
+* exact normalized product identity;
+* same exact size;
+* same brand/expression;
+* other meaningful deterministic evidence.
+
+A new variant may still ultimately be GENUINELY_NEW, but demonstrate that the historical group was checked using more than SKU/barcode.
+
+5. Review page
+
+Update /reconciliation/investigation so I can see:
+
+* historical ID;
+* historical product + variant title;
+* historical size;
+* historical SKU/barcode;
+* proposed new ID if any;
+* new product + variant title;
+* new size;
+* new SKU/barcode;
+* matching identity components;
+* conflicting components;
+* classification;
+* recommended human action.
+
+Sort:
+
+1. High-evidence recreation reviews
+2. Possible recreation reviews
+3. Conflicts/ambiguous
+4. No credible counterpart
+
+6. Retirement workflow
+
+Do not execute retirements during this task.
+
+Once this pass is complete, if the majority remain NO_CREDIBLE_CURRENT_COUNTERPART, prepare the decision UI so I may select multiple retirement candidates and authorize them in one review session using RECONCILIATION_REVIEW_TOKEN.
+
+Even if a batch authorization is used, each historical Variant ID must receive its own permanent audit record.
+
+Never perform an automatic “retire all 46” operation.
+
+7. Tests
+
+Add tests demonstrating:
+
+* same exact normalized product + size but changed SKU/barcode generates a review candidate;
+* same brand but different expression does not;
+* same title but different size is blocked;
+* same size/title but conflicting proof/ABV is flagged;
+* gift pack/normal-product conflict is flagged;
+* multiple matching new products becomes ambiguous;
+* deterministic candidate generation never creates an alias automatically.
+
+Preserve all existing 79 passing tests.
+
+STOP REPORT
+
+Return:
+
+* high-evidence recreation reviews;
+* possible recreation reviews;
+* ambiguous/conflicting;
+* no credible counterpart;
+* exact IDs/titles involved in every non-D category;
+* breakdown of all 20 new variants;
+* total test count;
+* Git commit;
+* CATALOG_SYNC state;
+* confirmation of zero permanent decisions and zero Shopify writes.
+
+Then STOP. Do not begin Phase 4.

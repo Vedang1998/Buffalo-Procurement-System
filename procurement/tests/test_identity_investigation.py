@@ -8,6 +8,8 @@ from procurement_os.catalog_investigation import (
     classify_deleted_vs_new,
     classify_existence,
     classify_new_variant,
+    continuity_sweep_deleted,
+    continuity_sweep_new,
     lookup_variant_node,
     normalize_size,
     variant_gid,
@@ -142,6 +144,82 @@ class ReverseViewTests(unittest.TestCase):
     def test_new_variant_in_dup_barcode_group_heightened(self):
         v = classify_new_variant(new(), [], set(), {"620213101753"})
         self.assertTrue(v["heightened_review"])
+
+
+class ContinuitySweepTests(unittest.TestCase):
+    """Extended sweep: full identity evidence beyond SKU/barcode (owner directive)."""
+
+    def test_same_normalized_product_and_size_with_changed_sku_barcode_is_candidate(self):
+        v = continuity_sweep_deleted(seed(sku="OLD1", barcode=None),
+                                     [new(sku="NEW9", barcode=None)], set(), set())
+        self.assertIn(v["classification"], ("HIGH_EVIDENCE_RECREATION_REVIEW", "POSSIBLE_RECREATION_REVIEW"))
+        self.assertTrue(v["candidates"])
+        self.assertIn("human approval", v["candidates"] and v["reason"])
+
+    def test_changed_barcode_downgrades_from_high_evidence(self):
+        v = continuity_sweep_deleted(seed(sku=None, barcode="111111111111"),
+                                     [new(sku=None, barcode="222222222222")], set(), set())
+        self.assertEqual(v["classification"], "POSSIBLE_RECREATION_REVIEW")
+
+    def test_same_brand_different_expression_is_no_candidate(self):
+        v = continuity_sweep_deleted(
+            seed(product_title="Glenfiddich 12 Year", sku=None, barcode=None),
+            [new(product_title="Glenfiddich 15 Year", sku=None, barcode=None)], set(), set())
+        self.assertEqual(v["classification"], "NO_CREDIBLE_CURRENT_COUNTERPART")
+
+    def test_same_title_different_size_is_blocked(self):
+        v = continuity_sweep_deleted(seed(variant_title="1.5L", sku=None, barcode=None),
+                                     [new(variant_title="1.75L", sku=None, barcode=None)], set(), set())
+        self.assertEqual(v["classification"], "NO_CREDIBLE_CURRENT_COUNTERPART")
+
+    def test_conflicting_proof_is_flagged(self):
+        v = continuity_sweep_deleted(
+            seed(product_title="Old Grand-Dad 80 Proof", sku=None, barcode=None),
+            [new(product_title="Old Grand-Dad 100 Proof", sku=None, barcode=None)], set(), set())
+        self.assertEqual(v["classification"], "NO_CREDIBLE_CURRENT_COUNTERPART")
+        # even with a barcode match, the proof conflict must be surfaced as material
+        v2 = continuity_sweep_deleted(
+            seed(product_title="Old Grand-Dad 80 Proof", sku=None),
+            [new(product_title="Old Grand-Dad 100 Proof", sku=None)], set(), set())
+        self.assertEqual(v2["classification"], "CONFLICT_AMBIGUOUS")
+        self.assertTrue(any("PROOF CONFLICT" in c for c in v2["candidates"][0]["conflicting"]))
+
+    def test_conflicting_abv_is_flagged(self):
+        v = continuity_sweep_deleted(
+            seed(product_title="Seltzer 5%", sku=None),
+            [new(product_title="Seltzer 8%", sku=None)], set(), set())
+        self.assertEqual(v["classification"], "CONFLICT_AMBIGUOUS")
+
+    def test_gift_pack_conflict_is_flagged(self):
+        v = continuity_sweep_deleted(
+            seed(product_title="Glenfiddich 12", sku=None),
+            [new(product_title="Glenfiddich 12 Gift Set", sku=None)], set(), set())
+        self.assertIn(v["classification"], ("CONFLICT_AMBIGUOUS", "NO_CREDIBLE_CURRENT_COUNTERPART"))
+
+    def test_multiple_matching_new_products_is_ambiguous(self):
+        n1, n2 = new(variant_id="901", sku=None, barcode=None), new(variant_id="902", sku=None, barcode=None)
+        v = continuity_sweep_deleted(seed(sku=None, barcode=None), [n1, n2], set(), set())
+        self.assertEqual(v["classification"], "CONFLICT_AMBIGUOUS")
+
+    def test_sweep_never_creates_alias_automatically(self):
+        import inspect
+
+        import procurement_os.catalog_investigation as mod
+        src = inspect.getsource(mod)
+        for forbidden in ("variant_aliases", "approve_recreated_variant", "retire_missing_variant"):
+            self.assertNotIn(forbidden, src, f"investigation module must never touch {forbidden}")
+        v = continuity_sweep_deleted(seed(), [new()], set(), set())
+        self.assertNotIn("approved", json_dumps_lower(v))
+
+    def test_reverse_sweep_demonstrates_full_evidence_check(self):
+        v = continuity_sweep_new(new(sku="Z", barcode="0"), [seed()], set(), set())
+        self.assertEqual(v["historical_ids_checked"], 1)
+        self.assertIn("proof", v["evidence_used"])
+
+
+def json_dumps_lower(obj) -> str:
+    import json
+    return json.dumps(obj).lower()
 
 
 class SafetyTests(unittest.TestCase):

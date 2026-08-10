@@ -207,6 +207,191 @@ def classify_new_variant(new: dict, deleted_seeds: list[dict], dup_skus: set[str
             "reason": "single clean unique-identifier match to a deleted historical identity — approval still required"}
 
 
+# --- Extended continuity sweep (Canonical Spec full identity evidence) -------
+#
+# Candidate generation for human review ONLY. Never creates aliases, never
+# approves, never retires, never writes to Shopify. SKU/barcode remain strong
+# evidence but their absence or change does not by itself force NO candidate.
+
+_PROOF_RE = re.compile(r"(\d{2,3}(?:\.\d)?)\s*(?:PROOF|PF)\b", re.IGNORECASE)
+_ABV_RE = re.compile(r"(\d{1,2}(?:\.\d)?)\s*%", re.IGNORECASE)
+_VINTAGE_RE = re.compile(r"\b(19[5-9]\d|20[0-4]\d)\b")
+
+
+def extract_proof(text: str | None) -> str | None:
+    m = _PROOF_RE.search(text or "")
+    return m.group(1) if m else None
+
+
+def extract_abv(text: str | None) -> str | None:
+    m = _ABV_RE.search(text or "")
+    return m.group(1) if m else None
+
+
+def extract_vintage(text: str | None) -> str | None:
+    m = _VINTAGE_RE.search(text or "")
+    return m.group(1) if m else None
+
+
+def compare_identity(seed: dict, new: dict, dup_skus: set[str], dup_barcodes: set[str]) -> dict:
+    """Full deterministic identity comparison per the Canonical Spec evidence list.
+    Returns matched/conflicting identity components; never a decision."""
+    matched, conflicting, cautions = [], [], []
+    s_full = f"{seed.get('product_title') or ''} {seed.get('variant_title') or ''}"
+    n_full = f"{new.get('product_title') or ''} {new.get('variant_title') or ''}"
+
+    # Product identity: exact normalized title (brand + expression together).
+    st, nt = normalize_title(seed.get("product_title")), normalize_title(new.get("product_title"))
+    title_exact = bool(st) and st == nt
+    s_tokens, n_tokens = set(st.split()), set(nt.split())
+    title_subset = bool(st and nt) and not title_exact and (s_tokens <= n_tokens or n_tokens <= s_tokens)
+    if title_exact:
+        matched.append("product identity exact (normalized brand+expression)")
+    elif title_subset:
+        cautions.append(f"product titles related but not identical: '{seed.get('product_title')}' vs '{new.get('product_title')}'")
+    elif st and nt:
+        conflicting.append(f"product identity differs: '{seed.get('product_title')}' vs '{new.get('product_title')}'")
+
+    # Size/volume/pack — identity-critical, exact normalized comparison.
+    s_size = normalize_size(seed.get("variant_title")) or normalize_size(seed.get("product_title"))
+    n_size = normalize_size(new.get("variant_title")) or normalize_size(new.get("product_title"))
+    size_match = False
+    if s_size and n_size:
+        if s_size == n_size:
+            size_match = True
+            matched.append(f"exact size/pack: {s_size}")
+        else:
+            conflicting.append(f"SIZE/PACK CONFLICT: {s_size} vs {n_size}")
+    elif not s_size and not n_size:
+        svt, nvt = normalize_title(seed.get("variant_title")), normalize_title(new.get("variant_title"))
+        if svt and svt == nvt:
+            size_match = True
+            matched.append(f"variant title exact (no size token): '{svt}'")
+        elif svt and nvt and svt != nvt:
+            conflicting.append(f"variant title differs: '{seed.get('variant_title')}' vs '{new.get('variant_title')}'")
+    else:
+        cautions.append(f"size determinable on only one side (seed={s_size}, new={n_size})")
+
+    # Gift pack / combo / alternate pack.
+    if is_packish(s_full) != is_packish(n_full):
+        conflicting.append("gift/combo/alternate-pack indicator on only one side — not the same sellable identity by default")
+
+    # Proof / ABV / vintage — material when present on both sides.
+    for name, fn in (("proof", extract_proof), ("ABV", extract_abv), ("vintage", extract_vintage)):
+        a, b = fn(s_full), fn(n_full)
+        if a and b:
+            if a == b:
+                matched.append(f"{name} match: {a}")
+            else:
+                conflicting.append(f"{name.upper()} CONFLICT: {a} vs {b}")
+
+    # Vendor / product type — supporting, not identity by themselves.
+    for name in ("vendor", "product_type"):
+        a, b = (seed.get(name) or "").strip(), (new.get(name) or "").strip()
+        if a and b:
+            if a.lower() == b.lower():
+                matched.append(f"{name} match: {a}")
+            else:
+                cautions.append(f"{name} differs: '{a}' vs '{b}' (suppliers change; not identity-conclusive)")
+
+    # SKU / barcode — strong when unique-exact; a change is noted, never disqualifying alone.
+    sku_exact = barcode_exact = False
+    a, b = (seed.get("sku") or "").strip(), (new.get("sku") or "").strip()
+    if a and b:
+        if a == b:
+            if a in dup_skus:
+                cautions.append(f"sku matches but '{a}' is duplicated in live catalog — not unique evidence")
+            else:
+                sku_exact = True
+                matched.append(f"sku exact: {a}")
+        else:
+            cautions.append(f"sku changed: '{a}' -> '{b}' (supplier SKUs may change)")
+    a, b = (seed.get("barcode") or "").strip(), (new.get("barcode") or "").strip()
+    if a and b:
+        if a == b:
+            if a in dup_barcodes:
+                cautions.append(f"barcode matches but '{a}' is duplicated in live catalog — not unique evidence")
+            else:
+                barcode_exact = True
+                matched.append(f"barcode exact: {a}")
+        else:
+            cautions.append(f"barcode differs: '{a}' vs '{b}' — different UPC usually means different physical product")
+
+    # Retail price — weak supporting evidence only.
+    if seed.get("retail_price") and new.get("retail_price"):
+        if str(seed["retail_price"]) == str(new["retail_price"]):
+            matched.append(f"retail price match (weak): {new['retail_price']}")
+        else:
+            cautions.append(f"retail price differs: {seed['retail_price']} vs {new['retail_price']} (weak evidence only)")
+
+    barcode_changed = any(c.startswith("barcode differs") for c in cautions)
+    return {
+        "new_variant_id": new.get("variant_id"),
+        "seed_variant_id": seed.get("variant_id"),
+        "matched": matched, "conflicting": conflicting, "cautions": cautions,
+        "title_exact": title_exact, "title_subset": title_subset, "size_match": size_match,
+        "sku_exact": sku_exact, "barcode_exact": barcode_exact, "barcode_changed": barcode_changed,
+        "is_candidate": (sku_exact or barcode_exact
+                         or (title_exact and size_match)
+                         or (title_subset and size_match)),
+    }
+
+
+def continuity_sweep_deleted(seed: dict, new_rows: list[dict], dup_skus: set[str], dup_barcodes: set[str]) -> dict:
+    """Classify one deleted historical identity using full identity evidence.
+    Categories: HIGH_EVIDENCE_RECREATION_REVIEW / POSSIBLE_RECREATION_REVIEW /
+    CONFLICT_AMBIGUOUS / NO_CREDIBLE_CURRENT_COUNTERPART. Never merges."""
+    comparisons = [compare_identity(seed, n, dup_skus, dup_barcodes) for n in new_rows]
+    candidates = [c for c in comparisons if c["is_candidate"]]
+    if not candidates:
+        return {"classification": "NO_CREDIBLE_CURRENT_COUNTERPART", "candidates": [],
+                "reason": "after full deterministic comparison (title, size, pack, proof/ABV/vintage, vendor, type, SKU, barcode, price), none of the NEW variants credibly represents this historical product",
+                "recommended_action": "Human may authorize retirement (explicit approval required)"}
+    if len(candidates) > 1:
+        return {"classification": "CONFLICT_AMBIGUOUS", "candidates": candidates,
+                "reason": f"{len(candidates)} NEW variants present credible identity evidence — human must disambiguate",
+                "recommended_action": "Leave unresolved; investigate manually"}
+    only = candidates[0]
+    if only["conflicting"]:
+        return {"classification": "CONFLICT_AMBIGUOUS", "candidates": [only],
+                "reason": "material identity conflict present: " + "; ".join(only["conflicting"]),
+                "recommended_action": "Leave unresolved; do not approve with conflicting identity fields"}
+    strong = (only["sku_exact"] or only["barcode_exact"] or (only["title_exact"] and only["size_match"]))
+    if strong and not only["barcode_changed"]:
+        return {"classification": "HIGH_EVIDENCE_RECREATION_REVIEW", "candidates": [only],
+                "reason": "deterministic identity evidence strongly suggests the same sellable product — explicit human approval still required",
+                "recommended_action": "Review side-by-side; approve recreation only if correct"}
+    return {"classification": "POSSIBLE_RECREATION_REVIEW", "candidates": [only],
+            "reason": "meaningful identity evidence exists but certainty is insufficient",
+            "recommended_action": "Review carefully; approve, reject, or leave unresolved"}
+
+
+def continuity_sweep_new(new: dict, deleted_seeds: list[dict], dup_skus: set[str], dup_barcodes: set[str]) -> dict:
+    """Reverse check: demonstrate each NEW variant was compared against every
+    deleted historical identity using more than SKU/barcode."""
+    comparisons = [compare_identity(s, new, dup_skus, dup_barcodes) for s in deleted_seeds]
+    candidates = [c for c in comparisons if c["is_candidate"]]
+    checked = {"historical_ids_checked": len(deleted_seeds),
+               "evidence_used": ["normalized product identity", "normalized variant title", "exact size/pack",
+                                  "gift/combo indicators", "proof", "ABV", "vintage", "vendor", "product type",
+                                  "SKU", "barcode", "retail price (weak)"]}
+    if not candidates:
+        return {"classification": "GENUINELY_NEW", "predecessors": [], **checked,
+                "reason": "no deleted historical identity shares credible deterministic identity evidence"}
+    if len(candidates) > 1:
+        return {"classification": "AMBIGUOUS", "predecessors": candidates, **checked,
+                "reason": "multiple deleted historical identities present credible evidence"}
+    only = candidates[0]
+    if only["conflicting"]:
+        return {"classification": "AMBIGUOUS", "predecessors": [only], **checked,
+                "reason": "candidate has material identity conflicts"}
+    if (only["sku_exact"] or only["barcode_exact"] or (only["title_exact"] and only["size_match"])) and not only["barcode_changed"]:
+        return {"classification": "LIKELY_RECREATION", "predecessors": [only], **checked,
+                "reason": "strong deterministic identity match to a deleted historical identity — approval still required"}
+    return {"classification": "POSSIBLE_RECREATION", "predecessors": [only], **checked,
+            "reason": "partial identity evidence to a deleted historical identity"}
+
+
 # --- Orchestration ----------------------------------------------------------
 
 def _variant_row(cur, variant_id: str) -> dict:
@@ -272,12 +457,15 @@ def run_identity_investigation(conn, client, catalog_sync_id: str) -> dict:
                     summary["still_active_defect_ids"].append(vid)
                     evidence["defect"] = "reconciliation marked MISSING but Shopify reports ACTIVE — enumeration defect, investigate before any decision"
                 if existence == "DELETED_OR_NO_LONGER_RESOLVABLE":
-                    verdict = classify_deleted_vs_new(row, new_rows, dup_skus, dup_barcodes)
+                    # Tier 1: unique SKU/barcode. Tier 2: full identity evidence sweep.
+                    evidence["identifier_tier_analysis"] = classify_deleted_vs_new(row, new_rows, dup_skus, dup_barcodes)
+                    verdict = continuity_sweep_deleted(row, new_rows, dup_skus, dup_barcodes)
                     evidence["recreation_analysis"] = verdict
                     classification = f"DELETED/{verdict['classification']}"
                     summary["deleted_classifications"][verdict["classification"]] = \
                         summary["deleted_classifications"].get(verdict["classification"], 0) + 1
-                    if verdict["heightened_review"]:
+                    if _touches_dup(row, dup_skus, dup_barcodes) or any(
+                            c.get("cautions") for c in verdict.get("candidates", [])):
                         summary["heightened_review_ids"].append(vid)
                 summary["missing_existence"][existence] = summary["missing_existence"].get(existence, 0) + 1
                 cur.execute(
@@ -288,7 +476,9 @@ def run_identity_investigation(conn, client, catalog_sync_id: str) -> dict:
                      classification, json.dumps(evidence),
                      vid in summary["heightened_review_ids"] or existence == "STILL_EXISTS_ACTIVE"))
             for row in new_rows:
-                verdict = classify_new_variant(row, deleted_seeds, dup_skus, dup_barcodes)
+                verdict = continuity_sweep_new(row, deleted_seeds, dup_skus, dup_barcodes)
+                verdict["heightened_review"] = (_touches_dup(row, dup_skus, dup_barcodes)
+                                                or any(c.get("cautions") for c in verdict.get("predecessors", [])))
                 summary["new_classifications"][verdict["classification"]] = \
                     summary["new_classifications"].get(verdict["classification"], 0) + 1
                 if verdict["heightened_review"]:
