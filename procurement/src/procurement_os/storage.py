@@ -40,8 +40,11 @@ class LocalFilesystemStorage(StorageAdapter):
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
-        p = (self._root / key).resolve()
-        if not str(p).startswith(str(self._root.resolve())):
+        if Path(key).is_absolute():
+            raise ValueError("absolute storage keys are not permitted")
+        root = self._root.resolve()
+        p = (root / key).resolve()
+        if not p.is_relative_to(root):
             raise ValueError("storage key escapes storage root")
         return p
 

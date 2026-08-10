@@ -51,9 +51,22 @@ def boolean(v: str | None, default: bool=False) -> bool:
     return s in {'1','true','yes','y','t'}
 
 
-def import_seed(seed_dir: Path, database_url: str) -> dict[str,int]:
+def import_seed(seed_dir: Path, database_url: str | None = None, conn: Any | None = None) -> dict[str,int]:
+    """Import the seed bundle.
+
+    Either pass ``database_url`` (standalone CLI use, self-managed transaction) or an
+    open psycopg ``conn`` so a caller can bind import + validation + audit into one
+    transaction (fail-closed orchestration in tools/run_seed_import.py).
+    """
     import psycopg
 
+    if conn is not None:
+        return _import_seed_on_conn(seed_dir, conn)
+    with psycopg.connect(database_url) as _conn:
+        return _import_seed_on_conn(seed_dir, _conn)
+
+
+def _import_seed_on_conn(seed_dir: Path, conn: Any) -> dict[str,int]:
     variants=read_csv(seed_dir/'variants.csv')
     aliases=read_csv(seed_dir/'variant_aliases.csv')
     vendors=read_csv(seed_dir/'vendors.csv')
@@ -62,7 +75,8 @@ def import_seed(seed_dir: Path, database_url: str) -> dict[str,int]:
     exceptions=read_csv(seed_dir/'open_exceptions.csv')
 
     counts={}
-    with psycopg.connect(database_url) as conn:
+    # Connection is supplied by the caller; indentation preserved from v1.3 body.
+    if conn is not None:
       with conn.transaction():
        with conn.cursor() as cur:
         vendor_ids={}
