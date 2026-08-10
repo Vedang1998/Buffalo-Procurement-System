@@ -1,0 +1,126 @@
+RECONCILIATION_REVIEW_TOKEN is now configured. Continue Phase 3, but handle both the review-token security and the 1,999-vs-2,003 catalog discrepancy under the following rules.
+
+1. Reconciliation review token
+
+Use RECONCILIATION_REVIEW_TOKEN only as an authorization control for permanent identity decisions such as:
+
+* APPROVE RECREATION
+* REJECT RECREATION / KEEP SEPARATE
+* MARK HISTORICAL IDENTITY RETIRED
+
+Never:
+
+* log the token;
+* display it in the UI;
+* return it in an API response;
+* persist it in PostgreSQL;
+* write it to files;
+* commit it to Git;
+* expose it in debug output or exception traces.
+
+Read it only from the environment/Replit Secrets and compare submitted review authorization securely.
+
+The token authorizes the action, but the actual identity decision must still be independently audited. For every permanent decision persist:
+
+* old Variant ID;
+* new Variant ID if applicable;
+* action taken;
+* evidence presented;
+* conflicting evidence;
+* timestamp;
+* actor/session identity available to the application;
+* reconciliation run ID;
+* resulting alias/retirement/rejection state.
+
+Never store the review token or any derivative of the token in that audit record.
+
+Keep all permanent identity decisions fail-closed. A high confidence score alone must never authorize a merge.
+
+⸻
+
+2. Investigate the live Shopify catalog discrepancy before accepting the snapshot
+
+We currently have:
+
+* Shopify/count-index result: 2,003
+* complete paginated catalog fetch result: 1,999
+
+Do not change filters, loosen acceptance criteria, or change CATALOG_SYNC merely to make these numbers agree.
+
+Investigate and document the exact reason for the four-record difference.
+
+Verify at minimum:
+
+1. Both queries use the same intended catalog definition, especially active-product filtering.
+2. Pagination actually reached hasNextPage = false.
+3. Every endCursor advanced correctly and no cursor was repeated or skipped.
+4. Number of raw nodes fetched versus number of unique Shopify Variant IDs.
+5. Whether any duplicate Variant IDs were returned across pages.
+6. Whether Shopify returned any GraphQL errors, warnings, throttling issues, partial responses, or retry behavior that could have dropped nodes.
+7. Whether the count query and productVariants query use different filter semantics.
+8. Whether archived/draft/unlisted products or variants associated with non-ACTIVE products are included in one query but excluded from the other.
+9. Whether any products changed status or were created/deleted while the count and pagination queries were running.
+10. Whether the four records can be identified explicitly by Variant ID.
+
+If necessary, run controlled comparison queries and persist diagnostic results, but keep Shopify access read-only.
+
+Do not solve this by simply deciding that 1,999 or 2,003 is “close enough.”
+
+The acceptable outcome is an evidence-backed explanation such as:
+
+* count query includes four records excluded by the active catalog query;
+* four variants changed state during the run;
+* pagination/query bug identified and fixed;
+* duplicate/count-index inconsistency identified;
+* or another precisely demonstrated Shopify behavior.
+
+Once identified, make the catalog sync implementation deterministic so subsequent runs produce a consistent active-catalog definition.
+
+⸻
+
+3. Phase 3 safety remains unchanged
+
+Until the catalog snapshot is proven complete and all material identity exceptions are resolved:
+
+CATALOG_SYNC = FAIL
+
+Do not:
+
+* begin SALES_BACKFILL;
+* enable PO generation;
+* update Shopify SKUs;
+* change Shopify inventory;
+* archive Shopify products;
+* change retail prices;
+* create old-ID → new-ID aliases without explicit human approval.
+
+You may continue building/populating the reconciliation review UI while investigating the count discrepancy.
+
+⸻
+
+4. When finished, stop and report
+
+Return one Phase 3 diagnostic/reconciliation report containing:
+
+* count-query result;
+* raw paginated-node count;
+* unique paginated Variant-ID count;
+* exact explanation for the discrepancy;
+* the four Variant IDs involved, if identifiable;
+* final authoritative live active-catalog count;
+* exact-ID matches to the 2,029 historical seed;
+* new live variants;
+* historical IDs missing from live Shopify;
+* recreation candidates;
+* ambiguous identities;
+* SKU conflicts;
+* barcode conflicts;
+* metadata-only changes;
+* unresolved blocker count;
+* reconciliation decisions made;
+* audit-log verification;
+* tests passed;
+* code/migrations changed;
+* final CATALOG_SYNC status and every reason it remains FAIL, if applicable.
+
+Stop after this report and wait for approval before Phase 4.
