@@ -2,14 +2,32 @@
 
 Internal procurement operating system for Buffalo House Liquor & Wines — deterministic, fail-closed purchasing intelligence replacing Shopify Stocky. Python/FastAPI is the procurement-engine authority (lives in `procurement/`); the Node monorepo scaffold coexists but must never duplicate procurement business logic.
 
-## Authority order (mandatory)
+## Read before any Replit Agent work
 
-1. `procurement/docs/authority/01_CANONICAL_SYSTEM_SPEC_v2_1.md`
-2. `procurement/config/rules.toml` (machine-enforced)
-3. `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md` (sequencing)
-4. `procurement/docs/authority/05_CURRENT_BUILD_STATUS_v1_3.md`
+1. `AGENTS.md`
+2. `procurement/docs/authority/01_CANONICAL_SYSTEM_SPEC_v2_1.md`
+3. `procurement/config/rules.toml`
+4. `docs/PROJECT_GOVERNANCE.md`
+5. `docs/CODEX_HANDOFF.md`
+6. relevant schema/migrations/tests
 
-Do not simplify or reinterpret procurement business rules without explicit owner approval. Read actual readiness gates from PostgreSQL; at the current handoff `CATALOG_SYNC=PASS` and `SALES_BACKFILL=FAIL` pending historical-identity review. PO generation stays disabled while any blocking gate fails. Never auto-merge Variant identities. Owner approval is required between phases.
+Do not simplify or reinterpret procurement business rules without explicit owner approval. Read actual readiness gates from PostgreSQL rather than assuming the handoff is still current.
+
+## Replit Agent role
+
+Replit Agent is the **Replit-specific specialist/reserve**, not the default coding agent. Prefer it for Replit deployment, Autoscale, Workflows/Scheduled Deployments, App Storage, networking/ports, environment/platform behavior, and other Replit-specific issues.
+
+Follow `docs/PROJECT_GOVERNANCE.md`:
+
+- one writer at a time;
+- do not modify the same task concurrently with Codex/Claude/Cursor;
+- machine tests/control totals before confidence claims;
+- independent review for material backend/data/procurement logic;
+- owner approval at phase boundaries and for defined consequential decisions;
+- update `docs/CODEX_HANDOFF.md` at meaningful milestone closeout if Replit Agent was the writer;
+- do not mark a phase complete while a blocking gate or owner decision remains open.
+
+PO generation stays disabled while any required blocking gate fails. Never auto-merge Variant identities. Never manually force readiness gates.
 
 ## Procurement app — run & operate
 
@@ -37,26 +55,9 @@ Do not simplify or reinterpret procurement business rules without explicit owner
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
-## Where things live
-
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
-
-## Architecture decisions
-
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
 ## Pointers
 
+- Current checkpoint: `docs/CODEX_HANDOFF.md`
+- Project-management/review process: `docs/PROJECT_GOVERNANCE.md`
+- Executive phase status: `procurement/docs/PHASE_STATUS.md`
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
