@@ -37,4 +37,12 @@ class ShopifyAuthTests(unittest.TestCase):
         p=ClientCredentialsTokenProvider(ShopifyConfig('s','i','x'),post_form=post,clock=lambda:0)
         self.assertEqual(p.get_token(),'1'); p.invalidate(); self.assertEqual(p.get_token(),'2')
 
+    def test_malformed_token_response_does_not_echo_payload(self):
+        def post(*args,**kwargs):
+            return Response({'diagnostic':'sensitive-upstream-payload'})
+        p=ClientCredentialsTokenProvider(ShopifyConfig('s','i','x'),post_form=post,clock=lambda:0)
+        with self.assertRaises(RuntimeError) as ctx:
+            p.get_token()
+        self.assertNotIn('sensitive-upstream-payload',str(ctx.exception))
+
 if __name__ == '__main__': unittest.main()

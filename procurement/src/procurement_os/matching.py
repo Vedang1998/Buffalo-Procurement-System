@@ -55,6 +55,10 @@ def score_candidate(c: MatchCandidate, auto_threshold=.92, review_threshold=.82)
     if ss and qs and ss==qs: score=min(1,score+.05); reasons.append("SIZE_MATCH")
     score=max(0,min(1,score))
     if pack_penalty: return MatchResult(score,False,True,False,tuple(reasons))
-    if score>=auto_threshold: return MatchResult(score,True,False,False,tuple(reasons+["HIGH_CONFIDENCE"]))
+    if score>=auto_threshold:
+        return MatchResult(
+            score,False,True,False,
+            tuple(reasons+["FUZZY_SUPPORTING_EVIDENCE_ONLY"]),
+        )
     if score>=review_threshold: return MatchResult(score,False,True,False,tuple(reasons+["REVIEW_THRESHOLD"]))
     return MatchResult(score,False,True,False,tuple(reasons+["LOW_CONFIDENCE"]))

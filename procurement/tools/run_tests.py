@@ -10,7 +10,7 @@ import unittest
 from urllib.parse import urlparse
 
 
-MINIMUM_EXPECTED_TESTS = 142
+MINIMUM_EXPECTED_TESTS = 159
 EXPECTED_TEST_MODULES = {
     "test_assortment.py",
     "test_catalog.py",
@@ -23,8 +23,11 @@ EXPECTED_TEST_MODULES = {
     "test_phase4_postgres_integration.py",
     "test_phase4_query_contracts.py",
     "test_pricing.py",
+    "test_readiness.py",
     "test_review.py",
+    "test_safety_contracts.py",
     "test_sales.py",
+    "test_schema_migrations.py",
     "test_shopify_auth.py",
     "test_shopify_queries.py",
     "test_storage.py",

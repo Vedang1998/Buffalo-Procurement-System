@@ -197,6 +197,22 @@ class HistoricalIdentityResolutionTests(unittest.TestCase):
                     ("RESOLVED", "100", "APPROVED_HISTORICAL_IDENTITY"),
                 )
 
+    def test_null_id_exact_current_sku_title_still_requires_human_alias(self):
+        index = HistoricalIdentityIndex(
+            [CurrentIdentity("100", "CURRENT", "Current Product", "750ML")], []
+        )
+        resolution = index.resolve(
+            source_row(
+                variant_id=None,
+                sku="CURRENT",
+                product="Current Product",
+                variant="750ML",
+            )
+        )
+        self.assertEqual(
+            (resolution.status, resolution.canonical_variant_id, resolution.method),
+            ("UNRESOLVED", None, "UNAPPROVED_IDENTITY_EVIDENCE"),
+        )
     def test_duplicate_sku_never_becomes_unique_proof(self):
         index = HistoricalIdentityIndex(
             [
@@ -232,7 +248,7 @@ class HistoricalIdentityResolutionTests(unittest.TestCase):
         )
         self.assertEqual(resolution.status, "AMBIGUOUS")
         self.assertIsNone(resolution.canonical_variant_id)
-        self.assertEqual(resolution.method, "SKU_EVIDENCE_ONLY")
+        self.assertEqual(resolution.method, "UNAPPROVED_IDENTITY_EVIDENCE")
         self.assertTrue(any("SIZE_CONFLICT" in item for item in resolution.evidence["conflicts"]))
 
     def test_title_change_does_not_defeat_an_approved_variant_id_alias(self):

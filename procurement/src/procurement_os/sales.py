@@ -180,28 +180,10 @@ class HistoricalIdentityIndex:
             if len(approved_exact) > 1:
                 return IdentityResolution("AMBIGUOUS", None, "APPROVED_HISTORICAL_IDENTITY", tuple(approved_exact), {"source_sku": row.source_sku})
 
-            current_exact = sorted(self.current_full.get((sku, p, v), set()))
             live_sku_candidates = sorted(self.current_sku.get(sku, set()))
-            if len(current_exact) == 1 and len(live_sku_candidates) == 1:
-                return IdentityResolution(
-                    "RESOLVED", current_exact[0], "DETERMINISTIC_UNIQUE_CURRENT_IDENTITY",
-                    tuple(current_exact), {"source_sku": row.source_sku,
-                                           "product_title": row.source_product_title,
-                                           "variant_title": row.source_variant_title},
-                )
-            if current_exact:
-                return IdentityResolution(
-                    "AMBIGUOUS", None, "DUPLICATE_SKU_CONFLICT",
-                    tuple(live_sku_candidates or current_exact),
-                    {"source_sku": row.source_sku,
-                     "reason": "duplicate live SKU cannot provide unique identity proof"},
-                )
-
-            # SKU is mapping evidence, never permanent identity. Even one candidate is
-            # insufficient without exact normalized identity evidence, and a size conflict
-            # is an explicit blocker rather than something a confidence score can hide.
             candidates = sorted(self.alias_sku.get(sku, set()) | self.current_sku.get(sku, set()))
             if candidates:
+                current_exact = sorted(self.current_full.get((sku, p, v), set()))
                 source_size = extract_size(row.source_variant_title) or extract_size(row.source_product_title)
                 conflicts: list[str] = []
                 for candidate_id in candidates:
@@ -214,10 +196,11 @@ class HistoricalIdentityIndex:
                 return IdentityResolution(
                     "AMBIGUOUS" if len(candidates) > 1 or conflicts else "UNRESOLVED",
                     None,
-                    "SKU_EVIDENCE_ONLY",
+                    "UNAPPROVED_IDENTITY_EVIDENCE",
                     tuple(candidates),
                     {"source_sku": row.source_sku, "conflicts": conflicts,
-                     "reason": "supplier/historical SKU alone is insufficient identity evidence"},
+                     "exact_current_identity_candidates": current_exact,
+                     "reason": "current SKU/title evidence requires an approved historical alias"},
                 )
 
         return IdentityResolution("UNRESOLVED", None, None, (), {

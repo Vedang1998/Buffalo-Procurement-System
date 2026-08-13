@@ -30,11 +30,11 @@ def apply_schema(db_dir: Path, database_url: str) -> list[str]:
             sql = (db_dir / name).read_text(encoding="utf-8")
             with conn.transaction():
                 conn.execute(sql)
-            conn.execute(
-                "INSERT INTO meta(key,value) VALUES (%s,'applied')"
-                " ON CONFLICT(key) DO UPDATE SET value='applied', updated_at=now()",
-                (f"migration:{name}",),
-            )
+                conn.execute(
+                    "INSERT INTO meta(key,value) VALUES (%s,'applied')"
+                    " ON CONFLICT(key) DO UPDATE SET value='applied', updated_at=now()",
+                    (f"migration:{name}",),
+                )
             applied.append(name)
     return applied
 
