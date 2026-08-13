@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-10T17:10:56Z (UTC)
+**Updated:** 2026-08-13T14:44:20Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -12,11 +12,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### Repository and tests
 
-- Branch: `main`.
+- Active unmerged branch: `tooling/overnight-hardening-2026-08-12`, based exactly on `origin/main` commit `c03969f4a3ddfcd05d95a7bd66d04df714ca1e75`.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
-- Test command: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests -v`.
-- Post-backfill test result: **142/142 PASS**, 0 failures, 0 errors, 0 skips; unittest time 2.410 seconds, measured wall time 3.181 seconds on 2026-08-10.
-- Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
+- Verified overnight logic/test checkpoint: `980b1fba88b8ccde5530e1c01425586ce139d345`. Verified audit/task-packet checkpoint: `7c736e19c09da2880981173f42e3cf3c9dd54d2f`.
+- Canonical developer/CI test command, run from repository root: `./scripts/procurement-tests`.
+- Overnight baseline: **142/142 PASS**, 0 failures, 0 errors, 0 skips.
+- Final local CI-equivalent result: **159 discovered / 159 executed / 159 PASS**, 0 failures, 0 errors, 0 skips; unittest time 1.563 seconds and complete command wall time 14.575 seconds on 2026-08-13.
+- Coverage includes an isolated PostgreSQL Phase 4 workflow plus full migration-chain idempotency, readiness-gate completeness, catalog-run failure precedence, approved-only identity resolution, disabled price rollover, and permanent safety contracts. The runner rejects non-loopback/non-`_test` databases, missing expected modules, test counts below 159, discovery/execution mismatch, any skip, or any failure/error.
 
 ### Phase 3 catalog checkpoint
 
@@ -51,11 +53,59 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 | --- | --- | --- |
 | `CATALOG_SYNC` | `PASS` | Phase 3 catalog remains reconciled. |
 | `SALES_BACKFILL` | `FAIL` | 341 material unresolved identity groups (343 total groups) await owner decisions. |
+| `INVENTORY_HISTORY` | `WARN` | Later workstream is not accepted or operational. |
 | `VENDOR_RULES` | `FAIL` | Phase not started. |
+| `PRICE_COVERAGE` | `WARN` | Later price-book workstream is not accepted. |
+| `MAPPING_INTEGRITY` | `WARN` | Later supplier-mapping validation is not accepted. |
+| `OPEN_PO_RECONCILIATION` | `WARN` | Later PO-ledger reconciliation is not operational. |
 
-- PO generation is **disabled**, blocked by `SALES_BACKFILL` and `VENDOR_RULES`; purchase-order count remains zero.
+- Hardened PO readiness now requires all seven canonical global gates to exist and be `PASS`; `WARN`, `FAIL`, or missing required evidence blocks. PO generation is **disabled** and purchase-order count remains zero.
 - Shopify remained strictly read-only. Phase 4 stored no customer fields/PII and made zero Shopify writes.
 - No automatic historical alias approval or exclusion occurred.
+
+## Overnight engineering hardening milestone — unmerged
+
+### Result and CI
+
+- Local engineering result is **PASS**; repository/governance closeout is **PARTIAL** pending remote CI, independent review, owner acceptance, and GitHub publication.
+- Added `.github/workflows/procurement-tests.yml` for pull requests targeting `main` and pushes to `main`. Required job/check name is exactly `procurement-tests`.
+- CI installs from root `pyproject.toml`/`uv.lock`, uses a disposable PostgreSQL 17 service, and calls the same `./scripts/procurement-tests` command used locally. No production URL or application secret is referenced.
+- Workflow YAML parsed successfully and the required job name was independently checked locally. GitHub Actions cannot run until the branch is published and a PR targets `main`.
+- GitHub publication is **blocked in this environment**: `origin` SSH push was denied because no usable public-key credential is available, and `gh auth status` reports no authenticated host. No credential was installed or changed. The committed local branch is intact and clean once this handoff commit is created.
+
+### Canonical defects fixed and tests added
+
+- Fixed two CRITICAL Class A defects: incomplete/missing readiness gates could falsely enable PO generation; operational price rollover lacked the canonical backup/completeness/transition/assertion guards. Rollover is now explicitly disabled until its authorized phase.
+- Fixed three HIGH Class A defects: incomplete catalog evidence could pass, an older completed catalog run could mask a newer failed run, null/zero-ID historical sales could resolve from unapproved current SKU/title evidence, and fuzzy supplier similarity could auto-match. The two catalog symptoms are one catalog-readiness finding in the structured inventory.
+- Fixed two MEDIUM Class A defects: migration SQL/audit recording was not atomic; permanent catalog decisions allowed incomplete actor/reason provenance.
+- Fixed one LOW Class A secret-safety defect: malformed token responses could be echoed into an exception.
+- Added **17 deterministic tests** (142 to 159) covering catalog evidence, catalog run precedence, required gate completeness/scope, approved-only historical identity, disabled rollover, permanent-decision provenance, full migration-chain idempotency/audit, no PO route, one-PO/vendor schema, automation-off rules, and token-payload redaction.
+- Read-only production quantification found **zero** facts resolved by the removed unapproved current-SKU/title method, so no production remediation is indicated by that fix.
+- Complete structured findings and classifications: `procurement/docs/CANONICAL_AUDIT_2026-08-13.md`.
+
+### Files changed
+
+- CI/parity: `.github/workflows/procurement-tests.yml`, `scripts/procurement-tests`, `procurement/tools/run_tests.py`, `procurement/README.md`.
+- Implementation: `procurement/src/procurement_os/api.py`, `catalog.py`, `matching.py`, `pricing.py`, `readiness.py`, `sales.py`, `shopify/auth.py`, and `procurement/tools/apply_schema.py`.
+- Tests: `test_catalog.py`, `test_matching.py`, `test_phase4_historical_sales.py`, `test_phase4_postgres_integration.py`, `test_pricing.py`, `test_readiness.py`, `test_safety_contracts.py`, `test_sales.py`, `test_schema_migrations.py`, and `test_shopify_auth.py` under `procurement/tests/`.
+- Documentation: `docs/CODEX_HANDOFF.md`, `docs/TOOLING_SETUP.md`, `docs/superpowers/specs/2026-08-13-overnight-hardening-design.md`, `procurement/docs/CANONICAL_AUDIT_2026-08-13.md`, and `procurement/docs/FUTURE_PHASE_TASK_PACKETS.md`.
+- `procurement/docs/PHASE_STATUS.md` was intentionally unchanged because no phase/program milestone changed.
+
+### Validation and security evidence
+
+- `uv lock --check`, Python compilation, shell syntax, YAML parse/job-name check, migration/integrity tests, Git whitespace review, and tracked-secret/auth-state scans passed.
+- Authentication state under `.ai-auth/` remains ignored and untracked. `procurement/.env.example` contains placeholders/public API-version configuration. No tracked private-key or token signature was detected.
+- Pre-existing seed CSVs and the historical v1.3 source packet were reviewed as intentional repository inputs, not overnight-generated production exports.
+- Latest production read-only verification used a database-enforced read-only transaction. All seven gate states are unchanged; 7/7 migration markers are present; purchase orders, historical review decisions, and active historical exclusions remain zero.
+- Phase 4 controls remain exact: 21/21 chunks, 70/70 pages, 59,083 source/unique facts, 55,971 resolved, 3,112 unresolved, 0 ambiguous/excluded; source/raw 82,501.0000 units and $1,300,975.14; canonical 78,815.0000 units and $1,231,372.83; unresolved 3,686.0000 units and $69,602.31.
+- Production writes: **ZERO**. Shopify writes: **ZERO**. PO generation/release: **ZERO**. Automatic owner decisions: **ZERO**.
+
+### Prepared later work and intentional deferrals
+
+- `procurement/docs/FUTURE_PHASE_TASK_PACKETS.md` preserves current foundation phase IDs, canonical phases 3–9, and all 13 ordered post-foundation workstreams. Each packet records prerequisites/readiness, scope, dependencies, anticipated schema, human decisions, acceptance/tests/controls, idempotency, containment, review, release gate, and exact authorization boundary.
+- No later operational feature was implemented. Inventory/vendor/pricing/forecasting/procurement/PO work remains gated by Phase 4 and explicit phase authorization.
+- Owner decisions remain: the 343 Phase 4 identity groups; future verified vendor terms, supplier mappings, price transitions, model/policy acceptance, strategic quantities, combo/new-item decisions, and every final PO.
+- Independent Claude review, targeted Cursor review, ChatGPT business/program review, remote CI proof, PR, merge, deployment, and release are intentionally deferred.
 
 ## Historical checkpoint
 
@@ -65,6 +115,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
+Morning engineering sequence: restore an owner-controlled GitHub authentication route without sharing credentials in chat; push `tooling/overnight-hardening-2026-08-12`; open a draft PR to `main`; require green `procurement-tests`; obtain Claude adversarial review; remediate through one writer; obtain targeted Cursor and ChatGPT reviews; then request owner merge acceptance. Do not merge or deploy before those steps.
+
+The only next Phase 4 business operation remains authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
 
 Do not begin inventory history, vendor rules, forecasting, pricing ingestion, procurement optimization, or PO generation until the owner explicitly authorizes the next phase.
