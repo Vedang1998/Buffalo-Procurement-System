@@ -13,7 +13,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ### Repository and tests
 
 - Branch: `main`.
-- Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). The Phase 4 checkpoint commit is the commit containing this update; use `git rev-parse HEAD` for its final SHA.
+- Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Test command: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests -v`.
 - Post-backfill test result: **142/142 PASS**, 0 failures, 0 errors, 0 skips; unittest time 2.410 seconds, measured wall time 3.181 seconds on 2026-08-10.
 - Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
