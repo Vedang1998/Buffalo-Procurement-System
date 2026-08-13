@@ -9,5 +9,7 @@ class T(unittest.TestCase):
   self.assertTrue(r.blocked)
  def test_close_title(self):
   r=score_candidate(MatchCandidate('JOSH CELLARS SB 750ML','Josh Cellars Sauvignon Blanc','750ML'),.80,.70)
-  self.assertTrue(r.auto_match)
+  self.assertFalse(r.auto_match)
+  self.assertTrue(r.review)
+  self.assertIn('FUZZY_SUPPORTING_EVIDENCE_ONLY',r.reasons)
 if __name__=='__main__': unittest.main()

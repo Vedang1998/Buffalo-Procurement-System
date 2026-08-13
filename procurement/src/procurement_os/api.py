@@ -15,7 +15,6 @@ from .config import load_rules
 from .economics import qualifying_quantity, target_cost
 from .health import full_health
 from .matching import MatchCandidate, score_candidate
-from .pricing import rollover
 from .readiness import po_readiness
 from . import sales as sales_service
 
@@ -51,7 +50,7 @@ class RecreationDecision(BaseModel):
     old_variant_id: str
     new_variant_id: str
     actor: str
-    note: str = ""
+    note: str
     review_token: str
 
 
@@ -328,7 +327,7 @@ def reconciliation_page():
 <div class='actions'>
 <form method='post' action='decide'><input type=hidden name=action value=approve>
 <input type=hidden name=old value='{esc(old.get("variant_id"))}'><input type=hidden name=new value='{esc(c.get("new_variant_id"))}'>
-<input name=actor placeholder='your name' required><input name=note placeholder='note'>
+<input name=actor placeholder='your name' required><input name=note placeholder='approval reason' required>
 <input name=review_token type=password placeholder='review token' required>
 <button class='ok'>APPROVE RECREATION</button></form>
 <form method='post' action='decide'><input type=hidden name=action value=reject>
@@ -734,12 +733,8 @@ def historical_sales_review_decide(
 
 @app.post("/pricing/rollover")
 def pricing_rollover(req: RolloverRequest):
-    db = os.getenv("DATABASE_URL")
-    if not db:
-        raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
-    import psycopg
-    try:
-        with psycopg.connect(db) as conn:
-            return rollover(conn, req.as_of)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    raise HTTPException(
+        status_code=503,
+        detail=("Price rollover is not operationally enabled; the authorized "
+                "price-book phase and all canonical rollover guards are incomplete"),
+    )

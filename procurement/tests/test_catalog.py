@@ -5,7 +5,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from decimal import Decimal
 import unittest
 
-from procurement_os.catalog import LiveVariant, SeedVariant, numeric_shopify_id, parse_live_variant, reconcile_catalog
+from procurement_os.catalog import (
+    LiveVariant, SeedVariant, approve_recreated_variant, catalog_gate_blockers,
+    numeric_shopify_id, parse_live_variant, reconcile_catalog,
+    reject_recreation_candidate, retire_missing_variant,
+)
 
 
 def live(vid, *, pid='p1', sku=None, barcode=None, product='Product', variant='750ML'):
@@ -67,5 +71,39 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(v.product_id, '88')
         self.assertEqual(v.shopify_current_cost, Decimal('10.00'))
         self.assertEqual(v.inventory_quantity, Decimal('4'))
+
+    def test_catalog_gate_requires_complete_durable_identity_evidence(self):
+        complete = {
+            "live_rows_received": 2,
+            "exact_current_ids": 1,
+            "new_live_variants": 1,
+            "unresolved_blockers": 0,
+            "pagination_complete": True,
+            "source_hash": "catalog-hash",
+        }
+        self.assertEqual(catalog_gate_blockers(**complete), ())
+        cases = (
+            ({"pagination_complete": False}, "PAGINATION_INCOMPLETE"),
+            ({"live_rows_received": 0, "exact_current_ids": 0, "new_live_variants": 0}, "NO_LIVE_VARIANTS"),
+            ({"new_live_variants": 0}, "LIVE_IDENTITY_ACCOUNTING_MISMATCH"),
+            ({"source_hash": None}, "CATALOG_SNAPSHOT_HASH_MISSING"),
+            ({"unresolved_blockers": 1}, "IDENTITY_BLOCKERS_UNRESOLVED"),
+        )
+        for override, expected in cases:
+            with self.subTest(expected=expected):
+                evidence = {**complete, **override}
+                self.assertIn(expected, catalog_gate_blockers(**evidence))
+
+    def test_permanent_identity_actions_require_actor_and_reason_before_database_access(self):
+        calls = (
+            (approve_recreated_variant, (object(), "old", "new"), {"actor": "", "note": "reason"}),
+            (approve_recreated_variant, (object(), "old", "new"), {"actor": "owner", "note": " "}),
+            (reject_recreation_candidate, (object(), "old", "new"), {"actor": "", "note": "reason"}),
+            (retire_missing_variant, (object(), "old"), {"actor": "owner", "note": " "}),
+        )
+        for function, args, kwargs in calls:
+            with self.subTest(function=function.__name__, kwargs=kwargs):
+                with self.assertRaises(ValueError):
+                    function(*args, **kwargs)
 
 if __name__ == '__main__': unittest.main()

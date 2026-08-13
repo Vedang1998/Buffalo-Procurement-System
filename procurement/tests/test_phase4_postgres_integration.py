@@ -33,6 +33,8 @@ from procurement_os.historical_sales import (
     record_historical_sales_review_decision,
     source_identity_key,
 )
+from procurement_os.catalog import recompute_catalog_gate
+from procurement_os.readiness import po_readiness
 from procurement_os.sales import SalesSourceRow, load_identity_index
 
 
@@ -321,6 +323,61 @@ class Phase4PostgresIntegrationTests(unittest.TestCase):
                 cur.fetchall(),
                 [("100", None, "ZERO-A"), ("200", None, "ZERO-B")],
             )
+
+    def test_po_readiness_requires_every_gate_and_fails_when_one_is_missing(self):
+        initial = po_readiness(self.conn)
+        self.assertFalse(initial["po_generation_enabled"])
+        self.assertTrue(any(
+            blocker["detail"]["gate_name"] == "SALES_BACKFILL"
+            for blocker in initial["blockers"]
+            if "gate_name" in blocker["detail"]
+        ))
+        with self.conn.cursor() as cur:
+            cur.execute("UPDATE readiness_gates SET status='PASS'")
+        self.assertTrue(po_readiness(self.conn)["po_generation_enabled"])
+        with self.conn.cursor() as cur:
+            cur.execute("DELETE FROM readiness_gates WHERE gate_name='VENDOR_RULES'")
+        missing = po_readiness(self.conn)
+        self.assertFalse(missing["po_generation_enabled"])
+        self.assertTrue(any(
+            blocker["type"] == "MISSING_REQUIRED_GATE"
+            and blocker["detail"]["gate_name"] == "VENDOR_RULES"
+            for blocker in missing["blockers"]
+        ))
+
+    def test_newer_failed_catalog_sync_cannot_be_bypassed_by_recompute(self):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO catalog_sync_runs(
+                     status,pagination_complete,live_rows_received,exact_current_ids,
+                     new_live_variants,source_hash,completed_at
+                   ) VALUES ('COMPLETED',TRUE,1,1,0,'complete-hash',now())
+                   RETURNING catalog_sync_id"""
+            )
+            complete_id = cur.fetchone()[0]
+        self.assertEqual(recompute_catalog_gate(self.conn)["status"], "PASS")
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO catalog_sync_runs(
+                     status,pagination_complete,live_rows_received,exact_current_ids,
+                     new_live_variants,source_hash,started_at,completed_at
+                   ) VALUES ('FAILED',FALSE,0,0,0,NULL,now() + interval '1 day',
+                             now() + interval '1 day')"""
+            )
+        result = recompute_catalog_gate(self.conn)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("LATEST_CATALOG_SYNC_NOT_COMPLETED", result["readiness_blockers"])
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """SELECT status FROM readiness_gates
+                   WHERE gate_name='CATALOG_SYNC' AND scope_type='GLOBAL' AND scope_id=''"""
+            )
+            self.assertEqual(cur.fetchone()[0], "FAIL")
+            cur.execute(
+                "SELECT COUNT(*) FROM catalog_reconciliation_items WHERE catalog_sync_id=%s",
+                (complete_id,),
+            )
+            self.assertEqual(cur.fetchone()[0], 0)
 
 
 if __name__ == "__main__":

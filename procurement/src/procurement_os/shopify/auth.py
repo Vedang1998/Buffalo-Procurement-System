@@ -96,7 +96,7 @@ class ClientCredentialsTokenProvider:
         payload = response.json()
         token = payload.get("access_token")
         if not token:
-            raise RuntimeError(f"Shopify token response omitted access_token: {payload}")
+            raise RuntimeError("Shopify token response omitted access_token")
         expires_in = int(payload.get("expires_in", 86399))
         self._cached = AccessToken(
             token=token,

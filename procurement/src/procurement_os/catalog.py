@@ -80,6 +80,30 @@ class CatalogReconciliation:
         return not self.blockers
 
 
+def catalog_gate_blockers(
+    *,
+    live_rows_received: int,
+    exact_current_ids: int,
+    new_live_variants: int,
+    unresolved_blockers: int,
+    pagination_complete: bool,
+    source_hash: str | None,
+) -> tuple[str, ...]:
+    """Evaluate the durable evidence required for CATALOG_SYNC to pass."""
+    blockers: list[str] = []
+    if not pagination_complete:
+        blockers.append("PAGINATION_INCOMPLETE")
+    if live_rows_received <= 0:
+        blockers.append("NO_LIVE_VARIANTS")
+    if exact_current_ids + new_live_variants != live_rows_received:
+        blockers.append("LIVE_IDENTITY_ACCOUNTING_MISMATCH")
+    if not source_hash:
+        blockers.append("CATALOG_SNAPSHOT_HASH_MISSING")
+    if unresolved_blockers:
+        blockers.append("IDENTITY_BLOCKERS_UNRESOLVED")
+    return tuple(blockers)
+
+
 def _clean(v: str | None) -> str:
     return (v or "").strip().casefold()
 
@@ -338,6 +362,15 @@ def catalog_snapshot_hash(live_rows: list[LiveVariant]) -> str:
 def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[LiveVariant], reconciliation: CatalogReconciliation, *, api_version: str, pagination_complete: bool = True, started_at=None) -> str:
     """Persist a catalog sync atomically. `conn` is a psycopg-compatible connection."""
     import json
+    source_hash = catalog_snapshot_hash(live_rows)
+    gate_blockers = catalog_gate_blockers(
+        live_rows_received=len(live_rows),
+        exact_current_ids=reconciliation.exact_ids,
+        new_live_variants=reconciliation.new_live,
+        unresolved_blockers=len(reconciliation.blockers),
+        pagination_complete=pagination_complete,
+        source_hash=source_hash,
+    )
     with conn.transaction():
         with conn.cursor() as cur:
             cur.execute(
@@ -348,7 +381,7 @@ def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[
                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'COMPLETED',%s,%s,COALESCE(%s,now()),now()) RETURNING catalog_sync_id""",
                 (api_version, reported_count, len(live_rows), reconciliation.exact_ids,
                  reconciliation.new_live, reconciliation.missing_seed, reconciliation.potential_recreations,
-                 len(reconciliation.blockers), catalog_snapshot_hash(live_rows), pagination_complete, started_at),
+                 len(reconciliation.blockers), source_hash, pagination_complete, started_at),
             )
             sync_id = str(cur.fetchone()[0])
 
@@ -390,7 +423,7 @@ def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[
                      issue.classification, issue.blocking, json.dumps(issue.evidence)),
                 )
 
-            status = 'PASS' if reconciliation.can_pass_catalog_gate else 'FAIL'
+            status = 'PASS' if not gate_blockers else 'FAIL'
             cur.execute(
                 """INSERT INTO readiness_gates(gate_name,status,severity,blocks_po,evidence_json,message,checked_at)
                    VALUES ('CATALOG_SYNC',%s,'CRITICAL',TRUE,%s::jsonb,%s,now())
@@ -404,7 +437,8 @@ def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[
                     'missing_seed': reconciliation.missing_seed,
                     'potential_recreations': reconciliation.potential_recreations,
                     'blockers': len(reconciliation.blockers),
-                }), 'Catalog reconciliation passed.' if status == 'PASS' else f'{len(reconciliation.blockers)} catalog identity blockers require resolution.'),
+                    'readiness_blockers': gate_blockers,
+                }), 'Catalog reconciliation passed.' if status == 'PASS' else f'Catalog readiness failed: {", ".join(gate_blockers)}.'),
             )
             cur.execute("UPDATE catalog_sync_runs SET completed_at=now() WHERE catalog_sync_id=%s", (sync_id,))
     return sync_id
@@ -416,6 +450,10 @@ def approve_recreated_variant(conn: Any, old_variant_id: str, new_variant_id: st
     This is deliberately never called automatically by `reconcile_catalog`.
     """
     import json
+    actor = str(actor).strip()
+    note = str(note).strip()
+    if not actor or not note:
+        raise ValueError("Recreation approval requires a nonblank actor and reason")
     old_variant_id = str(old_variant_id)
     new_variant_id = str(new_variant_id)
     if old_variant_id == new_variant_id:
@@ -488,8 +526,10 @@ def reject_recreation_candidate(conn: Any, old_variant_id: str, new_variant_id: 
     resolving the underlying blocker (the old identity still needs disposition).
     """
     import json
-    if not note.strip():
-        raise ValueError("A rejection note is required")
+    actor = str(actor).strip()
+    note = str(note).strip()
+    if not actor or not note:
+        raise ValueError("Recreation rejection requires a nonblank actor and reason")
     old_variant_id, new_variant_id = str(old_variant_id), str(new_variant_id)
     with conn.transaction():
         with conn.cursor() as cur:
@@ -551,8 +591,10 @@ def load_approved_aliases(conn: Any) -> dict[str, str]:
 def retire_missing_variant(conn: Any, variant_id: str, *, actor: str, note: str) -> None:
     """Human confirmation that a missing historical canonical item has no current replacement."""
     import json
-    if not note.strip():
-        raise ValueError("A retirement note is required")
+    actor = str(actor).strip()
+    note = str(note).strip()
+    if not actor or not note:
+        raise ValueError("Retirement requires a nonblank actor and reason")
     variant_id = str(variant_id)
     with conn.transaction():
         with conn.cursor() as cur:
@@ -593,23 +635,51 @@ def recompute_catalog_gate(conn: Any) -> dict[str, Any]:
     import json
     with conn.transaction():
         with conn.cursor() as cur:
-            cur.execute("SELECT catalog_sync_id FROM catalog_sync_runs WHERE status='COMPLETED' ORDER BY completed_at DESC NULLS LAST,started_at DESC LIMIT 1")
+            cur.execute(
+                """SELECT catalog_sync_id,status,pagination_complete,live_rows_received,
+                          exact_current_ids,new_live_variants,source_hash
+                   FROM catalog_sync_runs
+                   ORDER BY started_at DESC,completed_at DESC NULLS LAST LIMIT 1"""
+            )
             row = cur.fetchone()
             if not row:
-                evidence = {"reason": "no completed catalog sync"}
-                status = "FAIL"
-                blockers = 1
+                readiness_blockers = ("NO_COMPLETED_CATALOG_SYNC",)
+                evidence = {"reason": "no completed catalog sync", "readiness_blockers": readiness_blockers}
+            elif row[1] != "COMPLETED":
+                readiness_blockers = ("LATEST_CATALOG_SYNC_NOT_COMPLETED",)
+                evidence = {
+                    "catalog_sync_id": str(row[0]),
+                    "latest_run_status": row[1],
+                    "readiness_blockers": readiness_blockers,
+                }
             else:
                 sync_id = row[0]
                 cur.execute("SELECT COUNT(*) FROM catalog_reconciliation_items WHERE catalog_sync_id=%s AND blocking=TRUE AND resolved_at IS NULL", (sync_id,))
-                blockers = int(cur.fetchone()[0])
-                status = "PASS" if blockers == 0 else "FAIL"
-                evidence = {"catalog_sync_id": str(sync_id), "unresolved_blockers": blockers}
+                unresolved_blockers = int(cur.fetchone()[0])
+                readiness_blockers = catalog_gate_blockers(
+                    live_rows_received=int(row[3]),
+                    exact_current_ids=int(row[4]),
+                    new_live_variants=int(row[5]),
+                    unresolved_blockers=unresolved_blockers,
+                    pagination_complete=bool(row[2]),
+                    source_hash=row[6],
+                )
+                evidence = {
+                    "catalog_sync_id": str(sync_id),
+                    "unresolved_blockers": unresolved_blockers,
+                    "pagination_complete": bool(row[2]),
+                    "live_rows_received": int(row[3]),
+                    "exact_current_ids": int(row[4]),
+                    "new_live_variants": int(row[5]),
+                    "source_hash_present": bool(row[6]),
+                    "readiness_blockers": readiness_blockers,
+                }
+            status = "PASS" if not readiness_blockers else "FAIL"
             cur.execute(
                 """INSERT INTO readiness_gates(gate_name,status,severity,blocks_po,evidence_json,message,checked_at)
                    VALUES ('CATALOG_SYNC',%s,'CRITICAL',TRUE,%s::jsonb,%s,now())
                    ON CONFLICT(gate_name,scope_type,scope_id) DO UPDATE SET
                      status=EXCLUDED.status,evidence_json=EXCLUDED.evidence_json,message=EXCLUDED.message,checked_at=now()""",
-                (status, json.dumps(evidence), "Catalog reconciliation passed." if status == "PASS" else f"{blockers} catalog blockers remain."),
+                (status, json.dumps(evidence), "Catalog reconciliation passed." if status == "PASS" else f"Catalog readiness failed: {', '.join(readiness_blockers)}."),
             )
     return {"status": status, **evidence}

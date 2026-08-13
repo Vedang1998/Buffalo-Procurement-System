@@ -49,8 +49,19 @@ class SalesTests(unittest.TestCase):
 
     def test_unique_sku_alone_does_not_resolve_when_title_changed(self):
         r=self.idx.resolve(sale(vid=None, sku='OLD', product='Renamed A'))
-        self.assertEqual((r.status,r.canonical_variant_id,r.method),('UNRESOLVED',None,'SKU_EVIDENCE_ONLY'))
+        self.assertEqual((r.status,r.canonical_variant_id,r.method),('UNRESOLVED',None,'UNAPPROVED_IDENTITY_EVIDENCE'))
         self.assertEqual(r.candidates,('100',))
+
+    def test_current_sku_and_title_require_an_approved_historical_alias(self):
+        idx=HistoricalIdentityIndex(
+            [CurrentIdentity('100','NOW','Current A','750ML')], []
+        )
+        r=idx.resolve(sale(vid='0',sku='NOW',product='Current A',variant='750ML'))
+        self.assertEqual(
+            (r.status,r.canonical_variant_id,r.method),
+            ('UNRESOLVED',None,'UNAPPROVED_IDENTITY_EVIDENCE'),
+        )
+        self.assertEqual(r.evidence['exact_current_identity_candidates'],['100'])
 
     def test_duplicate_sku_is_ambiguous(self):
         idx=HistoricalIdentityIndex(

@@ -71,8 +71,14 @@ python tools/import_seed_csv.py --seed-dir seed --database-url "$DATABASE_URL"
 ### Test suite
 
 ```bash
-python -m unittest discover -s tests -v
+./scripts/procurement-tests
 ```
+
+Run the command from the repository root. It invokes the locked `uv`
+environment, provisions disposable local PostgreSQL when needed, discovers the
+complete suite, and fails on missing modules, a reduced baseline count, skipped
+tests, or any test failure. CI supplies its own ephemeral PostgreSQL service and
+uses the same command. Tests never inherit the runtime `DATABASE_URL`.
 
 ## Important accepted rules retained
 
