@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-10T17:10:56Z (UTC)
+**Updated:** 2026-08-13T18:19:28Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -17,6 +17,36 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Test command: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests -v`.
 - Post-backfill test result: **142/142 PASS**, 0 failures, 0 errors, 0 skips; unittest time 2.410 seconds, measured wall time 3.181 seconds on 2026-08-10.
 - Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
+
+### PR 4a deterministic CI/tooling checkpoint
+
+- Authorized tooling branch: `tooling/pr-4a-deterministic-ci`; intermediate
+  checkpoint `678a6892dee47906f9350f8e1521ec1ce85cc4b7` and its logical follow-up
+  remediation commit (the branch HEAD containing this handoff). This work does
+  not complete or alter a procurement phase.
+- Baseline at `678a689`: **142/142 PASS**, 0 failures, 0 errors, 0 skips.
+- Current complete deterministic suite: **159/159 PASS** on Python 3.13.11 and
+  PostgreSQL 16.14, with 0 failures, 0 errors, 0 skips, 0 expected failures, and
+  0 unexpected successes. Discovery and execution both equal 159.
+- Runner self-tests: **17/17 PASS**. They prove fail-closed handling for expected
+  failures, unexpected successes, skips, missing required modules, deficient
+  per-module counts, discovery/execution mismatch, non-loopback URLs, non-test
+  database names, unsafe URL/libpq routing inputs, inherited runtime database
+  isolation, connected-database mismatch, and PostgreSQL-major mismatch.
+- CI parity is Python 3.13 only, uv 0.12.3, and the immutable PostgreSQL 16 image
+  `postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b`.
+  The image was independently pulled and reported PostgreSQL 16.14. `uv lock
+  --check`, Python compilation, shell syntax, TOML parsing, YAML parsing/format,
+  diff whitespace, changed-file secret safety, and origin/main scope checks pass.
+- Scope proof: the branch changes only CI/tooling, runner self-tests, runtime and
+  dependency metadata, Procurement test-command/setup documentation, and this
+  handoff. There are zero changes under `procurement/src/` or `procurement/db/`
+  and zero procurement business-logic, API-behavior, migration, Shopify, F4, or
+  PR 4b changes. `procurement/docs/PHASE_STATUS.md` is unchanged because no
+  program/phase milestone changed.
+- Git push and GitHub check evidence occur after the closeout commit is created.
+  GitHub CLI is not authenticated in this workspace, so PR/check inspection is
+  an external remaining proof item even when the Git branch push succeeds.
 
 ### Phase 3 catalog checkpoint
 
@@ -64,6 +94,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Exact lookup plus deterministic continuity review found no credible current counterpart for all 46 deleted identities; human-authorized retirement was executed and audited before the successful post-retirement catalog sync.
 
 ## Authorization boundary / next action
+
+PR 4a stops after pushing `tooling/pr-4a-deterministic-ci`. Do not merge until
+the GitHub `procurement-tests` check passes and the owner accepts the PR. Do not
+implement the separately approved F4 recommendation here, and do not start PR
+4b.
+
+The Phase 4 operational boundary below remains unchanged by PR 4a.
 
 Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
 

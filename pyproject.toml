@@ -2,7 +2,7 @@
 name = "repl-nix-workspace"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "fastapi>=0.115",
     "httpx>=0.27",
@@ -10,3 +10,6 @@ dependencies = [
     "python-multipart>=0.0.32",
     "uvicorn>=0.30",
 ]
+
+[tool.uv]
+required-version = "==0.12.3"

@@ -76,9 +76,16 @@ python tools/import_seed_csv.py --seed-dir seed --database-url "$DATABASE_URL"
 
 Run the command from the repository root. It invokes the locked `uv`
 environment, provisions disposable local PostgreSQL when needed, discovers the
-complete suite, and fails on missing modules, a reduced baseline count, skipped
-tests, or any test failure. CI supplies its own ephemeral PostgreSQL service and
-uses the same command. Tests never inherit the runtime `DATABASE_URL`.
+complete suite, and fails on missing modules, a per-module count below its
+minimum, a reduced global count, skipped/expected-failure/unexpected-success
+results, a discovery/execution mismatch, or any ordinary failure/error. New
+tests above the lower bounds remain valid. CI supplies its own ephemeral
+PostgreSQL service and uses the same command. Tests never inherit the runtime
+`DATABASE_URL`.
+
+The deterministic runtime is Python 3.13, PostgreSQL 16, and uv 0.12.3. Local
+PostgreSQL must be major version 16 unless `TEST_DATABASE_URL` points to a
+disposable loopback PostgreSQL 16 database whose name ends in `_test`.
 
 ## Important accepted rules retained
 

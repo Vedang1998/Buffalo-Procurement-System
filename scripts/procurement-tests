@@ -3,21 +3,41 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 runner="$repo_root/procurement/tools/run_tests.py"
+required_uv_version="0.12.3"
 
 # Never inherit the runtime/production database URL into deterministic tests.
 unset DATABASE_URL
+for variable in $(compgen -A variable PG); do
+  unset "$variable"
+done
+
+if [[ "$(uv --version 2>/dev/null || true)" == "uv $required_uv_version "* ]]; then
+  uv_command=(uv)
+elif command -v uvx >/dev/null 2>&1; then
+  uv_command=(uvx --from "uv==$required_uv_version" uv)
+else
+  echo "ERROR: uv $required_uv_version or uvx is required" >&2
+  exit 2
+fi
 
 if [[ -n "${TEST_DATABASE_URL:-}" ]]; then
   cd "$repo_root"
-  exec uv run --frozen python "$runner"
+  exec "${uv_command[@]}" run --frozen python "$runner"
 fi
 
-for command in initdb pg_ctl createdb uv; do
+for command in initdb pg_ctl createdb postgres; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ERROR: $command is required, or provide a loopback TEST_DATABASE_URL ending in _test" >&2
     exit 2
   fi
 done
+
+postgres_major=$(postgres --version | sed -E 's/.* ([0-9]+)(\..*)?$/\1/')
+if [[ "$postgres_major" != "16" ]]; then
+  echo "ERROR: PostgreSQL 16 is required; local postgres is $(postgres --version)" >&2
+  echo "Provide a loopback TEST_DATABASE_URL ending in _test for a PostgreSQL 16 server." >&2
+  exit 2
+fi
 
 pg_root=$(mktemp -d /tmp/buffalo-procurement-tests.XXXXXX)
 pg_data="$pg_root/data"
@@ -39,4 +59,4 @@ createdb -h 127.0.0.1 -p "$pg_port" -U "$pg_user" procurement_test
 
 export TEST_DATABASE_URL="postgresql://$pg_user@127.0.0.1:$pg_port/procurement_test"
 cd "$repo_root"
-uv run --frozen python "$runner"
+"${uv_command[@]}" run --frozen python "$runner"

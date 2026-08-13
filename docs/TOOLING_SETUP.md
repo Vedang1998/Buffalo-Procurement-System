@@ -27,6 +27,14 @@ or worktree after a checkpoint is pushed.
 
 ## Environment and secret policy
 
+- Deterministic runtime parity is Python 3.13, PostgreSQL 16, and uv 0.12.3.
+  `.python-version`, both Python project constraints, and `.replit` prevent
+  silent drift to Python 3.14 or an unqualified PostgreSQL package.
+- CI keeps `astral-sh/setup-uv` SHA-pinned, requests uv 0.12.3 and Python 3.13,
+  and uses the immutable PostgreSQL 16 image
+  `postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b`.
+  That digest was independently pulled and verified as PostgreSQL 16.14 on
+  2026-08-13.
 - Production secrets belong in Replit Secrets/environment, never source files,
   logs, screenshots, issue text, prompts, commits, or CI configuration.
 - Never expose database URLs, Shopify credentials, review tokens, API tokens,
@@ -37,8 +45,10 @@ or worktree after a checkpoint is pushed.
 - GitHub CI uses a disposable PostgreSQL service with test-only credentials. It
   receives no production `DATABASE_URL`, Shopify credential, or Replit secret.
 - Deterministic tests use `TEST_DATABASE_URL`; the canonical runner refuses a
-  non-loopback database or a database name that does not end in `_test` and never
-  inherits the runtime `DATABASE_URL`.
+  non-loopback database, a database name that does not end in `_test`, URL
+  query/redirect parameters, a connected `current_database()` mismatch, or a
+  server outside PostgreSQL major 16. It clears inherited libpq `PG*` settings
+  and never inherits the runtime `DATABASE_URL`.
 
 ## Production-write restrictions
 
@@ -99,11 +109,18 @@ not use destructive reset/checkout commands to erase them.
    ./scripts/procurement-tests
    ```
 
+   The wrapper uses uv 0.12.3 exactly. If the active uv differs but `uvx` is
+   available, it obtains that pinned tool version. With no supplied test URL,
+   local PostgreSQL binaries must be major version 16. A disposable loopback
+   PostgreSQL 16 service may instead be supplied through `TEST_DATABASE_URL`.
+
 4. Implement only on the authorized feature branch; run focused tests after each
    material change.
-5. Run the same full command again. It must report exact discovered/executed/pass/
-   failure/error/skip counts and zero skips.
-6. Run applicable schema/integrity, syntax/static, diff, and secret-safety checks.
+5. Run the same full command again. It must report discovered, executed, pass,
+   failure, error, skip, expected-failure, and unexpected-success counts; all
+   non-pass counts must be zero.
+6. Run `uv lock --check` with uv 0.12.3, plus applicable schema/integrity,
+   syntax/static, diff, and secret-safety checks.
 7. Push the branch and obtain GitHub `procurement-tests` proof.
 8. Obtain risk-appropriate independent review, remediate findings through the one
    writer, then obtain ChatGPT/owner acceptance before merge or release.
