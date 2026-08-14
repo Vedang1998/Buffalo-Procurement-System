@@ -8,6 +8,7 @@ import io
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -128,6 +129,23 @@ class TestFailClosedResults(unittest.TestCase):
 
 
 class TestModuleMinimums(unittest.TestCase):
+    def test_unregistered_on_disk_module_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            tests_dir = Path(temporary_directory)
+            (tests_dir / "test_registered.py").touch()
+            (tests_dir / "test_unregistered.py").touch()
+
+            errors = runner._module_registration_errors(
+                tests_dir, {"test_registered.py": 1}
+            )
+            registered_errors = runner._module_registration_errors(
+                tests_dir,
+                {"test_registered.py": 1, "test_unregistered.py": 1},
+            )
+
+        self.assertEqual(errors, ["unregistered test module: test_unregistered.py"])
+        self.assertEqual(registered_errors, [])
+
     def test_missing_required_module_is_rejected(self):
         errors = runner._module_minimum_errors(
             Counter({"test_present.py": 1}),
@@ -144,9 +162,9 @@ class TestModuleMinimums(unittest.TestCase):
             ["test_required.py discovered 2 tests; required minimum is 3"],
         )
 
-    def test_new_tests_above_lower_bound_are_allowed(self):
+    def test_new_tests_in_registered_module_above_lower_bound_are_allowed(self):
         errors = runner._module_minimum_errors(
-            Counter({"test_required.py": 4, "test_new.py": 10}),
+            Counter({"test_required.py": 4}),
             {"test_required.py": 3},
         )
         self.assertEqual(errors, [])

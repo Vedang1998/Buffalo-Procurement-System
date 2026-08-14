@@ -16,9 +16,9 @@ from urllib.parse import unquote, urlparse
 REQUIRED_PYTHON = (3, 13)
 REQUIRED_POSTGRESQL_MAJOR = 16
 
-# These are lower bounds, not exact counts. New tests and new modules remain
-# discoverable, while deleting or accidentally hiding tests in a required module
-# fails closed even when the global count happens to stay above its floor.
+# These are lower bounds, not exact counts. New tests remain discoverable once
+# their module is registered here, while deleting, renaming, or accidentally
+# hiding tests fails closed even when the global count stays above its floor.
 REQUIRED_MODULE_MINIMUMS = {
     "test_assortment.py": 4,
     "test_catalog.py": 7,
@@ -36,7 +36,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_shopify_auth.py": 3,
     "test_shopify_queries.py": 1,
     "test_storage.py": 5,
-    "test_test_runner.py": 17,
+    "test_test_runner.py": 18,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())
 
@@ -200,6 +200,19 @@ def _module_test_counts(suite: unittest.TestSuite) -> Counter[str]:
     return counts
 
 
+def _module_registration_errors(
+    tests_dir: Path,
+    required: dict[str, int] = REQUIRED_MODULE_MINIMUMS,
+) -> list[str]:
+    on_disk_modules = {
+        path.name for path in tests_dir.glob("test_*.py") if path.is_file()
+    }
+    return [
+        f"unregistered test module: {module}"
+        for module in sorted(on_disk_modules - required.keys())
+    ]
+
+
 def _module_minimum_errors(
     actual: Counter[str] | dict[str, int],
     required: dict[str, int] = REQUIRED_MODULE_MINIMUMS,
@@ -277,7 +290,8 @@ def main() -> int:
     module_counts = _module_test_counts(suite)
     print(f"Procurement OS tests discovered: {discovered}", flush=True)
 
-    module_errors = _module_minimum_errors(module_counts)
+    module_errors = _module_registration_errors(tests_dir)
+    module_errors.extend(_module_minimum_errors(module_counts))
     if discovered < GLOBAL_MINIMUM_TESTS:
         module_errors.append(
             f"global discovered count {discovered} is below floor {GLOBAL_MINIMUM_TESTS}"
