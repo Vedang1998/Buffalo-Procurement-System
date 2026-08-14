@@ -23,7 +23,7 @@ import re
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .catalog import numeric_shopify_id
+from .catalog import authoritative_catalog_gate, numeric_shopify_id
 from .sales import (
     HistoricalIdentityIndex,
     IdentityResolution,
@@ -265,13 +265,8 @@ def _set_sales_gate(cur: Any, *, status: str, evidence: dict[str, Any], message:
 
 
 def assert_catalog_ready(conn: Any) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """SELECT status FROM readiness_gates
-               WHERE gate_name='CATALOG_SYNC' AND scope_type='GLOBAL' AND scope_id=''"""
-        )
-        row = cur.fetchone()
-    if not row or row[0] != "PASS":
+    gate = authoritative_catalog_gate(conn)
+    if gate["status"] != "PASS":
         raise RuntimeError("CATALOG_SYNC is not PASS; historical sales backfill is blocked")
 
 

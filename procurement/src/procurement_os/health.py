@@ -91,9 +91,22 @@ def check_seed(conn: Any) -> dict[str, Any]:
 
 
 def check_gate(conn: Any, gate_name: str) -> dict[str, Any]:
+    if gate_name == "CATALOG_SYNC":
+        from .catalog import authoritative_catalog_gate
+
+        gate = authoritative_catalog_gate(conn)
+        return {
+            "status": gate["status"],
+            "severity": gate["severity"],
+            "blocks_po": gate["blocks_po"],
+            "message": gate["message"],
+            "evidence": gate["evidence"],
+            "checked_at": str(gate["checked_at"]),
+            "ok": gate["status"] == "PASS",
+        }
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT status, severity, blocks_po, message, checked_at FROM readiness_gates"
+            "SELECT status, severity, blocks_po, message, evidence_json, checked_at FROM readiness_gates"
             " WHERE gate_name=%s AND scope_type='GLOBAL' ORDER BY checked_at DESC LIMIT 1",
             (gate_name,),
         )
@@ -102,7 +115,8 @@ def check_gate(conn: Any, gate_name: str) -> dict[str, Any]:
         return {"status": "MISSING", "ok": False}
     return {
         "status": row[0], "severity": row[1], "blocks_po": row[2],
-        "message": row[3], "checked_at": str(row[4]), "ok": row[0] == "PASS",
+        "message": row[3], "evidence": row[4] or {},
+        "checked_at": str(row[5]), "ok": row[0] == "PASS",
     }
 
 
