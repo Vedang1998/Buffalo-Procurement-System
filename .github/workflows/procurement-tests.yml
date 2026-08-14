@@ -1,0 +1,56 @@
+name: Procurement CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  procurement-tests:
+    name: procurement-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        # postgres:16, independently verified as PostgreSQL 16.14 on 2026-08-13.
+        image: postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+        env:
+          POSTGRES_USER: procurement_test
+          POSTGRES_PASSWORD: procurement_test
+          POSTGRES_DB: procurement_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U procurement_test -d procurement_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://procurement_test:procurement_test@127.0.0.1:5432/procurement_test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.3"
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Validate dependency lock
+        run: uv lock --check
+
+      - name: Install locked Python dependencies
+        run: uv sync --frozen
+
+      - name: Run complete deterministic Procurement OS suite
+        run: ./scripts/procurement-tests
