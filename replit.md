@@ -32,7 +32,9 @@ PO generation stays disabled while any required blocking gate fails. Never auto-
 ## Procurement app — run & operate
 
 - Workflow `Procurement OS` runs uvicorn on port 8000 (`procurement/src/procurement_os/api.py`); `/admin/status` is the status page, `/health/full` machine-readable, and `/historical-sales/review` is the Phase 4 owner queue
-- Tests: `cd procurement && PYTHONPATH=src python3 -m unittest discover -s tests`
+- Tests, from the repository root: `./scripts/procurement-tests`
+- The direct unittest command is not the current validation route; use the
+  authoritative repository-root command above.
 - Schema: `python3 tools/apply_schema.py --database-url "$DATABASE_URL"` (idempotent, transactional; order in MIGRATION_ORDER)
 - Seed: `tools/import_seed_csv.py` then `tools/verify_seed_import.py` (writes audit row to `seed_import_records`)
 - Object storage must go through `procurement_os/storage.py` adapter — never platform calls in domain logic
