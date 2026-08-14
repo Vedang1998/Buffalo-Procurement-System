@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-14T19:10:12Z (UTC)
+**Updated:** 2026-08-14T19:50:16Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -12,7 +12,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### Repository and tests
 
-- Branch: `main`.
+- Verified `main` baseline:
+  `8d8a07a082a575ef35c6b37ecb6dedc7f47cbbaf`. Documentation-only G12
+  closeout branch: `docs/pr4a-post-merge-closeout`, created from that exact
+  `origin/main` commit.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -23,18 +26,22 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   superseded and must not be used for current validation.
 - Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
 
-### PR 4a deterministic CI/tooling checkpoint
+### PR 4a deterministic CI/tooling closeout
 
-- Authorized tooling branch: `tooling/pr-4a-deterministic-ci`; intermediate
-  checkpoint `678a6892dee47906f9350f8e1521ec1ce85cc4b7`. Independently reviewed head
-  `159dfb4abdc9693120ad577fe4af6a7906a07734` received APPROVE with no CRITICAL
-  or HIGH findings and no merge blockers. The branch-head remediation containing
-  this handoff fixes only review findings S-1 and S-2. This work does not complete
-  or alter a procurement phase.
+- PR #5 / PR 4a is **MERGED / CLOSED**. The exact reviewed head was
+  `c04b923f57f0c38411d4e6509163fd7734ef681d`; the owner-approved merge commit
+  on `main` is `8d8a07a082a575ef35c6b37ecb6dedc7f47cbbaf`.
+- Pre-merge GitHub Procurement CI run #3 was **SUCCESS** on the exact reviewed
+  head `c04b923f57f0c38411d4e6509163fd7734ef681d`. Post-merge GitHub Procurement
+  CI run #4 was **SUCCESS** on the exact `main` merge commit
+  `8d8a07a082a575ef35c6b37ecb6dedc7f47cbbaf`.
+- PR 4a and this documentation-only closeout do not complete or alter a
+  procurement phase. Phase 4 remains incomplete.
 - Baseline at `678a689`: **142/142 PASS**, 0 failures, 0 errors, 0 skips.
-- Current complete deterministic suite: **160/160 PASS** on Python 3.13.11 and
-  disposable local PostgreSQL 16.9, with 0 failures, 0 errors, 0 skips, 0 expected
-  failures, and 0 unexpected successes. Discovery and execution both equal 160.
+- Post-closeout regression evidence: the current complete deterministic suite is
+  **160 discovered / 160 executed / 160 passed** on Python 3.13.11 and
+  disposable local PostgreSQL 16.9, with 0 failures, 0 errors, 0 skips, 0
+  expected failures, and 0 unexpected successes.
 - Runner self-tests: **18/18 PASS**. They prove fail-closed handling for expected
   failures, unexpected successes, skips, missing required modules, deficient
   per-module counts, unregistered on-disk test modules, discovery/execution
@@ -47,15 +54,19 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   The image was independently pulled and reported PostgreSQL 16.14. `uv lock
   --check`, Python compilation, shell syntax, TOML parsing, YAML parsing/format,
   diff whitespace, changed-file secret safety, and origin/main scope checks pass.
-- Scope proof: the branch changes only CI/tooling, runner self-tests, runtime and
+- PR 4a scope proof: the branch changed only CI/tooling, runner self-tests, runtime and
   dependency metadata, Procurement test-command/setup documentation, and this
   handoff. There are zero changes under `procurement/src/`, `procurement/db/`,
   `procurement/config/`, or `procurement/docs/PHASE_STATUS.md`. There are zero
   procurement business-logic, API-behavior, migration, Shopify, F4, or PR 4b
   changes; no program/phase milestone changed.
-- Git push and GitHub check evidence occur after the closeout commit is created.
-  GitHub CLI is not authenticated in this workspace, so PR/check inspection is
-  an external remaining proof item even when the Git branch push succeeds.
+- G12 closeout scope proof: only `docs/CODEX_HANDOFF.md` and `replit.md` change;
+  `procurement/docs/PHASE_STATUS.md` remains unchanged.
+- Non-blocking future tooling follow-up: the current test-module registration
+  invariant assumes a flat `procurement/tests/test_*.py` layout. Nested test
+  directories are not yet protected by that completeness invariant.
+- The owner-approved F4 policy remains **NOT YET IMPLEMENTED**. PR 4b remains
+  **NOT YET AUTHORIZED**.
 
 ### Phase 3 catalog checkpoint
 
@@ -104,12 +115,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-PR 4a stops after pushing `tooling/pr-4a-deterministic-ci`. Do not merge until
-the GitHub `procurement-tests` check passes and the owner accepts the PR. Do not
-implement the separately approved F4 recommendation here, and do not start PR
-4b.
+PR #5 / PR 4a is closed after owner-approved merge and successful post-merge
+verification. The exact engineering next boundary is: repository
+branch-protection/settings hardening may be configured separately; do not start
+PR 4b without explicit owner authorization. The owner-approved F4 policy is not
+yet implemented.
 
-The Phase 4 operational boundary below remains unchanged by PR 4a.
+The Phase 4 operational boundary below remains unchanged by PR 4a and its
+documentation-only G12 closeout.
 
 Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
 
