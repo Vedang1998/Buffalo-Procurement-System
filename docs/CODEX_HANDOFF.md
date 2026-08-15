@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-14T19:50:16Z (UTC)
+**Updated:** 2026-08-15T01:44:38Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -65,8 +65,55 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Non-blocking future tooling follow-up: the current test-module registration
   invariant assumes a flat `procurement/tests/test_*.py` layout. Nested test
   directories are not yet protected by that completeness invariant.
-- The owner-approved F4 policy remains **NOT YET IMPLEMENTED**. PR 4b remains
-  **NOT YET AUTHORIZED**.
+- The historical PR 4a authorization boundary is superseded by the
+  owner-authorized, still-unmerged PR 4b checkpoint below.
+
+### PR 4b authoritative catalog/readiness hardening checkpoint — UNMERGED
+
+- Objective: F1 authoritative catalog-run semantics plus owner-approved F4
+  scoped readiness semantics.
+- Branch: `hardening/pr-4b-readiness-catalog`.
+- Exact base: `d90f7313fc6048697ef74553c3895a88e9ac8a04`.
+- Implementation commit:
+  `fa848cde427b405838dc6401350487718671ffe4` (`Implement scope-aware readiness
+  and catalog authority`).
+- PR 4b remains **UNMERGED**. This checkpoint does not authorize merge,
+  deployment, or PR 4c.
+- F1 result: there is one authoritative newest-attempt catalog selector,
+  ordered by `started_at DESC, catalog_sync_id DESC`. It never falls back to an
+  older successful run; an incomplete or failed newest attempt fails closed;
+  and `CATALOG_SYNC` can pass only when all implemented deterministic catalog
+  controls pass.
+- F4 result: `FAIL` blocks the affected/applicable scope; `WARN` remains
+  non-blocking; missing applicable required evidence fails closed; unrelated
+  vendor/variant failures do not create global blocks; exception scope matching
+  is conjunctive; and existing global required failures still block.
+- Exact completed G4 test totals:
+  `discovered=186; executed=186; passed=186; failures=0; errors=0; skips=0;
+  expectedFailures=0; unexpectedSuccesses=0`. All 19 registered test modules
+  met their per-module minimums, with no missing or unregistered test module.
+- Dependency control used the repository-persistent pinned executable, which
+  reported `uv 0.12.3 (x86_64-unknown-linux-gnu)`; `uv lock --check` exited 0
+  after resolving 22 packages.
+- Python compilation passed for `main.py`, `procurement/src`,
+  `procurement/tools`, and `procurement/tests`. Working-tree and
+  base-to-implementation `git diff --check` controls passed. All 1,036 added
+  lines passed the changed-file secret scan; no auth state was tracked; and no
+  unintended cache, bytecode, log, temporary, build, dependency, or generated
+  artifact was tracked.
+- Required PR 4b A-Q adversarial coverage is complete and deterministic.
+- Additional F4 guardrails passed: an existing global `VENDOR_RULES` `FAIL`
+  still blocks; undeclared missing `VENDOR_RULES` is not a universal blocker;
+  declared-applicable missing `VENDOR_RULES` fails closed; and all relevant
+  status/API consumers use the same authoritative `catalog_sync_id`.
+- G4 used only disposable loopback PostgreSQL test infrastructure. There was
+  zero production database access or write and zero Shopify access or write.
+  PR 4b made no migration, no identity decision, no PO generation or release,
+  and no deployment.
+- Phase 4 remains **INCOMPLETE**. The 343 historical identity decisions remain
+  untouched, and `SALES_BACKFILL` remains operationally outstanding. No
+  official phase/program milestone changed, and
+  `procurement/docs/PHASE_STATUS.md` remains unchanged.
 
 ### Phase 3 catalog checkpoint
 
@@ -115,14 +162,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-PR #5 / PR 4a is closed after owner-approved merge and successful post-merge
-verification. The exact engineering next boundary is: repository
-branch-protection/settings hardening may be configured separately; do not start
-PR 4b without explicit owner authorization. The owner-approved F4 policy is not
-yet implemented.
+PR 4b implementation/G4 is accepted for closeout preparation but remains
+**UNMERGED**. The exact next authorization boundary is independent adversarial
+review of the final exact branch head, then targeted Cursor read-only specialist
+review, then ChatGPT business-rule review. Do not merge without explicit owner
+authorization.
 
-The Phase 4 operational boundary below remains unchanged by PR 4a and its
-documentation-only G12 closeout.
+The Phase 4 operational boundary below remains unchanged by PR 4b and this
+documentation-only closeout preparation.
 
 Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
 
