@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import importlib.util
 import os
 from pathlib import Path
+import re
 import unittest
 from unittest.mock import patch
 from urllib.parse import quote
@@ -12,6 +14,7 @@ import uuid
 
 from procurement_os import api, health
 from procurement_os.catalog import (
+    authoritative_catalog_gate,
     catalog_gate_blockers,
     evaluate_authoritative_catalog_run,
     recompute_catalog_gate,
@@ -21,6 +24,7 @@ from procurement_os.readiness import po_readiness
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
+TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
 MIGRATIONS = (
     "schema_postgres.sql",
     "001_v1_3_catalog_sales.sql",
@@ -30,6 +34,16 @@ MIGRATIONS = (
     "005_identity_investigation.sql",
     "006_phase4_sales_backfill.sql",
 )
+
+
+def load_tool_module(filename: str):
+    path = TOOLS_DIR / filename
+    spec = importlib.util.spec_from_file_location(f"test_tool_{path.stem}", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load tool module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class ConnectionContext:
@@ -167,20 +181,46 @@ class CatalogReadinessIntegrationTests(unittest.TestCase):
         self.assertEqual(second["catalog_sync_id"], higher_id)
         self.assertEqual(first["status"], "FAIL")
 
-    def test_missing_optional_reported_count_can_pass_but_mismatch_cannot(self):
+    def test_reported_count_drift_is_diagnostic_and_does_not_block(self):
+        run_id = self.insert_run(
+            started_at=self.base_time,
+            reported_count=2003,
+            live_rows=1999,
+            exact_ids=1979,
+            new_ids=20,
+            pagination_complete=True,
+            source_hash="known-count-drift-fixture",
+        )
+        result = evaluate_authoritative_catalog_run(self.conn)
+        self.assertEqual(result["catalog_sync_id"], run_id)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["blockers"], ())
+        self.assertEqual(
+            result["diagnostics"],
+            {
+                "shopify_reported_count_mismatch": True,
+                "shopify_reported_count_delta": 4,
+            },
+        )
+        gate = authoritative_catalog_gate(self.conn)
+        self.assertEqual(gate["status"], "PASS")
+        self.assertIs(gate["evidence"]["shopify_reported_count_mismatch"], True)
+        self.assertEqual(gate["evidence"]["shopify_reported_count_delta"], 4)
+        assert_catalog_ready(self.conn)
+
         optional_id = self.insert_run(
-            started_at=self.base_time, reported_count=None
+            started_at=self.base_time + timedelta(minutes=1), reported_count=None
         )
         optional = evaluate_authoritative_catalog_run(self.conn)
         self.assertEqual(optional["catalog_sync_id"], optional_id)
         self.assertEqual(optional["status"], "PASS")
-
-        mismatch_id = self.insert_run(
-            started_at=self.base_time + timedelta(minutes=1), reported_count=3
+        self.assertEqual(
+            optional["diagnostics"],
+            {
+                "shopify_reported_count_mismatch": False,
+                "shopify_reported_count_delta": None,
+            },
         )
-        mismatch = evaluate_authoritative_catalog_run(self.conn)
-        self.assertEqual(mismatch["catalog_sync_id"], mismatch_id)
-        self.assertIn("SHOPIFY_REPORTED_COUNT_MISMATCH", mismatch["blockers"])
 
     def test_every_public_status_consumer_uses_same_authoritative_run(self):
         self.insert_run(started_at=self.base_time)
@@ -263,6 +303,67 @@ class CatalogReadinessIntegrationTests(unittest.TestCase):
                 (run_id,),
             )
             self.assertEqual(cur.fetchone(), (True, None))
+
+    def test_identity_tool_never_falls_back_from_newer_failed_attempt(self):
+        self.insert_run(started_at=self.base_time)
+        failed_id = self.insert_run(
+            started_at=self.base_time + timedelta(minutes=1),
+            status="FAILED",
+            pagination_complete=False,
+            live_rows=0,
+            exact_ids=0,
+            new_ids=0,
+            source_hash=None,
+            reported_count=None,
+        )
+        tool = load_tool_module("run_identity_investigation.py")
+        with self.assertRaisesRegex(
+            RuntimeError, "AUTHORITATIVE_CATALOG_RUN_NOT_COMPLETED"
+        ):
+            tool.authoritative_investigation_catalog_sync_id(self.conn)
+        self.assertEqual(
+            evaluate_authoritative_catalog_run(self.conn)["catalog_sync_id"],
+            failed_id,
+        )
+
+    def test_identity_tool_accepts_complete_run_with_identity_blockers(self):
+        run_id = self.insert_run(started_at=self.base_time)
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO catalog_reconciliation_items(
+                     catalog_sync_id,variant_id,seed_variant_id,classification,
+                     blocking,evidence_json
+                   ) VALUES (%s,'old-id','old-id','MISSING',TRUE,'{}'::jsonb)""",
+                (run_id,),
+            )
+        tool = load_tool_module("run_identity_investigation.py")
+        self.assertEqual(
+            tool.authoritative_investigation_catalog_sync_id(self.conn), run_id
+        )
+
+    def test_count_diagnostic_never_attaches_to_older_completed_run(self):
+        old_id = self.insert_run(started_at=self.base_time)
+        self.insert_run(
+            started_at=self.base_time + timedelta(minutes=1),
+            status="FAILED",
+            pagination_complete=False,
+            live_rows=0,
+            exact_ids=0,
+            new_ids=0,
+            source_hash=None,
+            reported_count=None,
+        )
+        tool = load_tool_module("diagnose_count_discrepancy.py")
+        with self.assertRaisesRegex(
+            RuntimeError, "AUTHORITATIVE_CATALOG_RUN_NOT_COMPLETED"
+        ):
+            tool.persist_diagnostic_report(self.conn, {"fixture": True})
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT notes FROM catalog_sync_runs WHERE catalog_sync_id=%s",
+                (old_id,),
+            )
+            self.assertIsNone(cur.fetchone()[0])
 
     def test_postgres_po_readiness_preserves_scope_and_declared_applicability(self):
         self.insert_run(started_at=self.base_time)
@@ -375,7 +476,6 @@ class CatalogEvidenceUnitTests(unittest.TestCase):
             ),
             ({"new_live_variants": 0}, "CATALOG_IDENTITY_ACCOUNTING_MISMATCH"),
             ({"source_hash": None}, "CATALOG_SNAPSHOT_HASH_MISSING"),
-            ({"shopify_reported_variant_count": 3}, "SHOPIFY_REPORTED_COUNT_MISMATCH"),
         )
         for override, expected in cases:
             with self.subTest(expected=expected):
@@ -389,13 +489,17 @@ class CatalogEvidenceUnitTests(unittest.TestCase):
         )
 
     def test_catalog_run_selection_sql_has_one_implementation_point(self):
-        source_root = Path(__file__).resolve().parents[1] / "src" / "procurement_os"
+        procurement_root = Path(__file__).resolve().parents[1]
+        selector_pattern = re.compile(
+            r"\bfrom\s+catalog_sync_runs\b", re.IGNORECASE
+        )
         selectors = [
-            path.relative_to(source_root).as_posix()
-            for path in source_root.rglob("*.py")
-            if "FROM catalog_sync_runs" in path.read_text(encoding="utf-8")
+            path.relative_to(procurement_root).as_posix()
+            for path in procurement_root.rglob("*.py")
+            if "tests" not in path.relative_to(procurement_root).parts
+            and selector_pattern.search(path.read_text(encoding="utf-8"))
         ]
-        self.assertEqual(selectors, ["catalog.py"])
+        self.assertEqual(selectors, ["src/procurement_os/catalog.py"])
 
 if __name__ == "__main__":
     unittest.main()

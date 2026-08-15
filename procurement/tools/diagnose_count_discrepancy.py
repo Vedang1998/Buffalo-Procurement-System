@@ -1,6 +1,6 @@
 """Phase 3 diagnostic: explain the productVariantsCount (2,003) vs paginated fetch (1,999)
 discrepancy with evidence. Read-only against Shopify. Results printed as JSON and
-persisted to the latest catalog_sync_runs.notes.
+persisted only to the structurally usable authoritative catalog attempt's notes.
 
 Checks performed (per the owner's directive):
  1. Same catalog definition on both queries (identical $query filter string).
@@ -23,6 +23,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from procurement_os.catalog import (
+    require_structurally_usable_authoritative_catalog_run,
+)
 from procurement_os.shopify.auth import ClientCredentialsTokenProvider, ShopifyConfig
 from procurement_os.shopify.graphql import ShopifyGraphQLClient
 from procurement_os.shopify.queries import ACTIVE_CATALOG_FILTER, CATALOG_COUNT_QUERY, CATALOG_PAGE_QUERY
@@ -62,6 +65,20 @@ def paginate_variant_ids(client, flt):
 
 def count(client, flt=None):
     return int(client.query(CATALOG_COUNT_QUERY, {"query": flt})["productVariantsCount"]["count"])
+
+
+def persist_diagnostic_report(conn, report) -> str:
+    evaluation = require_structurally_usable_authoritative_catalog_run(conn)
+    sync_id = str(evaluation["catalog_sync_id"])
+    with conn.cursor() as cur:
+        cur.execute(
+            """UPDATE catalog_sync_runs
+               SET notes = coalesce(notes,'') || E'\n\nDIAGNOSTIC: ' || %s
+               WHERE catalog_sync_id = %s""",
+            (json.dumps(report), sync_id),
+        )
+    conn.commit()
+    return sync_id
 
 
 def main():
@@ -126,15 +143,8 @@ def main():
     if database_url:
         import psycopg
         with psycopg.connect(database_url) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """UPDATE catalog_sync_runs
-                       SET notes = coalesce(notes,'') || E'\n\nDIAGNOSTIC: ' || %s
-                       WHERE catalog_sync_id = (SELECT catalog_sync_id FROM catalog_sync_runs
-                                                WHERE status='COMPLETED' ORDER BY started_at DESC LIMIT 1)""",
-                    (json.dumps(report),))
-            conn.commit()
-            print({"diagnostic_persisted": True})
+            sync_id = persist_diagnostic_report(conn, report)
+            print({"diagnostic_persisted": True, "catalog_sync_id": sync_id})
 
 
 if __name__ == "__main__":

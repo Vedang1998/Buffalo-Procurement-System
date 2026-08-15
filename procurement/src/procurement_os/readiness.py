@@ -4,6 +4,7 @@ from typing import Any, Iterable
 
 
 FOUNDATION_APPLICABLE_GATES = frozenset({"CATALOG_SYNC", "SALES_BACKFILL"})
+SUPPORTED_READINESS_SCOPE_TYPES = frozenset({"GLOBAL", "VENDOR", "VARIANT", "RUN"})
 
 
 def readiness_gates(conn: Any, *, scope_type: str | None = None, scope_id: str | None = None) -> list[dict]:
@@ -39,6 +40,8 @@ def _scope_applies(
     variant_id: str | None,
     run_id: str | None,
 ) -> bool:
+    if scope_type not in SUPPORTED_READINESS_SCOPE_TYPES:
+        raise ValueError(f"unsupported readiness scope_type: {scope_type!r}")
     if scope_type == "GLOBAL":
         return True
     target = {
@@ -47,6 +50,21 @@ def _scope_applies(
         "RUN": run_id,
     }.get(scope_type)
     return target is not None and str(scope_id) == str(target)
+
+
+def _validated_applicable_gate_names(
+    names: Iterable[str] | None,
+) -> frozenset[str]:
+    if names is None or isinstance(names, (str, bytes)):
+        raise ValueError(
+            "applicable gate names must be an iterable of nonblank strings"
+        )
+    validated: set[str] = set()
+    for name in names:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("applicable gate names must be nonblank strings")
+        validated.add(name.strip())
+    return frozenset(validated)
 
 
 def readiness_gate_blockers(
@@ -64,9 +82,7 @@ def readiness_gate_blockers(
     advisory. Existing ``blocks_po`` rows retain their meaning without making all
     seven canonical gate names globally mandatory.
     """
-    declared = {str(name).strip() for name in applicable_gate_names}
-    if "" in declared:
-        raise ValueError("applicable gate names must be nonblank")
+    declared = _validated_applicable_gate_names(applicable_gate_names)
     required_names = FOUNDATION_APPLICABLE_GATES | declared
 
     applicable_rows = [
@@ -112,7 +128,11 @@ def exception_applies(
     variant_id: str | None = None,
     run_id: str | None = None,
 ) -> bool:
-    """Conjunctively match every populated exception scope dimension."""
+    """Conjunctively match every populated exception scope dimension.
+
+    A combined vendor/variant exception does not apply to a vendor-only query,
+    and a run-scoped exception does not become global when no run is evaluated.
+    """
     for field, target in (
         ("vendor_id", vendor_id),
         ("variant_id", variant_id),
@@ -179,14 +199,20 @@ def po_readiness(
     run_id: str | None = None,
     applicable_gate_names: Iterable[str] = (),
 ) -> dict:
-    """Fail closed for required gates and material exceptions in affected scope."""
+    """Fail closed for required gates and material exceptions in affected scope.
+
+    Vendor-only readiness is not certification of every prospective PO line.
+    Final-PO callers must evaluate each applicable item with both ``vendor_id``
+    and ``variant_id`` (and ``run_id`` when relevant).
+    """
+    declared_gate_names = _validated_applicable_gate_names(applicable_gate_names)
     gates = _effective_readiness_gates(conn)
     blockers = readiness_gate_blockers(
         gates,
         vendor_id=vendor_id,
         variant_id=variant_id,
         run_id=run_id,
-        applicable_gate_names=applicable_gate_names,
+        applicable_gate_names=declared_gate_names,
     )
 
     with conn.cursor() as cur:
@@ -228,7 +254,7 @@ def po_readiness(
         },
         "applicable_gate_names": sorted(
             FOUNDATION_APPLICABLE_GATES
-            | {str(name).strip() for name in applicable_gate_names}
+            | declared_gate_names
         ),
         "blockers": blockers,
         "gates": gates,

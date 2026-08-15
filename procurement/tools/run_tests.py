@@ -22,7 +22,7 @@ REQUIRED_POSTGRESQL_MAJOR = 16
 REQUIRED_MODULE_MINIMUMS = {
     "test_assortment.py": 4,
     "test_catalog.py": 7,
-    "test_catalog_readiness.py": 11,
+    "test_catalog_readiness.py": 14,
     "test_catalog_reconciliation_phase3.py": 12,
     "test_economics.py": 4,
     "test_historical_sales_review_api.py": 12,
@@ -32,7 +32,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_phase4_postgres_integration.py": 4,
     "test_phase4_query_contracts.py": 5,
     "test_pricing.py": 3,
-    "test_readiness.py": 15,
+    "test_readiness.py": 19,
     "test_review.py": 3,
     "test_sales.py": 12,
     "test_shopify_auth.py": 3,

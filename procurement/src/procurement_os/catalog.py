@@ -81,6 +81,7 @@ class CatalogReconciliation:
 
 
 CATALOG_RUN_ORDER_BY = "started_at DESC, catalog_sync_id DESC"
+CATALOG_IDENTITY_BLOCKER = "CATALOG_IDENTITY_BLOCKERS_UNRESOLVED"
 
 
 def _authoritative_catalog_run(cur: Any) -> dict[str, Any] | None:
@@ -141,12 +142,23 @@ def catalog_gate_blockers(
     if not str(run["source_hash"] or "").strip():
         blockers.append("CATALOG_SNAPSHOT_HASH_MISSING")
 
-    reported_count = run["shopify_reported_variant_count"]
-    if reported_count is not None and int(reported_count) != live_rows:
-        blockers.append("SHOPIFY_REPORTED_COUNT_MISMATCH")
     if unresolved_blockers != 0:
-        blockers.append("CATALOG_IDENTITY_BLOCKERS_UNRESOLVED")
+        blockers.append(CATALOG_IDENTITY_BLOCKER)
     return tuple(blockers)
+
+
+def catalog_run_diagnostics(run: dict[str, Any]) -> dict[str, Any]:
+    """Return advisory catalog controls that never determine readiness status."""
+    reported_count = run["shopify_reported_variant_count"]
+    live_rows = int(run["live_rows_received"])
+    return {
+        "shopify_reported_count_mismatch": (
+            reported_count is not None and int(reported_count) != live_rows
+        ),
+        "shopify_reported_count_delta": (
+            int(reported_count) - live_rows if reported_count is not None else None
+        ),
+    }
 
 
 def _evaluate_authoritative_catalog_run(cur: Any) -> dict[str, Any]:
@@ -158,6 +170,7 @@ def _evaluate_authoritative_catalog_run(cur: Any) -> dict[str, Any]:
             "run": None,
             "unresolved_blockers": None,
             "blockers": ("NO_CATALOG_SYNC_ATTEMPT",),
+            "diagnostics": {},
         }
 
     cur.execute(
@@ -175,6 +188,7 @@ def _evaluate_authoritative_catalog_run(cur: Any) -> dict[str, Any]:
         "run": run,
         "unresolved_blockers": unresolved_blockers,
         "blockers": blockers,
+        "diagnostics": catalog_run_diagnostics(run),
     }
 
 
@@ -182,6 +196,30 @@ def evaluate_authoritative_catalog_run(conn: Any) -> dict[str, Any]:
     """Read-only authoritative catalog readiness used by every public consumer."""
     with conn.cursor() as cur:
         return _evaluate_authoritative_catalog_run(cur)
+
+
+def require_structurally_usable_authoritative_catalog_run(
+    conn: Any,
+) -> dict[str, Any]:
+    """Return the newest attempt when its completed catalog evidence is usable.
+
+    Identity diagnostics must be able to inspect a structurally complete run
+    whose only readiness failure is unresolved identity work. Every other
+    blocker means the newest attempt is unsafe to diagnose, and an older
+    successful run must never be substituted.
+    """
+    evaluation = evaluate_authoritative_catalog_run(conn)
+    structural_blockers = tuple(
+        blocker
+        for blocker in evaluation["blockers"]
+        if blocker != CATALOG_IDENTITY_BLOCKER
+    )
+    if structural_blockers:
+        raise RuntimeError(
+            "Authoritative catalog attempt is not structurally usable: "
+            + ", ".join(structural_blockers)
+        )
+    return evaluation
 
 
 def _catalog_gate_from_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -201,6 +239,12 @@ def _catalog_gate_from_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
         "new_live_variants": run["new_live_variants"] if run else None,
         "source_hash_present": bool(
             run and str(run["source_hash"] or "").strip()
+        ),
+        "shopify_reported_count_mismatch": evaluation["diagnostics"].get(
+            "shopify_reported_count_mismatch"
+        ),
+        "shopify_reported_count_delta": evaluation["diagnostics"].get(
+            "shopify_reported_count_delta"
         ),
         "unresolved_blockers": evaluation["unresolved_blockers"],
         "readiness_blockers": list(evaluation["blockers"]),

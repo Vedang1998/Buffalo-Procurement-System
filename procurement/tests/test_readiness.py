@@ -148,6 +148,22 @@ class ReadinessScopeTests(unittest.TestCase):
         self.assertEqual(blockers[0]["type"], "MISSING_APPLICABLE_GATE")
         self.assertEqual(blockers[0]["detail"]["gate_name"], "VENDOR_RULES")
 
+    def test_unknown_readiness_scope_type_raises_before_result(self):
+        gates = foundation_passes() + [
+            gate("PRICE_COVERAGE", "FAIL", scope_type="FUTURE_SCOPE", scope_id="A")
+        ]
+        with self.assertRaisesRegex(
+            ValueError, "unsupported readiness scope_type: 'FUTURE_SCOPE'"
+        ):
+            readiness_gate_blockers(gates, vendor_id="A")
+
+    def test_invalid_applicable_gate_names_are_rejected(self):
+        for invalid in (None, "VENDOR_RULES", [None], [42], [""], ["   "]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                readiness_gate_blockers(
+                    foundation_passes(), applicable_gate_names=invalid
+                )
+
 
 class ExceptionScopeTests(unittest.TestCase):
     def test_applicable_high_and_critical_exceptions_block(self):
@@ -175,6 +191,28 @@ class ExceptionScopeTests(unittest.TestCase):
         self.assertEqual(
             exception_blockers(rows, vendor_id="B", variant_id="Y"), []
         )
+
+    def test_combined_exception_requires_both_vendor_and_variant(self):
+        combined = exception(vendor_id="A", variant_id="X")
+        self.assertEqual(exception_blockers([combined], vendor_id="A"), [])
+        self.assertEqual(
+            len(exception_blockers([combined], vendor_id="A", variant_id="X")),
+            1,
+        )
+        self.assertEqual(
+            exception_blockers([combined], vendor_id="A", variant_id="Y"), []
+        )
+        self.assertEqual(
+            exception_blockers([combined], vendor_id="B", variant_id="X"), []
+        )
+
+    def test_run_scope_is_isolated_and_global_exception_remains_global(self):
+        run_scoped = exception(run_id="R1")
+        global_exception = exception()
+        self.assertEqual(len(exception_blockers([run_scoped], run_id="R1")), 1)
+        self.assertEqual(exception_blockers([run_scoped], run_id="R2"), [])
+        self.assertEqual(exception_blockers([run_scoped]), [])
+        self.assertEqual(len(exception_blockers([global_exception])), 1)
 
 
 if __name__ == "__main__":
