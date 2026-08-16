@@ -1,8 +1,8 @@
 # Phase 4 Historical Review Catalog Search — Design
 
-**Date:** 2026-08-16  
-**Base:** `6a833f8318549aaf4b62ff400168b306579b90c6`  
-**Branch:** `phase4/historical-review-catalog-search`  
+**Date:** 2026-08-16
+**Base:** `6a833f8318549aaf4b62ff400168b306579b90c6`
+**Branch:** `phase4/historical-review-catalog-search`
 **Status:** Owner-approved design for authorized Phase 4 support work
 
 ## Objective and boundary
