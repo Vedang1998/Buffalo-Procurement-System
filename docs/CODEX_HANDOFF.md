@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-16T16:28:12Z (UTC)
+**Updated:** 2026-08-16T17:41:52Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -87,6 +87,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Independent adversarial review and ChatGPT business-rule review remain
   required. No PR creation, merge, deployment, or owner identity review is
   authorized at this checkpoint.
+
+### Phase 4 catalog-search independent-review remediation checkpoint
+
+- Claude independently reviewed exact prior branch head
+  `87d347a4efee7e420c2c302de8e34bb09bfd7fe9`, reproduced the complete
+  **198/198 PASS** result, and returned **APPROVE** with four LOW findings.
+- Owner-authorized narrow remediation accepted only LOW-1 and LOW-4. Exact
+  remediation commit before this handoff-only update:
+  `59cea38575da99c1c0829a4063273d7db03a983c` (`Harden Phase 4 catalog search
+  review tests`). No runtime or business-rule file changed.
+- LOW-1 remediated: `REQUIRED_MODULE_MINIMUMS` now matches the final discovered
+  counts for `test_historical_sales_review_api.py` (**16**) and
+  `test_phase4_postgres_integration.py` (**6**). Their prior floors were 12 and
+  4. `GLOBAL_MINIMUM_TESTS` remains derived from the module sum and is now 199.
+  An explicit discovery audit proved that deleting any one test from either
+  module now violates its required floor.
+- LOW-4 remediated with
+  `test_unknown_mapping_target_is_rejected_without_partial_persistence`, using
+  disposable PostgreSQL and the real
+  `record_historical_sales_review_decision`. A nonexistent canonical Variant ID
+  raised the exact safe `ValueError` `unknown canonical Variant ID`. Before and
+  after values matched for alias, review-decision, change-log, exclusion, and
+  unknown-variant counts; the complete `SALES_BACKFILL` readiness row; sales
+  aggregates; run state; and the broader business-state hash. No partial write
+  occurred, and the existing runtime guard required no change.
+- Final deterministic totals: **199 discovered / 199 executed / 199 passed**,
+  with 0 failures, 0 errors, 0 skips, 0 expected failures, and 0 unexpected
+  successes. Exact final module counts are 16 API-review tests and 6 Phase 4
+  PostgreSQL integration tests.
+- LOW-2 (weak source-inspection test) and LOW-3 (`business_state_hash` omits
+  some run-detail tables) are explicitly deferred as non-blocking test hygiene.
+  Independent-review NOTE-1 (unauthenticated read-only catalog exposure),
+  NOTE-2 (ordering case asymmetry), and NOTE-3 (prefix-tier writer-test
+  coverage) remain accepted observations and were not changed in this narrow
+  pass.
+- Production database access = 0; Shopify access = 0; identity decisions = 0;
+  rebuilds = 0; readiness changes = 0; deployments = 0; PO actions = 0. Phase 4
+  remains incomplete, `SALES_BACKFILL` remains **FAIL**, all 343 unresolved
+  groups remain untouched, and `procurement/docs/PHASE_STATUS.md` is unchanged.
+- No PR, merge, deployment, or owner identity review is authorized. The exact
+  next action is independent DELTA review of the exact pushed remediation head.
 
 ### PR 4a deterministic CI/tooling closeout
 
@@ -356,11 +397,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-The exact next action is **independent adversarial review of the exact pushed
+The exact next action is **independent DELTA review of the exact pushed
 `phase4/historical-review-catalog-search` branch head**. The reviewer must inspect
-the actual `origin/main...HEAD` diff and rerun deterministic validation against
-disposable infrastructure. ChatGPT business-rule review and owner merge
-authorization remain required after independent review.
+the remediation delta after prior reviewed head
+`87d347a4efee7e420c2c302de8e34bb09bfd7fe9` and rerun deterministic validation
+against disposable infrastructure. ChatGPT business-rule review and owner merge
+authorization remain required after DELTA review.
 
 No PR creation, merge, deployment, production access, or identity decision is
 authorized. Search-helper completion does not complete Phase 4. Do not map or
