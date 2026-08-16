@@ -248,6 +248,65 @@ class Phase4PostgresIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(self.business_state_hash(), before)
 
+    def test_unknown_mapping_target_is_rejected_without_partial_persistence(self):
+        unresolved = self.row(
+            "0", "UNKNOWN-TARGET", "Unknown Target History", "750ML", "2", "20.00"
+        )
+        run_id, initial = self.persist_complete_run([unresolved])
+        self.assertEqual(initial["status"], "FAIL")
+        unknown_variant_id = "999999999999999"
+
+        def guarded_state():
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """SELECT
+                         (SELECT COUNT(*) FROM variant_aliases),
+                         (SELECT COUNT(*) FROM historical_sales_review_decisions),
+                         (SELECT COUNT(*) FROM change_log),
+                         (SELECT COUNT(*) FROM historical_sales_exclusions),
+                         (SELECT COUNT(*) FROM variants WHERE variant_id=%s)""",
+                    (unknown_variant_id,),
+                )
+                mutation_counts = cur.fetchone()
+                cur.execute(
+                    """SELECT status,blocks_po,evidence_json::text,message,checked_at
+                       FROM readiness_gates
+                       WHERE gate_name='SALES_BACKFILL'
+                         AND scope_type='GLOBAL' AND scope_id=''"""
+                )
+                readiness = cur.fetchone()
+                cur.execute(
+                    """SELECT COUNT(*),COALESCE(SUM(units_sold),0),
+                              COALESCE(SUM(net_sales),0)
+                       FROM sales_daily"""
+                )
+                sales_aggregate = cur.fetchone()
+                cur.execute(
+                    """SELECT status,completed_at,resolved_rows,unresolved_rows,
+                              ambiguous_rows,canonical_net_items_sold,
+                              canonical_net_sales
+                       FROM sales_backfill_runs WHERE sales_backfill_id=%s""",
+                    (run_id,),
+                )
+                run_state = cur.fetchone()
+            return mutation_counts, readiness, sales_aggregate, run_state
+
+        state_before = guarded_state()
+        hash_before = self.business_state_hash()
+        with self.assertRaisesRegex(ValueError, "^unknown canonical Variant ID$"):
+            record_historical_sales_review_decision(
+                self.conn,
+                source_key=source_identity_key(unresolved),
+                action="MAP_TO_CANONICAL",
+                canonical_variant_id=unknown_variant_id,
+                actor="phase4-test",
+                reason="synthetic unknown-target rejection",
+            )
+
+        self.assertEqual(guarded_state(), state_before)
+        self.assertEqual(self.business_state_hash(), hash_before)
+        self.assertEqual(state_before[0], (0, 0, 0, 0, 0))
+
     def test_durable_ingest_review_rebuild_restatement_and_interruption(self):
         active = self.row("100", "DUP", "Live A", "750ML", "5", "50.00")
         ambiguous = self.row(None, "DUP", "Historical Unknown", "750ML", "2", "20.00")
