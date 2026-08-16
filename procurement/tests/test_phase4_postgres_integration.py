@@ -67,6 +67,14 @@ class Phase4PostgresIntegrationTests(unittest.TestCase):
                WHERE gate_name='CATALOG_SYNC' AND scope_type='GLOBAL' AND scope_id=''"""
         )
         self.conn.execute(
+            """INSERT INTO catalog_sync_runs(
+                 status,completed_at,shopify_api_version,
+                 shopify_reported_variant_count,live_rows_received,
+                 exact_current_ids,new_live_variants,source_hash,pagination_complete
+               ) VALUES ('COMPLETED',now(),'2026-07',3,3,3,0,
+                         'phase4-integration-catalog',TRUE)"""
+        )
+        self.conn.execute(
             """INSERT INTO variants(
                  variant_id,product_id,product_title,variant_title,sku,active,catalog_state
                ) VALUES

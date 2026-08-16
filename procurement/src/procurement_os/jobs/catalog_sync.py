@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 
 from procurement_os.catalog import (
-    SeedVariant, fetch_live_catalog, load_approved_aliases, load_rejected_pairs,
-    persist_catalog_sync, reconcile_catalog,
+    SeedVariant, evaluate_authoritative_catalog_run, fetch_live_catalog,
+    load_approved_aliases, load_rejected_pairs, persist_catalog_sync,
+    recompute_catalog_gate, reconcile_catalog,
 )
 from procurement_os.shopify.auth import ClientCredentialsTokenProvider, ShopifyConfig
 from procurement_os.shopify.graphql import ShopifyGraphQLClient
@@ -56,7 +57,6 @@ def main() -> None:
     except Exception as exc:
         # Fail closed: persist a FAILED run and force CATALOG_SYNC=FAIL so a prior
         # gate state can never survive a failed/incomplete sync.
-        import json
         with psycopg.connect(database_url) as conn:
             with conn.transaction():
                 with conn.cursor() as cur:
@@ -64,13 +64,7 @@ def main() -> None:
                         """INSERT INTO catalog_sync_runs(shopify_api_version,status,pagination_complete,started_at,completed_at,notes)
                            VALUES (%s,'FAILED',FALSE,%s,now(),%s)""",
                         (config.api_version, started_at, f"{type(exc).__name__}: {exc}"[:2000]))
-                    cur.execute(
-                        """INSERT INTO readiness_gates(gate_name,status,severity,blocks_po,evidence_json,message,checked_at)
-                           VALUES ('CATALOG_SYNC','FAIL','CRITICAL',TRUE,%s::jsonb,%s,now())
-                           ON CONFLICT(gate_name,scope_type,scope_id) DO UPDATE SET
-                             status='FAIL',evidence_json=EXCLUDED.evidence_json,message=EXCLUDED.message,checked_at=now()""",
-                        (json.dumps({"failure": f"{type(exc).__name__}: {exc}"[:500]}),
-                         "Catalog sync failed or was incomplete; gate forced FAIL."))
+            recompute_catalog_gate(conn)
         raise
 
 
@@ -106,6 +100,7 @@ def _run_sync(database_url: str, config: ShopifyConfig, client: ShopifyGraphQLCl
             with conn.cursor() as cur:
                 cur.execute("UPDATE catalog_sync_runs SET notes=%s WHERE catalog_sync_id=%s", (count_drift, sync_id))
             conn.commit()
+        catalog_readiness = evaluate_authoritative_catalog_run(conn)
         print({
             "catalog_sync_id": sync_id,
             "reported_count": reported_count,
@@ -115,7 +110,8 @@ def _run_sync(database_url: str, config: ShopifyConfig, client: ShopifyGraphQLCl
             "missing_seed": reconciliation.missing_seed,
             "potential_recreations": reconciliation.potential_recreations,
             "blockers": len(reconciliation.blockers),
-            "catalog_gate_pass": reconciliation.can_pass_catalog_gate,
+            "catalog_gate_pass": catalog_readiness["status"] == "PASS",
+            "catalog_gate_blockers": list(catalog_readiness["blockers"]),
         })
 
 

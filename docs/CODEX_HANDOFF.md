@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-14T19:50:16Z (UTC)
+**Updated:** 2026-08-15T02:24:41Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -65,8 +65,162 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Non-blocking future tooling follow-up: the current test-module registration
   invariant assumes a flat `procurement/tests/test_*.py` layout. Nested test
   directories are not yet protected by that completeness invariant.
-- The owner-approved F4 policy remains **NOT YET IMPLEMENTED**. PR 4b remains
-  **NOT YET AUTHORIZED**.
+- The historical PR 4a authorization boundary is superseded by the
+  owner-authorized, still-unmerged PR 4b checkpoint below.
+
+### PR 4b authoritative catalog/readiness hardening checkpoint — UNMERGED
+
+- Objective: F1 authoritative catalog-run semantics plus owner-approved F4
+  scoped readiness semantics.
+- Branch: `hardening/pr-4b-readiness-catalog`.
+- Exact base: `d90f7313fc6048697ef74553c3895a88e9ac8a04`.
+- Implementation commit:
+  `fa848cde427b405838dc6401350487718671ffe4` (`Implement scope-aware readiness
+  and catalog authority`).
+- PR 4b remains **UNMERGED**. This checkpoint does not authorize merge,
+  deployment, or PR 4c.
+- F1 result: there is one authoritative newest-attempt catalog selector,
+  ordered by `started_at DESC, catalog_sync_id DESC`. It never falls back to an
+  older successful run; an incomplete or failed newest attempt fails closed;
+  and `CATALOG_SYNC` can pass only when all implemented deterministic catalog
+  controls pass.
+- F4 result: `FAIL` blocks the affected/applicable scope; `WARN` remains
+  non-blocking; missing applicable required evidence fails closed; unrelated
+  vendor/variant failures do not create global blocks; exception scope matching
+  is conjunctive; and existing global required failures still block.
+- Exact completed G4 test totals:
+  `discovered=186; executed=186; passed=186; failures=0; errors=0; skips=0;
+  expectedFailures=0; unexpectedSuccesses=0`. All 19 registered test modules
+  met their per-module minimums, with no missing or unregistered test module.
+- Dependency control used the repository-persistent pinned executable, which
+  reported `uv 0.12.3 (x86_64-unknown-linux-gnu)`; `uv lock --check` exited 0
+  after resolving 22 packages.
+- Python compilation passed for `main.py`, `procurement/src`,
+  `procurement/tools`, and `procurement/tests`. Working-tree and
+  base-to-implementation `git diff --check` controls passed. All 1,036 added
+  lines passed the changed-file secret scan; no auth state was tracked; and no
+  unintended cache, bytecode, log, temporary, build, dependency, or generated
+  artifact was tracked.
+- Required PR 4b A-Q adversarial coverage is complete and deterministic.
+- Additional F4 guardrails passed: an existing global `VENDOR_RULES` `FAIL`
+  still blocks; undeclared missing `VENDOR_RULES` is not a universal blocker;
+  declared-applicable missing `VENDOR_RULES` fails closed; and all relevant
+  status/API consumers use the same authoritative `catalog_sync_id`.
+- G4 used only disposable loopback PostgreSQL test infrastructure. There was
+  zero production database access or write and zero Shopify access or write.
+  PR 4b made no migration, no identity decision, no PO generation or release,
+  and no deployment.
+- Phase 4 remains **INCOMPLETE**. The 343 historical identity decisions remain
+  untouched, and `SALES_BACKFILL` remains operationally outstanding. No
+  official phase/program milestone changed, and
+  `procurement/docs/PHASE_STATUS.md` remains unchanged.
+
+### PR 4b G7 review remediation checkpoint — UNMERGED
+
+- Independent Claude review returned **REQUEST CHANGES** against exact reviewed
+  head `d978ab17e601fdc317e8e0b7a5da34b26f03afcc`.
+- Exact remediation implementation commit/head before this handoff-only update:
+  `b30b2706fe065373e6ad6ec4d5dfda481678e3f3` (`Remediate PR 4b review
+  findings`). Its parent is the exact reviewed head; no commit was amended or
+  rebased.
+- Accepted HIGH-1: Shopify `productVariantsCount` drift is a control statistic,
+  not authoritative catalog data and not a `CATALOG_SYNC` blocker. Pagination
+  plus the independent active-product `variantsCount` verification remains
+  authoritative. Reported count, mismatch, and delta remain explicit diagnostic
+  evidence; they do not produce `WARN` or block readiness. All other authorized
+  deterministic catalog controls remain fail-closed.
+- Accepted HIGH-2: the divergent latest-`COMPLETED` selectors were removed from
+  `tools/run_identity_investigation.py` and
+  `tools/diagnose_count_discrepancy.py`. Both now use the centralized newest-
+  attempt evaluator. Missing, failed, running, or structurally incomplete newest
+  attempts are refused without older-success fallback. A structurally complete
+  run may still be investigated when unresolved catalog identities are its only
+  readiness blocker. The selector-uniqueness guard now scans runtime/tooling
+  Python across `procurement/`, excluding tests, with case/whitespace-tolerant
+  SQL detection.
+- MEDIUM-1 was rejected as a defect: owner-approved exception matching remains
+  conjunctive. A combined vendor/variant exception does not block vendor-only
+  scope; it blocks when both dimensions match; unrelated dimensions remain
+  isolated. The caller contract now states that future final-PO logic must
+  evaluate each applicable line with vendor and variant scope. No PO engine was
+  added.
+- MEDIUM-2 was preserved and documented: a run-scoped HIGH/CRITICAL exception
+  blocks its matching run, not another run and not a global request without a
+  run. A truly global HIGH/CRITICAL exception still blocks global status.
+- Accepted MEDIUM-3: unsupported readiness `scope_type` values now raise a clear
+  `ValueError` before a readiness result can be produced.
+- Accepted LOW-2 narrowly: `None`, non-string, blank, whitespace-only, and bare
+  string applicable-gate inputs are rejected instead of being stringified or
+  iterated into misleading gate names.
+- Not addressed by authority: LOW-1 unresolved-count drift beyond existing
+  diagnostics, LOW-3 query optimization, and LOW-4's pre-existing
+  `AMBIGUOUS_IDENTITY` schema-constraint issue. LOW-4 remains a future
+  pre-existing issue. No PR 4c identity/matching, pricing, migration,
+  vendor-rule, forecasting, procurement, PO, or Shopify-write scope was added.
+- Exact final remediation test totals:
+  `discovered=193; executed=193; passed=193; failures=0; errors=0; skips=0;
+  expectedFailures=0; unexpectedSuccesses=0`. All registered modules met their
+  updated per-module minima with no missing or unregistered module.
+- Pinned `uv 0.12.3` lock validation passed; Python compilation passed for
+  `main.py`, `procurement/src`, `procurement/tools`, and `procurement/tests`;
+  `git diff --check` passed; 269 added remediation lines passed the changed-file
+  secret scan; and no auth state or generated artifact is tracked.
+- The sole authorized production verification used this exact SQL in one
+  database-enforced read-only transaction:
+
+  ```sql
+  BEGIN TRANSACTION READ ONLY;
+  WITH authoritative AS (
+    SELECT catalog_sync_id, started_at, completed_at, status,
+           pagination_complete, source_hash, live_rows_received,
+           exact_current_ids, new_live_variants,
+           shopify_reported_variant_count, unresolved_count
+    FROM catalog_sync_runs
+    ORDER BY started_at DESC, catalog_sync_id DESC
+    LIMIT 1
+  )
+  SELECT current_setting('transaction_read_only') AS transaction_read_only,
+         a.catalog_sync_id,
+         a.started_at AT TIME ZONE 'UTC' AS started_at_utc,
+         a.completed_at AT TIME ZONE 'UTC' AS completed_at_utc,
+         a.status,
+         a.pagination_complete,
+         (a.source_hash IS NOT NULL AND btrim(a.source_hash) <> '')
+           AS source_hash_present,
+         a.live_rows_received,
+         a.exact_current_ids,
+         a.new_live_variants,
+         a.shopify_reported_variant_count,
+         a.unresolved_count AS recorded_unresolved_count,
+         (SELECT COUNT(*)
+            FROM catalog_reconciliation_items cri
+           WHERE cri.catalog_sync_id = a.catalog_sync_id
+             AND cri.blocking = TRUE
+             AND cri.resolved_at IS NULL)
+           AS live_unresolved_blocking_items
+    FROM authoritative a;
+  COMMIT;
+  ```
+
+- Production result: `transaction_read_only=on`;
+  `catalog_sync_id=7e3ebb8b-a204-43fe-8304-fe3a21216a68`;
+  `started_at_utc=2026-08-10 14:55:53.619347`;
+  `completed_at_utc=2026-08-10 14:55:53.634178`; `status=COMPLETED`;
+  `pagination_complete=true`; `source_hash_present=true`;
+  `live_rows_received=1999`; `exact_current_ids=1999`;
+  `new_live_variants=0`; `shopify_reported_variant_count=2003`;
+  `recorded_unresolved_count=0`; `live_unresolved_blocking_items=0`.
+  The remediated evaluator therefore remains `PASS` and exposes the +4
+  reported-count drift diagnostically.
+- The production transaction made zero writes. No readiness gate was updated,
+  no catalog sync was run, and there was zero Shopify access and zero Shopify
+  writes.
+  Remediation made no migration, identity decision, PO generation/release, or
+  deployment.
+- Phase 4 remains **INCOMPLETE**. All 343 historical identity decisions remain
+  untouched, `SALES_BACKFILL` remains operationally outstanding, PR 4b remains
+  **UNMERGED**, no official phase milestone changed, and
+  `procurement/docs/PHASE_STATUS.md` remains unchanged.
 
 ### Phase 3 catalog checkpoint
 
@@ -115,14 +269,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-PR #5 / PR 4a is closed after owner-approved merge and successful post-merge
-verification. The exact engineering next boundary is: repository
-branch-protection/settings hardening may be configured separately; do not start
-PR 4b without explicit owner authorization. The owner-approved F4 policy is not
-yet implemented.
+PR 4b G7 remediation is implemented and validated but remains **UNMERGED**. The
+exact next authorization boundary is Claude DELTA re-review of the final exact
+remediated branch head. Do not start Cursor review, merge, deploy, or begin PR 4c
+without explicit owner authorization.
 
-The Phase 4 operational boundary below remains unchanged by PR 4a and its
-documentation-only G12 closeout.
+The Phase 4 operational boundary below remains unchanged by PR 4b and this
+documentation-only closeout preparation.
 
 Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
 

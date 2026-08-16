@@ -17,6 +17,7 @@ from .health import full_health
 from .matching import MatchCandidate, score_candidate
 from .pricing import rollover
 from .readiness import po_readiness
+from . import catalog as catalog_service
 from . import sales as sales_service
 
 app = FastAPI(title="Buffalo Procurement OS", version="1.3.0")
@@ -165,11 +166,9 @@ def rules():
 
 @app.get("/foundation/status")
 def foundation_status():
-    db = os.getenv("DATABASE_URL")
-    if not db:
+    if not os.getenv("DATABASE_URL"):
         return {"database_configured": False, "po_generation_enabled": False, "reason": "DATABASE_URL is not configured"}
-    import psycopg
-    with psycopg.connect(db) as conn:
+    with _db_conn() as conn:
         result = po_readiness(conn)
     return {"database_configured": True, **result}
 
@@ -201,15 +200,10 @@ def matching_endpoint(req: MatchRequest):
 
 @app.get("/reconciliation/items")
 def reconciliation_items(unresolved_only: bool = True):
-    """Reconciliation queue for the latest completed catalog sync run."""
+    """Reconciliation queue for the one authoritative catalog attempt."""
     with _db_conn() as conn, conn.cursor() as cur:
-        cur.execute("""SELECT catalog_sync_id,started_at,completed_at,shopify_api_version,
-                              shopify_reported_variant_count,live_rows_received,exact_current_ids,
-                              new_live_variants,missing_seed_variants,potential_recreations,
-                              unresolved_count,source_hash,pagination_complete
-                       FROM catalog_sync_runs WHERE status='COMPLETED'
-                       ORDER BY completed_at DESC NULLS LAST,started_at DESC LIMIT 1""")
-        run = cur.fetchone()
+        evaluation = catalog_service.evaluate_authoritative_catalog_run(conn)
+        run = evaluation["run"]
         if not run:
             return {"run": None, "items": []}
         q = """SELECT reconciliation_item_id,classification,seed_variant_id,live_variant_id,
@@ -218,7 +212,7 @@ def reconciliation_items(unresolved_only: bool = True):
         if unresolved_only:
             q += " AND blocking=TRUE AND resolved_at IS NULL"
         q += " ORDER BY classification,reconciliation_item_id"
-        cur.execute(q, (run[0],))
+        cur.execute(q, (run["catalog_sync_id"],))
         items = [
             {"item_id": r[0], "classification": r[1], "seed_variant_id": r[2],
              "live_variant_id": r[3], "blocking": r[4], "evidence": r[5],
@@ -242,11 +236,25 @@ def reconciliation_items(unresolved_only: bool = True):
         for i in items:
             i["historical_record"] = old_rows.get(i["seed_variant_id"])
     return {
-        "run": {"catalog_sync_id": str(run[0]), "started_at": str(run[1]), "completed_at": str(run[2]),
-                "shopify_api_version": run[3], "shopify_reported_variant_count": run[4],
-                "live_rows_received": run[5], "exact_current_ids": run[6], "new_live_variants": run[7],
-                "missing_seed_variants": run[8], "potential_recreations": run[9],
-                "unresolved_count": run[10], "source_hash": run[11], "pagination_complete": run[12]},
+        "run": {
+            "catalog_sync_id": run["catalog_sync_id"],
+            "started_at": str(run["started_at"]),
+            "completed_at": str(run["completed_at"]) if run["completed_at"] else None,
+            "status": run["status"],
+            "shopify_api_version": run["shopify_api_version"],
+            "shopify_reported_variant_count": run["shopify_reported_variant_count"],
+            "live_rows_received": run["live_rows_received"],
+            "exact_current_ids": run["exact_current_ids"],
+            "new_live_variants": run["new_live_variants"],
+            "missing_seed_variants": run["missing_seed_variants"],
+            "potential_recreations": run["potential_recreations"],
+            "unresolved_count": evaluation["unresolved_blockers"],
+            "recorded_unresolved_count": run["recorded_unresolved_count"],
+            "source_hash": run["source_hash"],
+            "pagination_complete": run["pagination_complete"],
+            "readiness_status": evaluation["status"],
+            "readiness_blockers": list(evaluation["blockers"]),
+        },
         "items": items,
     }
 
@@ -298,7 +306,7 @@ def reconciliation_page():
     data = reconciliation_items(unresolved_only=True)
     run = data["run"]
     if not run:
-        return "<h1>Catalog Reconciliation</h1><p>No completed catalog sync run yet.</p>"
+        return "<h1>Catalog Reconciliation</h1><p>No catalog sync attempt exists yet.</p>"
     items = data["items"]
 
     def esc(v):
@@ -368,9 +376,12 @@ button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-
 .ok{{background:#dafbe1;color:#116329}}.bad{{background:#ffebe9;color:#82071e}}.mid{{background:#fff8c5;color:#7d4e00}}.muted{{color:#59636e;font-size:12px;align-self:center}}
 </style></head><body>
 <h1>Catalog Reconciliation — human review queue</h1>
-<p>Run {esc(run['catalog_sync_id'])} · API {esc(run['shopify_api_version'])} · live variants {esc(run['live_rows_received'])}
+<p>Authoritative run {esc(run['catalog_sync_id'])} · run status {esc(run['status'])}
+· readiness {esc(run['readiness_status'])} · API {esc(run['shopify_api_version'])}
+· live variants {esc(run['live_rows_received'])}
 (reported {esc(run['shopify_reported_variant_count'])}) · pagination complete: {esc(run['pagination_complete'])}
 · snapshot {esc((run['source_hash'] or '')[:16])}…</p>
+<p>Readiness blockers: {esc(', '.join(run['readiness_blockers']) or 'none')}</p>
 <p><b>{len(items)}</b> unresolved blocker(s). Identity decisions are permanent and audited. Nothing here writes to Shopify.</p>
 {sections or '<p>No unresolved blockers.</p>'}
 </body></html>"""
@@ -378,14 +389,14 @@ button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-
 
 @app.get("/reconciliation/investigation/items")
 def investigation_items():
-    """Persisted identity-investigation evidence for the latest completed sync (diagnostic only)."""
+    """Persisted evidence for the authoritative catalog attempt (diagnostic only)."""
     with _db_conn() as conn:
+        evaluation = catalog_service.evaluate_authoritative_catalog_run(conn)
+        run = evaluation["run"]
+        if not run:
+            return {"run": None, "catalog_readiness": evaluation, "missing": [], "new": []}
+        sync_id = run["catalog_sync_id"]
         with conn.cursor() as cur:
-            cur.execute("SELECT catalog_sync_id FROM catalog_sync_runs WHERE status='COMPLETED' ORDER BY started_at DESC LIMIT 1")
-            row = cur.fetchone()
-            if not row:
-                return {"run": None, "missing": [], "new": []}
-            sync_id = str(row[0])
             cur.execute(
                 """SELECT subject,variant_id,shopify_status,classification,evidence_json,heightened_review,looked_up_at
                    FROM identity_investigations WHERE catalog_sync_id=%s ORDER BY subject,variant_id""", (sync_id,))
@@ -394,7 +405,16 @@ def investigation_items():
                 rec = {"variant_id": vid, "shopify_status": status, "classification": cls,
                        "evidence": ev, "heightened_review": hr, "looked_up_at": str(at)}
                 (missing if subj == "MISSING_SEED" else new).append(rec)
-    return {"run": sync_id, "missing": missing, "new": new}
+    return {
+        "run": sync_id,
+        "catalog_readiness": {
+            "status": evaluation["status"],
+            "catalog_sync_id": evaluation["catalog_sync_id"],
+            "blockers": list(evaluation["blockers"]),
+        },
+        "missing": missing,
+        "new": new,
+    }
 
 
 @app.get("/reconciliation/investigation", response_class=HTMLResponse)

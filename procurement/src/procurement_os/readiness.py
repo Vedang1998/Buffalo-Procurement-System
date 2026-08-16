@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
+
+
+FOUNDATION_APPLICABLE_GATES = frozenset({"CATALOG_SYNC", "SALES_BACKFILL"})
+SUPPORTED_READINESS_SCOPE_TYPES = frozenset({"GLOBAL", "VENDOR", "VARIANT", "RUN"})
 
 
 def readiness_gates(conn: Any, *, scope_type: str | None = None, scope_id: str | None = None) -> list[dict]:
@@ -28,50 +32,230 @@ def readiness_gates(conn: Any, *, scope_type: str | None = None, scope_id: str |
         ]
 
 
-def po_readiness(conn: Any, *, vendor_id: str | None = None, variant_id: str | None = None) -> dict:
-    """Fail closed on explicit readiness gates and unresolved material exceptions.
+def _scope_applies(
+    scope_type: str,
+    scope_id: str,
+    *,
+    vendor_id: str | None,
+    variant_id: str | None,
+    run_id: str | None,
+) -> bool:
+    if scope_type not in SUPPORTED_READINESS_SCOPE_TYPES:
+        raise ValueError(f"unsupported readiness scope_type: {scope_type!r}")
+    if scope_type == "GLOBAL":
+        return True
+    target = {
+        "VENDOR": vendor_id,
+        "VARIANT": variant_id,
+        "RUN": run_id,
+    }.get(scope_type)
+    return target is not None and str(scope_id) == str(target)
 
-    Global gates always apply. Scoped gates apply only to the requested vendor/variant.
-    This avoids the anti-pattern where one bad C-item disables every vendor PO and causes
-    operators to bypass safety controls entirely.
+
+def _validated_applicable_gate_names(
+    names: Iterable[str] | None,
+) -> frozenset[str]:
+    if names is None or isinstance(names, (str, bytes)):
+        raise ValueError(
+            "applicable gate names must be an iterable of nonblank strings"
+        )
+    validated: set[str] = set()
+    for name in names:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("applicable gate names must be nonblank strings")
+        validated.add(name.strip())
+    return frozenset(validated)
+
+
+def readiness_gate_blockers(
+    gates: list[dict],
+    *,
+    vendor_id: str | None = None,
+    variant_id: str | None = None,
+    run_id: str | None = None,
+    applicable_gate_names: Iterable[str] = (),
+) -> list[dict]:
+    """Evaluate required FAIL and missing-evidence conditions for one PO scope.
+
+    Foundation gates are always applicable. Callers may declare additional gate
+    names required for their concrete vendor/item/run calculation. WARN is always
+    advisory. Existing ``blocks_po`` rows retain their meaning without making all
+    seven canonical gate names globally mandatory.
     """
-    gates = readiness_gates(conn)
-    blockers = []
-    for g in gates:
-        applies = g["scope_type"] == "GLOBAL"
-        if vendor_id and g["scope_type"] == "VENDOR" and g["scope_id"] == str(vendor_id):
-            applies = True
-        if variant_id and g["scope_type"] == "VARIANT" and g["scope_id"] == str(variant_id):
-            applies = True
-        if applies and g["blocks_po"] and g["status"] == "FAIL":
-            blockers.append({"type": "READINESS_GATE", "detail": g})
+    declared = _validated_applicable_gate_names(applicable_gate_names)
+    required_names = FOUNDATION_APPLICABLE_GATES | declared
+
+    applicable_rows = [
+        gate
+        for gate in gates
+        if _scope_applies(
+            str(gate["scope_type"]),
+            str(gate["scope_id"]),
+            vendor_id=vendor_id,
+            variant_id=variant_id,
+            run_id=run_id,
+        )
+    ]
+    blockers: list[dict] = []
+    for gate in applicable_rows:
+        required = gate["gate_name"] in required_names or bool(gate["blocks_po"])
+        if required and gate["status"] == "FAIL":
+            blockers.append({"type": "READINESS_GATE", "detail": gate})
+
+    evidence_names = {str(gate["gate_name"]) for gate in applicable_rows}
+    for gate_name in sorted(required_names - evidence_names):
+        blockers.append(
+            {
+                "type": "MISSING_APPLICABLE_GATE",
+                "detail": {
+                    "gate_name": gate_name,
+                    "status": "MISSING",
+                    "scope": {
+                        "vendor_id": vendor_id,
+                        "variant_id": variant_id,
+                        "run_id": run_id,
+                    },
+                },
+            }
+        )
+    return blockers
+
+
+def exception_applies(
+    exception: dict,
+    *,
+    vendor_id: str | None = None,
+    variant_id: str | None = None,
+    run_id: str | None = None,
+) -> bool:
+    """Conjunctively match every populated exception scope dimension.
+
+    A combined vendor/variant exception does not apply to a vendor-only query,
+    and a run-scoped exception does not become global when no run is evaluated.
+    """
+    for field, target in (
+        ("vendor_id", vendor_id),
+        ("variant_id", variant_id),
+        ("run_id", run_id),
+    ):
+        scoped_value = exception.get(field)
+        if scoped_value is not None and str(scoped_value) != str(target):
+            return False
+    return True
+
+
+def exception_blockers(
+    exceptions: list[dict],
+    *,
+    vendor_id: str | None = None,
+    variant_id: str | None = None,
+    run_id: str | None = None,
+) -> list[dict]:
+    return [
+        {"type": "OPEN_EXCEPTION", "detail": exception}
+        for exception in exceptions
+        if exception["status"] == "OPEN"
+        and exception["severity"] in {"HIGH", "CRITICAL"}
+        and exception_applies(
+            exception,
+            vendor_id=vendor_id,
+            variant_id=variant_id,
+            run_id=run_id,
+        )
+    ]
+
+
+def _effective_readiness_gates(conn: Any) -> list[dict]:
+    """Overlay CATALOG_SYNC with the one authoritative catalog-run evaluator."""
+    from .catalog import authoritative_catalog_gate
+
+    gates = [
+        gate
+        for gate in readiness_gates(conn)
+        if not (
+            gate["gate_name"] == "CATALOG_SYNC"
+            and gate["scope_type"] == "GLOBAL"
+            and gate["scope_id"] == ""
+        )
+    ]
+    gates.append(authoritative_catalog_gate(conn))
+    return sorted(
+        gates,
+        key=lambda gate: (
+            not bool(gate["blocks_po"]),
+            str(gate["severity"]),
+            str(gate["gate_name"]),
+            str(gate["scope_type"]),
+            str(gate["scope_id"]),
+        ),
+    )
+
+
+def po_readiness(
+    conn: Any,
+    *,
+    vendor_id: str | None = None,
+    variant_id: str | None = None,
+    run_id: str | None = None,
+    applicable_gate_names: Iterable[str] = (),
+) -> dict:
+    """Fail closed for required gates and material exceptions in affected scope.
+
+    Vendor-only readiness is not certification of every prospective PO line.
+    Final-PO callers must evaluate each applicable item with both ``vendor_id``
+    and ``variant_id`` (and ``run_id`` when relevant).
+    """
+    declared_gate_names = _validated_applicable_gate_names(applicable_gate_names)
+    gates = _effective_readiness_gates(conn)
+    blockers = readiness_gate_blockers(
+        gates,
+        vendor_id=vendor_id,
+        variant_id=variant_id,
+        run_id=run_id,
+        applicable_gate_names=declared_gate_names,
+    )
 
     with conn.cursor() as cur:
-        clauses = ["status='OPEN'", "severity IN ('HIGH','CRITICAL')"]
-        args = []
-        if vendor_id is None and variant_id is None:
-            # Global foundation status must not be disabled by one item/vendor exception.
-            clauses.append("vendor_id IS NULL AND variant_id IS NULL")
-        else:
-            if vendor_id:
-                clauses.append("(vendor_id IS NULL OR vendor_id=%s)")
-                args.append(vendor_id)
-            if variant_id:
-                clauses.append("(variant_id IS NULL OR variant_id=%s)")
-                args.append(variant_id)
         cur.execute(
-            "SELECT exception_id,severity,exception_type,message,variant_id,vendor_id FROM exceptions WHERE " + " AND ".join(clauses) + " ORDER BY exception_id",
-            tuple(args),
+            """SELECT exception_id,severity,exception_type,message,variant_id,
+                      vendor_id,run_id,status
+               FROM exceptions
+               WHERE status='OPEN' AND severity IN ('HIGH','CRITICAL')
+               ORDER BY exception_id"""
         )
-        for r in cur.fetchall():
-            blockers.append({
-                "type": "OPEN_EXCEPTION",
-                "detail": {"exception_id": r[0], "severity": r[1], "exception_type": r[2], "message": r[3], "variant_id": r[4], "vendor_id": str(r[5]) if r[5] else None},
-            })
+        exceptions = [
+            {
+                "exception_id": row[0],
+                "severity": row[1],
+                "exception_type": row[2],
+                "message": row[3],
+                "variant_id": str(row[4]) if row[4] is not None else None,
+                "vendor_id": str(row[5]) if row[5] is not None else None,
+                "run_id": str(row[6]) if row[6] is not None else None,
+                "status": row[7],
+            }
+            for row in cur.fetchall()
+        ]
+    blockers.extend(
+        exception_blockers(
+            exceptions,
+            vendor_id=vendor_id,
+            variant_id=variant_id,
+            run_id=run_id,
+        )
+    )
 
     return {
         "po_generation_enabled": not blockers,
-        "scope": {"vendor_id": vendor_id, "variant_id": variant_id},
+        "scope": {
+            "vendor_id": vendor_id,
+            "variant_id": variant_id,
+            "run_id": run_id,
+        },
+        "applicable_gate_names": sorted(
+            FOUNDATION_APPLICABLE_GATES
+            | declared_gate_names
+        ),
         "blockers": blockers,
         "gates": gates,
     }
