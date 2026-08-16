@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-16T04:17:49Z (UTC)
+**Updated:** 2026-08-16T17:41:52Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -13,10 +13,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ### Repository and tests
 
 - Verified current `origin/main` baseline:
-  `527498ce39dfa504c32916b16478cbe02dc6781c` (`Merge PR #7: harden
-  authoritative catalog and scoped readiness`). Documentation-only PR 4b G12
-  closeout branch: `docs/pr4b-post-merge-closeout`, created directly from that
-  exact commit. The prior PR 4a closeout remains historical evidence.
+  `6a833f8318549aaf4b62ff400168b306579b90c6` (`Merge PR #8: document PR
+  4b post-merge closeout`). Phase 4 review-search branch:
+  `phase4/historical-review-catalog-search`, created directly from that exact
+  commit without repointing the preserved local `main`. The prior PR 4a and PR
+  4b checkpoints remain historical evidence below.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -26,6 +27,107 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   wall time 3.181 seconds on 2026-08-10. That direct unittest command is
   superseded and must not be used for current validation.
 - Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
+
+### Phase 4 historical-review catalog search implementation checkpoint
+
+- Objective: add a small, read-only local catalog search/picker to the existing
+  historical-sales human-review page. Search and selection provide evidence and
+  populate the existing Canonical Variant ID field; they never decide identity
+  or submit the protected mapping form.
+- Exact base: `6a833f8318549aaf4b62ff400168b306579b90c6`.
+- Branch: `phase4/historical-review-catalog-search`.
+- Approved design commit:
+  `b9bcf92849bbbad67e1b9fedb229b9b693cae856` (`Design Phase 4 historical
+  catalog search helper`).
+- Exact implementation/test commit:
+  `746b292820b0a77be2fcb6d5933d45e35898cfcd` (`Add Phase 4 historical catalog
+  search picker`).
+- Implementation: `search_historical_sales_catalog` performs one bounded,
+  parameterized local PostgreSQL `SELECT` over stored Variant ID, SKU, barcode,
+  product title, variant title, and handle evidence. Query length is limited to
+  128 characters, results are capped at 20, SQL wildcard characters remain
+  literal, and relevance plus Variant ID provide deterministic order. The
+  read-only endpoint is `GET /historical-sales/review/catalog-search?q=...`.
+- Target eligibility remains the existing exact-`variants`-membership contract.
+  Search exposes `active` and `catalog_state` as evidence and does not invent an
+  active-only rule; preserved inactive historical variants remain legitimate
+  canonical owners under `HistoricalIdentityIndex`. The permanent mapping path
+  already rejects unknown targets and transactionally verifies that the resolver
+  reaches the exact requested canonical Variant ID. No mapping-validation defect
+  requiring a change was found.
+- UI: each unresolved review card has an isolated vanilla-JavaScript picker.
+  Results use neutral labels and DOM `textContent`; explicit selection copies the
+  exact result ID only into that card's existing mapping field. It does not submit
+  a form, call the decision service, create an alias/exclusion, rebuild sales,
+  change readiness, or call Shopify. Existing deterministic candidates, source
+  evidence, conflicts, materiality, sales impact, reviewer, reason, and review
+  token controls remain visible and separate.
+- Deterministic result: **198 discovered / 198 executed / 198 passed**, with 0
+  failures, 0 errors, 0 skips, 0 expected failures, and 0 unexpected successes.
+  Coverage includes literal wildcard/quote/injection probes, every stored search
+  field, empty/long/no-result input, result cap/order, inactive-status evidence,
+  generic error rendering, exact/card-local selection, no decision or Shopify
+  path, and a disposable-PostgreSQL business-state hash proving no search writes.
+- Pinned `uv 0.12.3` lock validation passed after resolving 22 packages. Python
+  compilation passed for `main.py`, `procurement/src`, `procurement/tools`, and
+  `procurement/tests`. `git diff --check`, changed-file secret safety, tracked
+  auth/generated-artifact safety, and `origin/main` scope checks passed.
+- Exact changed files at this checkpoint:
+  `docs/CODEX_HANDOFF.md`,
+  `docs/superpowers/specs/2026-08-16-historical-review-catalog-search-design.md`,
+  `procurement/src/procurement_os/api.py`,
+  `procurement/src/procurement_os/sales.py`,
+  `procurement/tests/test_historical_sales_review_api.py`, and
+  `procurement/tests/test_phase4_postgres_integration.py`.
+- No migration or dependency change was made. Production database access = 0;
+  Shopify access = 0; Shopify writes = 0; identity decisions = 0; mappings = 0;
+  exclusions = 0; rebuilds = 0; readiness changes = 0; deployments = 0; PO
+  actions = 0. `SALES_BACKFILL` remains **FAIL** and all 343 grouped identities
+  remain pending human review. `procurement/docs/PHASE_STATUS.md` is unchanged.
+- Independent adversarial review and ChatGPT business-rule review remain
+  required. No PR creation, merge, deployment, or owner identity review is
+  authorized at this checkpoint.
+
+### Phase 4 catalog-search independent-review remediation checkpoint
+
+- Claude independently reviewed exact prior branch head
+  `87d347a4efee7e420c2c302de8e34bb09bfd7fe9`, reproduced the complete
+  **198/198 PASS** result, and returned **APPROVE** with four LOW findings.
+- Owner-authorized narrow remediation accepted only LOW-1 and LOW-4. Exact
+  remediation commit before this handoff-only update:
+  `59cea38575da99c1c0829a4063273d7db03a983c` (`Harden Phase 4 catalog search
+  review tests`). No runtime or business-rule file changed.
+- LOW-1 remediated: `REQUIRED_MODULE_MINIMUMS` now matches the final discovered
+  counts for `test_historical_sales_review_api.py` (**16**) and
+  `test_phase4_postgres_integration.py` (**6**). Their prior floors were 12 and
+  4. `GLOBAL_MINIMUM_TESTS` remains derived from the module sum and is now 199.
+  An explicit discovery audit proved that deleting any one test from either
+  module now violates its required floor.
+- LOW-4 remediated with
+  `test_unknown_mapping_target_is_rejected_without_partial_persistence`, using
+  disposable PostgreSQL and the real
+  `record_historical_sales_review_decision`. A nonexistent canonical Variant ID
+  raised the exact safe `ValueError` `unknown canonical Variant ID`. Before and
+  after values matched for alias, review-decision, change-log, exclusion, and
+  unknown-variant counts; the complete `SALES_BACKFILL` readiness row; sales
+  aggregates; run state; and the broader business-state hash. No partial write
+  occurred, and the existing runtime guard required no change.
+- Final deterministic totals: **199 discovered / 199 executed / 199 passed**,
+  with 0 failures, 0 errors, 0 skips, 0 expected failures, and 0 unexpected
+  successes. Exact final module counts are 16 API-review tests and 6 Phase 4
+  PostgreSQL integration tests.
+- LOW-2 (weak source-inspection test) and LOW-3 (`business_state_hash` omits
+  some run-detail tables) are explicitly deferred as non-blocking test hygiene.
+  Independent-review NOTE-1 (unauthenticated read-only catalog exposure),
+  NOTE-2 (ordering case asymmetry), and NOTE-3 (prefix-tier writer-test
+  coverage) remain accepted observations and were not changed in this narrow
+  pass.
+- Production database access = 0; Shopify access = 0; identity decisions = 0;
+  rebuilds = 0; readiness changes = 0; deployments = 0; PO actions = 0. Phase 4
+  remains incomplete, `SALES_BACKFILL` remains **FAIL**, all 343 unresolved
+  groups remain untouched, and `procurement/docs/PHASE_STATUS.md` is unchanged.
+- No PR, merge, deployment, or owner identity review is authorized. The exact
+  next action is independent DELTA review of the exact pushed remediation head.
 
 ### PR 4a deterministic CI/tooling closeout
 
@@ -295,16 +397,16 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-PR #7 / PR 4b is merged and closed. No deployment or PR 4c has been authorized.
-The exact next operational boundary is read-only owner-review preparation,
-followed by authenticated **human** decisions on the 343 grouped identities.
-Preparation may prioritize existing durable evidence but must not approve,
-reject, map, exclude, or otherwise decide an identity.
+The exact next action is **independent DELTA review of the exact pushed
+`phase4/historical-review-catalog-search` branch head**. The reviewer must inspect
+the remediation delta after prior reviewed head
+`87d347a4efee7e420c2c302de8e34bb09bfd7fe9` and rerun deterministic validation
+against disposable infrastructure. ChatGPT business-rule review and owner merge
+authorization remain required after DELTA review.
 
-After the preparation report, stop for owner decisions. Only authenticated
-human review may be followed by the separately controlled local
-re-resolution/rebuild through the implemented workflow. Do not auto-map,
-auto-exclude, refetch Shopify merely to apply local decisions, or force
-`SALES_BACKFILL`.
+No PR creation, merge, deployment, production access, or identity decision is
+authorized. Search-helper completion does not complete Phase 4. Do not map or
+exclude any of the 343 groups, run local re-resolution/rebuild, change readiness,
+query Shopify, or force `SALES_BACKFILL`.
 
 Do not begin inventory history, vendor rules, forecasting, pricing ingestion, procurement optimization, or PO generation until the owner explicitly authorizes the next phase.

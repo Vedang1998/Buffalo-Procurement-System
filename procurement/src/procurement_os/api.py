@@ -575,6 +575,122 @@ def historical_sales_review_items():
     return {"count": len(items), "items": items}
 
 
+@app.get("/historical-sales/review/catalog-search")
+def historical_sales_catalog_search(q: str = ""):
+    """Return bounded local catalog evidence; never records an identity decision."""
+    normalized_query = str(q).strip()
+    if not normalized_query:
+        return {"query": "", "count": 0, "items": []}
+    if len(normalized_query) > sales_service.HISTORICAL_SALES_CATALOG_SEARCH_MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail="Local catalog search query must be 128 characters or fewer",
+        )
+    try:
+        with _db_conn() as conn:
+            items = sales_service.search_historical_sales_catalog(
+                conn, normalized_query
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Local catalog search is temporarily unavailable",
+        ) from None
+    return {"query": normalized_query, "count": len(items), "items": items}
+
+
+_HISTORICAL_SALES_CATALOG_PICKER_SCRIPT = """
+document.addEventListener("click", async function (event) {
+  if (!(event.target instanceof Element)) return;
+
+  const selectButton = event.target.closest(".catalog-select-button");
+  if (selectButton) {
+    const card = selectButton.closest(".historical-sales-review-card");
+    const target = card && card.querySelector(
+      "form[data-historical-sales-map] input[name='canonical_variant_id']"
+    );
+    if (target) {
+      target.value = selectButton.dataset.variantId;
+      target.focus();
+    }
+    return;
+  }
+
+  const searchButton = event.target.closest(".catalog-search-button");
+  if (!searchButton) return;
+  const picker = searchButton.closest(".catalog-picker");
+  const input = picker.querySelector(".catalog-search-input");
+  const status = picker.querySelector(".catalog-search-status");
+  const results = picker.querySelector(".catalog-search-results");
+  const query = input.value.trim();
+  results.replaceChildren();
+  if (!query) {
+    status.textContent = "Enter a local catalog search term.";
+    return;
+  }
+
+  status.textContent = "Searching local catalog…";
+  searchButton.disabled = true;
+  try {
+    const response = await fetch(
+      "review/catalog-search?q=" + encodeURIComponent(query),
+      {headers: {"Accept": "application/json"}, credentials: "same-origin"}
+    );
+    if (!response.ok) throw new Error("catalog search failed");
+    const payload = await response.json();
+    if (!Array.isArray(payload.items) || payload.items.length === 0) {
+      status.textContent = "No local catalog results found.";
+      return;
+    }
+
+    status.textContent = payload.items.length + " local catalog result(s).";
+    for (const item of payload.items) {
+      const result = document.createElement("div");
+      result.className = "catalog-result";
+
+      const heading = document.createElement("b");
+      heading.textContent = "Local catalog result — Variant ID " + item.variant_id;
+      result.appendChild(heading);
+
+      const identity = document.createElement("div");
+      identity.textContent = (item.product_title || "—") + " — " +
+        (item.variant_title || "—");
+      result.appendChild(identity);
+
+      const evidence = document.createElement("div");
+      evidence.className = "catalog-result-evidence";
+      evidence.textContent = "SKU " + (item.sku || "—") + " · Barcode " +
+        (item.barcode || "—") + " · Active " + (item.active ? "yes" : "no") +
+        " · Catalog state " + (item.catalog_state || "—");
+      result.appendChild(evidence);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "catalog-select-button";
+      button.dataset.variantId = String(item.variant_id);
+      button.textContent = "Select Variant ID";
+      result.appendChild(button);
+      results.appendChild(result);
+    }
+  } catch (error) {
+    status.textContent = "Local catalog search is temporarily unavailable.";
+  } finally {
+    searchButton.disabled = false;
+  }
+});
+
+document.addEventListener("keydown", function (event) {
+  if (!(event.target instanceof Element)) return;
+  if (event.key !== "Enter" || !event.target.matches(".catalog-search-input")) return;
+  event.preventDefault();
+  const picker = event.target.closest(".catalog-picker");
+  picker.querySelector(".catalog-search-button").click();
+});
+"""
+
+
 def _historical_sales_review_html(items: list[dict]) -> str:
     """Render the deliberately small, server-side historical-sales review UI."""
     import html
@@ -650,7 +766,7 @@ def _historical_sales_review_html(items: list[dict]) -> str:
             if candidates else "<p class='muted'>No deterministic canonical candidate is available.</p>"
         )
 
-        cards += f"""<section class='item'>
+        cards += f"""<section class='item historical-sales-review-card'>
 <header><div><h2>{esc(product_title)} — {esc(variant_title)}</h2>
 <p class='identity'>Source Variant ID {esc(source_variant_id)} · historical SKU {esc(sku)}</p></div>
 <div><span class='status'>{esc(status)}</span><span class='materiality'>{esc(materiality)}</span></div></header>
@@ -660,10 +776,21 @@ def _historical_sales_review_html(items: list[dict]) -> str:
 <div class='conflict'><h3>Conflicts</h3><pre>{evidence(conflicts)}</pre></div></div>
 <h3>Candidate canonical variants</h3>{candidates_view}
 <p class='muted'>Candidates are evidence only. No mapping is pre-approved or pre-selected.</p>
+<div class='catalog-picker'>
+<h3>Search local canonical catalog</h3>
+<p class='muted'>Search results are evidence only. Selecting a result only fills the existing Canonical Variant ID field.</p>
+<div class='catalog-search-controls'>
+<label>Product, title, SKU, barcode, or Variant ID
+<input class='catalog-search-input' type='search' maxlength='128' autocomplete='off'></label>
+<button type='button' class='catalog-search-button'>SEARCH LOCAL CATALOG</button>
+</div>
+<p class='catalog-search-status muted' role='status' aria-live='polite'></p>
+<div class='catalog-search-results'></div>
+</div>
 <div class='actions'>
-<form method='post' action='review/decide'>
+<form method='post' action='review/decide' data-historical-sales-map>
 <input type='hidden' name='source_key' value='{esc(source_key)}'><input type='hidden' name='action' value='MAP_TO_CANONICAL'>
-<label>Canonical Variant ID <input name='canonical_variant_id' list='{datalist_id}' placeholder='enter exact Variant ID' required></label>
+<label>Canonical Variant ID <input class='canonical-variant-id' name='canonical_variant_id' list='{datalist_id}' placeholder='enter exact Variant ID' required></label>
 <datalist id='{datalist_id}'>{datalist}</datalist>
 <label>Reviewer <input name='actor' autocomplete='name' required></label>
 <label>Reason <input name='reason' required></label>
@@ -689,12 +816,14 @@ h1{{font-size:24px}}h2{{font-size:18px;margin:0}}h3{{font-size:14px;margin:10px 
 header{{display:flex;justify-content:space-between;gap:16px;align-items:start}}.identity,.muted{{color:#59636e;font-size:13px}}.status,.materiality{{display:inline-block;padding:3px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:5px}}
 .status{{color:#82071e;background:#ffebe9}}.materiality{{color:#7d4e00;background:#fff8c5}}table{{border-collapse:collapse;width:100%;margin:12px 0}}td,th{{border:1px solid #d1d9e0;padding:6px 9px;text-align:left;font-size:13px}}th{{background:#f6f8fa}}
 .evidence-grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}pre{{white-space:pre-wrap;word-break:break-word;margin:3px 0;font:12px ui-monospace,monospace}}.conflict{{color:#82071e}}.candidates{{padding-left:22px}}.candidate{{margin:10px 0}}.label{{font-weight:600}}
+.catalog-picker{{border:1px solid #afb8c1;border-radius:6px;background:#f6f8fa;padding:10px;margin-top:12px}}.catalog-search-controls{{display:flex;align-items:end;gap:8px;flex-wrap:wrap}}.catalog-search-results{{display:grid;gap:7px}}.catalog-result{{border-left:3px solid #afb8c1;background:#fff;padding:8px;font-size:12px}}.catalog-result-evidence{{color:#59636e;margin:4px 0}}
 .actions{{display:grid;gap:10px;margin-top:14px}}form{{border-top:1px solid #d1d9e0;padding-top:10px;display:flex;gap:8px;align-items:end;flex-wrap:wrap}}label{{display:flex;flex-direction:column;gap:3px;font-size:12px}}input{{padding:6px;font-size:13px;min-width:150px}}button{{padding:7px 11px;border:1px solid;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer}}
 .map{{background:#dafbe1;color:#116329}}.exclude{{background:#ffebe9;color:#82071e}}.leave{{background:#f6f8fa;color:#1f2328}}@media(max-width:760px){{.evidence-grid{{grid-template-columns:1fr}}header{{display:block}}}}</style>
 </head><body><h1>Historical ShopifyQL Sales — identity review</h1>
 <p><b>{len(items)}</b> unresolved or ambiguous historical source identity group(s), ranked by materiality. Daily facts are grouped so each decision covers the complete historical source identity. Nothing on this page writes to Shopify.</p>
 <p class='muted'>Mapping and exclusion decisions are permanent, audited, and require a reviewer, reason, and review token. Leaving an item unresolved keeps SALES_BACKFILL failed.</p>
 {cards or '<p>No unresolved or ambiguous historical source identities require review.</p>'}
+<script>{_HISTORICAL_SALES_CATALOG_PICKER_SCRIPT}</script>
 </body></html>"""
 
 
