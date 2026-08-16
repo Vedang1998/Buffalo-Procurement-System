@@ -33,7 +33,11 @@ from procurement_os.historical_sales import (
     record_historical_sales_review_decision,
     source_identity_key,
 )
-from procurement_os.sales import SalesSourceRow, load_identity_index
+from procurement_os.sales import (
+    SalesSourceRow,
+    load_identity_index,
+    search_historical_sales_catalog,
+)
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
@@ -126,6 +130,123 @@ class Phase4PostgresIntegrationTests(unittest.TestCase):
         return run_id, finalize_sales_backfill(
             self.conn, run_id=run_id, independent_totals=totals,
         )
+
+    def business_state_hash(self) -> str:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """SELECT md5(COALESCE(string_agg(payload,'|' ORDER BY payload),''))
+                   FROM (
+                     SELECT 'variants:' || to_jsonb(v)::text AS payload FROM variants v
+                     UNION ALL
+                     SELECT 'aliases:' || to_jsonb(a)::text FROM variant_aliases a
+                     UNION ALL
+                     SELECT 'exclusions:' || to_jsonb(e)::text FROM historical_sales_exclusions e
+                     UNION ALL
+                     SELECT 'decisions:' || to_jsonb(d)::text FROM historical_sales_review_decisions d
+                     UNION ALL
+                     SELECT 'readiness:' || to_jsonb(g)::text FROM readiness_gates g
+                     UNION ALL
+                     SELECT 'changes:' || to_jsonb(c)::text FROM change_log c
+                     UNION ALL
+                     SELECT 'sales:' || to_jsonb(s)::text FROM sales_daily s
+                     UNION ALL
+                     SELECT 'runs:' || to_jsonb(r)::text FROM sales_backfill_runs r
+                   ) snapshot"""
+            )
+            return str(cur.fetchone()[0])
+
+    def test_local_catalog_search_is_bounded_literal_deterministic_and_read_only(self):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO variants(
+                     variant_id,product_id,product_title,variant_title,handle,
+                     sku,barcode,active,catalog_state
+                   ) VALUES
+                     ('401','41','O''Brien 100% Reserve','Special_750ML','obrien-reserve',
+                      'SKU_SPECIAL','BAR%401',TRUE,'LIVE'),
+                     ('402','42','O Brien 100X Reserve','Standard 750ML','other-reserve',
+                      'SKUXSPECIAL','BARX401',TRUE,'LIVE'),
+                     ('500','50','500 Prefix Product','750ML','exact-id',
+                      'OTHER-500','BAR-500',TRUE,'LIVE'),
+                     ('501','51','Exact SKU Product','750ML','exact-sku',
+                      '500','BAR-501',TRUE,'LIVE'),
+                     ('502','52','Contains 500 Product','750ML','contains-500',
+                      'OTHER-502','BAR-502',TRUE,'LIVE')"""
+            )
+            cur.executemany(
+                """INSERT INTO variants(
+                     variant_id,product_id,product_title,variant_title,handle,
+                     sku,barcode,active,catalog_state
+                   ) VALUES (%s,%s,'Limit Bottle','750ML',%s,%s,%s,TRUE,'LIVE')""",
+                [
+                    (str(600 + index), str(60 + index), f"limit-{index}",
+                     f"LIMIT-{index}", f"LIMIT-BAR-{index}")
+                    for index in range(25)
+                ],
+            )
+
+        before = self.business_state_hash()
+        self.assertEqual(search_historical_sales_catalog(self.conn, "   "), [])
+        with self.assertRaisesRegex(ValueError, "128 characters or fewer"):
+            search_historical_sales_catalog(self.conn, "x" * 129)
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            search_historical_sales_catalog(self.conn, "Bottle", limit=0)
+
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "500")],
+            ["500", "501", "502"],
+        )
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "SKU_SPECIAL")],
+            ["401"],
+        )
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "BAR%401")],
+            ["401"],
+        )
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "100%")],
+            ["401"],
+        )
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "Special_750")],
+            ["401"],
+        )
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "O'Brien")],
+            ["401"],
+        )
+        self.assertEqual(
+            [row["variant_id"] for row in search_historical_sales_catalog(self.conn, "obrien-reserve")],
+            ["401"],
+        )
+        self.assertEqual(
+            search_historical_sales_catalog(self.conn, "'; DELETE FROM variants; --"),
+            [],
+        )
+        self.assertEqual(search_historical_sales_catalog(self.conn, "no such bottle"), [])
+
+        limited = search_historical_sales_catalog(self.conn, "Limit Bottle", limit=100)
+        self.assertEqual(len(limited), 20)
+        self.assertEqual(
+            [row["variant_id"] for row in limited],
+            [str(value) for value in range(600, 620)],
+        )
+
+        retired = search_historical_sales_catalog(self.conn, "Retired C")
+        self.assertEqual(
+            retired,
+            [{
+                "variant_id": "300",
+                "product_title": "Retired C",
+                "variant_title": "750ML",
+                "sku": "OLD-C",
+                "barcode": None,
+                "active": False,
+                "catalog_state": "RETIRED_CONFIRMED",
+            }],
+        )
+        self.assertEqual(self.business_state_hash(), before)
 
     def test_durable_ingest_review_rebuild_restatement_and_interruption(self):
         active = self.row("100", "DUP", "Live A", "750ML", "5", "50.00")

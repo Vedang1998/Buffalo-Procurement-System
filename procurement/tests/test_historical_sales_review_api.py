@@ -1,6 +1,7 @@
 """Focused safety and rendering tests for the Phase 4 historical-sales review UI."""
 from __future__ import annotations
 
+import inspect
 import os
 import unittest
 from unittest.mock import Mock, patch
@@ -68,6 +69,7 @@ class HistoricalSalesReviewRouteTests(unittest.TestCase):
         }
         self.assertIn(("/historical-sales/review", "GET"), route_methods)
         self.assertIn(("/historical-sales/review/items", "GET"), route_methods)
+        self.assertIn(("/historical-sales/review/catalog-search", "GET"), route_methods)
         self.assertIn(("/historical-sales/review/decide", "POST"), route_methods)
 
     def test_items_endpoint_returns_aggregated_service_result(self):
@@ -82,6 +84,75 @@ class HistoricalSalesReviewRouteTests(unittest.TestCase):
             result = api.historical_sales_review_items()
         self.assertEqual(result, {"count": 1, "items": items})
         get_items.assert_called_once_with(db.connection)
+
+    def test_catalog_search_endpoint_is_trimmed_read_only_and_uses_no_review_token(self):
+        db = FakeConnectionContext()
+        items = [{
+            "variant_id": "222",
+            "product_title": "Local Product",
+            "variant_title": "750ML",
+            "sku": "CURRENT-1",
+            "barcode": "012345678901",
+            "active": True,
+            "catalog_state": "LIVE",
+        }]
+        decision = Mock()
+        with patch.object(api, "_db_conn", return_value=db), patch.object(
+            api.sales_service,
+            "search_historical_sales_catalog",
+            return_value=items,
+            create=True,
+        ) as search, patch.object(
+            api.sales_service,
+            "record_historical_sales_review_decision",
+            decision,
+            create=True,
+        ), patch(
+            "procurement_os.shopify.graphql.ShopifyGraphQLClient"
+        ) as shopify_client:
+            result = api.historical_sales_catalog_search(q="  Local Product  ")
+        self.assertEqual(
+            result,
+            {"query": "Local Product", "count": 1, "items": items},
+        )
+        search.assert_called_once_with(db.connection, "Local Product")
+        decision.assert_not_called()
+        shopify_client.assert_not_called()
+
+    def test_catalog_search_service_has_no_mutation_or_shopify_path(self):
+        source = inspect.getsource(api.sales_service.search_historical_sales_catalog)
+        upper_source = source.upper()
+        self.assertIn("SELECT V.VARIANT_ID", upper_source)
+        self.assertIn("(QUERY, PREFIX, CONTAINS, BOUNDED_LIMIT)", upper_source)
+        for forbidden in (
+            "INSERT INTO", "UPDATE ", "DELETE FROM", "UPSERT", "CREATE ",
+            "ALTER ", "DROP ", "SHOPIFYGRAPHQLCLIENT", ".QUERY(",
+        ):
+            self.assertNotIn(forbidden, upper_source)
+
+    def test_catalog_search_validation_and_internal_errors_are_sanitized(self):
+        database = Mock()
+        with patch.object(api, "_db_conn", database):
+            self.assertEqual(
+                api.historical_sales_catalog_search(q="   "),
+                {"query": "", "count": 0, "items": []},
+            )
+            with self.assertRaises(HTTPException) as validation:
+                api.historical_sales_catalog_search(q="x" * 129)
+        self.assertEqual(validation.exception.status_code, 400)
+        database.assert_not_called()
+
+        with patch.object(
+            api, "_db_conn", side_effect=RuntimeError("private database detail")
+        ):
+            with self.assertRaises(HTTPException) as internal:
+                api.historical_sales_catalog_search(q="Bottle")
+        self.assertEqual(internal.exception.status_code, 503)
+        self.assertEqual(
+            internal.exception.detail,
+            "Local catalog search is temporarily unavailable",
+        )
+        self.assertNotIn("private database detail", str(internal.exception.detail))
 
     def test_page_groups_evidence_and_escapes_all_source_text(self):
         page = api._historical_sales_review_html([review_item()])
@@ -114,6 +185,40 @@ class HistoricalSalesReviewRouteTests(unittest.TestCase):
         self.assertNotIn("<script>alert", page)
         self.assertIn("&lt;script&gt;alert", page)
         self.assertIn("Historical &lt;Bottle&gt;", page)
+        self.assertIn("Search local canonical catalog", page)
+        self.assertIn("SEARCH LOCAL CATALOG", page)
+        self.assertIn("Search results are evidence only", page)
+        self.assertIn("Select Variant ID", page)
+        self.assertIn("No local catalog results found.", page)
+
+    def test_picker_selection_is_exact_card_local_and_never_submits_a_decision(self):
+        second = {**review_item(), "source_key": "second-card", "historical_sku": "SECOND"}
+        page = api._historical_sales_review_html([review_item(), second])
+        script = api._HISTORICAL_SALES_CATALOG_PICKER_SCRIPT
+        self.assertEqual(
+            page.count("<section class='item historical-sales-review-card'>"), 2
+        )
+        self.assertEqual(page.count("<div class='catalog-picker'>"), 2)
+        self.assertEqual(
+            page.count(
+                "<form method='post' action='review/decide' data-historical-sales-map>"
+            ),
+            2,
+        )
+        self.assertIn('selectButton.closest(".historical-sales-review-card")', script)
+        self.assertIn(
+            'card.querySelector(\n      "form[data-historical-sales-map] input[name=\'canonical_variant_id\']"',
+            script,
+        )
+        self.assertIn("button.dataset.variantId = String(item.variant_id)", script)
+        self.assertIn("target.value = selectButton.dataset.variantId", script)
+        self.assertIn('button.type = "button"', script)
+        self.assertNotIn(".submit(", script)
+        self.assertNotIn("review/decide", script)
+        for forbidden_label in (
+            "recommended", "approved", "likely correct", "auto match", "best match",
+        ):
+            self.assertNotIn(forbidden_label, script.lower())
 
     def test_empty_page_is_operational_and_read_only(self):
         page = api._historical_sales_review_html([])

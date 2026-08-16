@@ -313,6 +313,89 @@ def fetch_shopifyql_sales(
     return result
 
 
+HISTORICAL_SALES_CATALOG_SEARCH_MAX_QUERY_LENGTH = 128
+HISTORICAL_SALES_CATALOG_SEARCH_MAX_RESULTS = 20
+
+
+def _catalog_search_pattern(value: str) -> str:
+    """Escape PostgreSQL LIKE metacharacters so reviewer input stays literal."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def search_historical_sales_catalog(
+    conn: Any,
+    query: str,
+    *,
+    limit: int = HISTORICAL_SALES_CATALOG_SEARCH_MAX_RESULTS,
+) -> list[dict[str, Any]]:
+    """Search stored canonical catalog evidence without making an identity decision.
+
+    Exact membership in ``variants`` is the existing MAP_TO_CANONICAL target
+    contract. Active status and catalog state are returned as reviewer evidence;
+    they are not reinterpreted here as a new eligibility rule.
+    """
+    query = str(query).strip()
+    if not query:
+        return []
+    if len(query) > HISTORICAL_SALES_CATALOG_SEARCH_MAX_QUERY_LENGTH:
+        raise ValueError(
+            "Local catalog search query must be 128 characters or fewer"
+        )
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError("Local catalog search result limit must be a positive integer")
+    bounded_limit = min(limit, HISTORICAL_SALES_CATALOG_SEARCH_MAX_RESULTS)
+    escaped = _catalog_search_pattern(query)
+    prefix = f"{escaped}%"
+    contains = f"%{escaped}%"
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """WITH search_parameters AS (
+                 SELECT %s::text AS exact_value,
+                        %s::text AS prefix_pattern,
+                        %s::text AS contains_pattern
+               )
+               SELECT v.variant_id,v.product_title,v.variant_title,v.sku,v.barcode,
+                      v.active,v.catalog_state
+               FROM variants v
+               CROSS JOIN search_parameters p
+               WHERE v.variant_id ILIKE p.contains_pattern ESCAPE '\\'
+                  OR COALESCE(v.sku,'') ILIKE p.contains_pattern ESCAPE '\\'
+                  OR COALESCE(v.barcode,'') ILIKE p.contains_pattern ESCAPE '\\'
+                  OR v.product_title ILIKE p.contains_pattern ESCAPE '\\'
+                  OR v.variant_title ILIKE p.contains_pattern ESCAPE '\\'
+                  OR COALESCE(v.handle,'') ILIKE p.contains_pattern ESCAPE '\\'
+               ORDER BY CASE
+                 WHEN v.variant_id=p.exact_value THEN 0
+                 WHEN LOWER(COALESCE(v.sku,''))=LOWER(p.exact_value)
+                   OR LOWER(COALESCE(v.barcode,''))=LOWER(p.exact_value) THEN 1
+                 WHEN v.variant_id ILIKE p.prefix_pattern ESCAPE '\\'
+                   OR COALESCE(v.sku,'') ILIKE p.prefix_pattern ESCAPE '\\'
+                   OR COALESCE(v.barcode,'') ILIKE p.prefix_pattern ESCAPE '\\'
+                   OR v.product_title ILIKE p.prefix_pattern ESCAPE '\\'
+                   OR v.variant_title ILIKE p.prefix_pattern ESCAPE '\\'
+                   OR COALESCE(v.handle,'') ILIKE p.prefix_pattern ESCAPE '\\' THEN 2
+                 ELSE 3
+               END,
+               v.variant_id
+               LIMIT %s""",
+            (query, prefix, contains, bounded_limit),
+        )
+        rows = cur.fetchall()
+    return [
+        {
+            "variant_id": str(row[0]),
+            "product_title": row[1],
+            "variant_title": row[2],
+            "sku": row[3],
+            "barcode": row[4],
+            "active": bool(row[5]),
+            "catalog_state": row[6],
+        }
+        for row in rows
+    ]
+
+
 def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
     with conn.cursor() as cur:
         cur.execute("SELECT variant_id,sku,product_title,variant_title,active,catalog_state FROM variants")
