@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-15T02:24:41Z (UTC)
+**Updated:** 2026-08-16T04:17:49Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -12,10 +12,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### Repository and tests
 
-- Verified `main` baseline:
-  `8d8a07a082a575ef35c6b37ecb6dedc7f47cbbaf`. Documentation-only G12
-  closeout branch: `docs/pr4a-post-merge-closeout`, created from that exact
-  `origin/main` commit.
+- Verified current `origin/main` baseline:
+  `527498ce39dfa504c32916b16478cbe02dc6781c` (`Merge PR #7: harden
+  authoritative catalog and scoped readiness`). Documentation-only PR 4b G12
+  closeout branch: `docs/pr4b-post-merge-closeout`, created directly from that
+  exact commit. The prior PR 4a closeout remains historical evidence.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -65,10 +66,35 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Non-blocking future tooling follow-up: the current test-module registration
   invariant assumes a flat `procurement/tests/test_*.py` layout. Nested test
   directories are not yet protected by that completeness invariant.
-- The historical PR 4a authorization boundary is superseded by the
-  owner-authorized, still-unmerged PR 4b checkpoint below.
+- The historical PR 4a authorization boundary is superseded by the merged PR 4b
+  checkpoint and post-merge closeout below.
 
-### PR 4b authoritative catalog/readiness hardening checkpoint — UNMERGED
+### PR 4b post-merge G12 closeout — MERGED / CLOSED
+
+- PR #7 / PR 4b, `PR 4b: Harden authoritative catalog and scoped readiness`, is
+  **MERGED / CLOSED**. The exact reviewed PR head was
+  `302a14673ce01bf130f28f66743e74c935ae4a03`; the owner-authorized merge
+  commit now on `origin/main` is
+  `527498ce39dfa504c32916b16478cbe02dc6781c`.
+- Pre-merge GitHub Procurement CI run `31925468640` was **SUCCESS** on the exact
+  reviewed head. Post-merge GitHub Procurement CI run `31925753302` was
+  **SUCCESS** on the exact merge commit.
+- Final deterministic totals were **193 discovered / 193 executed / 193
+  passed**, with 0 failures, 0 errors, 0 skips, 0 expected failures, and 0
+  unexpected successes.
+- Independent review disposition: Claude Code DELTA review **APPROVE**; Cursor
+  targeted specialist review **APPROVE**; ChatGPT business-rule review
+  **APPROVE**. The owner explicitly authorized the merge, and PR #7 merged
+  successfully.
+- This merge and documentation-only G12 closeout did not complete Phase 4.
+  `SALES_BACKFILL` remains **FAIL**; all 343 unresolved historical identity
+  groups, including 341 material groups, remain for authenticated human review.
+- No deployment, Shopify access or write, catalog sync, PO generation or
+  release, identity decision, or PR 4c work occurred as part of this closeout.
+  `procurement/docs/PHASE_STATUS.md` remains unchanged because no official
+  phase/program milestone changed.
+
+### PR 4b authoritative catalog/readiness hardening implementation checkpoint
 
 - Objective: F1 authoritative catalog-run semantics plus owner-approved F4
   scoped readiness semantics.
@@ -77,8 +103,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Implementation commit:
   `fa848cde427b405838dc6401350487718671ffe4` (`Implement scope-aware readiness
   and catalog authority`).
-- PR 4b remains **UNMERGED**. This checkpoint does not authorize merge,
-  deployment, or PR 4c.
+- This implementation checkpoint is now contained in merged PR #7. The merge
+  does not authorize deployment or PR 4c.
 - F1 result: there is one authoritative newest-attempt catalog selector,
   ordered by `started_at DESC, catalog_sync_id DESC`. It never falls back to an
   older successful run; an incomplete or failed newest attempt fails closed;
@@ -115,7 +141,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   official phase/program milestone changed, and
   `procurement/docs/PHASE_STATUS.md` remains unchanged.
 
-### PR 4b G7 review remediation checkpoint — UNMERGED
+### PR 4b G7 review remediation checkpoint — MERGED / CLOSED
 
 - Independent Claude review returned **REQUEST CHANGES** against exact reviewed
   head `d978ab17e601fdc317e8e0b7a5da34b26f03afcc`.
@@ -218,9 +244,9 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   Remediation made no migration, identity decision, PO generation/release, or
   deployment.
 - Phase 4 remains **INCOMPLETE**. All 343 historical identity decisions remain
-  untouched, `SALES_BACKFILL` remains operationally outstanding, PR 4b remains
-  **UNMERGED**, no official phase milestone changed, and
-  `procurement/docs/PHASE_STATUS.md` remains unchanged.
+  untouched, `SALES_BACKFILL` remains operationally outstanding, no official
+  phase milestone changed, and `procurement/docs/PHASE_STATUS.md` remains
+  unchanged.
 
 ### Phase 3 catalog checkpoint
 
@@ -269,14 +295,16 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-PR 4b G7 remediation is implemented and validated but remains **UNMERGED**. The
-exact next authorization boundary is Claude DELTA re-review of the final exact
-remediated branch head. Do not start Cursor review, merge, deploy, or begin PR 4c
-without explicit owner authorization.
+PR #7 / PR 4b is merged and closed. No deployment or PR 4c has been authorized.
+The exact next operational boundary is read-only owner-review preparation,
+followed by authenticated **human** decisions on the 343 grouped identities.
+Preparation may prioritize existing durable evidence but must not approve,
+reject, map, exclude, or otherwise decide an identity.
 
-The Phase 4 operational boundary below remains unchanged by PR 4b and this
-documentation-only closeout preparation.
-
-Stop for owner decisions. The only next Phase 4 operation is authenticated human review of the 343 grouped identities followed by local re-resolution/rebuild through the implemented workflow. Do not auto-map, auto-exclude, refetch Shopify merely to apply local decisions, or force `SALES_BACKFILL`.
+After the preparation report, stop for owner decisions. Only authenticated
+human review may be followed by the separately controlled local
+re-resolution/rebuild through the implemented workflow. Do not auto-map,
+auto-exclude, refetch Shopify merely to apply local decisions, or force
+`SALES_BACKFILL`.
 
 Do not begin inventory history, vendor rules, forecasting, pricing ingestion, procurement optimization, or PO generation until the owner explicitly authorizes the next phase.
