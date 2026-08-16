@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-16T17:41:52Z (UTC)
+**Updated:** 2026-08-16T19:36:43Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -13,11 +13,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ### Repository and tests
 
 - Verified current `origin/main` baseline:
-  `6a833f8318549aaf4b62ff400168b306579b90c6` (`Merge PR #8: document PR
-  4b post-merge closeout`). Phase 4 review-search branch:
-  `phase4/historical-review-catalog-search`, created directly from that exact
-  commit without repointing the preserved local `main`. The prior PR 4a and PR
-  4b checkpoints remain historical evidence below.
+  `323702d06c8ba96525e97f9bf94289a164615b73` (`Merge PR #9: add Phase 4
+  historical-review catalog search`). Documentation-only post-merge closeout
+  branch: `docs/pr9-post-merge-closeout`, created directly from that exact
+  commit without repointing the preserved local `main`. The prior implementation
+  and review checkpoints remain historical evidence below.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -84,9 +84,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   exclusions = 0; rebuilds = 0; readiness changes = 0; deployments = 0; PO
   actions = 0. `SALES_BACKFILL` remains **FAIL** and all 343 grouped identities
   remain pending human review. `procurement/docs/PHASE_STATUS.md` is unchanged.
-- Independent adversarial review and ChatGPT business-rule review remain
-  required. No PR creation, merge, deployment, or owner identity review is
-  authorized at this checkpoint.
+- This pre-review implementation boundary is superseded by the completed review,
+  owner-authorized PR #9 merge, and post-merge closeout recorded below.
 
 ### Phase 4 catalog-search independent-review remediation checkpoint
 
@@ -126,8 +125,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   rebuilds = 0; readiness changes = 0; deployments = 0; PO actions = 0. Phase 4
   remains incomplete, `SALES_BACKFILL` remains **FAIL**, all 343 unresolved
   groups remain untouched, and `procurement/docs/PHASE_STATUS.md` is unchanged.
-- No PR, merge, deployment, or owner identity review is authorized. The exact
-  next action is independent DELTA review of the exact pushed remediation head.
+- This remediation-review boundary is superseded by Claude's DELTA approval,
+  ChatGPT business-rule approval, owner merge authorization, and the merged PR #9
+  checkpoint below.
+
+### PR #9 post-merge G12 closeout — MERGED / CLOSED
+
+- PR #9, `Phase 4: add local catalog search to historical-sales review`, is
+  **MERGED / CLOSED**. The exact reviewed PR head was
+  `e597ae5a787e7ec24ea81d82285281da09f770e5`; the exact owner-authorized merge
+  commit now on `origin/main` is
+  `323702d06c8ba96525e97f9bf94289a164615b73`.
+- Pre-merge Procurement CI run #11 (`31967110216`) was **SUCCESS** for pull
+  request head `e597ae5a787e7ec24ea81d82285281da09f770e5`. Post-merge Procurement CI run
+  #12 (`31967543024`) was **SUCCESS** for pushed main head
+  `323702d06c8ba96525e97f9bf94289a164615b73`.
+- Final deterministic baseline is **199 discovered / 199 executed / 199 passed**,
+  with 0 failures, 0 errors, 0 skips, 0 expected failures, and 0 unexpected
+  successes.
+- Review and authorization record: Claude broad adversarial review **APPROVE**;
+  Claude DELTA review **APPROVE**; ChatGPT business-rule review **APPROVE**; the
+  owner explicitly authorized the PR #9 merge.
+- The merged helper searches only local PostgreSQL catalog evidence and is
+  read-only. It makes no Shopify call, makes no automatic identity decision, and
+  preserves the existing explicit human mapping controls and review-token
+  protected decision path.
+- Deferred non-blocking review hygiene remains: LOW-2, the weak
+  source-inspection control; and LOW-3, incomplete table coverage in
+  `business_state_hash`. Neither deferred item changes accepted runtime behavior
+  or the merge disposition.
+- This merge does not complete Phase 4. `SALES_BACKFILL` remains **FAIL**; 343
+  grouped identities, including 341 material groups, remain pending human review.
+  This milestone made no identity decision, ran no rebuild/re-resolution, changed
+  no readiness gate, deployed nothing, and started no downstream phase or
+  post-foundation workstream.
+- `procurement/docs/PHASE_STATUS.md` remains unchanged because PR #9 did not close
+  or materially change the canonical Phase 4 milestone.
 
 ### PR 4a deterministic CI/tooling closeout
 
@@ -397,16 +430,16 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-The exact next action is **independent DELTA review of the exact pushed
-`phase4/historical-review-catalog-search` branch head**. The reviewer must inspect
-the remediation delta after prior reviewed head
-`87d347a4efee7e420c2c302de8e34bb09bfd7fe9` and rerun deterministic validation
-against disposable infrastructure. ChatGPT business-rule review and owner merge
-authorization remain required after DELTA review.
+After this documentation closeout, the exact next authorized operational action
+is to deploy reviewed main commit
+`323702d06c8ba96525e97f9bf94289a164615b73` to Replit and perform a narrow smoke
+test of the historical-sales review page and local catalog search.
 
-No PR creation, merge, deployment, production access, or identity decision is
-authorized. Search-helper completion does not complete Phase 4. Do not map or
-exclude any of the 343 groups, run local re-resolution/rebuild, change readiness,
-query Shopify, or force `SALES_BACKFILL`.
+Deployment and smoke validation must make no identity decision; they must not map
+or exclude any of the 343 groups, run any historical-sales rebuild/re-resolution,
+change any readiness gate, or make any Shopify query or write as part of the helper.
+They must not start Phase 5, Phase 6, any post-foundation workstream, or any PO
+generation/release. Owner review of the 343 groups begins only after deployment
+and smoke validation plus separate authorization where applicable.
 
 Do not begin inventory history, vendor rules, forecasting, pricing ingestion, procurement optimization, or PO generation until the owner explicitly authorizes the next phase.
