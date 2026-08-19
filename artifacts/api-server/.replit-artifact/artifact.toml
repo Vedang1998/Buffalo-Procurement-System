@@ -21,8 +21,9 @@ args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 NODE_ENV = "production"
 
 [services.production.run]
-# we don't run through pnpm to make startup faster in production
-args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+# The supervisor starts FastAPI on loopback, waits for /health, then starts Node.
+# Node is therefore never exposed while the procurement backend is unavailable.
+args = ["python3", "scripts/replit_production_start.py"]
 
 [services.production.run.env]
 PORT = "8080"

@@ -3,6 +3,9 @@ modules = ["nodejs-24", "python-base-3.13", "postgresql-16"]
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+# Replit hosting may invoke its platform uv before the explicit project build.
+# Keep the project-level uv pin out of pyproject.toml; CI/test tooling still pins 0.12.3.
+build = "uvx uv@0.12.3 sync --frozen"
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
