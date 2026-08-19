@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-16T19:36:43Z (UTC)
+**Updated:** 2026-08-19T12:57:46Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -12,12 +12,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### Repository and tests
 
-- Verified current `origin/main` baseline:
-  `323702d06c8ba96525e97f9bf94289a164615b73` (`Merge PR #9: add Phase 4
-  historical-review catalog search`). Documentation-only post-merge closeout
-  branch: `docs/pr9-post-merge-closeout`, created directly from that exact
-  commit without repointing the preserved local `main`. The prior implementation
-  and review checkpoints remain historical evidence below.
+- Verified current `origin/main` release baseline:
+  `ae902a57ec22ad7f6911a57278f8997de3d0cdd5` (`Merge PR #11: harden Replit
+  production startup`), release tree
+  `3bd9063502f782ebd93c3a4ed65130b73220ad62`. Documentation-only closeout
+  branch: `docs/pr11-deployment-closeout`, created directly from that exact
+  merge commit. The prior implementation and review checkpoints remain
+  historical evidence below.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -27,6 +28,51 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   wall time 3.181 seconds on 2026-08-10. That direct unittest command is
   superseded and must not be used for current validation.
 - Coverage includes an isolated, fully rolled-back PostgreSQL integration workflow for raw page persistence, interruption durability, mapping/exclusion audit, local aggregate rebuild, restatement, idempotent rerun, durable range resume, conflicting-alias rollback, and independent review of multiple zero-ID identity groups.
+
+### PR #11 deployment reconciliation/hardening closeout — MERGED / DEPLOYED / CLOSED
+
+- Reviewed head:
+  `bfbe908189b35a64e6fef91b1839782ded3450b4`; merge SHA:
+  `ae902a57ec22ad7f6911a57278f8997de3d0cdd5`; release tree:
+  `3bd9063502f782ebd93c3a4ed65130b73220ad62`.
+- Pre-merge Procurement CI run #17 (`32252622709`) completed `SUCCESS` with
+  **10/10** deterministic deployment-startup tests and **199/199** Procurement
+  OS tests. Post-merge Procurement CI run #18 (`32254371003`) also completed
+  `SUCCESS`.
+- Independent Replit platform review initially returned `BLOCK` on unproven
+  startup timing. Exact-head isolated DELTA testing then returned `APPROVE`:
+  supervisor launch to Node `/api/healthz` 200 was **713 ms** and **1,483 ms**;
+  SIGTERM cleanup was **388 ms**; forced post-readiness FastAPI death failed
+  closed and removed Node health within **493 ms**.
+- Workspace reconciliation preserved
+  `backup/pre-reconcile-production-startup-hardening` at
+  `f4a57e57f7fdcdd74225703be6dbb96aff6f2e23`, then reconciled to the exact merge
+  tree with a clean working tree. Local validation passed the same **10/10**
+  startup tests, the complete **199/199** Procurement suite against a disposable
+  loopback PostgreSQL database, and GET-only FastAPI, Node, and
+  Node-to-FastAPI health smokes.
+- Replit deployment `abcc03bd-9cd4-47fa-8f3e-9b198156c4f9` published
+  successfully. Publish checkpoint
+  `4bde08152cf958dc97686e01a4f27d83fdb4961f` has the identical release tree and
+  is preserved at `backup/post-publish-checkpoint-4bde0815`.
+- Fresh production logs proved fail-closed order: the Python supervisor launched
+  FastAPI, loopback `GET /health` returned 200, the supervisor logged
+  `FastAPI procurement backend is healthy; starting Node API service`, Node
+  listened on 8080, and Replit received `/api/healthz` 200. After readiness
+  there were no 500/502 responses, connection-refused errors, timeouts, crashes,
+  or restarts.
+- Direct unauthenticated production checks remained correctly access-limited:
+  `/api/healthz` and `/procurement/health` returned 307 to the private Replit
+  shield, and no authenticated bypass mechanism was available or attempted.
+- Read-only development/production verification found identical schemas and
+  application-relation counts, including `variants=2049`, `prices=271`,
+  `sales_daily=55966`, `source_facts=59083`, `readiness_gates=7`,
+  `purchase_orders=0`, and `purchase_order_lines=0`. Gates were unchanged:
+  `CATALOG_SYNC=PASS`, `SALES_BACKFILL=FAIL`, and `VENDOR_RULES=FAIL`.
+- This milestone made no identity decision, mapping, exclusion, historical
+  rebuild, readiness change, Shopify write, or PO action.
+  `procurement/docs/PHASE_STATUS.md` is intentionally unchanged because no
+  official phase or program milestone changed.
 
 ### Phase 4 historical-review catalog search implementation checkpoint
 
@@ -430,16 +476,9 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-After this documentation closeout, the exact next authorized operational action
-is to deploy reviewed main commit
-`323702d06c8ba96525e97f9bf94289a164615b73` to Replit and perform a narrow smoke
-test of the historical-sales review page and local catalog search.
-
-Deployment and smoke validation must make no identity decision; they must not map
-or exclude any of the 343 groups, run any historical-sales rebuild/re-resolution,
-change any readiness gate, or make any Shopify query or write as part of the helper.
-They must not start Phase 5, Phase 6, any post-foundation workstream, or any PO
-generation/release. Owner review of the 343 groups begins only after deployment
-and smoke validation plus separate authorization where applicable.
-
-Do not begin inventory history, vendor rules, forecasting, pricing ingestion, procurement optimization, or PO generation until the owner explicitly authorizes the next phase.
+Deployment reconciliation/hardening is closed. Do **not** automatically begin
+Phase 4 identity decisions or any downstream work. Wait for a separate owner
+authorization before mapping or excluding any historical identity, rebuilding
+or re-resolving historical sales, changing readiness gates, querying or writing
+Shopify, starting another phase or post-foundation workstream, or generating or
+releasing any PO.
