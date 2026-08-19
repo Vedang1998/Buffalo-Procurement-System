@@ -106,18 +106,36 @@ class ReplitProductionStartupTests(unittest.TestCase):
 
         healthcheck.assert_not_called()
 
+    def test_wait_for_services_fails_if_fastapi_dies_after_readiness(self) -> None:
+        fastapi = FakeProcess(returncode=9)
+        node = FakeProcess()
+
+        with self.assertRaisesRegex(RuntimeError, "exited after readiness with code 9"):
+            STARTUP.wait_for_services(
+                fastapi,
+                node,
+                poll_interval_seconds=0.1,
+                sleep=lambda _seconds: None,
+            )
+
+    def test_wait_for_services_returns_node_exit_code(self) -> None:
+        fastapi = FakeProcess()
+        node = FakeProcess(returncode=3)
+
+        self.assertEqual(
+            STARTUP.wait_for_services(
+                fastapi,
+                node,
+                poll_interval_seconds=0.1,
+                sleep=lambda _seconds: None,
+            ),
+            3,
+        )
+
     def test_main_starts_node_only_after_fastapi_readiness(self) -> None:
         events: list[str] = []
         fastapi = FakeProcess()
-
-        class NodeProcess(FakeProcess):
-            def wait(self, timeout: float | None = None) -> int:
-                del timeout
-                events.append("node_wait")
-                self.returncode = 0
-                return 0
-
-        node = NodeProcess()
+        node = FakeProcess()
 
         def start_fastapi() -> FakeProcess:
             events.append("start_fastapi")
@@ -130,18 +148,24 @@ class ReplitProductionStartupTests(unittest.TestCase):
             events.append("start_node")
             return node
 
+        def wait_for_services(*_args: object, **_kwargs: object) -> int:
+            events.append("wait_services")
+            return 0
+
         with (
             patch.object(STARTUP, "start_fastapi", side_effect=start_fastapi),
             patch.object(STARTUP, "wait_for_fastapi", side_effect=wait_for_fastapi),
             patch.object(STARTUP, "start_node", side_effect=start_node),
+            patch.object(STARTUP, "wait_for_services", side_effect=wait_for_services),
             patch.object(STARTUP.signal, "signal", return_value=signal.SIG_DFL),
         ):
             self.assertEqual(STARTUP.main(), 0)
 
         self.assertEqual(
             events[:4],
-            ["start_fastapi", "wait_fastapi", "start_node", "node_wait"],
+            ["start_fastapi", "wait_fastapi", "start_node", "wait_services"],
         )
+        self.assertTrue(node.terminated)
         self.assertTrue(fastapi.terminated)
 
     def test_main_never_starts_node_when_fastapi_readiness_fails(self) -> None:
