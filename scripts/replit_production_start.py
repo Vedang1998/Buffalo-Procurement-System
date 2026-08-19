@@ -105,6 +105,25 @@ def wait_for_fastapi(
         sleep(poll_interval_seconds)
 
 
+def wait_for_services(
+    fastapi: subprocess.Popen[bytes],
+    node: subprocess.Popen[bytes],
+    *,
+    poll_interval_seconds: float,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    while True:
+        fastapi_returncode = fastapi.poll()
+        if fastapi_returncode is not None:
+            raise RuntimeError(
+                f"FastAPI exited after readiness with code {fastapi_returncode}"
+            )
+        node_returncode = node.poll()
+        if node_returncode is not None:
+            return node_returncode
+        sleep(poll_interval_seconds)
+
+
 def stop_process(process: subprocess.Popen[bytes] | None) -> None:
     if process is None or process.poll() is not None:
         return
@@ -140,14 +159,20 @@ def main() -> int:
             DEFAULT_POLL_INTERVAL_SECONDS,
         )
 
+        print("Starting FastAPI procurement backend", flush=True)
         fastapi = start_fastapi()
         wait_for_fastapi(
             fastapi,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
         )
+        print("FastAPI procurement backend is healthy; starting Node API service", flush=True)
         node = start_node()
-        return node.wait()
+        return wait_for_services(
+            fastapi,
+            node,
+            poll_interval_seconds=poll_interval_seconds,
+        )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"ERROR: Replit production startup failed closed: {exc}", file=sys.stderr)
         return 1
