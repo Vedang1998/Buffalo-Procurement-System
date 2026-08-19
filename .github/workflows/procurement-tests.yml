@@ -52,5 +52,8 @@ jobs:
       - name: Install locked Python dependencies
         run: uv sync --frozen
 
+      - name: Run deterministic Replit startup hardening tests
+        run: uv run --frozen python -m unittest discover -s scripts/tests -p 'test_replit_production_start.py' -v
+
       - name: Run complete deterministic Procurement OS suite
         run: ./scripts/procurement-tests
