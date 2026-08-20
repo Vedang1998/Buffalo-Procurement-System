@@ -1,9 +1,9 @@
 # Phase 4 Controlled Identity-Decision Persistence Design
 
-**Date:** 2026-08-20  
-**Status:** Owner-approved design  
-**Risk:** Level 3 — historical identity affects forecasting and procurement  
-**Starting main:** `60db3e5a893856df5b95a05f0ec75b3ec7e84f22`  
+**Date:** 2026-08-20
+**Status:** Owner-approved design
+**Risk:** Level 3 — historical identity affects forecasting and procurement
+**Starting main:** `60db3e5a893856df5b95a05f0ec75b3ec7e84f22`
 **Approved manifest SHA-256:** `95fe0c7902efc337bb51ba0b5a2f974f9b2ac76d7221a25e7dcd52a8cd28d287`
 
 ## 1. Authorization boundary
