@@ -33,6 +33,13 @@ class HistoricalAlias:
 
 
 @dataclass(frozen=True)
+class HistoricalSourceDecision:
+    source_identity_key: str
+    decision_action: str
+    canonical_variant_id: str | None
+
+
+@dataclass(frozen=True)
 class SalesSourceRow:
     sale_date: date
     source_variant_id: str | None
@@ -90,6 +97,7 @@ class HistoricalIdentityIndex:
         aliases: Iterable[HistoricalAlias],
         *,
         excluded_source_keys: Iterable[str] = (),
+        source_decisions: Iterable[HistoricalSourceDecision] = (),
     ) -> None:
         self.current_by_id: dict[str, CurrentIdentity] = {}
         self.old_id_to_current: dict[str, set[str]] = {}
@@ -98,6 +106,7 @@ class HistoricalIdentityIndex:
         self.current_full: dict[tuple[str, str, str], set[str]] = {}
         self.current_sku: dict[str, set[str]] = {}
         self.excluded_source_keys = set(excluded_source_keys)
+        self.source_key_to_current: dict[str, str] = {}
 
         for row in current:
             vid = numeric_shopify_id(row.variant_id)
@@ -125,6 +134,18 @@ class HistoricalIdentityIndex:
                 self.alias_sku.setdefault(sku, set()).add(vid)
                 self.alias_full.setdefault((sku, p, v), set()).add(vid)
 
+        for row in source_decisions:
+            if str(row.decision_action).strip().upper() != "MAP":
+                continue
+            source_key = str(row.source_identity_key).strip()
+            vid = numeric_shopify_id(row.canonical_variant_id)
+            if not source_key or not vid:
+                raise ValueError("approved source-key MAP decision is incomplete")
+            existing = self.source_key_to_current.get(source_key)
+            if existing is not None and existing != vid:
+                raise ValueError("conflicting approved source-key MAP decisions")
+            self.source_key_to_current[source_key] = vid
+
     @staticmethod
     def source_key(row: SalesSourceRow) -> str:
         return "|".join([
@@ -138,6 +159,16 @@ class HistoricalIdentityIndex:
         source_key = self.source_key(row)
         if source_key in self.excluded_source_keys:
             return IdentityResolution("EXCLUDED", None, "EXPLICIT_EXCLUSION", evidence={"source_key": source_key})
+
+        approved_source_target = self.source_key_to_current.get(source_key)
+        if approved_source_target is not None:
+            return IdentityResolution(
+                "RESOLVED",
+                approved_source_target,
+                "APPROVED_SOURCE_IDENTITY_DECISION",
+                (approved_source_target,),
+                {"source_identity_key": source_key},
+            )
 
         sid = _identity_variant_id(row.source_variant_id)
         current = self.current_by_id.get(sid) if sid else None
@@ -407,7 +438,29 @@ def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
         aliases = [HistoricalAlias(str(r[0]), r[1], r[2], r[3], r[4], bool(r[5])) for r in cur.fetchall()]
         cur.execute("SELECT source_key FROM historical_sales_exclusions WHERE active=TRUE")
         excluded = [r[0] for r in cur.fetchall()]
-    return HistoricalIdentityIndex(current, aliases, excluded_source_keys=excluded)
+        cur.execute(
+            """WITH ranked AS (
+                 SELECT source_identity_key,decision_action,canonical_variant_id,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY source_identity_key
+                          ORDER BY decided_at DESC,
+                                   historical_sales_review_decision_id DESC
+                        ) AS row_number
+                 FROM historical_sales_review_decisions
+               )
+               SELECT source_identity_key,decision_action,canonical_variant_id
+               FROM ranked WHERE row_number=1"""
+        )
+        source_decisions = [
+            HistoricalSourceDecision(str(r[0]), str(r[1]), str(r[2]) if r[2] else None)
+            for r in cur.fetchall()
+        ]
+    return HistoricalIdentityIndex(
+        current,
+        aliases,
+        excluded_source_keys=excluded,
+        source_decisions=source_decisions,
+    )
 
 
 def persist_sales_backfill(

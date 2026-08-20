@@ -1373,7 +1373,8 @@ def run_historical_sales_backfill(
         release_backfill_lock(conn)
 
 
-def _latest_reviewable_run(cur: Any) -> tuple[str, date, date] | None:
+def latest_reviewable_run(cur: Any) -> tuple[str, date, date] | None:
+    """Return the single newest fully durable run eligible for owner review."""
     cur.execute(
         """SELECT sales_backfill_id,start_date,end_date
            FROM sales_backfill_runs
@@ -1390,7 +1391,7 @@ def _latest_reviewable_run(cur: Any) -> tuple[str, date, date] | None:
 def get_historical_sales_review_items(conn: Any) -> list[dict[str, Any]]:
     """Return unresolved source identities grouped and ranked by materiality."""
     with conn.cursor() as cur:
-        run = _latest_reviewable_run(cur)
+        run = latest_reviewable_run(cur)
         if not run:
             return []
         run_id = run[0]
@@ -1494,7 +1495,7 @@ def get_historical_sales_review_items(conn: Any) -> list[dict[str, Any]]:
 
 
 def _source_for_decision(cur: Any, source_key: str) -> tuple[str, SalesSourceRow]:
-    run = _latest_reviewable_run(cur)
+    run = latest_reviewable_run(cur)
     if not run:
         raise ValueError("no complete historical-sales source run is available for review")
     cur.execute(
