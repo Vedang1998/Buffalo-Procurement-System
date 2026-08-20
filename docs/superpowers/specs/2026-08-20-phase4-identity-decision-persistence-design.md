@@ -94,9 +94,18 @@ Every source key receives an effective durable ledger entry. Evidence records at
 least the manifest SHA, manifest row number, evidence basis, review note,
 execution Git SHA, run ID, source fields, and owner authorization scope.
 
-An existing latest decision is idempotently accepted only when its run, action,
-target, and manifest SHA match exactly. Any other pre-existing latest decision is
-a hard conflict. The service inserts no duplicate decision for an identical rerun.
+An existing latest decision is compatible when its run, exact source key, action,
+and canonical target match the manifest, even if it predates the approved manifest
+and lacks the current manifest SHA. A compatible legacy row is not silently
+treated as fully complete: the service appends one current-manifest decision that
+supersedes the legacy row, preserves the original ledger history, and carries the
+complete current manifest provenance. A different run, action, or target is a hard
+conflict.
+
+An existing latest decision with complete current-manifest provenance is an
+idempotent no-op. After a compatible legacy decision is normalized once, the new
+provenanced row is the sole latest effective decision and every subsequent rerun
+is a true no-op.
 
 ## 5. Source-key resolution and aliases
 
@@ -213,7 +222,7 @@ counts, and protected fingerprints.
 ## 11. Test strategy
 
 Add pure parser/control tests and disposable PostgreSQL integration tests covering
-all twenty required cases:
+all twenty-one required cases, including the added legacy-provenance case:
 
 1. exact 343-row contract;
 2. SHA mismatch;
@@ -226,15 +235,17 @@ all twenty required cases:
 9. Fiesta mapping;
 10. NUTRL 3/3 exception;
 11. identical existing decision idempotency;
-12. conflicting existing decision rollback;
-13. title-only MAP persistence and later exact-key resolution;
-14. repeated old ID across multiple source keys;
-15. explicit LEAVE_UNRESOLVED persistence;
-16. missing and invalid review authorization;
-17. no rebuild call path;
-18. no gate mutation;
-19. injected mid-transaction failure rollback;
-20. deterministic readback and protected fingerprint equality.
+12. compatible legacy decision without manifest SHA is superseded once with
+    complete provenance, then a second run is a no-op;
+13. conflicting existing decision rollback;
+14. title-only MAP persistence and later exact-key resolution;
+15. repeated old ID across multiple source keys;
+16. explicit LEAVE_UNRESOLVED persistence;
+17. missing and invalid review authorization;
+18. no rebuild call path;
+19. no gate mutation;
+20. injected mid-transaction failure rollback;
+21. deterministic readback and protected fingerprint equality.
 
 Register any new test module in the fail-closed test runner and run targeted tests
 before `./scripts/procurement-tests`.
