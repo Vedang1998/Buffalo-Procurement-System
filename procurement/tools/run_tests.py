@@ -30,7 +30,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_matching.py": 3,
     "test_phase4_historical_sales.py": 32,
     "test_phase4_identity_manifest.py": 16,
-    "test_phase4_identity_manifest_postgres.py": 17,
+    "test_phase4_identity_manifest_postgres.py": 22,
     "test_phase4_postgres_integration.py": 6,
     "test_phase4_query_contracts.py": 5,
     "test_pricing.py": 3,

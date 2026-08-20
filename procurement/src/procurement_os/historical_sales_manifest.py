@@ -503,6 +503,25 @@ def require_review_authorization(
         raise PermissionError("invalid reconciliation review authorization")
 
 
+def _canonical_source_key(
+    source_variant_id: str | None,
+    source_sku: str | None,
+    source_product_title: str | None,
+    source_variant_title: str | None,
+) -> str:
+    return HistoricalIdentityIndex.source_key(
+        SalesSourceRow(
+            date(1970, 1, 1),
+            source_variant_id,
+            source_sku,
+            source_product_title,
+            source_variant_title,
+            Decimal("0"),
+            Decimal("0"),
+        )
+    )
+
+
 def load_review_source_snapshot(
     conn: Any, run_id: str
 ) -> dict[str, ReviewSourceSnapshot]:
@@ -540,20 +559,36 @@ def load_review_source_snapshot(
         ):
             raise ValueError("approved review run durable controls drifted")
         cur.execute(
+            """SELECT r.raw_sales_id,r.source_identity_key,
+                      r.source_variant_id,r.source_sku,
+                      r.source_product_title,r.source_variant_title
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s
+                 AND r.resolution_status IN ('UNRESOLVED','AMBIGUOUS')
+               ORDER BY r.source_identity_key,r.raw_sales_id""",
+            (run_id,),
+        )
+        for evidence in cur.fetchall():
+            stored_key = str(evidence[1])
+            computed_key = _canonical_source_key(
+                str(evidence[2]) if evidence[2] is not None else None,
+                str(evidence[3]) if evidence[3] is not None else None,
+                str(evidence[4]) if evidence[4] is not None else None,
+                str(evidence[5]) if evidence[5] is not None else None,
+            )
+            if computed_key != stored_key:
+                raise ValueError(
+                    f"canonical review group drift for {stored_key}: "
+                    f"raw evidence recomputes to {computed_key}"
+                )
+        cur.execute(
             """SELECT r.source_identity_key,
                       MIN(r.source_variant_id),MIN(r.source_sku),
                       MIN(r.source_product_title),MIN(r.source_variant_title),
                       COUNT(*)::int,
                       COALESCE(SUM(ABS(rf.observed_net_items_sold)),0),
-                      COALESCE(SUM(ABS(rf.observed_net_sales)),0),
-                      COUNT(DISTINCT r.source_variant_id)
-                        + CASE WHEN BOOL_OR(r.source_variant_id IS NULL) THEN 1 ELSE 0 END,
-                      COUNT(DISTINCT r.source_sku)
-                        + CASE WHEN BOOL_OR(r.source_sku IS NULL) THEN 1 ELSE 0 END,
-                      COUNT(DISTINCT r.source_product_title)
-                        + CASE WHEN BOOL_OR(r.source_product_title IS NULL) THEN 1 ELSE 0 END,
-                      COUNT(DISTINCT r.source_variant_title)
-                        + CASE WHEN BOOL_OR(r.source_variant_title IS NULL) THEN 1 ELSE 0 END
+                      COALESCE(SUM(ABS(rf.observed_net_sales)),0)
                FROM sales_backfill_run_facts rf
                JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
                WHERE rf.sales_backfill_id=%s
@@ -564,10 +599,6 @@ def load_review_source_snapshot(
         )
         result: dict[str, ReviewSourceSnapshot] = {}
         for row in cur.fetchall():
-            if any(int(value) != 1 for value in row[8:12]):
-                raise ValueError(
-                    f"source field drift within review group {row[0]}"
-                )
             units = Decimal(str(row[6]))
             sales = Decimal(str(row[7]))
             result[str(row[0])] = ReviewSourceSnapshot(
@@ -728,21 +759,34 @@ def _validate_snapshot_matches_manifest(
         raise ValueError(f"unknown database source key outside manifest: {unknown[0]}")
     for row in manifest.rows:
         source = snapshot[row.source_identity_key]
-        expected = (
+        manifest_display_key = _canonical_source_key(
             row.source_variant_id,
             row.source_sku,
             row.historical_product_title or None,
             row.historical_variant_title or None,
+        )
+        if manifest_display_key != row.source_identity_key:
+            raise ManifestValidationError(
+                f"manifest display fields conflict with {row.source_identity_key}"
+            )
+        snapshot_display_key = _canonical_source_key(
+            source.source_variant_id,
+            source.source_sku,
+            source.source_product_title,
+            source.source_variant_title,
+        )
+        if snapshot_display_key != row.source_identity_key:
+            raise ValueError(
+                f"canonical review group drift for {row.source_identity_key}: "
+                f"representative evidence recomputes to {snapshot_display_key}"
+            )
+        expected = (
             row.affected_raw_rows,
             row.absolute_unit_magnitude,
             row.absolute_sales_magnitude,
             row.material,
         )
         actual = (
-            source.source_variant_id,
-            source.source_sku,
-            source.source_product_title,
-            source.source_variant_title,
             source.affected_raw_rows,
             source.absolute_unit_magnitude,
             source.absolute_sales_magnitude,

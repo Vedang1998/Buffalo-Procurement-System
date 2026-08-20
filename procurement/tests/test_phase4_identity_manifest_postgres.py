@@ -46,6 +46,8 @@ MIGRATIONS = (
     "006_phase4_sales_backfill.sql",
 )
 
+BUSHMILLS_SOURCE_KEY = "0|3010636|BUSHMILLS PROHIBITION|750ML"
+
 
 @unittest.skipUnless(os.getenv("DATABASE_URL"), "PostgreSQL integration requires DATABASE_URL")
 class Phase4IdentityManifestPostgresTests(unittest.TestCase):
@@ -225,6 +227,67 @@ class Phase4IdentityManifestPostgresTests(unittest.TestCase):
                        WHERE table_name='historical_sales_review_decisions')"""
             )
             return tuple(int(value) for value in cur.fetchone())
+
+    def _update_one_bushmills_evidence(self, column: str, value: str) -> None:
+        allowed_columns = {
+            "source_variant_id",
+            "source_sku",
+            "source_product_title",
+            "source_variant_title",
+        }
+        if column not in allowed_columns:
+            raise ValueError(f"unsupported source evidence column {column}")
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"""UPDATE shopify_sales_daily_raw
+                    SET {column}=%s
+                    WHERE raw_sales_id=(
+                      SELECT MIN(raw_sales_id)
+                      FROM shopify_sales_daily_raw
+                      WHERE sales_backfill_id=%s AND source_identity_key=%s
+                    )
+                    RETURNING raw_sales_id""",
+                (value, APPROVED_RUN_ID, BUSHMILLS_SOURCE_KEY),
+            )
+            self.assertIsNotNone(cur.fetchone())
+        self.conn.commit()
+
+    def test_canonical_group_allows_bushmills_case_and_whitespace_variants(self):
+        self._update_one_bushmills_evidence(
+            "source_product_title", "  Bushmills   Prohibition  "
+        )
+
+        preflight = validate_database_preflight(self.conn, self.manifest)
+
+        self.assertEqual(preflight.decision_state_counts["MISSING"], 343)
+
+    def test_canonical_group_rejects_genuine_title_identity_change(self):
+        self._update_one_bushmills_evidence(
+            "source_product_title", "Bushmills Original"
+        )
+
+        with self.assertRaisesRegex(ValueError, "canonical review group drift"):
+            validate_database_preflight(self.conn, self.manifest)
+
+    def test_canonical_group_rejects_sku_change(self):
+        self._update_one_bushmills_evidence("source_sku", "DIFFERENT-SKU")
+
+        with self.assertRaisesRegex(ValueError, "canonical review group drift"):
+            validate_database_preflight(self.conn, self.manifest)
+
+    def test_canonical_group_rejects_size_or_variant_change(self):
+        self._update_one_bushmills_evidence("source_variant_title", "1L")
+
+        with self.assertRaisesRegex(ValueError, "canonical review group drift"):
+            validate_database_preflight(self.conn, self.manifest)
+
+    def test_canonical_group_rejects_old_variant_id_change(self):
+        self._update_one_bushmills_evidence(
+            "source_variant_id", "41111111111111"
+        )
+
+        with self.assertRaisesRegex(ValueError, "canonical review group drift"):
+            validate_database_preflight(self.conn, self.manifest)
 
     def test_exact_preflight_and_missing_unknown_key_fail_closed(self):
         preflight = validate_database_preflight(self.conn, self.manifest)
