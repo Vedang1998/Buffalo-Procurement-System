@@ -58,7 +58,7 @@ Verified production state at the current handoff:
 
 ### Phase 4 — Historical ShopifyQL sales backfill / reconciliation
 
-**OWNER DECISIONS PERSISTED; REBUILD PENDING — `SALES_BACKFILL = FAIL`**
+**OWNER DECISIONS PERSISTED AND INDEPENDENTLY REVIEWED; REBUILD PENDING — `SALES_BACKFILL = FAIL`**
 
 Current handoff records:
 
@@ -71,15 +71,32 @@ Current handoff records:
 - 0 ambiguous rows
 - 343/343 owner decisions persisted with current manifest provenance
 - decisions: 55 MAP / 8 EXCLUDE / 280 LEAVE_UNRESOLVED
+- 51 distinct canonical MAP targets
 - exactly 8 active historical exclusions and 17 safe old-ID alias families
+- approved manifest SHA-256:
+  `95fe0c7902efc337bb51ba0b5a2f974f9b2ac76d7221a25e7dcd52a8cd28d287`
+- production persistence execution SHA:
+  `30b6d81d2b53ad66200d4821255597e3766d72f7`
+- second production dry-run: `CURRENT_PROVENANCE=343` and all planned
+  mutations `0`
+- independent full review: **APPROVE WITH NON-BLOCKING FINDINGS**; the sole
+  LOW finding was remediated and the targeted delta review returned **APPROVE**
+  with no findings
+- PR #13 is **MERGED**; reviewed final head
+  `28370f6176c235391a5682146703326af6f7a96f`, merge/main SHA
+  `4d0c12fec29780214b944c6d625faec5cc8a30c5`
+- exact-head Procurement CI run `32435931948`: **243/243 PASS**; post-merge CI
+  run `32436953358`: **SUCCESS**
+- protected sales, resolution, readiness-gate, and PO fingerprints are
+  unchanged; purchase orders remain 0 and purchase-order lines remain 0
 - historical source resolution and canonical aggregate remain unchanged pending rebuild
 - review UI available at `/procurement/historical-sales/review`
-- full test suite: 241/241 PASS at the current Phase 4 checkpoint
+- historical-sales rebuild/re-resolution was not run
+- `SALES_BACKFILL` and readiness-gate reevaluation were not run
 
-**Next Phase 4 checkpoint:** independent adversarial review of the persistence
-implementation and production results. Historical re-resolution/rebuild and
-`SALES_BACKFILL` gate reevaluation require separate owner authorization after
-that review.
+**Next Phase 4 checkpoint:** separate owner authorization is required for Phase
+4 historical-sales re-resolution/rebuild and subsequent `SALES_BACKFILL` and
+readiness-gate reevaluation.
 
 ### Phase 5 — Foundation UI
 
