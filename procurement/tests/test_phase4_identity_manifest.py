@@ -14,6 +14,7 @@ PROCUREMENT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROCUREMENT_ROOT.parent))
 sys.path.insert(0, str(PROCUREMENT_ROOT / "src"))
 
+import procurement_os.historical_sales_manifest as manifest_service
 from procurement_os.historical_sales_manifest import (
     APPROVED_MANIFEST_SHA256,
     APPROVED_RUN_ID,
@@ -117,10 +118,18 @@ class Phase4IdentityManifestContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ManifestValidationError, "non-MAP row forbids"):
             validate_manifest_rows(tuple(mutated))
 
-    def test_exact_exclusion_set_is_required(self):
+    def test_exact_exclusion_set_and_readback_order_are_required(self):
         self.assertEqual(
             {row.source_identity_key for row in self.rows if row.review_disposition == "EXCLUDE"},
             EXCLUSION_SOURCE_KEYS,
+        )
+        database_return_order = ["|||", *sorted(EXCLUSION_SOURCE_KEYS - {"|||"})]
+        self.assertEqual(database_return_order[0], "|||")
+        self.assertEqual(
+            manifest_service._sorted_active_exclusion_keys(
+                [(key,) for key in database_return_order]
+            ),
+            sorted(EXCLUSION_SOURCE_KEYS),
         )
         index = next(i for i, row in enumerate(self.rows) if row.review_disposition == "EXCLUDE")
         mutated = list(self.rows)

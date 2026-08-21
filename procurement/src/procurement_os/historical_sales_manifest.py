@@ -1063,6 +1063,10 @@ def _read_gate_and_po_state(conn: Any) -> tuple[str, int, int]:
     return str(gate[0]), po_count, po_line_count
 
 
+def _sorted_active_exclusion_keys(rows: Iterable[Any]) -> list[str]:
+    return sorted(str(row[0]) for row in rows)
+
+
 def readback_manifest_decisions(
     conn: Any,
     manifest: AuthorizedManifest,
@@ -1086,9 +1090,9 @@ def readback_manifest_decisions(
     )
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT source_key FROM historical_sales_exclusions WHERE active ORDER BY source_key"
+            "SELECT source_key FROM historical_sales_exclusions WHERE active"
         )
-        active_exclusions = [str(row[0]) for row in cur.fetchall()]
+        active_exclusions = _sorted_active_exclusion_keys(cur.fetchall())
         if map_targets:
             cur.execute(
                 "SELECT variant_id FROM variants WHERE variant_id=ANY(%s)",
