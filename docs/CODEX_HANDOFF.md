@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-21T00:01:55Z (UTC)
+**Updated:** 2026-08-21T02:27:29Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Phase 4 controlled identity-decision persistence — OWNER DECISIONS PERSISTED / REBUILD PENDING
+### Phase 4 controlled identity-decision persistence — OWNER DECISIONS PERSISTED AND INDEPENDENTLY REVIEWED; REBUILD PENDING — SALES_BACKFILL = FAIL
 
 - The independently reviewed, owner-approved 343-row manifest was persisted
   exactly once to production under the one-time sequencing exception. Manifest
@@ -20,12 +20,22 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   plan commit: `8d3dc3c5aedcf331880c7af303706f8d08176439`; implementation commit:
   `ed13b3aba73be86e8c7df0db4874fa3445710a43`; validator-remediation and exact
   executing commit: `30b6d81d2b53ad66200d4821255597e3766d72f7`.
+- PR #13, `Phase 4 controlled identity-decision persistence`, is **MERGED**.
+  The independently reviewed final head was
+  `28370f6176c235391a5682146703326af6f7a96f`; the normal merge commit and
+  current `main` checkpoint is
+  `4d0c12fec29780214b944c6d625faec5cc8a30c5`.
 - Independent review of the corrected identity manifest returned **APPROVE**.
-  Independent adversarial review of the persistence implementation and results
-  is still required before any rebuild or gate reevaluation.
-- Machine validation passed **38/38 targeted** tests and the complete pinned
-  PostgreSQL 16.9 suite passed **241/241**, with zero failures, errors, skips,
-  expected failures, or unexpected successes. The Bushmills regression accepts
+  The full persistence implementation/result review returned **APPROVE WITH
+  NON-BLOCKING FINDINGS**. Its sole LOW finding was remediated by deriving the
+  effective-decision conflict count from the deterministic latest ledger state;
+  the targeted delta review returned **APPROVE** with no blocking or
+  non-blocking findings.
+- Final machine validation passed **243/243**. Exact-head Procurement CI run
+  `32435931948` completed **SUCCESS** on reviewed head
+  `28370f6176c235391a5682146703326af6f7a96f`; post-merge Procurement CI run
+  `32436953358` completed **SUCCESS** on merge/main SHA
+  `4d0c12fec29780214b944c6d625faec5cc8a30c5`. The Bushmills regression accepts
   only representations that recompute to the same canonical
   `HistoricalIdentityIndex.source_key`; genuine title, SKU, variant/size, and
   old-Variant-ID changes remain hard stops.
@@ -64,14 +74,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Historical-sales rebuild/re-resolution was not run. `SALES_BACKFILL` was not
   reevaluated or changed and remains **FAIL**. No readiness gate, Shopify data,
   Vendor Rules, forecasting/procurement data, historical aggregate, raw
-  resolution, purchase order, or PO line was changed.
+  resolution, purchase order, or PO line was changed. Purchase orders remain
+  **0** and purchase-order lines remain **0**.
 
 ### Repository and tests
 
 - Verified current `origin/main` release baseline:
-  `60db3e5a893856df5b95a05f0ec75b3ec7e84f22` (`Merge PR #12: close
-  deployment hardening handoff`), release tree
-  `228b3e8fefdeab736953a47f699dcc96ddfad3e7`.
+  `4d0c12fec29780214b944c6d625faec5cc8a30c5` (`Merge PR #13: controlled
+  identity-decision persistence`).
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -512,10 +522,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   effective review decisions and exactly 8 active historical exclusions; they
   have not yet been applied to historical source resolution.
 - Coverage, source persistence, idempotency, source/raw controls, resolution accounting, and canonical controls all reconcile. The canonical aggregate was rebuilt from this run's durable facts.
-- Phase 4 workflow implementation, initial live fetch, and owner-decision
-  persistence are complete, but **Phase 4 remains incomplete until independent
-  persistence review, separately authorized historical re-resolution/rebuild,
-  and gate reevaluation are complete**.
+- Phase 4 workflow implementation, initial live fetch, owner-decision
+  persistence, and independent persistence review are complete, but **Phase 4
+  remains incomplete until separately authorized historical
+  re-resolution/rebuild and gate reevaluation are complete**.
 
 ### Current readiness and safety state
 
@@ -538,9 +548,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Owner decisions are persisted under the one-time sequencing exception. The next
-action is **independent adversarial review of the persistence implementation and
-production results**. Do not merge, rebuild or re-resolve historical sales,
-reevaluate or change `SALES_BACKFILL` or any readiness gate, query or write
-Shopify, begin Vendor Rules/forecasting/procurement work, or create/release any
-PO without separate owner authorization after that review.
+Owner decisions are persisted, independently reviewed, and merged under PR #13.
+The exact next action is to obtain **separate owner authorization for Phase 4
+historical-sales re-resolution/rebuild and subsequent `SALES_BACKFILL` and
+readiness-gate reevaluation**. Until that authorization is granted, do not
+rebuild or re-resolve historical sales, reevaluate or change any readiness gate,
+query or write Shopify, begin Vendor Rules/forecasting/procurement work, or
+create/release any PO.
