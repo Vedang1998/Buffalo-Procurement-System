@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-19T12:57:46Z (UTC)
+**Updated:** 2026-08-21T00:01:55Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,15 +10,68 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### Phase 4 controlled identity-decision persistence — OWNER DECISIONS PERSISTED / REBUILD PENDING
+
+- The independently reviewed, owner-approved 343-row manifest was persisted
+  exactly once to production under the one-time sequencing exception. Manifest
+  SHA-256: `95fe0c7902efc337bb51ba0b5a2f974f9b2ac76d7221a25e7dcd52a8cd28d287`;
+  production run: `d389079c-eabf-49b5-a245-40a207025fd7`.
+- Execution branch: `phase4/identity-decision-persistence`; approved design and
+  plan commit: `8d3dc3c5aedcf331880c7af303706f8d08176439`; implementation commit:
+  `ed13b3aba73be86e8c7df0db4874fa3445710a43`; validator-remediation and exact
+  executing commit: `30b6d81d2b53ad66200d4821255597e3766d72f7`.
+- Independent review of the corrected identity manifest returned **APPROVE**.
+  Independent adversarial review of the persistence implementation and results
+  is still required before any rebuild or gate reevaluation.
+- Machine validation passed **38/38 targeted** tests and the complete pinned
+  PostgreSQL 16.9 suite passed **241/241**, with zero failures, errors, skips,
+  expected failures, or unexpected successes. The Bushmills regression accepts
+  only representations that recompute to the same canonical
+  `HistoricalIdentityIndex.source_key`; genuine title, SKU, variant/size, and
+  old-Variant-ID changes remain hard stops.
+- The final pre-apply dry-run was database-enforced read-only with no assigned
+  transaction ID. Controls were exact: 343 unique keys; 341 material and 2
+  nonmaterial; 3,112 affected raw rows; 55 MAP, 8 EXCLUDE, and 280
+  LEAVE_UNRESOLVED; `MISSING=343`, `LEGACY_COMPATIBLE=0`,
+  `CURRENT_PROVENANCE=0`, and `CONFLICT=0`; `SALES_BACKFILL=FAIL`.
+- The one serializable production transaction inserted 343 provenanced ledger
+  decisions, 8 active exclusions, 17 safe uniform old-ID alias families, and
+  343 decision change-log rows. It normalized zero legacy decisions and
+  committed 711 total controlled mutations. The transaction's complete
+  readback and protected-state assertions passed before commit.
+- Fresh-connection read-only reconciliation proved 343/343 effective source
+  keys with current manifest provenance: 55 MAP, 8 EXCLUDE, and 280
+  LEAVE_UNRESOLVED; all 55 MAP targets populated; 51 distinct targets; zero
+  missing targets or conflicting effective decisions; NUTRL Fruit 3/3 maps to
+  `41716813627467`; Fiesta target `41193000796235` has zero mappings; and High
+  Noon Tequila Variety remains 3/3 LEAVE_UNRESOLVED.
+- The active exclusion set is exactly:
+  `0||DELIVERY FEE|`; `0||SHIPPING FEES|`; `0||TIP|`; `||TIP|`;
+  `0||BUFFALO HOUSE GIFT CARD|BUFFALO HOUSE GIFT CARD`;
+  `||BUFFALO HOUSE GIFT CARD|BUFFALO HOUSE GIFT CARD`;
+  `41173357133899||BUFFALO HOUSE GIFT CARD|10.00`; and `|||`.
+- Protected state was byte-for-byte unchanged before and after persistence:
+  `sales_daily` 55,966 rows / `fd2b4e504b492d9e7609ef8642320f7de300f5294369476da0877aee8da8b2e8`;
+  raw resolution 59,083 / `06e2726cc33849fc180788fa036a45dcd1b1acd7af32cf813f0ec9311b7dd37a`;
+  sales-backfill runs 1 / `d26f1326eea8e16be6626684db5623c291f582a63564e7aeda9c90167507d409`;
+  readiness gates 7 / `3e3c67ec4fbf0f29824311b4b97ad77bc20635acc3a2e3822c89c73a3119c21a`;
+  purchase orders 0 and lines 0, each with the empty-state SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- The mandatory second dry-run was read-only/no-XID and a true no-op:
+  `CURRENT_PROVENANCE=343`; `MISSING=0`; `LEGACY_COMPATIBLE=0`; `CONFLICT=0`;
+  decision, exclusion, alias, audit, normalization, and total planned mutations
+  all equal zero.
+- Historical-sales rebuild/re-resolution was not run. `SALES_BACKFILL` was not
+  reevaluated or changed and remains **FAIL**. No readiness gate, Shopify data,
+  Vendor Rules, forecasting/procurement data, historical aggregate, raw
+  resolution, purchase order, or PO line was changed.
+
 ### Repository and tests
 
 - Verified current `origin/main` release baseline:
-  `ae902a57ec22ad7f6911a57278f8997de3d0cdd5` (`Merge PR #11: harden Replit
-  production startup`), release tree
-  `3bd9063502f782ebd93c3a4ed65130b73220ad62`. Documentation-only closeout
-  branch: `docs/pr11-deployment-closeout`, created directly from that exact
-  merge commit. The prior implementation and review checkpoints remain
-  historical evidence below.
+  `60db3e5a893856df5b95a05f0ec75b3ec7e84f22` (`Merge PR #12: close
+  deployment hardening handoff`), release tree
+  `228b3e8fefdeab736953a47f699dcc96ddfad3e7`.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -445,28 +498,37 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Coverage: **21/21 date chunks**, **70/70 structurally contiguous pages**, all pages/chunks complete; no parse error, duplicate observation, missing chunk, or coverage gap. Current-code local finalization re-proved page indexes, offsets, terminal-page structure, stored range, and run-creation date evidence without refetching Shopify.
 - Durable source: **59,083 source rows = 59,083 unique natural facts**.
 - Resolution: **55,971 resolved rows**, **3,112 unresolved rows**, **0 ambiguous rows**, **0 explicitly excluded rows**.
-- Owner review queue: **343 unresolved identity groups** ranked by materiality (**341 material**, 2 zero-impact but retained); one group has a SKU-only candidate, which remains evidence only and is not approved.
+- The former owner review queue contained **343 unresolved identity groups**
+  ranked by materiality (**341 material**, 2 zero-impact but retained). All 343
+  owner decisions are now durably persisted, but source rows have not been
+  re-resolved and the canonical aggregate has not been rebuilt.
 - Browser review UI: `/procurement/historical-sales/review` (FastAPI route `/historical-sales/review`); JSON: `/procurement/historical-sales/review/items`. Decisions require actor, reason, and `RECONCILIATION_REVIEW_TOKEN`.
 - Shopify source totals exactly equal persisted raw totals:
   - net items: **82,501.0000** source = **82,501.0000** raw;
   - net sales: **$1,300,975.14** source = **$1,300,975.14** raw.
 - Canonical resolved totals: **78,815.0000 net items** and **$1,231,372.83 net sales**.
 - Unresolved totals: **3,686.0000 net items** and **$69,602.31 net sales**; materiality is **3,696.0000 absolute units** and **$72,616.29 absolute sales**.
-- Excluded totals: **0 items / $0.00**. There are zero review decisions and zero active historical exclusions at this checkpoint.
+- Pre-rebuild excluded totals remain **0 items / $0.00**. There are now 343
+  effective review decisions and exactly 8 active historical exclusions; they
+  have not yet been applied to historical source resolution.
 - Coverage, source persistence, idempotency, source/raw controls, resolution accounting, and canonical controls all reconcile. The canonical aggregate was rebuilt from this run's durable facts.
-- Phase 4 workflow implementation is complete and the initial live fetch is complete, but **Phase 4 is not complete while human identity review and `SALES_BACKFILL` remain outstanding**.
+- Phase 4 workflow implementation, initial live fetch, and owner-decision
+  persistence are complete, but **Phase 4 remains incomplete until independent
+  persistence review, separately authorized historical re-resolution/rebuild,
+  and gate reevaluation are complete**.
 
 ### Current readiness and safety state
 
 | Gate | Current status | Notes |
 | --- | --- | --- |
 | `CATALOG_SYNC` | `PASS` | Phase 3 catalog remains reconciled. |
-| `SALES_BACKFILL` | `FAIL` | 341 material unresolved identity groups (343 total groups) await owner decisions. |
+| `SALES_BACKFILL` | `FAIL` | Owner decisions are persisted; historical re-resolution/rebuild and gate reevaluation have not run. |
 | `VENDOR_RULES` | `FAIL` | Phase not started. |
 
 - PO generation is **disabled**, blocked by `SALES_BACKFILL` and `VENDOR_RULES`; purchase-order count remains zero.
 - Shopify remained strictly read-only. Phase 4 stored no customer fields/PII and made zero Shopify writes.
-- No automatic historical alias approval or exclusion occurred.
+- Only the exact owner-approved identity decisions, exclusions, and safe uniform
+  old-ID aliases were persisted; no automatic identity decision occurred.
 
 ## Historical checkpoint
 
@@ -476,9 +538,9 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Deployment reconciliation/hardening is closed. Do **not** automatically begin
-Phase 4 identity decisions or any downstream work. Wait for a separate owner
-authorization before mapping or excluding any historical identity, rebuilding
-or re-resolving historical sales, changing readiness gates, querying or writing
-Shopify, starting another phase or post-foundation workstream, or generating or
-releasing any PO.
+Owner decisions are persisted under the one-time sequencing exception. The next
+action is **independent adversarial review of the persistence implementation and
+production results**. Do not merge, rebuild or re-resolve historical sales,
+reevaluate or change `SALES_BACKFILL` or any readiness gate, query or write
+Shopify, begin Vendor Rules/forecasting/procurement work, or create/release any
+PO without separate owner authorization after that review.
