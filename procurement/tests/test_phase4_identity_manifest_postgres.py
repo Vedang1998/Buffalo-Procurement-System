@@ -634,11 +634,121 @@ class Phase4IdentityManifestPostgresTests(unittest.TestCase):
         persist_manifest_decisions(self.conn, self.manifest, self.context)
         readback = readback_manifest_decisions(self.conn, self.manifest)
         self.assertEqual(readback["effective_source_keys"], 343)
+        self.assertEqual(readback["conflicting_effective_decisions"], 0)
         self.assertEqual(readback["active_exclusion_source_keys"], sorted(EXCLUSION_SOURCE_KEYS))
         report = dry_run_manifest(self.conn, self.manifest, self.context)
         self.assertEqual(report["decision_state_counts"]["CURRENT_PROVENANCE"], 343)
         self.assertEqual(report["planned_mutations"]["total"], 0)
         self.assertEqual(report["readback"]["manifest_provenance_complete"], 343)
+
+    def test_readback_detects_incompatible_latest_effective_target(self):
+        persist_manifest_decisions(self.conn, self.manifest, self.context)
+        cranberry_rows = [
+            row
+            for row in self.manifest.rows
+            if row.review_disposition == "MAP"
+            and row.source_variant_id == "41157780013131"
+        ]
+        lemonade_target = next(
+            row.canonical_variant_id
+            for row in self.manifest.rows
+            if row.source_variant_id == "41157780045899"
+        )
+        self.assertEqual(len(cranberry_rows), 2)
+        source_key = cranberry_rows[0].source_identity_key
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO historical_sales_review_decisions(
+                     sales_backfill_id,source_identity_key,source_variant_id,source_sku,
+                     source_product_title,source_variant_title,decision_action,
+                     canonical_variant_id,actor,reason,evidence_json,
+                     supersedes_decision_id,decided_at
+                   )
+                   SELECT sales_backfill_id,source_identity_key,source_variant_id,source_sku,
+                          source_product_title,source_variant_title,decision_action,
+                          %s,actor,reason,evidence_json,
+                          historical_sales_review_decision_id,decided_at + INTERVAL '1 second'
+                   FROM historical_sales_review_decisions
+                   WHERE source_identity_key=%s
+                   ORDER BY decided_at DESC,historical_sales_review_decision_id DESC
+                   LIMIT 1""",
+                (lemonade_target, source_key),
+            )
+
+        report = readback_manifest_decisions(
+            self.conn, self.manifest, require_complete=False
+        )
+        self.assertEqual(report["map_to_canonical"], 55)
+        self.assertEqual(report["distinct_map_targets"], 51)
+        self.assertEqual(report["manifest_provenance_complete"], 343)
+        self.assertEqual(report["conflicting_effective_decisions"], 1)
+        with self.assertRaisesRegex(
+            ValueError,
+            "post-write readback conflicting_effective_decisions=1 expected 0",
+        ):
+            readback_manifest_decisions(self.conn, self.manifest)
+
+    def test_readback_ignores_superseded_historical_conflict(self):
+        persist_manifest_decisions(self.conn, self.manifest, self.context)
+        cranberry_rows = [
+            row
+            for row in self.manifest.rows
+            if row.review_disposition == "MAP"
+            and row.source_variant_id == "41157780013131"
+        ]
+        lemonade_target = next(
+            row.canonical_variant_id
+            for row in self.manifest.rows
+            if row.source_variant_id == "41157780045899"
+        )
+        source_key = cranberry_rows[0].source_identity_key
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO historical_sales_review_decisions(
+                     sales_backfill_id,source_identity_key,source_variant_id,source_sku,
+                     source_product_title,source_variant_title,decision_action,
+                     canonical_variant_id,actor,reason,evidence_json,
+                     supersedes_decision_id,decided_at
+                   )
+                   SELECT sales_backfill_id,source_identity_key,source_variant_id,source_sku,
+                          source_product_title,source_variant_title,decision_action,
+                          %s,actor,reason,evidence_json,
+                          historical_sales_review_decision_id,decided_at + INTERVAL '1 second'
+                   FROM historical_sales_review_decisions
+                   WHERE source_identity_key=%s
+                   ORDER BY decided_at DESC,historical_sales_review_decision_id DESC
+                   LIMIT 1
+                   RETURNING historical_sales_review_decision_id,decided_at""",
+                (lemonade_target, source_key),
+            )
+            conflicting_id, conflicting_at = cur.fetchone()
+            cur.execute(
+                """INSERT INTO historical_sales_review_decisions(
+                     sales_backfill_id,source_identity_key,source_variant_id,source_sku,
+                     source_product_title,source_variant_title,decision_action,
+                     canonical_variant_id,actor,reason,evidence_json,
+                     supersedes_decision_id,decided_at
+                   )
+                   SELECT sales_backfill_id,source_identity_key,source_variant_id,source_sku,
+                          source_product_title,source_variant_title,decision_action,
+                          %s,actor,reason,evidence_json,%s,%s + INTERVAL '1 second'
+                   FROM historical_sales_review_decisions
+                   WHERE source_identity_key=%s
+                     AND canonical_variant_id=%s
+                   ORDER BY decided_at ASC,historical_sales_review_decision_id ASC
+                   LIMIT 1""",
+                (
+                    cranberry_rows[0].canonical_variant_id,
+                    conflicting_id,
+                    conflicting_at,
+                    source_key,
+                    cranberry_rows[0].canonical_variant_id,
+                ),
+            )
+
+        report = readback_manifest_decisions(self.conn, self.manifest)
+        self.assertEqual(report["conflicting_effective_decisions"], 0)
+        self.assertEqual(report["manifest_provenance_complete"], 343)
 
     def test_persistence_source_has_no_rebuild_gate_shopify_or_po_call_path(self):
         import procurement_os.historical_sales_manifest as service

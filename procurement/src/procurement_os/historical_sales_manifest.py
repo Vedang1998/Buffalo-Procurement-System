@@ -1077,6 +1077,10 @@ def readback_manifest_decisions(
         conn, (row.source_identity_key for row in manifest.rows)
     )
     by_key = {row.source_identity_key: row for row in manifest.rows}
+    classifications = classify_existing_decisions(manifest, latest)
+    conflicting_effective_decisions = sum(
+        item.state == "CONFLICT" for item in classifications
+    )
     action_counts = Counter(decision.decision_action for decision in latest.values())
     map_targets = [
         decision.canonical_variant_id
@@ -1128,7 +1132,7 @@ def readback_manifest_decisions(
             and latest[key].decision_action == "LEAVE_UNRESOLVED"
             for key in HIGH_NOON_TEQUILA_SOURCE_KEYS
         ),
-        "conflicting_effective_decisions": 0,
+        "conflicting_effective_decisions": conflicting_effective_decisions,
         "manifest_provenance_complete": provenance_complete,
         "sales_backfill_status": gate_status,
         "purchase_orders": po_count,
