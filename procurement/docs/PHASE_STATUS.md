@@ -58,7 +58,7 @@ Verified production state at the current handoff:
 
 ### Phase 4 — Historical ShopifyQL sales backfill / reconciliation
 
-**IMPLEMENTATION + INITIAL LIVE BACKFILL COMPLETE; OWNER REVIEW PENDING — `SALES_BACKFILL = FAIL`**
+**OWNER DECISIONS PERSISTED; REBUILD PENDING — `SALES_BACKFILL = FAIL`**
 
 Current handoff records:
 
@@ -69,11 +69,17 @@ Current handoff records:
 - 55,971 resolved rows
 - 3,112 unresolved rows
 - 0 ambiguous rows
-- 343 grouped unresolved historical identities, 341 material
+- 343/343 owner decisions persisted with current manifest provenance
+- decisions: 55 MAP / 8 EXCLUDE / 280 LEAVE_UNRESOLVED
+- exactly 8 active historical exclusions and 17 safe old-ID alias families
+- historical source resolution and canonical aggregate remain unchanged pending rebuild
 - review UI available at `/procurement/historical-sales/review`
-- full test suite: 142/142 PASS at the current Phase 4 checkpoint
+- full test suite: 241/241 PASS at the current Phase 4 checkpoint
 
-**Next authorized Phase 4 action:** authenticated owner review of grouped historical identities, followed by local re-resolution/rebuild. Do not auto-map or auto-exclude.
+**Next Phase 4 checkpoint:** independent adversarial review of the persistence
+implementation and production results. Historical re-resolution/rebuild and
+`SALES_BACKFILL` gate reevaluation require separate owner authorization after
+that review.
 
 ### Phase 5 — Foundation UI
 
@@ -85,7 +91,7 @@ Existing operational pages include readiness/catalog/historical-sales review fun
 
 **NOT YET CLOSED**
 
-The project already has substantial adversarial/integration coverage, but formal foundation acceptance remains gated by unresolved Phase 4 historical-sales decisions and the canonical completion criteria.
+The project already has substantial adversarial/integration coverage, but formal foundation acceptance remains gated by the pending Phase 4 rebuild, gate reevaluation, and canonical completion criteria.
 
 ## Post-foundation ordered workstreams
 
@@ -112,7 +118,7 @@ These are program workstreams. Do not renumber or overwrite official phase IDs i
 | Gate | Status | Meaning |
 | --- | --- | --- |
 | `CATALOG_SYNC` | PASS | Catalog identity foundation is reconciled. |
-| `SALES_BACKFILL` | FAIL | Historical identity owner review remains. |
+| `SALES_BACKFILL` | FAIL | Owner decisions are persisted; rebuild and gate reevaluation remain pending. |
 | `VENDOR_RULES` | FAIL | Not yet built/validated. |
 | PO readiness | DISABLED | Intentionally blocked while required gates fail. |
 

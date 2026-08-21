@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 
 from procurement_os.sales import (
-    CurrentIdentity, HistoricalAlias, HistoricalIdentityIndex, SalesSourceRow,
+    CurrentIdentity, HistoricalAlias, HistoricalIdentityIndex, HistoricalSourceDecision, SalesSourceRow,
     date_chunks, fetch_shopifyql_sales, parse_shopifyql_row, source_row_hash,
 )
 
@@ -67,6 +67,53 @@ class SalesTests(unittest.TestCase):
         idx=HistoricalIdentityIndex([],[],excluded_source_keys=[key])
         r=idx.resolve(row)
         self.assertEqual(r.status,'EXCLUDED')
+
+    def test_exact_source_key_map_is_human_authority_not_title_matching(self):
+        row=sale(vid='0',sku=None,product='Historical Title Only',variant='750ML')
+        decision=HistoricalSourceDecision(
+            HistoricalIdentityIndex.source_key(row),'MAP','100'
+        )
+        idx=HistoricalIdentityIndex(
+            [CurrentIdentity('100',None,'Canonical Product','750ML')],[],
+            source_decisions=[decision],
+        )
+        resolved=idx.resolve(row)
+        self.assertEqual(
+            (resolved.status,resolved.canonical_variant_id,resolved.method),
+            ('RESOLVED','100','APPROVED_SOURCE_IDENTITY_DECISION'),
+        )
+
+    def test_source_key_map_does_not_leak_to_normalized_similar_identity(self):
+        approved=sale(vid='0',sku=None,product='Historical Title Only',variant='750ML')
+        idx=HistoricalIdentityIndex(
+            [CurrentIdentity('100',None,'Canonical Product','750ML')],[],
+            source_decisions=[HistoricalSourceDecision(
+                HistoricalIdentityIndex.source_key(approved),'MAP','100'
+            )],
+        )
+        other=sale(vid='0',sku=None,product='Historical Title Only Reserve',variant='750ML')
+        self.assertEqual(idx.resolve(other).status,'UNRESOLVED')
+
+    def test_leave_unresolved_source_decision_never_becomes_mapping(self):
+        row=sale(vid='0',sku=None,product='Deliberately Unresolved',variant='8PK 12OZ')
+        idx=HistoricalIdentityIndex(
+            [CurrentIdentity('100',None,'Canonical Product','750ML')],[],
+            source_decisions=[HistoricalSourceDecision(
+                HistoricalIdentityIndex.source_key(row),'LEAVE_UNRESOLVED',None
+            )],
+        )
+        self.assertEqual(idx.resolve(row).status,'UNRESOLVED')
+
+    def test_source_key_map_can_target_preserved_inactive_variant(self):
+        row=sale(vid='0',sku='OLD-INACTIVE',product='Historical Inactive',variant='750ML')
+        idx=HistoricalIdentityIndex(
+            [CurrentIdentity('300','OLD-INACTIVE','Retired Canonical','750ML',False,'RETIRED_CONFIRMED')],[],
+            source_decisions=[HistoricalSourceDecision(
+                HistoricalIdentityIndex.source_key(row),'MAP','300'
+            )],
+        )
+        resolved=idx.resolve(row)
+        self.assertEqual((resolved.status,resolved.canonical_variant_id),('RESOLVED','300'))
 
     def test_unknown_is_unresolved(self):
         self.assertEqual(self.idx.resolve(sale(sku='NOPE')).status,'UNRESOLVED')
