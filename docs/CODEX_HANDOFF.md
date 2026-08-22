@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-21T02:27:29Z (UTC)
+**Updated:** 2026-08-22T01:50:16Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,69 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Phase 4 owner-approved terminal disposition — ARTIFACT FROZEN; INDEPENDENT REVIEW PENDING; REBUILD PENDING — SALES_BACKFILL = FAIL
+
+- Owner authorization dated 2026-08-21 approved the terminal exclusion semantic
+  `HISTORICAL_IDENTITY_UNATTRIBUTABLE_AFTER_EXHAUSTIVE_REVIEW`, all 19
+  predecessor/successor continuity pairs, the final five individual MAP
+  exceptions, and terminal exclusion of the three High Noon Tequila keys,
+  KILLR flavor ambiguity, and both contradictory Popov size keys. Fiesta target
+  `41193000796235` remains prohibited, and neither Popov size is canonical.
+- The original 343-row manifest remains immutable historical authority at
+  SHA-256 `95fe0c7902efc337bb51ba0b5a2f974f9b2ac76d7221a25e7dcd52a8cd28d287`.
+  Its 280 effective `LEAVE_UNRESOLVED` decisions have not been changed in
+  production. The append-only terminal supplement is
+  `procurement/review/phase4_terminal_disposition_manifest.csv`, SHA-256
+  `fb1e15e67fe66c7742b84ea2c50bf01ce8a5008f00b4887293404ac09d3f59ff`.
+- The supplement is exactly 280 unique prior-LEAVE keys: 43
+  `RESTORE_HISTORICAL_IDENTITY`, 47 `MAP_TO_CANONICAL`, 190
+  `EXCLUDE_UNATTRIBUTABLE`, and 0 unresolved. RESTORE covers 435 raw rows,
+  511.0000 net/absolute units and $8,506.52 net/absolute sales. MAP covers 200
+  raw rows, 232.0000 net/absolute units and $4,096.03 net/absolute sales.
+  Terminal unattributable exclusion covers 1,465 raw rows, 1,798.0000 net /
+  1,808.0000 absolute units and $37,695.37 net / $40,685.37 absolute sales.
+- Combined effective terminal intent across 343 source keys is 102 MAP, 198
+  EXCLUDE (the immutable original exact eight plus 190 new terminal
+  exclusions), 43 RESTORE and 0 LEAVE_UNRESOLVED. The 102 MAP keys cover 1,023
+  raw rows and 96 distinct targets. Canonically sorted target-flow control
+  SHA-256 is `5d6832cea3df7a4f45d31d7e7a8100409ddc078936095fe3c775ce862a1f64a6`.
+  The 43 RESTORE keys use 43 distinct exact historical Variant IDs; each target
+  equals its source historical Variant ID. All 19 continuity successors are
+  restored and all 19 predecessors map to the corresponding successor.
+- The original 3,112 unresolved raw facts terminally partition into 1,458
+  resolved-attribution rows and 1,654 excluded rows: resolved-attribution
+  impact is 1,844.0000 net/absolute units and $31,761.01 net/absolute sales;
+  exclusion impact is 1,842.0000 net / 1,852.0000 absolute units and
+  $37,841.30 net / $40,855.28 absolute sales.
+- Eventual post-rebuild whole-source controls are frozen at 59,083 facts:
+  57,429 RESOLVED, 1,654 EXCLUDED, 0 UNRESOLVED and 0 AMBIGUOUS; 80,659.0000
+  resolved net / 80,693.0000 absolute units; 1,842.0000 excluded net /
+  1,852.0000 absolute units; $1,263,133.84 resolved net / $1,264,065.52
+  absolute sales; and $37,841.30 excluded net / $40,855.28 absolute sales.
+  Source totals remain 82,501.0000 net / 82,545.0000 absolute units and
+  $1,300,975.14 net / $1,304,920.80 absolute sales. Expected `sales_daily` is
+  57,424 rows, 80,659.0000 units and $1,263,133.84 sales.
+- Frozen resolution-method counts are: 36,397 `EXACT_ACTIVE_VARIANT_ID`;
+  19,430 `APPROVED_VARIANT_ID_ALIAS`; 136
+  `APPROVED_HISTORICAL_IDENTITY`; 443
+  `EXACT_PRESERVED_HISTORICAL_VARIANT_ID`; 1,023
+  `APPROVED_SOURCE_IDENTITY_DECISION`; 189 `EXPLICIT_EXCLUSION`; and 1,465
+  `EXPLICIT_UNATTRIBUTABLE_EXCLUSION`.
+- Final exclusion reason buckets are separately controlled: the original exact
+  eight use `PHASE4_ORIGINAL_EXACT_NON_PRODUCT_EXCLUSION` and cover 189 raw
+  rows, 44.0000 net/absolute units and $145.93 net / $169.91 absolute sales;
+  the new 190 use
+  `HISTORICAL_IDENTITY_UNATTRIBUTABLE_AFTER_EXHAUSTIVE_REVIEW` and cover the
+  1,465-row controls above. An `EXCLUDED` status alone is never readiness
+  evidence: later implementation must prove effective owner-approved ledger
+  decisions, allowlisted reasons, exact source scope, manifest/evidence
+  provenance, no target, complete membership and exact reason-coded financial
+  reconciliation.
+- Canonical authority and governance text now record the approved semantic.
+  Runtime code, SQL/schema, `rules.toml`, database state, catalog, aliases,
+  source facts, aggregate sales, readiness gates, Shopify and POs remain
+  unchanged. Phase 4 is not complete.
 
 ### Phase 4 controlled identity-decision persistence — OWNER DECISIONS PERSISTED AND INDEPENDENTLY REVIEWED; REBUILD PENDING — SALES_BACKFILL = FAIL
 
@@ -79,9 +142,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### Repository and tests
 
-- Verified current `origin/main` release baseline:
-  `4d0c12fec29780214b944c6d625faec5cc8a30c5` (`Merge PR #13: controlled
-  identity-decision persistence`).
+- Verified authorized `origin/main` baseline for the terminal artifact freeze:
+  `97fe3868fa87d17d1a8f236d993c35cd8db83805`.
 - Phase 4 starting HEAD: `90a6b9ec2469d541ff11cb3716807754fd4edb05` (`Add durable Codex and Claude project handoff`). Verified Phase 4 implementation checkpoint: `a78b5808551f3bae584367a631cf25776d3ff038` (`Phase 4 historical sales backfill and reconciliation workflow`).
 - Authoritative current test command, run from the repository root:
   `./scripts/procurement-tests`.
@@ -548,10 +610,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Owner decisions are persisted, independently reviewed, and merged under PR #13.
-The exact next action is to obtain **separate owner authorization for Phase 4
-historical-sales re-resolution/rebuild and subsequent `SALES_BACKFILL` and
-readiness-gate reevaluation**. Until that authorization is granted, do not
-rebuild or re-resolve historical sales, reevaluate or change any readiness gate,
-query or write Shopify, begin Vendor Rules/forecasting/procurement work, or
-create/release any PO.
+The owner-approved terminal authority and SHA-pinned 280-key supplement are
+frozen in repository documentation only. The exact next action is **independent
+adversarial review of the owner-approved authority change and SHA-pinned
+terminal manifest**. Implementation planning/code, historical-identity
+restoration, decision persistence, historical-sales re-resolution/rebuild,
+`SALES_BACKFILL` evaluation or gate write, Shopify access, Vendor Rules,
+forecasting/procurement and PO work remain unauthorized.

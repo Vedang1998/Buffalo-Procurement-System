@@ -58,7 +58,7 @@ Verified production state at the current handoff:
 
 ### Phase 4 — Historical ShopifyQL sales backfill / reconciliation
 
-**OWNER DECISIONS PERSISTED AND INDEPENDENTLY REVIEWED; REBUILD PENDING — `SALES_BACKFILL = FAIL`**
+**OWNER-APPROVED TERMINAL DISPOSITION FROZEN; INDEPENDENT ARTIFACT REVIEW AND IMPLEMENTATION PENDING; REBUILD PENDING — `SALES_BACKFILL = FAIL`**
 
 Current handoff records:
 
@@ -93,10 +93,29 @@ Current handoff records:
 - review UI available at `/procurement/historical-sales/review`
 - historical-sales rebuild/re-resolution was not run
 - `SALES_BACKFILL` and readiness-gate reevaluation were not run
+- owner-approved terminal supplement:
+  `procurement/review/phase4_terminal_disposition_manifest.csv`, SHA-256
+  `fb1e15e67fe66c7742b84ea2c50bf01ce8a5008f00b4887293404ac09d3f59ff`
+- supplement controls: 280/280 prior LEAVE keys; 43 RESTORE / 47 MAP / 190
+  EXCLUDE / 0 unresolved
+- combined terminal intent: 43 RESTORE / 102 MAP / 198 EXCLUDE / 0
+  LEAVE_UNRESOLVED; current production effective state remains the prior 55 MAP
+  / 8 EXCLUDE / 280 LEAVE until separately authorized implementation
+- expected eventual post-rebuild controls: 57,429 RESOLVED / 1,654 EXCLUDED /
+  0 UNRESOLVED / 0 AMBIGUOUS; 80,659 resolved and 1,842 excluded net units;
+  $1,263,133.84 resolved and $37,841.30 excluded net sales; expected
+  `sales_daily` rows 57,424
+- terminal exclusion readiness is not status-based: every material excluded
+  source key must later prove an effective owner-approved exact-key decision,
+  allowlisted reason, manifest/evidence provenance, no target, complete
+  membership and exact reason-coded rows/units/sales reconciliation
+- no runtime, schema, rules, database, catalog, alias, sales, gate, Shopify,
+  procurement or PO change was authorized or performed by the artifact freeze
 
-**Next Phase 4 checkpoint:** separate owner authorization is required for Phase
-4 historical-sales re-resolution/rebuild and subsequent `SALES_BACKFILL` and
-readiness-gate reevaluation.
+**Next Phase 4 checkpoint:** independent adversarial review of the owner-approved
+authority change and SHA-pinned terminal manifest. Implementation, restoration,
+persistence, historical-sales rebuild and readiness-gate evaluation remain
+separately unauthorized.
 
 ### Phase 5 — Foundation UI
 
@@ -135,7 +154,7 @@ These are program workstreams. Do not renumber or overwrite official phase IDs i
 | Gate | Status | Meaning |
 | --- | --- | --- |
 | `CATALOG_SYNC` | PASS | Catalog identity foundation is reconciled. |
-| `SALES_BACKFILL` | FAIL | Owner decisions are persisted; rebuild and gate reevaluation remain pending. |
+| `SALES_BACKFILL` | FAIL | Terminal intent is artifact-frozen only; independent review, implementation, rebuild and gate reevaluation remain pending. |
 | `VENDOR_RULES` | FAIL | Not yet built/validated. |
 | PO readiness | DISABLED | Intentionally blocked while required gates fail. |
 
