@@ -287,6 +287,8 @@ Minimum:
 - targeted specialist review where useful;
 - ChatGPT business-rule review;
 - owner approval for defined material decisions;
+- explicit owner approval and append-only evidence for any terminal historical
+  identity exclusion affecting material units or revenue;
 - CI and live/control-total verification where applicable.
 
 ### Level 4 — actual PO release / irreversible production action

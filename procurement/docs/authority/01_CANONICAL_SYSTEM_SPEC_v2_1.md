@@ -564,7 +564,7 @@ No final PO output is trusted while a required gate is FAIL.
 Foundation gates
 
 1. CATALOG_SYNC — current Shopify identity is reconciled.
-2. SALES_BACKFILL — historical sales have been canonicalized with material unresolved identity rows eliminated or explicitly resolved.
+2. SALES_BACKFILL — historical sales have been canonicalized with every material identity either resolved to a proven canonical Variant ID or covered by a proven owner-approved terminal exclusion.
 3. INVENTORY_HISTORY — own snapshots are running; Shopify inventory analytics are tested and used where reliable.
 4. VENDOR_RULES — order cycles, lead times, delivery/minimum/loose-fee rules needed for calculation are present.
 5. PRICE_COVERAGE — affected supplier offers have verified CURRENT pricing before strategic price-aware decisions are made.
@@ -691,6 +691,24 @@ These are expected and already observed in live ShopifyQL output.
 
 Use SKU/title-at-time-of-sale against approved aliases. If still unresolved, route to review.
 
+Terminal historical-identity exclusion
+
+After exhaustive review, the owner may explicitly exclude a genuine historical
+sale from canonical Variant-level attribution when no safe canonical Shopify
+Variant ID can be established. The terminal reason is
+HISTORICAL_IDENTITY_UNATTRIBUTABLE_AFTER_EXHAUSTIVE_REVIEW. This disposition
+does not delete or alter the immutable source fact, does not invent a canonical
+identity, and does not contribute to per-Variant sales_daily. Source identity,
+units, sales, reversals and forensic evidence remain permanently auditable, and
+reason-coded excluded net and absolute units/sales remain part of control-total
+reporting. It can never make a product eligible for forecasting, replenishment,
+procurement or a purchase order.
+
+Future unresolved identities remain fail-closed and may not be automatically
+converted to a terminal exclusion. For Phase 4, the only allowlisted exclusion
+reasons are PHASE4_ORIGINAL_EXACT_NON_PRODUCT_EXCLUSION and
+HISTORICAL_IDENTITY_UNATTRIBUTABLE_AFTER_EXHAUSTIVE_REVIEW.
+
 Pagination
 
 ShopifyQL results are paged deterministically using LIMIT + OFFSET and stable ORDER BY, preferably in date chunks so an interrupted backfill can resume.
@@ -700,10 +718,15 @@ Sales acceptance
 SALES_BACKFILL passes only when:
 
 • the requested historical period is complete;
-• every material unit/revenue row is resolved or explicitly excluded for a documented reason;
+• every material unit/revenue row is resolved or has an effective owner-approved EXCLUDE ledger decision for its exact source key, an allowlisted structured reason, required manifest/evidence provenance and no canonical target;
+• a trusted exclusion-integrity computation reconciles complete reason-coded excluded membership, rows, net/absolute units and net/absolute sales, with the original exact eight exclusions separately identifiable;
 • aggregates reconcile to ShopifyQL control totals within defined tolerances;
 • re-running the same batch is idempotent;
 • canonical sales can be regenerated from raw facts.
+
+An EXCLUDED status by itself is never sufficient readiness evidence. Missing,
+unprovenanced, unknown-reason, target-bearing, scope-mismatched or financially
+unreconciled exclusions keep SALES_BACKFILL failed.
 
 ────────
 
