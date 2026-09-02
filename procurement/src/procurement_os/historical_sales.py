@@ -196,12 +196,25 @@ def evaluate_sales_readiness(
 
 
 def derive_exclusion_integrity(conn: Any, run_id: str) -> ExclusionIntegrityReport:
-    """Dispatch to the exact Phase 4 proof or the legacy per-run proof."""
+    """Dispatch through durable, versioned authority or legacy per-run proof."""
 
-    from .historical_sales_manifest import APPROVED_RUN_ID
-
-    if str(run_id) == APPROVED_RUN_ID:
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT 1 FROM historical_sales_exclusion_authority_runs
+               WHERE sales_backfill_id=%s""",
+            (run_id,),
+        )
+        authority = cur.fetchone()
+    if authority is not None:
         return derive_phase4_exclusion_integrity(conn, run_id)
+
+    return _derive_legacy_exclusion_integrity(conn, run_id)
+
+
+def _derive_legacy_exclusion_integrity(
+    conn: Any, run_id: str
+) -> ExclusionIntegrityReport:
+    """Prove legacy per-run exclusions without inheriting Phase 4 authority."""
 
     diagnostics: set[str] = set()
     with conn.cursor() as cur:
@@ -285,12 +298,13 @@ def derive_phase4_exclusion_integrity(
     # startup while still reusing its frozen artifact and exact decision model.
     from .historical_sales_manifest import (
         APPROVED_MANIFEST_SHA256,
-        APPROVED_RUN_ID,
         EXCLUSION_SOURCE_KEYS,
     )
     from .historical_sales_terminal import (
         AUTHORITY_GIT_SHA,
         ORIGINAL_EXCLUSION_REASON,
+        TERMINAL_AUTHORITY_VERSION,
+        TERMINAL_DECISION_SCHEMA_VERSION,
         TERMINAL_EVIDENCE_VERSION,
         TERMINAL_EXCLUSION_REASON,
         TERMINAL_MANIFEST_SHA256,
@@ -303,9 +317,40 @@ def derive_phase4_exclusion_integrity(
     )
 
     diagnostics: set[str] = set()
-    if str(run_id) != APPROVED_RUN_ID:
-        diagnostics.add("RUN_NOT_APPROVED_PHASE4_SOURCE")
-
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT authority_version,decision_authority_run_id,
+                      original_manifest_sha256,terminal_manifest_sha256,
+                      decision_schema_version
+               FROM historical_sales_exclusion_authority_runs
+               WHERE sales_backfill_id=%s""",
+            (run_id,),
+        )
+        authority_row = cur.fetchone()
+    if authority_row is None:
+        return ExclusionIntegrityReport(
+            passed=False,
+            diagnostics=("PHASE4_EXCLUSION_AUTHORITY_NOT_REGISTERED",),
+            active_exclusion_keys=0,
+            excluded_source_facts=0,
+            reason_buckets={},
+        )
+    decision_authority_run_id = str(authority_row[1])
+    authority_expected = (
+        TERMINAL_AUTHORITY_VERSION,
+        decision_authority_run_id,
+        APPROVED_MANIFEST_SHA256,
+        TERMINAL_MANIFEST_SHA256,
+        TERMINAL_DECISION_SCHEMA_VERSION,
+    )
+    if tuple(str(value) for value in authority_row) != authority_expected:
+        return ExclusionIntegrityReport(
+            passed=False,
+            diagnostics=("UNSUPPORTED_OR_DRIFTED_EXCLUSION_AUTHORITY",),
+            active_exclusion_keys=0,
+            excluded_source_facts=0,
+            reason_buckets={},
+        )
     procurement_root = Path(__file__).resolve().parents[2]
     artifact = load_terminal_artifact(
         procurement_root / "review" / "phase4_terminal_disposition_manifest.csv",
@@ -376,6 +421,7 @@ def derive_phase4_exclusion_integrity(
                 execution_git_sha=execution_git_sha,
                 superseded=superseded.get(decision["supersedes_decision_id"]),
                 expected_prior_action="LEAVE_UNRESOLVED",
+                expected_decision_run_id=decision_authority_run_id,
             )
         else:
             source = original_by_key[key]
@@ -393,6 +439,7 @@ def derive_phase4_exclusion_integrity(
                 execution_git_sha=execution_git_sha,
                 superseded=superseded.get(decision["supersedes_decision_id"]),
                 expected_prior_action="EXCLUDE",
+                expected_decision_run_id=decision_authority_run_id,
             )
         if not exact:
             diagnostics.add(f"LATEST_DECISION_MISMATCH:{key}")
@@ -1874,6 +1921,27 @@ def _source_for_decision(cur: Any, source_key: str) -> tuple[str, SalesSourceRow
     if not run:
         raise ValueError("no complete historical-sales source run is available for review")
     cur.execute(
+        """SELECT authority_version
+           FROM historical_sales_exclusion_authority_runs
+           WHERE sales_backfill_id=%s""",
+        (run[0],),
+    )
+    authority = cur.fetchone()
+    if authority is not None:
+        cur.execute(
+            """SELECT COUNT(*)::int
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s
+                 AND r.resolution_status IN ('UNRESOLVED','AMBIGUOUS')""",
+            (run[0],),
+        )
+        if int(cur.fetchone()[0]) > 0:
+            raise ValueError(
+                "historical-sales review decisions are frozen while the "
+                "owner-approved terminal package awaits controlled rebuild"
+            )
+    cur.execute(
         """SELECT r.sale_date,r.source_variant_id,r.source_sku,r.source_product_title,
                   r.source_variant_title,rf.observed_net_items_sold,rf.observed_net_sales,
                   r.resolution_status
@@ -2000,7 +2068,12 @@ def _record_historical_sales_review_decision_unlocked(
         # before writing its audit record.  This catches normalization-equivalent
         # conflicting aliases and any future resolver/index drift; an exception
         # rolls the alias/exclusion mutation back with the surrounding transaction.
-        decision_resolution = load_identity_index(conn).resolve(source)
+        decision_resolution = load_identity_index(
+            conn,
+            pending_legacy_exclusion_keys=(
+                (source_key,) if normalized_action == "EXCLUDE" else ()
+            ),
+        ).resolve(source)
         if normalized_action == "MAP" and not (
             decision_resolution.status == "RESOLVED"
             and decision_resolution.canonical_variant_id == canonical_variant_id

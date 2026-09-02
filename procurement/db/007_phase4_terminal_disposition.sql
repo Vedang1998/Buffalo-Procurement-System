@@ -1,6 +1,47 @@
 -- Phase 4 terminal disposition: historical-only canonical identity, append-only
 -- terminal decision provenance, and operational ineligibility controls.
 
+-- This is deliberately the first executable control in the migration.  A
+-- pre-terminal database has no legitimate Product-ID-less canonical rows.  On
+-- reapply, only the explicitly constrained HISTORICAL_ONLY rows may omit it.
+DO $$
+DECLARE
+    invalid_count BIGINT;
+    invalid_sample TEXT;
+    scope_column_exists BOOLEAN;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid='variants'::regclass
+          AND attname='identity_scope'
+          AND NOT attisdropped
+    ) INTO scope_column_exists;
+    IF scope_column_exists THEN
+        EXECUTE $query$
+            SELECT COUNT(*)::bigint,
+                   array_to_string(
+                     (array_agg(variant_id ORDER BY variant_id))[1:10],','
+                   )
+            FROM variants
+            WHERE identity_scope<>'HISTORICAL_ONLY'
+              AND COALESCE(btrim(product_id),'')=''
+        $query$ INTO invalid_count,invalid_sample;
+    ELSE
+        SELECT COUNT(*)::bigint,
+               array_to_string(
+                 (array_agg(variant_id ORDER BY variant_id))[1:10],','
+               )
+          INTO invalid_count,invalid_sample
+          FROM variants
+          WHERE COALESCE(btrim(product_id),'')='';
+    END IF;
+    IF invalid_count>0 THEN
+        RAISE EXCEPTION
+          'phase4 terminal migration blocked: CURRENT variants with missing Product ID count=%, sample=%',
+          invalid_count,COALESCE(invalid_sample,'');
+    END IF;
+END $$;
+
 ALTER TABLE variants ADD COLUMN IF NOT EXISTS identity_scope TEXT NOT NULL DEFAULT 'CURRENT';
 ALTER TABLE variants ADD COLUMN IF NOT EXISTS restoration_manifest_sha256 TEXT;
 ALTER TABLE variants ADD COLUMN IF NOT EXISTS restoration_manifest_row_number INTEGER;
@@ -194,6 +235,38 @@ FOR EACH ROW EXECUTE FUNCTION phase4_reject_review_decision_mutation();
 ALTER TABLE historical_sales_exclusions ADD COLUMN IF NOT EXISTS reason_code TEXT;
 ALTER TABLE historical_sales_exclusions ADD COLUMN IF NOT EXISTS effective_decision_id UUID;
 
+CREATE TABLE IF NOT EXISTS historical_sales_exclusion_authority_runs (
+    sales_backfill_id UUID PRIMARY KEY
+        REFERENCES sales_backfill_runs(sales_backfill_id) ON DELETE RESTRICT,
+    authority_version TEXT NOT NULL CHECK (btrim(authority_version)<>''),
+    decision_authority_run_id UUID NOT NULL
+        REFERENCES sales_backfill_runs(sales_backfill_id) ON DELETE RESTRICT,
+    original_manifest_sha256 TEXT NOT NULL
+        CHECK (original_manifest_sha256 ~ '^[0-9a-f]{64}$'),
+    terminal_manifest_sha256 TEXT NOT NULL
+        CHECK (terminal_manifest_sha256 ~ '^[0-9a-f]{64}$'),
+    decision_schema_version TEXT NOT NULL
+        CHECK (btrim(decision_schema_version)<>''),
+    evidence_version TEXT NOT NULL CHECK (btrim(evidence_version)<>''),
+    owner_authorization TEXT NOT NULL CHECK (btrim(owner_authorization)<>''),
+    authority_git_sha TEXT NOT NULL CHECK (authority_git_sha ~ '^[0-9a-f]{40}$'),
+    execution_git_sha TEXT NOT NULL CHECK (execution_git_sha ~ '^[0-9a-f]{40}$'),
+    registered_by TEXT NOT NULL CHECK (btrim(registered_by)<>''),
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION phase4_reject_exclusion_authority_mutation()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'historical sales exclusion authority is append-only';
+END $$;
+
+DROP TRIGGER IF EXISTS trg_phase4_exclusion_authority_append_only
+ON historical_sales_exclusion_authority_runs;
+CREATE TRIGGER trg_phase4_exclusion_authority_append_only
+BEFORE UPDATE OR DELETE ON historical_sales_exclusion_authority_runs
+FOR EACH ROW EXECUTE FUNCTION phase4_reject_exclusion_authority_mutation();
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -258,20 +331,26 @@ BEFORE INSERT OR UPDATE OF source_key,reason_code,effective_decision_id
 ON historical_sales_exclusions
 FOR EACH ROW EXECUTE FUNCTION phase4_validate_exclusion_decision_link();
 
+CREATE OR REPLACE FUNCTION is_operational_current_variant(checked_variant_id TEXT)
+RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM variants
+        WHERE variant_id=checked_variant_id
+          AND identity_scope='CURRENT'
+          AND active=TRUE
+    )
+$$;
+
 CREATE OR REPLACE FUNCTION phase4_assert_current_operational_variant(
     checked_variant_id TEXT,
     operation_name TEXT
 ) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE
-    checked_scope TEXT;
-    checked_active BOOLEAN;
 BEGIN
     IF checked_variant_id IS NULL THEN
         RETURN;
     END IF;
-    SELECT identity_scope,active INTO checked_scope,checked_active
-      FROM variants WHERE variant_id=checked_variant_id;
-    IF checked_scope='HISTORICAL_ONLY' OR checked_active IS DISTINCT FROM TRUE THEN
+    IF NOT is_operational_current_variant(checked_variant_id) THEN
         RAISE EXCEPTION '% requires an active CURRENT variant; variant % is ineligible',
             operation_name,checked_variant_id;
     END IF;
@@ -399,36 +478,78 @@ SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,o.shopify_units_per_case,
        o.qualifying_units_per_case,o.assortment_scope,o.assortment_group,o.assortable
 FROM prices p
 JOIN supplier_offers o ON o.offer_id=p.offer_id
-JOIN variants v ON v.variant_id=o.variant_id
 WHERE p.price_state='current'
   AND o.active
-  AND v.active
-  AND v.identity_scope='CURRENT';
+  AND is_operational_current_variant(o.variant_id);
 
 CREATE OR REPLACE VIEW v_future_prices AS
 SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,o.shopify_units_per_case,
        o.qualifying_units_per_case,o.assortment_scope,o.assortment_group,o.assortable
 FROM prices p
 JOIN supplier_offers o ON o.offer_id=p.offer_id
-JOIN variants v ON v.variant_id=o.variant_id
 WHERE p.price_state='future'
   AND o.active
-  AND v.active
-  AND v.identity_scope='CURRENT';
+  AND is_operational_current_variant(o.variant_id);
 
 CREATE OR REPLACE VIEW v_operational_inventory_snapshots AS
 SELECT i.*
 FROM inventory_snapshots i
-JOIN variants v ON v.variant_id=i.variant_id
-WHERE v.active AND v.identity_scope='CURRENT';
+WHERE is_operational_current_variant(i.variant_id);
 
 CREATE OR REPLACE VIEW v_operational_daily_inventory_snapshots AS
 SELECT i.*
 FROM daily_inventory_snapshots i
-JOIN variants v ON v.variant_id=i.variant_id
-WHERE v.active AND v.identity_scope='CURRENT';
+WHERE is_operational_current_variant(i.variant_id);
 
 CREATE OR REPLACE VIEW v_operational_variants AS
 SELECT v.*
 FROM variants v
-WHERE v.active AND v.identity_scope='CURRENT';
+WHERE is_operational_current_variant(v.variant_id);
+
+-- Fail closed if a future edit leaves the migration only partially enforcing
+-- its contract.  These checks also make idempotent reapplication observable.
+DO $$
+DECLARE
+    missing TEXT[] := ARRAY[]::TEXT[];
+    view_definition TEXT;
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid='variants'::regclass AND attname='product_id'
+          AND attnotnull AND NOT attisdropped
+    ) THEN
+        missing := array_append(missing,'variants.product_id still NOT NULL');
+    END IF;
+    IF (
+        SELECT COUNT(*) FROM pg_constraint
+        WHERE conrelid='variants'::regclass
+          AND conname IN (
+            'ck_variants_identity_scope',
+            'ck_variants_identity_invariants',
+            'ck_variants_restoration_provenance'
+          ) AND convalidated
+    ) <> 3 THEN
+        missing := array_append(missing,'validated variant identity constraints');
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_proc
+        WHERE proname='is_operational_current_variant'
+          AND pg_function_is_visible(oid)
+    ) THEN
+        missing := array_append(missing,'operational CURRENT helper');
+    END IF;
+    SELECT pg_get_viewdef('v_current_prices'::regclass,TRUE)
+      INTO view_definition;
+    IF position('is_operational_current_variant' IN view_definition)=0 THEN
+        missing := array_append(missing,'filtered current-price view');
+    END IF;
+    SELECT pg_get_viewdef('v_future_prices'::regclass,TRUE)
+      INTO view_definition;
+    IF position('is_operational_current_variant' IN view_definition)=0 THEN
+        missing := array_append(missing,'filtered future-price view');
+    END IF;
+    IF cardinality(missing)>0 THEN
+        RAISE EXCEPTION 'phase4 terminal migration postcondition failure: %',
+            array_to_string(missing,', ');
+    END IF;
+END $$;

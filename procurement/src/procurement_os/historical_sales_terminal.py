@@ -20,6 +20,7 @@ import re
 import subprocess
 from typing import Any, Iterable, Mapping
 
+from .catalog import numeric_shopify_id
 from .historical_sales import acquire_backfill_transaction_lock
 from .historical_sales_manifest import (
     APPROVED_MANIFEST_SHA256,
@@ -51,8 +52,22 @@ TERMINAL_EVIDENCE_VERSION = "phase4-terminal-disposition-evidence-v1"
 FIESTA_CANONICAL_VARIANT_ID = "41193000796235"
 AUTHORITY_GIT_SHA = "701548dfacbc35d505f1d726146c268d6e42260d"
 TERMINAL_DECISION_SCHEMA_VERSION = "PHASE4_TERMINAL_V1"
+TERMINAL_AUTHORITY_VERSION = "PHASE4_TERMINAL_EXCLUSION_AUTHORITY_V1"
 TERMINAL_OWNER_AUTHORIZATION = (
     "OWNER_AUTHORIZATION_2026-08-21_PHASE4_TERMINAL_PACKET"
+)
+HIGH_NOON_TEQUILA_SOURCE_KEYS = frozenset(
+    {
+        "0|3012337|HIGH NOON TEQUILA VARIETY PACK|12OZ",
+        "0|3014701|HIGH NOON TEQUILA VARIETY 8 PACK|12OZ",
+        "0|3014701|HIGH NOON TEQUILA VARIETY 8 PACK|8PK 12OZ CANS",
+    }
+)
+POPOV_CONTRADICTION_SOURCE_KEYS = frozenset(
+    {
+        "41178335281227|9000474|POPOV VODKA|1.5L",
+        "41178335281227|9000474|POPOV VODKA|1.75L",
+    }
 )
 
 TERMINAL_HEADERS = (
@@ -267,6 +282,13 @@ class TerminalArtifact:
 class ExecutionGitIdentity:
     repository_root: Path
     git_sha: str
+
+
+@dataclass(frozen=True)
+class SourceFactsValidation:
+    lifecycle: str
+    status_counts: dict[str, int]
+    baseline_flow: dict[str, str | int]
 
 
 def _parse_terminal_rows(raw_bytes: bytes) -> tuple[TerminalDispositionRow, ...]:
@@ -601,6 +623,18 @@ def _validate_terminal_rows(
             )
         if row.canonical_variant_id == FIESTA_CANONICAL_VARIANT_ID:
             raise TerminalValidationError("High Noon Fiesta canonical target is forbidden")
+
+    by_key = {row.source_identity_key: row for row in rows}
+    if set(by_key).intersection(HIGH_NOON_TEQUILA_SOURCE_KEYS) != set(
+        HIGH_NOON_TEQUILA_SOURCE_KEYS
+    ) or any(by_key[key].action != "EXCLUDE" for key in HIGH_NOON_TEQUILA_SOURCE_KEYS):
+        raise TerminalValidationError("High Noon Tequila terminal control drifted")
+    if set(by_key).intersection(POPOV_CONTRADICTION_SOURCE_KEYS) != set(
+        POPOV_CONTRADICTION_SOURCE_KEYS
+    ) or any(
+        by_key[key].action != "EXCLUDE" for key in POPOV_CONTRADICTION_SOURCE_KEYS
+    ):
+        raise TerminalValidationError("Popov contradiction terminal control drifted")
 
     controls = _terminal_controls(rows, original)
     expected = {
@@ -1125,10 +1159,11 @@ def _terminal_decision_exact(
     execution_git_sha: str,
     superseded: tuple[str, str, str | None, str | None, str] | None,
     expected_prior_action: str,
+    expected_decision_run_id: str,
 ) -> bool:
     expected_target = canonical_variant_id
     return (
-        db_row["sales_backfill_id"] == APPROVED_RUN_ID
+        db_row["sales_backfill_id"] == expected_decision_run_id
         and db_row["source_variant_id"] == source_variant_id
         and db_row["source_sku"] == source_sku
         and db_row["source_product_title"] == source_product_title
@@ -1147,12 +1182,19 @@ def _terminal_decision_exact(
         and superseded[0] == db_row["source_identity_key"]
         and superseded[1] == expected_prior_action
         and superseded[2] is None
-        and superseded[3] == APPROVED_RUN_ID
+        and superseded[3] == expected_decision_run_id
         and superseded[4] == "LEGACY_V1"
     )
 
 
-def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
+def _validate_source_facts(
+    conn: Any, artifact: TerminalArtifact
+) -> SourceFactsValidation:
+    """Validate the complete 59,083-fact source and the 3,112-key partition."""
+
+    all_keys = sorted(
+        row.source_identity_key for row in artifact.original_manifest.rows
+    )
     with conn.cursor() as cur:
         cur.execute(
             """SELECT status,source,raw_rows,resolved_rows,unresolved_rows,
@@ -1163,22 +1205,73 @@ def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
             (APPROVED_RUN_ID,),
         )
         run = cur.fetchone()
-        if run != (
-            "COMPLETED",
-            "SHOPIFYQL_SALES",
-            59083,
-            55971,
-            3112,
-            0,
-            59083,
-            True,
-            True,
-            True,
-            True,
-            True,
-            True,
-        ):
+        immutable_run = (
+            run is not None
+            and run[0] == "COMPLETED"
+            and run[1] == "SHOPIFYQL_SALES"
+            and int(run[2]) == 59083
+            and int(run[6]) == 59083
+            and tuple(run[7:]) == (True, True, True, True, True, True)
+        )
+        if not immutable_run:
             raise TerminalValidationError("approved source run controls drifted")
+        run_shape = (int(run[3]), int(run[4]), int(run[5]))
+        if run_shape == (55971, 3112, 0):
+            lifecycle = "PRE_REBUILD"
+        elif run_shape == (57429, 0, 0):
+            lifecycle = "POST_REBUILD"
+        else:
+            raise TerminalValidationError("approved source run lifecycle drifted")
+
+        cur.execute(
+            """SELECT COUNT(*)::int,COUNT(DISTINCT rf.raw_sales_id)::int,
+                      COUNT(*) FILTER (WHERE r.resolution_status='RESOLVED')::int,
+                      COUNT(*) FILTER (WHERE r.resolution_status='UNRESOLVED')::int,
+                      COUNT(*) FILTER (WHERE r.resolution_status='AMBIGUOUS')::int,
+                      COUNT(*) FILTER (WHERE r.resolution_status='EXCLUDED')::int
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s""",
+            (APPROVED_RUN_ID,),
+        )
+        fact_shape = tuple(int(value) for value in cur.fetchone())
+        expected_shape = (
+            (59083, 59083, 55971, 3112, 0, 0)
+            if lifecycle == "PRE_REBUILD"
+            else (59083, 59083, 57429, 0, 0, 1654)
+        )
+        if fact_shape != expected_shape:
+            raise TerminalValidationError("complete source-fact status controls drifted")
+
+        cur.execute(
+            """SELECT COUNT(*)::int,
+                      COALESCE(SUM(rf.observed_net_items_sold),0),
+                      COALESCE(SUM(ABS(rf.observed_net_items_sold)),0),
+                      COALESCE(SUM(rf.observed_net_sales),0),
+                      COALESCE(SUM(ABS(rf.observed_net_sales)),0)
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s
+                 AND NOT (r.source_identity_key=ANY(%s))""",
+            (APPROVED_RUN_ID, all_keys),
+        )
+        baseline = cur.fetchone()
+        baseline_flow = {
+            "raw_rows": int(baseline[0]),
+            "net_units": str(Decimal(baseline[1])),
+            "absolute_units": str(Decimal(baseline[2])),
+            "net_sales": str(Decimal(baseline[3])),
+            "absolute_sales": str(Decimal(baseline[4])),
+        }
+        if baseline_flow != {
+            "raw_rows": 55971,
+            "net_units": "78815.0000",
+            "absolute_units": "78849.0000",
+            "net_sales": "1231372.83",
+            "absolute_sales": "1232304.51",
+        }:
+            raise TerminalValidationError("previously resolved source flow drifted")
+
         cur.execute(
             """SELECT r.source_identity_key,COUNT(*)::int,MIN(r.sale_date),MAX(r.sale_date),
                       COALESCE(SUM(rf.observed_net_items_sold),0),
@@ -1188,8 +1281,9 @@ def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
                FROM sales_backfill_run_facts rf
                JOIN shopify_sales_daily_raw r USING(raw_sales_id)
                WHERE rf.sales_backfill_id=%s
+                 AND r.source_identity_key=ANY(%s)
                GROUP BY r.source_identity_key ORDER BY r.source_identity_key""",
-            (APPROVED_RUN_ID,),
+            (APPROVED_RUN_ID, all_keys),
         )
         metrics = {str(row[0]): row[1:] for row in cur.fetchall()}
         cur.execute(
@@ -1198,8 +1292,9 @@ def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
                FROM sales_backfill_run_facts rf
                JOIN shopify_sales_daily_raw r USING(raw_sales_id)
                WHERE rf.sales_backfill_id=%s
+                 AND r.source_identity_key=ANY(%s)
                ORDER BY r.source_identity_key,r.raw_sales_id""",
-            (APPROVED_RUN_ID,),
+            (APPROVED_RUN_ID, all_keys),
         )
         evidence_rows = cur.fetchall()
 
@@ -1210,6 +1305,18 @@ def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
         raise TerminalValidationError("source-key membership drifted")
     if len(evidence_rows) != 3112:
         raise TerminalValidationError("affected raw-row population drifted")
+    terminal_by_key = {row.source_identity_key: row for row in artifact.rows}
+    expected_post_status: dict[str, str] = {}
+    for original_row in artifact.original_manifest.rows:
+        terminal_row = terminal_by_key.get(original_row.source_identity_key)
+        action = (
+            terminal_row.action
+            if terminal_row is not None
+            else original_row.review_disposition
+        )
+        expected_post_status[original_row.source_identity_key] = (
+            "EXCLUDED" if action == "EXCLUDE" else "RESOLVED"
+        )
     for key, variant_id, sku, product_title, variant_title, status in evidence_rows:
         computed = HistoricalIdentityIndex.source_key(
             SalesSourceRow(
@@ -1222,10 +1329,14 @@ def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
                 Decimal("0"),
             )
         )
-        if computed != str(key) or status != "UNRESOLVED":
+        expected_status = (
+            "UNRESOLVED"
+            if lifecycle == "PRE_REBUILD"
+            else expected_post_status[str(key)]
+        )
+        if computed != str(key) or status != expected_status:
             raise TerminalValidationError(f"source evidence drifted for {key}")
 
-    terminal_by_key = {row.source_identity_key: row for row in artifact.rows}
     for key, original_row in original_by_key.items():
         metric = metrics[key]
         row_count, first_date, last_date = int(metric[0]), metric[1], metric[2]
@@ -1248,6 +1359,17 @@ def _validate_source_facts(conn: Any, artifact: TerminalArtifact) -> None:
             or absolute_sales != terminal_row.absolute_sales
         ):
             raise TerminalValidationError(f"terminal source controls drifted for {key}")
+    return SourceFactsValidation(
+        lifecycle=lifecycle,
+        status_counts={
+            "facts": fact_shape[0],
+            "resolved": fact_shape[2],
+            "unresolved": fact_shape[3],
+            "ambiguous": fact_shape[4],
+            "excluded": fact_shape[5],
+        },
+        baseline_flow=baseline_flow,
+    )
 
 
 def _load_restored_variants(
@@ -1287,6 +1409,113 @@ def _load_active_exclusions(conn: Any) -> dict[str, tuple[Any, ...]]:
         }
 
 
+def _broad_alias_family_evidence(
+    conn: Any,
+    artifact: TerminalArtifact,
+    aliases: Mapping[str, str],
+) -> dict[str, dict[str, Any]]:
+    """Prove every full-run member of each proposed old-ID alias family."""
+
+    old_ids = sorted(aliases)
+    if not old_ids:
+        return {}
+    original_by_key = {
+        row.source_identity_key: row for row in artifact.original_manifest.rows
+    }
+    terminal_by_key = {row.source_identity_key: row for row in artifact.rows}
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT r.source_identity_key,r.source_variant_id,r.source_sku,
+                      r.source_product_title,r.source_variant_title,
+                      r.resolution_status,r.canonical_variant_id,r.resolution_method,
+                      rf.observed_net_items_sold,rf.observed_net_sales
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s
+                 AND regexp_replace(COALESCE(r.source_variant_id,''),'^.*/','')=ANY(%s)
+               ORDER BY r.source_identity_key,r.raw_sales_id""",
+            (APPROVED_RUN_ID, old_ids),
+        )
+        facts = cur.fetchall()
+
+    grouped: dict[str, list[tuple[Any, ...]]] = defaultdict(list)
+    for fact in facts:
+        old_id = numeric_shopify_id(fact[1])
+        if old_id in aliases:
+            computed_key = HistoricalIdentityIndex.source_key(
+                SalesSourceRow(
+                    date(1970, 1, 1),
+                    fact[1],
+                    fact[2],
+                    fact[3],
+                    fact[4],
+                    Decimal(str(fact[8])),
+                    Decimal(str(fact[9])) if fact[9] is not None else None,
+                )
+            )
+            if computed_key != str(fact[0]):
+                raise TerminalValidationError(
+                    f"broad alias source-key drift for old Variant ID {old_id}"
+                )
+            grouped[old_id].append(fact)
+
+    result: dict[str, dict[str, Any]] = {}
+    for old_id, target in sorted(aliases.items()):
+        family = grouped.get(old_id, [])
+        if not family:
+            raise TerminalValidationError(
+                f"broad alias family has no full-run facts for old Variant ID {old_id}"
+            )
+        source_keys: set[str] = set()
+        baseline_facts = manifest_facts = 0
+        net_units = Decimal("0")
+        absolute_units = Decimal("0")
+        net_sales = Decimal("0")
+        absolute_sales = Decimal("0")
+        for fact in family:
+            key = str(fact[0])
+            source_keys.add(key)
+            units = Decimal(str(fact[8]))
+            sales = Decimal(str(fact[9] or 0))
+            net_units += units
+            absolute_units += abs(units)
+            net_sales += sales
+            absolute_sales += abs(sales)
+            if key in original_by_key:
+                manifest_facts += 1
+                terminal = terminal_by_key.get(key)
+                action = terminal.action if terminal else original_by_key[key].review_disposition
+                approved_target = (
+                    terminal.canonical_variant_id
+                    if terminal
+                    else original_by_key[key].canonical_variant_id
+                )
+                if action != "MAP" or approved_target != target:
+                    raise TerminalValidationError(
+                        f"broad alias family conflicts with approved disposition for {key}"
+                    )
+            else:
+                baseline_facts += 1
+                if fact[5] != "RESOLVED" or str(fact[6] or "") != target:
+                    raise TerminalValidationError(
+                        f"broad alias would reattribute prior resolved fact {key}"
+                    )
+        result[old_id] = {
+            "old_variant_id": old_id,
+            "canonical_variant_id": target,
+            "full_run_source_keys": sorted(source_keys),
+            "full_run_raw_facts": len(family),
+            "previously_resolved_raw_facts": baseline_facts,
+            "manifest_raw_facts": manifest_facts,
+            "net_units": f"{net_units:.4f}",
+            "absolute_units": f"{absolute_units:.4f}",
+            "net_sales": f"{net_sales:.2f}",
+            "absolute_sales": f"{absolute_sales:.2f}",
+            "proof": "FULL_APPROVED_RUN_FAMILY_UNIFORM",
+        }
+    return result
+
+
 def inspect_terminal_state(
     conn: Any, artifact: TerminalArtifact, execution_git_sha: str
 ) -> dict[str, Any]:
@@ -1297,8 +1526,9 @@ def inspect_terminal_state(
     if not re.fullmatch(r"[0-9a-f]{40}", execution_git_sha):
         raise TerminalValidationError("execution Git SHA must be a full commit SHA")
     diagnostics: list[str] = []
+    source_validation: SourceFactsValidation | None = None
     try:
-        _validate_source_facts(conn, artifact)
+        source_validation = _validate_source_facts(conn, artifact)
     except TerminalValidationError as exc:
         diagnostics.append(str(exc))
 
@@ -1361,6 +1591,7 @@ def inspect_terminal_state(
                 execution_git_sha=execution_git_sha,
                 superseded=superseded.get(db_row["supersedes_decision_id"]),
                 expected_prior_action="LEAVE_UNRESOLVED",
+                expected_decision_run_id=APPROVED_RUN_ID,
             )
         elif original_row.review_disposition == "EXCLUDE":
             current_decisions_exact &= _terminal_decision_exact(
@@ -1377,6 +1608,7 @@ def inspect_terminal_state(
                 execution_git_sha=execution_git_sha,
                 superseded=superseded.get(db_row["supersedes_decision_id"]),
                 expected_prior_action="EXCLUDE",
+                expected_decision_run_id=APPROVED_RUN_ID,
             )
         else:
             current_decisions_exact &= legacy_exact.get(key, False)
@@ -1428,6 +1660,15 @@ def inspect_terminal_state(
         for old_id, target in current_aliases.items()
         if old_id not in pre_aliases
     }
+    broad_alias_evidence: dict[str, dict[str, Any]] = {}
+    broad_aliases_exact = True
+    try:
+        broad_alias_evidence = _broad_alias_family_evidence(
+            conn, artifact, terminal_only_aliases
+        )
+    except TerminalValidationError as exc:
+        broad_aliases_exact = False
+        diagnostics.append(str(exc))
     with conn.cursor() as cur:
         cur.execute(
             """SELECT old_variant_id,variant_id,historical_product_title,
@@ -1452,14 +1693,12 @@ def inspect_terminal_state(
             )
             expected_evidence = {
                 "terminal_manifest_sha256": TERMINAL_MANIFEST_SHA256,
-                "source_identity_keys": [
-                    row.source_identity_key for row in evidence_rows
-                ],
                 "canonical_variant_id": target,
                 "evidence_version": TERMINAL_EVIDENCE_VERSION,
                 "owner_authorization": TERMINAL_OWNER_AUTHORIZATION,
                 "authority_git_sha": AUTHORITY_GIT_SHA,
                 "execution_git_sha": execution_git_sha,
+                "broad_family": broad_alias_evidence.get(old_id),
             }
             current_aliases_exact &= alias is not None and alias == (
                 target,
@@ -1474,6 +1713,8 @@ def inspect_terminal_state(
                 alias[9] if alias is not None else None,
                 expected_evidence,
             ) and bool(alias[8]) and alias[9] is not None
+    current_aliases_exact &= broad_aliases_exact
+    pre_aliases_exact &= broad_aliases_exact
 
     expected_targets = {
         row.canonical_variant_id
@@ -1551,6 +1792,16 @@ def inspect_terminal_state(
 
     with conn.cursor() as cur:
         cur.execute(
+            """SELECT authority_version,decision_authority_run_id,
+                      original_manifest_sha256,terminal_manifest_sha256,
+                      decision_schema_version,evidence_version,owner_authorization,
+                      authority_git_sha,execution_git_sha,registered_by,registered_at
+               FROM historical_sales_exclusion_authority_runs
+               WHERE sales_backfill_id=%s""",
+            (APPROVED_RUN_ID,),
+        )
+        authority_row = cur.fetchone()
+        cur.execute(
             """SELECT status FROM readiness_gates
                WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL' AND scope_id=''"""
         )
@@ -1559,25 +1810,71 @@ def inspect_terminal_state(
         po_count = int(cur.fetchone()[0])
         cur.execute("SELECT COUNT(*)::int FROM purchase_order_lines")
         po_line_count = int(cur.fetchone()[0])
-    protected_controls_exact = gate == ("FAIL",) and po_count == 0 and po_line_count == 0
+    pre_authority_exact = authority_row is None
+    current_authority_exact = (
+        authority_row is not None
+        and tuple(str(value) for value in authority_row[:9])
+        == (
+            TERMINAL_AUTHORITY_VERSION,
+            APPROVED_RUN_ID,
+            APPROVED_MANIFEST_SHA256,
+            TERMINAL_MANIFEST_SHA256,
+            TERMINAL_DECISION_SCHEMA_VERSION,
+            TERMINAL_EVIDENCE_VERSION,
+            TERMINAL_OWNER_AUTHORIZATION,
+            AUTHORITY_GIT_SHA,
+            execution_git_sha,
+        )
+        and bool(authority_row[9])
+        and authority_row[10] is not None
+    )
+    source_pre_exact = (
+        source_validation is not None
+        and source_validation.lifecycle == "PRE_REBUILD"
+    )
+    source_current_exact = (
+        source_validation is not None
+        and source_validation.lifecycle in {"PRE_REBUILD", "POST_REBUILD"}
+    )
+    gate_status = str(gate[0]) if gate else None
+    pre_protected_controls_exact = (
+        gate_status == "FAIL" and po_count == 0 and po_line_count == 0
+    )
+    current_lifecycle_exact = (
+        source_validation is not None
+        and (
+            (
+                source_validation.lifecycle == "PRE_REBUILD"
+                and gate_status == "FAIL"
+            )
+            or (
+                source_validation.lifecycle == "POST_REBUILD"
+                and gate_status == "PASS"
+            )
+        )
+        and po_count == 0
+        and po_line_count == 0
+    )
 
     pre_components = {
-        "source_facts": not diagnostics,
+        "source_facts": source_pre_exact,
         "decisions": pre_decisions_exact,
         "restores": pre_restores_exact,
         "aliases": pre_aliases_exact,
         "targets": pre_targets_exact,
         "exclusions": pre_exclusions_exact,
-        "protected_controls": protected_controls_exact,
+        "authority_registry": pre_authority_exact,
+        "protected_controls": pre_protected_controls_exact,
     }
     current_components = {
-        "source_facts": not diagnostics,
+        "source_facts": source_current_exact,
         "decisions": current_decisions_exact,
         "restores": current_restores_exact,
         "aliases": current_aliases_exact,
         "targets": current_targets_exact,
         "exclusions": current_exclusions_exact,
-        "protected_controls": protected_controls_exact,
+        "authority_registry": current_authority_exact,
+        "protected_controls": current_lifecycle_exact,
     }
     if all(pre_components.values()):
         classification = "PRE_TERMINAL_EXACT"
@@ -1609,6 +1906,16 @@ def inspect_terminal_state(
         "historical_only_variants": len(restored),
         "active_exclusions": len(exclusions),
         "approved_alias_families": len(observed_aliases),
+        "source_lifecycle": (
+            source_validation.lifecycle if source_validation is not None else "INVALID"
+        ),
+        "source_status_counts": (
+            source_validation.status_counts if source_validation is not None else {}
+        ),
+        "baseline_source_flow": (
+            source_validation.baseline_flow if source_validation is not None else {}
+        ),
+        "broad_alias_family_evidence": broad_alias_evidence,
         "planned_mutations": (
             {
                 "restored_variants": 43,
@@ -1616,6 +1923,7 @@ def inspect_terminal_state(
                 "original_exclusion_normalizations": 8,
                 "terminal_aliases": len(set(current_aliases) - set(pre_aliases)),
                 "active_exclusions": 198,
+                "authority_registrations": 1,
             }
             if classification == "PRE_TERMINAL_EXACT"
             else {
@@ -1624,6 +1932,7 @@ def inspect_terminal_state(
                 "original_exclusion_normalizations": 0,
                 "terminal_aliases": 0,
                 "active_exclusions": 0,
+                "authority_registrations": 0,
             }
         ),
         "latest_decision_ids": {
@@ -1696,6 +2005,50 @@ def _insert_change_log(
 def _inject(stage: str, requested: str | None) -> None:
     if requested == stage:
         raise RuntimeError(f"injected terminal persistence failure at {stage}")
+
+
+def dry_run_terminal_disposition(
+    conn: Any,
+    artifact: TerminalArtifact,
+    context: TerminalExecutionContext,
+) -> dict[str, Any]:
+    """Inspect one locked PostgreSQL snapshot and prove it assigned no XID."""
+
+    _validate_artifact_instance(artifact)
+    execution = derive_runtime_execution_git_identity(
+        context.expected_execution_git_sha
+    )
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+            )
+            cur.execute(
+                """SELECT current_setting('transaction_read_only'),
+                          current_setting('transaction_isolation'),
+                          txid_current_if_assigned()"""
+            )
+            read_only, isolation, xid_before = cur.fetchone()
+        if read_only != "on" or str(isolation).lower() != "repeatable read":
+            raise RuntimeError("terminal dry-run transaction is not read-only snapshot")
+        if xid_before is not None:
+            raise RuntimeError("terminal dry-run assigned an XID before inspection")
+        acquire_backfill_transaction_lock(conn)
+        report = inspect_terminal_state(conn, artifact, execution.git_sha)
+        with conn.cursor() as cur:
+            cur.execute("SELECT txid_current_if_assigned()")
+            xid_after = cur.fetchone()[0]
+        if xid_after is not None:
+            raise RuntimeError("terminal dry-run assigned an XID during inspection")
+        return {
+            "execution_git_sha": execution.git_sha,
+            "transaction_read_only": True,
+            "transaction_isolation": "repeatable read",
+            "xid_before": None,
+            "xid_after": None,
+            "database_dml": 0,
+            **report,
+        }
 
 
 def persist_terminal_disposition(
@@ -1915,14 +2268,14 @@ def persist_terminal_disposition(
                         json.dumps(
                             {
                                 "terminal_manifest_sha256": TERMINAL_MANIFEST_SHA256,
-                                "source_identity_keys": [
-                                    row.source_identity_key for row in evidence_rows
-                                ],
                                 "canonical_variant_id": target,
                                 "evidence_version": TERMINAL_EVIDENCE_VERSION,
                                 "owner_authorization": TERMINAL_OWNER_AUTHORIZATION,
                                 "authority_git_sha": AUTHORITY_GIT_SHA,
                                 "execution_git_sha": execution.git_sha,
+                                "broad_family": before[
+                                    "broad_alias_family_evidence"
+                                ][old_id],
                             },
                             sort_keys=True,
                             separators=(",", ":"),
@@ -1982,6 +2335,46 @@ def persist_terminal_disposition(
                         latest_terminal_decision_ids[key],
                     ),
                 )
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO historical_sales_exclusion_authority_runs(
+                     sales_backfill_id,authority_version,decision_authority_run_id,
+                     original_manifest_sha256,terminal_manifest_sha256,
+                     decision_schema_version,evidence_version,owner_authorization,
+                     authority_git_sha,execution_git_sha,registered_by
+                   ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (
+                    APPROVED_RUN_ID,
+                    TERMINAL_AUTHORITY_VERSION,
+                    APPROVED_RUN_ID,
+                    APPROVED_MANIFEST_SHA256,
+                    TERMINAL_MANIFEST_SHA256,
+                    TERMINAL_DECISION_SCHEMA_VERSION,
+                    TERMINAL_EVIDENCE_VERSION,
+                    TERMINAL_OWNER_AUTHORIZATION,
+                    AUTHORITY_GIT_SHA,
+                    execution.git_sha,
+                    context.actor,
+                ),
+            )
+        _insert_change_log(
+            conn,
+            table_name="historical_sales_exclusion_authority_runs",
+            row_key=APPROVED_RUN_ID,
+            action="INSERT",
+            after={
+                "authority_version": TERMINAL_AUTHORITY_VERSION,
+                "decision_authority_run_id": APPROVED_RUN_ID,
+                "original_manifest_sha256": APPROVED_MANIFEST_SHA256,
+                "terminal_manifest_sha256": TERMINAL_MANIFEST_SHA256,
+                "decision_schema_version": TERMINAL_DECISION_SCHEMA_VERSION,
+                "evidence_version": TERMINAL_EVIDENCE_VERSION,
+                "owner_authorization": TERMINAL_OWNER_AUTHORIZATION,
+                "authority_git_sha": AUTHORITY_GIT_SHA,
+                "execution_git_sha": execution.git_sha,
+            },
+            actor=context.actor,
+        )
         _inject("after_exclusions", inject_failure_stage)
         _inject("before_readback", inject_failure_stage)
 
@@ -1994,7 +2387,7 @@ def persist_terminal_disposition(
         fingerprints_after = after["protected_fingerprints"]
         if fingerprints_after != fingerprints_before:
             raise RuntimeError("protected sales, resolution, gate, or PO state changed")
-        committed_mutations = 43 + 280 + 8 + len(terminal_aliases) + 198 + 288
+        committed_mutations = 43 + 280 + 8 + len(terminal_aliases) + 198 + 288 + 2
         result = {
             "classification_before": classification,
             "classification_after": after["classification"],

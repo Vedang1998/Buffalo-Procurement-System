@@ -545,12 +545,43 @@ def catalog_snapshot_hash(live_rows: list[LiveVariant]) -> str:
     return hashlib.sha256(json.dumps(canonical, sort_keys=True).encode("utf-8")).hexdigest()
 
 
+class HistoricalOnlyVariantReappearanceError(ValueError):
+    """A restored historical identity unexpectedly exists in the live catalog."""
+
+    def __init__(self, variant_ids: list[str]) -> None:
+        self.variant_ids = tuple(sorted(set(variant_ids)))
+        super().__init__(
+            "HISTORICAL_ONLY_VARIANT_REAPPEARANCE_REQUIRES_CONTROLLED_REVIEW: "
+            + ",".join(self.variant_ids)
+        )
+
+
+def assert_no_historical_only_reappearance(
+    cur: Any, live_rows: list[LiveVariant]
+) -> None:
+    """Classify a live/restored-ID collision before the catalog UPSERT."""
+
+    live_ids = sorted({str(row.variant_id) for row in live_rows})
+    if not live_ids:
+        return
+    cur.execute(
+        """SELECT variant_id FROM variants
+           WHERE identity_scope='HISTORICAL_ONLY' AND variant_id=ANY(%s)
+           ORDER BY variant_id""",
+        (live_ids,),
+    )
+    collisions = [str(row[0]) for row in cur.fetchall()]
+    if collisions:
+        raise HistoricalOnlyVariantReappearanceError(collisions)
+
+
 def persist_catalog_sync(conn: Any, reported_count: int | None, live_rows: list[LiveVariant], reconciliation: CatalogReconciliation, *, api_version: str, pagination_complete: bool = True, started_at=None) -> str:
     """Persist a catalog sync atomically. `conn` is a psycopg-compatible connection."""
     import json
     source_hash = catalog_snapshot_hash(live_rows)
     with conn.transaction():
         with conn.cursor() as cur:
+            assert_no_historical_only_reappearance(cur, live_rows)
             cur.execute(
                 """INSERT INTO catalog_sync_runs(
                      shopify_api_version,shopify_reported_variant_count,live_rows_received,

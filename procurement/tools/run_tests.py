@@ -16,25 +16,25 @@ from urllib.parse import unquote, urlparse
 REQUIRED_PYTHON = (3, 13)
 REQUIRED_POSTGRESQL_MAJOR = 16
 
-# These are lower bounds, not exact counts. New tests remain discoverable once
-# their module is registered here, while deleting, renaming, or accidentally
-# hiding tests fails closed even when the global count stays above its floor.
+# These are checkpoint floors set to every currently registered test in each
+# module. New tests remain discoverable, while deleting, renaming, or hiding a
+# checkpoint test cannot be concealed by growth in a different module.
 REQUIRED_MODULE_MINIMUMS = {
     "test_assortment.py": 4,
     "test_catalog.py": 7,
     "test_catalog_readiness.py": 14,
     "test_catalog_reconciliation_phase3.py": 12,
     "test_economics.py": 4,
-    "test_historical_sales_review_api.py": 16,
+    "test_historical_sales_review_api.py": 17,
     "test_identity_investigation.py": 32,
     "test_matching.py": 3,
     "test_phase4_historical_sales.py": 33,
     "test_phase4_identity_manifest.py": 16,
-    "test_phase4_identity_manifest_postgres.py": 22,
+    "test_phase4_identity_manifest_postgres.py": 24,
     "test_phase4_postgres_integration.py": 6,
     "test_phase4_query_contracts.py": 5,
-    "test_phase4_terminal_disposition.py": 21,
-    "test_phase4_terminal_disposition_postgres.py": 25,
+    "test_phase4_terminal_disposition.py": 23,
+    "test_phase4_terminal_disposition_postgres.py": 34,
     "test_pricing.py": 3,
     "test_readiness.py": 19,
     "test_review.py": 3,

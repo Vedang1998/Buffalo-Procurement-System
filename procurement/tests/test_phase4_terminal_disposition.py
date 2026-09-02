@@ -256,7 +256,11 @@ class Phase4TerminalDispositionCliTests(unittest.TestCase):
         from procurement.tools import persist_phase4_terminal_disposition as cli
 
         self.cli = cli
-        self.environment = {"DATABASE_URL": "postgresql://secret-value"}
+        self.environment = {
+            "DATABASE_URL": "postgresql://secret-value",
+            "RECONCILIATION_REVIEW_TOKEN": "synthetic-terminal-token",
+            "PHASE4_REVIEW_TOKEN_INPUT": "synthetic-terminal-token",
+        }
 
     def test_context_has_no_caller_supplied_observed_execution_sha(self):
         fields = set(TerminalExecutionContext.__dataclass_fields__)
@@ -269,6 +273,37 @@ class Phase4TerminalDispositionCliTests(unittest.TestCase):
                     ["--apply", "--actor", "owner"], environ=self.environment
                 )
         connect.assert_not_called()
+
+    def test_dry_run_and_apply_require_strong_review_authorization(self):
+        for mode in ("--dry-run", "--apply"):
+            for supplied in (None, "wrong-token"):
+                environment = dict(self.environment)
+                if supplied is None:
+                    environment.pop("PHASE4_REVIEW_TOKEN_INPUT")
+                else:
+                    environment["PHASE4_REVIEW_TOKEN_INPUT"] = supplied
+                with self.subTest(mode=mode, supplied=supplied):
+                    with mock.patch.object(self.cli, "connect_database") as connect:
+                        with self.assertRaises(PermissionError):
+                            self.cli.execute(
+                                [mode, "--actor", "owner"],
+                                environ=environment,
+                            )
+                    connect.assert_not_called()
+
+    def test_safe_error_never_emits_authorization_tokens(self):
+        configured = self.environment["RECONCILIATION_REVIEW_TOKEN"]
+        supplied = self.environment["PHASE4_REVIEW_TOKEN_INPUT"]
+        message = self.cli._safe_error(
+            RuntimeError(
+                f"postgresql://user:password@host/database {configured} {supplied}"
+            ),
+            self.environment,
+        )
+        self.assertNotIn(configured, message)
+        self.assertNotIn(supplied, message)
+        self.assertNotIn("password", message)
+        self.assertIn("[REDACTED]", message)
 
     def test_only_frozen_repository_manifest_paths_are_accepted(self):
         with tempfile.NamedTemporaryFile(suffix=".csv") as alternate:
@@ -301,8 +336,11 @@ class Phase4TerminalDispositionCliTests(unittest.TestCase):
                 self.cli, "connect_database", return_value=connection
             ),
             mock.patch.object(
-                self.cli, "inspect_terminal_state", return_value=report
-            ) as inspect_state,
+                self.cli, "dry_run_terminal_disposition", return_value={
+                    "execution_git_sha": "c" * 40,
+                    **report,
+                }
+            ) as dry_run,
             mock.patch.object(self.cli, "persist_terminal_disposition") as persist,
         ):
             result = self.cli.execute(
@@ -316,7 +354,7 @@ class Phase4TerminalDispositionCliTests(unittest.TestCase):
                 environ=self.environment,
             )
         derive.assert_called_once_with("c" * 40)
-        inspect_state.assert_called_once()
+        dry_run.assert_called_once()
         persist.assert_not_called()
         self.assertEqual(result["execution_git_sha"], "c" * 40)
         self.assertNotIn(self.environment["DATABASE_URL"], json.dumps(result))

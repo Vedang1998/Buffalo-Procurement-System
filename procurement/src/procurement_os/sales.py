@@ -444,7 +444,12 @@ def search_historical_sales_catalog(
     ]
 
 
-def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
+def load_identity_index(
+    conn: Any,
+    *,
+    pending_legacy_exclusion_keys: Iterable[str] = (),
+) -> HistoricalIdentityIndex:
+    pending_legacy = {str(key) for key in pending_legacy_exclusion_keys}
     with conn.cursor() as cur:
         cur.execute("SELECT variant_id,sku,product_title,variant_title,active,catalog_state FROM variants")
         current = [CurrentIdentity(str(r[0]), r[1], r[2] or "", r[3] or "", bool(r[4]), r[5] or "SEEDED") for r in cur.fetchall()]
@@ -473,6 +478,7 @@ def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
                WHERE e.active=TRUE"""
         )
         exclusion_methods: dict[str, str] = {}
+        unclassifiable_exclusions: list[str] = []
         for row in cur.fetchall():
             (
                 source_key,
@@ -503,12 +509,28 @@ def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
             elif (
                 exclusion_reason is None
                 and effective_decision_id is None
-                and latest_schema in {None, "LEGACY_V1"}
+                and (
+                    (
+                        latest_decision_id is not None
+                        and latest_action == "EXCLUDE"
+                        and latest_reason is None
+                        and latest_schema == "LEGACY_V1"
+                    )
+                    or str(source_key) in pending_legacy
+                )
             ):
-                # Preserve the pre-terminal manual-review behavior. Once a
-                # terminal-schema decision exists for a key, missing structured
-                # reason/link evidence fails closed and is not an exclusion.
+                # A service transaction may prove one legacy exclusion before
+                # appending its matching ledger row. Outside that explicitly
+                # scoped transaction, an effective legacy EXCLUDE row is
+                # required. Terminal exclusions always require their exact link.
                 exclusion_methods[str(source_key)] = "EXPLICIT_EXCLUSION"
+            else:
+                unclassifiable_exclusions.append(str(source_key))
+        if unclassifiable_exclusions:
+            raise ValueError(
+                "active historical exclusion has no approved effective method: "
+                + ",".join(sorted(unclassifiable_exclusions))
+            )
         cur.execute(
             """WITH ranked AS (
                  SELECT source_identity_key,decision_action,canonical_variant_id,

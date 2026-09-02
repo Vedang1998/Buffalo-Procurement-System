@@ -17,9 +17,12 @@ sys.path.insert(0, str(PROCUREMENT_ROOT / "src"))
 from procurement_os.historical_sales_terminal import (  # noqa: E402
     TerminalExecutionContext,
     derive_runtime_execution_git_identity,
-    inspect_terminal_state,
+    dry_run_terminal_disposition,
     load_terminal_artifact,
     persist_terminal_disposition,
+)
+from procurement_os.historical_sales_manifest import (  # noqa: E402
+    require_review_authorization,
 )
 
 
@@ -73,6 +76,10 @@ def execute(
     actor = str(args.actor).strip()
     if not actor:
         raise ValueError("nonblank terminal execution actor is required")
+    require_review_authorization(
+        environment.get("RECONCILIATION_REVIEW_TOKEN"),
+        environment.get("PHASE4_REVIEW_TOKEN_INPUT"),
+    )
     if args.apply and not args.acknowledge_exact_terminal_persistence:
         raise ValueError("apply requires exact terminal-persistence acknowledgement")
 
@@ -92,10 +99,9 @@ def execute(
 
     with connect_database(database_url) as conn:
         if args.dry_run:
-            report = inspect_terminal_state(conn, artifact, execution.git_sha)
+            report = dry_run_terminal_disposition(conn, artifact, context)
             return {
                 "mode": "dry-run",
-                "execution_git_sha": execution.git_sha,
                 **report,
             }
         return {
@@ -109,7 +115,11 @@ def _safe_error(exc: BaseException, environment: Mapping[str, str]) -> str:
     message = re.sub(
         r"(?i)postgres(?:ql)?://[^\s]+", "postgresql://[REDACTED]", message
     )
-    for name in ("DATABASE_URL",):
+    for name in (
+        "DATABASE_URL",
+        "RECONCILIATION_REVIEW_TOKEN",
+        "PHASE4_REVIEW_TOKEN_INPUT",
+    ):
         value = environment.get(name)
         if value:
             message = message.replace(value, "[REDACTED]")
