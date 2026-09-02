@@ -74,7 +74,14 @@ def _run_sync(database_url: str, config: ShopifyConfig, client: ShopifyGraphQLCl
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
             # Seed identities only: rows originating from the historical import.
-            cur.execute("SELECT variant_id,product_id,product_title,variant_title,sku,barcode,active FROM variants WHERE catalog_state IN ('SEEDED','LIVE','MISSING','RESOLVED_RECREATED','RETIRED_CONFIRMED')")
+            cur.execute(
+                """SELECT variant_id,product_id,product_title,variant_title,sku,barcode,active
+                   FROM variants
+                   WHERE identity_scope='CURRENT'
+                     AND catalog_state IN (
+                       'SEEDED','LIVE','MISSING','RESOLVED_RECREATED','RETIRED_CONFIRMED'
+                     )"""
+            )
             seed = [SeedVariant(str(r[0]), str(r[1] or ''), r[2] or '', r[3] or '', r[4], r[5], bool(r[6])) for r in cur.fetchall()]
         rejected = load_rejected_pairs(conn)
         approved = load_approved_aliases(conn)

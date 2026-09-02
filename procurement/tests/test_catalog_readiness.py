@@ -33,6 +33,7 @@ MIGRATIONS = (
     "004_identity_decision_invariants.sql",
     "005_identity_investigation.sql",
     "006_phase4_sales_backfill.sql",
+    "007_phase4_terminal_disposition.sql",
 )
 
 

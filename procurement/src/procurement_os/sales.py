@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import hashlib
 import json
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Mapping
 
 from .catalog import numeric_shopify_id
 from .matching import extract_size, normalize_text
@@ -97,6 +97,7 @@ class HistoricalIdentityIndex:
         aliases: Iterable[HistoricalAlias],
         *,
         excluded_source_keys: Iterable[str] = (),
+        exclusion_methods: Mapping[str, str] | None = None,
         source_decisions: Iterable[HistoricalSourceDecision] = (),
     ) -> None:
         self.current_by_id: dict[str, CurrentIdentity] = {}
@@ -105,7 +106,17 @@ class HistoricalIdentityIndex:
         self.alias_sku: dict[str, set[str]] = {}
         self.current_full: dict[tuple[str, str, str], set[str]] = {}
         self.current_sku: dict[str, set[str]] = {}
-        self.excluded_source_keys = set(excluded_source_keys)
+        self.exclusion_methods = {
+            str(source_key): "EXPLICIT_EXCLUSION"
+            for source_key in excluded_source_keys
+        }
+        for source_key, method in (exclusion_methods or {}).items():
+            if method not in {
+                "EXPLICIT_EXCLUSION",
+                "EXPLICIT_UNATTRIBUTABLE_EXCLUSION",
+            }:
+                raise ValueError("unknown historical-sales exclusion method")
+            self.exclusion_methods[str(source_key)] = method
         self.source_key_to_current: dict[str, str] = {}
 
         for row in current:
@@ -157,8 +168,14 @@ class HistoricalIdentityIndex:
 
     def resolve(self, row: SalesSourceRow) -> IdentityResolution:
         source_key = self.source_key(row)
-        if source_key in self.excluded_source_keys:
-            return IdentityResolution("EXCLUDED", None, "EXPLICIT_EXCLUSION", evidence={"source_key": source_key})
+        exclusion_method = self.exclusion_methods.get(source_key)
+        if exclusion_method is not None:
+            return IdentityResolution(
+                "EXCLUDED",
+                None,
+                exclusion_method,
+                evidence={"source_key": source_key},
+            )
 
         approved_source_target = self.source_key_to_current.get(source_key)
         if approved_source_target is not None:
@@ -436,8 +453,62 @@ def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
             FROM variant_aliases
         """)
         aliases = [HistoricalAlias(str(r[0]), r[1], r[2], r[3], r[4], bool(r[5])) for r in cur.fetchall()]
-        cur.execute("SELECT source_key FROM historical_sales_exclusions WHERE active=TRUE")
-        excluded = [r[0] for r in cur.fetchall()]
+        cur.execute(
+            """WITH ranked AS (
+                 SELECT historical_sales_review_decision_id,source_identity_key,
+                        decision_action,reason_code,decision_schema_version,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY source_identity_key
+                          ORDER BY decided_at DESC,
+                                   historical_sales_review_decision_id DESC
+                        ) AS row_number
+                 FROM historical_sales_review_decisions
+               )
+               SELECT e.source_key,e.reason_code,e.effective_decision_id,
+                      d.historical_sales_review_decision_id,d.decision_action,
+                      d.reason_code,d.decision_schema_version
+               FROM historical_sales_exclusions e
+               LEFT JOIN ranked d
+                 ON d.source_identity_key=e.source_key AND d.row_number=1
+               WHERE e.active=TRUE"""
+        )
+        exclusion_methods: dict[str, str] = {}
+        for row in cur.fetchall():
+            (
+                source_key,
+                exclusion_reason,
+                effective_decision_id,
+                latest_decision_id,
+                latest_action,
+                latest_reason,
+                latest_schema,
+            ) = row
+            structured_link_is_exact = (
+                effective_decision_id is not None
+                and latest_decision_id is not None
+                and effective_decision_id == latest_decision_id
+                and latest_action == "EXCLUDE"
+                and exclusion_reason == latest_reason
+            )
+            if structured_link_is_exact and exclusion_reason == (
+                "PHASE4_ORIGINAL_EXACT_NON_PRODUCT_EXCLUSION"
+            ):
+                exclusion_methods[str(source_key)] = "EXPLICIT_EXCLUSION"
+            elif structured_link_is_exact and exclusion_reason == (
+                "HISTORICAL_IDENTITY_UNATTRIBUTABLE_AFTER_EXHAUSTIVE_REVIEW"
+            ):
+                exclusion_methods[str(source_key)] = (
+                    "EXPLICIT_UNATTRIBUTABLE_EXCLUSION"
+                )
+            elif (
+                exclusion_reason is None
+                and effective_decision_id is None
+                and latest_schema in {None, "LEGACY_V1"}
+            ):
+                # Preserve the pre-terminal manual-review behavior. Once a
+                # terminal-schema decision exists for a key, missing structured
+                # reason/link evidence fails closed and is not an exclusion.
+                exclusion_methods[str(source_key)] = "EXPLICIT_EXCLUSION"
         cur.execute(
             """WITH ranked AS (
                  SELECT source_identity_key,decision_action,canonical_variant_id,
@@ -458,7 +529,7 @@ def load_identity_index(conn: Any) -> HistoricalIdentityIndex:
     return HistoricalIdentityIndex(
         current,
         aliases,
-        excluded_source_keys=excluded,
+        exclusion_methods=exclusion_methods,
         source_decisions=source_decisions,
     )
 

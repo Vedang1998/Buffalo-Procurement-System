@@ -19,6 +19,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -62,6 +63,15 @@ class ControlTotals:
 class ReadinessEvaluation:
     passed: bool
     blockers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExclusionIntegrityReport:
+    passed: bool
+    diagnostics: tuple[str, ...]
+    active_exclusion_keys: int
+    excluded_source_facts: int
+    reason_buckets: dict[str, dict[str, Any]]
 
 
 def _decimal(value: Any, *, field: str, null_as_zero: bool = False) -> Decimal:
@@ -126,8 +136,11 @@ def sanitize_error(exc: BaseException) -> tuple[str, str]:
     return error_class, message or error_class
 
 
-def evaluate_sales_readiness(evidence: dict[str, Any]) -> ReadinessEvaluation:
-    """Pure, central fail-closed evaluator for the global SALES_BACKFILL gate."""
+def _evaluate_sales_readiness(
+    evidence: dict[str, Any],
+    exclusion_integrity: ExclusionIntegrityReport,
+) -> ReadinessEvaluation:
+    """Pure helper; exclusion integrity must already be database-derived."""
     blockers: list[str] = []
     if str(evidence.get("start_date")) != AUTHORITATIVE_START_DATE.isoformat():
         blockers.append("AUTHORITATIVE_START_DATE_NOT_COVERED")
@@ -153,12 +166,370 @@ def evaluate_sales_readiness(evidence: dict[str, Any]) -> ReadinessEvaluation:
         blockers.append("CANONICAL_AGGREGATE_NOT_REBUILT")
     if not evidence.get("resolution_accounting_reconciled"):
         blockers.append("RESOLUTION_ACCOUNTING_FAILED")
+    if not exclusion_integrity.passed:
+        blockers.append("EXCLUSION_INTEGRITY_NOT_PROVEN")
 
     unresolved_abs_units = _decimal(evidence.get("unresolved_ambiguous_abs_units", 0), field="unresolved units", null_as_zero=True)
     unresolved_abs_sales = _decimal(evidence.get("unresolved_ambiguous_abs_sales", 0), field="unresolved sales", null_as_zero=True)
     if unresolved_abs_units != 0 or unresolved_abs_sales != 0:
         blockers.append("MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED")
     return ReadinessEvaluation(not blockers, tuple(blockers))
+
+
+def evaluate_sales_readiness(
+    conn: Any,
+    *,
+    run_id: str,
+    evidence: dict[str, Any],
+) -> ReadinessEvaluation:
+    """Derive exclusion integrity from PostgreSQL before evaluating readiness."""
+
+    exclusion_integrity = derive_exclusion_integrity(conn, run_id)
+    evidence["exclusion_integrity"] = {
+        "passed": exclusion_integrity.passed,
+        "diagnostics": list(exclusion_integrity.diagnostics),
+        "active_exclusion_keys": exclusion_integrity.active_exclusion_keys,
+        "excluded_source_facts": exclusion_integrity.excluded_source_facts,
+        "reason_buckets": exclusion_integrity.reason_buckets,
+    }
+    return _evaluate_sales_readiness(evidence, exclusion_integrity)
+
+
+def derive_exclusion_integrity(conn: Any, run_id: str) -> ExclusionIntegrityReport:
+    """Dispatch to the exact Phase 4 proof or the legacy per-run proof."""
+
+    from .historical_sales_manifest import APPROVED_RUN_ID
+
+    if str(run_id) == APPROVED_RUN_ID:
+        return derive_phase4_exclusion_integrity(conn, run_id)
+
+    diagnostics: set[str] = set()
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT r.source_identity_key,r.sale_date,r.source_variant_id,
+                      r.source_sku,r.source_product_title,r.source_variant_title,
+                      r.resolution_method,r.canonical_variant_id,
+                      rf.observed_net_items_sold,rf.observed_net_sales
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s AND r.resolution_status='EXCLUDED'
+               ORDER BY r.source_identity_key,r.raw_sales_id""",
+            (run_id,),
+        )
+        facts = cur.fetchall()
+        keys = sorted({str(row[0]) for row in facts})
+        cur.execute(
+            """WITH ranked AS (
+                 SELECT source_identity_key,decision_action,canonical_variant_id,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY source_identity_key
+                          ORDER BY decided_at DESC,
+                                   historical_sales_review_decision_id DESC
+                        ) AS row_number
+                 FROM historical_sales_review_decisions
+                 WHERE source_identity_key=ANY(%s)
+               )
+               SELECT source_identity_key,decision_action,canonical_variant_id
+               FROM ranked WHERE row_number=1""",
+            (keys,),
+        )
+        decisions = {str(row[0]): (str(row[1]), row[2]) for row in cur.fetchall()}
+        cur.execute(
+            """SELECT source_key FROM historical_sales_exclusions
+               WHERE active=TRUE AND source_key=ANY(%s)""",
+            (keys,),
+        )
+        active = {str(row[0]) for row in cur.fetchall()}
+
+    if active != set(keys):
+        diagnostics.add("ACTIVE_EXCLUSION_MEMBERSHIP_MISMATCH")
+    for key in keys:
+        if decisions.get(key) != ("EXCLUDE", None):
+            diagnostics.add(f"LATEST_DECISION_MISMATCH:{key}")
+    for fact in facts:
+        key = str(fact[0])
+        canonical_key = HistoricalIdentityIndex.source_key(
+            SalesSourceRow(
+                fact[1], fact[2], fact[3], fact[4], fact[5],
+                Decimal(str(fact[8])),
+                Decimal(str(fact[9])) if fact[9] is not None else None,
+            )
+        )
+        if (
+            canonical_key != key
+            or fact[6] != "EXPLICIT_EXCLUSION"
+            or fact[7] is not None
+        ):
+            diagnostics.add(f"RAW_EXCLUSION_STATE_MISMATCH:{key}")
+    return ExclusionIntegrityReport(
+        passed=not diagnostics,
+        diagnostics=tuple(sorted(diagnostics)),
+        active_exclusion_keys=len(active),
+        excluded_source_facts=len(facts),
+        reason_buckets={
+            "LEGACY_EXPLICIT_OWNER_EXCLUSION": {
+                "keys": len(keys),
+                "raw_rows": len(facts),
+            }
+        },
+    )
+
+
+def derive_phase4_exclusion_integrity(
+    conn: Any,
+    run_id: str,
+) -> ExclusionIntegrityReport:
+    """Prove terminal exclusions from latest ledger, linkage, and raw facts."""
+
+    # Lazy imports avoid making the persistence-only module part of ingestion
+    # startup while still reusing its frozen artifact and exact decision model.
+    from .historical_sales_manifest import (
+        APPROVED_MANIFEST_SHA256,
+        APPROVED_RUN_ID,
+        EXCLUSION_SOURCE_KEYS,
+    )
+    from .historical_sales_terminal import (
+        AUTHORITY_GIT_SHA,
+        ORIGINAL_EXCLUSION_REASON,
+        TERMINAL_EVIDENCE_VERSION,
+        TERMINAL_EXCLUSION_REASON,
+        TERMINAL_MANIFEST_SHA256,
+        TERMINAL_OWNER_AUTHORIZATION,
+        _load_active_exclusions,
+        _load_decisions_by_id,
+        _load_latest_terminal_decisions,
+        _terminal_decision_exact,
+        load_terminal_artifact,
+    )
+
+    diagnostics: set[str] = set()
+    if str(run_id) != APPROVED_RUN_ID:
+        diagnostics.add("RUN_NOT_APPROVED_PHASE4_SOURCE")
+
+    procurement_root = Path(__file__).resolve().parents[2]
+    artifact = load_terminal_artifact(
+        procurement_root / "review" / "phase4_terminal_disposition_manifest.csv",
+        procurement_root / "review" / "phase4_identity_manifest_corrected.csv",
+    )
+    original_by_key = {
+        row.source_identity_key: row for row in artifact.original_manifest.rows
+    }
+    terminal_by_key = {row.source_identity_key: row for row in artifact.rows}
+    terminal_exclusion_keys = {
+        row.source_identity_key for row in artifact.rows if row.action == "EXCLUDE"
+    }
+    expected_keys = set(EXCLUSION_SOURCE_KEYS) | terminal_exclusion_keys
+    expected_reason = {
+        **{key: ORIGINAL_EXCLUSION_REASON for key in EXCLUSION_SOURCE_KEYS},
+        **{key: TERMINAL_EXCLUSION_REASON for key in terminal_exclusion_keys},
+    }
+    expected_rows = {
+        key: original_by_key[key].affected_raw_rows for key in EXCLUSION_SOURCE_KEYS
+    }
+    expected_rows.update(
+        {
+            row.source_identity_key: row.raw_row_count
+            for row in artifact.rows
+            if row.action == "EXCLUDE"
+        }
+    )
+
+    latest = _load_latest_terminal_decisions(conn, expected_keys)
+    if set(latest) != expected_keys:
+        diagnostics.add("LATEST_DECISION_MEMBERSHIP_MISMATCH")
+    execution_shas = {
+        row["execution_git_sha"]
+        for row in latest.values()
+        if row["execution_git_sha"] is not None
+    }
+    if len(execution_shas) != 1 or not re.fullmatch(
+        r"[0-9a-f]{40}", next(iter(execution_shas), "")
+    ):
+        diagnostics.add("EXECUTION_PROVENANCE_MISMATCH")
+    execution_git_sha = next(iter(execution_shas), "")
+    superseded = _load_decisions_by_id(
+        conn,
+        [
+            row["supersedes_decision_id"]
+            for row in latest.values()
+            if row["supersedes_decision_id"]
+        ],
+    )
+    for key in sorted(expected_keys):
+        decision = latest.get(key)
+        if decision is None:
+            diagnostics.add(f"LATEST_DECISION_MISSING:{key}")
+            continue
+        if key in terminal_exclusion_keys:
+            source = terminal_by_key[key]
+            exact = _terminal_decision_exact(
+                decision,
+                source_variant_id=source.source_variant_id,
+                source_sku=source.historical_sku,
+                source_product_title=source.historical_product_title or None,
+                source_variant_title=source.historical_variant_title or None,
+                action="EXCLUDE",
+                canonical_variant_id=None,
+                reason_code=TERMINAL_EXCLUSION_REASON,
+                primary_manifest_sha256=TERMINAL_MANIFEST_SHA256,
+                primary_manifest_row_number=source.row_number,
+                execution_git_sha=execution_git_sha,
+                superseded=superseded.get(decision["supersedes_decision_id"]),
+                expected_prior_action="LEAVE_UNRESOLVED",
+            )
+        else:
+            source = original_by_key[key]
+            exact = _terminal_decision_exact(
+                decision,
+                source_variant_id=source.source_variant_id,
+                source_sku=source.source_sku,
+                source_product_title=source.historical_product_title or None,
+                source_variant_title=source.historical_variant_title or None,
+                action="EXCLUDE",
+                canonical_variant_id=None,
+                reason_code=ORIGINAL_EXCLUSION_REASON,
+                primary_manifest_sha256=APPROVED_MANIFEST_SHA256,
+                primary_manifest_row_number=source.row_number,
+                execution_git_sha=execution_git_sha,
+                superseded=superseded.get(decision["supersedes_decision_id"]),
+                expected_prior_action="EXCLUDE",
+            )
+        if not exact:
+            diagnostics.add(f"LATEST_DECISION_MISMATCH:{key}")
+        if (
+            decision["owner_authorization"] != TERMINAL_OWNER_AUTHORIZATION
+            or decision["authority_git_sha"] != AUTHORITY_GIT_SHA
+            or decision["evidence_version"] != TERMINAL_EVIDENCE_VERSION
+        ):
+            diagnostics.add(f"DECISION_PROVENANCE_MISMATCH:{key}")
+
+    active_exclusions = _load_active_exclusions(conn)
+    if set(active_exclusions) != expected_keys:
+        diagnostics.add("ACTIVE_EXCLUSION_MEMBERSHIP_MISMATCH")
+    for key in sorted(expected_keys):
+        exclusion = active_exclusions.get(key)
+        decision = latest.get(key)
+        if exclusion is None or decision is None:
+            continue
+        if (
+            exclusion[4] != expected_reason[key]
+            or exclusion[5] != decision["decision_id"]
+            or exclusion[0] != decision["source_variant_id"]
+            or exclusion[1] != decision["source_sku"]
+            or exclusion[2] != decision["source_product_title"]
+            or exclusion[3] != decision["source_variant_title"]
+        ):
+            diagnostics.add(f"ACTIVE_EXCLUSION_LINK_MISMATCH:{key}")
+
+    buckets: dict[str, dict[str, Any]] = {
+        reason: {
+            "keys": 0,
+            "raw_rows": 0,
+            "net_units": Decimal("0"),
+            "absolute_units": Decimal("0"),
+            "net_sales": Decimal("0"),
+            "absolute_sales": Decimal("0"),
+        }
+        for reason in (ORIGINAL_EXCLUSION_REASON, TERMINAL_EXCLUSION_REASON)
+    }
+    for key in expected_keys:
+        buckets[expected_reason[key]]["keys"] += 1
+
+    observed_rows_by_key = {key: 0 for key in expected_keys}
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT r.source_identity_key,r.sale_date,r.source_variant_id,
+                      r.source_sku,r.source_product_title,r.source_variant_title,
+                      r.resolution_status,r.resolution_method,r.canonical_variant_id,
+                      rf.observed_net_items_sold,rf.observed_net_sales
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
+               WHERE rf.sales_backfill_id=%s
+                 AND (r.source_identity_key=ANY(%s) OR r.resolution_status='EXCLUDED')
+               ORDER BY r.source_identity_key,r.raw_sales_id""",
+            (run_id, sorted(expected_keys)),
+        )
+        facts = cur.fetchall()
+
+    expected_methods = {
+        ORIGINAL_EXCLUSION_REASON: "EXPLICIT_EXCLUSION",
+        TERMINAL_EXCLUSION_REASON: "EXPLICIT_UNATTRIBUTABLE_EXCLUSION",
+    }
+    for fact in facts:
+        key = str(fact[0])
+        if key not in expected_keys:
+            diagnostics.add(f"UNEXPECTED_EXCLUDED_SOURCE_KEY:{key}")
+            continue
+        canonical_key = HistoricalIdentityIndex.source_key(
+            SalesSourceRow(
+                sale_date=fact[1],
+                source_variant_id=fact[2],
+                source_sku=fact[3],
+                source_product_title=fact[4],
+                source_variant_title=fact[5],
+                net_items_sold=Decimal(str(fact[9])),
+                net_sales=Decimal(str(fact[10])) if fact[10] is not None else None,
+            )
+        )
+        if canonical_key != key:
+            diagnostics.add(f"RAW_SOURCE_SCOPE_MISMATCH:{key}")
+        reason = expected_reason[key]
+        if (
+            fact[6] != "EXCLUDED"
+            or fact[7] != expected_methods[reason]
+            or fact[8] is not None
+        ):
+            diagnostics.add(f"RAW_EXCLUSION_STATE_MISMATCH:{key}")
+        units = Decimal(str(fact[9]))
+        sales = Decimal(str(fact[10] or 0))
+        observed_rows_by_key[key] += 1
+        bucket = buckets[reason]
+        bucket["raw_rows"] += 1
+        bucket["net_units"] += units
+        bucket["absolute_units"] += abs(units)
+        bucket["net_sales"] += sales
+        bucket["absolute_sales"] += abs(sales)
+
+    for key in sorted(expected_keys):
+        if observed_rows_by_key[key] != expected_rows[key]:
+            diagnostics.add(f"RAW_ROW_COUNT_MISMATCH:{key}")
+
+    expected_buckets = {
+        ORIGINAL_EXCLUSION_REASON: {
+            "keys": 8,
+            "raw_rows": 189,
+            "net_units": Decimal("44.0000"),
+            "absolute_units": Decimal("44.0000"),
+            "net_sales": Decimal("145.93"),
+            "absolute_sales": Decimal("169.91"),
+        },
+        TERMINAL_EXCLUSION_REASON: {
+            "keys": 190,
+            "raw_rows": 1465,
+            "net_units": Decimal("1798.0000"),
+            "absolute_units": Decimal("1808.0000"),
+            "net_sales": Decimal("37695.37"),
+            "absolute_sales": Decimal("40685.37"),
+        },
+    }
+    for reason, expected in expected_buckets.items():
+        if buckets[reason] != expected:
+            diagnostics.add(f"REASON_BUCKET_CONTROL_MISMATCH:{reason}")
+
+    serialized_buckets = {
+        reason: {
+            key: (str(value) if isinstance(value, Decimal) else value)
+            for key, value in values.items()
+        }
+        for reason, values in sorted(buckets.items())
+    }
+    return ExclusionIntegrityReport(
+        passed=not diagnostics,
+        diagnostics=tuple(sorted(diagnostics)),
+        active_exclusion_keys=len(active_exclusions),
+        excluded_source_facts=sum(observed_rows_by_key.values()),
+        reason_buckets=serialized_buckets,
+    )
 
 
 def _table_payload(payload: dict[str, Any], *, required_columns: Iterable[str]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -1201,7 +1572,11 @@ def _finalize_sales_backfill_unlocked(
             "control_totals_reconciled": source_controls_match and resolution_accounting and canonical_reconciled,
             "canonical_aggregate_rebuilt": aggregate_rebuilt,
         }
-        readiness = evaluate_sales_readiness(evidence)
+        readiness = evaluate_sales_readiness(
+            conn,
+            run_id=run_id,
+            evidence=evidence,
+        )
         run_status = "COMPLETED" if coverage["coverage_complete"] and evidence["control_totals_reconciled"] else "FAILED"
         cur.execute(
             """UPDATE sales_backfill_runs SET completed_at=COALESCE(completed_at,now()),status=%s,

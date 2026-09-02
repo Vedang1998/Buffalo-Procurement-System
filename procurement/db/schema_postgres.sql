@@ -7,10 +7,14 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS variants (
- variant_id TEXT PRIMARY KEY, shopify_gid TEXT UNIQUE, product_id TEXT NOT NULL, product_gid TEXT,
+ variant_id TEXT PRIMARY KEY, shopify_gid TEXT UNIQUE, product_id TEXT, product_gid TEXT,
  product_title TEXT NOT NULL, variant_title TEXT NOT NULL, handle TEXT, status TEXT, sku TEXT, barcode TEXT,
  retail_price NUMERIC(12,2), shopify_current_cost NUMERIC(12,4), shopify_vendor TEXT, product_type TEXT,
- active BOOLEAN NOT NULL DEFAULT TRUE, variant_created_at TIMESTAMPTZ, source_snapshot TEXT, last_synced_at TIMESTAMPTZ
+ active BOOLEAN NOT NULL DEFAULT TRUE, variant_created_at TIMESTAMPTZ, source_snapshot TEXT, last_synced_at TIMESTAMPTZ,
+ catalog_state TEXT NOT NULL DEFAULT 'SEEDED', identity_scope TEXT NOT NULL DEFAULT 'CURRENT',
+ restoration_manifest_sha256 TEXT, restoration_manifest_row_number INTEGER,
+ restoration_evidence_version TEXT, restoration_owner_authorization TEXT,
+ restoration_authority_git_sha TEXT, restoration_execution_git_sha TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_variants_product ON variants(product_id,product_title,variant_title);
 CREATE INDEX IF NOT EXISTS idx_variants_sku ON variants(sku);
