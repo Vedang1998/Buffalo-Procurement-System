@@ -1182,6 +1182,68 @@ class Phase4TerminalDispositionPostgresTests(unittest.TestCase):
             )
         )
 
+    def test_alias_family_uses_resolver_variant_id_whitespace_normalization(self):
+        artifact = self.seed_preterminal_state()
+        current_aliases = _terminal_safe_alias_families(artifact, terminal=True)
+        pre_aliases = _terminal_safe_alias_families(artifact, terminal=False)
+        restore_ids = {
+            row.source_variant_id for row in artifact.rows if row.action == "RESTORE"
+        }
+        old_id, target = next(
+            iter(
+                sorted(
+                    (old_id, target)
+                    for old_id, target in current_aliases.items()
+                    if old_id not in pre_aliases and target not in restore_ids
+                )
+            )
+        )
+        fact = self.conn.execute(
+            """SELECT r.raw_sales_id,r.source_identity_key,r.canonical_variant_id,
+                      rf.observed_net_items_sold,rf.observed_net_sales
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r USING(raw_sales_id)
+               WHERE rf.sales_backfill_id=%s AND r.source_variant_id=%s
+                 AND r.resolution_status='RESOLVED'
+               ORDER BY r.raw_sales_id LIMIT 1""",
+            (APPROVED_RUN_ID, old_id),
+        ).fetchone()
+        self.assertIsNotNone(fact)
+        self.assertEqual(str(fact[2]), target)
+        self.conn.execute(
+            "UPDATE shopify_sales_daily_raw SET source_variant_id=%s WHERE raw_sales_id=%s",
+            (f"  {old_id}  ", fact[0]),
+        )
+        self.conn.commit()
+
+        report = inspect_terminal_state(self.conn, artifact, EXECUTION_SHA)
+        evidence = report["broad_alias_family_evidence"][old_id]
+        self.assertEqual(report["classification"], "PRE_TERMINAL_EXACT")
+        self.assertIn(str(fact[1]), evidence["full_run_source_keys"])
+        self.assertEqual(evidence["canonical_variant_id"], target)
+        unchanged = self.conn.execute(
+            """SELECT canonical_variant_id,observed_net_items_sold,observed_net_sales
+               FROM sales_backfill_run_facts rf
+               JOIN shopify_sales_daily_raw r USING(raw_sales_id)
+               WHERE r.raw_sales_id=%s""",
+            (fact[0],),
+        ).fetchone()
+        self.assertEqual(unchanged, (fact[2], fact[3], fact[4]))
+
+        self.conn.execute(
+            "UPDATE shopify_sales_daily_raw SET canonical_variant_id='BASE-000' WHERE raw_sales_id=%s",
+            (fact[0],),
+        )
+        self.conn.commit()
+        conflict = inspect_terminal_state(self.conn, artifact, EXECUTION_SHA)
+        self.assertEqual(conflict["classification"], "CONFLICT")
+        self.assertTrue(
+            any(
+                "reattribute prior resolved fact" in value
+                for value in conflict["diagnostics"]
+            )
+        )
+
     def test_aliases_preserve_prior_per_variant_flow_and_recompute_methods(self):
         artifact = self.seed_preterminal_state()
         before_flow = self.conn.execute(

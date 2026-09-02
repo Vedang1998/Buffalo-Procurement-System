@@ -1432,7 +1432,7 @@ def _broad_alias_family_evidence(
                FROM sales_backfill_run_facts rf
                JOIN shopify_sales_daily_raw r ON r.raw_sales_id=rf.raw_sales_id
                WHERE rf.sales_backfill_id=%s
-                 AND regexp_replace(COALESCE(r.source_variant_id,''),'^.*/','')=ANY(%s)
+                 AND regexp_replace(btrim(COALESCE(r.source_variant_id,'')),'^.*/','')=ANY(%s)
                ORDER BY r.source_identity_key,r.raw_sales_id""",
             (APPROVED_RUN_ID, old_ids),
         )
