@@ -7,11 +7,30 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS variants (
- variant_id TEXT PRIMARY KEY, shopify_gid TEXT UNIQUE, product_id TEXT NOT NULL, product_gid TEXT,
+ variant_id TEXT PRIMARY KEY, shopify_gid TEXT UNIQUE, product_id TEXT, product_gid TEXT,
  product_title TEXT NOT NULL, variant_title TEXT NOT NULL, handle TEXT, status TEXT, sku TEXT, barcode TEXT,
  retail_price NUMERIC(12,2), shopify_current_cost NUMERIC(12,4), shopify_vendor TEXT, product_type TEXT,
- active BOOLEAN NOT NULL DEFAULT TRUE, variant_created_at TIMESTAMPTZ, source_snapshot TEXT, last_synced_at TIMESTAMPTZ
+ active BOOLEAN NOT NULL DEFAULT TRUE, variant_created_at TIMESTAMPTZ, source_snapshot TEXT, last_synced_at TIMESTAMPTZ,
+ catalog_state TEXT NOT NULL DEFAULT 'SEEDED', identity_scope TEXT NOT NULL DEFAULT 'CURRENT',
+ restoration_manifest_sha256 TEXT, restoration_manifest_row_number INTEGER,
+ restoration_evidence_version TEXT, restoration_owner_authorization TEXT,
+ restoration_authority_git_sha TEXT, restoration_execution_git_sha TEXT
 );
+-- Keep schema re-application safe on databases created before identity_scope
+-- existed.  Operational views below must never be recreated without this
+-- explicit scope column and filter.
+ALTER TABLE variants
+    ADD COLUMN IF NOT EXISTS identity_scope TEXT NOT NULL DEFAULT 'CURRENT';
+
+CREATE OR REPLACE FUNCTION is_operational_current_variant(checked_variant_id TEXT)
+RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM variants
+        WHERE variant_id=checked_variant_id
+          AND identity_scope='CURRENT'
+          AND active=TRUE
+    )
+$$;
 CREATE INDEX IF NOT EXISTS idx_variants_product ON variants(product_id,product_title,variant_title);
 CREATE INDEX IF NOT EXISTS idx_variants_sku ON variants(sku);
 CREATE INDEX IF NOT EXISTS idx_variants_barcode ON variants(barcode);
@@ -175,10 +194,18 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
 
 CREATE OR REPLACE VIEW v_current_prices AS
 SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,o.shopify_units_per_case,o.qualifying_units_per_case,o.assortment_scope,o.assortment_group,o.assortable
-FROM prices p JOIN supplier_offers o ON o.offer_id=p.offer_id WHERE p.price_state='current';
+FROM prices p
+JOIN supplier_offers o ON o.offer_id=p.offer_id
+WHERE p.price_state='current'
+  AND o.active
+  AND is_operational_current_variant(o.variant_id);
 CREATE OR REPLACE VIEW v_future_prices AS
 SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,o.shopify_units_per_case,o.qualifying_units_per_case,o.assortment_scope,o.assortment_group,o.assortable
-FROM prices p JOIN supplier_offers o ON o.offer_id=p.offer_id WHERE p.price_state='future';
+FROM prices p
+JOIN supplier_offers o ON o.offer_id=p.offer_id
+WHERE p.price_state='future'
+  AND o.active
+  AND is_operational_current_variant(o.variant_id);
 
 
 

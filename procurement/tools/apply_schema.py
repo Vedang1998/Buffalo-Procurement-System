@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 MIGRATION_ORDER = [
     "schema_postgres.sql",
@@ -18,25 +19,31 @@ MIGRATION_ORDER = [
     "004_identity_decision_invariants.sql",
     "005_identity_investigation.sql",
     "006_phase4_sales_backfill.sql",
+    "007_phase4_terminal_disposition.sql",
 ]
 
 
-def apply_schema(db_dir: Path, database_url: str) -> list[str]:
-    import psycopg
-
+def apply_schema_connection(conn: Any, db_dir: Path) -> list[str]:
+    """Apply every file transactionally on an already-scoped connection."""
     applied = []
-    with psycopg.connect(database_url) as conn:
-        for name in MIGRATION_ORDER:
-            sql = (db_dir / name).read_text(encoding="utf-8")
-            with conn.transaction():
-                conn.execute(sql)
+    for name in MIGRATION_ORDER:
+        sql = (db_dir / name).read_text(encoding="utf-8")
+        with conn.transaction():
+            conn.execute(sql)
             conn.execute(
                 "INSERT INTO meta(key,value) VALUES (%s,'applied')"
                 " ON CONFLICT(key) DO UPDATE SET value='applied', updated_at=now()",
                 (f"migration:{name}",),
             )
-            applied.append(name)
+        applied.append(name)
     return applied
+
+
+def apply_schema(db_dir: Path, database_url: str) -> list[str]:
+    import psycopg
+
+    with psycopg.connect(database_url) as conn:
+        return apply_schema_connection(conn, db_dir)
 
 
 def main():

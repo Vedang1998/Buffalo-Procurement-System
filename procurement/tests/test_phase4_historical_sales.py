@@ -21,10 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from procurement_os import historical_sales
 from procurement_os.historical_sales import (
     AUTHORITATIVE_START_DATE,
+    ExclusionIntegrityReport,
     _coverage_evidence,
+    _evaluate_sales_readiness,
     _page_coverage_evidence,
     current_store_date,
-    evaluate_sales_readiness,
     parse_control_payload,
     parse_detail_payload,
     sanitize_error,
@@ -113,6 +114,10 @@ def passing_evidence(**overrides: object) -> dict[str, object]:
     }
     evidence.update(overrides)
     return evidence
+
+
+def passing_exclusion_integrity() -> ExclusionIntegrityReport:
+    return ExclusionIntegrityReport(True, (), 198, 1654, {})
 
 
 class HistoricalIdentityResolutionTests(unittest.TestCase):
@@ -348,18 +353,21 @@ class RawFactContractTests(unittest.TestCase):
 
 class ReadinessInvariantTests(unittest.TestCase):
     def test_complete_reconciled_durable_run_can_pass(self):
-        result = evaluate_sales_readiness(passing_evidence())
+        result = _evaluate_sales_readiness(
+            passing_evidence(), passing_exclusion_integrity()
+        )
         self.assertTrue(result.passed)
         self.assertEqual(result.blockers, ())
 
     def test_zero_unresolved_rows_alone_cannot_override_incomplete_controls(self):
-        result = evaluate_sales_readiness(
+        result = _evaluate_sales_readiness(
             passing_evidence(
                 unresolved_rows=0,
                 ambiguous_rows=0,
                 control_totals_reconciled=False,
                 coverage_complete=False,
-            )
+            ),
+            passing_exclusion_integrity(),
         )
         self.assertFalse(result.passed)
         self.assertIn("CONTROL_TOTALS_FAILED", result.blockers)
@@ -382,7 +390,9 @@ class ReadinessInvariantTests(unittest.TestCase):
         }
         for label, (override, blocker) in cases.items():
             with self.subTest(label=label):
-                result = evaluate_sales_readiness(passing_evidence(**override))
+                result = _evaluate_sales_readiness(
+                    passing_evidence(**override), passing_exclusion_integrity()
+                )
                 self.assertFalse(result.passed)
                 self.assertIn(blocker, result.blockers)
 
@@ -393,9 +403,20 @@ class ReadinessInvariantTests(unittest.TestCase):
             {"unresolved_ambiguous_abs_units": "7", "unresolved_ambiguous_abs_sales": "0"},
         ):
             with self.subTest(override=override):
-                result = evaluate_sales_readiness(passing_evidence(**override))
+                result = _evaluate_sales_readiness(
+                    passing_evidence(**override), passing_exclusion_integrity()
+                )
                 self.assertFalse(result.passed)
                 self.assertIn("MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED", result.blockers)
+
+    def test_caller_boolean_cannot_override_database_derived_exclusion_failure(self):
+        evidence = passing_evidence(exclusion_integrity_reconciled=True)
+        failed = ExclusionIntegrityReport(
+            False, ("ACTIVE_EXCLUSION_MEMBERSHIP_MISMATCH",), 197, 1653, {}
+        )
+        result = _evaluate_sales_readiness(evidence, failed)
+        self.assertFalse(result.passed)
+        self.assertIn("EXCLUSION_INTEGRITY_NOT_PROVEN", result.blockers)
 
     def test_interrupted_or_missing_chunk_cannot_claim_coverage(self):
         complete = [

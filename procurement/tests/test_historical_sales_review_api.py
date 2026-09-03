@@ -357,6 +357,25 @@ class HistoricalSalesReviewDecisionTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertNotIn("correct-token", str(ctx.exception.detail))
 
+    def test_terminal_rebuild_window_freeze_is_returned_as_conflict(self):
+        db = FakeConnectionContext()
+        message = (
+            "historical-sales review decisions are frozen while the "
+            "owner-approved terminal package awaits controlled rebuild"
+        )
+        with patch.dict(
+            os.environ, {"RECONCILIATION_REVIEW_TOKEN": "correct-token"}
+        ), patch.object(api, "_db_conn", return_value=db), patch.object(
+            api.sales_service,
+            "record_historical_sales_review_decision",
+            side_effect=ValueError(message),
+            create=True,
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                self.call_decision(action="LEAVE_UNRESOLVED")
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail, message)
+
 
 if __name__ == "__main__":
     unittest.main()

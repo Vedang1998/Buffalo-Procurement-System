@@ -66,7 +66,26 @@ class SalesTests(unittest.TestCase):
         key=HistoricalIdentityIndex.source_key(row)
         idx=HistoricalIdentityIndex([],[],excluded_source_keys=[key])
         r=idx.resolve(row)
-        self.assertEqual(r.status,'EXCLUDED')
+        self.assertEqual((r.status,r.method),('EXCLUDED','EXPLICIT_EXCLUSION'))
+
+    def test_unattributable_exclusion_has_distinct_reason_aware_method(self):
+        row=sale(vid=None,sku='LOST',product='Unattributable Product')
+        key=HistoricalIdentityIndex.source_key(row)
+        idx=HistoricalIdentityIndex(
+            [],[],
+            exclusion_methods={key:'EXPLICIT_UNATTRIBUTABLE_EXCLUSION'},
+        )
+        r=idx.resolve(row)
+        self.assertEqual(
+            (r.status,r.canonical_variant_id,r.method),
+            ('EXCLUDED',None,'EXPLICIT_UNATTRIBUTABLE_EXCLUSION'),
+        )
+
+    def test_unknown_exclusion_method_fails_closed(self):
+        row=sale(vid=None,sku='LOST',product='Unknown Reason')
+        key=HistoricalIdentityIndex.source_key(row)
+        with self.assertRaisesRegex(ValueError,'unknown historical-sales exclusion'):
+            HistoricalIdentityIndex([],[],exclusion_methods={key:'UNKNOWN_REASON'})
 
     def test_exact_source_key_map_is_human_authority_not_title_matching(self):
         row=sale(vid='0',sku=None,product='Historical Title Only',variant='750ML')
