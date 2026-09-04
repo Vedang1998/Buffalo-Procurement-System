@@ -58,7 +58,7 @@ Verified production state at the current handoff:
 
 ### Phase 4 — Historical ShopifyQL sales backfill / reconciliation
 
-**OWNER-APPROVED TERMINAL DISPOSITION FROZEN; INDEPENDENT ARTIFACT REVIEW AND IMPLEMENTATION PENDING; REBUILD PENDING — `SALES_BACKFILL = FAIL`**
+**COMPLETE — `SALES_BACKFILL = PASS`**
 
 Current handoff records:
 
@@ -66,68 +66,71 @@ Current handoff records:
 - 21/21 date chunks and 70/70 pages complete
 - 59,083 durable unique source facts
 - source/raw control totals reconcile exactly
-- 55,971 resolved rows
-- 3,112 unresolved rows
+- 57,429 resolved rows
+- 1,654 excluded rows
+- 0 unresolved rows
 - 0 ambiguous rows
-- 343/343 owner decisions persisted with current manifest provenance
-- decisions: 55 MAP / 8 EXCLUDE / 280 LEAVE_UNRESOLVED
-- 51 distinct canonical MAP targets
-- exactly 8 active historical exclusions and 17 safe old-ID alias families
+- final terminal decisions: 43 RESTORE / 102 MAP / 198 EXCLUDE / 0
+  LEAVE_UNRESOLVED
+- 96 distinct canonical MAP targets
+- 43 exact inactive historical-only identities
+- exactly 198 structured active historical exclusions and 56 safe approved
+  old-ID alias families
 - approved manifest SHA-256:
   `95fe0c7902efc337bb51ba0b5a2f974f9b2ac76d7221a25e7dcd52a8cd28d287`
-- production persistence execution SHA:
-  `30b6d81d2b53ad66200d4821255597e3766d72f7`
-- second production dry-run: `CURRENT_PROVENANCE=343` and all planned
-  mutations `0`
-- independent full review: **APPROVE WITH NON-BLOCKING FINDINGS**; the sole
-  LOW finding was remediated and the targeted delta review returned **APPROVE**
-  with no findings
-- PR #13 is **MERGED**; reviewed final head
-  `28370f6176c235391a5682146703326af6f7a96f`, merge/main SHA
-  `4d0c12fec29780214b944c6d625faec5cc8a30c5`
-- exact-head Procurement CI run `32435931948`: **243/243 PASS**; post-merge CI
-  run `32436953358`: **SUCCESS**
-- protected sales, resolution, readiness-gate, and PO fingerprints are
-  unchanged; purchase orders remain 0 and purchase-order lines remain 0
-- historical source resolution and canonical aggregate remain unchanged pending rebuild
-- review UI available at `/procurement/historical-sales/review`
-- historical-sales rebuild/re-resolution was not run
-- `SALES_BACKFILL` and readiness-gate reevaluation were not run
 - owner-approved terminal supplement:
   `procurement/review/phase4_terminal_disposition_manifest.csv`, SHA-256
   `fb1e15e67fe66c7742b84ea2c50bf01ce8a5008f00b4887293404ac09d3f59ff`
-- supplement controls: 280/280 prior LEAVE keys; 43 RESTORE / 47 MAP / 190
-  EXCLUDE / 0 unresolved
-- combined terminal intent: 43 RESTORE / 102 MAP / 198 EXCLUDE / 0
-  LEAVE_UNRESOLVED; current production effective state remains the prior 55 MAP
-  / 8 EXCLUDE / 280 LEAVE until separately authorized implementation
-- expected eventual post-rebuild controls: 57,429 RESOLVED / 1,654 EXCLUDED /
-  0 UNRESOLVED / 0 AMBIGUOUS; 80,659 resolved and 1,842 excluded net units;
-  $1,263,133.84 resolved and $37,841.30 excluded net sales; expected
-  `sales_daily` rows 57,424
-- terminal exclusion readiness is not status-based: every material excluded
-  source key must later prove an effective owner-approved exact-key decision,
-  allowlisted reason, manifest/evidence provenance, no target, complete
-  membership and exact reason-coded rows/units/sales reconciliation
-- no runtime, schema, rules, database, catalog, alias, sales, gate, Shopify,
-  procurement or PO change was authorized or performed by the artifact freeze
+- exact production implementation/merge SHA:
+  `dbd4cdc1d48e098e20e8f7642a64fb409966c793`
+- post-merge Procurement CI run `33818188106`: **completed / success** on that
+  exact SHA; post-production deterministic suite: **305/305 PASS**
+- migration 007 applied transactionally with all schema postconditions proven
+- terminal dry-run: `PRE_TERMINAL_EXACT`, no diagnostics, read-only/no-XID,
+  zero DML
+- terminal persistence: `PRE_TERMINAL_EXACT -> CURRENT_TERMINAL_EXACT`, 858
+  controlled mutations, protected source/aggregate/gate/PO fingerprints
+  unchanged
+- second identical terminal persistence: `CURRENT_TERMINAL_EXACT`, zero
+  planned mutations and zero committed DML
+- final source controls: 82,501.0000 net / 82,545.0000 absolute units and
+  $1,300,975.14 net / $1,304,920.80 absolute sales
+- resolved controls: 80,659.0000 net / 80,693.0000 absolute units and
+  $1,263,133.84 net / $1,264,065.52 absolute sales
+- excluded controls: 1,842.0000 net / 1,852.0000 absolute units and $37,841.30
+  net / $40,855.28 absolute sales
+- final `sales_daily`: 57,424 rows / 80,659.0000 units / $1,263,133.84 sales
+- database-derived exclusion integrity: PASS, no diagnostics, exact original
+  8-key/189-row bucket and exact exhaustively-unattributable 190-key/1,465-row
+  bucket
+- final post-rebuild terminal inspection: `CURRENT_TERMINAL_EXACT`, lifecycle
+  `POST_REBUILD`, zero planned terminal mutations, read-only/no-XID
+- `SALES_BACKFILL` reached PASS through the canonical readiness evaluator with
+  zero blockers at `2026-09-04T11:48:28.619695Z`
+- `CATALOG_SYNC` remains PASS; `VENDOR_RULES` remains FAIL; purchase orders and
+  purchase-order lines remain zero
+- Shopify writes, Packet A, Vendor Rules, forecasting, recommendations,
+  procurement, PO generation/release, and deployments were not started
 
-**Next Phase 4 checkpoint:** independent adversarial review of the owner-approved
-authority change and SHA-pinned terminal manifest. Implementation, restoration,
-persistence, historical-sales rebuild and readiness-gate evaluation remain
-separately unauthorized.
+**Next boundary:** stop. Any downstream phase or workstream requires a new
+explicit owner authorization. Remove the one-time `PHASE4_REVIEW_TOKEN_INPUT`
+from Replit Secrets now that closeout is complete.
 
 ### Phase 5 — Foundation UI
 
 **PARTIALLY DELIVERED AS NEEDED; FORMAL PHASE NOT YET CLOSED**
 
-Existing operational pages include readiness/catalog/historical-sales review functionality. Formal acceptance should follow the canonical Phase 5 requirements after Phase 4 review is resolved.
+Existing operational pages include readiness/catalog/historical-sales review
+functionality. Phase 4 is no longer a blocker, but formal Phase 5 acceptance has
+not been authorized or started by this closeout.
 
 ### Phase 6 — Foundation test / acceptance completion
 
 **NOT YET CLOSED**
 
-The project already has substantial adversarial/integration coverage, but formal foundation acceptance remains gated by the pending Phase 4 rebuild, gate reevaluation, and canonical completion criteria.
+The project already has substantial adversarial/integration coverage and Phase
+4 now passes. Formal Phase 6 foundation acceptance remains a separate,
+owner-authorized milestone and was not started by this closeout.
 
 ## Post-foundation ordered workstreams
 
@@ -154,7 +157,7 @@ These are program workstreams. Do not renumber or overwrite official phase IDs i
 | Gate | Status | Meaning |
 | --- | --- | --- |
 | `CATALOG_SYNC` | PASS | Catalog identity foundation is reconciled. |
-| `SALES_BACKFILL` | FAIL | Terminal intent is artifact-frozen only; independent review, implementation, rebuild and gate reevaluation remain pending. |
+| `SALES_BACKFILL` | PASS | Complete historical coverage, terminal identity accounting, canonical aggregate, controls, and database-derived exclusion integrity passed. |
 | `VENDOR_RULES` | FAIL | Not yet built/validated. |
 | PO readiness | DISABLED | Intentionally blocked while required gates fail. |
 

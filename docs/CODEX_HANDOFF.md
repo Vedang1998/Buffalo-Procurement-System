@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-08-22T01:50:16Z (UTC)
+**Updated:** 2026-09-04T11:56:05Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,123 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Phase 4 owner-approved terminal disposition — ARTIFACT FROZEN; INDEPENDENT REVIEW PENDING; REBUILD PENDING — SALES_BACKFILL = FAIL
+### Phase 4 production closeout — COMPLETE; `SALES_BACKFILL = PASS`
+
+- Owner-authorized production closeout executed from exact clean merged `main`
+  SHA `dbd4cdc1d48e098e20e8f7642a64fb409966c793`, tree
+  `fb9887834beff0b39a24f633503f3b78d8992f97`. Remote `origin/main`
+  resolved to the same SHA. GitHub Procurement CI run `33818188106` was
+  independently re-read through the GitHub API and was `completed / success`
+  for that exact SHA.
+- Before any production connection, both `PHASE4_REVIEW_TOKEN_INPUT` and
+  `RECONCILIATION_REVIEW_TOKEN` were proven present and non-empty without
+  printing, echoing, hashing, logging, or otherwise exposing either value. The
+  existing `require_review_authorization` constant-time comparison passed.
+- Production preflight used a database-enforced `REPEATABLE READ, READ ONLY`
+  snapshot with no transaction ID before or after inspection. Runtime identity
+  was PostgreSQL `16.10`, database `heliumdb`, schema `public`, and the database
+  name matched the configured URL. Migration 007 was wholly absent. Frozen
+  prestate was exact: 2,049 variants / 1,999 active / 46 retired-confirmed;
+  59,083 raw facts = 55,971 RESOLVED / 3,112 UNRESOLVED / 0 AMBIGUOUS /
+  0 EXCLUDED; 55,966 `sales_daily` rows; 343 review decisions; 8 active
+  exclusions; 17 review aliases; 7 readiness gates with `CATALOG_SYNC=PASS`,
+  `SALES_BACKFILL=FAIL`, and `VENDOR_RULES=FAIL`; 0 purchase orders and 0 PO
+  lines.
+- Exact protected prestate fingerprints were:
+  `sales_daily=fd2b4e504b492d9e7609ef8642320f7de300f5294369476da0877aee8da8b2e8`
+  (55,966 rows),
+  `raw_resolution=06e2726cc33849fc180788fa036a45dcd1b1acd7af32cf813f0ec9311b7dd37a`
+  (59,083),
+  `sales_backfill_runs=d26f1326eea8e16be6626684db5623c291f582a63564e7aeda9c90167507d409`
+  (1),
+  `readiness_gates=3e3c67ec4fbf0f29824311b4b97ad77bc20635acc3a2e3822c89c73a3119c21a`
+  (7), and the empty PO/PO-line digest
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- The legacy protected dry-run was also read-only/no-XID and proved
+  `CURRENT_PROVENANCE=343`, `CONFLICT=0`, and zero planned mutations for the
+  prior manifest state. It revalidated the original manifest SHA-256
+  `95fe0c7902efc337bb51ba0b5a2f974f9b2ac76d7221a25e7dcd52a8cd28d287`.
+- Only migration `procurement/db/007_phase4_terminal_disposition.sql` and its
+  standard migration marker were applied, transactionally. Fresh read-only
+  postconditions proved all 7 new variant columns, all 3 validated identity
+  constraints, all 13 Phase 4 triggers, all 5 filtered operational views,
+  2,049/2,049 pre-existing variants still `CURRENT`, zero premature
+  historical-only rows, zero premature terminal provenance, and unchanged
+  protected fingerprints.
+- The protected terminal dry-run revalidated terminal manifest SHA-256
+  `fb1e15e67fe66c7742b84ea2c50bf01ce8a5008f00b4887293404ac09d3f59ff`
+  and classified the entire database `PRE_TERMINAL_EXACT` with no diagnostics,
+  read-only/no-XID, and zero DML. Its exact plan was 43 restored identities,
+  280 terminal decision supersessions, 8 original-exclusion normalizations,
+  39 new proven alias families, 198 structured active exclusions, and 1
+  authority registration.
+- One serializable transaction changed `PRE_TERMINAL_EXACT` to
+  `CURRENT_TERMINAL_EXACT` and committed exactly 858 controlled mutations.
+  Fresh readback proved 43 RESTORE / 102 MAP / 198 EXCLUDE / 0
+  LEAVE_UNRESOLVED; 43 exact inactive `HISTORICAL_ONLY` identities; 56 total
+  approved source-ID alias families; 198 structured active exclusions; all
+  current-state components true; no diagnostic; and no protected
+  source/aggregate/gate/PO fingerprint change during terminal persistence.
+- A fresh read-only terminal dry-run again returned
+  `CURRENT_TERMINAL_EXACT`, zero DML, and no transaction ID. The mandatory
+  second identical persistence execution returned
+  `CURRENT_TERMINAL_EXACT -> CURRENT_TERMINAL_EXACT`, every planned mutation
+  count zero, committed mutations zero, and identical before/after protected
+  fingerprints.
+- The public canonical `finalize_sales_backfill` path then re-resolved all
+  59,083 durable facts, rebuilt the canonical aggregate, derived exclusion
+  integrity from authoritative PostgreSQL state, and evaluated readiness. It
+  completed with `status=PASS`, `run_status=COMPLETED`, zero blockers, 21/21
+  chunks, 70/70 pages, durable source facts, zero duplicate observations,
+  reconciled source/resolution/canonical controls, and
+  `canonical_aggregate_rebuilt=true`.
+- Final whole-source controls are exact: 59,083 facts = 57,429 RESOLVED /
+  1,654 EXCLUDED / 0 UNRESOLVED / 0 AMBIGUOUS. Source totals are 82,501.0000
+  net / 82,545.0000 absolute units and $1,300,975.14 net / $1,304,920.80
+  absolute sales. Resolved totals are 80,659.0000 net / 80,693.0000 absolute
+  units and $1,263,133.84 net / $1,264,065.52 absolute sales. Excluded totals
+  are 1,842.0000 net / 1,852.0000 absolute units and $37,841.30 net /
+  $40,855.28 absolute sales. `sales_daily` is exactly 57,424 rows /
+  80,659.0000 units / $1,263,133.84 sales.
+- Final resolution-method counts are exact: 36,397
+  `EXACT_ACTIVE_VARIANT_ID`; 19,430 `APPROVED_VARIANT_ID_ALIAS`; 136
+  `APPROVED_HISTORICAL_IDENTITY`; 443
+  `EXACT_PRESERVED_HISTORICAL_VARIANT_ID`; 1,023
+  `APPROVED_SOURCE_IDENTITY_DECISION`; 189 `EXPLICIT_EXCLUSION`; and 1,465
+  `EXPLICIT_UNATTRIBUTABLE_EXCLUSION`.
+- Authoritative exclusion integrity is `PASS` with no diagnostics, 198 exact
+  active source keys, and 1,654 excluded facts. The original-eight bucket is
+  8 keys / 189 rows / 44.0000 net and absolute units / $145.93 net and
+  $169.91 absolute sales. The exhaustively-unattributable bucket is 190 keys /
+  1,465 rows / 1,798.0000 net and 1,808.0000 absolute units / $37,695.37 net
+  and $40,685.37 absolute sales.
+- Fresh post-rebuild read-only verification classified the database
+  `CURRENT_TERMINAL_EXACT` with lifecycle `POST_REBUILD`, zero planned
+  terminal mutations, zero DML, and no transaction ID. Final protected
+  fingerprints are:
+  `sales_daily=43a6e808c5ff78d6de3cb2c7f382643f82935dc7d4f41d2fbaf72f9d995d4b14`
+  (57,424),
+  `raw_resolution=80ee8c2502eac33c75722d680f8e0ec5e0336ea08b72f341019f8d6b8e7e9b1f`
+  (59,083),
+  `sales_backfill_runs=f6789dfd2a064a62dcdbccc62ea21e5930080f29f47a879d333ce96073a2734b`
+  (1), and
+  `readiness_gates=66f69117e24adedf72b3a6df4fd80607482e8bb339c4803520e697237be10046`
+  (7); both PO digests remain the empty-state digest.
+- `SALES_BACKFILL` reached `PASS` through the canonical readiness path at
+  `2026-09-04T11:48:28.619695Z`; its persisted evidence contains zero blockers
+  and database-derived exclusion integrity `passed=true`. `CATALOG_SYNC`
+  remains `PASS`; `VENDOR_RULES` remains `FAIL`; other not-yet-started gates
+  remain `WARN`. Purchase orders and PO lines remain zero.
+- Post-production machine validation passed 305/305 with zero failures,
+  errors, skips, expected failures, or unexpected successes on Python 3.13.11
+  and disposable loopback PostgreSQL 16.9. No production database was exposed
+  to the test runner.
+- Shopify access/writes, Packet A, Vendor Rules, forecasting,
+  recommendations, procurement, PO generation/release, and deployments were
+  all zero/not started. Phase 4 is complete. No downstream phase or workstream
+  is authorized by this closeout.
+
+### Historical checkpoint — Phase 4 owner-approved terminal disposition artifact freeze
 
 - Owner authorization dated 2026-08-21 approved the terminal exclusion semantic
   `HISTORICAL_IDENTITY_UNATTRIBUTABLE_AFTER_EXHAUSTIVE_REVIEW`, all 19
@@ -73,7 +189,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   source facts, aggregate sales, readiness gates, Shopify and POs remain
   unchanged. Phase 4 is not complete.
 
-### Phase 4 controlled identity-decision persistence — OWNER DECISIONS PERSISTED AND INDEPENDENTLY REVIEWED; REBUILD PENDING — SALES_BACKFILL = FAIL
+### Historical checkpoint — Phase 4 controlled identity-decision persistence
 
 - The independently reviewed, owner-approved 343-row manifest was persisted
   exactly once to production under the one-time sequencing exception. Manifest
@@ -561,7 +677,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Current variants: 2,049 total = 1,999 `LIVE`/active + 46 `RETIRED_CONFIRMED`/inactive + 4 historical inactive-as-expected (`SEEDED`/inactive, archived in Shopify).
 - The 46 retirements remain individually audited. Phase 4 did not change catalog identity or retirement decisions.
 
-### Phase 4 implementation and live run
+### Historical checkpoint — Phase 4 initial implementation and live run
 
 - ShopifyQL access probe: **PASS** using configured Admin API `2026-07`; store timezone is `America/New_York`. No customer dimensions or Orders API fallback were used.
 - Additive migration `procurement/db/006_phase4_sales_backfill.sql` is applied. It adds durable run/chunk/page checkpoints, run-to-fact observations, restatement evidence, complete control fields, and append-only historical-sales review decisions.
@@ -570,7 +686,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Coverage: **21/21 date chunks**, **70/70 structurally contiguous pages**, all pages/chunks complete; no parse error, duplicate observation, missing chunk, or coverage gap. Current-code local finalization re-proved page indexes, offsets, terminal-page structure, stored range, and run-creation date evidence without refetching Shopify.
 - Durable source: **59,083 source rows = 59,083 unique natural facts**.
 - Resolution: **55,971 resolved rows**, **3,112 unresolved rows**, **0 ambiguous rows**, **0 explicitly excluded rows**.
-- The former owner review queue contained **343 unresolved identity groups**
+- At this historical checkpoint, the owner review queue contained **343
+  unresolved identity groups**
   ranked by materiality (**341 material**, 2 zero-impact but retained). All 343
   owner decisions are now durably persisted, but source rows have not been
   re-resolved and the canonical aggregate has not been rebuilt.
@@ -584,12 +701,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   effective review decisions and exactly 8 active historical exclusions; they
   have not yet been applied to historical source resolution.
 - Coverage, source persistence, idempotency, source/raw controls, resolution accounting, and canonical controls all reconcile. The canonical aggregate was rebuilt from this run's durable facts.
-- Phase 4 workflow implementation, initial live fetch, owner-decision
+- At this historical checkpoint, Phase 4 workflow implementation, initial live
+  fetch, owner-decision
   persistence, and independent persistence review are complete, but **Phase 4
   remains incomplete until separately authorized historical
   re-resolution/rebuild and gate reevaluation are complete**.
 
-### Current readiness and safety state
+### Historical pre-closeout readiness and safety state
 
 | Gate | Current status | Notes |
 | --- | --- | --- |
@@ -610,10 +728,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-The owner-approved terminal authority and SHA-pinned 280-key supplement are
-frozen in repository documentation only. The exact next action is **independent
-adversarial review of the owner-approved authority change and SHA-pinned
-terminal manifest**. Implementation planning/code, historical-identity
-restoration, decision persistence, historical-sales re-resolution/rebuild,
-`SALES_BACKFILL` evaluation or gate write, Shopify access, Vendor Rules,
-forecasting/procurement and PO work remain unauthorized.
+Phase 4 production closeout is complete and `SALES_BACKFILL=PASS`. Stop here:
+Packet A, Vendor Rules, inventory-history work, forecasting, recommendations,
+procurement, PO generation/release, Shopify mutations, and every downstream
+phase/workstream require a new explicit owner authorization. The task-specific
+`PHASE4_REVIEW_TOKEN_INPUT` secret has served its one-time purpose and should be
+removed from Replit Secrets; the long-lived configured
+`RECONCILIATION_REVIEW_TOKEN` remains governed separately and was not exposed.
