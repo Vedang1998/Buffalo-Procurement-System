@@ -1,7 +1,7 @@
 # Phase 5 Foundation UI Acceptance Remediation — Implementation Plan
 
-**Design:** `docs/superpowers/specs/2026-09-04-phase5-foundation-ui-remediation-design.md`  
-**Baseline:** `983656c1fbebeaeec3be4db4ed8d43e87aa9aa77`  
+**Design:** `docs/superpowers/specs/2026-09-04-phase5-foundation-ui-remediation-design.md`
+**Baseline:** `983656c1fbebeaeec3be4db4ed8d43e87aa9aa77`
 **Design commit:** `7be544b8ccd89aba5fc78d74cf2d385f3e3753ef`
 
 ## Constraints

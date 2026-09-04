@@ -1,9 +1,9 @@
 # Phase 5 Foundation UI Acceptance Remediation — Design
 
-**Date:** 2026-09-04  
-**Owner authorization:** Phase 5 Foundation UI acceptance remediation  
-**Baseline:** `983656c1fbebeaeec3be4db4ed8d43e87aa9aa77`  
-**Risk:** LOW-to-MODERATE; operational read-only presentation only  
+**Date:** 2026-09-04
+**Owner authorization:** Phase 5 Foundation UI acceptance remediation
+**Baseline:** `983656c1fbebeaeec3be4db4ed8d43e87aa9aa77`
+**Risk:** LOW-to-MODERATE; operational read-only presentation only
 **Status:** Approved for implementation; formal Phase 5 acceptance remains open
 
 ## Objective

@@ -230,6 +230,7 @@ def _catalog_gate_from_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
         "run_status": run["status"] if run else None,
         "started_at": str(run["started_at"]) if run else None,
         "completed_at": str(run["completed_at"]) if run and run["completed_at"] else None,
+        "shopify_api_version": run["shopify_api_version"] if run else None,
         "pagination_complete": run["pagination_complete"] if run else None,
         "shopify_reported_variant_count": (
             run["shopify_reported_variant_count"] if run else None

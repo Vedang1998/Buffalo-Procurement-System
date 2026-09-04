@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 import os
 
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -13,7 +13,7 @@ from .catalog import (
 )
 from .config import load_rules
 from .economics import qualifying_quantity, target_cost
-from .health import full_health
+from .health import data_sync_run_status, full_health
 from .matching import MatchCandidate, score_candidate
 from .pricing import rollover
 from .readiness import po_readiness
@@ -101,23 +101,74 @@ STATUS_BADGE = {
 }
 
 
-@app.get("/", response_class=HTMLResponse)
-@app.get("/admin/status", response_class=HTMLResponse)
-def admin_status():
-    """Phase 0-2 admin status page: seed import state + readiness gates.
+_OPERATIONAL_NAV_ITEMS = (
+    ("System Readiness", "admin/status"),
+    ("Catalog Reconciliation", "reconciliation"),
+    ("Historical Sales Reconciliation", "historical-sales/review"),
+    ("Data/Sync Runs", "data-sync-runs"),
+)
 
-    Intentionally simple and read-only. PO generation is disabled and shown as such.
-    """
-    h = full_health()
-    gates = h.get("gates", {})
+
+def _html_escape(value) -> str:
+    import html
+
+    return html.escape(str(value), quote=True) if value not in (None, "") else "—"
+
+
+def _operational_nav(nav_root: str, *, current: str) -> str:
+    links = []
+    for label, path in _OPERATIONAL_NAV_ITEMS:
+        current_attribute = " aria-current='page'" if label == current else ""
+        links.append(
+            f"<a href='{nav_root}{path}'{current_attribute}>{label}</a>"
+        )
+    return (
+        "<nav aria-label='Phase 5 operations' "
+        "style='display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px'>"
+        + "".join(
+            "<span style='display:inline-block;border:1px solid #d1d9e0;"
+            "border-radius:6px;padding:6px 9px'>" + link + "</span>"
+            for link in links
+        )
+        + "</nav>"
+    )
+
+
+def _po_blocker_html(blocker: dict) -> str:
+    detail = blocker.get("detail") or {}
+    identity = (
+        detail.get("gate_name")
+        or detail.get("exception_type")
+        or blocker.get("type")
+        or "READINESS_BLOCKER"
+    )
+    message = detail.get("message") or "Required readiness evidence is unavailable."
+    return f"<li><b>{_html_escape(identity)}</b> — {_html_escape(message)}</li>"
+
+
+def _admin_status_html(h: dict, *, nav_root: str) -> str:
+    """Render backend-owned health/readiness results without evaluating gates."""
+    readiness = h.get("po_readiness") or {}
+    gates = readiness.get("gates") or []
     shopify = h["shopify_credentials"]
 
-    def gate_row(name):
-        g = gates.get(name, {})
-        status = g.get("status", "UNKNOWN")
-        color = {"PASS": "#116329", "WARN": "#7d4e00"}.get(status, "#82071e")
-        return (f"<tr><td>{name}</td><td style='color:{color};font-weight:600'>{status}</td>"
-                f"<td>{g.get('message', '')}</td></tr>")
+    gate_rows = []
+    for gate in gates:
+        status = str(gate.get("status") or "UNKNOWN")
+        css_class = {
+            "PASS": "gate-pass",
+            "WARN": "gate-warn",
+            "FAIL": "gate-fail",
+        }.get(status, "gate-fail")
+        scope_type = gate.get("scope_type") or "GLOBAL"
+        scope_id = gate.get("scope_id") or ""
+        scope = scope_type if not scope_id else f"{scope_type}: {scope_id}"
+        gate_rows.append(
+            f"<tr><td>{_html_escape(gate.get('gate_name'))}</td>"
+            f"<td>{_html_escape(scope)}</td>"
+            f"<td class='{css_class}'>{_html_escape(status)}</td>"
+            f"<td>{_html_escape(gate.get('message'))}</td></tr>"
+        )
 
     seed = h.get("seed", {})
     seed_detail = (
@@ -136,27 +187,153 @@ def admin_status():
          if not h.get("schema", {}).get("ok") else ""),
         ("Seed import", seed.get("ok", False), seed_detail),
         ("Shopify credentials", shopify["configured"],
-         "" if shopify["configured"] else f"not configured (missing: {', '.join(shopify['missing_vars'])})"),
+         "" if shopify["configured"] else
+         f"not configured (missing: {', '.join(shopify['missing_vars'])})"),
     ]
-    comp = "".join(
-        f"<tr><td>{name}</td><td>{STATUS_BADGE[ok]}</td><td>{note}</td></tr>"
+    components = "".join(
+        f"<tr><td>{_html_escape(name)}</td><td>{STATUS_BADGE[bool(ok)]}</td>"
+        f"<td>{_html_escape(note)}</td></tr>"
         for name, ok, note in rows
     )
-    return f"""<!doctype html><html><head><title>Buffalo Procurement OS — System Status</title>
-<style>body{{font-family:system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+
+    enabled = bool(readiness.get("po_generation_enabled", False))
+    po_state = "ENABLED" if enabled else "DISABLED"
+    po_class = "po-enabled" if enabled else "po-disabled"
+    blockers = readiness.get("blockers") or []
+    blocker_detail = (
+        "<ul>" + "".join(_po_blocker_html(item) for item in blockers) + "</ul>"
+        if blockers else "<p>No canonical PO readiness blockers.</p>"
+    )
+    disabled_control = (
+        "<button type='button' disabled aria-disabled='true'>"
+        "PO generation disabled</button>"
+        if not enabled else ""
+    )
+    rendered_gates = "".join(gate_rows) or (
+        "<tr><td colspan='4'>Canonical readiness gates are unavailable.</td></tr>"
+    )
+    navigation = _operational_nav(nav_root, current="System Readiness")
+
+    return f"""<!doctype html><html><head><title>Buffalo Procurement OS — System Readiness</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
 table{{border-collapse:collapse;width:100%;margin-bottom:2rem}}td,th{{border:1px solid #d1d9e0;padding:8px 12px;text-align:left;font-size:14px}}
-th{{background:#f6f8fa}}h1{{font-size:22px}}h2{{font-size:17px}}
-.po{{background:#ffebe9;border:1px solid #ff8182;border-radius:6px;padding:12px 16px;font-weight:600;color:#82071e}}</style>
-</head><body>
-<h1>Buffalo Procurement OS — System Status</h1>
-<p class="po">PO generation: DISABLED — CATALOG_SYNC and SALES_BACKFILL must PASS against production data first.</p>
+th{{background:#f6f8fa}}h1{{font-size:22px}}h2{{font-size:17px}}.gate-pass{{color:#116329;font-weight:700}}
+.gate-warn{{color:#7d4e00;font-weight:700}}.gate-fail{{color:#82071e;font-weight:700}}
+.po-enabled,.po-disabled{{border:1px solid;border-radius:6px;padding:12px 16px;margin-bottom:20px}}
+.po-enabled{{background:#dafbe1;border-color:#4ac26b;color:#116329}}.po-disabled{{background:#ffebe9;border-color:#ff8182;color:#82071e}}
+.po-enabled h2,.po-disabled h2{{margin:0}}button[disabled]{{padding:7px 11px;border:1px solid #afb8c1;border-radius:5px;color:#59636e;cursor:not-allowed}}</style>
+</head><body>{navigation}
+<h1>Buffalo Procurement OS — System Readiness</h1>
+<section class='{po_class}'><h2>PO generation: {po_state}</h2>{blocker_detail}{disabled_control}</section>
 <h2>Components</h2>
-<table><tr><th>Component</th><th>Status</th><th>Detail</th></tr>{comp}</table>
-<h2>Foundation readiness gates</h2>
-<table><tr><th>Gate</th><th>Status</th><th>Message</th></tr>
-{gate_row('CATALOG_SYNC')}{gate_row('SALES_BACKFILL')}</table>
-<p style="color:#59636e;font-size:13px">Machine-readable: <a href="health/full">/health/full</a></p>
+<table><tr><th>Component</th><th>Status</th><th>Detail</th></tr>{components}</table>
+<h2>Readiness gates</h2>
+<table><tr><th>Gate</th><th>Scope</th><th>Status</th><th>Canonical message / blocker</th></tr>
+{rendered_gates}</table>
+<p style="color:#59636e;font-size:13px">Machine-readable: <a href="{nav_root}health/full">/health/full</a></p>
 </body></html>"""
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/admin/status", response_class=HTMLResponse)
+def admin_status(request: Request):
+    """Operational system-readiness page; presentation is read-only."""
+    nav_root = "" if request.url.path == "/" else "../"
+    return _admin_status_html(full_health(), nav_root=nav_root)
+
+
+def _display_count(value) -> str:
+    if value is None:
+        return "—"
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return _html_escape(value)
+
+
+def _display_boolean(value) -> str:
+    if value is None:
+        return "—"
+    return "yes" if value is True else "no"
+
+
+def _run_readiness_html(readiness: dict) -> str:
+    status = readiness.get("status") or "MISSING"
+    css_class = {
+        "PASS": "gate-pass",
+        "WARN": "gate-warn",
+        "FAIL": "gate-fail",
+    }.get(str(status), "gate-fail")
+    blockers = readiness.get("blockers") or []
+    blocker_text = ", ".join(str(item) for item in blockers) or "none"
+    return (
+        f"<p>Readiness: <b class='{css_class}'>{_html_escape(status)}</b> — "
+        f"{_html_escape(readiness.get('message'))}</p>"
+        f"<p>Readiness blockers: {_html_escape(blocker_text)}</p>"
+    )
+
+
+def _data_sync_runs_html(data: dict, *, nav_root: str) -> str:
+    """Render existing durable run evidence without exposing an action surface."""
+    catalog = data["catalog"]
+    catalog_run = catalog.get("run")
+    if catalog_run:
+        catalog_body = f"""<table><tr><th>Run ID</th><td>{_html_escape(catalog_run.get('catalog_sync_id'))}</td></tr>
+<tr><th>Started</th><td>{_html_escape(catalog_run.get('started_at'))}</td></tr>
+<tr><th>Completed</th><td>{_html_escape(catalog_run.get('completed_at'))}</td></tr>
+<tr><th>Run status</th><td>{_html_escape(catalog_run.get('status'))}</td></tr>
+<tr><th>Shopify API</th><td>{_html_escape(catalog_run.get('shopify_api_version'))}</td></tr>
+<tr><th>Pagination complete</th><td>{_display_boolean(catalog_run.get('pagination_complete'))}</td></tr>
+<tr><th>Live rows</th><td>{_display_count(catalog_run.get('live_rows_received'))}</td></tr>
+<tr><th>Shopify-reported variants</th><td>{_display_count(catalog_run.get('shopify_reported_variant_count'))}</td></tr>
+<tr><th>Exact current IDs</th><td>{_display_count(catalog_run.get('exact_current_ids'))}</td></tr>
+<tr><th>New live variants</th><td>{_display_count(catalog_run.get('new_live_variants'))}</td></tr>
+<tr><th>Unresolved blockers</th><td>{_display_count(catalog_run.get('unresolved_blockers'))}</td></tr></table>"""
+    else:
+        catalog_body = "<p>No authoritative catalog attempt is available.</p>"
+
+    sales = data["historical_sales"]
+    sales_run = sales.get("run")
+    if sales_run:
+        sales_body = f"""<table><tr><th>Run ID</th><td>{_html_escape(sales_run.get('sales_backfill_id'))}</td></tr>
+<tr><th>Requested range</th><td>{_html_escape(sales_run.get('start_date'))} through {_html_escape(sales_run.get('end_date'))}</td></tr>
+<tr><th>Started</th><td>{_html_escape(sales_run.get('started_at'))}</td></tr>
+<tr><th>Completed</th><td>{_html_escape(sales_run.get('completed_at'))}</td></tr>
+<tr><th>Run status</th><td>{_html_escape(sales_run.get('status'))}</td></tr>
+<tr><th>Chunk completion</th><td>{_display_count(sales_run.get('completed_chunks'))} / {_display_count(sales_run.get('expected_chunks'))}</td></tr>
+<tr><th>Page completion</th><td>{_display_count(sales_run.get('completed_pages'))} / {_display_count(sales_run.get('expected_pages'))}</td></tr>
+<tr><th>Source facts</th><td>{_display_count(sales_run.get('unique_source_facts'))}</td></tr>
+<tr><th>Resolution state</th><td>{_display_count(sales_run.get('resolved_rows'))} resolved · {_display_count(sales_run.get('excluded_rows'))} excluded · {_display_count(sales_run.get('unresolved_rows'))} unresolved · {_display_count(sales_run.get('ambiguous_rows'))} ambiguous</td></tr>
+<tr><th>Coverage complete</th><td>{_display_boolean(sales_run.get('coverage_complete'))}</td></tr>
+<tr><th>Pages complete</th><td>{_display_boolean(sales_run.get('pages_complete'))}</td></tr>
+<tr><th>Source facts persisted</th><td>{_display_boolean(sales_run.get('source_facts_persisted'))}</td></tr>
+<tr><th>Idempotency verified</th><td>{_display_boolean(sales_run.get('idempotency_verified'))}</td></tr>
+<tr><th>Control totals reconciled</th><td>{_display_boolean(sales_run.get('control_totals_reconciled'))}</td></tr>
+<tr><th>Canonical aggregate current</th><td>{_display_boolean(sales_run.get('canonical_aggregate_rebuilt'))}</td></tr></table>"""
+    else:
+        sales_body = "<p>No historical-sales run evidence is available.</p>"
+
+    navigation = _operational_nav(nav_root, current="Data/Sync Runs")
+    return f"""<!doctype html><html><head><title>Data/Sync Runs</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+h1{{font-size:24px}}h2{{font-size:18px;margin-top:26px}}table{{border-collapse:collapse;width:100%}}
+td,th{{border:1px solid #d1d9e0;padding:7px 10px;text-align:left;font-size:13px}}th{{background:#f6f8fa;width:230px}}
+.gate-pass{{color:#116329}}.gate-warn{{color:#7d4e00}}.gate-fail{{color:#82071e}}.muted{{color:#59636e;font-size:13px}}</style>
+</head><body>{navigation}<h1>Data/Sync Runs</h1>
+<p class='muted'>Read-only evidence from durable catalog and historical-sales checkpoints.</p>
+<section><h2>Catalog</h2><p>Selection: {_html_escape(catalog.get('selection'))}</p>
+{_run_readiness_html(catalog.get('readiness') or {})}{catalog_body}</section>
+<section><h2>Historical sales</h2><p>Selection: {_html_escape(sales.get('selection'))}</p>
+{_run_readiness_html(sales.get('readiness') or {})}{sales_body}</section>
+</body></html>"""
+
+
+@app.get("/data-sync-runs", response_class=HTMLResponse)
+def data_sync_runs_page():
+    """Read-only durable run/checkpoint evidence; never starts or retries a job."""
+    with _db_conn() as conn:
+        data = data_sync_run_status(conn)
+    return _data_sync_runs_html(data, nav_root="")
 
 
 @app.get("/rules")
@@ -306,7 +483,14 @@ def reconciliation_page():
     data = reconciliation_items(unresolved_only=True)
     run = data["run"]
     if not run:
-        return "<h1>Catalog Reconciliation</h1><p>No catalog sync attempt exists yet.</p>"
+        navigation = _operational_nav("", current="Catalog Reconciliation")
+        return (
+            "<!doctype html><html><head><title>Catalog Reconciliation</title>"
+            "</head><body style='font-family:system-ui,sans-serif;max-width:980px;"
+            f"margin:2rem auto;padding:0 1rem;color:#1f2328'>{navigation}"
+            "<h1>Catalog Reconciliation</h1>"
+            "<p>No catalog sync attempt exists yet.</p></body></html>"
+        )
     items = data["items"]
 
     def esc(v):
@@ -375,6 +559,7 @@ th{{background:#f6f8fa}}.warn{{color:#82071e}}.item{{border:1px solid #d1d9e0;bo
 button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-size:12px;font-weight:600}}
 .ok{{background:#dafbe1;color:#116329}}.bad{{background:#ffebe9;color:#82071e}}.mid{{background:#fff8c5;color:#7d4e00}}.muted{{color:#59636e;font-size:12px;align-self:center}}
 </style></head><body>
+{_operational_nav('', current='Catalog Reconciliation')}
 <h1>Catalog Reconciliation — human review queue</h1>
 <p>Authoritative run {esc(run['catalog_sync_id'])} · run status {esc(run['status'])}
 · readiness {esc(run['readiness_status'])} · API {esc(run['shopify_api_version'])}
@@ -383,6 +568,7 @@ button{{padding:5px 10px;border-radius:5px;border:1px solid;cursor:pointer;font-
 · snapshot {esc((run['source_hash'] or '')[:16])}…</p>
 <p>Readiness blockers: {esc(', '.join(run['readiness_blockers']) or 'none')}</p>
 <p><b>{len(items)}</b> unresolved blocker(s). Identity decisions are permanent and audited. Nothing here writes to Shopify.</p>
+<p class='muted'><a href='reconciliation/investigation'>Catalog Identity Investigation</a> provides subordinate diagnostic evidence.</p>
 {sections or '<p>No unresolved blockers.</p>'}
 </body></html>"""
 
@@ -819,7 +1005,7 @@ header{{display:flex;justify-content:space-between;gap:16px;align-items:start}}.
 .catalog-picker{{border:1px solid #afb8c1;border-radius:6px;background:#f6f8fa;padding:10px;margin-top:12px}}.catalog-search-controls{{display:flex;align-items:end;gap:8px;flex-wrap:wrap}}.catalog-search-results{{display:grid;gap:7px}}.catalog-result{{border-left:3px solid #afb8c1;background:#fff;padding:8px;font-size:12px}}.catalog-result-evidence{{color:#59636e;margin:4px 0}}
 .actions{{display:grid;gap:10px;margin-top:14px}}form{{border-top:1px solid #d1d9e0;padding-top:10px;display:flex;gap:8px;align-items:end;flex-wrap:wrap}}label{{display:flex;flex-direction:column;gap:3px;font-size:12px}}input{{padding:6px;font-size:13px;min-width:150px}}button{{padding:7px 11px;border:1px solid;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer}}
 .map{{background:#dafbe1;color:#116329}}.exclude{{background:#ffebe9;color:#82071e}}.leave{{background:#f6f8fa;color:#1f2328}}@media(max-width:760px){{.evidence-grid{{grid-template-columns:1fr}}header{{display:block}}}}</style>
-</head><body><h1>Historical ShopifyQL Sales — identity review</h1>
+</head><body>{_operational_nav('../', current='Historical Sales Reconciliation')}<h1>Historical ShopifyQL Sales — identity review</h1>
 <p><b>{len(items)}</b> unresolved or ambiguous historical source identity group(s), ranked by materiality. Daily facts are grouped so each decision covers the complete historical source identity. Nothing on this page writes to Shopify.</p>
 <p class='muted'>Mapping and exclusion decisions are permanent, audited, and require a reviewer, reason, and review token. Leaving an item unresolved keeps SALES_BACKFILL failed.</p>
 {cards or '<p>No unresolved or ambiguous historical source identities require review.</p>'}
