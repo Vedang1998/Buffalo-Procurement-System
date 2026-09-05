@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-04T11:56:05Z (UTC)
+**Updated:** 2026-09-05T00:18:46Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,82 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Phase 5 Foundation UI remediation — implementation complete; independent acceptance review pending
+
+- Owner-authorized implementation started from exact clean `main` SHA
+  `983656c1fbebeaeec3be4db4ed8d43e87aa9aa77`. GitHub Procurement CI run
+  `33875150819` was `completed / success` for that exact SHA. Work is isolated
+  on branch `codex/phase5-foundation-ui-remediation`; design commit
+  `7be544b8ccd89aba5fc78d74cf2d385f3e3753ef`, plan commit
+  `31854acc7da591dcbf3422f3aff8bac51358d949`, and implementation commit
+  `1bb1cb5a1eb7b0daccf96cf67543fc32efcb256a`. The independent review's
+  blocking test-safety finding is remediated by commit
+  `da6e45346b7960964db83a6362d05e47a6d6a66a`.
+- `/admin/status` now renders every gate returned by canonical
+  `po_readiness()`, including each backend-owned PASS/WARN/FAIL status and
+  exact message. PO readiness is also taken directly from that result. The
+  page renders ENABLED/DISABLED, canonical blockers, and an inert disabled
+  button with no form, action, JavaScript handler, or mutation route. No
+  frontend gate or blocker semantics were introduced.
+- New canonical GET-only route `/data-sync-runs` renders durable catalog-run
+  evidence from the authoritative catalog evaluator and historical-sales
+  run/checkpoint evidence selected first by canonical gate run ID, then by the
+  established latest-reviewable-run selector, with newest attempt used only as
+  a labeled diagnostic fallback. These presentation paths issue SELECTs only
+  and expose no sync, retry, rebuild, job, Shopify, or PO action.
+- A shared depth-aware operational navigation renderer connects System
+  Readiness, Catalog Reconciliation, Historical Sales Reconciliation, and
+  Data/Sync Runs without renaming or redirecting existing routes. Catalog
+  Identity Investigation is exposed only as a subordinate reconciliation
+  link. Existing catalog and historical review decision routes and their
+  security controls are unchanged.
+- Dedicated deterministic Phase 5 coverage is 22/22 against an explicit,
+  independently created disposable loopback PostgreSQL 16 database whose name
+  ends `_test`. The complete Procurement OS suite is 327/327 with zero
+  failures, errors, skips, expected failures, or unexpected successes on
+  Python 3.13.11 and disposable loopback PostgreSQL 16.9. Replit startup
+  hardening is 10/10; pinned `uv 0.12.3` lock/sync checks, compilation, and
+  `git diff --check` pass. The new test module is registered at a mandatory
+  floor of 22; the global floor rises accordingly.
+- The Phase 5 PostgreSQL integration fixture no longer reads or falls back to
+  ordinary `DATABASE_URL`. A narrow test-only loader invokes the unchanged
+  safety functions in `procurement/tools/run_tests.py`: it requires and parses
+  `TEST_DATABASE_URL`, rejects non-PostgreSQL, non-loopback, multi-database,
+  non-`_test`, parameter, query and fragment targets, clears all libpq `PG*`
+  redirects, and then connects to the exact validated URL. On that same
+  connection it verifies exact `current_database()` identity and PostgreSQL
+  major version 16 before fixture-schema DDL is reachable. Eight new tests
+  cover every requested rejection and valid-target case. During this reviewer
+  remediation, production database connections and writes were both zero.
+- No Shopify client was invoked; Shopify calls/writes are zero. No PO action,
+  generation, export, release, or mutation path was added or invoked. No
+  public production migration, readiness-gate write, catalog/sales job, or
+  downstream Phase 6 work was performed.
+- Validation anomaly requiring independent reviewer attention: one early
+  direct invocation of the new integration module inherited the production
+  `DATABASE_URL`. It created three uniquely named `phase5_ui_*` schemas,
+  applied schema/migration fixtures inside each, ran fixture DML, and dropped
+  each schema in teardown. Therefore production-connection DML cannot be
+  reported as zero for this task, despite the writes being isolated and
+  removed. ChatGPT independently reconciled the incident through a separate
+  read-only production inspection: zero remaining `phase5_ui_%` schemas; all
+  approved Phase 4 protected fingerprints exact; 59,083 source facts; 57,424
+  `sales_daily` rows; seven readiness gates; 0 purchase orders; 0 PO lines;
+  raw resolution 57,429 RESOLVED / 1,654 EXCLUDED / 0 UNRESOLVED / 0
+  AMBIGUOUS; `CATALOG_SYNC=PASS`, `SALES_BACKFILL=PASS`, `VENDOR_RULES=FAIL`,
+  and the other four gates WARN. All later targeted and full tests explicitly
+  used validated disposable loopback PostgreSQL.
+- Older PostgreSQL integration modules retain a direct-invocation pattern that
+  relies on the authoritative full-suite runner to replace `DATABASE_URL` with
+  its validated `TEST_DATABASE_URL`. Broadening the correction to those legacy
+  modules is explicitly deferred as a **Phase 6 test-harness hardening item**;
+  no Phase 6 implementation was performed here.
+- Formal Phase 5 acceptance remains open. `procurement/docs/PHASE_STATUS.md`
+  is intentionally unchanged. No PR or merge has been opened or performed.
+  Exact next action: ChatGPT must re-review the test-safety remediation,
+  validation evidence, read-only boundaries, and retained production-test
+  disclosure before any PR or merge decision.
 
 ### Phase 4 production closeout — COMPLETE; `SALES_BACKFILL = PASS`
 
