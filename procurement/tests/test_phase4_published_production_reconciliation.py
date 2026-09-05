@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date, timedelta
+import hashlib
 import importlib.util
+import inspect
 import os
 from pathlib import Path
 import stat
@@ -42,15 +44,61 @@ sys.modules[RUNNER_SPEC.name] = test_runner
 RUNNER_SPEC.loader.exec_module(test_runner)
 
 DB_DIR = PROCUREMENT_ROOT / "db"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 BOOTSTRAP = REPOSITORY_ROOT / "scripts" / "phase4-published-production-bootstrap.sh"
+HISTORICAL_SCHEMA_FIXTURE = (
+    FIXTURES_DIR / "schema_postgres_pre_terminal_198b213e.sql"
+)
+HISTORICAL_SCHEMA_SOURCE_COMMIT = (
+    "198b213e9b8f733e4cc76e568e91697d187e817f"
+)
+HISTORICAL_SCHEMA_SOURCE_BLOB = (
+    "4f7dc2517f373513f132e1bf40970986bc607e55"
+)
+HISTORICAL_SCHEMA_SHA256 = (
+    "d5b5731d668d71a88af35e14ebe1fec60901f4bc222374303f7365d629dd38e6"
+)
 PRE_007_MIGRATIONS = (
-    "schema_postgres.sql",
     "001_v1_3_catalog_sales.sql",
     "002_seed_import_records.sql",
     "003_phase3_reconciliation.sql",
     "004_identity_decision_invariants.sql",
     "005_identity_investigation.sql",
     "006_phase4_sales_backfill.sql",
+)
+MIGRATION_BYTE_AUTHORITIES = {
+    "001_v1_3_catalog_sales.sql": (
+        "1ef0e23d7d9d8f7f731dfd93326e8b7dbf407f29",
+        "66bc873f91142e0941728af4260031a908195195a2e8d1a54d4ed5fee28ff50b",
+    ),
+    "002_seed_import_records.sql": (
+        "bf4fed48b8115ea0d364f6e8875efc243132ae43",
+        "950e9520a12938ca0bee68ac3d68976da5a6119ec97753d4a4c243cb80ea3ad9",
+    ),
+    "003_phase3_reconciliation.sql": (
+        "fa7d1b3c8d6f8b922dcdf33106f1085e0803d7ac",
+        "079396b466baadea0501fd591aaa585a39299f6649bbc71fc52897d9d8a65e42",
+    ),
+    "004_identity_decision_invariants.sql": (
+        "483332d9fd32c992e82e04d822adc6ad54e83e5e",
+        "bb490864a7657da672505d3fcba9df8c87ded72fefa0497db11298a058b64e7e",
+    ),
+    "005_identity_investigation.sql": (
+        "b814439b228bae9c10c17f4970cecb614b28a5a0",
+        "c9cc337fe34857368c471f493702fa0b42691ac48fe3fae4ca1a4fc3ea929b01",
+    ),
+    "006_phase4_sales_backfill.sql": (
+        "7a331ae24e71b6eaadb6076a36adba06d62266d3",
+        "3ea0e2f280395c83d99d51617c7ffc6d6c1097d95f90e1bcad59698e67d775b1",
+    ),
+    "007_phase4_terminal_disposition.sql": (
+        "19af26028a4c4dd0e26853120f5c475e72990ef3",
+        "657b4db6f150b26aa93a83ba32e1e8d648ed183d9c939f4ebd1109f6afcdd363",
+    ),
+}
+GENUINE_PRE_007_AUTHORITY_CHAIN = (
+    ("schema_postgres.sql", HISTORICAL_SCHEMA_FIXTURE),
+    *((name, DB_DIR / name) for name in PRE_007_MIGRATIONS),
 )
 SAFE_TEST_URL = "postgresql://test:test@127.0.0.1:5432/procurement_test"
 EXECUTION_SHA = "a" * 40
@@ -98,6 +146,65 @@ def run_isolated_real_git(arguments):
             capture_output=True,
             text=True,
         )
+
+
+def git_blob_sha1(content: bytes) -> str:
+    header = f"blob {len(content)}\0".encode("ascii")
+    return hashlib.sha1(header + content).hexdigest()
+
+
+def install_genuine_pre_007_chain(conn) -> None:
+    """Install only the frozen historical base and committed migrations 001-006."""
+
+    for marker_name, authority_path in GENUINE_PRE_007_AUTHORITY_CHAIN:
+        conn.execute(authority_path.read_text(encoding="utf-8"))
+        conn.execute(
+            """INSERT INTO meta(key,value) VALUES (%s,'applied')
+               ON CONFLICT(key) DO UPDATE SET value='applied'""",
+            (f"migration:{marker_name}",),
+        )
+
+
+class CorrectiveSemanticAuthorityProvenanceTests(unittest.TestCase):
+    def test_historical_schema_fixture_has_frozen_provenance(self):
+        content = HISTORICAL_SCHEMA_FIXTURE.read_bytes()
+        self.assertEqual(len(content), 22_818)
+        self.assertEqual(hashlib.sha256(content).hexdigest(), HISTORICAL_SCHEMA_SHA256)
+        self.assertEqual(git_blob_sha1(content), HISTORICAL_SCHEMA_SOURCE_BLOB)
+        self.assertEqual(
+            HISTORICAL_SCHEMA_SOURCE_COMMIT,
+            "198b213e9b8f733e4cc76e568e91697d187e817f",
+        )
+
+    def test_migration_authority_bytes_are_frozen(self):
+        self.assertEqual(
+            tuple(MIGRATION_BYTE_AUTHORITIES),
+            PRE_007_MIGRATIONS + ("007_phase4_terminal_disposition.sql",),
+        )
+        for name, (expected_blob, expected_sha256) in (
+            MIGRATION_BYTE_AUTHORITIES.items()
+        ):
+            content = (DB_DIR / name).read_bytes()
+            self.assertEqual(
+                hashlib.sha256(content).hexdigest(), expected_sha256, name
+            )
+            self.assertEqual(git_blob_sha1(content), expected_blob, name)
+
+    def test_semantic_authority_chain_has_no_surgical_reconstruction(self):
+        authority_paths = tuple(path for _marker, path in GENUINE_PRE_007_AUTHORITY_CHAIN)
+        self.assertEqual(authority_paths[0], HISTORICAL_SCHEMA_FIXTURE)
+        self.assertNotIn(DB_DIR / "schema_postgres.sql", authority_paths)
+        self.assertEqual(
+            authority_paths[1:], tuple(DB_DIR / name for name in PRE_007_MIGRATIONS)
+        )
+        installer_source = inspect.getsource(install_genuine_pre_007_chain).upper()
+        for prohibited in (
+            "DROP COLUMN",
+            "DROP FUNCTION",
+            "CREATE VIEW",
+            "CREATE OR REPLACE VIEW",
+        ):
+            self.assertNotIn(prohibited, installer_source)
 
 
 class CorrectivePreconnectionSafetyTests(unittest.TestCase):
@@ -997,14 +1104,7 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
         self.conn.execute(
             sql.SQL("SET search_path TO {}, public").format(sql.Identifier(self.schema))
         )
-        for name in PRE_007_MIGRATIONS:
-            self.conn.execute((DB_DIR / name).read_text(encoding="utf-8"))
-            self.conn.execute(
-                """INSERT INTO meta(key,value) VALUES (%s,'applied')
-                   ON CONFLICT(key) DO UPDATE SET value='applied'""",
-                (f"migration:{name}",),
-            )
-        self._remove_schema_reapplication_terminal_artifacts()
+        install_genuine_pre_007_chain(self.conn)
         self.conn.commit()
         self._seed_exact_state_a()
         self.frozen = protected_state_fingerprints(self.conn)
@@ -1035,27 +1135,57 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
         finally:
             self.conn.close()
 
-    def _remove_schema_reapplication_terminal_artifacts(self) -> None:
-        self.conn.execute(
-            """CREATE OR REPLACE VIEW v_current_prices AS
-               SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,
-                      o.shopify_units_per_case,o.qualifying_units_per_case,
-                      o.assortment_scope,o.assortment_group,o.assortable
-               FROM prices p JOIN supplier_offers o USING(offer_id)
-               WHERE p.price_state='current' AND o.active"""
-        )
-        self.conn.execute(
-            """CREATE OR REPLACE VIEW v_future_prices AS
-               SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,
-                      o.shopify_units_per_case,o.qualifying_units_per_case,
-                      o.assortment_scope,o.assortment_group,o.assortable
-               FROM prices p JOIN supplier_offers o USING(offer_id)
-               WHERE p.price_state='future' AND o.active"""
-        )
-        self.conn.execute("DROP FUNCTION IF EXISTS is_operational_current_variant(TEXT)")
-        for column in sorted(corrective.TERMINAL_VARIANT_COLUMNS):
-            self.conn.execute(f"ALTER TABLE variants DROP COLUMN IF EXISTS {column}")
-        self.conn.execute("ALTER TABLE variants ALTER COLUMN product_id SET NOT NULL")
+    @contextmanager
+    def _genuine_chain_schema(self):
+        """Yield an independently validated connection with a fresh authority chain."""
+
+        from psycopg import sql
+
+        connection, target, database_info = validated_test_connection()
+        self.assertEqual(target, self.target)
+        self.assertEqual(database_info, self.database_info)
+        schema = f"phase4_signature_{uuid.uuid4().hex}"
+        try:
+            connection.execute(
+                sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema))
+            )
+            connection.execute(
+                sql.SQL("SET search_path TO {}, public").format(
+                    sql.Identifier(schema)
+                )
+            )
+            install_genuine_pre_007_chain(connection)
+            connection.commit()
+            yield connection, schema
+        finally:
+            connection.rollback()
+            connection.execute("SET search_path TO public")
+            connection.execute(
+                sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                    sql.Identifier(schema)
+                )
+            )
+            connection.commit()
+            connection.close()
+
+    @staticmethod
+    def _protected_column_positions(conn):
+        rows = conn.execute(
+            """SELECT c.relname,a.attname,a.attnum::int
+               FROM pg_class c
+               JOIN pg_namespace n ON n.oid=c.relnamespace
+               JOIN pg_attribute a ON a.attrelid=c.oid
+               WHERE n.nspname=current_schema()
+                 AND c.relname=ANY(%s)
+                 AND a.attnum>0 AND NOT a.attisdropped
+               ORDER BY c.relname,a.attname""",
+            (sorted(corrective.TERMINAL_COLUMN_CONTRACT),),
+        ).fetchall()
+        return {
+            (str(relation), str(name)): int(position)
+            for relation, name, position in rows
+            if name in corrective.TERMINAL_COLUMN_CONTRACT[str(relation)]
+        }
 
     def _seed_exact_state_a(self) -> None:
         fixture = terminal_fixture_module.Phase4TerminalDispositionPostgresTests(
@@ -1429,29 +1559,115 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             )
 
     def test_canonical_migration_reproduces_frozen_semantic_signature(self):
-        with patch.object(
-            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
-        ), self.execution_patch():
-            self._advance_to_c(actor="corrective-signature-reproduction")
-            state = corrective.migration_007_state(self.conn)
-            self.assertEqual(state["classification"], "COMPLETE")
-            self.assertTrue(state["semantic_schema_matches"])
-            self.assertEqual(
-                state["semantic_schema_sha256"],
-                corrective.EXPECTED_MIGRATION_007_SCHEMA_SHA256,
+        observed = []
+        schemas = [(self.conn, self.schema)]
+        with self._genuine_chain_schema() as independent:
+            schemas.append(independent)
+            for connection, schema in schemas:
+                pre_signature = corrective._migration_007_semantic_signature(
+                    connection, schema
+                )
+                self.assertEqual(
+                    pre_signature["sha256"],
+                    corrective.EXPECTED_PRE_007_SCHEMA_SHA256,
+                )
+                connection.execute(
+                    (DB_DIR / "007_phase4_terminal_disposition.sql").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                post_signature = corrective._migration_007_semantic_signature(
+                    connection, schema
+                )
+                self.assertEqual(
+                    post_signature["sha256"],
+                    corrective.EXPECTED_MIGRATION_007_SCHEMA_SHA256,
+                )
+                payload = post_signature["payload"]
+                self.assertEqual(len(payload["functions"]), 10)
+                self.assertEqual(len(payload["triggers"]), 13)
+                self.assertEqual(len(payload["constraints"]), 20)
+                self.assertEqual(len(payload["views"]), 5)
+                self.assertEqual(len(payload["protected_relations"]), 1)
+                self.assertEqual(len(payload["view_columns"]), 93)
+                self.assertEqual(
+                    payload["view_columns"],
+                    sorted(
+                        payload["view_columns"],
+                        key=lambda column: (
+                            column["relation"],
+                            column["position"],
+                        ),
+                    ),
+                )
+                self.assertEqual(len(payload["authority_columns"]), 12)
+                self.assertEqual(
+                    [column["position"] for column in payload["authority_columns"]],
+                    list(range(1, 13)),
+                )
+                preexisting = payload["preexisting_protected_columns"]
+                self.assertEqual(len(preexisting), 18)
+                self.assertTrue(all("position" not in column for column in preexisting))
+                self.assertEqual(
+                    [(column["relation"], column["name"]) for column in preexisting],
+                    sorted(
+                        (column["relation"], column["name"])
+                        for column in preexisting
+                    ),
+                )
+                observed.append((pre_signature["sha256"], post_signature["sha256"]))
+        self.assertEqual(len(set(observed)), 1)
+
+    def test_preexisting_protected_columns_ignore_physical_position(self):
+        baseline_pre = corrective._migration_007_semantic_signature(
+            self.conn, self.schema
+        )
+        with self._genuine_chain_schema() as (with_holes, with_holes_schema):
+            for table in corrective.TERMINAL_COLUMN_CONTRACT:
+                with_holes.execute(
+                    f'ALTER TABLE "{table}" ADD COLUMN phase4_position_probe TEXT'
+                )
+                with_holes.execute(
+                    f'ALTER TABLE "{table}" DROP COLUMN phase4_position_probe'
+                )
+            with_holes_pre = corrective._migration_007_semantic_signature(
+                with_holes, with_holes_schema
             )
-            signature = corrective._migration_007_semantic_signature(
+            self.assertEqual(baseline_pre["sha256"], with_holes_pre["sha256"])
+
+            migration_sql = (
+                DB_DIR / "007_phase4_terminal_disposition.sql"
+            ).read_text(encoding="utf-8")
+            self.conn.execute(migration_sql)
+            with_holes.execute(migration_sql)
+            baseline_positions = self._protected_column_positions(self.conn)
+            hole_positions = self._protected_column_positions(with_holes)
+            for table in corrective.TERMINAL_COLUMN_CONTRACT:
+                table_keys = [key for key in baseline_positions if key[0] == table]
+                self.assertTrue(table_keys)
+                self.assertTrue(
+                    any(
+                        baseline_positions[key] != hole_positions[key]
+                        for key in table_keys
+                    ),
+                    table,
+                )
+
+            baseline_post = corrective._migration_007_semantic_signature(
                 self.conn, self.schema
             )
-            self.assertEqual(
-                signature["sha256"],
-                "238a8b885f4a9d9840d3befb1e26b199c813e9807622b33183275a878651be17",
+            with_holes_post = corrective._migration_007_semantic_signature(
+                with_holes, with_holes_schema
             )
-            self.assertEqual(len(signature["payload"]["functions"]), 10)
-            self.assertEqual(len(signature["payload"]["triggers"]), 13)
-            self.assertEqual(len(signature["payload"]["constraints"]), 20)
-            self.assertEqual(len(signature["payload"]["views"]), 5)
-            self.assertEqual(len(signature["payload"]["protected_relations"]), 1)
+            self.assertEqual(
+                baseline_post["payload"]["preexisting_protected_columns"],
+                with_holes_post["payload"]["preexisting_protected_columns"],
+            )
+            self.assertEqual(baseline_post["sha256"], with_holes_post["sha256"])
+            self.assertEqual(
+                baseline_post["sha256"],
+                corrective.EXPECTED_MIGRATION_007_SCHEMA_SHA256,
+            )
 
     def test_pre_007_view_drift_blocks_original_manifest_after_outer_classification(self):
         with patch.object(
@@ -1582,6 +1798,19 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             self.conn.commit()
             self._assert_semantic_drift_stops()
 
+    def test_extra_required_name_function_overload_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                """CREATE FUNCTION is_operational_current_variant(
+                     checked_variant_id TEXT,ignored BOOLEAN)
+                   RETURNS BOOLEAN LANGUAGE sql STABLE AS $$ SELECT ignored $$"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
     def test_same_name_trigger_on_wrong_table_is_semantic_drift(self):
         with patch.object(
             corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
@@ -1594,6 +1823,27 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
                 """CREATE TRIGGER trg_phase4_supplier_offer_guard
                    BEFORE INSERT OR UPDATE OF variant_id ON variants
                    FOR EACH ROW EXECUTE FUNCTION phase4_guard_direct_operational_variant()"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
+    def test_same_name_trigger_with_noop_function_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                """CREATE FUNCTION phase4_test_noop_trigger()
+                   RETURNS TRIGGER LANGUAGE plpgsql AS $$
+                   BEGIN RETURN NEW; END $$"""
+            )
+            self.conn.execute(
+                "DROP TRIGGER trg_phase4_supplier_offer_guard ON supplier_offers"
+            )
+            self.conn.execute(
+                """CREATE TRIGGER trg_phase4_supplier_offer_guard
+                   BEFORE INSERT OR UPDATE OF variant_id,active ON supplier_offers
+                   FOR EACH ROW EXECUTE FUNCTION phase4_test_noop_trigger()"""
             )
             self.conn.commit()
             self._assert_semantic_drift_stops()

@@ -268,13 +268,16 @@ TERMINAL_VIEWS = frozenset(
         "v_operational_variants",
     }
 )
-MIGRATION_007_SCHEMA_SIGNATURE_VERSION = "phase4-terminal-schema-v1"
-# Generated only from the exact committed migration on disposable PostgreSQL 16.
+MIGRATION_007_SCHEMA_SIGNATURE_VERSION = "phase4-terminal-schema-v2"
+# Generated on disposable PostgreSQL 16 from the byte-frozen historical
+# pre-terminal schema authority plus the unchanged migrations 001-006, then the
+# exact committed migration 007.  The provenance and reproduction are enforced
+# by test_phase4_published_production_reconciliation.py.
 EXPECTED_MIGRATION_007_SCHEMA_SHA256 = (
-    "238a8b885f4a9d9840d3befb1e26b199c813e9807622b33183275a878651be17"
+    "26dac49f608dbc31527cc4fe105e854d3b6ab86ac1d094ce0508d1c4e0fbeced"
 )
 EXPECTED_PRE_007_SCHEMA_SHA256 = (
-    "ecf12c0a1f4b2d5e2dea60a508f59eab271e544b7d8efcf968bd3d0a453c90f0"
+    "cf7e091c334c3a78e9ced12731025b2b7d08529cdf34e6cbe3818b85df36253a"
 )
 TERMINAL_COLUMN_CONTRACT = {
     "variants": TERMINAL_VARIANT_COLUMNS | {"product_id"},
@@ -840,16 +843,44 @@ def _migration_007_semantic_signature(
         else:
             cur.execute("RELEASE SAVEPOINT phase4_migration_007_semantic_signature")
 
-    view_columns = [
-        column for column in all_columns if column["relation"] in TERMINAL_VIEWS
-    ]
-    protected_columns = [
-        column
-        for column in all_columns
-        if column["relation"] == "historical_sales_exclusion_authority_runs"
-        or column["name"]
-        in TERMINAL_COLUMN_CONTRACT.get(str(column["relation"]), frozenset())
-    ]
+    # View output position is semantic: clients consume a defined ordered row
+    # shape.  The authority registry was created wholly by migration 007, so its
+    # creation-time column order is also retained as part of the frozen contract.
+    view_columns = sorted(
+        (
+            column
+            for column in all_columns
+            if column["relation"] in TERMINAL_VIEWS
+        ),
+        key=lambda column: (str(column["relation"]), int(column["position"])),
+    )
+    authority_columns = sorted(
+        (
+            column
+            for column in all_columns
+            if column["relation"]
+            == "historical_sales_exclusion_authority_runs"
+        ),
+        key=lambda column: (str(column["relation"]), int(column["position"])),
+    )
+
+    # These three relations predate migration 007.  Their physical attnum can
+    # differ after an equivalent add/drop history, while the protected column
+    # semantics remain identical.  Exclude attnum and explicitly sort by the
+    # semantic relation/name key so neither the records nor array order leak
+    # irrelevant physical-column history.
+    preexisting_protected_columns = []
+    for column in all_columns:
+        if column["name"] not in TERMINAL_COLUMN_CONTRACT.get(
+            str(column["relation"]), frozenset()
+        ):
+            continue
+        semantic_column = dict(column)
+        semantic_column.pop("position")
+        preexisting_protected_columns.append(semantic_column)
+    preexisting_protected_columns.sort(
+        key=lambda column: (str(column["relation"]), str(column["name"]))
+    )
     payload = {
         "contract_version": MIGRATION_007_SCHEMA_SIGNATURE_VERSION,
         "postgresql_major": EXPECTED_POSTGRESQL_MAJOR,
@@ -859,7 +890,8 @@ def _migration_007_semantic_signature(
         "views": views,
         "protected_relations": protected_relations,
         "view_columns": view_columns,
-        "protected_columns": protected_columns,
+        "authority_columns": authority_columns,
+        "preexisting_protected_columns": preexisting_protected_columns,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return {
