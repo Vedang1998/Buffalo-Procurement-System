@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T14:00:50Z (UTC)
+**Updated:** 2026-09-05T17:50:54Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,130 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Published-production final adversarial remediation — IMPLEMENTED / AWAITING INDEPENDENT RE-REVIEW
+
+- ChatGPT approved design commit
+  `e27e5d4644164161483dfd7ce15ff38c08a6aed6`. The implementation commits are
+  `9699e677ba90e80cb0b2ade3ac5d10d17c676b4c` and
+  `7c206eca74fe6a83c01bf1accd6f8192787e90bf`; the latter preserves the
+  bootstrap's executable mode. The reviewed implementation tree before this
+  documentation checkpoint is
+  `3fcdc8ef565f40767aa3110254739d86cd7b6def` on
+  `codex/phase4-published-production-reconciliation`.
+- The Scheduled Deployment bootstrap is now POSIX `/bin/sh` and invokes every
+  external utility through an absolute reviewed literal. It checks the fixed
+  shell, ownership utility, temporary-directory utility, directory utility,
+  cleanup utility, environment utility, Git, and noninteractive failure
+  utility before use. Git receives an `env -i` allowlist with isolated
+  `HOME`/`XDG_CONFIG_HOME`; clone, detached checkout, canonical origin, exact
+  HEAD, exact tree, and clean status all precede repository Python.
+- The sole permitted interpreter is the literal
+  `/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped`.
+  There is no interpreter argument, environment override, `PATH` lookup,
+  discovery, alternate, or fallback. `/nix`, `/nix/store`, the exact package
+  directory, its `bin` directory, and the executable must all pass the
+  reviewed non-writability/type/executability checks or the bootstrap stops
+  before Python and before any database connection.
+- Hostile-bootstrap tests placed fake `sh`, `bash`, `stat`, `mktemp`, `mkdir`,
+  `rm`, `env`, `git`, `false`, and `python3` executables first in parent
+  `PATH`, plus hostile Git hooks/templates/configuration. No sentinel ran. A
+  real local clone completed every provenance proof, verified-clone Python
+  received the exact synthetic authorized parent environment and parent
+  `PATH` only after those proofs, and the ephemeral clone was removed through
+  the trusted cleanup path. A separate writable-parent regression proves
+  failure before Git or Python. GitHub CI portability is confined to a
+  generated test-only copy using literal `/usr/bin/python3` when the approved
+  Nix path is absent; the production bootstrap remains exact-Nix-only.
+- Every canonical terminal Git derivation is now enclosed by the corrective
+  sanitized subprocess environment: read-only classification, first terminal
+  persistence, and mandatory replay. The real-Git integration regression
+  changes only the terminal module's tracked repository anchor, delegates to
+  the real canonical Git implementation, observes at least three real
+  derivations with `PATH=/usr/bin:/bin` and disabled inherited configuration,
+  proves the database URL and both review-token variables absent in every Git
+  child, proves hostile Git/fsmonitor sentinels absent, and retains exact 858
+  first-run / 0 replay mutation behavior.
+- Canonical manifest and terminal persistence services gained only optional
+  keyword-only `locked_precondition` callbacks. Defaults preserve all existing
+  callers. Each callback runs immediately after the established advisory
+  transaction lock and before canonical preflight/inspection or DML. The
+  corrective caller re-proves exact A for manifest persistence, exact B for
+  migration 007, exact C for terminal persistence, exact D/PRE_REBUILD for
+  mandatory replay, and exact D/PRE_REBUILD for the real local finalizer.
+- Two-connection PostgreSQL regressions prove stale A-to-B, B-to-C, C-to-D,
+  and D-to-E classifications cannot repeat a committed stage. Additional
+  post-classification drift tests cover unexpected migration markers at every
+  mutating/replay entry point, pre-007 view drift at both A and B, duplicate
+  Phase-4 alias provenance at B, and replay invoked directly at C or E. Every
+  case rejects inside the lock-owning transaction and preserves the exact
+  observed state; the stale D-to-E path never calls the finalizer twice.
+- Migration 007 classification now attests a canonical PostgreSQL-catalog
+  payload rather than object names alone. The payload signs 10 functions, 13
+  triggers, 20 constraints, five operational views and their 93 output
+  columns, 30 protected table columns, and the authority registry relation's
+  table kind, persistence, RLS, replica identity, partition, and relation
+  options. Target schema names are normalized, nested collections are sorted,
+  canonical JSON is hashed, raw OIDs/timestamps/owners/statistics are excluded,
+  and public read-only inspection retains the no-XID contract.
+- The signatures were generated from the exact committed through-006 schema
+  and exact committed migration 007 on disposable PostgreSQL 16, not
+  hand-authored. Frozen pre-007 SHA-256 is
+  `ecf12c0a1f4b2d5e2dea60a508f59eab271e544b7d8efcf968bd3d0a453c90f0`;
+  frozen post-007 SHA-256 is
+  `238a8b885f4a9d9840d3befb1e26b199c813e9807622b33183275a878651be17`.
+  Independent schema names and a disposable `public` schema reproduced the
+  same post-007 hash. Same-name always-true function, wrong-table trigger,
+  tautological constraint, superficially guarded `OR TRUE` view, and UNLOGGED
+  authority-table changes all classify `PARTIAL_OR_DRIFTED`; semantic drift
+  blocks C, D, and E.
+- The retained late-finalizer rollback regression invokes real
+  `apply_rebuild_stage()` and the unmocked canonical
+  `rerun_sales_identity_resolution()`, then raises only from
+  `final_business_controls()` after real in-transaction finalization. At the
+  injection point it observes 57,429 RESOLVED / 1,654 EXCLUDED,
+  `sales_daily` 57,424 rows / 80,659.0000 units / $1,263,133.84,
+  `canonical_aggregate_rebuilt=true`, `SALES_BACKFILL=PASS`, and
+  `POST_REBUILD`. Fresh readback after rollback exactly equals pre-rebuild
+  State D: 55,971 RESOLVED / 3,112 UNRESOLVED; 55,966 `sales_daily` rows /
+  78,815.0000 units / $1,231,372.83; exact backfill/readiness rows and
+  fingerprints; `SALES_BACKFILL=FAIL` with
+  `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`; `CURRENT_TERMINAL_EXACT` /
+  `PRE_REBUILD`; and zero POs/lines.
+- Deterministic validation passed: corrective module **52/52**; complete Phase
+  4 set **194/194**; Phase 5 **22/22**; startup hardening **10/10**; and the
+  authoritative Procurement OS suite **379/379**, with zero failures, errors,
+  skips, expected failures, or unexpected successes. The authoritative runner
+  independently verified Python 3.13.11, PostgreSQL 16.9, loopback, and exact
+  database `procurement_adversarial_test` before discovery. The corrective
+  module/global floors rose from 36/363 to 52/379.
+- Pinned `uv 0.12.3` reported the exact version and `uv lock --check` passed.
+  Python compilation, `/bin/sh` syntax, `git diff --check`, changed-file
+  credential-pattern inspection, sensitive-variable added-line review, and
+  tracked generated-artifact/cache scan passed. Only explicit disposable
+  loopback PostgreSQL 16 `_test` infrastructure was used; libpq redirect
+  variables were cleared and connected database identity/major were verified
+  before fixture DDL.
+- Fail-closed deployment preflight observation: the approved interpreter is
+  present and its exact package/bin/executable are non-writable in the current
+  development image, but `/nix/store` itself is writable by this development
+  user. The unmodified production bootstrap therefore correctly refuses to
+  run here before clone/Python/database access. No weakening or interpreter
+  substitution was made. The eventual Scheduled Deployment image must prove
+  this exact interpreter and every reviewed non-writable parent check; if it
+  does not, stop and return for a separately reviewed change. Also, the schema
+  hash was generated on PostgreSQL 16.9 while published production was
+  reported as 16.15; any minor-version deparser difference safely causes a
+  pre-mutation false-fail and must not be bypassed.
+- Future reviewed deployment command template (placeholders only):
+  `/bin/sh ./scripts/phase4-published-production-bootstrap.sh '<REVIEWED_40_CHAR_SHA>' '<REVIEWED_40_CHAR_TREE>'`.
+- Production database connections/writes during this remediation: **0 / 0**.
+  Shopify calls/writes: **0 / 0**. PO actions: **0**. No deployment, PR,
+  merge, or Phase 6 implementation occurred.
+- Published-production corrective Phase 4 closeout remains **OPEN**. Phase 6
+  remains owner-authorized but **PAUSED** behind it.
+- **Exact next action:** ChatGPT code re-review and independent adversarial
+  re-review before PR, deployment, merge, or production execution.
 
 ### Published-production environment correction — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
 
