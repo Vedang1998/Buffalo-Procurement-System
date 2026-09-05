@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T00:18:46Z (UTC)
+**Updated:** 2026-09-05T01:39:44Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,81 +10,77 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Phase 5 Foundation UI remediation — implementation complete; independent acceptance review pending
+### Phase 5 Foundation UI — COMPLETE
 
-- Owner-authorized implementation started from exact clean `main` SHA
-  `983656c1fbebeaeec3be4db4ed8d43e87aa9aa77`. GitHub Procurement CI run
-  `33875150819` was `completed / success` for that exact SHA. Work is isolated
-  on branch `codex/phase5-foundation-ui-remediation`; design commit
-  `7be544b8ccd89aba5fc78d74cf2d385f3e3753ef`, plan commit
-  `31854acc7da591dcbf3422f3aff8bac51358d949`, and implementation commit
-  `1bb1cb5a1eb7b0daccf96cf67543fc32efcb256a`. The independent review's
-  blocking test-safety finding is remediated by commit
-  `da6e45346b7960964db83a6362d05e47a6d6a66a`.
-- `/admin/status` now renders every gate returned by canonical
-  `po_readiness()`, including each backend-owned PASS/WARN/FAIL status and
-  exact message. PO readiness is also taken directly from that result. The
-  page renders ENABLED/DISABLED, canonical blockers, and an inert disabled
-  button with no form, action, JavaScript handler, or mutation route. No
-  frontend gate or blocker semantics were introduced.
-- New canonical GET-only route `/data-sync-runs` renders durable catalog-run
-  evidence from the authoritative catalog evaluator and historical-sales
-  run/checkpoint evidence selected first by canonical gate run ID, then by the
-  established latest-reviewable-run selector, with newest attempt used only as
-  a labeled diagnostic fallback. These presentation paths issue SELECTs only
-  and expose no sync, retry, rebuild, job, Shopify, or PO action.
-- A shared depth-aware operational navigation renderer connects System
-  Readiness, Catalog Reconciliation, Historical Sales Reconciliation, and
-  Data/Sync Runs without renaming or redirecting existing routes. Catalog
-  Identity Investigation is exposed only as a subordinate reconciliation
-  link. Existing catalog and historical review decision routes and their
-  security controls are unchanged.
-- Dedicated deterministic Phase 5 coverage is 22/22 against an explicit,
-  independently created disposable loopback PostgreSQL 16 database whose name
-  ends `_test`. The complete Procurement OS suite is 327/327 with zero
-  failures, errors, skips, expected failures, or unexpected successes on
-  Python 3.13.11 and disposable loopback PostgreSQL 16.9. Replit startup
-  hardening is 10/10; pinned `uv 0.12.3` lock/sync checks, compilation, and
-  `git diff --check` pass. The new test module is registered at a mandatory
-  floor of 22; the global floor rises accordingly.
-- The Phase 5 PostgreSQL integration fixture no longer reads or falls back to
-  ordinary `DATABASE_URL`. A narrow test-only loader invokes the unchanged
-  safety functions in `procurement/tools/run_tests.py`: it requires and parses
-  `TEST_DATABASE_URL`, rejects non-PostgreSQL, non-loopback, multi-database,
-  non-`_test`, parameter, query and fragment targets, clears all libpq `PG*`
-  redirects, and then connects to the exact validated URL. On that same
-  connection it verifies exact `current_database()` identity and PostgreSQL
-  major version 16 before fixture-schema DDL is reachable. Eight new tests
-  cover every requested rejection and valid-target case. During this reviewer
-  remediation, production database connections and writes were both zero.
-- No Shopify client was invoked; Shopify calls/writes are zero. No PO action,
-  generation, export, release, or mutation path was added or invoked. No
-  public production migration, readiness-gate write, catalog/sales job, or
-  downstream Phase 6 work was performed.
-- Validation anomaly requiring independent reviewer attention: one early
-  direct invocation of the new integration module inherited the production
-  `DATABASE_URL`. It created three uniquely named `phase5_ui_*` schemas,
-  applied schema/migration fixtures inside each, ran fixture DML, and dropped
-  each schema in teardown. Therefore production-connection DML cannot be
-  reported as zero for this task, despite the writes being isolated and
-  removed. ChatGPT independently reconciled the incident through a separate
-  read-only production inspection: zero remaining `phase5_ui_%` schemas; all
-  approved Phase 4 protected fingerprints exact; 59,083 source facts; 57,424
-  `sales_daily` rows; seven readiness gates; 0 purchase orders; 0 PO lines;
-  raw resolution 57,429 RESOLVED / 1,654 EXCLUDED / 0 UNRESOLVED / 0
-  AMBIGUOUS; `CATALOG_SYNC=PASS`, `SALES_BACKFILL=PASS`, `VENDOR_RULES=FAIL`,
-  and the other four gates WARN. All later targeted and full tests explicitly
-  used validated disposable loopback PostgreSQL.
-- Older PostgreSQL integration modules retain a direct-invocation pattern that
-  relies on the authoritative full-suite runner to replace `DATABASE_URL` with
-  its validated `TEST_DATABASE_URL`. Broadening the correction to those legacy
-  modules is explicitly deferred as a **Phase 6 test-harness hardening item**;
-  no Phase 6 implementation was performed here.
-- Formal Phase 5 acceptance remains open. `procurement/docs/PHASE_STATUS.md`
-  is intentionally unchanged. No PR or merge has been opened or performed.
-  Exact next action: ChatGPT must re-review the test-safety remediation,
-  validation evidence, read-only boundaries, and retained production-test
-  disclosure before any PR or merge decision.
+- Formal acceptance result: **PASS**. The accepted implementation chain is
+  design `7be544b8ccd89aba5fc78d74cf2d385f3e3753ef`, plan
+  `31854acc7da591dcbf3422f3aff8bac51358d949`, UI implementation
+  `1bb1cb5a1eb7b0daccf96cf67543fc32efcb256a`, and test-safety remediation
+  `da6e45346b7960964db83a6362d05e47a6d6a66a`. PR #18, `Complete Phase 5
+  Foundation UI acceptance remediation`, was reviewed at exact head
+  `bfecaccfca2361d73078591e0d989921ec87446c` and merged as
+  `2af6a7258695023ff7c24ad6ff3f1ad9de760d2d`, exact tree
+  `c873c8097614babd14726eff182414fc38fb4e9a`.
+- Exact-head Procurement CI run `33935952570` completed successfully on
+  `bfecaccfca2361d73078591e0d989921ec87446c`. Post-merge Procurement CI run
+  `33936303756` completed successfully on exact merged main SHA
+  `2af6a7258695023ff7c24ad6ff3f1ad9de760d2d`. Dedicated Phase 5 tests passed
+  22/22 and the complete deterministic Procurement OS suite passed 327/327
+  with zero failures, errors, or skips.
+- Independent live development acceptance ran against exact tree
+  `c873c8097614babd14726eff182414fc38fb4e9a`. The required endpoints returned:
+  `/procurement/admin/status` 200, `/procurement/reconciliation` 200,
+  `/procurement/historical-sales/review` 200,
+  `/procurement/data-sync-runs` 200, and `/procurement/health/full` 200. The
+  temporarily started existing Procurement OS/API workflows were stopped
+  immediately after acceptance.
+- All four HTML surfaces—System Readiness, Catalog Reconciliation, Historical
+  Sales Reconciliation, and Data/Sync Runs—displayed shared navigation to one
+  another. `/data-sync-runs` remained GET-only and read-only, displayed
+  authoritative catalog and historical-sales run evidence, including 59,083
+  source facts / 57,429 resolved / 1,654 excluded / 0 unresolved / 0
+  ambiguous, and exposed no sync, retry, rebuild, job, or mutation control.
+- System Readiness displayed every canonical gate and exact message:
+  `CATALOG_SYNC=PASS` — `Catalog reconciliation passed.`;
+  `SALES_BACKFILL=PASS` — `Historical ShopifyQL sales backfill, identity
+  accounting, and controls passed.`; `VENDOR_RULES=FAIL` — `Vendor operating
+  rules are not yet confirmed complete.`; `INVENTORY_HISTORY=WARN` — `Own
+  daily inventory snapshots are not yet confirmed running.`;
+  `MAPPING_INTEGRITY=WARN` — `Supplier mapping integrity is not yet fully
+  validated.`; `OPEN_PO_RECONCILIATION=WARN` — `Procurement PO reconciliation
+  is not yet fully operational.`; and `PRICE_COVERAGE=WARN` — `Full-catalog
+  verified supplier pricing is not yet complete.`
+- PO generation visibly remained **DISABLED** for the exact canonical blocker
+  `VENDOR_RULES`. The disabled control was inert and had no form, action,
+  JavaScript, POST, or PO mutation path. Purchase orders remained 0 and
+  purchase-order lines remained 0.
+- Live GET-only no-write controls passed: readiness gates remained 7; the
+  readiness fingerprint remained
+  `66f69117e24adedf72b3a6df4fd80607482e8bb339c4803520e697237be10046`;
+  gate statuses, messages, and `checked_at` values were unchanged; purchase
+  orders and lines remained 0 before and after; and assigned transaction XID
+  remained NULL. No acceptance GET caused database DML or readiness changes.
+- The production-test incident remains disclosed: an earlier direct Phase 5
+  integration-test invocation inherited production `DATABASE_URL`, created
+  three isolated `phase5_ui_*` fixture schemas, and removed them in teardown.
+  Independent read-only reconciliation subsequently proved zero residual
+  `phase5_ui_%` schemas, all approved Phase 4 protected fingerprints exact,
+  no public business-state drift, no PO creation, and unchanged protected
+  source, resolution, readiness, and aggregate controls. Remediation
+  `da6e45346b7960964db83a6362d05e47a6d6a66a` makes Phase 5 integration tests
+  use only validated `TEST_DATABASE_URL`, requiring disposable loopback
+  PostgreSQL 16 and exact `_test` database identity before fixture DDL. The
+  remaining legacy direct-invocation test-harness pattern is deferred to Phase
+  6; no Phase 6 implementation has started.
+- `PHASE4_REVIEW_TOKEN_INPUT` was independently verified absent without
+  accessing or exposing its value. `RECONCILIATION_REVIEW_TOKEN` remains
+  separately governed. Phase 5 caused zero Shopify writes and added or invoked
+  no PO-generation action.
+- **Authorization boundary:** Phase 5 Foundation UI is COMPLETE. **STOP.**
+  Phase 6 Foundation test / acceptance completion remains a separate
+  owner-authorized milestone. No Phase 6 work, Vendor Rules work, inventory
+  snapshots, price books, forecasting, procurement, PO generation/release,
+  Shopify mutation, or downstream workstream is authorized by this closure.
 
 ### Phase 4 production closeout — COMPLETE; `SALES_BACKFILL = PASS`
 
@@ -804,10 +800,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Phase 4 production closeout is complete and `SALES_BACKFILL=PASS`. Stop here:
-Packet A, Vendor Rules, inventory-history work, forecasting, recommendations,
-procurement, PO generation/release, Shopify mutations, and every downstream
-phase/workstream require a new explicit owner authorization. The task-specific
-`PHASE4_REVIEW_TOKEN_INPUT` secret has served its one-time purpose and should be
-removed from Replit Secrets; the long-lived configured
-`RECONCILIATION_REVIEW_TOKEN` remains governed separately and was not exposed.
+Phase 5 Foundation UI is **COMPLETE**. **STOP.** Phase 6 Foundation test /
+acceptance completion remains a separate owner-authorized milestone. No Phase
+6 work, Vendor Rules work, inventory snapshots, price books, forecasting,
+procurement, PO generation/release, Shopify mutation, or downstream workstream
+is authorized by this closure. `PHASE4_REVIEW_TOKEN_INPUT` was independently
+verified absent without accessing or exposing its value;
+`RECONCILIATION_REVIEW_TOKEN` remains governed separately.
