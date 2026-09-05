@@ -736,6 +736,65 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             return_value=ExecutionGitIdentity(REPOSITORY_ROOT, EXECUTION_SHA),
         )
 
+    def _capture_rebuild_controls(self, conn):
+        terminal = corrective.inspect_terminal_state(
+            conn, self.prepared.terminal_artifact, self.prepared.execution.git_sha
+        )
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """SELECT COUNT(*)::int,COALESCE(SUM(units_sold),0),
+                          COALESCE(SUM(net_sales),0)
+                   FROM sales_daily WHERE source='SHOPIFYQL_SALES'
+                     AND sale_date BETWEEN %s AND %s""",
+                (corrective.START_DATE, corrective.END_DATE),
+            )
+            daily = cursor.fetchone()
+            cursor.execute(
+                """SELECT status,control_evidence,to_jsonb(r)::text
+                   FROM sales_backfill_runs r WHERE sales_backfill_id=%s""",
+                (corrective.APPROVED_RUN_ID,),
+            )
+            backfill = cursor.fetchone()
+            cursor.execute(
+                """SELECT gate_name,status,evidence_json,to_jsonb(g)::text
+                   FROM readiness_gates g
+                   ORDER BY gate_name,scope_type,scope_id"""
+            )
+            readiness = cursor.fetchall()
+            cursor.execute("SELECT COUNT(*)::int FROM purchase_orders")
+            purchase_orders = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*)::int FROM purchase_order_lines")
+            purchase_order_lines = int(cursor.fetchone()[0])
+        if daily is None or backfill is None:
+            raise AssertionError("rebuild control snapshot is incomplete")
+        sales_gate = next(row for row in readiness if row[0] == "SALES_BACKFILL")
+        return {
+            "fingerprints": protected_state_fingerprints(conn),
+            "raw_status_counts": corrective._raw_status_counts(conn),
+            "sales_daily": {
+                "rows": int(daily[0]),
+                "net_units": daily[1],
+                "net_sales": daily[2],
+            },
+            "sales_backfill_run": {
+                "status": str(backfill[0]),
+                "evidence": backfill[1],
+                "exact_row": str(backfill[2]),
+            },
+            "readiness_exact_rows": tuple(
+                (str(row[0]), str(row[1]), row[2], str(row[3])) for row in readiness
+            ),
+            "sales_backfill_gate": {
+                "status": str(sales_gate[1]),
+                "evidence": sales_gate[2],
+            },
+            "terminal_classification": terminal["classification"],
+            "source_lifecycle": terminal["source_lifecycle"],
+            "terminal_planned_mutations": terminal["planned_mutations"],
+            "purchase_orders": purchase_orders,
+            "purchase_order_lines": purchase_order_lines,
+        }
+
     def test_exact_state_a_through_e_and_completed_replay(self):
         with patch.object(
             corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
@@ -832,6 +891,94 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
                     "authority_registrations": 0,
                 },
             )
+
+    def test_real_finalizer_changes_roll_back_when_final_controls_raise(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            corrective.apply_original_manifest_stage(
+                self.conn, self.prepared, actor="corrective-rollback-test"
+            )
+            corrective.apply_migration_007_stage(self.conn, self.prepared)
+            corrective.apply_terminal_stage(
+                self.conn, self.prepared, actor="corrective-rollback-test"
+            )
+            state_d, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(state_d, "D_CURRENT_TERMINAL_PRE_REBUILD")
+            before = self._capture_rebuild_controls(self.conn)
+            self.conn.rollback()
+
+            observed_after_real_finalizer = {}
+
+            def fail_after_real_finalizer(conn):
+                observed_after_real_finalizer.update(
+                    self._capture_rebuild_controls(conn)
+                )
+                raise RuntimeError("synthetic post-finalizer validation failure")
+
+            with patch.object(
+                corrective,
+                "final_business_controls",
+                side_effect=fail_after_real_finalizer,
+            ) as final_controls:
+                with self.assertRaisesRegex(
+                    RuntimeError, "synthetic post-finalizer validation failure"
+                ):
+                    corrective.apply_rebuild_stage(self.conn, self.prepared)
+            final_controls.assert_called_once_with(self.conn)
+
+            self.assertEqual(
+                observed_after_real_finalizer["raw_status_counts"],
+                corrective.EXPECTED_FINAL_STATUS_COUNTS,
+            )
+            self.assertEqual(
+                observed_after_real_finalizer["sales_daily"],
+                corrective.EXPECTED_SALES_DAILY,
+            )
+            self.assertEqual(
+                observed_after_real_finalizer["sales_backfill_run"]["status"],
+                "COMPLETED",
+            )
+            self.assertTrue(
+                observed_after_real_finalizer["sales_backfill_run"]["evidence"][
+                    "canonical_aggregate_rebuilt"
+                ]
+            )
+            self.assertEqual(
+                observed_after_real_finalizer["sales_backfill_gate"]["status"],
+                "PASS",
+            )
+            self.assertEqual(
+                observed_after_real_finalizer["source_lifecycle"], "POST_REBUILD"
+            )
+            self.assertNotEqual(
+                observed_after_real_finalizer["fingerprints"], before["fingerprints"]
+            )
+
+            from psycopg import sql
+
+            fresh_conn, _, _ = validated_test_connection()
+            try:
+                fresh_conn.execute(
+                    sql.SQL("SET search_path TO {}, public").format(
+                        sql.Identifier(self.schema)
+                    )
+                )
+                after = self._capture_rebuild_controls(fresh_conn)
+                fresh_conn.rollback()
+            finally:
+                fresh_conn.close()
+
+            self.assertEqual(before["fingerprints"], self.frozen)
+            self.assertEqual(
+                before["raw_status_counts"], corrective.EXPECTED_INITIAL_STATUS_COUNTS
+            )
+            self.assertEqual(before["sales_backfill_gate"]["status"], "FAIL")
+            self.assertEqual(before["terminal_classification"], "CURRENT_TERMINAL_EXACT")
+            self.assertEqual(before["source_lifecycle"], "PRE_REBUILD")
+            self.assertEqual(before["purchase_orders"], 0)
+            self.assertEqual(before["purchase_order_lines"], 0)
+            self.assertEqual(after, before)
 
     def test_validated_loopback_test_database_is_postgresql_16(self):
         self.assertTrue(self.target.database.endswith("_test"))
