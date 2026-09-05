@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T01:39:44Z (UTC)
+**Updated:** 2026-09-05T04:05:21Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,90 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Published-production environment correction — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+
+- **Environment correction:** the prior Phase 4 closeout and Phase 5 live
+  acceptance evidence labeled as production was obtained from Replit's
+  development database, `heliumdb`. The published deployment uses a separate
+  PostgreSQL database, `neondb`. This was an environment-identification error;
+  independent read-only inspection found no evidence of rogue or partial
+  mutation in `neondb`.
+- Exact independently verified published-production prestate: database
+  `neondb`; PostgreSQL 16.15; schema `public`; database-enforced read-only
+  inspection; XID NULL; zero residual `phase5_ui_%` schemas; migrations through
+  006 present; migration 007 wholly absent; 2,049 variants; 59,083 durable raw
+  facts = 55,971 RESOLVED / 3,112 UNRESOLVED / 0 AMBIGUOUS / 0 EXCLUDED;
+  55,966 `sales_daily` rows; zero review decisions; zero historical
+  exclusions; zero approved Phase 4 old-ID alias families; zero purchase
+  orders and zero PO lines.
+- Exact published-production readiness prestate is
+  `CATALOG_SYNC=PASS`, `SALES_BACKFILL=FAIL` with blocker
+  `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`, `VENDOR_RULES=FAIL`, and the
+  remaining four future gates WARN. PO generation remains disabled.
+- Frozen `neondb` initial protected fingerprints are
+  `sales_daily=fd2b4e504b492d9e7609ef8642320f7de300f5294369476da0877aee8da8b2e8`,
+  `raw_resolution=06e2726cc33849fc180788fa036a45dcd1b1acd7af32cf813f0ec9311b7dd37a`,
+  `sales_backfill_runs=d26f1326eea8e16be6626684db5623c291f582a63564e7aeda9c90167507d409`,
+  `readiness_gates=3e3c67ec4fbf0f29824311b4b97ad77bc20635acc3a2e3822c89c73a3119c21a`,
+  and the empty PO/PO-line digest
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Owner authorization is recorded for the corrective published-production
+  reconciliation. Verified implementation baseline was exact `main`
+  `631bd95e2680b1fcdba80a39f52669d83c8e93ac`, tree
+  `2f9ed7a8e74967da7d5c48161cd3af1b8e557727`, on branch
+  `codex/phase4-published-production-reconciliation`. Approved design
+  checkpoint is `edec3ed8cbb75d1b926e31050e4770db4791a126`; implementation checkpoint is
+  `e2a5dff9687ebac24a904f15e20b3d90b3f55ada`, tree
+  `2bc62b20717c96933ca7287a01a56335fc131439`.
+- The implementation adds a verified-clone Scheduled Deployment bootstrap and
+  a narrow restart-safe corrective runner. Before any database connection the
+  runner requires the deployment marker, database configuration, both
+  non-empty review-token inputs, the existing constant-time authorization
+  comparison, exact clean derived Git identity, exact reviewed commit/tree and
+  canonical origin, and both frozen manifest hashes. The bootstrap executes no
+  repository Python until a unique `/tmp` clone proves origin, detached HEAD,
+  tree, and clean status; it has no packaged-source fallback.
+- Every runner connection's first SQL statement proves exact database
+  `neondb`, PostgreSQL major 16, schema `public`, and no assigned XID. The
+  runner accepts only exact States A through E: frozen baseline; original
+  manifest persisted/pre-007; post-007 `PRE_TERMINAL_EXACT`; current terminal/
+  pre-rebuild; and current terminal/post-rebuild. Partial or mixed state stops.
+  A completed State E invocation is a read-only no-op and does not call the
+  finalizer or rewrite readiness.
+- Existing Phase 4 services remain sole authority: original manifest dry-run
+  and persistence, migration 007 plus its standard marker in one transaction,
+  terminal dry-run/persistence/exact classification/Git provenance/advisory
+  lock, mandatory zero-DML terminal replay, and
+  `rerun_sales_identity_resolution()` for the fixed 2024-11-28 through
+  2026-08-10 durable range. The corrective path has no Shopify client, sync,
+  procurement, or PO action.
+- Dedicated corrective tests passed **32/32** against explicit disposable
+  loopback PostgreSQL 16 `_test` infrastructure. Existing Phase 4 tests passed
+  **142/142**, Phase 5 passed **22/22**, startup hardening passed **10/10**, and
+  the authoritative full deterministic Procurement OS suite passed **359/359**
+  with zero failures, errors, skips, expected failures, or unexpected
+  successes. The full runner verified Python 3.13.11, PostgreSQL 16.9,
+  `procurement_test`, and loopback before test discovery. Pinned `uv 0.12.3`
+  lock validation, Python compilation, shell syntax, `git diff --check`, secret
+  scan, and generated-artifact scan passed.
+- Test fixtures use only the existing `TEST_DATABASE_URL` contract from
+  `procurement/tools/run_tests.py`: PostgreSQL URL, loopback host, exactly one
+  `_test` database name, no parameter/query/fragment tricks, cleared libpq
+  `PG*` redirects, exact connected-database identity, and PostgreSQL major 16
+  before fixture DDL. A production-style ordinary `DATABASE_URL` was present
+  during focused corrective validation and was demonstrably ignored by the
+  fixture path.
+- Production database connections and writes during this implementation task:
+  **0 / 0**. Shopify calls/writes: **0 / 0**. PO actions: **0**. No Scheduled
+  Deployment was created and no PR was opened.
+- Phase 4's implementation and owner-approved identity authority remain
+  accepted, but published-production reconciliation is **IN PROGRESS** until
+  independent implementation review, PR/CI, reviewed temporary Scheduled
+  Deployment execution, and post-execution evidence are complete. Phase 6 is
+  owner-authorized but **PAUSED** on this prerequisite.
+- **Exact next action:** ChatGPT independent implementation review before PR or
+  any production connection/execution.
 
 ### Phase 5 Foundation UI — COMPLETE
 
@@ -76,15 +160,19 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   accessing or exposing its value. `RECONCILIATION_REVIEW_TOKEN` remains
   separately governed. Phase 5 caused zero Shopify writes and added or invoked
   no PO-generation action.
-- **Authorization boundary:** Phase 5 Foundation UI is COMPLETE. **STOP.**
-  Phase 6 Foundation test / acceptance completion remains a separate
-  owner-authorized milestone. No Phase 6 work, Vendor Rules work, inventory
-  snapshots, price books, forecasting, procurement, PO generation/release,
-  Shopify mutation, or downstream workstream is authorized by this closure.
+- **Current boundary:** Phase 5 application/UI acceptance remains COMPLETE.
+  Published-production Phase 4 correction now takes precedence. Phase 6 is
+  owner-authorized but PAUSED until that prerequisite is independently
+  reviewed, executed, and verified.
 
-### Phase 4 production closeout — COMPLETE; `SALES_BACKFILL = PASS`
+### Development-database Phase 4 closeout — COMPLETE HISTORICAL EVIDENCE ONLY
 
-- Owner-authorized production closeout executed from exact clean merged `main`
+> Correction: this sequence ran against development `heliumdb`, not published
+> production `neondb`. Its implementation/authority and deterministic outcomes
+> remain valid, but its database results are not published-production closeout
+> evidence.
+
+- Owner-authorized closeout sequence executed from exact clean merged `main`
   SHA `dbd4cdc1d48e098e20e8f7642a64fb409966c793`, tree
   `fb9887834beff0b39a24f633503f3b78d8992f97`. Remote `origin/main`
   resolved to the same SHA. GitHub Procurement CI run `33818188106` was
@@ -94,8 +182,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `RECONCILIATION_REVIEW_TOKEN` were proven present and non-empty without
   printing, echoing, hashing, logging, or otherwise exposing either value. The
   existing `require_review_authorization` constant-time comparison passed.
-- Production preflight used a database-enforced `REPEATABLE READ, READ ONLY`
-  snapshot with no transaction ID before or after inspection. Runtime identity
+- The development-database preflight used a database-enforced `REPEATABLE READ,
+  READ ONLY` snapshot with no transaction ID before or after inspection. Runtime identity
   was PostgreSQL `16.10`, database `heliumdb`, schema `public`, and the database
   name matched the configured URL. Migration 007 was wholly absent. Frozen
   prestate was exact: 2,049 variants / 1,999 active / 46 retired-confirmed;
@@ -800,10 +888,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Phase 5 Foundation UI is **COMPLETE**. **STOP.** Phase 6 Foundation test /
-acceptance completion remains a separate owner-authorized milestone. No Phase
-6 work, Vendor Rules work, inventory snapshots, price books, forecasting,
-procurement, PO generation/release, Shopify mutation, or downstream workstream
-is authorized by this closure. `PHASE4_REVIEW_TOKEN_INPUT` was independently
-verified absent without accessing or exposing its value;
-`RECONCILIATION_REVIEW_TOKEN` remains governed separately.
+Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
+Phase 4 reconciliation is **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**; no PR,
+Scheduled Deployment, or production connection is authorized yet. Phase 6 is
+owner-authorized but **PAUSED** on this prerequisite. The exact next action is
+ChatGPT independent implementation review. Vendor Rules, inventory snapshots,
+price books, forecasting, procurement, PO generation/release, Shopify mutation,
+and other downstream implementation remain out of scope.

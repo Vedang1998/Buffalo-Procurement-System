@@ -58,9 +58,21 @@ Verified production state at the current handoff:
 
 ### Phase 4 — Historical ShopifyQL sales backfill / reconciliation
 
-**COMPLETE — `SALES_BACKFILL = PASS`**
+**IMPLEMENTATION / AUTHORITY ACCEPTED — PUBLISHED-PRODUCTION CORRECTION IN PROGRESS**
 
-Current handoff records:
+The previously recorded terminal closeout ran against Replit development
+`heliumdb`, not published-production `neondb`. Its reviewed implementation,
+owner-approved identity authority, and deterministic expected controls remain
+accepted. Independent read-only inspection found published production at the
+exact frozen pre-correction state: migration 007 absent, zero review decisions,
+zero historical exclusions, zero approved Phase 4 old-ID alias families, 59,083
+facts = 55,971 resolved / 3,112 unresolved, and `SALES_BACKFILL=FAIL` with
+`MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`.
+
+Owner-authorized corrective implementation is in progress on
+`codex/phase4-published-production-reconciliation`. No published-production
+connection or write is authorized during implementation/review. The accepted
+deterministic terminal target remains:
 
 - range: 2024-11-28 through 2026-08-10
 - 21/21 date chunks and 70/70 pages complete
@@ -81,7 +93,7 @@ Current handoff records:
 - owner-approved terminal supplement:
   `procurement/review/phase4_terminal_disposition_manifest.csv`, SHA-256
   `fb1e15e67fe66c7742b84ea2c50bf01ce8a5008f00b4887293404ac09d3f59ff`
-- exact production implementation/merge SHA:
+- prior accepted Phase 4 implementation/merge SHA:
   `dbd4cdc1d48e098e20e8f7642a64fb409966c793`
 - post-merge Procurement CI run `33818188106`: **completed / success** on that
   exact SHA; post-production deterministic suite: **305/305 PASS**
@@ -112,14 +124,18 @@ Current handoff records:
 - Shopify writes, Packet A, Vendor Rules, forecasting, recommendations,
   procurement, PO generation/release, and deployments were not started
 
-**Phase 4 closeout boundary:** satisfied. The one-time
-`PHASE4_REVIEW_TOKEN_INPUT` was independently verified absent without accessing
-or exposing its value. Any downstream workstream still requires explicit owner
-authorization.
+**Published-production Phase 4 closeout boundary:** not yet satisfied. It
+requires independent corrective implementation review, PR/CI, reviewed
+temporary Scheduled Deployment execution against exact `neondb`, and verified
+post-execution evidence. Phase 6 remains paused until this prerequisite closes.
 
 ### Phase 5 — Foundation UI
 
 **COMPLETE**
+
+- Phase 5 application/UI acceptance remains complete. Its prior live runtime
+  exercise was against development `heliumdb`; it is not evidence that the
+  separate published `neondb` has received the Phase 4 data closeout.
 
 - All four required operational surfaces are present and live-accepted: System
   Readiness, Catalog Reconciliation, Historical Sales Reconciliation, and
@@ -141,11 +157,12 @@ authorization.
 
 ### Phase 6 — Foundation test / acceptance completion
 
-**NOT YET CLOSED / NOT STARTED**
+**OWNER AUTHORIZED / PAUSED ON PUBLISHED-PRODUCTION PHASE 4 PREREQUISITE**
 
 Formal Phase 6 foundation acceptance, including the deferred legacy
-direct-invocation test-harness hardening item, remains a separate
-owner-authorized milestone and has not started.
+direct-invocation test-harness hardening item, is authorized but implementation
+has not started. Do not begin until the corrective published-production Phase 4
+closeout is independently reviewed, executed, and verified.
 
 ## Post-foundation ordered workstreams
 
@@ -167,14 +184,14 @@ After the required foundation gates pass, continue in the canonical order:
 
 These are program workstreams. Do not renumber or overwrite official phase IDs in the canonical implementation documents without owner-approved change control.
 
-## Current readiness summary
+## Published-production readiness summary (pre-correction)
 
 | Gate | Status | Meaning |
 | --- | --- | --- |
 | `CATALOG_SYNC` | PASS | Catalog identity foundation is reconciled. |
-| `SALES_BACKFILL` | PASS | Complete historical coverage, terminal identity accounting, canonical aggregate, controls, and database-derived exclusion integrity passed. |
+| `SALES_BACKFILL` | FAIL | Published `neondb` still has 3,112 unresolved facts; corrective reconciliation has not executed. |
 | `VENDOR_RULES` | FAIL | Not yet built/validated. |
-| PO readiness | DISABLED | Intentionally blocked while required gates fail. |
+| PO readiness | DISABLED | Blocked by `SALES_BACKFILL` and `VENDOR_RULES`; POs and PO lines remain zero. |
 
 ## Project-management rule
 
