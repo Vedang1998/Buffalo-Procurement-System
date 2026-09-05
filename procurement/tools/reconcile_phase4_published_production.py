@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 from typing import Any, Iterator, Mapping, Sequence
 
 
@@ -77,6 +78,13 @@ REQUIRED_PRE_007_MARKERS = frozenset(
         "migration:006_phase4_sales_backfill.sql",
     }
 )
+EXPECTED_PRE_007_MARKERS = {
+    marker: "applied" for marker in REQUIRED_PRE_007_MARKERS
+}
+EXPECTED_POST_007_MARKERS = {
+    **EXPECTED_PRE_007_MARKERS,
+    MIGRATION_007_MARKER: "applied",
+}
 
 FROZEN_PROTECTED_FINGERPRINTS = {
     "sales_daily": {
@@ -298,31 +306,77 @@ def _git_text(repository_root: Path, *arguments: str) -> str:
         raise CorrectiveValidationError("unable to verify corrective Git identity") from exc
 
 
+@contextmanager
+def _isolated_git_subprocess_environment() -> Iterator[None]:
+    """Keep deployment secrets and inherited Git configuration out of Git."""
+
+    git_command = Path("/usr/bin/git")
+    if not git_command.is_file() or not os.access(git_command, os.X_OK):
+        raise CorrectiveValidationError("trusted Git executable is unavailable")
+    original_environment = dict(os.environ)
+    with tempfile.TemporaryDirectory(
+        prefix="buffalo-phase4-git-environment-", dir="/tmp"
+    ) as temporary:
+        isolation_root = Path(temporary)
+        git_home = isolation_root / "home"
+        git_xdg = isolation_root / "xdg"
+        git_home.mkdir(mode=0o700)
+        git_xdg.mkdir(mode=0o700)
+        sanitized_environment = {
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(git_home),
+            "XDG_CONFIG_HOME": str(git_xdg),
+            "LANG": "C",
+            "LC_ALL": "C",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_ASKPASS": "/bin/false",
+            "SSH_ASKPASS": "/bin/false",
+            "GIT_SSL_CAINFO": "/etc/ssl/certs/ca-certificates.crt",
+        }
+        try:
+            os.environ.clear()
+            os.environ.update(sanitized_environment)
+            yield
+        finally:
+            os.environ.clear()
+            os.environ.update(original_environment)
+
+
 def validate_runtime_execution_identity(
     expected_git_sha: str, expected_tree_sha: str
 ) -> RuntimeIdentity:
     expected_git_sha = _require_sha(expected_git_sha, "expected execution Git SHA")
     expected_tree_sha = _require_sha(expected_tree_sha, "expected execution tree SHA")
-    observed: ExecutionGitIdentity = derive_runtime_execution_git_identity(
-        expected_git_sha
-    )
-    origin = _git_text(observed.repository_root, "remote", "get-url", "origin")
-    if origin != CANONICAL_ORIGIN:
-        raise CorrectiveValidationError("execution Git origin is not canonical")
-    tree_sha = _git_text(observed.repository_root, "rev-parse", "HEAD^{tree}").lower()
-    if tree_sha != expected_tree_sha:
-        raise CorrectiveValidationError("execution Git tree differs from reviewed tree")
-    for relative in (
-        "scripts/phase4-published-production-bootstrap.sh",
-        "procurement/tools/reconcile_phase4_published_production.py",
-    ):
-        tracked = _git_text(
-            observed.repository_root, "ls-files", "--error-unmatch", "--", relative
+    with _isolated_git_subprocess_environment():
+        observed: ExecutionGitIdentity = derive_runtime_execution_git_identity(
+            expected_git_sha
         )
-        if tracked != relative:
-            raise CorrectiveValidationError(
-                f"required corrective runtime path is not tracked: {relative}"
+        origin = _git_text(observed.repository_root, "remote", "get-url", "origin")
+        if origin != CANONICAL_ORIGIN:
+            raise CorrectiveValidationError("execution Git origin is not canonical")
+        tree_sha = _git_text(
+            observed.repository_root, "rev-parse", "HEAD^{tree}"
+        ).lower()
+        if tree_sha != expected_tree_sha:
+            raise CorrectiveValidationError("execution Git tree differs from reviewed tree")
+        for relative in (
+            "scripts/phase4-published-production-bootstrap.sh",
+            "procurement/tools/reconcile_phase4_published_production.py",
+        ):
+            tracked = _git_text(
+                observed.repository_root,
+                "ls-files",
+                "--error-unmatch",
+                "--",
+                relative,
             )
+            if tracked != relative:
+                raise CorrectiveValidationError(
+                    f"required corrective runtime path is not tracked: {relative}"
+                )
     return RuntimeIdentity(observed.repository_root, observed.git_sha, tree_sha)
 
 
@@ -513,19 +567,16 @@ def migration_007_state(conn: Any) -> dict[str, Any]:
             or authority_table
         )
         marker_present = markers.get(MIGRATION_007_MARKER) == "applied"
-        pre_markers_present = all(
-            markers.get(marker) == "applied" for marker in REQUIRED_PRE_007_MARKERS
-        )
+        pre_markers_exact = markers == EXPECTED_PRE_007_MARKERS
+        post_markers_exact = markers == EXPECTED_POST_007_MARKERS
         absent = (
-            pre_markers_present
-            and MIGRATION_007_MARKER not in markers
+            pre_markers_exact
             and not unique_columns_present
             and not unique_objects_present
         )
         complete = all(
             (
-                pre_markers_present,
-                marker_present,
+                post_markers_exact,
                 TERMINAL_VARIANT_COLUMNS <= columns["variants"],
                 TERMINAL_DECISION_COLUMNS
                 <= columns["historical_sales_review_decisions"],
@@ -544,8 +595,12 @@ def migration_007_state(conn: Any) -> dict[str, Any]:
             "classification": (
                 "ABSENT" if absent else "COMPLETE" if complete else "PARTIAL_OR_DRIFTED"
             ),
-            "pre_007_markers_present": pre_markers_present,
+            "pre_007_markers_present": all(
+                markers.get(marker) == "applied"
+                for marker in REQUIRED_PRE_007_MARKERS
+            ),
             "migration_007_marker_present": marker_present,
+            "migration_marker_set_exact": pre_markers_exact or post_markers_exact,
             "required_columns_present": complete,
             "required_constraints": len(TERMINAL_CONSTRAINTS & constraints),
             "required_triggers": len(TERMINAL_TRIGGERS & triggers),

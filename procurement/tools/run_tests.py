@@ -32,7 +32,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_phase4_identity_manifest.py": 16,
     "test_phase4_identity_manifest_postgres.py": 24,
     "test_phase4_postgres_integration.py": 6,
-    "test_phase4_published_production_reconciliation.py": 33,
+    "test_phase4_published_production_reconciliation.py": 36,
     "test_phase4_query_contracts.py": 5,
     "test_phase4_terminal_disposition.py": 23,
     "test_phase4_terminal_disposition_postgres.py": 35,

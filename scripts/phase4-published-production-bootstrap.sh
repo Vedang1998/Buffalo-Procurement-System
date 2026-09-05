@@ -39,14 +39,41 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 clone_dir="$bootstrap_dir/repository"
-export GIT_TERMINAL_PROMPT=0
-git clone --no-checkout -- "$canonical_origin" "$clone_dir"
-git -C "$clone_dir" checkout --detach "$expected_sha"
+git_home="$bootstrap_dir/git-home"
+git_xdg="$bootstrap_dir/git-xdg"
+mkdir -m 700 -- "$git_home" "$git_xdg"
 
-observed_origin=$(git -C "$clone_dir" remote get-url origin)
-observed_sha=$(git -C "$clone_dir" rev-parse --verify 'HEAD^{commit}')
-observed_tree=$(git -C "$clone_dir" rev-parse --verify 'HEAD^{tree}')
-observed_status=$(git -C "$clone_dir" status --porcelain=v1 --untracked-files=all)
+git_command=/usr/bin/git
+git_path=/usr/bin:/bin
+if [ ! -x "$git_command" ]; then
+  echo 'ERROR: trusted Git executable is unavailable' >&2
+  exit 2
+fi
+
+sanitized_git() {
+  /usr/bin/env -i \
+    PATH="$git_path" \
+    HOME="$git_home" \
+    XDG_CONFIG_HOME="$git_xdg" \
+    LANG=C \
+    LC_ALL=C \
+    GIT_TERMINAL_PROMPT=0 \
+    GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_GLOBAL=/dev/null \
+    GIT_ASKPASS=/bin/false \
+    SSH_ASKPASS=/bin/false \
+    GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt \
+    "$git_command" "$@"
+}
+
+sanitized_git clone --no-checkout -- "$canonical_origin" "$clone_dir"
+sanitized_git -C "$clone_dir" checkout --detach "$expected_sha"
+
+observed_origin=$(sanitized_git -C "$clone_dir" remote get-url origin)
+observed_sha=$(sanitized_git -C "$clone_dir" rev-parse --verify 'HEAD^{commit}')
+observed_tree=$(sanitized_git -C "$clone_dir" rev-parse --verify 'HEAD^{tree}')
+observed_status=$(sanitized_git -C "$clone_dir" status --porcelain=v1 --untracked-files=all)
 
 if [ "$observed_origin" != "$canonical_origin" ]; then
   echo 'ERROR: cloned repository origin is not canonical' >&2

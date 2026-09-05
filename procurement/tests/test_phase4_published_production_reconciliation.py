@@ -25,7 +25,10 @@ import reconcile_phase4_published_production as corrective
 import test_phase4_terminal_disposition_postgres as terminal_fixture_module
 
 from procurement_os.historical_sales_manifest import protected_state_fingerprints
-from procurement_os.historical_sales_terminal import ExecutionGitIdentity
+from procurement_os.historical_sales_terminal import (
+    ExecutionGitIdentity,
+    derive_execution_git_identity,
+)
 
 
 RUNNER_PATH = PROCUREMENT_ROOT / "tools" / "run_tests.py"
@@ -81,6 +84,16 @@ def validated_test_connection():
         connection.close()
         raise
     return connection, target, database_info
+
+
+def run_isolated_real_git(arguments):
+    with corrective._isolated_git_subprocess_environment():
+        return subprocess.run(
+            arguments,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 class CorrectivePreconnectionSafetyTests(unittest.TestCase):
@@ -324,13 +337,21 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         )
         git.chmod(git.stat().st_mode | stat.S_IXUSR)
         python.chmod(python.stat().st_mode | stat.S_IXUSR)
+        test_bootstrap = root / BOOTSTRAP.name
+        test_bootstrap.write_text(
+            BOOTSTRAP.read_text(encoding="utf-8").replace(
+                "git_command=/usr/bin/git", f"git_command={git}"
+            ),
+            encoding="utf-8",
+        )
+        test_bootstrap.chmod(test_bootstrap.stat().st_mode | stat.S_IXUSR)
         environment = {
             **os.environ,
             "PATH": f"{root}:{os.environ['PATH']}",
             "REPLIT_DEPLOYMENT": "1",
         }
         result = subprocess.run(
-            [str(BOOTSTRAP), EXECUTION_SHA, TREE_SHA],
+            [str(test_bootstrap), EXECUTION_SHA, TREE_SHA],
             text=True,
             capture_output=True,
             env=environment,
@@ -393,6 +414,290 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         self.assertNotIn("DATABASE_URL", source)
         self.assertNotIn("RECONCILIATION_REVIEW_TOKEN", source)
         self.assertNotIn("PHASE4_REVIEW_TOKEN_INPUT", source)
+
+    def test_real_git_clone_ignores_hostile_inherited_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            runner = source / "procurement" / "tools" / Path(corrective.__file__).name
+            runner.parent.mkdir(parents=True)
+            verified_python = root / "verified-python"
+            runner.write_text(
+                textwrap.dedent(
+                    f"""
+                    import os
+                    from pathlib import Path
+
+                    expected = (
+                        os.environ.get("DATABASE_URL") == "synthetic-database-sentinel"
+                        and os.environ.get("RECONCILIATION_REVIEW_TOKEN")
+                        == "synthetic-configured-token"
+                        and os.environ.get("PHASE4_REVIEW_TOKEN_INPUT")
+                        == "synthetic-input-token"
+                    )
+                    Path({str(verified_python)!r}).write_text(
+                        "AUTHORIZED_ENVIRONMENT_PRESENT" if expected else "MISSING",
+                        encoding="utf-8",
+                    )
+                    """
+                ),
+                encoding="utf-8",
+            )
+            (source / "scripts").mkdir()
+            (source / "scripts" / BOOTSTRAP.name).write_text(
+                "tracked bootstrap fixture\n", encoding="utf-8"
+            )
+            run_isolated_real_git(["git", "init", "-q", str(source)])
+            run_isolated_real_git(["git", "-C", str(source), "add", "."])
+            run_isolated_real_git(
+                [
+                    "git",
+                    "-C",
+                    str(source),
+                    "-c",
+                    "user.name=Corrective Test",
+                    "-c",
+                    "user.email=corrective@example.invalid",
+                    "commit",
+                    "-q",
+                    "-m",
+                    "fixture",
+                ]
+            )
+            commit = run_isolated_real_git(
+                ["git", "-C", str(source), "rev-parse", "HEAD^{commit}"]
+            ).stdout.strip()
+            tree = run_isolated_real_git(
+                ["git", "-C", str(source), "rev-parse", "HEAD^{tree}"]
+            ).stdout.strip()
+            origin = root / "origin.git"
+            run_isolated_real_git(
+                ["git", "clone", "-q", "--bare", str(source), str(origin)]
+            )
+
+            hook_executed = root / "hostile-hook-executed"
+            secret_exposed = root / "hostile-hook-secret-exposed"
+            hostile_hooks = root / "hostile-hooks"
+            hostile_hooks.mkdir()
+            hook = hostile_hooks / "post-checkout"
+            hook.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/bin/sh
+                    printf executed > {str(hook_executed)!r}
+                    if [ "${{DATABASE_URL:-}}" = synthetic-database-sentinel ] || \
+                       [ "${{RECONCILIATION_REVIEW_TOKEN:-}}" = synthetic-configured-token ] || \
+                       [ "${{PHASE4_REVIEW_TOKEN_INPUT:-}}" = synthetic-input-token ]; then
+                      printf exposed > {str(secret_exposed)!r}
+                    fi
+                    """
+                ),
+                encoding="utf-8",
+            )
+            hook.chmod(hook.stat().st_mode | stat.S_IXUSR)
+            hostile_home = root / "hostile-home"
+            hostile_home.mkdir()
+            hostile_config = hostile_home / ".gitconfig"
+            hostile_config.write_text(
+                f"[core]\n\thooksPath = {hostile_hooks}\n", encoding="utf-8"
+            )
+            hostile_xdg = root / "hostile-xdg"
+            (hostile_xdg / "git").mkdir(parents=True)
+            (hostile_xdg / "git" / "config").write_text(
+                f"[core]\n\thooksPath = {hostile_hooks}\n", encoding="utf-8"
+            )
+            hostile_template = root / "hostile-template"
+            (hostile_template / "hooks").mkdir(parents=True)
+            template_hook = hostile_template / "hooks" / "post-checkout"
+            template_hook.write_bytes(hook.read_bytes())
+            template_hook.chmod(template_hook.stat().st_mode | stat.S_IXUSR)
+            hostile_path = root / "hostile-path"
+            hostile_path.mkdir()
+            hostile_git_executed = root / "hostile-git-executed"
+            hostile_git = hostile_path / "git"
+            hostile_git.write_text(
+                f"#!/bin/sh\nprintf executed > {str(hostile_git_executed)!r}\nexit 99\n",
+                encoding="utf-8",
+            )
+            hostile_git.chmod(hostile_git.stat().st_mode | stat.S_IXUSR)
+
+            test_bootstrap = root / BOOTSTRAP.name
+            test_bootstrap.write_text(
+                BOOTSTRAP.read_text(encoding="utf-8").replace(
+                    corrective.CANONICAL_ORIGIN, origin.as_uri()
+                ),
+                encoding="utf-8",
+            )
+            test_bootstrap.chmod(test_bootstrap.stat().st_mode | stat.S_IXUSR)
+            environment = {
+                **os.environ,
+                "REPLIT_DEPLOYMENT": "1",
+                "PATH": f"{hostile_path}:{os.environ['PATH']}",
+                "HOME": str(hostile_home),
+                "XDG_CONFIG_HOME": str(hostile_xdg),
+                "GIT_CONFIG_GLOBAL": str(hostile_config),
+                "GIT_CONFIG_SYSTEM": str(hostile_config),
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "core.hooksPath",
+                "GIT_CONFIG_VALUE_0": str(hostile_hooks),
+                "GIT_TEMPLATE_DIR": str(hostile_template),
+                "GIT_ASKPASS": str(hook),
+                "SSH_ASKPASS": str(hook),
+                "DATABASE_URL": "synthetic-database-sentinel",
+                "RECONCILIATION_REVIEW_TOKEN": "synthetic-configured-token",
+                "PHASE4_REVIEW_TOKEN_INPUT": "synthetic-input-token",
+            }
+            result = subprocess.run(
+                [str(test_bootstrap), commit, tree],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                verified_python.read_text(encoding="utf-8"),
+                "AUTHORIZED_ENVIRONMENT_PRESENT",
+            )
+            self.assertFalse(hook_executed.exists())
+            self.assertFalse(secret_exposed.exists())
+            self.assertFalse(hostile_git_executed.exists())
+
+
+class CorrectivePythonGitIsolationTests(unittest.TestCase):
+    def test_real_python_git_children_ignore_config_and_receive_no_secrets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            repository.mkdir()
+            for relative in (
+                "scripts/phase4-published-production-bootstrap.sh",
+                "procurement/tools/reconcile_phase4_published_production.py",
+            ):
+                path = repository / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("tracked\n", encoding="utf-8")
+            run_isolated_real_git(["git", "init", "-q", str(repository)])
+            run_isolated_real_git(["git", "-C", str(repository), "add", "."])
+            run_isolated_real_git(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "-c",
+                    "user.name=Corrective Test",
+                    "-c",
+                    "user.email=corrective@example.invalid",
+                    "commit",
+                    "-q",
+                    "-m",
+                    "fixture",
+                ]
+            )
+            run_isolated_real_git(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "remote",
+                    "add",
+                    "origin",
+                    corrective.CANONICAL_ORIGIN,
+                ]
+            )
+            commit = run_isolated_real_git(
+                ["git", "-C", str(repository), "rev-parse", "HEAD^{commit}"]
+            ).stdout.strip()
+            tree = run_isolated_real_git(
+                ["git", "-C", str(repository), "rev-parse", "HEAD^{tree}"]
+            ).stdout.strip()
+
+            hostile_probe = root / "hostile-fsmonitor"
+            hostile_executed = root / "hostile-config-executed"
+            hostile_probe.write_text(
+                f"#!/bin/sh\nprintf executed > {str(hostile_executed)!r}\n",
+                encoding="utf-8",
+            )
+            hostile_probe.chmod(hostile_probe.stat().st_mode | stat.S_IXUSR)
+            hostile_home = root / "hostile-home"
+            hostile_home.mkdir()
+            hostile_config = hostile_home / ".gitconfig"
+            hostile_config.write_text(
+                f"[core]\n\tfsmonitor = {hostile_probe}\n", encoding="utf-8"
+            )
+            hostile_path = root / "hostile-path"
+            hostile_path.mkdir()
+            hostile_git_executed = root / "hostile-git-executed"
+            hostile_git = hostile_path / "git"
+            hostile_git.write_text(
+                f"#!/bin/sh\nprintf executed > {str(hostile_git_executed)!r}\nexit 99\n",
+                encoding="utf-8",
+            )
+            hostile_git.chmod(hostile_git.stat().st_mode | stat.S_IXUSR)
+            environment = {
+                "PATH": f"{hostile_path}:{os.environ['PATH']}",
+                "HOME": str(hostile_home),
+                "GIT_CONFIG_GLOBAL": str(hostile_config),
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "core.fsmonitor",
+                "GIT_CONFIG_VALUE_0": str(hostile_probe),
+                "DATABASE_URL": "synthetic-database-sentinel",
+                "RECONCILIATION_REVIEW_TOKEN": "synthetic-configured-token",
+                "PHASE4_REVIEW_TOKEN_INPUT": "synthetic-input-token",
+            }
+
+            def derive_with_real_git(expected_sha):
+                return derive_execution_git_identity(
+                    repository, expected_sha=expected_sha
+                )
+
+            with patch.dict(os.environ, environment, clear=False), patch.object(
+                corrective,
+                "derive_runtime_execution_git_identity",
+                side_effect=derive_with_real_git,
+            ):
+                identity = corrective.validate_runtime_execution_identity(commit, tree)
+                self.assertEqual(identity.git_sha, commit)
+                self.assertEqual(identity.tree_sha, tree)
+                self.assertFalse(hostile_executed.exists())
+                self.assertFalse(hostile_git_executed.exists())
+
+                child_result = root / "git-child-environment"
+                probe = root / "git-child-probe"
+                probe.write_text(
+                    textwrap.dedent(
+                        f"""\
+                        #!/bin/sh
+                        if [ -n "${{DATABASE_URL+x}}" ] || \
+                           [ -n "${{RECONCILIATION_REVIEW_TOKEN+x}}" ] || \
+                           [ -n "${{PHASE4_REVIEW_TOKEN_INPUT+x}}" ]; then
+                          printf exposed > {str(child_result)!r}
+                        else
+                          printf isolated > {str(child_result)!r}
+                        fi
+                        """
+                    ),
+                    encoding="utf-8",
+                )
+                probe.chmod(probe.stat().st_mode | stat.S_IXUSR)
+                with corrective._isolated_git_subprocess_environment():
+                    subprocess.run(
+                        [
+                            "git",
+                            "-C",
+                            str(repository),
+                            "-c",
+                            f"alias.phase4-environment-probe=!{probe}",
+                            "phase4-environment-probe",
+                        ],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                self.assertEqual(
+                    child_result.read_text(encoding="utf-8"), "isolated"
+                )
 
 
 class CorrectiveStateMachineDispatchTests(unittest.TestCase):
@@ -979,6 +1284,107 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             self.assertEqual(before["purchase_orders"], 0)
             self.assertEqual(before["purchase_order_lines"], 0)
             self.assertEqual(after, before)
+
+    def test_unexpected_migration_marker_stops_every_allowed_state(self):
+        def assert_marker_rejected(expected_state, value):
+            state, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(state, expected_state)
+            self.conn.execute(
+                "INSERT INTO meta(key,value) VALUES ('migration:008_unapproved.sql',%s)",
+                (value,),
+            )
+            self.conn.commit()
+            try:
+                self.assertEqual(
+                    corrective.migration_007_state(self.conn)["classification"],
+                    "PARTIAL_OR_DRIFTED",
+                )
+
+                @contextmanager
+                def fixture_connection(_database_url):
+                    yield self.conn, {
+                        "database": "procurement_review_focused_test",
+                        "postgresql_major": 16,
+                    }
+
+                with patch.object(
+                    corrective, "prepare_execution", return_value=self.prepared
+                ), patch.object(
+                    corrective,
+                    "verified_connection",
+                    side_effect=fixture_connection,
+                ), patch.object(
+                    corrective, "_clear_libpq_environment"
+                ), patch.object(
+                    corrective, "apply_original_manifest_stage"
+                ) as manifest, patch.object(
+                    corrective, "apply_migration_007_stage"
+                ) as migration, patch.object(
+                    corrective, "apply_terminal_stage"
+                ) as terminal, patch.object(
+                    corrective, "prove_terminal_noop"
+                ) as replay, patch.object(
+                    corrective, "apply_rebuild_stage"
+                ) as rebuild:
+                    with self.assertRaisesRegex(Exception, "partial or drifted"):
+                        corrective.execute(
+                            [
+                                "--expected-execution-git-sha",
+                                EXECUTION_SHA,
+                                "--expected-execution-tree-sha",
+                                TREE_SHA,
+                            ],
+                            environ={},
+                        )
+                for operation in (manifest, migration, terminal, replay, rebuild):
+                    operation.assert_not_called()
+            finally:
+                self.conn.rollback()
+                self.conn.execute(
+                    "DELETE FROM meta WHERE key='migration:008_unapproved.sql'"
+                )
+                self.conn.commit()
+            restored, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(restored, expected_state)
+
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            for value in ("applied", "unexpected-value"):
+                with self.subTest(state="A_FROZEN_PRODUCTION_BASELINE", value=value):
+                    assert_marker_rejected("A_FROZEN_PRODUCTION_BASELINE", value)
+
+            corrective.apply_original_manifest_stage(
+                self.conn, self.prepared, actor="corrective-marker-test"
+            )
+            for value in ("applied", "unexpected-value"):
+                with self.subTest(
+                    state="B_ORIGINAL_MANIFEST_PERSISTED_PRE_007", value=value
+                ):
+                    assert_marker_rejected(
+                        "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007", value
+                    )
+
+            corrective.apply_migration_007_stage(self.conn, self.prepared)
+            for value in ("applied", "unexpected-value"):
+                with self.subTest(state="C_POST_007_PRE_TERMINAL", value=value):
+                    assert_marker_rejected("C_POST_007_PRE_TERMINAL", value)
+
+            corrective.apply_terminal_stage(
+                self.conn, self.prepared, actor="corrective-marker-test"
+            )
+            for value in ("applied", "unexpected-value"):
+                with self.subTest(
+                    state="D_CURRENT_TERMINAL_PRE_REBUILD", value=value
+                ):
+                    assert_marker_rejected("D_CURRENT_TERMINAL_PRE_REBUILD", value)
+
+            corrective.apply_rebuild_stage(self.conn, self.prepared)
+            for value in ("applied", "unexpected-value"):
+                with self.subTest(
+                    state="E_CURRENT_TERMINAL_POST_REBUILD", value=value
+                ):
+                    assert_marker_rejected("E_CURRENT_TERMINAL_POST_REBUILD", value)
 
     def test_validated_loopback_test_database_is_postgresql_16(self):
         self.assertTrue(self.target.database.endswith("_test"))
