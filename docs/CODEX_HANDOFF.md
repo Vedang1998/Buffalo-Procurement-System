@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T04:05:21Z (UTC)
+**Updated:** 2026-09-05T12:57:56Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -67,10 +67,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `rerun_sales_identity_resolution()` for the fixed 2024-11-28 through
   2026-08-10 durable range. The corrective path has no Shopify client, sync,
   procurement, or PO action.
-- Dedicated corrective tests passed **32/32** against explicit disposable
+- ChatGPT's review of prior head
+  `b744ea17b4ac0c6d32a718b6b4fe8385778fdc52` found no production-code defect
+  and requested one additional Level-4 proof: rollback after the real
+  canonical finalizer has changed State D but before the outer corrective
+  transaction commits. The narrow remediation implementation checkpoint is
+  `0d6ff674e64403d5840a3cb730f495e982f0b69f`, tree
+  `d5e52b7648308e16c01997b9220c9fc565d1847c`. The regression
+  `test_real_finalizer_changes_roll_back_when_final_controls_raise` patches
+  only `final_business_controls()` to raise at that exact point; it does not
+  mock `apply_rebuild_stage()`, `rerun_sales_identity_resolution()`, or the
+  canonical finalizer. The corrective runner and bootstrap remain unchanged.
+- The disposable rollback evidence run began and, after the injected failure,
+  returned on a fresh connection to identical State-D fingerprints:
+  `sales_daily=4d56a799ade44ee91e1119ccaad5be24abeec1ef273af6eb1fbe3662e32d3cc3`
+  (55,966 rows),
+  `raw_resolution=f79ead85ac0f5e828799b81b313f18f54273851822115b0aa302ea68fc37f8a5`
+  (59,083),
+  `sales_backfill_runs=7a11c470cfee5ba1b33aff1b678e2a68921be4f6193d08654a25810bb65d0629`
+  (1), and
+  `readiness_gates=a7d42841cf28ff56c4734d33541f75bd3479364c25d6ad8907fdb60f7755402d`
+  (7); both PO fingerprints remained the empty digest. Before and after were
+  exactly 55,971 RESOLVED / 3,112 UNRESOLVED / 0 AMBIGUOUS / 0 EXCLUDED;
+  `sales_daily` 55,966 rows / 78,815.0000 units / $1,231,372.83;
+  backfill status `COMPLETED` with `canonical_aggregate_rebuilt=false`;
+  `SALES_BACKFILL=FAIL` with exact blocker
+  `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`; terminal classification
+  `CURRENT_TERMINAL_EXACT`; lifecycle `PRE_REBUILD`; zero terminal mutations;
+  and zero POs/lines. Exact full backfill-run evidence and all exact readiness
+  rows were included in the equality assertion, not merely these summaries.
+- At the injected point, the unmocked real finalizer had visibly produced
+  57,429 RESOLVED / 1,654 EXCLUDED / 0 unresolved / 0 ambiguous;
+  `sales_daily` 57,424 rows / 80,659.0000 units / $1,263,133.84;
+  `canonical_aggregate_rebuilt=true`; `SALES_BACKFILL=PASS` with zero blockers;
+  terminal lifecycle `POST_REBUILD`; and changed fingerprints. Raising from
+  the patched final validator then rolled all of those in-transaction effects
+  back, proving the corrective wrapper remains the final commit boundary over
+  the canonical finalizer's nested `conn.transaction()`.
+- Dedicated corrective tests passed **33/33** against explicit disposable
   loopback PostgreSQL 16 `_test` infrastructure. Existing Phase 4 tests passed
   **142/142**, Phase 5 passed **22/22**, startup hardening passed **10/10**, and
-  the authoritative full deterministic Procurement OS suite passed **359/359**
+  the authoritative full deterministic Procurement OS suite passed **360/360**
   with zero failures, errors, skips, expected failures, or unexpected
   successes. The full runner verified Python 3.13.11, PostgreSQL 16.9,
   `procurement_test`, and loopback before test discovery. Pinned `uv 0.12.3`
@@ -91,8 +128,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   independent implementation review, PR/CI, reviewed temporary Scheduled
   Deployment execution, and post-execution evidence are complete. Phase 6 is
   owner-authorized but **PAUSED** on this prerequisite.
-- **Exact next action:** ChatGPT independent implementation review before PR or
-  any production connection/execution.
+- **Exact next action:** ChatGPT narrow re-review and independent adversarial
+  review before PR or any production connection/execution.
 
 ### Phase 5 Foundation UI — COMPLETE
 
