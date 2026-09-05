@@ -205,26 +205,46 @@ The payload contains:
   constraint on the migration-created exclusion-authority table.
 - **Views:** name, relation kind/persistence/options, exact non-pretty view
   definition, and ordered output-column name/type/typmod/nullability/collation.
+- **Pre-existing protected tables:** protected columns on `variants`,
+  `historical_sales_review_decisions`, and `historical_sales_exclusions` use
+  relation/name/type/typmod/nullability/collation/identity/generated/storage/
+  compression/default semantics sorted by relation and name. Physical
+  `pg_attribute.attnum` is deliberately excluded because add/drop history on
+  these pre-existing relations is not a Phase-4 material protection.
 - **Authority table:** complete column name/order/type/typmod/nullability,
   default, identity, and generated-column structure, complementing its full
-  constraint coverage.
+  constraint coverage. Its order remains material because migration 007 creates
+  the complete relation as one frozen contract.
 
 The expected payload/hash is not hand-authored. During implementation, the
-exact prestate migrations are applied to disposable PostgreSQL 16, the exact
-committed migration 007 is applied, and the helper's resulting hash is frozen
-in the corrective runner. A deterministic regression recreates that fixture
-from committed SQL and must reproduce the frozen hash exactly. Runtime
-post-007 classification requires exact hash equality; a mismatch is
-`PARTIAL_OR_DRIFTED`.
+byte-exact historical pre-terminal schema from commit
+`198b213e9b8f733e4cc76e568e91697d187e817f`, Git blob
+`4f7dc2517f373513f132e1bf40970986bc607e55`, is applied from a self-contained
+fixture. The byte-frozen current migrations 001-006 are then applied in
+canonical order on disposable PostgreSQL 16 to generate PRE-007; the exact
+committed migration 007 is then applied to generate POST-007. No consolidated
+current-schema subtraction or hand-written view/function/column surgery is an
+authority input. The resulting contract-v2 hashes are PRE-007
+`cf7e091c334c3a78e9ced12731025b2b7d08529cdf34e6cbe3818b85df36253a`
+and POST-007
+`26dac49f608dbc31527cc4fe105e854d3b6ab86ac1d094ce0508d1c4e0fbeced`.
+Deterministic regressions recreate the chain under randomized schema names and
+must reproduce both hashes exactly. A separate dropped-column-hole regression
+proves physical position independence without weakening ordered view or
+authority-table contracts. Runtime pre/post classification requires exact hash
+equality; a mismatch is `PARTIAL_OR_DRIFTED`.
 
 Adversarial tests independently preserve an object's name while changing each
 material class:
 
-1. replace `is_operational_current_variant(TEXT)` with an always-true body;
-2. recreate a required trigger on the wrong table or with a no-op function;
-3. replace a required named constraint with validated `CHECK (TRUE)`; and
+1. replace `is_operational_current_variant(TEXT)` with an always-true body or
+   add an unexpected required-name overload;
+2. recreate a required trigger on the wrong table or redirect the exact
+   same-name/correct-table trigger to a no-op function;
+3. replace a required named constraint with validated `CHECK (TRUE)`;
 4. alter an operational view while retaining its name and a superficial call to
-   `is_operational_current_variant`.
+   `is_operational_current_variant`; and
+5. change the authority registry from durable logged storage to UNLOGGED.
 
 Each drift must change the signature and make C/D/E classification stop before
 any permitted action. The untouched canonical migration must remain COMPLETE.

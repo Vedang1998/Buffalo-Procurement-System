@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T17:50:54Z (UTC)
+**Updated:** 2026-09-05T23:24:59Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,104 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Published-production final adversarial remediation — IMPLEMENTED / AWAITING INDEPENDENT RE-REVIEW
+### G7 semantic-signature provenance remediation — IMPLEMENTED / AWAITING INDEPENDENT RE-REVIEW
+
+- Independent adversarial review returned **REQUEST CHANGES** on exact head
+  `8b23e1a7bf9ee107693b13cd5b2e2a7df7a1f81b`, tree
+  `312392f59558f9307f3394cde5f1c853d6b609ce`. The blocker was confined to
+  semantic-signature provenance: the previous test authority began from the
+  consolidated current schema and surgically removed terminal structures.
+  That synthetic history retained dropped-column `attnum` holes and also
+  reconstructed the two pre-007 price views with an `o.active` condition not
+  present in the genuine historical schema. The rejected pre/post hashes are
+  no longer authority.
+- Corrective implementation commit
+  `fa8f07d0860889250270f6aeb23813cf9d9ed231` replaces that source with the
+  self-contained byte-exact fixture
+  `procurement/tests/fixtures/schema_postgres_pre_terminal_198b213e.sql`.
+  Its authority is commit
+  `198b213e9b8f733e4cc76e568e91697d187e817f` (the sole parent of terminal
+  implementation `326ad7659f41e63c9353e9372e7f67b94af47357`), Git blob
+  `4f7dc2517f373513f132e1bf40970986bc607e55`, 22,818 raw bytes, and raw
+  SHA-256
+  `d5b5731d668d71a88af35e14ebe1fec60901f4bc222374303f7365d629dd38e6`.
+  Tests reproduce the blob ID locally from the frozen bytes, so shallow CI
+  needs neither repository history nor network access.
+- Current migrations 001-006 were independently compared with the same files
+  at `198b213...`, terminal commit `326ad765...`, and reviewed head
+  `8b23e1a...`; they are byte-identical across that authority range. Frozen
+  Git-blob / raw-SHA-256 pairs are: 001 `1ef0e23d...` /
+  `66bc873f91142e0941728af4260031a908195195a2e8d1a54d4ed5fee28ff50b`;
+  002 `bf4fed48...` /
+  `950e9520a12938ca0bee68ac3d68976da5a6119ec97753d4a4c243cb80ea3ad9`;
+  003 `fa7d1b3c...` /
+  `079396b466baadea0501fd591aaa585a39299f6649bbc71fc52897d9d8a65e42`;
+  004 `483332d9...` /
+  `bb490864a7657da672505d3fcba9df8c87ded72fefa0497db11298a058b64e7e`;
+  005 `b814439b...` /
+  `c9cc337fe34857368c471f493702fa0b42691ac48fe3fae4ca1a4fc3ea929b01`;
+  and 006 `7a331ae2...` /
+  `3ea0e2f280395c83d99d51617c7ffc6d6c1097d95f90e1bcad59698e67d775b1`.
+  Current migration 007 remains unchanged at blob `19af2602...`, raw SHA-256
+  `657b4db6f150b26aa93a83ba32e1e8d648ed183d9c939f4ebd1109f6afcdd363`.
+- Signature contract v2 starts with the exact historical fixture, reapplies
+  the exact current 001-006 bytes in canonical order, computes PRE-007, then
+  applies the exact committed 007 and computes POST-007. Protected columns on
+  the three pre-existing relations (`variants`, review decisions, exclusions)
+  retain relation/name/type/typmod/nullability/collation/identity/generated/
+  storage/compression/default semantics but omit physical `attnum` and sort by
+  relation/name. Ordered view output and the wholly migration-created authority
+  table retain their column positions as material contract. Function, trigger,
+  constraint, view, and authority-relation semantics are otherwise unchanged.
+- Disposable PostgreSQL 16.9 generated the reviewed genuine-chain hashes:
+  PRE-007
+  `cf7e091c334c3a78e9ced12731025b2b7d08529cdf34e6cbe3818b85df36253a`;
+  POST-007
+  `26dac49f608dbc31527cc4fe105e854d3b6ab86ac1d094ce0508d1c4e0fbeced`.
+  The post contract contains exactly 10 functions, 13 triggers, 20
+  constraints, five views / 93 ordered view columns, one protected authority
+  relation / 12 ordered authority columns, and 18 position-independent
+  pre-existing protected columns.
+- Two independently randomized genuine historical-chain schemas reproduce
+  both frozen hashes. A separate regression creates real dropped-column holes
+  on all three pre-existing relations, proves the protected raw `attnum` values
+  differ after migration 007, and still reproduces byte-identical normalized
+  protected-column payloads and the complete POST-007 hash. Source assertions
+  prove neither current consolidated `schema_postgres.sql` nor hand-written
+  DROP/recreated-view surgery participates in hash authority.
+- Existing fail-closed semantic drift coverage remains green and now also
+  includes a required-name extra function overload and a correct-table,
+  same-name trigger redirected to a no-op function. Always-true helper,
+  wrong-table trigger, tautological same-name constraint, superficially guarded
+  `OR TRUE` view, UNLOGGED authority registry, and unexpected marker drift all
+  continue to reject. Bootstrap isolation, downstream real-Git isolation,
+  post-lock predecessor proofs, stale/concurrent execution, exact 858/0
+  terminal mutation/replay, late-finalizer rollback, and State-E read-only
+  replay remain unchanged and green.
+- Deterministic validation passed: new G7 focus **7/7**; complete corrective
+  module **58/58**; complete Phase 4 set **200/200**; Phase 5 **22/22**;
+  startup hardening **10/10**; and authoritative suite **385/385**, with zero
+  failures, errors, skips, expected failures, or unexpected successes. The
+  module/global floors are now 58/385. The authoritative runner independently
+  created and verified Python 3.13.11, PostgreSQL 16.9, loopback, and exact
+  disposable database `procurement_test` before discovery. Every G7 database
+  test used only the validated `TEST_DATABASE_URL` contract; ordinary
+  `DATABASE_URL` was never fixture authority.
+- Pinned `uv 0.12.3` and `uv lock --check`, Python compilation, `/bin/sh`
+  bootstrap syntax, `git diff --check`, added-line credential-pattern review,
+  and tracked generated-artifact/cache scan pass. The non-blocking review notes
+  about newly named objects outside the frozen whitelist, independent Git-tool
+  ownership re-attestation inside Python, and transaction-isolation readback
+  remain recorded for later review; none is a demonstrated bypass and none was
+  broadened into this G7 correction.
+- Production database connections/writes: **0 / 0**. Shopify calls/writes:
+  **0 / 0**. PO actions: **0**. No `neondb`, deployment, PR, merge, or Phase 6
+  implementation occurred. Published-production corrective Phase 4 remains
+  **OPEN**; Phase 6 remains owner-authorized but **PAUSED**.
+- **Exact next action:** ChatGPT code re-review and independent adversarial
+  re-review before PR, deployment, merge, or production execution.
+
+### Prior final adversarial checkpoint — SUPERSEDED BY G7 PROVENANCE REMEDIATION
 
 - ChatGPT approved design commit
   `e27e5d4644164161483dfd7ce15ff38c08a6aed6`. The implementation commits are
@@ -75,17 +172,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   options. Target schema names are normalized, nested collections are sorted,
   canonical JSON is hashed, raw OIDs/timestamps/owners/statistics are excluded,
   and public read-only inspection retains the no-XID contract.
-- The signatures were generated from the exact committed through-006 schema
-  and exact committed migration 007 on disposable PostgreSQL 16, not
-  hand-authored. Frozen pre-007 SHA-256 is
-  `ecf12c0a1f4b2d5e2dea60a508f59eab271e544b7d8efcf968bd3d0a453c90f0`;
-  frozen post-007 SHA-256 is
-  `238a8b885f4a9d9840d3befb1e26b199c813e9807622b33183275a878651be17`.
-  Independent schema names and a disposable `public` schema reproduced the
-  same post-007 hash. Same-name always-true function, wrong-table trigger,
-  tautological constraint, superficially guarded `OR TRUE` view, and UNLOGGED
-  authority-table changes all classify `PARTIAL_OR_DRIFTED`; semantic drift
-  blocks C, D, and E.
+- **Superseded provenance:** independent review rejected the prior pre-007
+  `ecf12c0...` and post-007 `238a8b88...` hashes because their fixture used
+  consolidated-schema surgery rather than the historical authority chain. The
+  G7 checkpoint above supplies the only current frozen hashes. Same-name
+  always-true function, wrong-table trigger, tautological constraint,
+  superficially guarded `OR TRUE` view, and UNLOGGED authority-table changes
+  all classify `PARTIAL_OR_DRIFTED`; semantic drift blocks C, D, and E.
 - The retained late-finalizer rollback regression invokes real
   `apply_rebuild_stage()` and the unmocked canonical
   `rerun_sales_identity_resolution()`, then raises only from
