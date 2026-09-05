@@ -84,11 +84,12 @@ The only accepted Python executable is the owner-approved literal:
 /nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped
 ```
 
-The bootstrap hardcodes both that file and its exact package-root and `bin`
-parent paths. Before Python execution it requires the parents to exist as
-directories, be owned by UID 0, and be non-writable by the executing user, and
-requires the interpreter to be a regular, executable, UID-0-owned,
-non-writable file. There is no
+The bootstrap hardcodes that file, `/nix`, `/nix/store`, and its exact
+package-root and `bin` parent paths. Before Python execution it requires every
+parent to exist as a directory and be non-writable by the executing user, and
+requires the interpreter to be a regular, executable, non-writable file. Nix-store
+immutability, rather than a portable numeric-owner assumption, is the trust
+property for this exact owner-approved path. There is no
 `python`, `python3`, `PATH` lookup, glob, dynamic discovery, CLI choice,
 environment override, or alternate fallback. Any failed check exits before
 Python and therefore before a database connection. The exact interpreter is

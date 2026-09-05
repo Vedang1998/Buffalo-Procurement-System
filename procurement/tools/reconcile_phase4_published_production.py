@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -32,6 +33,7 @@ from procurement_os.historical_sales import (  # noqa: E402
 from procurement_os.historical_sales_manifest import (  # noqa: E402
     APPROVED_RUN_ID,
     ManifestExecutionContext,
+    _decision_artifact_counts,
     dry_run_manifest,
     load_authorized_manifest,
     persist_manifest_decisions,
@@ -266,6 +268,19 @@ TERMINAL_VIEWS = frozenset(
         "v_operational_variants",
     }
 )
+MIGRATION_007_SCHEMA_SIGNATURE_VERSION = "phase4-terminal-schema-v1"
+# Generated only from the exact committed migration on disposable PostgreSQL 16.
+EXPECTED_MIGRATION_007_SCHEMA_SHA256 = (
+    "238a8b885f4a9d9840d3befb1e26b199c813e9807622b33183275a878651be17"
+)
+EXPECTED_PRE_007_SCHEMA_SHA256 = (
+    "ecf12c0a1f4b2d5e2dea60a508f59eab271e544b7d8efcf968bd3d0a453c90f0"
+)
+TERMINAL_COLUMN_CONTRACT = {
+    "variants": TERMINAL_VARIANT_COLUMNS | {"product_id"},
+    "historical_sales_review_decisions": TERMINAL_DECISION_COLUMNS,
+    "historical_sales_exclusions": TERMINAL_EXCLUSION_COLUMNS,
+}
 
 
 class CorrectiveValidationError(RuntimeError):
@@ -487,129 +502,507 @@ def _read_only(conn: Any, operation: Any) -> Any:
         return result
 
 
-def migration_007_state(conn: Any) -> dict[str, Any]:
-    def inspect() -> dict[str, Any]:
-        with conn.cursor() as cur:
-            cur.execute("SELECT key,value FROM meta WHERE key LIKE 'migration:%'")
-            markers = {str(row[0]): str(row[1]) for row in cur.fetchall()}
-            columns: dict[str, set[str]] = {}
-            for table in (
-                "variants",
-                "historical_sales_review_decisions",
-                "historical_sales_exclusions",
-            ):
-                cur.execute(
-                    """SELECT column_name FROM information_schema.columns
-                       WHERE table_schema=current_schema() AND table_name=%s""",
-                    (table,),
-                )
-                columns[table] = {str(row[0]) for row in cur.fetchall()}
+def _stable_catalog_value(value: Any) -> Any:
+    if isinstance(value, (list, tuple)):
+        return [_stable_catalog_value(item) for item in value]
+    if isinstance(value, memoryview):
+        return value.tobytes().hex()
+    return value
+
+
+def _catalog_records(
+    rows: Sequence[Sequence[Any]], columns: Sequence[str]
+) -> list[dict[str, Any]]:
+    return [
+        {
+            column: _stable_catalog_value(value)
+            for column, value in zip(columns, row, strict=True)
+        }
+        for row in rows
+    ]
+
+
+def _normalize_target_schema_text(value: str, target_schema: str) -> str:
+    quoted = '"' + target_schema.replace('"', '""') + '".'
+    return value.replace(quoted, "$TARGET_SCHEMA.").replace(
+        target_schema + ".", "$TARGET_SCHEMA."
+    )
+
+
+def _migration_007_semantic_signature(
+    conn: Any, target_schema: str
+) -> dict[str, Any]:
+    """Return the normalized PostgreSQL-16 semantic contract for migration 007."""
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_setting('search_path')")
+        original_search_path = str(cur.fetchone()[0])
+        cur.execute("SAVEPOINT phase4_migration_007_semantic_signature")
+        try:
             cur.execute(
-                """SELECT conname FROM pg_constraint
-                   WHERE connamespace=(SELECT oid FROM pg_namespace
-                                       WHERE nspname=current_schema())
-                     AND convalidated"""
+                "SELECT set_config('search_path','pg_catalog,' || quote_ident(%s),TRUE)",
+                (target_schema,),
             )
-            constraints = {str(row[0]) for row in cur.fetchall()}
             cur.execute(
-                """SELECT tgname FROM pg_trigger t
+                """SELECT '$TARGET_SCHEMA',p.proname,
+                          pg_get_function_identity_arguments(p.oid),
+                          pg_get_function_result(p.oid),l.lanname,p.prokind,
+                          p.provolatile,p.proparallel,p.proisstrict,p.prosecdef,
+                          p.proleakproof,p.proretset,
+                          COALESCE(p.proargnames,ARRAY[]::text[]),
+                          COALESCE(p.proargmodes::text,''),p.pronargdefaults,
+                          COALESCE(pg_get_expr(p.proargdefaults,0,FALSE),''),
+                          COALESCE(p.proconfig,ARRAY[]::text[]),
+                          COALESCE(p.probin,''),p.prosrc
+                   FROM pg_proc p
+                   JOIN pg_namespace n ON n.oid=p.pronamespace
+                   JOIN pg_language l ON l.oid=p.prolang
+                   WHERE n.nspname=%s AND p.proname=ANY(%s)
+                   ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)""",
+                (target_schema, sorted(TERMINAL_FUNCTIONS)),
+            )
+            functions = _catalog_records(
+                cur.fetchall(),
+                (
+                    "schema",
+                    "name",
+                    "identity_arguments",
+                    "result",
+                    "language",
+                    "kind",
+                    "volatility",
+                    "parallel",
+                    "strict",
+                    "security_definer",
+                    "leakproof",
+                    "set_returning",
+                    "argument_names",
+                    "argument_modes",
+                    "default_argument_count",
+                    "argument_defaults",
+                    "configuration",
+                    "binary",
+                    "source",
+                ),
+            )
+            for function in functions:
+                function["configuration"] = sorted(function["configuration"])
+
+            cur.execute(
+                """SELECT '$TARGET_SCHEMA',c.relname,t.tgname,t.tgtype,
+                          t.tgenabled,t.tgisinternal,(t.tgparentid<>0),
+                          t.tgdeferrable,t.tginitdeferred,
+                          CASE WHEN fn.nspname=%s THEN '$TARGET_SCHEMA'
+                               ELSE fn.nspname END,p.proname,
+                          pg_get_function_identity_arguments(p.oid),
+                          COALESCE((
+                            SELECT array_agg(a.attname::text ORDER BY key.ordinality)
+                            FROM unnest(t.tgattr::smallint[]) WITH ORDINALITY
+                                 AS key(attnum,ordinality)
+                            JOIN pg_attribute a
+                              ON a.attrelid=t.tgrelid AND a.attnum=key.attnum
+                          ),ARRAY[]::text[]),
+                          encode(t.tgargs,'hex'),COALESCE(t.tgoldtable,''),
+                          COALESCE(t.tgnewtable,''),
+                          COALESCE(pg_get_expr(t.tgqual,t.tgrelid,FALSE),''),
+                          pg_get_triggerdef(t.oid,FALSE)
+                   FROM pg_trigger t
                    JOIN pg_class c ON c.oid=t.tgrelid
                    JOIN pg_namespace n ON n.oid=c.relnamespace
-                   WHERE n.nspname=current_schema() AND NOT t.tgisinternal
-                     AND t.tgenabled<>'D'"""
+                   JOIN pg_proc p ON p.oid=t.tgfoid
+                   JOIN pg_namespace fn ON fn.oid=p.pronamespace
+                   WHERE n.nspname=%s AND t.tgname=ANY(%s)
+                   ORDER BY c.relname,t.tgname""",
+                (target_schema, target_schema, sorted(TERMINAL_TRIGGERS)),
             )
-            triggers = {str(row[0]) for row in cur.fetchall()}
-            cur.execute(
-                """SELECT p.proname FROM pg_proc p
-                   JOIN pg_namespace n ON n.oid=p.pronamespace
-                   WHERE n.nspname=current_schema()"""
+            triggers = _catalog_records(
+                cur.fetchall(),
+                (
+                    "table_schema",
+                    "table",
+                    "name",
+                    "type_bits",
+                    "enabled",
+                    "internal",
+                    "has_parent",
+                    "deferrable",
+                    "initially_deferred",
+                    "function_schema",
+                    "function",
+                    "function_identity_arguments",
+                    "update_columns",
+                    "arguments_hex",
+                    "old_transition_table",
+                    "new_transition_table",
+                    "condition",
+                    "definition",
+                ),
             )
-            functions = {str(row[0]) for row in cur.fetchall()}
-            cur.execute(
-                """SELECT table_name FROM information_schema.tables
-                   WHERE table_schema=current_schema()
-                     AND table_name='historical_sales_exclusion_authority_runs'"""
-            )
-            authority_table = cur.fetchone() is not None
-            cur.execute(
-                """SELECT table_name FROM information_schema.views
-                   WHERE table_schema=current_schema()"""
-            )
-            views = {str(row[0]) for row in cur.fetchall()}
-            cur.execute(
-                """SELECT table_name,column_name,is_nullable
-                   FROM information_schema.columns
-                   WHERE table_schema=current_schema()
-                     AND table_name='variants' AND column_name='product_id'"""
-            )
-            product_id = cur.fetchone()
-            cur.execute(
-                """SELECT viewname,definition FROM pg_views
-                   WHERE schemaname=current_schema()
-                     AND viewname IN ('v_current_prices','v_future_prices')"""
-            )
-            guarded_price_views = {
-                str(row[0])
-                for row in cur.fetchall()
-                if "is_operational_current_variant" in str(row[1])
-            }
+            for trigger in triggers:
+                trigger["condition"] = _normalize_target_schema_text(
+                    trigger["condition"], target_schema
+                )
+                trigger["definition"] = _normalize_target_schema_text(
+                    trigger["definition"], target_schema
+                )
 
-        unique_columns_present = bool(
-            TERMINAL_VARIANT_COLUMNS & columns["variants"]
-            or TERMINAL_DECISION_COLUMNS
-            & columns["historical_sales_review_decisions"]
-            or TERMINAL_EXCLUSION_COLUMNS & columns["historical_sales_exclusions"]
-        )
-        unique_objects_present = bool(
-            TERMINAL_CONSTRAINTS & constraints
-            or TERMINAL_TRIGGERS & triggers
-            or TERMINAL_FUNCTIONS & functions
-            or authority_table
-        )
-        marker_present = markers.get(MIGRATION_007_MARKER) == "applied"
-        pre_markers_exact = markers == EXPECTED_PRE_007_MARKERS
-        post_markers_exact = markers == EXPECTED_POST_007_MARKERS
-        absent = (
-            pre_markers_exact
-            and not unique_columns_present
-            and not unique_objects_present
-        )
-        complete = all(
-            (
-                post_markers_exact,
-                TERMINAL_VARIANT_COLUMNS <= columns["variants"],
-                TERMINAL_DECISION_COLUMNS
-                <= columns["historical_sales_review_decisions"],
-                TERMINAL_EXCLUSION_COLUMNS
-                <= columns["historical_sales_exclusions"],
-                TERMINAL_CONSTRAINTS <= constraints,
-                TERMINAL_TRIGGERS <= triggers,
-                TERMINAL_FUNCTIONS <= functions,
-                TERMINAL_VIEWS <= views,
-                authority_table,
-                product_id is not None and str(product_id[2]) == "YES",
-                guarded_price_views == {"v_current_prices", "v_future_prices"},
+            cur.execute(
+                """SELECT '$TARGET_SCHEMA',c.relname,co.conname,co.contype,
+                          co.convalidated,co.condeferrable,co.condeferred,
+                          co.conislocal,co.coninhcount,co.connoinherit,
+                          (co.conparentid<>0),
+                          COALESCE((
+                            SELECT array_agg(a.attname::text ORDER BY key.ordinality)
+                            FROM unnest(co.conkey) WITH ORDINALITY
+                                 AS key(attnum,ordinality)
+                            JOIN pg_attribute a
+                              ON a.attrelid=co.conrelid AND a.attnum=key.attnum
+                          ),ARRAY[]::text[]),
+                          CASE WHEN refn.nspname IS NULL THEN ''
+                               WHEN refn.nspname=%s THEN '$TARGET_SCHEMA'
+                               ELSE refn.nspname END,
+                          COALESCE(refc.relname,''),
+                          COALESCE((
+                            SELECT array_agg(a.attname::text ORDER BY key.ordinality)
+                            FROM unnest(co.confkey) WITH ORDINALITY
+                                 AS key(attnum,ordinality)
+                            JOIN pg_attribute a
+                              ON a.attrelid=co.confrelid AND a.attnum=key.attnum
+                          ),ARRAY[]::text[]),
+                          co.confmatchtype,co.confupdtype,co.confdeltype,
+                          COALESCE((
+                            SELECT array_agg(a.attname::text ORDER BY key.ordinality)
+                            FROM unnest(co.confdelsetcols) WITH ORDINALITY
+                                 AS key(attnum,ordinality)
+                            JOIN pg_attribute a
+                              ON a.attrelid=co.conrelid AND a.attnum=key.attnum
+                          ),ARRAY[]::text[]),
+                          COALESCE(pg_get_expr(co.conbin,co.conrelid,FALSE),''),
+                          pg_get_constraintdef(co.oid,FALSE)
+                   FROM pg_constraint co
+                   JOIN pg_class c ON c.oid=co.conrelid
+                   JOIN pg_namespace n ON n.oid=c.relnamespace
+                   LEFT JOIN pg_class refc ON refc.oid=co.confrelid
+                   LEFT JOIN pg_namespace refn ON refn.oid=refc.relnamespace
+                   WHERE n.nspname=%s
+                     AND (co.conname=ANY(%s)
+                          OR c.relname='historical_sales_exclusion_authority_runs')
+                   ORDER BY c.relname,co.conname""",
+                (target_schema, target_schema, sorted(TERMINAL_CONSTRAINTS)),
             )
-        )
-        return {
-            "classification": (
-                "ABSENT" if absent else "COMPLETE" if complete else "PARTIAL_OR_DRIFTED"
-            ),
-            "pre_007_markers_present": all(
-                markers.get(marker) == "applied"
-                for marker in REQUIRED_PRE_007_MARKERS
-            ),
-            "migration_007_marker_present": marker_present,
-            "migration_marker_set_exact": pre_markers_exact or post_markers_exact,
-            "required_columns_present": complete,
-            "required_constraints": len(TERMINAL_CONSTRAINTS & constraints),
-            "required_triggers": len(TERMINAL_TRIGGERS & triggers),
-            "required_functions": len(TERMINAL_FUNCTIONS & functions),
-            "required_views": len(TERMINAL_VIEWS & views),
-            "authority_table_present": authority_table,
-        }
+            constraints = _catalog_records(
+                cur.fetchall(),
+                (
+                    "table_schema",
+                    "table",
+                    "name",
+                    "type",
+                    "validated",
+                    "deferrable",
+                    "initially_deferred",
+                    "local",
+                    "inheritance_count",
+                    "no_inherit",
+                    "has_parent",
+                    "columns",
+                    "referenced_schema",
+                    "referenced_table",
+                    "referenced_columns",
+                    "foreign_key_match",
+                    "foreign_key_update",
+                    "foreign_key_delete",
+                    "foreign_key_delete_set_columns",
+                    "expression",
+                    "definition",
+                ),
+            )
+            for constraint in constraints:
+                constraint["expression"] = _normalize_target_schema_text(
+                    constraint["expression"], target_schema
+                )
+                constraint["definition"] = _normalize_target_schema_text(
+                    constraint["definition"], target_schema
+                )
 
-    return _read_only(conn, inspect)
+            cur.execute(
+                """SELECT '$TARGET_SCHEMA',c.relname,c.relkind,c.relpersistence,
+                          COALESCE(c.reloptions,ARRAY[]::text[]),
+                          c.relrowsecurity,c.relforcerowsecurity,
+                          pg_get_viewdef(c.oid,FALSE)
+                   FROM pg_class c
+                   JOIN pg_namespace n ON n.oid=c.relnamespace
+                   WHERE n.nspname=%s AND c.relname=ANY(%s)
+                   ORDER BY c.relname""",
+                (target_schema, sorted(TERMINAL_VIEWS)),
+            )
+            views = _catalog_records(
+                cur.fetchall(),
+                (
+                    "schema",
+                    "name",
+                    "relation_kind",
+                    "persistence",
+                    "options",
+                    "row_security",
+                    "force_row_security",
+                    "definition",
+                ),
+            )
+            for view in views:
+                view["options"] = sorted(view["options"])
+                view["definition"] = _normalize_target_schema_text(
+                    view["definition"], target_schema
+                )
+
+            cur.execute(
+                """SELECT '$TARGET_SCHEMA',c.relname,c.relkind,c.relpersistence,
+                          c.relrowsecurity,c.relforcerowsecurity,c.relreplident,
+                          c.relispartition,COALESCE(c.reloptions,ARRAY[]::text[])
+                   FROM pg_class c
+                   JOIN pg_namespace n ON n.oid=c.relnamespace
+                   WHERE n.nspname=%s
+                     AND c.relname='historical_sales_exclusion_authority_runs'
+                   ORDER BY c.relname""",
+                (target_schema,),
+            )
+            protected_relations = _catalog_records(
+                cur.fetchall(),
+                (
+                    "schema",
+                    "name",
+                    "relation_kind",
+                    "persistence",
+                    "row_security",
+                    "force_row_security",
+                    "replica_identity",
+                    "partition",
+                    "options",
+                ),
+            )
+            for relation in protected_relations:
+                relation["options"] = sorted(relation["options"])
+
+            cur.execute(
+                """SELECT '$TARGET_SCHEMA',c.relname,a.attnum,a.attname,
+                          format_type(a.atttypid,a.atttypmod),a.attnotnull,
+                          a.atttypmod,
+                          CASE WHEN coll.oid IS NULL THEN '' ELSE colln.nspname END,
+                          COALESCE(coll.collname,''),a.attidentity,a.attgenerated,
+                          a.attstorage,a.attcompression,
+                          COALESCE(pg_get_expr(d.adbin,d.adrelid,FALSE),'')
+                   FROM pg_class c
+                   JOIN pg_namespace n ON n.oid=c.relnamespace
+                   JOIN pg_attribute a ON a.attrelid=c.oid
+                   LEFT JOIN pg_attrdef d
+                     ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+                   LEFT JOIN pg_collation coll ON coll.oid=a.attcollation
+                   LEFT JOIN pg_namespace colln ON colln.oid=coll.collnamespace
+                   WHERE n.nspname=%s AND c.relname=ANY(%s)
+                     AND a.attnum>0 AND NOT a.attisdropped
+                   ORDER BY c.relname,a.attnum""",
+                (
+                    target_schema,
+                    sorted(set(TERMINAL_COLUMN_CONTRACT) | set(TERMINAL_VIEWS)
+                           | {"historical_sales_exclusion_authority_runs"}),
+                ),
+            )
+            all_columns = _catalog_records(
+                cur.fetchall(),
+                (
+                    "schema",
+                    "relation",
+                    "position",
+                    "name",
+                    "type",
+                    "not_null",
+                    "type_modifier",
+                    "collation_schema",
+                    "collation",
+                    "identity",
+                    "generated",
+                    "storage",
+                    "compression",
+                    "default",
+                ),
+            )
+            for column in all_columns:
+                column["default"] = _normalize_target_schema_text(
+                    column["default"], target_schema
+                )
+            cur.execute(
+                "SELECT set_config('search_path',%s,TRUE)",
+                (original_search_path,),
+            )
+        except BaseException:
+            cur.execute("ROLLBACK TO SAVEPOINT phase4_migration_007_semantic_signature")
+            cur.execute("RELEASE SAVEPOINT phase4_migration_007_semantic_signature")
+            raise
+        else:
+            cur.execute("RELEASE SAVEPOINT phase4_migration_007_semantic_signature")
+
+    view_columns = [
+        column for column in all_columns if column["relation"] in TERMINAL_VIEWS
+    ]
+    protected_columns = [
+        column
+        for column in all_columns
+        if column["relation"] == "historical_sales_exclusion_authority_runs"
+        or column["name"]
+        in TERMINAL_COLUMN_CONTRACT.get(str(column["relation"]), frozenset())
+    ]
+    payload = {
+        "contract_version": MIGRATION_007_SCHEMA_SIGNATURE_VERSION,
+        "postgresql_major": EXPECTED_POSTGRESQL_MAJOR,
+        "functions": functions,
+        "triggers": triggers,
+        "constraints": constraints,
+        "views": views,
+        "protected_relations": protected_relations,
+        "view_columns": view_columns,
+        "protected_columns": protected_columns,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return {
+        "sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "payload": payload,
+    }
+
+
+def _inspect_migration_007_state(conn: Any) -> dict[str, Any]:
+    """Inspect markers and migration semantics inside the caller's transaction."""
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        target_schema = str(cur.fetchone()[0])
+        cur.execute("SELECT key,value FROM meta WHERE key LIKE 'migration:%'")
+        markers = {str(row[0]): str(row[1]) for row in cur.fetchall()}
+        columns: dict[str, set[str]] = {}
+        for table in TERMINAL_COLUMN_CONTRACT:
+            cur.execute(
+                """SELECT column_name FROM information_schema.columns
+                   WHERE table_schema=%s AND table_name=%s""",
+                (target_schema, table),
+            )
+            columns[table] = {str(row[0]) for row in cur.fetchall()}
+        cur.execute(
+            """SELECT conname FROM pg_constraint
+               WHERE connamespace=(SELECT oid FROM pg_namespace WHERE nspname=%s)
+                 AND convalidated""",
+            (target_schema,),
+        )
+        constraints = {str(row[0]) for row in cur.fetchall()}
+        cur.execute(
+            """SELECT tgname FROM pg_trigger t
+               JOIN pg_class c ON c.oid=t.tgrelid
+               JOIN pg_namespace n ON n.oid=c.relnamespace
+               WHERE n.nspname=%s AND NOT t.tgisinternal AND t.tgenabled<>'D'""",
+            (target_schema,),
+        )
+        triggers = {str(row[0]) for row in cur.fetchall()}
+        cur.execute(
+            """SELECT p.proname FROM pg_proc p
+               JOIN pg_namespace n ON n.oid=p.pronamespace
+               WHERE n.nspname=%s""",
+            (target_schema,),
+        )
+        functions = {str(row[0]) for row in cur.fetchall()}
+        cur.execute(
+            """SELECT table_name FROM information_schema.tables
+               WHERE table_schema=%s
+                 AND table_name='historical_sales_exclusion_authority_runs'""",
+            (target_schema,),
+        )
+        authority_table = cur.fetchone() is not None
+        cur.execute(
+            """SELECT table_name FROM information_schema.views
+               WHERE table_schema=%s""",
+            (target_schema,),
+        )
+        views = {str(row[0]) for row in cur.fetchall()}
+        cur.execute(
+            """SELECT is_nullable FROM information_schema.columns
+               WHERE table_schema=%s
+                 AND table_name='variants' AND column_name='product_id'""",
+            (target_schema,),
+        )
+        product_id = cur.fetchone()
+
+    semantic = _migration_007_semantic_signature(conn, target_schema)
+    unique_columns_present = bool(
+        TERMINAL_VARIANT_COLUMNS & columns["variants"]
+        or TERMINAL_DECISION_COLUMNS
+        & columns["historical_sales_review_decisions"]
+        or TERMINAL_EXCLUSION_COLUMNS & columns["historical_sales_exclusions"]
+    )
+    unique_objects_present = bool(
+        TERMINAL_CONSTRAINTS & constraints
+        or TERMINAL_TRIGGERS & triggers
+        or TERMINAL_FUNCTIONS & functions
+        or authority_table
+    )
+    marker_present = markers.get(MIGRATION_007_MARKER) == "applied"
+    pre_markers_exact = markers == EXPECTED_PRE_007_MARKERS
+    post_markers_exact = markers == EXPECTED_POST_007_MARKERS
+    required_columns_present = all(
+        required <= columns[table]
+        for table, required in TERMINAL_COLUMN_CONTRACT.items()
+    )
+    structural_complete = all(
+        (
+            post_markers_exact,
+            required_columns_present,
+            TERMINAL_CONSTRAINTS <= constraints,
+            TERMINAL_TRIGGERS <= triggers,
+            TERMINAL_FUNCTIONS <= functions,
+            TERMINAL_VIEWS <= views,
+            authority_table,
+            product_id is not None and str(product_id[0]) == "YES",
+        )
+    )
+    semantic_matches = semantic["sha256"] == EXPECTED_MIGRATION_007_SCHEMA_SHA256
+    pre_007_semantic_matches = semantic["sha256"] == EXPECTED_PRE_007_SCHEMA_SHA256
+    absent = all(
+        (
+            pre_markers_exact,
+            not unique_columns_present,
+            not unique_objects_present,
+            product_id is not None and str(product_id[0]) == "NO",
+            pre_007_semantic_matches,
+        )
+    )
+    complete = structural_complete and semantic_matches
+    return {
+        "classification": (
+            "ABSENT" if absent else "COMPLETE" if complete else "PARTIAL_OR_DRIFTED"
+        ),
+        "pre_007_markers_present": all(
+            markers.get(marker) == "applied" for marker in REQUIRED_PRE_007_MARKERS
+        ),
+        "migration_007_marker_present": marker_present,
+        "migration_marker_set_exact": pre_markers_exact or post_markers_exact,
+        "required_columns_present": required_columns_present,
+        "required_constraints": len(TERMINAL_CONSTRAINTS & constraints),
+        "required_triggers": len(TERMINAL_TRIGGERS & triggers),
+        "required_functions": len(TERMINAL_FUNCTIONS & functions),
+        "required_views": len(TERMINAL_VIEWS & views),
+        "authority_table_present": authority_table,
+        "semantic_schema_sha256": semantic["sha256"],
+        "semantic_schema_matches": semantic_matches,
+        "pre_007_semantic_schema_matches": pre_007_semantic_matches,
+    }
+
+
+def migration_007_state(conn: Any) -> dict[str, Any]:
+    return _read_only(conn, lambda: _inspect_migration_007_state(conn))
+
+
+def _require_migration_007_state_locked(conn: Any, expected: str) -> dict[str, Any]:
+    observed = _inspect_migration_007_state(conn)
+    if observed["classification"] != expected:
+        raise CorrectiveValidationError(
+            f"locked migration 007 state is not exact {expected}"
+        )
+    return observed
 
 
 def _raw_status_counts(conn: Any) -> dict[str, int]:
@@ -752,6 +1145,85 @@ def _manifest_state(
     raise CorrectiveValidationError("pre-007 state is neither exact State A nor State B")
 
 
+def _require_manifest_predecessor_locked(
+    conn: Any, prepared: PreparedExecution, expected_state: str
+) -> None:
+    """Re-prove exact A or B after the shared lock and before mutation."""
+
+    _require_migration_007_state_locked(conn, "ABSENT")
+    preflight = validate_database_preflight(conn, prepared.original_manifest)
+    inventory = _basic_inventory(conn)
+    artifacts = _decision_artifact_counts(conn, prepared.original_manifest)
+    _assert_frozen_fingerprints(protected_state_fingerprints(conn))
+    if (
+        inventory["source_facts"] != 59083
+        or inventory["sales_daily_rows"] != 55966
+        or inventory["raw_status_counts"] != EXPECTED_INITIAL_STATUS_COUNTS
+        or inventory["sales_gate_status"] != "FAIL"
+        or not _initial_sales_blocker_present(inventory)
+    ):
+        raise CorrectiveValidationError("locked manifest source controls drifted")
+
+    if expected_state == "A_FROZEN_PRODUCTION_BASELINE":
+        exact = (
+            inventory["variants"] == 2049
+            and inventory["decision_ledger_rows"] == 0
+            and inventory["exclusion_rows"] == 0
+            and inventory["active_exclusions"] == 0
+            and preflight.decision_state_counts
+            == {
+                "MISSING": 343,
+                "LEGACY_COMPATIBLE": 0,
+                "CURRENT_PROVENANCE": 0,
+                "CONFLICT": 0,
+            }
+            and len(preflight.alias_insert_families) == 17
+            and len(preflight.exclusion_mutations) == 8
+            and artifacts
+            == {
+                "historical_sales_review_decisions": 0,
+                "effective_manifest_decisions": 0,
+                "active_historical_sales_exclusions": 0,
+                "sales_backfill_review_alias_rows": 0,
+                "manifest_old_id_families": 17,
+                "compatible_existing_alias_families": 0,
+                "decision_change_log_rows": 0,
+            }
+        )
+    elif expected_state == "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007":
+        exact = (
+            inventory["variants"] == 2049
+            and inventory["decision_ledger_rows"] == 343
+            and inventory["exclusion_rows"] == 8
+            and inventory["active_exclusions"] == 8
+            and preflight.decision_state_counts
+            == {
+                "MISSING": 0,
+                "LEGACY_COMPATIBLE": 0,
+                "CURRENT_PROVENANCE": 343,
+                "CONFLICT": 0,
+            }
+            and not preflight.alias_insert_families
+            and not preflight.exclusion_mutations
+            and artifacts
+            == {
+                "historical_sales_review_decisions": 343,
+                "effective_manifest_decisions": 343,
+                "active_historical_sales_exclusions": 8,
+                "sales_backfill_review_alias_rows": 17,
+                "manifest_old_id_families": 17,
+                "compatible_existing_alias_families": 17,
+                "decision_change_log_rows": 343,
+            }
+        )
+    else:
+        raise CorrectiveValidationError("unsupported locked manifest predecessor")
+    if not exact:
+        raise CorrectiveValidationError(
+            f"locked manifest predecessor is not exact {expected_state}"
+        )
+
+
 def _terminal_inventory(conn: Any) -> dict[str, int]:
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*)::int FROM variants")
@@ -773,6 +1245,96 @@ def _terminal_inventory(conn: Any) -> dict[str, int]:
         "decision_ledger_rows": decisions,
         "authority_registry_rows": authority,
     }
+
+
+TERMINAL_FIRST_MUTATION_PLAN = {
+    "restored_variants": 43,
+    "terminal_decisions": 280,
+    "original_exclusion_normalizations": 8,
+    "terminal_aliases": 39,
+    "active_exclusions": 198,
+    "authority_registrations": 1,
+}
+TERMINAL_ZERO_MUTATION_PLAN = {
+    "restored_variants": 0,
+    "terminal_decisions": 0,
+    "original_exclusion_normalizations": 0,
+    "terminal_aliases": 0,
+    "active_exclusions": 0,
+    "authority_registrations": 0,
+}
+
+
+def _validate_terminal_prestate(
+    terminal: Mapping[str, Any], inventory: Mapping[str, Any]
+) -> None:
+    if (
+        terminal["classification"] != "PRE_TERMINAL_EXACT"
+        or terminal["diagnostics"]
+        or terminal["planned_mutations"] != TERMINAL_FIRST_MUTATION_PLAN
+        or dict(inventory)
+        != {
+            "variants": 2049,
+            "historical_only_variants": 0,
+            "decision_ledger_rows": 343,
+            "authority_registry_rows": 0,
+        }
+    ):
+        raise CorrectiveValidationError("terminal prestate controls drifted")
+    _assert_frozen_fingerprints(terminal["protected_fingerprints"])
+
+
+def _validate_terminal_current_state(
+    terminal: Mapping[str, Any], inventory: Mapping[str, Any]
+) -> None:
+    if (
+        terminal["classification"] != "CURRENT_TERMINAL_EXACT"
+        or terminal["diagnostics"]
+        or terminal["effective_actions"]
+        != {"RESTORE": 43, "MAP": 102, "EXCLUDE": 198, "LEAVE_UNRESOLVED": 0}
+        or terminal["historical_only_variants"] != 43
+        or terminal["active_exclusions"] != 198
+        or terminal["approved_alias_families"] != 56
+        or terminal["planned_mutations"] != TERMINAL_ZERO_MUTATION_PLAN
+        or dict(inventory)
+        != {
+            "variants": 2092,
+            "historical_only_variants": 43,
+            "decision_ledger_rows": 631,
+            "authority_registry_rows": 1,
+        }
+    ):
+        raise CorrectiveValidationError("current terminal inventory drifted")
+
+
+def _require_terminal_predecessor_locked(
+    conn: Any,
+    prepared: PreparedExecution,
+    *,
+    classification: str,
+    lifecycle: str,
+) -> None:
+    """Re-prove exact C or D after the terminal service acquires its lock."""
+
+    _require_migration_007_state_locked(conn, "COMPLETE")
+    terminal = inspect_terminal_state(
+        conn, prepared.terminal_artifact, prepared.execution.git_sha
+    )
+    inventory = _terminal_inventory(conn)
+    if classification == "PRE_TERMINAL_EXACT":
+        if lifecycle != "PRE_REBUILD" or terminal["source_lifecycle"] != lifecycle:
+            raise CorrectiveValidationError("terminal apply predecessor is invalid")
+        _validate_terminal_prestate(terminal, inventory)
+    elif classification == "CURRENT_TERMINAL_EXACT":
+        _validate_terminal_current_state(terminal, inventory)
+        if terminal["source_lifecycle"] != lifecycle:
+            raise CorrectiveValidationError(
+                f"locked terminal lifecycle is not exact {lifecycle}"
+            )
+        if lifecycle == "PRE_REBUILD":
+            _assert_frozen_fingerprints(terminal["protected_fingerprints"])
+    else:
+        raise CorrectiveValidationError("unsupported locked terminal predecessor")
 
 
 def _decimal(value: Any) -> Decimal:
@@ -928,28 +1490,13 @@ def classify_state(
         actor="phase4-published-production-correction",
         expected_execution_git_sha=prepared.execution.git_sha,
     )
-    terminal = dry_run_terminal_disposition(
-        conn, prepared.terminal_artifact, terminal_context
-    )
+    with _isolated_git_subprocess_environment():
+        terminal = dry_run_terminal_disposition(
+            conn, prepared.terminal_artifact, terminal_context
+        )
     inventory = _read_only(conn, lambda: _terminal_inventory(conn))
     if terminal["classification"] == "PRE_TERMINAL_EXACT":
-        _assert_frozen_fingerprints(terminal["protected_fingerprints"])
-        if terminal["diagnostics"] or terminal["planned_mutations"] != {
-            "restored_variants": 43,
-            "terminal_decisions": 280,
-            "original_exclusion_normalizations": 8,
-            "terminal_aliases": 39,
-            "active_exclusions": 198,
-            "authority_registrations": 1,
-        }:
-            raise CorrectiveValidationError("terminal prestate plan drifted")
-        if inventory != {
-            "variants": 2049,
-            "historical_only_variants": 0,
-            "decision_ledger_rows": 343,
-            "authority_registry_rows": 0,
-        }:
-            raise CorrectiveValidationError("State C inventory drifted")
+        _validate_terminal_prestate(terminal, inventory)
         return "C_POST_007_PRE_TERMINAL", {
             "migration_007": migration,
             "terminal": terminal,
@@ -958,31 +1505,7 @@ def classify_state(
         raise CorrectiveValidationError(
             "terminal state is not an exact permitted classification"
         )
-    if (
-        terminal["diagnostics"]
-        or terminal["effective_actions"]
-        != {"RESTORE": 43, "MAP": 102, "EXCLUDE": 198, "LEAVE_UNRESOLVED": 0}
-        or terminal["historical_only_variants"] != 43
-        or terminal["active_exclusions"] != 198
-        or terminal["approved_alias_families"] != 56
-        or terminal["planned_mutations"]
-        != {
-            "restored_variants": 0,
-            "terminal_decisions": 0,
-            "original_exclusion_normalizations": 0,
-            "terminal_aliases": 0,
-            "active_exclusions": 0,
-            "authority_registrations": 0,
-        }
-        or inventory
-        != {
-            "variants": 2092,
-            "historical_only_variants": 43,
-            "decision_ledger_rows": 631,
-            "authority_registry_rows": 1,
-        }
-    ):
-        raise CorrectiveValidationError("current terminal inventory drifted")
+    _validate_terminal_current_state(terminal, inventory)
     if terminal["source_lifecycle"] == "PRE_REBUILD":
         _assert_frozen_fingerprints(terminal["protected_fingerprints"])
         return "D_CURRENT_TERMINAL_PRE_REBUILD", {
@@ -1005,7 +1528,14 @@ def apply_original_manifest_stage(
     context = ManifestExecutionContext(
         actor=actor, implementation_git_sha=prepared.execution.git_sha
     )
-    result = persist_manifest_decisions(conn, prepared.original_manifest, context)
+    result = persist_manifest_decisions(
+        conn,
+        prepared.original_manifest,
+        context,
+        locked_precondition=lambda locked_conn: _require_manifest_predecessor_locked(
+            locked_conn, prepared, "A_FROZEN_PRODUCTION_BASELINE"
+        ),
+    )
     if (
         result["committed_mutations"] != 711
         or result["inserted_decisions"] != 343
@@ -1025,6 +1555,9 @@ def apply_migration_007_stage(conn: Any, prepared: PreparedExecution) -> dict[st
         with conn.cursor() as cur:
             cur.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         acquire_backfill_transaction_lock(conn)
+        _require_manifest_predecessor_locked(
+            conn, prepared, "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007"
+        )
         preflight = validate_database_preflight(conn, prepared.original_manifest)
         if preflight.decision_state_counts != {
             "MISSING": 0,
@@ -1054,6 +1587,7 @@ def apply_migration_007_stage(conn: Any, prepared: PreparedExecution) -> dict[st
                SET value='applied',updated_at=now()""",
             (MIGRATION_007_MARKER,),
         )
+        postcondition = _require_migration_007_state_locked(conn, "COMPLETE")
         after = protected_state_fingerprints(conn)
         if after != before:
             raise CorrectiveValidationError("migration 007 changed protected state")
@@ -1062,6 +1596,7 @@ def apply_migration_007_stage(conn: Any, prepared: PreparedExecution) -> dict[st
         "transaction_isolation": "serializable",
         "protected_fingerprints_before": before,
         "protected_fingerprints_after": after,
+        "semantic_schema_sha256": postcondition["semantic_schema_sha256"],
     }
 
 
@@ -1072,22 +1607,25 @@ def apply_terminal_stage(
         actor=actor,
         expected_execution_git_sha=prepared.execution.git_sha,
     )
-    result = persist_terminal_disposition(
-        conn, prepared.terminal_artifact, context
-    )
+    with _isolated_git_subprocess_environment():
+        result = persist_terminal_disposition(
+            conn,
+            prepared.terminal_artifact,
+            context,
+            locked_precondition=lambda locked_conn: (
+                _require_terminal_predecessor_locked(
+                    locked_conn,
+                    prepared,
+                    classification="PRE_TERMINAL_EXACT",
+                    lifecycle="PRE_REBUILD",
+                )
+            ),
+        )
     if (
         result["classification_before"] != "PRE_TERMINAL_EXACT"
         or result["classification_after"] != "CURRENT_TERMINAL_EXACT"
         or result["committed_mutations"] != 858
-        or result["planned_mutations"]
-        != {
-            "restored_variants": 43,
-            "terminal_decisions": 280,
-            "original_exclusion_normalizations": 8,
-            "terminal_aliases": 39,
-            "active_exclusions": 198,
-            "authority_registrations": 1,
-        }
+        or result["planned_mutations"] != TERMINAL_FIRST_MUTATION_PLAN
         or result["protected_fingerprints_before"]
         != result["protected_fingerprints_after"]
     ):
@@ -1103,9 +1641,20 @@ def prove_terminal_noop(
         actor=actor,
         expected_execution_git_sha=prepared.execution.git_sha,
     )
-    result = persist_terminal_disposition(
-        conn, prepared.terminal_artifact, context
-    )
+    with _isolated_git_subprocess_environment():
+        result = persist_terminal_disposition(
+            conn,
+            prepared.terminal_artifact,
+            context,
+            locked_precondition=lambda locked_conn: (
+                _require_terminal_predecessor_locked(
+                    locked_conn,
+                    prepared,
+                    classification="CURRENT_TERMINAL_EXACT",
+                    lifecycle="PRE_REBUILD",
+                )
+            ),
+        )
     if (
         result["classification_before"] != "CURRENT_TERMINAL_EXACT"
         or result["classification_after"] != "CURRENT_TERMINAL_EXACT"
@@ -1124,21 +1673,14 @@ def apply_rebuild_stage(conn: Any, prepared: PreparedExecution) -> dict[str, Any
         with conn.cursor() as cur:
             cur.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         acquire_backfill_transaction_lock(conn)
+        _require_migration_007_state_locked(conn, "COMPLETE")
         before = inspect_terminal_state(
             conn, prepared.terminal_artifact, prepared.execution.git_sha
         )
-        if (
-            before["classification"] != "CURRENT_TERMINAL_EXACT"
-            or before["source_lifecycle"] != "PRE_REBUILD"
-        ):
+        inventory = _terminal_inventory(conn)
+        _validate_terminal_current_state(before, inventory)
+        if before["source_lifecycle"] != "PRE_REBUILD":
             raise CorrectiveValidationError("rebuild stage did not re-prove exact State D")
-        if _terminal_inventory(conn) != {
-            "variants": 2092,
-            "historical_only_variants": 43,
-            "decision_ledger_rows": 631,
-            "authority_registry_rows": 1,
-        }:
-            raise CorrectiveValidationError("rebuild stage State D inventory drifted")
         _assert_frozen_fingerprints(before["protected_fingerprints"])
         with conn.cursor() as cur:
             cur.execute(

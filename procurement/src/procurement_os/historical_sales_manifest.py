@@ -18,7 +18,7 @@ import io
 import json
 from pathlib import Path
 import re
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .historical_sales import acquire_backfill_transaction_lock, latest_reviewable_run
 from .sales import (
@@ -1279,6 +1279,7 @@ def persist_manifest_decisions(
     manifest: AuthorizedManifest,
     context: ManifestExecutionContext,
     *,
+    locked_precondition: Callable[[Any], None] | None = None,
     inject_failure_after_row: int | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any]
@@ -1289,6 +1290,8 @@ def persist_manifest_decisions(
             if str(cur.fetchone()[0]).lower() != "serializable":
                 raise RuntimeError("manifest transaction isolation is not serializable")
         acquire_backfill_transaction_lock(conn)
+        if locked_precondition is not None:
+            locked_precondition(conn)
         preflight = validate_database_preflight(conn, manifest)
         fingerprints_before = protected_state_fingerprints(conn)
         classifications = {

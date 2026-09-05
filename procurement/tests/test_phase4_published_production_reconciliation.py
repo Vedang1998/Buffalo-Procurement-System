@@ -23,6 +23,7 @@ sys.path.insert(0, str(PROCUREMENT_ROOT / "tools"))
 
 import reconcile_phase4_published_production as corrective
 import test_phase4_terminal_disposition_postgres as terminal_fixture_module
+import procurement_os.historical_sales_terminal as terminal_service
 
 from procurement_os.historical_sales_manifest import protected_state_fingerprints
 from procurement_os.historical_sales_terminal import (
@@ -54,6 +55,9 @@ PRE_007_MIGRATIONS = (
 SAFE_TEST_URL = "postgresql://test:test@127.0.0.1:5432/procurement_test"
 EXECUTION_SHA = "a" * 40
 TREE_SHA = "b" * 40
+TRUSTED_PYTHON = Path(
+    "/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped"
+)
 
 
 def validated_test_connection():
@@ -322,6 +326,40 @@ class CorrectiveTestDatabaseSafetyTests(unittest.TestCase):
 
 
 class CorrectiveBootstrapTests(unittest.TestCase):
+    @staticmethod
+    def host_executable_bootstrap_source(source: str) -> str:
+        """Adapt only a test copy when CI lacks the production Nix path."""
+
+        if TRUSTED_PYTHON.is_file() and os.access(TRUSTED_PYTHON, os.X_OK):
+            package_root = TRUSTED_PYTHON.parents[1]
+            return source.replace(
+                "trusted_nix_root='/nix'", f"trusted_nix_root='{package_root}'"
+            ).replace(
+                "trusted_python_store='/nix/store'",
+                f"trusted_python_store='{package_root}'",
+            )
+        ci_python = Path("/usr/bin/python3")
+        if not ci_python.is_file() or not os.access(ci_python, os.X_OK):
+            raise AssertionError(
+                "host lacks both the approved Nix Python and /usr/bin/python3"
+            )
+        return (
+            source.replace("trusted_nix_root='/nix'", "trusted_nix_root='/usr'")
+            .replace("trusted_python_store='/nix/store'", "trusted_python_store='/usr'")
+            .replace(
+                "trusted_python_root='/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0'",
+                "trusted_python_root='/usr'",
+            )
+            .replace(
+                "trusted_python_bin='/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin'",
+                "trusted_python_bin='/usr/bin'",
+            )
+            .replace(
+                "trusted_python='/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped'",
+                "trusted_python='/usr/bin/python3'",
+            )
+        )
+
     def run_bootstrap_with_fake_tools(
         self, git_body: str
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
@@ -331,19 +369,46 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         invoked = root / "python-invoked"
         git = root / "git"
         git.write_text("#!/bin/sh\n" + textwrap.dedent(git_body), encoding="utf-8")
-        python = root / "python3"
+        python = root / "approved-python"
         python.write_text(
             f"#!/bin/sh\nprintf invoked > '{invoked}'\nexit 0\n", encoding="utf-8"
         )
         git.chmod(git.stat().st_mode | stat.S_IXUSR)
         python.chmod(python.stat().st_mode | stat.S_IXUSR)
         test_bootstrap = root / BOOTSTRAP.name
-        test_bootstrap.write_text(
-            BOOTSTRAP.read_text(encoding="utf-8").replace(
-                "git_command=/usr/bin/git", f"git_command={git}"
-            ),
-            encoding="utf-8",
+        source = BOOTSTRAP.read_text(encoding="utf-8")
+        source = source.replace("trusted_git='/usr/bin/git'", f"trusted_git='{git}'")
+        source = source.replace(
+            "trusted_python_root='/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0'",
+            f"trusted_python_root='{root}'",
+        ).replace(
+            "trusted_python_bin='/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin'",
+            f"trusted_python_bin='{root}'",
+        ).replace(
+            "trusted_python='/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped'",
+            f"trusted_python='{python}'",
         )
+        source = source.replace(
+            "require_root_owned_executable \"$trusted_git\" 'trusted Git executable'",
+            ": # test-only fake Git trust substitution",
+        ).replace(
+            "require_immutable_directory \"$trusted_python_root\" 'approved immutable Python package root'",
+            ": # test-only fake Python root substitution",
+        ).replace(
+            "require_immutable_directory \"$trusted_python_bin\" 'approved immutable Python binary directory'",
+            ": # test-only fake Python bin substitution",
+        ).replace(
+            "require_immutable_executable \"$trusted_python\" 'approved immutable Python executable'",
+            ": # test-only fake Python executable substitution",
+        )
+        source = source.replace(
+            "require_immutable_directory \"$trusted_nix_root\" 'approved immutable Nix root'",
+            ": # test-only fake Nix root substitution",
+        ).replace(
+            "require_immutable_directory \"$trusted_python_store\" 'approved immutable Nix store'",
+            ": # test-only fake Nix store substitution",
+        )
+        test_bootstrap.write_text(source, encoding="utf-8")
         test_bootstrap.chmod(test_bootstrap.stat().st_mode | stat.S_IXUSR)
         environment = {
             **os.environ,
@@ -351,7 +416,7 @@ class CorrectiveBootstrapTests(unittest.TestCase):
             "REPLIT_DEPLOYMENT": "1",
         }
         result = subprocess.run(
-            [str(test_bootstrap), EXECUTION_SHA, TREE_SHA],
+            ["/bin/sh", str(test_bootstrap), EXECUTION_SHA, TREE_SHA],
             text=True,
             capture_output=True,
             env=environment,
@@ -403,7 +468,9 @@ class CorrectiveBootstrapTests(unittest.TestCase):
 
     def test_bootstrap_orders_all_clone_proofs_before_python(self):
         source = BOOTSTRAP.read_text(encoding="utf-8")
-        python_position = source.index("python3 ")
+        python_position = source.index(
+            '"$trusted_python" "$clone_dir/procurement/tools/'
+        )
         for proof in (
             "observed_origin=",
             "observed_sha=",
@@ -415,6 +482,67 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         self.assertNotIn("RECONCILIATION_REVIEW_TOKEN", source)
         self.assertNotIn("PHASE4_REVIEW_TOKEN_INPUT", source)
 
+    def test_bootstrap_uses_only_approved_absolute_execution_boundary(self):
+        source = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertTrue(source.startswith("#!/bin/sh\n"))
+        self.assertIn(f"trusted_python='{TRUSTED_PYTHON}'", source)
+        self.assertIn("trusted_shell='/bin/sh'", source)
+        self.assertIn("trusted_nix_root='/nix'", source)
+        self.assertIn("trusted_python_store='/nix/store'", source)
+        for path in (
+            "/usr/bin/stat",
+            "/usr/bin/mktemp",
+            "/usr/bin/mkdir",
+            "/usr/bin/rm",
+            "/usr/bin/env",
+            "/usr/bin/git",
+            "/bin/false",
+        ):
+            self.assertIn(f"'{path}'", source)
+        for forbidden in (
+            "#!/usr/bin/env",
+            "command -v",
+            "python3",
+            "PHASE4_PYTHON",
+            "PYTHON_EXECUTABLE",
+        ):
+            self.assertNotIn(forbidden, source)
+        self.assertLess(
+            source.index("require_immutable_executable \"$trusted_python\""),
+            source.index('"$trusted_python" "$clone_dir/'),
+        )
+
+    def test_writable_nix_parent_fails_before_git_or_python(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sentinel = root / "unexpected-execution"
+            for name in ("git", "python3"):
+                fake = root / name
+                fake.write_text(
+                    f"#!/bin/sh\nprintf invoked > {str(sentinel)!r}\nexit 99\n",
+                    encoding="utf-8",
+                )
+                fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+            source = BOOTSTRAP.read_text(encoding="utf-8").replace(
+                "trusted_nix_root='/nix'", f"trusted_nix_root='{root}'"
+            )
+            test_bootstrap = root / BOOTSTRAP.name
+            test_bootstrap.write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                ["/bin/sh", str(test_bootstrap), EXECUTION_SHA, TREE_SHA],
+                check=False,
+                capture_output=True,
+                text=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "REPLIT_DEPLOYMENT": "1",
+                },
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Nix root", result.stderr)
+            self.assertFalse(sentinel.exists())
+
     def test_real_git_clone_ignores_hostile_inherited_configuration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -423,6 +551,8 @@ class CorrectiveBootstrapTests(unittest.TestCase):
             runner = source / "procurement" / "tools" / Path(corrective.__file__).name
             runner.parent.mkdir(parents=True)
             verified_python = root / "verified-python"
+            verified_execution_path = root / "verified-execution-path"
+            verified_parent_path = root / "verified-parent-path"
             runner.write_text(
                 textwrap.dedent(
                     f"""
@@ -439,6 +569,12 @@ class CorrectiveBootstrapTests(unittest.TestCase):
                     Path({str(verified_python)!r}).write_text(
                         "AUTHORIZED_ENVIRONMENT_PRESENT" if expected else "MISSING",
                         encoding="utf-8",
+                    )
+                    Path({str(verified_execution_path)!r}).write_text(
+                        str(Path(__file__).resolve()), encoding="utf-8"
+                    )
+                    Path({str(verified_parent_path)!r}).write_text(
+                        os.environ.get("PATH", ""), encoding="utf-8"
                     )
                     """
                 ),
@@ -514,19 +650,33 @@ class CorrectiveBootstrapTests(unittest.TestCase):
             template_hook.chmod(template_hook.stat().st_mode | stat.S_IXUSR)
             hostile_path = root / "hostile-path"
             hostile_path.mkdir()
-            hostile_git_executed = root / "hostile-git-executed"
-            hostile_git = hostile_path / "git"
-            hostile_git.write_text(
-                f"#!/bin/sh\nprintf executed > {str(hostile_git_executed)!r}\nexit 99\n",
-                encoding="utf-8",
-            )
-            hostile_git.chmod(hostile_git.stat().st_mode | stat.S_IXUSR)
+            hostile_sentinels = []
+            for name in (
+                "sh",
+                "bash",
+                "stat",
+                "mktemp",
+                "mkdir",
+                "rm",
+                "env",
+                "git",
+                "false",
+                "python3",
+            ):
+                sentinel = root / f"hostile-{name}-executed"
+                hostile_sentinels.append(sentinel)
+                executable = hostile_path / name
+                executable.write_text(
+                    f"#!/bin/sh\nprintf executed > {str(sentinel)!r}\nexit 99\n",
+                    encoding="utf-8",
+                )
+                executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
 
             test_bootstrap = root / BOOTSTRAP.name
             test_bootstrap.write_text(
-                BOOTSTRAP.read_text(encoding="utf-8").replace(
-                    corrective.CANONICAL_ORIGIN, origin.as_uri()
-                ),
+                self.host_executable_bootstrap_source(
+                    BOOTSTRAP.read_text(encoding="utf-8")
+                ).replace(corrective.CANONICAL_ORIGIN, origin.as_uri()),
                 encoding="utf-8",
             )
             test_bootstrap.chmod(test_bootstrap.stat().st_mode | stat.S_IXUSR)
@@ -549,7 +699,7 @@ class CorrectiveBootstrapTests(unittest.TestCase):
                 "PHASE4_REVIEW_TOKEN_INPUT": "synthetic-input-token",
             }
             result = subprocess.run(
-                [str(test_bootstrap), commit, tree],
+                ["/bin/sh", str(test_bootstrap), commit, tree],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -560,9 +710,17 @@ class CorrectiveBootstrapTests(unittest.TestCase):
                 verified_python.read_text(encoding="utf-8"),
                 "AUTHORIZED_ENVIRONMENT_PRESENT",
             )
+            self.assertEqual(
+                verified_parent_path.read_text(encoding="utf-8"), environment["PATH"]
+            )
+            cloned_runner = Path(
+                verified_execution_path.read_text(encoding="utf-8")
+            )
+            self.assertFalse(cloned_runner.exists())
             self.assertFalse(hook_executed.exists())
             self.assertFalse(secret_exposed.exists())
-            self.assertFalse(hostile_git_executed.exists())
+            for sentinel in hostile_sentinels:
+                self.assertFalse(sentinel.exists(), sentinel.name)
 
 
 class CorrectivePythonGitIsolationTests(unittest.TestCase):
@@ -1100,6 +1258,79 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             "purchase_order_lines": purchase_order_lines,
         }
 
+    def _fresh_schema_connection(self):
+        from psycopg import sql
+
+        connection, target, database_info = validated_test_connection()
+        self.assertEqual(target, self.target)
+        self.assertEqual(database_info, self.database_info)
+        connection.execute(
+            sql.SQL("SET search_path TO {}, public").format(
+                sql.Identifier(self.schema)
+            )
+        )
+        connection.commit()
+        return connection
+
+    def _stage_snapshot(self, conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT key,value,updated_at::text FROM meta ORDER BY key"
+            )
+            markers = tuple(tuple(str(value) for value in row) for row in cursor.fetchall())
+            cursor.execute("SELECT COUNT(*)::int FROM variants")
+            variants = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*)::int FROM historical_sales_review_decisions")
+            decisions = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*)::int FROM historical_sales_exclusions")
+            exclusions = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*)::int FROM variant_aliases")
+            aliases = int(cursor.fetchone()[0])
+            cursor.execute(
+                """SELECT COUNT(*)::int FROM variant_aliases
+                   WHERE source='SALES_BACKFILL_REVIEW'"""
+            )
+            review_aliases = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*)::int FROM change_log")
+            change_log = int(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT to_regclass('historical_sales_exclusion_authority_runs') IS NOT NULL"
+            )
+            authority_exists = bool(cursor.fetchone()[0])
+            authority = 0
+            if authority_exists:
+                cursor.execute(
+                    "SELECT COUNT(*)::int FROM historical_sales_exclusion_authority_runs"
+                )
+                authority = int(cursor.fetchone()[0])
+        return {
+            "markers": markers,
+            "variants": variants,
+            "decisions": decisions,
+            "exclusions": exclusions,
+            "aliases": aliases,
+            "review_aliases": review_aliases,
+            "change_log": change_log,
+            "authority": authority,
+            "fingerprints": protected_state_fingerprints(conn),
+            "semantic_schema_sha256": corrective._migration_007_semantic_signature(
+                conn, self.schema
+            )["sha256"],
+        }
+
+    def _advance_to_c(self, *, actor: str = "corrective-semantic-test") -> None:
+        corrective.apply_original_manifest_stage(self.conn, self.prepared, actor=actor)
+        corrective.apply_migration_007_stage(self.conn, self.prepared)
+
+    def _assert_semantic_drift_stops(self) -> None:
+        state = corrective.migration_007_state(self.conn)
+        self.assertEqual(state["classification"], "PARTIAL_OR_DRIFTED")
+        self.assertFalse(state["semantic_schema_matches"])
+        with patch.object(corrective, "dry_run_terminal_disposition") as terminal:
+            with self.assertRaisesRegex(Exception, "partial or drifted"):
+                corrective.classify_state(self.conn, self.prepared)
+        terminal.assert_not_called()
+
     def test_exact_state_a_through_e_and_completed_replay(self):
         with patch.object(
             corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
@@ -1196,6 +1427,514 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
                     "authority_registrations": 0,
                 },
             )
+
+    def test_canonical_migration_reproduces_frozen_semantic_signature(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c(actor="corrective-signature-reproduction")
+            state = corrective.migration_007_state(self.conn)
+            self.assertEqual(state["classification"], "COMPLETE")
+            self.assertTrue(state["semantic_schema_matches"])
+            self.assertEqual(
+                state["semantic_schema_sha256"],
+                corrective.EXPECTED_MIGRATION_007_SCHEMA_SHA256,
+            )
+            signature = corrective._migration_007_semantic_signature(
+                self.conn, self.schema
+            )
+            self.assertEqual(
+                signature["sha256"],
+                "238a8b885f4a9d9840d3befb1e26b199c813e9807622b33183275a878651be17",
+            )
+            self.assertEqual(len(signature["payload"]["functions"]), 10)
+            self.assertEqual(len(signature["payload"]["triggers"]), 13)
+            self.assertEqual(len(signature["payload"]["constraints"]), 20)
+            self.assertEqual(len(signature["payload"]["views"]), 5)
+            self.assertEqual(len(signature["payload"]["protected_relations"]), 1)
+
+    def test_pre_007_view_drift_blocks_original_manifest_after_outer_classification(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ):
+            state, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(state, "A_FROZEN_PRODUCTION_BASELINE")
+            self.conn.execute(
+                """CREATE OR REPLACE VIEW v_current_prices AS
+                   SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,
+                          o.shopify_units_per_case,o.qualifying_units_per_case,
+                          o.assortment_scope,o.assortment_group,o.assortable
+                   FROM prices p JOIN supplier_offers o USING(offer_id)
+                   WHERE p.price_state='current'"""
+            )
+            self.conn.commit()
+            before = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(Exception, "locked migration 007"):
+                corrective.apply_original_manifest_stage(
+                    self.conn, self.prepared, actor="corrective-pre-schema-race"
+                )
+            self.conn.rollback()
+            self.assertEqual(self._stage_snapshot(self.conn), before)
+            self.assertEqual(before["decisions"], 0)
+
+    def test_pre_007_view_drift_blocks_migration_after_outer_classification(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ):
+            corrective.apply_original_manifest_stage(
+                self.conn, self.prepared, actor="corrective-pre-schema-race"
+            )
+            state, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(state, "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007")
+            self.conn.execute(
+                """CREATE OR REPLACE VIEW v_future_prices AS
+                   SELECT p.*,o.variant_id,o.vendor_id,o.supplier_sku,
+                          o.shopify_units_per_case,o.qualifying_units_per_case,
+                          o.assortment_scope,o.assortment_group,o.assortable
+                   FROM prices p JOIN supplier_offers o USING(offer_id)
+                   WHERE p.price_state='future'"""
+            )
+            self.conn.commit()
+            before = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(Exception, "locked migration 007"):
+                corrective.apply_migration_007_stage(self.conn, self.prepared)
+            self.conn.rollback()
+            self.assertEqual(self._stage_snapshot(self.conn), before)
+            self.assertEqual(
+                corrective._inspect_migration_007_state(self.conn)["classification"],
+                "PARTIAL_OR_DRIFTED",
+            )
+
+    def test_locked_state_b_rejects_duplicate_manifest_alias_artifact(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ):
+            corrective.apply_original_manifest_stage(
+                self.conn, self.prepared, actor="corrective-alias-race"
+            )
+            state, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(state, "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007")
+            self.conn.execute(
+                """INSERT INTO variant_aliases(
+                     variant_id,old_variant_id,historical_product_title,
+                     historical_variant_title,historical_sku,match_method,
+                     confidence,source,notes,approved,approved_by,approved_at,evidence_json
+                   )
+                   SELECT variant_id,old_variant_id,historical_product_title,
+                          historical_variant_title,historical_sku,match_method,
+                          confidence,source,notes,approved,approved_by,approved_at,evidence_json
+                   FROM variant_aliases WHERE source='SALES_BACKFILL_REVIEW'
+                   ORDER BY old_variant_id LIMIT 1"""
+            )
+            self.conn.commit()
+            before = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(Exception, "predecessor is not exact"):
+                corrective.apply_migration_007_stage(self.conn, self.prepared)
+            self.conn.rollback()
+            self.assertEqual(self._stage_snapshot(self.conn), before)
+            self.assertEqual(before["review_aliases"], 18)
+
+    def test_terminal_replay_rejects_c_and_e_without_mutation(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c(actor="corrective-replay-predecessor")
+            before_c = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(Exception, "current terminal inventory"):
+                corrective.prove_terminal_noop(
+                    self.conn, self.prepared, actor="corrective-replay-predecessor"
+                )
+            self.conn.rollback()
+            self.assertEqual(self._stage_snapshot(self.conn), before_c)
+            self.conn.rollback()
+
+            corrective.apply_terminal_stage(
+                self.conn, self.prepared, actor="corrective-replay-predecessor"
+            )
+            replay = corrective.prove_terminal_noop(
+                self.conn, self.prepared, actor="corrective-replay-predecessor"
+            )
+            self.assertEqual(replay["committed_mutations"], 0)
+            corrective.apply_rebuild_stage(self.conn, self.prepared)
+            before_e = self._capture_rebuild_controls(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(Exception, "lifecycle is not exact PRE_REBUILD"):
+                corrective.prove_terminal_noop(
+                    self.conn, self.prepared, actor="corrective-replay-predecessor"
+                )
+            self.conn.rollback()
+            self.assertEqual(self._capture_rebuild_controls(self.conn), before_e)
+
+    def test_same_name_always_true_function_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                """CREATE OR REPLACE FUNCTION
+                     is_operational_current_variant(checked_variant_id TEXT)
+                   RETURNS BOOLEAN LANGUAGE sql STABLE AS $$ SELECT TRUE $$"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
+    def test_same_name_trigger_on_wrong_table_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                "DROP TRIGGER trg_phase4_supplier_offer_guard ON supplier_offers"
+            )
+            self.conn.execute(
+                """CREATE TRIGGER trg_phase4_supplier_offer_guard
+                   BEFORE INSERT OR UPDATE OF variant_id ON variants
+                   FOR EACH ROW EXECUTE FUNCTION phase4_guard_direct_operational_variant()"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
+    def test_same_name_tautological_constraint_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                "ALTER TABLE variants DROP CONSTRAINT ck_variants_identity_scope"
+            )
+            self.conn.execute(
+                """ALTER TABLE variants ADD CONSTRAINT ck_variants_identity_scope
+                   CHECK (TRUE)"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
+    def test_same_name_superficially_guarded_view_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                """CREATE OR REPLACE VIEW v_operational_variants AS
+                   SELECT v.* FROM variants v
+                   WHERE is_operational_current_variant(v.variant_id) OR TRUE"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
+    def test_authority_registry_unlogged_durability_is_semantic_drift(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c()
+            self.conn.execute(
+                "ALTER TABLE historical_sales_exclusion_authority_runs SET UNLOGGED"
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+
+    def test_semantic_drift_stops_classification_at_c_d_and_e(self):
+        def drift_and_restore(expected_state):
+            observed, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(observed, expected_state)
+            self.conn.execute(
+                """CREATE OR REPLACE FUNCTION
+                     is_operational_current_variant(checked_variant_id TEXT)
+                   RETURNS BOOLEAN LANGUAGE sql STABLE AS $$ SELECT TRUE $$"""
+            )
+            self.conn.commit()
+            self._assert_semantic_drift_stops()
+            self.conn.execute(corrective.MIGRATION_007.read_text(encoding="utf-8"))
+            self.conn.commit()
+            restored, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(restored, expected_state)
+
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c(actor="corrective-cde-drift")
+            drift_and_restore("C_POST_007_PRE_TERMINAL")
+            corrective.apply_terminal_stage(
+                self.conn, self.prepared, actor="corrective-cde-drift"
+            )
+            drift_and_restore("D_CURRENT_TERMINAL_PRE_REBUILD")
+            corrective.prove_terminal_noop(
+                self.conn, self.prepared, actor="corrective-cde-drift"
+            )
+            corrective.apply_rebuild_stage(self.conn, self.prepared)
+            drift_and_restore("E_CURRENT_TERMINAL_POST_REBUILD")
+
+    def test_stale_classifications_cannot_repeat_committed_stages(self):
+        second = self._fresh_schema_connection()
+        try:
+            with patch.object(
+                corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+            ), self.execution_patch():
+                for connection in (self.conn, second):
+                    state, _ = corrective.classify_state(connection, self.prepared)
+                    self.assertEqual(state, "A_FROZEN_PRODUCTION_BASELINE")
+                corrective.apply_original_manifest_stage(
+                    self.conn, self.prepared, actor="corrective-overlap-first"
+                )
+                state_b = self._stage_snapshot(self.conn)
+                self.conn.rollback()
+                with self.assertRaisesRegex(Exception, "predecessor is not exact"):
+                    corrective.apply_original_manifest_stage(
+                        second, self.prepared, actor="corrective-overlap-stale"
+                    )
+                second.rollback()
+                self.assertEqual(self._stage_snapshot(second), state_b)
+                second.rollback()
+
+                for connection in (self.conn, second):
+                    state, _ = corrective.classify_state(connection, self.prepared)
+                    self.assertEqual(
+                        state, "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007"
+                    )
+                corrective.apply_migration_007_stage(self.conn, self.prepared)
+                state_c = self._stage_snapshot(self.conn)
+                self.conn.rollback()
+                with self.assertRaisesRegex(Exception, "locked migration 007"):
+                    corrective.apply_migration_007_stage(second, self.prepared)
+                second.rollback()
+                self.assertEqual(self._stage_snapshot(second), state_c)
+                second.rollback()
+
+                for connection in (self.conn, second):
+                    state, _ = corrective.classify_state(connection, self.prepared)
+                    self.assertEqual(state, "C_POST_007_PRE_TERMINAL")
+                corrective.apply_terminal_stage(
+                    self.conn, self.prepared, actor="corrective-overlap-first"
+                )
+                state_d = self._stage_snapshot(self.conn)
+                self.conn.rollback()
+                with self.assertRaisesRegex(Exception, "terminal prestate"):
+                    corrective.apply_terminal_stage(
+                        second, self.prepared, actor="corrective-overlap-stale"
+                    )
+                second.rollback()
+                self.assertEqual(self._stage_snapshot(second), state_d)
+                second.rollback()
+
+                corrective.prove_terminal_noop(
+                    self.conn, self.prepared, actor="corrective-overlap-first"
+                )
+                for connection in (self.conn, second):
+                    state, _ = corrective.classify_state(connection, self.prepared)
+                    self.assertEqual(state, "D_CURRENT_TERMINAL_PRE_REBUILD")
+                corrective.apply_rebuild_stage(self.conn, self.prepared)
+                final_state = self._capture_rebuild_controls(self.conn)
+                self.conn.rollback()
+                with patch.object(
+                    corrective,
+                    "rerun_sales_identity_resolution",
+                    wraps=corrective.rerun_sales_identity_resolution,
+                ) as rerun:
+                    with self.assertRaisesRegex(Exception, "exact State D"):
+                        corrective.apply_rebuild_stage(second, self.prepared)
+                rerun.assert_not_called()
+                second.rollback()
+                self.assertEqual(self._capture_rebuild_controls(second), final_state)
+                second.rollback()
+        finally:
+            second.close()
+
+    def test_marker_drift_between_classification_and_every_stage_is_zero_mutation(self):
+        def reject_stage(expected_state, operation):
+            state, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(state, expected_state)
+            self.conn.execute(
+                "INSERT INTO meta(key,value) VALUES ('migration:008_unapproved.sql','applied')"
+            )
+            self.conn.commit()
+            before = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(Exception, "locked migration 007"):
+                operation()
+            self.conn.rollback()
+            self.assertEqual(self._stage_snapshot(self.conn), before)
+            self.conn.rollback()
+            self.conn.execute(
+                "DELETE FROM meta WHERE key='migration:008_unapproved.sql'"
+            )
+            self.conn.commit()
+            restored, _ = corrective.classify_state(self.conn, self.prepared)
+            self.assertEqual(restored, expected_state)
+
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            reject_stage(
+                "A_FROZEN_PRODUCTION_BASELINE",
+                lambda: corrective.apply_original_manifest_stage(
+                    self.conn, self.prepared, actor="corrective-marker-race"
+                ),
+            )
+            corrective.apply_original_manifest_stage(
+                self.conn, self.prepared, actor="corrective-marker-race"
+            )
+            reject_stage(
+                "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007",
+                lambda: corrective.apply_migration_007_stage(self.conn, self.prepared),
+            )
+            corrective.apply_migration_007_stage(self.conn, self.prepared)
+            reject_stage(
+                "C_POST_007_PRE_TERMINAL",
+                lambda: corrective.apply_terminal_stage(
+                    self.conn, self.prepared, actor="corrective-marker-race"
+                ),
+            )
+            corrective.apply_terminal_stage(
+                self.conn, self.prepared, actor="corrective-marker-race"
+            )
+            reject_stage(
+                "D_CURRENT_TERMINAL_PRE_REBUILD",
+                lambda: corrective.prove_terminal_noop(
+                    self.conn, self.prepared, actor="corrective-marker-race"
+                ),
+            )
+            reject_stage(
+                "D_CURRENT_TERMINAL_PRE_REBUILD",
+                lambda: corrective.apply_rebuild_stage(self.conn, self.prepared),
+            )
+
+    def test_downstream_terminal_git_derivations_are_all_isolated(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            self._advance_to_c(actor="corrective-downstream-git")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            required_paths = (
+                "procurement/src/procurement_os/historical_sales_terminal.py",
+                "procurement/src/procurement_os/historical_sales.py",
+                "procurement/src/procurement_os/sales.py",
+                "procurement/tools/persist_phase4_terminal_disposition.py",
+                "procurement/db/007_phase4_terminal_disposition.sql",
+                "procurement/review/phase4_terminal_disposition_manifest.csv",
+                "docs/superpowers/specs/2026-08-25-phase4-terminal-disposition-implementation-design.md",
+            )
+            for relative in required_paths:
+                path = repository / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("tracked corrective Git fixture\n", encoding="utf-8")
+            run_isolated_real_git(["git", "init", "-q", str(repository)])
+            run_isolated_real_git(["git", "-C", str(repository), "add", "."])
+            run_isolated_real_git(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "-c",
+                    "user.name=Corrective Test",
+                    "-c",
+                    "user.email=corrective@example.invalid",
+                    "commit",
+                    "-q",
+                    "-m",
+                    "fixture",
+                ]
+            )
+            commit = run_isolated_real_git(
+                ["git", "-C", str(repository), "rev-parse", "HEAD^{commit}"]
+            ).stdout.strip()
+            prepared = corrective.PreparedExecution(
+                database_url=self.prepared.database_url,
+                execution=corrective.RuntimeIdentity(repository, commit, TREE_SHA),
+                original_manifest=self.prepared.original_manifest,
+                terminal_artifact=self.prepared.terminal_artifact,
+            )
+
+            hostile_path = root / "hostile-path"
+            hostile_path.mkdir()
+            hostile_git_executed = root / "hostile-git-executed"
+            hostile_git = hostile_path / "git"
+            hostile_git.write_text(
+                f"#!/bin/sh\nprintf executed > {str(hostile_git_executed)!r}\nexit 99\n",
+                encoding="utf-8",
+            )
+            hostile_git.chmod(hostile_git.stat().st_mode | stat.S_IXUSR)
+            fsmonitor_executed = root / "hostile-fsmonitor-executed"
+            fsmonitor = root / "hostile-fsmonitor"
+            fsmonitor.write_text(
+                f"#!/bin/sh\nprintf executed > {str(fsmonitor_executed)!r}\n",
+                encoding="utf-8",
+            )
+            fsmonitor.chmod(fsmonitor.stat().st_mode | stat.S_IXUSR)
+            hostile_home = root / "hostile-home"
+            hostile_home.mkdir()
+            hostile_config = hostile_home / ".gitconfig"
+            hostile_config.write_text(
+                f"[core]\n\tfsmonitor = {fsmonitor}\n", encoding="utf-8"
+            )
+            hostile_environment = {
+                "PATH": f"{hostile_path}:{os.environ['PATH']}",
+                "HOME": str(hostile_home),
+                "GIT_CONFIG_GLOBAL": str(hostile_config),
+                "GIT_CONFIG_SYSTEM": str(hostile_config),
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "core.fsmonitor",
+                "GIT_CONFIG_VALUE_0": str(fsmonitor),
+                "DATABASE_URL": "synthetic-database-sentinel",
+                "RECONCILIATION_REVIEW_TOKEN": "synthetic-configured-token",
+                "PHASE4_REVIEW_TOKEN_INPUT": "synthetic-input-token",
+            }
+            actual_git = terminal_service._git
+            child_invocations = []
+
+            def observe_real_git(*arguments, **kwargs):
+                child_invocations.append((arguments, dict(os.environ)))
+                return actual_git(*arguments, **kwargs)
+
+            terminal_anchor = (
+                repository
+                / "procurement/src/procurement_os/historical_sales_terminal.py"
+            )
+            with patch.object(
+                corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+            ), patch.dict(
+                os.environ, hostile_environment, clear=False
+            ), patch.object(
+                terminal_service, "__file__", str(terminal_anchor)
+            ), patch.object(
+                terminal_service, "_git", side_effect=observe_real_git
+            ):
+                state_c, _ = corrective.classify_state(self.conn, prepared)
+                self.assertEqual(state_c, "C_POST_007_PRE_TERMINAL")
+                terminal = corrective.apply_terminal_stage(
+                    self.conn, prepared, actor="corrective-downstream-git"
+                )
+                self.assertEqual(terminal["committed_mutations"], 858)
+                state_d, _ = corrective.classify_state(self.conn, prepared)
+                self.assertEqual(state_d, "D_CURRENT_TERMINAL_PRE_REBUILD")
+                replay = corrective.prove_terminal_noop(
+                    self.conn, prepared, actor="corrective-downstream-git"
+                )
+                self.assertEqual(replay["committed_mutations"], 0)
+
+            derivations = sum(
+                arguments[1:] == ("rev-parse", "--show-toplevel")
+                for arguments, _environment in child_invocations
+            )
+            self.assertGreaterEqual(derivations, 3)
+            for _arguments, environment in child_invocations:
+                self.assertEqual(environment["PATH"], "/usr/bin:/bin")
+                self.assertEqual(environment["GIT_CONFIG_NOSYSTEM"], "1")
+                self.assertEqual(environment["GIT_CONFIG_GLOBAL"], "/dev/null")
+                for secret in (
+                    "DATABASE_URL",
+                    "RECONCILIATION_REVIEW_TOKEN",
+                    "PHASE4_REVIEW_TOKEN_INPUT",
+                ):
+                    self.assertNotIn(secret, environment)
+            self.assertFalse(hostile_git_executed.exists())
+            self.assertFalse(fsmonitor_executed.exists())
 
     def test_real_finalizer_changes_roll_back_when_final_controls_raise(self):
         with patch.object(
