@@ -35,7 +35,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_phase4_query_contracts.py": 5,
     "test_phase4_terminal_disposition.py": 23,
     "test_phase4_terminal_disposition_postgres.py": 35,
-    "test_phase5_foundation_ui.py": 14,
+    "test_phase5_foundation_ui.py": 22,
     "test_pricing.py": 3,
     "test_readiness.py": 19,
     "test_review.py": 3,

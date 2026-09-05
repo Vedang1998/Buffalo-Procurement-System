@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import importlib.util
 import inspect
 import json
 import os
 from pathlib import Path
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 from urllib.parse import urljoin
@@ -18,6 +20,15 @@ from procurement_os import api, health
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
+RUNNER_PATH = Path(__file__).resolve().parents[1] / "tools" / "run_tests.py"
+RUNNER_SPEC = importlib.util.spec_from_file_location(
+    "phase5_test_database_runner_contract", RUNNER_PATH
+)
+assert RUNNER_SPEC is not None and RUNNER_SPEC.loader is not None
+test_runner = importlib.util.module_from_spec(RUNNER_SPEC)
+sys.modules[RUNNER_SPEC.name] = test_runner
+RUNNER_SPEC.loader.exec_module(test_runner)
+
 MIGRATIONS = (
     "schema_postgres.sql",
     "001_v1_3_catalog_sales.sql",
@@ -28,6 +39,36 @@ MIGRATIONS = (
     "006_phase4_sales_backfill.sql",
     "007_phase4_terminal_disposition.sql",
 )
+
+
+def _validated_phase5_test_database_connection():
+    """Connect only after the authoritative test runner validates TEST_DATABASE_URL."""
+    target = test_runner._validated_test_database_target()
+    test_runner._clear_libpq_environment()
+
+    import psycopg
+
+    connection = psycopg.connect(target.url, connect_timeout=5)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT current_database(), current_setting('server_version'),
+                          current_setting('server_version_num')::integer"""
+            )
+            row = cursor.fetchone()
+        if row is None:
+            raise ValueError("PostgreSQL identity query returned no row")
+        database_info = test_runner._validate_database_facts(
+            target,
+            database=row[0],
+            server_version=row[1],
+            server_version_num=row[2],
+        )
+    except BaseException:
+        connection.close()
+        raise
+    return connection, target, database_info
+
 
 NAV_LABELS = (
     "System Readiness",
@@ -372,13 +413,93 @@ class Phase5BackendAggregationTests(unittest.TestCase):
             self.assertNotIn(forbidden, source)
 
 
-@unittest.skipUnless(os.getenv("DATABASE_URL"), "PostgreSQL integration requires DATABASE_URL")
+class Phase5TestDatabaseSafetyTests(unittest.TestCase):
+    SAFE_TEST_URL = "postgresql://test:test@127.0.0.1:5432/procurement_test"
+
+    def assert_configuration_rejected_before_connect(
+        self, environment: dict[str, str]
+    ) -> None:
+        with patch.dict(os.environ, environment, clear=True), patch(
+            "psycopg.connect"
+        ) as connect:
+            with self.assertRaises(ValueError):
+                _validated_phase5_test_database_connection()
+        connect.assert_not_called()
+
+    def test_production_database_url_alone_is_ignored_before_connection(self):
+        self.assert_configuration_rejected_before_connect(
+            {"DATABASE_URL": "postgresql://production.example/heliumdb"}
+        )
+
+    def test_missing_test_database_url_fails_before_connection(self):
+        self.assert_configuration_rejected_before_connect({})
+
+    def test_non_loopback_test_database_url_fails_before_connection(self):
+        self.assert_configuration_rejected_before_connect(
+            {
+                "TEST_DATABASE_URL": (
+                    "postgresql://test:test@database.example/procurement_test"
+                )
+            }
+        )
+
+    def test_non_test_database_name_fails_before_connection(self):
+        self.assert_configuration_rejected_before_connect(
+            {
+                "TEST_DATABASE_URL": (
+                    "postgresql://test:test@127.0.0.1:5432/heliumdb"
+                )
+            }
+        )
+
+    def test_url_parameters_query_and_fragment_fail_before_connection(self):
+        unsafe_urls = (
+            f"{self.SAFE_TEST_URL}?host=database.example",
+            f"{self.SAFE_TEST_URL}#production",
+            f"{self.SAFE_TEST_URL};host=database.example",
+        )
+        for url in unsafe_urls:
+            with self.subTest(url=url):
+                self.assert_configuration_rejected_before_connect(
+                    {"TEST_DATABASE_URL": url}
+                )
+
+    def _identity_connection(self, row: tuple):
+        connection = MagicMock()
+        cursor_context = connection.cursor.return_value
+        cursor_context.__enter__.return_value.fetchone.return_value = row
+        return connection
+
+    def test_connected_database_mismatch_fails_before_fixture_ddl(self):
+        connection = self._identity_connection(("heliumdb", "16.10", 160010))
+        with patch.dict(
+            os.environ, {"TEST_DATABASE_URL": self.SAFE_TEST_URL}, clear=True
+        ), patch("psycopg.connect", return_value=connection) as connect:
+            with self.assertRaisesRegex(ValueError, "current_database"):
+                _validated_phase5_test_database_connection()
+        connect.assert_called_once_with(self.SAFE_TEST_URL, connect_timeout=5)
+        connection.execute.assert_not_called()
+        connection.close.assert_called_once_with()
+
+    def test_wrong_postgresql_major_fails_before_fixture_ddl(self):
+        connection = self._identity_connection(("procurement_test", "17.5", 170005))
+        with patch.dict(
+            os.environ, {"TEST_DATABASE_URL": self.SAFE_TEST_URL}, clear=True
+        ), patch("psycopg.connect", return_value=connection) as connect:
+            with self.assertRaisesRegex(ValueError, "PostgreSQL 16 is required"):
+                _validated_phase5_test_database_connection()
+        connect.assert_called_once_with(self.SAFE_TEST_URL, connect_timeout=5)
+        connection.execute.assert_not_called()
+        connection.close.assert_called_once_with()
+
+
 class Phase5RunSelectionIntegrationTests(unittest.TestCase):
     def setUp(self):
-        import psycopg
         from psycopg import sql
 
-        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
+        self.conn, self.test_target, self.test_database_info = (
+            _validated_phase5_test_database_connection()
+        )
         self.schema = f"phase5_ui_{uuid.uuid4().hex}"
         self.conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))
         self.conn.execute(
@@ -475,6 +596,16 @@ class Phase5RunSelectionIntegrationTests(unittest.TestCase):
                 )
                 values.append(cur.fetchone()[0])
         return tuple(values)
+
+    def test_validated_loopback_postgresql_16_target_allows_fixture_schema(self):
+        self.assertTrue(self.test_target.database.endswith("_test"))
+        self.assertEqual(self.test_database_info.database, self.test_target.database)
+        self.assertEqual(self.test_database_info.server_major, 16)
+        with self.conn.cursor() as cursor:
+            cursor.execute("SELECT current_database(), current_schema()")
+            database, schema = cursor.fetchone()
+        self.assertEqual(database, self.test_target.database)
+        self.assertEqual(schema, self.schema)
 
     def test_canonical_gate_run_and_authoritative_catalog_attempt_win_without_writes(self):
         self.insert_catalog_run(started_at=self.base_time, status="COMPLETED")
