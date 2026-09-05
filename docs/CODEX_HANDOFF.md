@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T12:57:56Z (UTC)
+**Updated:** 2026-09-05T14:00:50Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -104,10 +104,46 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   the patched final validator then rolled all of those in-transaction effects
   back, proving the corrective wrapper remains the final commit boundary over
   the canonical finalizer's nested `conn.transaction()`.
-- Dedicated corrective tests passed **33/33** against explicit disposable
+- Independent adversarial review then returned **REQUEST CHANGES** at exact
+  reviewed head `193ed4abcd699fe1c5dd44b679d509af5942a5c9`, tree
+  `a5f24607c35cdcc161a17483a295a8cadf0335c8`, for two remaining fail-closed
+  gaps: inherited Git configuration/environment could affect pre-verification
+  Git children, and the state classifier accepted extra `migration:*`
+  markers. The earlier late-finalizer rollback finding remains closed and its
+  real-finalizer regression remains green.
+- Remediation checkpoint `e620a5a353421aa67829ac24aee8362d650e5666`,
+  tree `a829cbaac3c784fd94be40845434b2f2dec59283`, isolates every bootstrap Git
+  operation with `/usr/bin/env -i`, fixed `/usr/bin/git` and
+  `PATH=/usr/bin:/bin`, isolated mode-0700 `HOME`/`XDG_CONFIG_HOME`, disabled
+  system/global Git configuration and prompts, and an explicit minimal
+  allowlist. The corrective Python provenance section uses the same
+  corrective-only isolation boundary around the unchanged canonical
+  `derive_runtime_execution_git_identity()` path and restores the normal
+  Python environment afterward. Database URLs, review tokens, inherited
+  `GIT_*`, proxy, SSH/askpass, template, hook, and transport configuration are
+  therefore unavailable to Git children.
+- Real-Git regressions use local temporary repositories under hostile global
+  and XDG configuration, `core.hooksPath`, an executable checkout hook, a
+  hostile template hook, `GIT_CONFIG_*` injection, `core.fsmonitor`, a hostile
+  leading `PATH` with a fake `git`, and synthetic database/token sentinels.
+  Clone, checkout, and both bootstrap/Python provenance proofs succeeded via
+  the fixed trusted Git binary; neither hook, fsmonitor, nor fake Git executed;
+  a real Git child explicitly observed all three sensitive variables absent;
+  and verified repository Python received the restored authorized parent
+  environment only after all clone proofs.
+- Migration state is now exact-dictionary classified: States A/B require only
+  the seven named through-006 markers, each value exactly `applied`; States
+  C/D/E require exactly those seven plus migration 007, again each exactly
+  `applied`. Any missing, extra, or wrong-valued marker classifies as
+  `PARTIAL_OR_DRIFTED`. A PostgreSQL regression traverses real A→B→C→D→E and,
+  at every state, injects `migration:008_unapproved.sql` once with `applied`
+  and once with `unexpected-value`; all ten cases stop through the real outer
+  classifier before any permitted stage is called, then deterministically
+  restore the exact lifecycle state.
+- Dedicated corrective tests passed **36/36** against explicit disposable
   loopback PostgreSQL 16 `_test` infrastructure. Existing Phase 4 tests passed
   **142/142**, Phase 5 passed **22/22**, startup hardening passed **10/10**, and
-  the authoritative full deterministic Procurement OS suite passed **360/360**
+  the authoritative full deterministic Procurement OS suite passed **363/363**
   with zero failures, errors, skips, expected failures, or unexpected
   successes. The full runner verified Python 3.13.11, PostgreSQL 16.9,
   `procurement_test`, and loopback before test discovery. Pinned `uv 0.12.3`
@@ -120,6 +156,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   before fixture DDL. A production-style ordinary `DATABASE_URL` was present
   during focused corrective validation and was demonstrably ignored by the
   fixture path.
+- Non-blocking residual risk: migration-COMPLETE verification still checks
+  several schema protections primarily by object name rather than full
+  semantic definition. No concrete same-named bypass was found. Scope remains
+  bounded because clean B→C applies the exact reviewed migration SQL in one
+  transaction, execution source is exact-SHA/tree/origin verified, and exact
+  protected state/business controls remain mandatory. This residual is
+  recorded for independent review and was not expanded into an unapproved
+  schema-introspection redesign.
 - Production database connections and writes during this implementation task:
   **0 / 0**. Shopify calls/writes: **0 / 0**. PO actions: **0**. No Scheduled
   Deployment was created and no PR was opened.
@@ -128,8 +172,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   independent implementation review, PR/CI, reviewed temporary Scheduled
   Deployment execution, and post-execution evidence are complete. Phase 6 is
   owner-authorized but **PAUSED** on this prerequisite.
-- **Exact next action:** ChatGPT narrow re-review and independent adversarial
-  review before PR or any production connection/execution.
+- **Exact next action:** ChatGPT re-review and independent adversarial
+  re-review before PR or any production connection/execution.
 
 ### Phase 5 Foundation UI — COMPLETE
 
@@ -929,6 +973,7 @@ Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
 Phase 4 reconciliation is **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**; no PR,
 Scheduled Deployment, or production connection is authorized yet. Phase 6 is
 owner-authorized but **PAUSED** on this prerequisite. The exact next action is
-ChatGPT independent implementation review. Vendor Rules, inventory snapshots,
-price books, forecasting, procurement, PO generation/release, Shopify mutation,
-and other downstream implementation remain out of scope.
+ChatGPT re-review and independent adversarial re-review. Vendor Rules,
+inventory snapshots, price books, forecasting, procurement, PO
+generation/release, Shopify mutation, and other downstream implementation
+remain out of scope.
