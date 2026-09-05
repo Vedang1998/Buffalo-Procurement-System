@@ -112,25 +112,40 @@ Current handoff records:
 - Shopify writes, Packet A, Vendor Rules, forecasting, recommendations,
   procurement, PO generation/release, and deployments were not started
 
-**Next boundary:** stop. Any downstream phase or workstream requires a new
-explicit owner authorization. Remove the one-time `PHASE4_REVIEW_TOKEN_INPUT`
-from Replit Secrets now that closeout is complete.
+**Phase 4 closeout boundary:** satisfied. The one-time
+`PHASE4_REVIEW_TOKEN_INPUT` was independently verified absent without accessing
+or exposing its value. Any downstream workstream still requires explicit owner
+authorization.
 
 ### Phase 5 — Foundation UI
 
-**PARTIALLY DELIVERED AS NEEDED; FORMAL PHASE NOT YET CLOSED**
+**COMPLETE**
 
-Existing operational pages include readiness/catalog/historical-sales review
-functionality. Phase 4 is no longer a blocker, but formal Phase 5 acceptance has
-not been authorized or started by this closeout.
+- All four required operational surfaces are present and live-accepted: System
+  Readiness, Catalog Reconciliation, Historical Sales Reconciliation, and
+  Data/Sync Runs.
+- System Readiness displays all canonical PASS/WARN/FAIL results and exact
+  backend-owned messages; canonical PO readiness dynamically displays the
+  current blocker.
+- Data/Sync Runs is GET-only and read-only, and the four surfaces share
+  operational navigation.
+- Dedicated Phase 5 tests passed 22/22; the complete deterministic suite passed
+  327/327.
+- PR #18 merged as `2af6a7258695023ff7c24ad6ff3f1ad9de760d2d`.
+- PR-head Procurement CI run `33935952570` and post-merge Procurement CI run
+  `33936303756` completed successfully.
+- Live no-write acceptance passed: all required routes returned 200; readiness
+  and PO controls were unchanged; no GET assigned a transaction XID.
+- PO readiness remains **DISABLED** because `VENDOR_RULES=FAIL`; purchase
+  orders and purchase-order lines remain zero.
 
 ### Phase 6 — Foundation test / acceptance completion
 
-**NOT YET CLOSED**
+**NOT YET CLOSED / NOT STARTED**
 
-The project already has substantial adversarial/integration coverage and Phase
-4 now passes. Formal Phase 6 foundation acceptance remains a separate,
-owner-authorized milestone and was not started by this closeout.
+Formal Phase 6 foundation acceptance, including the deferred legacy
+direct-invocation test-harness hardening item, remains a separate
+owner-authorized milestone and has not started.
 
 ## Post-foundation ordered workstreams
 
