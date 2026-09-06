@@ -18,6 +18,7 @@ from .inventory import latest_inventory_snapshot_status
 from .matching import MatchCandidate, score_candidate
 from .pricing import rollover
 from .readiness import po_readiness
+from .vendor_rules import evaluate_vendor_rules, update_vendor_rules
 from . import catalog as catalog_service
 from . import sales as sales_service
 
@@ -114,6 +115,12 @@ def _html_escape(value) -> str:
     import html
 
     return html.escape(str(value), quote=True) if value not in (None, "") else "—"
+
+
+def _form_value(value) -> str:
+    import html
+
+    return html.escape(str(value), quote=True) if value not in (None, "") else ""
 
 
 def _operational_nav(nav_root: str, *, current: str) -> str:
@@ -342,6 +349,123 @@ def inventory_snapshots_status(as_of: date | None = None):
     """Read-only owned inventory snapshot evidence; never starts a capture."""
     with _db_conn() as conn:
         return latest_inventory_snapshot_status(conn, as_of_date=as_of or date.today())
+
+
+def _vendor_rules_html(result: dict) -> str:
+    cards = []
+    for vendor in result["vendors"]:
+        rules = vendor.get("rules") or {}
+        version = int(rules.get("rules_version") or 0)
+        order_days = ", ".join(rules.get("order_days") or [])
+        delivery_days = ", ".join(rules.get("expected_delivery_days") or [])
+        minimum_type = rules.get("minimum_type") or ""
+        options = "".join(
+            f"<option value='{kind}'{' selected' if minimum_type == kind else ''}>{kind}</option>"
+            for kind in ("NONE", "CASE", "DOLLAR")
+        )
+        checked = " checked" if rules.get("loose_order_allowed") else ""
+        disabled = " disabled" if not vendor["active"] else ""
+        cards.append(
+            f"""<section class='vendor-card'><h2>{_html_escape(vendor['vendor_name'])}</h2>
+<p><b>{_html_escape(vendor['status'])}</b> — {_html_escape(vendor['message'])}</p>
+<form method='post' action='/vendor-rules/{_html_escape(vendor['vendor_id'])}'>
+<input type='hidden' name='expected_version' value='{version}'>
+<label>Order days (comma-separated)<input name='order_days' value='{_form_value(order_days)}' required{disabled}></label>
+<label>Order cutoff (local)<input name='order_cutoff_local' type='time' value='{_form_value(rules.get('order_cutoff_local'))}' required{disabled}></label>
+<label>IANA timezone<input name='timezone_name' value='{_form_value(rules.get('timezone_name'))}' required{disabled}></label>
+<label>Expected delivery days<input name='expected_delivery_days' value='{_form_value(delivery_days)}' required{disabled}></label>
+<label>Order cycle days<input name='order_cycle_days' type='number' min='1' value='{_form_value(rules.get('order_cycle_days'))}' required{disabled}></label>
+<label>Lead time days<input name='lead_time_days' type='number' min='0' value='{_form_value(rules.get('lead_time_days'))}' required{disabled}></label>
+<label>Lead-time variability days<input name='lead_time_variability_days' type='number' min='0' step='0.01' value='{_form_value(rules.get('lead_time_variability_days'))}' required{disabled}></label>
+<label>Reliability (0–1)<input name='reliability_pct' type='number' min='0' max='1' step='0.000001' value='{_form_value(rules.get('reliability_pct'))}' required{disabled}></label>
+<label>Minimum type<select name='minimum_type' required{disabled}><option value=''>Choose…</option>{options}</select></label>
+<label>Minimum value<input name='minimum_value' type='number' min='0' step='0.01' value='{_form_value(rules.get('minimum_value'))}'{disabled}></label>
+<label>Below-minimum fee<input name='below_minimum_fee' type='number' min='0' step='0.01' value='{_form_value(rules.get('below_minimum_fee'))}' required{disabled}></label>
+<label class='check'><input name='loose_order_allowed' type='checkbox'{checked}{disabled}> Loose/broken-case ordering allowed</label>
+<label>Loose-unit fee<input name='loose_unit_fee' type='number' min='0' step='0.01' value='{_form_value(rules.get('loose_unit_fee'))}'{disabled}></label>
+<label>Special rules<textarea name='special_rules'{disabled}>{_form_value(rules.get('special_rules'))}</textarea></label>
+<label>Holiday / blackout notes<textarea name='holiday_blackout_notes'{disabled}>{_form_value(rules.get('holiday_blackout_notes'))}</textarea></label>
+<label>Confirmation source<input name='confirmation_source' value='{_form_value(rules.get('confirmation_source'))}' required{disabled}></label>
+<label>Owner/operator<input name='actor' required{disabled}></label>
+<label>Change reason<input name='reason' required{disabled}></label>
+<label>Review token<input name='review_token' type='password' required{disabled}></label>
+<button type='submit'{disabled}>Save confirmed vendor rules</button></form></section>"""
+        )
+    return f"""<!doctype html><html><head><title>Vendor Rules</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+.summary,.vendor-card{{border:1px solid #d1d9e0;border-radius:8px;padding:14px;margin:14px 0}}
+form{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}}label{{display:flex;flex-direction:column;font-size:12px;gap:3px}}
+input,select,textarea,button{{font:inherit;padding:7px}}.check{{display:block}}button{{align-self:end}}</style></head><body>
+<p><a href='/admin/status'>System Readiness</a> · <a href='/data-sync-runs'>Data/Sync Runs</a></p>
+<h1>Vendor Operating Rules</h1><section class='summary'><b>{_html_escape(result['status'])}</b> — {_html_escape(result['message'])}</section>
+{''.join(cards) or '<p>No vendors are configured.</p>'}
+<p>Blank or unconfirmed material fields keep VENDOR_RULES failed. Vendor minimums never authorize filler.</p>
+</body></html>"""
+
+
+@app.get("/vendor-rules", response_class=HTMLResponse)
+def vendor_rules_page():
+    with _db_conn() as conn:
+        result = evaluate_vendor_rules(conn)
+    return _vendor_rules_html(result)
+
+
+@app.post("/vendor-rules/{vendor_id}", response_class=HTMLResponse)
+def vendor_rules_update_page(
+    vendor_id: str,
+    order_days: str = Form(...),
+    order_cutoff_local: str = Form(...),
+    timezone_name: str = Form(...),
+    expected_delivery_days: str = Form(...),
+    order_cycle_days: int = Form(...),
+    lead_time_days: int = Form(...),
+    lead_time_variability_days: str = Form(...),
+    reliability_pct: str = Form(...),
+    minimum_type: str = Form(...),
+    minimum_value: str = Form(""),
+    below_minimum_fee: str = Form(...),
+    loose_order_allowed: bool = Form(False),
+    loose_unit_fee: str = Form(""),
+    special_rules: str = Form(""),
+    holiday_blackout_notes: str = Form(""),
+    confirmation_source: str = Form(...),
+    actor: str = Form(...),
+    reason: str = Form(...),
+    expected_version: int = Form(...),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    rules = {
+        "order_days": order_days.split(","),
+        "order_cutoff_local": order_cutoff_local,
+        "timezone_name": timezone_name,
+        "expected_delivery_days": expected_delivery_days.split(","),
+        "order_cycle_days": order_cycle_days,
+        "lead_time_days": lead_time_days,
+        "lead_time_variability_days": lead_time_variability_days,
+        "reliability_pct": reliability_pct,
+        "minimum_type": minimum_type,
+        "minimum_value": minimum_value,
+        "below_minimum_fee": below_minimum_fee,
+        "loose_order_allowed": loose_order_allowed,
+        "loose_unit_fee": loose_unit_fee,
+        "special_rules": special_rules,
+        "holiday_blackout_notes": holiday_blackout_notes,
+        "confirmation_source": confirmation_source,
+    }
+    try:
+        with _db_conn() as conn:
+            update_vendor_rules(
+                conn,
+                vendor_id=vendor_id,
+                rules=rules,
+                actor=actor,
+                reason=reason,
+                expected_version=expected_version,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return "<meta http-equiv='refresh' content='0;url=/vendor-rules'><p>Vendor rules saved.</p>"
 
 
 @app.get("/rules")

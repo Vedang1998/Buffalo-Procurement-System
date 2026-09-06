@@ -46,6 +46,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_shopify_queries.py": 1,
     "test_storage.py": 5,
     "test_test_runner.py": 20,
+    "test_vendor_rules.py": 13,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())
 

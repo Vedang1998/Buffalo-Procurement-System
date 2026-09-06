@@ -30,6 +30,7 @@ CORE_TABLES = [
     "shopify_sales_daily_raw", "historical_sales_review_decisions",
     "seed_import_records",
     "inventory_snapshot_runs", "inventory_snapshot_run_rows",
+    "vendor_operating_rules", "vendor_rule_revisions",
 ]
 
 SHOPIFY_ENV_VARS = ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]
