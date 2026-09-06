@@ -31,6 +31,8 @@ CORE_TABLES = [
     "seed_import_records",
     "inventory_snapshot_runs", "inventory_snapshot_run_rows",
     "vendor_operating_rules", "vendor_rule_revisions",
+    "runs", "purchase_orders", "purchase_order_lines",
+    "po_reconciliation_events", "po_operational_events",
 ]
 
 SHOPIFY_ENV_VARS = ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]

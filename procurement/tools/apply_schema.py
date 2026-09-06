@@ -22,6 +22,7 @@ MIGRATION_ORDER = [
     "007_phase4_terminal_disposition.sql",
     "008_monday_inventory_foundation.sql",
     "009_monday_vendor_rules.sql",
+    "010_monday_po_ledger.sql",
 ]
 
 
