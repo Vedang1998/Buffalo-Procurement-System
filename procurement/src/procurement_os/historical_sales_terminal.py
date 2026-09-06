@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .catalog import numeric_shopify_id
 from .historical_sales import acquire_backfill_transaction_lock
@@ -2056,6 +2056,7 @@ def persist_terminal_disposition(
     artifact: TerminalArtifact,
     context: TerminalExecutionContext,
     *,
+    locked_precondition: Callable[[Any], None] | None = None,
     inject_failure_stage: str | None = None,
 ) -> dict[str, Any]:
     """Persist only terminal catalog/decision artifacts in one transaction."""
@@ -2072,6 +2073,8 @@ def persist_terminal_disposition(
             if str(cur.fetchone()[0]).lower() != "serializable":
                 raise RuntimeError("terminal transaction isolation is not serializable")
         acquire_backfill_transaction_lock(conn)
+        if locked_precondition is not None:
+            locked_precondition(conn)
         before = inspect_terminal_state(conn, artifact, execution.git_sha)
         classification = before["classification"]
         if classification == "CONFLICT":

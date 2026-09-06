@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T01:39:44Z (UTC)
+**Updated:** 2026-09-06T02:19:12Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,420 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### G8 PR CI timeout remediation — IMPLEMENTED / FRESH EXACT-HEAD CI REQUIRED
+
+- Corrective published-production reconciliation PR
+  [#20](https://github.com/Vedang1998/Buffalo-Procurement-System/pull/20)
+  was opened from `codex/phase4-published-production-reconciliation` at the
+  independently approved head
+  `15129704817cc48c1abc5d267f4dc4b45f3cc9d3`, tree
+  `dee3f4d3257a637360e3630f737dd72a9e553573`, against exact `main`
+  `631bd95e2680b1fcdba80a39f52669d83c8e93ac`.
+- Exact-head pull-request CI run `34004231407` was **completed / cancelled**
+  on both attempts because the workflow's fixed 10-minute job timeout was
+  insufficient for the expanded deterministic suite. Attempt 1 nevertheless
+  completed the authoritative runner and emitted **385/385 PASS**, zero
+  failures, errors, skips, expected failures, or unexpected successes, and
+  `OK` in 583.503 seconds immediately before GitHub cancelled the overall job.
+  Attempt 2 reached the same job timeout without reporting a test failure.
+  The formal GitHub CI gate therefore remains **UNSATISFIED**; the cancelled
+  run is not accepted as passing CI.
+- The only workflow change raises `timeout-minutes` from **10** to **20** to
+  accommodate normal hosted-runner variance. The suite, job structure,
+  dependency lock, startup hardening, and all material corrective runtime,
+  database, bootstrap, migration, fixture, identity, readiness, Shopify, and
+  PO implementation files remain byte-identical to the independently approved
+  head above.
+- Production execution remains unauthorized. Production database
+  connections/writes: **0 / 0**. Shopify calls/writes: **0 / 0**. PO actions:
+  **0**. Published-production corrective Phase 4 remains **OPEN**; Phase 6
+  remains owner-authorized but **PAUSED**.
+- **Exact next action:** fresh pull-request CI on the workflow/docs-only head,
+  followed by ChatGPT verification of the narrow delta, exact-head CI, and
+  byte-identical material implementation before any merge authorization.
+
+### G7 semantic-signature provenance remediation — IMPLEMENTED / AWAITING INDEPENDENT RE-REVIEW
+
+- Independent adversarial review returned **REQUEST CHANGES** on exact head
+  `8b23e1a7bf9ee107693b13cd5b2e2a7df7a1f81b`, tree
+  `312392f59558f9307f3394cde5f1c853d6b609ce`. The blocker was confined to
+  semantic-signature provenance: the previous test authority began from the
+  consolidated current schema and surgically removed terminal structures.
+  That synthetic history retained dropped-column `attnum` holes and also
+  reconstructed the two pre-007 price views with an `o.active` condition not
+  present in the genuine historical schema. The rejected pre/post hashes are
+  no longer authority.
+- Corrective implementation commit
+  `fa8f07d0860889250270f6aeb23813cf9d9ed231` replaces that source with the
+  self-contained byte-exact fixture
+  `procurement/tests/fixtures/schema_postgres_pre_terminal_198b213e.sql`.
+  Its authority is commit
+  `198b213e9b8f733e4cc76e568e91697d187e817f` (the sole parent of terminal
+  implementation `326ad7659f41e63c9353e9372e7f67b94af47357`), Git blob
+  `4f7dc2517f373513f132e1bf40970986bc607e55`, 22,818 raw bytes, and raw
+  SHA-256
+  `d5b5731d668d71a88af35e14ebe1fec60901f4bc222374303f7365d629dd38e6`.
+  Tests reproduce the blob ID locally from the frozen bytes, so shallow CI
+  needs neither repository history nor network access.
+- Current migrations 001-006 were independently compared with the same files
+  at `198b213...`, terminal commit `326ad765...`, and reviewed head
+  `8b23e1a...`; they are byte-identical across that authority range. Frozen
+  Git-blob / raw-SHA-256 pairs are: 001 `1ef0e23d...` /
+  `66bc873f91142e0941728af4260031a908195195a2e8d1a54d4ed5fee28ff50b`;
+  002 `bf4fed48...` /
+  `950e9520a12938ca0bee68ac3d68976da5a6119ec97753d4a4c243cb80ea3ad9`;
+  003 `fa7d1b3c...` /
+  `079396b466baadea0501fd591aaa585a39299f6649bbc71fc52897d9d8a65e42`;
+  004 `483332d9...` /
+  `bb490864a7657da672505d3fcba9df8c87ded72fefa0497db11298a058b64e7e`;
+  005 `b814439b...` /
+  `c9cc337fe34857368c471f493702fa0b42691ac48fe3fae4ca1a4fc3ea929b01`;
+  and 006 `7a331ae2...` /
+  `3ea0e2f280395c83d99d51617c7ffc6d6c1097d95f90e1bcad59698e67d775b1`.
+  Current migration 007 remains unchanged at blob `19af2602...`, raw SHA-256
+  `657b4db6f150b26aa93a83ba32e1e8d648ed183d9c939f4ebd1109f6afcdd363`.
+- Signature contract v2 starts with the exact historical fixture, reapplies
+  the exact current 001-006 bytes in canonical order, computes PRE-007, then
+  applies the exact committed 007 and computes POST-007. Protected columns on
+  the three pre-existing relations (`variants`, review decisions, exclusions)
+  retain relation/name/type/typmod/nullability/collation/identity/generated/
+  storage/compression/default semantics but omit physical `attnum` and sort by
+  relation/name. Ordered view output and the wholly migration-created authority
+  table retain their column positions as material contract. Function, trigger,
+  constraint, view, and authority-relation semantics are otherwise unchanged.
+- Disposable PostgreSQL 16.9 generated the reviewed genuine-chain hashes:
+  PRE-007
+  `cf7e091c334c3a78e9ced12731025b2b7d08529cdf34e6cbe3818b85df36253a`;
+  POST-007
+  `26dac49f608dbc31527cc4fe105e854d3b6ab86ac1d094ce0508d1c4e0fbeced`.
+  The post contract contains exactly 10 functions, 13 triggers, 20
+  constraints, five views / 93 ordered view columns, one protected authority
+  relation / 12 ordered authority columns, and 18 position-independent
+  pre-existing protected columns.
+- Two independently randomized genuine historical-chain schemas reproduce
+  both frozen hashes. A separate regression creates real dropped-column holes
+  on all three pre-existing relations, proves the protected raw `attnum` values
+  differ after migration 007, and still reproduces byte-identical normalized
+  protected-column payloads and the complete POST-007 hash. Source assertions
+  prove neither current consolidated `schema_postgres.sql` nor hand-written
+  DROP/recreated-view surgery participates in hash authority.
+- Existing fail-closed semantic drift coverage remains green and now also
+  includes a required-name extra function overload and a correct-table,
+  same-name trigger redirected to a no-op function. Always-true helper,
+  wrong-table trigger, tautological same-name constraint, superficially guarded
+  `OR TRUE` view, UNLOGGED authority registry, and unexpected marker drift all
+  continue to reject. Bootstrap isolation, downstream real-Git isolation,
+  post-lock predecessor proofs, stale/concurrent execution, exact 858/0
+  terminal mutation/replay, late-finalizer rollback, and State-E read-only
+  replay remain unchanged and green.
+- Deterministic validation passed: new G7 focus **7/7**; complete corrective
+  module **58/58**; complete Phase 4 set **200/200**; Phase 5 **22/22**;
+  startup hardening **10/10**; and authoritative suite **385/385**, with zero
+  failures, errors, skips, expected failures, or unexpected successes. The
+  module/global floors are now 58/385. The authoritative runner independently
+  created and verified Python 3.13.11, PostgreSQL 16.9, loopback, and exact
+  disposable database `procurement_test` before discovery. Every G7 database
+  test used only the validated `TEST_DATABASE_URL` contract; ordinary
+  `DATABASE_URL` was never fixture authority.
+- Pinned `uv 0.12.3` and `uv lock --check`, Python compilation, `/bin/sh`
+  bootstrap syntax, `git diff --check`, added-line credential-pattern review,
+  and tracked generated-artifact/cache scan pass. The non-blocking review notes
+  about newly named objects outside the frozen whitelist, independent Git-tool
+  ownership re-attestation inside Python, and transaction-isolation readback
+  remain recorded for later review; none is a demonstrated bypass and none was
+  broadened into this G7 correction.
+- Production database connections/writes: **0 / 0**. Shopify calls/writes:
+  **0 / 0**. PO actions: **0**. No `neondb`, deployment, PR, merge, or Phase 6
+  implementation occurred. Published-production corrective Phase 4 remains
+  **OPEN**; Phase 6 remains owner-authorized but **PAUSED**.
+- **Exact next action:** ChatGPT code re-review and independent adversarial
+  re-review before PR, deployment, merge, or production execution.
+
+### Prior final adversarial checkpoint — SUPERSEDED BY G7 PROVENANCE REMEDIATION
+
+- ChatGPT approved design commit
+  `e27e5d4644164161483dfd7ce15ff38c08a6aed6`. The implementation commits are
+  `9699e677ba90e80cb0b2ade3ac5d10d17c676b4c` and
+  `7c206eca74fe6a83c01bf1accd6f8192787e90bf`; the latter preserves the
+  bootstrap's executable mode. The reviewed implementation tree before this
+  documentation checkpoint is
+  `3fcdc8ef565f40767aa3110254739d86cd7b6def` on
+  `codex/phase4-published-production-reconciliation`.
+- The Scheduled Deployment bootstrap is now POSIX `/bin/sh` and invokes every
+  external utility through an absolute reviewed literal. It checks the fixed
+  shell, ownership utility, temporary-directory utility, directory utility,
+  cleanup utility, environment utility, Git, and noninteractive failure
+  utility before use. Git receives an `env -i` allowlist with isolated
+  `HOME`/`XDG_CONFIG_HOME`; clone, detached checkout, canonical origin, exact
+  HEAD, exact tree, and clean status all precede repository Python.
+- The sole permitted interpreter is the literal
+  `/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped`.
+  There is no interpreter argument, environment override, `PATH` lookup,
+  discovery, alternate, or fallback. `/nix`, `/nix/store`, the exact package
+  directory, its `bin` directory, and the executable must all pass the
+  reviewed non-writability/type/executability checks or the bootstrap stops
+  before Python and before any database connection.
+- Hostile-bootstrap tests placed fake `sh`, `bash`, `stat`, `mktemp`, `mkdir`,
+  `rm`, `env`, `git`, `false`, and `python3` executables first in parent
+  `PATH`, plus hostile Git hooks/templates/configuration. No sentinel ran. A
+  real local clone completed every provenance proof, verified-clone Python
+  received the exact synthetic authorized parent environment and parent
+  `PATH` only after those proofs, and the ephemeral clone was removed through
+  the trusted cleanup path. A separate writable-parent regression proves
+  failure before Git or Python. GitHub CI portability is confined to a
+  generated test-only copy using literal `/usr/bin/python3` when the approved
+  Nix path is absent; the production bootstrap remains exact-Nix-only.
+- Every canonical terminal Git derivation is now enclosed by the corrective
+  sanitized subprocess environment: read-only classification, first terminal
+  persistence, and mandatory replay. The real-Git integration regression
+  changes only the terminal module's tracked repository anchor, delegates to
+  the real canonical Git implementation, observes at least three real
+  derivations with `PATH=/usr/bin:/bin` and disabled inherited configuration,
+  proves the database URL and both review-token variables absent in every Git
+  child, proves hostile Git/fsmonitor sentinels absent, and retains exact 858
+  first-run / 0 replay mutation behavior.
+- Canonical manifest and terminal persistence services gained only optional
+  keyword-only `locked_precondition` callbacks. Defaults preserve all existing
+  callers. Each callback runs immediately after the established advisory
+  transaction lock and before canonical preflight/inspection or DML. The
+  corrective caller re-proves exact A for manifest persistence, exact B for
+  migration 007, exact C for terminal persistence, exact D/PRE_REBUILD for
+  mandatory replay, and exact D/PRE_REBUILD for the real local finalizer.
+- Two-connection PostgreSQL regressions prove stale A-to-B, B-to-C, C-to-D,
+  and D-to-E classifications cannot repeat a committed stage. Additional
+  post-classification drift tests cover unexpected migration markers at every
+  mutating/replay entry point, pre-007 view drift at both A and B, duplicate
+  Phase-4 alias provenance at B, and replay invoked directly at C or E. Every
+  case rejects inside the lock-owning transaction and preserves the exact
+  observed state; the stale D-to-E path never calls the finalizer twice.
+- Migration 007 classification now attests a canonical PostgreSQL-catalog
+  payload rather than object names alone. The payload signs 10 functions, 13
+  triggers, 20 constraints, five operational views and their 93 output
+  columns, 30 protected table columns, and the authority registry relation's
+  table kind, persistence, RLS, replica identity, partition, and relation
+  options. Target schema names are normalized, nested collections are sorted,
+  canonical JSON is hashed, raw OIDs/timestamps/owners/statistics are excluded,
+  and public read-only inspection retains the no-XID contract.
+- **Superseded provenance:** independent review rejected the prior pre-007
+  `ecf12c0...` and post-007 `238a8b88...` hashes because their fixture used
+  consolidated-schema surgery rather than the historical authority chain. The
+  G7 checkpoint above supplies the only current frozen hashes. Same-name
+  always-true function, wrong-table trigger, tautological constraint,
+  superficially guarded `OR TRUE` view, and UNLOGGED authority-table changes
+  all classify `PARTIAL_OR_DRIFTED`; semantic drift blocks C, D, and E.
+- The retained late-finalizer rollback regression invokes real
+  `apply_rebuild_stage()` and the unmocked canonical
+  `rerun_sales_identity_resolution()`, then raises only from
+  `final_business_controls()` after real in-transaction finalization. At the
+  injection point it observes 57,429 RESOLVED / 1,654 EXCLUDED,
+  `sales_daily` 57,424 rows / 80,659.0000 units / $1,263,133.84,
+  `canonical_aggregate_rebuilt=true`, `SALES_BACKFILL=PASS`, and
+  `POST_REBUILD`. Fresh readback after rollback exactly equals pre-rebuild
+  State D: 55,971 RESOLVED / 3,112 UNRESOLVED; 55,966 `sales_daily` rows /
+  78,815.0000 units / $1,231,372.83; exact backfill/readiness rows and
+  fingerprints; `SALES_BACKFILL=FAIL` with
+  `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`; `CURRENT_TERMINAL_EXACT` /
+  `PRE_REBUILD`; and zero POs/lines.
+- Deterministic validation passed: corrective module **52/52**; complete Phase
+  4 set **194/194**; Phase 5 **22/22**; startup hardening **10/10**; and the
+  authoritative Procurement OS suite **379/379**, with zero failures, errors,
+  skips, expected failures, or unexpected successes. The authoritative runner
+  independently verified Python 3.13.11, PostgreSQL 16.9, loopback, and exact
+  database `procurement_adversarial_test` before discovery. The corrective
+  module/global floors rose from 36/363 to 52/379.
+- Pinned `uv 0.12.3` reported the exact version and `uv lock --check` passed.
+  Python compilation, `/bin/sh` syntax, `git diff --check`, changed-file
+  credential-pattern inspection, sensitive-variable added-line review, and
+  tracked generated-artifact/cache scan passed. Only explicit disposable
+  loopback PostgreSQL 16 `_test` infrastructure was used; libpq redirect
+  variables were cleared and connected database identity/major were verified
+  before fixture DDL.
+- Fail-closed deployment preflight observation: the approved interpreter is
+  present and its exact package/bin/executable are non-writable in the current
+  development image, but `/nix/store` itself is writable by this development
+  user. The unmodified production bootstrap therefore correctly refuses to
+  run here before clone/Python/database access. No weakening or interpreter
+  substitution was made. The eventual Scheduled Deployment image must prove
+  this exact interpreter and every reviewed non-writable parent check; if it
+  does not, stop and return for a separately reviewed change. Also, the schema
+  hash was generated on PostgreSQL 16.9 while published production was
+  reported as 16.15; any minor-version deparser difference safely causes a
+  pre-mutation false-fail and must not be bypassed.
+- Future reviewed deployment command template (placeholders only):
+  `/bin/sh ./scripts/phase4-published-production-bootstrap.sh '<REVIEWED_40_CHAR_SHA>' '<REVIEWED_40_CHAR_TREE>'`.
+- Production database connections/writes during this remediation: **0 / 0**.
+  Shopify calls/writes: **0 / 0**. PO actions: **0**. No deployment, PR,
+  merge, or Phase 6 implementation occurred.
+- Published-production corrective Phase 4 closeout remains **OPEN**. Phase 6
+  remains owner-authorized but **PAUSED** behind it.
+- **Exact next action:** ChatGPT code re-review and independent adversarial
+  re-review before PR, deployment, merge, or production execution.
+
+### Published-production environment correction — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+
+- **Environment correction:** the prior Phase 4 closeout and Phase 5 live
+  acceptance evidence labeled as production was obtained from Replit's
+  development database, `heliumdb`. The published deployment uses a separate
+  PostgreSQL database, `neondb`. This was an environment-identification error;
+  independent read-only inspection found no evidence of rogue or partial
+  mutation in `neondb`.
+- Exact independently verified published-production prestate: database
+  `neondb`; PostgreSQL 16.15; schema `public`; database-enforced read-only
+  inspection; XID NULL; zero residual `phase5_ui_%` schemas; migrations through
+  006 present; migration 007 wholly absent; 2,049 variants; 59,083 durable raw
+  facts = 55,971 RESOLVED / 3,112 UNRESOLVED / 0 AMBIGUOUS / 0 EXCLUDED;
+  55,966 `sales_daily` rows; zero review decisions; zero historical
+  exclusions; zero approved Phase 4 old-ID alias families; zero purchase
+  orders and zero PO lines.
+- Exact published-production readiness prestate is
+  `CATALOG_SYNC=PASS`, `SALES_BACKFILL=FAIL` with blocker
+  `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`, `VENDOR_RULES=FAIL`, and the
+  remaining four future gates WARN. PO generation remains disabled.
+- Frozen `neondb` initial protected fingerprints are
+  `sales_daily=fd2b4e504b492d9e7609ef8642320f7de300f5294369476da0877aee8da8b2e8`,
+  `raw_resolution=06e2726cc33849fc180788fa036a45dcd1b1acd7af32cf813f0ec9311b7dd37a`,
+  `sales_backfill_runs=d26f1326eea8e16be6626684db5623c291f582a63564e7aeda9c90167507d409`,
+  `readiness_gates=3e3c67ec4fbf0f29824311b4b97ad77bc20635acc3a2e3822c89c73a3119c21a`,
+  and the empty PO/PO-line digest
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Owner authorization is recorded for the corrective published-production
+  reconciliation. Verified implementation baseline was exact `main`
+  `631bd95e2680b1fcdba80a39f52669d83c8e93ac`, tree
+  `2f9ed7a8e74967da7d5c48161cd3af1b8e557727`, on branch
+  `codex/phase4-published-production-reconciliation`. Approved design
+  checkpoint is `edec3ed8cbb75d1b926e31050e4770db4791a126`; implementation checkpoint is
+  `e2a5dff9687ebac24a904f15e20b3d90b3f55ada`, tree
+  `2bc62b20717c96933ca7287a01a56335fc131439`.
+- The implementation adds a verified-clone Scheduled Deployment bootstrap and
+  a narrow restart-safe corrective runner. Before any database connection the
+  runner requires the deployment marker, database configuration, both
+  non-empty review-token inputs, the existing constant-time authorization
+  comparison, exact clean derived Git identity, exact reviewed commit/tree and
+  canonical origin, and both frozen manifest hashes. The bootstrap executes no
+  repository Python until a unique `/tmp` clone proves origin, detached HEAD,
+  tree, and clean status; it has no packaged-source fallback.
+- Every runner connection's first SQL statement proves exact database
+  `neondb`, PostgreSQL major 16, schema `public`, and no assigned XID. The
+  runner accepts only exact States A through E: frozen baseline; original
+  manifest persisted/pre-007; post-007 `PRE_TERMINAL_EXACT`; current terminal/
+  pre-rebuild; and current terminal/post-rebuild. Partial or mixed state stops.
+  A completed State E invocation is a read-only no-op and does not call the
+  finalizer or rewrite readiness.
+- Existing Phase 4 services remain sole authority: original manifest dry-run
+  and persistence, migration 007 plus its standard marker in one transaction,
+  terminal dry-run/persistence/exact classification/Git provenance/advisory
+  lock, mandatory zero-DML terminal replay, and
+  `rerun_sales_identity_resolution()` for the fixed 2024-11-28 through
+  2026-08-10 durable range. The corrective path has no Shopify client, sync,
+  procurement, or PO action.
+- ChatGPT's review of prior head
+  `b744ea17b4ac0c6d32a718b6b4fe8385778fdc52` found no production-code defect
+  and requested one additional Level-4 proof: rollback after the real
+  canonical finalizer has changed State D but before the outer corrective
+  transaction commits. The narrow remediation implementation checkpoint is
+  `0d6ff674e64403d5840a3cb730f495e982f0b69f`, tree
+  `d5e52b7648308e16c01997b9220c9fc565d1847c`. The regression
+  `test_real_finalizer_changes_roll_back_when_final_controls_raise` patches
+  only `final_business_controls()` to raise at that exact point; it does not
+  mock `apply_rebuild_stage()`, `rerun_sales_identity_resolution()`, or the
+  canonical finalizer. The corrective runner and bootstrap remain unchanged.
+- The disposable rollback evidence run began and, after the injected failure,
+  returned on a fresh connection to identical State-D fingerprints:
+  `sales_daily=4d56a799ade44ee91e1119ccaad5be24abeec1ef273af6eb1fbe3662e32d3cc3`
+  (55,966 rows),
+  `raw_resolution=f79ead85ac0f5e828799b81b313f18f54273851822115b0aa302ea68fc37f8a5`
+  (59,083),
+  `sales_backfill_runs=7a11c470cfee5ba1b33aff1b678e2a68921be4f6193d08654a25810bb65d0629`
+  (1), and
+  `readiness_gates=a7d42841cf28ff56c4734d33541f75bd3479364c25d6ad8907fdb60f7755402d`
+  (7); both PO fingerprints remained the empty digest. Before and after were
+  exactly 55,971 RESOLVED / 3,112 UNRESOLVED / 0 AMBIGUOUS / 0 EXCLUDED;
+  `sales_daily` 55,966 rows / 78,815.0000 units / $1,231,372.83;
+  backfill status `COMPLETED` with `canonical_aggregate_rebuilt=false`;
+  `SALES_BACKFILL=FAIL` with exact blocker
+  `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`; terminal classification
+  `CURRENT_TERMINAL_EXACT`; lifecycle `PRE_REBUILD`; zero terminal mutations;
+  and zero POs/lines. Exact full backfill-run evidence and all exact readiness
+  rows were included in the equality assertion, not merely these summaries.
+- At the injected point, the unmocked real finalizer had visibly produced
+  57,429 RESOLVED / 1,654 EXCLUDED / 0 unresolved / 0 ambiguous;
+  `sales_daily` 57,424 rows / 80,659.0000 units / $1,263,133.84;
+  `canonical_aggregate_rebuilt=true`; `SALES_BACKFILL=PASS` with zero blockers;
+  terminal lifecycle `POST_REBUILD`; and changed fingerprints. Raising from
+  the patched final validator then rolled all of those in-transaction effects
+  back, proving the corrective wrapper remains the final commit boundary over
+  the canonical finalizer's nested `conn.transaction()`.
+- Independent adversarial review then returned **REQUEST CHANGES** at exact
+  reviewed head `193ed4abcd699fe1c5dd44b679d509af5942a5c9`, tree
+  `a5f24607c35cdcc161a17483a295a8cadf0335c8`, for two remaining fail-closed
+  gaps: inherited Git configuration/environment could affect pre-verification
+  Git children, and the state classifier accepted extra `migration:*`
+  markers. The earlier late-finalizer rollback finding remains closed and its
+  real-finalizer regression remains green.
+- Remediation checkpoint `e620a5a353421aa67829ac24aee8362d650e5666`,
+  tree `a829cbaac3c784fd94be40845434b2f2dec59283`, isolates every bootstrap Git
+  operation with `/usr/bin/env -i`, fixed `/usr/bin/git` and
+  `PATH=/usr/bin:/bin`, isolated mode-0700 `HOME`/`XDG_CONFIG_HOME`, disabled
+  system/global Git configuration and prompts, and an explicit minimal
+  allowlist. The corrective Python provenance section uses the same
+  corrective-only isolation boundary around the unchanged canonical
+  `derive_runtime_execution_git_identity()` path and restores the normal
+  Python environment afterward. Database URLs, review tokens, inherited
+  `GIT_*`, proxy, SSH/askpass, template, hook, and transport configuration are
+  therefore unavailable to Git children.
+- Real-Git regressions use local temporary repositories under hostile global
+  and XDG configuration, `core.hooksPath`, an executable checkout hook, a
+  hostile template hook, `GIT_CONFIG_*` injection, `core.fsmonitor`, a hostile
+  leading `PATH` with a fake `git`, and synthetic database/token sentinels.
+  Clone, checkout, and both bootstrap/Python provenance proofs succeeded via
+  the fixed trusted Git binary; neither hook, fsmonitor, nor fake Git executed;
+  a real Git child explicitly observed all three sensitive variables absent;
+  and verified repository Python received the restored authorized parent
+  environment only after all clone proofs.
+- Migration state is now exact-dictionary classified: States A/B require only
+  the seven named through-006 markers, each value exactly `applied`; States
+  C/D/E require exactly those seven plus migration 007, again each exactly
+  `applied`. Any missing, extra, or wrong-valued marker classifies as
+  `PARTIAL_OR_DRIFTED`. A PostgreSQL regression traverses real A→B→C→D→E and,
+  at every state, injects `migration:008_unapproved.sql` once with `applied`
+  and once with `unexpected-value`; all ten cases stop through the real outer
+  classifier before any permitted stage is called, then deterministically
+  restore the exact lifecycle state.
+- Dedicated corrective tests passed **36/36** against explicit disposable
+  loopback PostgreSQL 16 `_test` infrastructure. Existing Phase 4 tests passed
+  **142/142**, Phase 5 passed **22/22**, startup hardening passed **10/10**, and
+  the authoritative full deterministic Procurement OS suite passed **363/363**
+  with zero failures, errors, skips, expected failures, or unexpected
+  successes. The full runner verified Python 3.13.11, PostgreSQL 16.9,
+  `procurement_test`, and loopback before test discovery. Pinned `uv 0.12.3`
+  lock validation, Python compilation, shell syntax, `git diff --check`, secret
+  scan, and generated-artifact scan passed.
+- Test fixtures use only the existing `TEST_DATABASE_URL` contract from
+  `procurement/tools/run_tests.py`: PostgreSQL URL, loopback host, exactly one
+  `_test` database name, no parameter/query/fragment tricks, cleared libpq
+  `PG*` redirects, exact connected-database identity, and PostgreSQL major 16
+  before fixture DDL. A production-style ordinary `DATABASE_URL` was present
+  during focused corrective validation and was demonstrably ignored by the
+  fixture path.
+- Non-blocking residual risk: migration-COMPLETE verification still checks
+  several schema protections primarily by object name rather than full
+  semantic definition. No concrete same-named bypass was found. Scope remains
+  bounded because clean B→C applies the exact reviewed migration SQL in one
+  transaction, execution source is exact-SHA/tree/origin verified, and exact
+  protected state/business controls remain mandatory. This residual is
+  recorded for independent review and was not expanded into an unapproved
+  schema-introspection redesign.
+- Production database connections and writes during this implementation task:
+  **0 / 0**. Shopify calls/writes: **0 / 0**. PO actions: **0**. No Scheduled
+  Deployment was created and no PR was opened.
+- Phase 4's implementation and owner-approved identity authority remain
+  accepted, but published-production reconciliation is **IN PROGRESS** until
+  independent implementation review, PR/CI, reviewed temporary Scheduled
+  Deployment execution, and post-execution evidence are complete. Phase 6 is
+  owner-authorized but **PAUSED** on this prerequisite.
+- **Exact next action:** ChatGPT re-review and independent adversarial
+  re-review before PR or any production connection/execution.
 
 ### Phase 5 Foundation UI — COMPLETE
 
@@ -76,15 +490,19 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   accessing or exposing its value. `RECONCILIATION_REVIEW_TOKEN` remains
   separately governed. Phase 5 caused zero Shopify writes and added or invoked
   no PO-generation action.
-- **Authorization boundary:** Phase 5 Foundation UI is COMPLETE. **STOP.**
-  Phase 6 Foundation test / acceptance completion remains a separate
-  owner-authorized milestone. No Phase 6 work, Vendor Rules work, inventory
-  snapshots, price books, forecasting, procurement, PO generation/release,
-  Shopify mutation, or downstream workstream is authorized by this closure.
+- **Current boundary:** Phase 5 application/UI acceptance remains COMPLETE.
+  Published-production Phase 4 correction now takes precedence. Phase 6 is
+  owner-authorized but PAUSED until that prerequisite is independently
+  reviewed, executed, and verified.
 
-### Phase 4 production closeout — COMPLETE; `SALES_BACKFILL = PASS`
+### Development-database Phase 4 closeout — COMPLETE HISTORICAL EVIDENCE ONLY
 
-- Owner-authorized production closeout executed from exact clean merged `main`
+> Correction: this sequence ran against development `heliumdb`, not published
+> production `neondb`. Its implementation/authority and deterministic outcomes
+> remain valid, but its database results are not published-production closeout
+> evidence.
+
+- Owner-authorized closeout sequence executed from exact clean merged `main`
   SHA `dbd4cdc1d48e098e20e8f7642a64fb409966c793`, tree
   `fb9887834beff0b39a24f633503f3b78d8992f97`. Remote `origin/main`
   resolved to the same SHA. GitHub Procurement CI run `33818188106` was
@@ -94,8 +512,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `RECONCILIATION_REVIEW_TOKEN` were proven present and non-empty without
   printing, echoing, hashing, logging, or otherwise exposing either value. The
   existing `require_review_authorization` constant-time comparison passed.
-- Production preflight used a database-enforced `REPEATABLE READ, READ ONLY`
-  snapshot with no transaction ID before or after inspection. Runtime identity
+- The development-database preflight used a database-enforced `REPEATABLE READ,
+  READ ONLY` snapshot with no transaction ID before or after inspection. Runtime identity
   was PostgreSQL `16.10`, database `heliumdb`, schema `public`, and the database
   name matched the configured URL. Migration 007 was wholly absent. Frozen
   prestate was exact: 2,049 variants / 1,999 active / 46 retired-confirmed;
@@ -800,10 +1218,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Authorization boundary / next action
 
-Phase 5 Foundation UI is **COMPLETE**. **STOP.** Phase 6 Foundation test /
-acceptance completion remains a separate owner-authorized milestone. No Phase
-6 work, Vendor Rules work, inventory snapshots, price books, forecasting,
-procurement, PO generation/release, Shopify mutation, or downstream workstream
-is authorized by this closure. `PHASE4_REVIEW_TOKEN_INPUT` was independently
-verified absent without accessing or exposing its value;
-`RECONCILIATION_REVIEW_TOKEN` remains governed separately.
+Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
+Phase 4 reconciliation is **IMPLEMENTED / PR #20 OPEN / FRESH CI REQUIRED**;
+no merge, Scheduled Deployment, or production connection is authorized yet.
+Phase 6 is owner-authorized but **PAUSED** on this prerequisite. The exact next
+action is fresh exact-head PR CI followed by ChatGPT verification of the
+workflow-only delta and material-file identity before merge authorization.
+Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
+generation/release, Shopify mutation, and other downstream implementation
+remain out of scope.
