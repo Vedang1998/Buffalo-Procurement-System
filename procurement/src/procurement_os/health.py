@@ -29,6 +29,7 @@ CORE_TABLES = [
     "sales_backfill_chunks", "sales_backfill_pages", "sales_backfill_run_facts",
     "shopify_sales_daily_raw", "historical_sales_review_decisions",
     "seed_import_records",
+    "inventory_snapshot_runs", "inventory_snapshot_run_rows",
 ]
 
 SHOPIFY_ENV_VARS = ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]

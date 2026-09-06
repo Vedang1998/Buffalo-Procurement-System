@@ -27,6 +27,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_economics.py": 4,
     "test_historical_sales_review_api.py": 17,
     "test_identity_investigation.py": 32,
+    "test_inventory.py": 13,
     "test_matching.py": 3,
     "test_phase4_historical_sales.py": 33,
     "test_phase4_identity_manifest.py": 16,

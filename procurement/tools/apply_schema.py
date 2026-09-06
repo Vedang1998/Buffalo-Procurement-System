@@ -20,6 +20,7 @@ MIGRATION_ORDER = [
     "005_identity_investigation.sql",
     "006_phase4_sales_backfill.sql",
     "007_phase4_terminal_disposition.sql",
+    "008_monday_inventory_foundation.sql",
 ]
 
 
