@@ -58,7 +58,7 @@ Verified production state at the current handoff:
 
 ### Phase 4 — Historical ShopifyQL sales backfill / reconciliation
 
-**IMPLEMENTATION / AUTHORITY ACCEPTED — PUBLISHED-PRODUCTION CORRECTION IN PROGRESS**
+**IMPLEMENTATION / AUTHORITY / REVIEW / MERGE ACCEPTED — PUBLISHED-PRODUCTION RELEASE PREFLIGHT PENDING**
 
 The previously recorded terminal closeout ran against Replit development
 `heliumdb`, not published-production `neondb`. Its reviewed implementation,
@@ -69,9 +69,14 @@ zero historical exclusions, zero approved Phase 4 old-ID alias families, 59,083
 facts = 55,971 resolved / 3,112 unresolved, and `SALES_BACKFILL=FAIL` with
 `MATERIAL_HISTORICAL_IDENTITIES_UNRESOLVED`.
 
-Owner-authorized corrective implementation is in progress on
-`codex/phase4-published-production-reconciliation`. No published-production
-connection or write is authorized during implementation/review. The accepted
+The corrective executor is merged on `main` at
+`74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, tree
+`ce728ec4016cd68be63c1563453838427f556579`. Exact post-merge push CI run
+`34007212711` was **completed / success** on that commit. Implementation, authority,
+independent review, merge, and CI are accepted. Published-production `neondb`
+remains at the frozen pre-correction state until execution is explicitly
+released; no published-production connection or write has occurred during
+implementation, review, merge, or this documentation checkpoint. The accepted
 deterministic terminal target remains:
 
 - range: 2024-11-28 through 2026-08-10
@@ -125,9 +130,11 @@ deterministic terminal target remains:
   procurement, PO generation/release, and deployments were not started
 
 **Published-production Phase 4 closeout boundary:** not yet satisfied. It
-requires independent corrective implementation review, PR/CI, reviewed
-temporary Scheduled Deployment execution against exact `neondb`, and verified
-post-execution evidence. Phase 6 remains paused until this prerequisite closes.
+requires the ChatGPT-controlled final published-production release preflight,
+reviewed temporary Scheduled Deployment execution against exact `neondb`, and
+independent verified post-execution reconciliation. Phase 4 is not complete,
+and Phase 6 remains paused until this prerequisite closes. The exact next
+action is the final published-production release preflight before any mutation.
 
 ### Phase 5 — Foundation UI
 

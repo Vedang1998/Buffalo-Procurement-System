@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-06T02:19:12Z (UTC)
+**Updated:** 2026-09-06T02:59:44Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,50 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### G8 PR CI timeout remediation — IMPLEMENTED / FRESH EXACT-HEAD CI REQUIRED
+### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
+
+- Corrective published-production reconciliation PR
+  [#20](https://github.com/Vedang1998/Buffalo-Procurement-System/pull/20)
+  merged successfully using a normal two-parent merge commit. Pre-merge
+  `main` was `631bd95e2680b1fcdba80a39f52669d83c8e93ac`; the approved PR head was
+  `946623bc59fbfa8b0c6abce7b5f1bf9c35ac2691`; and the merge commit/current
+  `main` is `74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, tree
+  `ce728ec4016cd68be63c1563453838427f556579`.
+- Exact-head pull-request CI run `34006299559` was **completed / success** on
+  the approved PR head. Exact post-merge `main` push CI run `34007212711` was
+  also **completed / success** on the merge commit. Startup hardening passed
+  **10/10** and the full deterministic Procurement suite passed **385/385**,
+  with failures, errors, skips, expected failures, and unexpected successes
+  all exactly zero.
+- Corrective implementation, authority, independent review, merge, and CI
+  gates are complete. Published-production Phase 4 remains **OPEN** because
+  production execution and independent post-action reconciliation have not
+  occurred. Phase 6 remains **OWNER AUTHORIZED but PAUSED**.
+- Production database connections/writes so far: **0 / 0**. Shopify
+  calls/writes: **0 / 0**. PO actions: **0**.
+- **Exact next action:** ChatGPT-controlled final published-production release
+  preflight before any mutation. That preflight must verify, without exposing
+  secret values:
+  1. exact reviewed `main` SHA/tree and successful CI;
+  2. the production Scheduled Deployment environment supports the exact
+     reviewed bootstrap;
+  3. the exact approved Nix Python exists and passes every reviewed
+     non-writability, type, and executable check;
+  4. `RECONCILIATION_REVIEW_TOKEN` and `PHASE4_REVIEW_TOKEN_INPUT` are present;
+  5. no manually defined production `DATABASE_URL` exists and Replit injects
+     its environment-specific production URL;
+  6. the actual target is `neondb`, PostgreSQL 16, schema `public`, and the
+     first identity query has a NULL transaction ID;
+  7. published production still matches the frozen pre-correction State A
+     counts and fingerprints;
+  8. migration markers are the exact pre-007 set;
+  9. migration 007 is absent;
+  10. the actual PRE-007 semantic signature is exactly
+      `cf7e091c334c3a78e9ced12731025b2b7d08529cdf34e6cbe3818b85df36253a`;
+  11. purchase orders / lines remain **0 / 0**.
+  Any mismatch must stop before mutation.
+
+### Historical G8 PR CI timeout remediation — SUPERSEDED BY SUCCESSFUL EXACT-HEAD CI AND MERGE
 
 - Corrective published-production reconciliation PR
   [#20](https://github.com/Vedang1998/Buffalo-Procurement-System/pull/20)
@@ -1219,11 +1262,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Authorization boundary / next action
 
 Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
-Phase 4 reconciliation is **IMPLEMENTED / PR #20 OPEN / FRESH CI REQUIRED**;
-no merge, Scheduled Deployment, or production connection is authorized yet.
-Phase 6 is owner-authorized but **PAUSED** on this prerequisite. The exact next
-action is fresh exact-head PR CI followed by ChatGPT verification of the
-workflow-only delta and material-file identity before merge authorization.
-Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
-generation/release, Shopify mutation, and other downstream implementation
-remain out of scope.
+Phase 4 implementation, authority, review, merge, and CI gates are complete at
+`main` `74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, but production execution and
+independent post-action reconciliation remain outstanding. No Scheduled
+Deployment or production connection is authorized yet. Phase 6 is
+owner-authorized but **PAUSED** on this prerequisite. The exact next action is
+ChatGPT-controlled final published-production release preflight before any
+mutation. Vendor Rules, inventory snapshots, price books, forecasting,
+procurement, PO generation/release, Shopify mutation, and other downstream
+implementation remain out of scope.
