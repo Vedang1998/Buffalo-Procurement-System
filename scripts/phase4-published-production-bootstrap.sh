@@ -74,9 +74,20 @@ if [ "${REPLIT_DEPLOYMENT:-}" != '1' ]; then
   fail 'corrective execution requires Replit deployment'
 fi
 
-if [ "$#" -ne 2 ]; then
-  fail 'expected reviewed execution commit and tree assertions'
-fi
+execution_mode='normal'
+case "$#" in
+  2)
+    ;;
+  3)
+    if [ "$3" != '--preflight-only' ]; then
+      fail 'third argument must be literal --preflight-only'
+    fi
+    execution_mode='preflight-only'
+    ;;
+  *)
+    fail 'expected reviewed execution commit/tree and optional literal --preflight-only'
+    ;;
+esac
 
 expected_sha=$1
 expected_tree=$2
@@ -147,6 +158,13 @@ if [ -n "$observed_status" ]; then
   fail 'cloned repository worktree is not clean'
 fi
 
-"$trusted_python" "$clone_dir/procurement/tools/reconcile_phase4_published_production.py" \
-  --expected-execution-git-sha "$expected_sha" \
-  --expected-execution-tree-sha "$expected_tree"
+if [ "$execution_mode" = 'preflight-only' ]; then
+  "$trusted_python" "$clone_dir/procurement/tools/reconcile_phase4_published_production.py" \
+    --expected-execution-git-sha "$expected_sha" \
+    --expected-execution-tree-sha "$expected_tree" \
+    --preflight-only
+else
+  "$trusted_python" "$clone_dir/procurement/tools/reconcile_phase4_published_production.py" \
+    --expected-execution-git-sha "$expected_sha" \
+    --expected-execution-tree-sha "$expected_tree"
+fi

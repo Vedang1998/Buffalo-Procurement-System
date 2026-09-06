@@ -121,6 +121,15 @@ EXPECTED_INITIAL_STATUS_COUNTS = {
     "AMBIGUOUS": 0,
     "EXCLUDED": 0,
 }
+EXPECTED_INITIAL_GATE_STATUSES = {
+    "CATALOG_SYNC": "PASS",
+    "SALES_BACKFILL": "FAIL",
+    "VENDOR_RULES": "FAIL",
+    "INVENTORY_HISTORY": "WARN",
+    "MAPPING_INTEGRITY": "WARN",
+    "OPEN_PO_RECONCILIATION": "WARN",
+    "PRICE_COVERAGE": "WARN",
+}
 EXPECTED_FINAL_STATUS_COUNTS = {
     "RESOLVED": 57429,
     "UNRESOLVED": 0,
@@ -906,7 +915,9 @@ def _inspect_migration_007_state(conn: Any) -> dict[str, Any]:
     with conn.cursor() as cur:
         cur.execute("SELECT current_schema()")
         target_schema = str(cur.fetchone()[0])
-        cur.execute("SELECT key,value FROM meta WHERE key LIKE 'migration:%'")
+        cur.execute(
+            "SELECT key,value FROM meta WHERE key LIKE 'migration:%' ORDER BY key"
+        )
         markers = {str(row[0]): str(row[1]) for row in cur.fetchall()}
         columns: dict[str, set[str]] = {}
         for table in TERMINAL_COLUMN_CONTRACT:
@@ -1007,6 +1018,7 @@ def _inspect_migration_007_state(conn: Any) -> dict[str, Any]:
         "classification": (
             "ABSENT" if absent else "COMPLETE" if complete else "PARTIAL_OR_DRIFTED"
         ),
+        "migration_markers": dict(sorted(markers.items())),
         "pre_007_markers_present": all(
             markers.get(marker) == "applied" for marker in REQUIRED_PRE_007_MARKERS
         ),
@@ -1018,6 +1030,11 @@ def _inspect_migration_007_state(conn: Any) -> dict[str, Any]:
         "required_functions": len(TERMINAL_FUNCTIONS & functions),
         "required_views": len(TERMINAL_VIEWS & views),
         "authority_table_present": authority_table,
+        "unique_terminal_columns_present": unique_columns_present,
+        "unique_terminal_objects_present": unique_objects_present,
+        "product_id_nullable": (
+            str(product_id[0]) == "YES" if product_id is not None else None
+        ),
         "semantic_schema_sha256": semantic["sha256"],
         "semantic_schema_matches": semantic_matches,
         "pre_007_semantic_schema_matches": pre_007_semantic_matches,
@@ -1554,6 +1571,173 @@ def classify_state(
     raise CorrectiveValidationError("current terminal source lifecycle is invalid")
 
 
+def collect_state_a_preflight_evidence(
+    conn: Any,
+    prepared: PreparedExecution,
+    classification_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Re-attest exact State A in one read-only, repeatable-read snapshot."""
+
+    manifest = classification_evidence.get("manifest") or {}
+    classified_migration = classification_evidence.get("migration_007") or {}
+    if (
+        manifest.get("mode") != "DRY_RUN"
+        or manifest.get("transaction_read_only") != "on"
+        or manifest.get("txid_before") is not None
+        or manifest.get("txid_after") is not None
+        or classified_migration.get("classification") != "ABSENT"
+    ):
+        raise CorrectiveValidationError(
+            "State A classification did not retain exact read-only evidence"
+        )
+
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+            )
+            cur.execute(
+                """SELECT current_setting('transaction_read_only'),
+                          current_setting('transaction_isolation'),
+                          txid_current_if_assigned()"""
+            )
+            transaction_read_only, transaction_isolation, xid_before = cur.fetchone()
+        if str(transaction_read_only) != "on":
+            raise CorrectiveValidationError("preflight transaction is not read-only")
+        if str(transaction_isolation).lower() != "repeatable read":
+            raise CorrectiveValidationError(
+                "preflight transaction is not repeatable read"
+            )
+        if xid_before is not None:
+            raise CorrectiveValidationError("preflight transaction began with an XID")
+
+        fingerprints_before = protected_state_fingerprints(conn)
+        migration = _inspect_migration_007_state(conn)
+        _require_manifest_predecessor_locked(
+            conn, prepared, "A_FROZEN_PRODUCTION_BASELINE"
+        )
+        inventory = _basic_inventory(conn)
+        artifacts = _decision_artifact_counts(conn, prepared.original_manifest)
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT gate_name,scope_type,scope_id,status,severity,blocks_po,
+                          message,evidence_json,checked_at::text
+                   FROM readiness_gates
+                   ORDER BY gate_name,scope_type,scope_id"""
+            )
+            readiness_rows = [
+                {
+                    "gate_name": str(row[0]),
+                    "scope_type": str(row[1]),
+                    "scope_id": str(row[2]),
+                    "status": str(row[3]),
+                    "severity": str(row[4]),
+                    "blocks_po": bool(row[5]),
+                    "message": str(row[6]) if row[6] is not None else None,
+                    "evidence": row[7] if isinstance(row[7], dict) else {},
+                    "checked_at": str(row[8]),
+                }
+                for row in cur.fetchall()
+            ]
+            cur.execute(
+                """SELECT COUNT(*)::int FROM pg_namespace
+                   WHERE nspname LIKE 'phase5\\_ui\\_%' ESCAPE '\\'"""
+            )
+            residual_phase5_schemas = int(cur.fetchone()[0])
+            cur.execute("SELECT COUNT(*)::int FROM purchase_orders")
+            purchase_orders = int(cur.fetchone()[0])
+            cur.execute("SELECT COUNT(*)::int FROM purchase_order_lines")
+            purchase_order_lines = int(cur.fetchone()[0])
+
+        fingerprints_after = protected_state_fingerprints(conn)
+        with conn.cursor() as cur:
+            cur.execute("SELECT txid_current_if_assigned()")
+            xid_after = cur.fetchone()[0]
+
+        if xid_after is not None:
+            raise CorrectiveValidationError("preflight transaction assigned an XID")
+        if migration["classification"] != "ABSENT":
+            raise CorrectiveValidationError("preflight migration 007 state is not absent")
+        if migration["migration_markers"] != EXPECTED_PRE_007_MARKERS:
+            raise CorrectiveValidationError("preflight migration marker dictionary drifted")
+        if (
+            migration["migration_007_marker_present"]
+            or migration["unique_terminal_columns_present"]
+            or migration["unique_terminal_objects_present"]
+            or migration["authority_table_present"]
+            or migration["product_id_nullable"] is not False
+            or migration["semantic_schema_sha256"]
+            != EXPECTED_PRE_007_SCHEMA_SHA256
+            or not migration["pre_007_semantic_schema_matches"]
+        ):
+            raise CorrectiveValidationError("preflight PRE-007 schema controls drifted")
+        if not (
+            fingerprints_before
+            == fingerprints_after
+            == manifest.get("protected_fingerprints")
+            == FROZEN_PROTECTED_FINGERPRINTS
+        ):
+            raise CorrectiveValidationError(
+                "preflight protected fingerprints are not exact and stable"
+            )
+
+        gate_statuses = {
+            row["gate_name"]: row["status"]
+            for row in readiness_rows
+            if row["scope_type"] == "GLOBAL" and row["scope_id"] == ""
+        }
+        if len(readiness_rows) != 7 or len(gate_statuses) != 7:
+            raise CorrectiveValidationError("preflight readiness gate set is not exact")
+        if gate_statuses != EXPECTED_INITIAL_GATE_STATUSES:
+            raise CorrectiveValidationError("preflight readiness statuses drifted")
+        if (
+            inventory["variants"] != 2049
+            or inventory["decision_ledger_rows"] != 0
+            or inventory["exclusion_rows"] != 0
+            or inventory["active_exclusions"] != 0
+            or inventory["source_facts"] != 59083
+            or inventory["sales_daily_rows"] != 55966
+            or inventory["raw_status_counts"] != EXPECTED_INITIAL_STATUS_COUNTS
+            or inventory["sales_gate_status"] != "FAIL"
+            or not _initial_sales_blocker_present(inventory)
+        ):
+            raise CorrectiveValidationError("preflight State A counts drifted")
+        if artifacts != {
+            "historical_sales_review_decisions": 0,
+            "effective_manifest_decisions": 0,
+            "active_historical_sales_exclusions": 0,
+            "sales_backfill_review_alias_rows": 0,
+            "manifest_old_id_families": 17,
+            "compatible_existing_alias_families": 0,
+            "decision_change_log_rows": 0,
+        }:
+            raise CorrectiveValidationError("preflight State A artifacts drifted")
+        if residual_phase5_schemas != 0:
+            raise CorrectiveValidationError("residual Phase 5 fixture schemas are present")
+        if purchase_orders != 0 or purchase_order_lines != 0:
+            raise CorrectiveValidationError("preflight PO tables are not empty")
+
+    return {
+        "transaction": {
+            "read_only": True,
+            "isolation": "repeatable read",
+            "xid_before": None,
+            "xid_after": None,
+        },
+        "counts": inventory,
+        "decision_artifacts": artifacts,
+        "readiness_gate_statuses": gate_statuses,
+        "readiness_gates": readiness_rows,
+        "protected_fingerprints_before": fingerprints_before,
+        "protected_fingerprints_after": fingerprints_after,
+        "migration_007": migration,
+        "expected_pre_007_semantic_schema_sha256": EXPECTED_PRE_007_SCHEMA_SHA256,
+        "residual_phase5_ui_schemas": residual_phase5_schemas,
+        "purchase_orders": purchase_orders,
+        "purchase_order_lines": purchase_order_lines,
+    }
+
+
 def apply_original_manifest_stage(
     conn: Any, prepared: PreparedExecution, *, actor: str
 ) -> dict[str, Any]:
@@ -1760,6 +1944,54 @@ def execute(
     )
     _clear_libpq_environment()
 
+    if args.preflight_only:
+        with verified_connection(prepared.database_url) as (conn, database_identity):
+            state, classification_evidence = classify_state(conn, prepared)
+            if state != "A_FROZEN_PRODUCTION_BASELINE":
+                raise CorrectiveValidationError(
+                    "published-production preflight requires exact frozen State A"
+                )
+            preflight = collect_state_a_preflight_evidence(
+                conn, prepared, classification_evidence
+            )
+        return {
+            "result": "PHASE4_PUBLISHED_PRODUCTION_PREFLIGHT",
+            "mode": "READ_ONLY",
+            "execution_git_sha": prepared.execution.git_sha,
+            "execution_tree_sha": prepared.execution.tree_sha,
+            "database_identity": database_identity,
+            "pre_database_checks": {
+                "replit_deployment": True,
+                "database_url_present": True,
+                "review_token_presence": {
+                    "RECONCILIATION_REVIEW_TOKEN": True,
+                    "PHASE4_REVIEW_TOKEN_INPUT": True,
+                },
+                "constant_time_authorization_passed": True,
+                "git_identity": {
+                    "origin": CANONICAL_ORIGIN,
+                    "head": prepared.execution.git_sha,
+                    "tree": prepared.execution.tree_sha,
+                    "clean": True,
+                },
+                "authority_artifacts": {
+                    "original_manifest_sha256": prepared.original_manifest.sha256,
+                    "terminal_manifest_sha256": prepared.terminal_artifact.sha256,
+                    "terminal_embeds_original_manifest": True,
+                },
+            },
+            "state": state,
+            "classification_evidence": classification_evidence,
+            "preflight_evidence": preflight,
+            "mutation_state_machine_entered": False,
+            "production_actions": {
+                "ddl": 0,
+                "dml": 0,
+                "rebuild": 0,
+                "readiness_writes": 0,
+            },
+        }
+
     stages: list[dict[str, Any]] = []
     seen_states: set[str] = set()
     while True:
@@ -1817,12 +2049,18 @@ def execute(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Correct published-production Phase 4 historical identity state"
+        description="Correct published-production Phase 4 historical identity state",
+        allow_abbrev=False,
     )
     parser.add_argument("--expected-execution-git-sha", required=True)
     parser.add_argument("--expected-execution-tree-sha", required=True)
     parser.add_argument(
         "--actor", default="phase4-published-production-corrective-executor"
+    )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="attest exact frozen production State A without DDL or DML",
     )
     return parser
 
