@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-05T23:24:59Z (UTC)
+**Updated:** 2026-09-06T02:19:12Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,38 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### G8 PR CI timeout remediation — IMPLEMENTED / FRESH EXACT-HEAD CI REQUIRED
+
+- Corrective published-production reconciliation PR
+  [#20](https://github.com/Vedang1998/Buffalo-Procurement-System/pull/20)
+  was opened from `codex/phase4-published-production-reconciliation` at the
+  independently approved head
+  `15129704817cc48c1abc5d267f4dc4b45f3cc9d3`, tree
+  `dee3f4d3257a637360e3630f737dd72a9e553573`, against exact `main`
+  `631bd95e2680b1fcdba80a39f52669d83c8e93ac`.
+- Exact-head pull-request CI run `34004231407` was **completed / cancelled**
+  on both attempts because the workflow's fixed 10-minute job timeout was
+  insufficient for the expanded deterministic suite. Attempt 1 nevertheless
+  completed the authoritative runner and emitted **385/385 PASS**, zero
+  failures, errors, skips, expected failures, or unexpected successes, and
+  `OK` in 583.503 seconds immediately before GitHub cancelled the overall job.
+  Attempt 2 reached the same job timeout without reporting a test failure.
+  The formal GitHub CI gate therefore remains **UNSATISFIED**; the cancelled
+  run is not accepted as passing CI.
+- The only workflow change raises `timeout-minutes` from **10** to **20** to
+  accommodate normal hosted-runner variance. The suite, job structure,
+  dependency lock, startup hardening, and all material corrective runtime,
+  database, bootstrap, migration, fixture, identity, readiness, Shopify, and
+  PO implementation files remain byte-identical to the independently approved
+  head above.
+- Production execution remains unauthorized. Production database
+  connections/writes: **0 / 0**. Shopify calls/writes: **0 / 0**. PO actions:
+  **0**. Published-production corrective Phase 4 remains **OPEN**; Phase 6
+  remains owner-authorized but **PAUSED**.
+- **Exact next action:** fresh pull-request CI on the workflow/docs-only head,
+  followed by ChatGPT verification of the narrow delta, exact-head CI, and
+  byte-identical material implementation before any merge authorization.
 
 ### G7 semantic-signature provenance remediation — IMPLEMENTED / AWAITING INDEPENDENT RE-REVIEW
 
@@ -1187,10 +1219,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Authorization boundary / next action
 
 Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
-Phase 4 reconciliation is **IMPLEMENTED / AWAITING INDEPENDENT REVIEW**; no PR,
-Scheduled Deployment, or production connection is authorized yet. Phase 6 is
-owner-authorized but **PAUSED** on this prerequisite. The exact next action is
-ChatGPT re-review and independent adversarial re-review. Vendor Rules,
-inventory snapshots, price books, forecasting, procurement, PO
+Phase 4 reconciliation is **IMPLEMENTED / PR #20 OPEN / FRESH CI REQUIRED**;
+no merge, Scheduled Deployment, or production connection is authorized yet.
+Phase 6 is owner-authorized but **PAUSED** on this prerequisite. The exact next
+action is fresh exact-head PR CI followed by ChatGPT verification of the
+workflow-only delta and material-file identity before merge authorization.
+Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
 generation/release, Shopify mutation, and other downstream implementation
 remain out of scope.
