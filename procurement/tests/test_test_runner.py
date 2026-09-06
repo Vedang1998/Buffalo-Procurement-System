@@ -7,6 +7,7 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -206,6 +207,31 @@ class TestDatabaseUrlSafety(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "TEST_DATABASE_URL is required"):
                 runner._validated_test_database_target()
+
+    def test_libpq_multi_host_urls_are_rejected_before_connection(self):
+        unsafe_urls = (
+            "postgresql://test:test@127.0.0.1:5432,production.example:5432/procurement_test",
+            "postgresql://test:test@[::1]:5432,production.example:5432/procurement_test",
+            "postgresql://test:test@127.0.0.1%2cproduction.example/procurement_test",
+        )
+        for url in unsafe_urls:
+            with self.subTest(url=url), self.assertRaisesRegex(ValueError, "one.*host"):
+                runner._validated_test_database_target(url)
+
+    def test_integration_modules_cannot_use_runtime_database_url_as_fixture_authority(self):
+        tests_dir = Path(__file__).resolve().parent
+        unsafe_patterns = (
+            re.compile(r"skipUnless\s*\(\s*os\.getenv\(\s*['\"]DATABASE_URL"),
+            re.compile(
+                r"psycopg\.connect\s*\(\s*os\.(?:environ\s*\[|getenv\()\s*['\"]DATABASE_URL"
+            ),
+        )
+        offenders: list[str] = []
+        for path in sorted(tests_dir.glob("test_*.py")):
+            source = path.read_text(encoding="utf-8")
+            if any(pattern.search(source) for pattern in unsafe_patterns):
+                offenders.append(path.name)
+        self.assertEqual(offenders, [])
 
 
 class TestConnectedDatabaseSafety(unittest.TestCase):

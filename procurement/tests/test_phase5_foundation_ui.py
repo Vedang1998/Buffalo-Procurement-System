@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-import importlib.util
 import inspect
 import json
 import os
 from pathlib import Path
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 from urllib.parse import urljoin
@@ -17,18 +15,12 @@ import uuid
 from fastapi.testclient import TestClient
 
 from procurement_os import api, health
+from postgres_test_support import (
+    validated_test_connection as _validated_phase5_test_database_connection,
+)
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
-RUNNER_PATH = Path(__file__).resolve().parents[1] / "tools" / "run_tests.py"
-RUNNER_SPEC = importlib.util.spec_from_file_location(
-    "phase5_test_database_runner_contract", RUNNER_PATH
-)
-assert RUNNER_SPEC is not None and RUNNER_SPEC.loader is not None
-test_runner = importlib.util.module_from_spec(RUNNER_SPEC)
-sys.modules[RUNNER_SPEC.name] = test_runner
-RUNNER_SPEC.loader.exec_module(test_runner)
-
 MIGRATIONS = (
     "schema_postgres.sql",
     "001_v1_3_catalog_sales.sql",
@@ -39,36 +31,6 @@ MIGRATIONS = (
     "006_phase4_sales_backfill.sql",
     "007_phase4_terminal_disposition.sql",
 )
-
-
-def _validated_phase5_test_database_connection():
-    """Connect only after the authoritative test runner validates TEST_DATABASE_URL."""
-    target = test_runner._validated_test_database_target()
-    test_runner._clear_libpq_environment()
-
-    import psycopg
-
-    connection = psycopg.connect(target.url, connect_timeout=5)
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """SELECT current_database(), current_setting('server_version'),
-                          current_setting('server_version_num')::integer"""
-            )
-            row = cursor.fetchone()
-        if row is None:
-            raise ValueError("PostgreSQL identity query returned no row")
-        database_info = test_runner._validate_database_facts(
-            target,
-            database=row[0],
-            server_version=row[1],
-            server_version_num=row[2],
-        )
-    except BaseException:
-        connection.close()
-        raise
-    return connection, target, database_info
-
 
 NAV_LABELS = (
     "System Readiness",

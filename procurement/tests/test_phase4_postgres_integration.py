@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-import os
 from pathlib import Path
 import sys
 import unittest
@@ -38,6 +37,7 @@ from procurement_os.sales import (
     load_identity_index,
     search_historical_sales_catalog,
 )
+from postgres_test_support import validated_test_connection
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
@@ -53,13 +53,13 @@ MIGRATIONS = (
 )
 
 
-@unittest.skipUnless(os.getenv("DATABASE_URL"), "PostgreSQL integration requires DATABASE_URL")
 class Phase4PostgresIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
-        import psycopg
         from psycopg import sql
 
-        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
+        self.conn, self.test_target, self.test_database_info = (
+            validated_test_connection()
+        )
         self.schema = f"phase4_test_{uuid.uuid4().hex}"
         self.conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))
         self.conn.execute(

@@ -44,7 +44,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_shopify_auth.py": 3,
     "test_shopify_queries.py": 1,
     "test_storage.py": 5,
-    "test_test_runner.py": 18,
+    "test_test_runner.py": 20,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())
 
@@ -120,8 +120,21 @@ def _validated_test_database_target(value: str | None = None) -> TestDatabaseTar
         or ";" in value
     ):
         raise ValueError("TEST_DATABASE_URL must not contain parameters, a query, or a fragment")
+    # libpq accepts comma-separated multi-host authorities.  urlparse exposes
+    # only the first host through ``hostname``, which could otherwise make a
+    # loopback-first URL fall through to a remote production host.  Reject the
+    # multi-host grammar (including percent-encoded commas) before connecting.
+    decoded_authority = unquote(parsed.netloc)
+    if "," in decoded_authority or decoded_authority.count("@") > 1:
+        raise ValueError("TEST_DATABASE_URL must name exactly one loopback host")
     if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("TEST_DATABASE_URL must target loopback disposable infrastructure")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("TEST_DATABASE_URL port must be a single valid number") from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("TEST_DATABASE_URL port must be a single valid number")
     if not parsed.path.startswith("/") or parsed.path.count("/") != 1:
         raise ValueError("TEST_DATABASE_URL must name exactly one database")
 
