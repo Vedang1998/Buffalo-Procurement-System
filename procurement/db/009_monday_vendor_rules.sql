@@ -51,6 +51,26 @@ CREATE TABLE IF NOT EXISTS vendor_rule_revisions (
     UNIQUE (vendor_id, rules_version)
 );
 
+ALTER TABLE vendor_operating_rules
+    DROP CONSTRAINT IF EXISTS ck_vendor_rule_case_minimum_whole;
+ALTER TABLE vendor_operating_rules
+    ADD CONSTRAINT ck_vendor_rule_case_minimum_whole CHECK (
+        minimum_type <> 'CASE' OR minimum_value = trunc(minimum_value)
+    );
+
+CREATE OR REPLACE FUNCTION prevent_vendor_rule_revision_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'vendor rule revisions are append-only';
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_vendor_rule_revisions_append_only
+    ON vendor_rule_revisions;
+CREATE TRIGGER trg_vendor_rule_revisions_append_only
+BEFORE UPDATE OR DELETE ON vendor_rule_revisions
+FOR EACH ROW EXECUTE FUNCTION prevent_vendor_rule_revision_mutation();
+
 CREATE INDEX IF NOT EXISTS idx_vendor_rule_revisions_vendor
     ON vendor_rule_revisions(vendor_id, rules_version DESC);
 

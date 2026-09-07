@@ -78,10 +78,20 @@ class VendorRulesPureTests(unittest.TestCase):
             complete_rules(minimum_type="NONE", minimum_value="1"),
             complete_rules(loose_order_allowed=True, loose_unit_fee=None),
             complete_rules(reliability_pct="1.1"),
+            complete_rules(order_cycle_days=2.9),
+            complete_rules(lead_time_days=True),
+            complete_rules(minimum_type="CASE", minimum_value="10.5"),
         )
         for rules in invalid:
             with self.subTest(rules=rules), self.assertRaises(VendorRuleValidationError):
                 validate_vendor_rules_input(rules)
+
+    def test_whole_day_and_case_minimum_types_are_exact(self):
+        rules = validate_vendor_rules_input(
+            complete_rules(order_cycle_days="7.0", lead_time_days="2.00")
+        )
+        self.assertEqual(rules.order_cycle_days, 7)
+        self.assertEqual(rules.lead_time_days, 2)
 
 
 class ConnectionContext:
@@ -183,6 +193,11 @@ class VendorRulesPostgresTests(unittest.TestCase):
                 complete_rules(minimum_type="NONE", minimum_value="1"),
                 expected_version=2,
             )
+        with self.assertRaises(Exception):
+            self.conn.execute(
+                "UPDATE vendor_operating_rules SET minimum_type='CASE',minimum_value=10.5"
+            )
+        self.conn.rollback()
 
     def test_loose_fee_zero_is_valid_and_missing_allowed_fee_is_not(self):
         vendor_id = self.add_vendor("Loose Distributor")
@@ -221,6 +236,20 @@ class VendorRulesPostgresTests(unittest.TestCase):
             ).fetchone()[0],
             3,
         )
+
+    def test_vendor_rule_revisions_are_database_append_only(self):
+        vendor_id = self.add_vendor("Durable Revision Distributor")
+        self.save(vendor_id)
+        self.conn.commit()
+        for statement in (
+            "UPDATE vendor_rule_revisions SET change_reason='rewritten'",
+            "DELETE FROM vendor_rule_revisions",
+        ):
+            with self.subTest(statement=statement), self.assertRaisesRegex(
+                Exception, "append-only"
+            ):
+                self.conn.execute(statement)
+            self.conn.rollback()
 
     def test_identical_replay_writes_no_revision_or_change_log(self):
         vendor_id = self.add_vendor("Idempotent Distributor")

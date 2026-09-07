@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Overnight Monday MVP Progress
 
-Updated: 2026-09-06 23:46 EDT
+Updated: 2026-09-07 00:11 EDT
 
 This is an operational engineering log for the authorized offline emergency workstream. It does not change canonical phase authority or authorize production activity.
 
@@ -50,6 +50,18 @@ Code presence is not acceptance. Packets 0–3 remain under audit until their fo
 
 Feature work freezes at 06:30 America/New_York for integration, full validation, gap reporting, and handoff. If a packet cannot be completed coherently before that boundary, it will remain explicitly deferred rather than being left half-implemented.
 
+## Packet 0–3 remediation checkpoint
+
+- The first exact-current focused run discovered 81 tests: 77 passed and four Packet 3 trusted-incoming assertions failed. The cause was a split clock: reconciliation wrote database `now()` but evaluated the caller's frozen `as_of` timestamp.
+- Reconciliation now uses one database-owned evidence timestamp for both the durable ledger write and trust evaluation; caller `as_of` is only a narrow clock-consistency assertion. SQL requires the evidence to follow FINAL/import events and to be near the database clock. Trusted open incoming requires nonblank JSON-string source and reference evidence in both Python and the database view.
+- DRAFT PO replay now rejects a changed expected receipt and rejects timezone-naive receipt timestamps.
+- Inventory readiness now blocks on stale snapshots and unknown incoming quantities. Capture timestamps must equal the `America/New_York` business date, and default status evaluation uses that store timezone rather than the host UTC date.
+- Completed inventory run evidence and inventory run rows are database-protected; vendor-rule revisions are append-only.
+- Vendor cycle/lead times reject booleans and fractional days; CASE minimums require whole case counts in both service validation and the database.
+- The affected focused suite then passed `85 / 85`, with failures/errors/skips/expected failures/unexpected successes all `0`.
+- Exact registered branch floor after these added tests: `452`.
+- Two independent read-only re-audits returned `APPROVE` with no remaining P0/P1 blocker in this bounded remediation. The full authoritative suite has not yet run on this candidate.
+
 ## Review and release status
 
 - Emergency candidate review: pending.
@@ -57,4 +69,3 @@ Feature work freezes at 06:30 America/New_York for integration, full validation,
 - Published-production Phase 4 remains OPEN.
 - Phase 6 remains OWNER AUTHORIZED but PAUSED.
 - Deployment, production connection, production mutation, Shopify access, and real PO creation/release remain unauthorized.
-

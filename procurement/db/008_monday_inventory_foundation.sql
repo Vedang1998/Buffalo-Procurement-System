@@ -55,6 +55,70 @@ CREATE TABLE IF NOT EXISTS inventory_snapshot_run_rows (
     PRIMARY KEY (inventory_snapshot_run_id, variant_id, location_gid)
 );
 
+CREATE OR REPLACE FUNCTION guard_inventory_snapshot_run_evidence()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status <> 'RUNNING'
+           OR NEW.completed_at IS NOT NULL
+           OR NEW.eligible_rows <> 0
+           OR NEW.archival_rows <> 0
+           OR NEW.invalid_rows <> 0
+           OR NEW.incomplete_rows <> 0 THEN
+            RAISE EXCEPTION 'inventory snapshot runs must start in pristine RUNNING state';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'inventory snapshot run evidence is durable and cannot be deleted';
+    END IF;
+    IF OLD.status <> 'RUNNING'
+       OR NEW.status NOT IN ('COMPLETED','FAILED')
+       OR NEW.inventory_snapshot_run_id IS DISTINCT FROM OLD.inventory_snapshot_run_id
+       OR NEW.business_date IS DISTINCT FROM OLD.business_date
+       OR NEW.started_at IS DISTINCT FROM OLD.started_at
+       OR NEW.source IS DISTINCT FROM OLD.source
+       OR NEW.source_hash IS DISTINCT FROM OLD.source_hash
+       OR NEW.rows_received IS DISTINCT FROM OLD.rows_received THEN
+        RAISE EXCEPTION 'completed inventory snapshot run evidence is immutable';
+    END IF;
+    IF NEW.completed_at IS NULL THEN
+        RAISE EXCEPTION 'completed or failed inventory snapshot run requires completed_at';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_guard_inventory_snapshot_run_evidence
+    ON inventory_snapshot_runs;
+CREATE TRIGGER trg_guard_inventory_snapshot_run_evidence
+BEFORE INSERT OR UPDATE OR DELETE ON inventory_snapshot_runs
+FOR EACH ROW EXECUTE FUNCTION guard_inventory_snapshot_run_evidence();
+
+CREATE OR REPLACE FUNCTION guard_inventory_snapshot_run_row_evidence()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    parent_status TEXT;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'inventory snapshot run-row evidence is append-only';
+    END IF;
+    SELECT status INTO parent_status
+      FROM inventory_snapshot_runs
+     WHERE inventory_snapshot_run_id=NEW.inventory_snapshot_run_id;
+    IF parent_status IS DISTINCT FROM 'RUNNING' THEN
+        RAISE EXCEPTION 'inventory snapshot rows require a RUNNING parent';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS trg_guard_inventory_snapshot_run_row_evidence
+    ON inventory_snapshot_run_rows;
+CREATE TRIGGER trg_guard_inventory_snapshot_run_row_evidence
+BEFORE INSERT OR UPDATE OR DELETE ON inventory_snapshot_run_rows
+FOR EACH ROW EXECUTE FUNCTION guard_inventory_snapshot_run_row_evidence();
+
 ALTER TABLE daily_inventory_snapshots
     ADD COLUMN IF NOT EXISTS inventory_snapshot_run_id UUID
         REFERENCES inventory_snapshot_runs(inventory_snapshot_run_id)

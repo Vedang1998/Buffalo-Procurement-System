@@ -8,6 +8,7 @@ import inspect
 from pathlib import Path
 import unittest
 import uuid
+from zoneinfo import ZoneInfo
 
 from fastapi.routing import APIRoute
 
@@ -18,6 +19,7 @@ from procurement_os.inventory import (
     capture_daily_inventory,
     evaluate_inventory_history,
     inventory_source_hash,
+    inventory_business_date,
     latest_inventory_snapshot_status,
     normalize_inventory_levels,
 )
@@ -64,6 +66,29 @@ class InventoryPureTests(unittest.TestCase):
                 normalize_inventory_levels(
                     [{"variant_id": "1", "available_quantity": value}]
                 )
+
+    def test_capture_timestamp_must_correspond_to_business_date(self):
+        for captured_at in (
+            datetime(2025, 9, 7, tzinfo=timezone.utc),
+            datetime(2027, 9, 7, tzinfo=timezone.utc),
+            datetime(2026, 9, 7),
+        ):
+            with self.subTest(captured_at=captured_at), self.assertRaises(
+                InventoryValidationError
+            ):
+                capture_daily_inventory(
+                    object(),
+                    business_date=date(2026, 9, 7),
+                    rows=[{"variant_id": "1", "available_quantity": 1}],
+                    source="OFFLINE_TEST",
+                    captured_at=captured_at,
+                )
+        self.assertEqual(
+            inventory_business_date(
+                datetime(2026, 9, 7, 3, 30, tzinfo=timezone.utc)
+            ),
+            date(2026, 9, 6),
+        )
 
     def test_cli_and_status_route_have_no_shopify_or_mutating_get_path(self):
         service_source = inspect.getsource(
@@ -158,12 +183,19 @@ class InventoryPostgresTests(unittest.TestCase):
         }
 
     def capture(self, rows, *, day=None, at_hour=2, source="OFFLINE_TEST", **kwargs):
+        target_day = day or self.BUSINESS_DATE
         return capture_daily_inventory(
             self.conn,
-            business_date=day or self.BUSINESS_DATE,
+            business_date=target_day,
             rows=rows,
             source=source,
-            captured_at=datetime(2026, 9, 7, at_hour, tzinfo=timezone.utc),
+            captured_at=datetime(
+                target_day.year,
+                target_day.month,
+                target_day.day,
+                at_hour,
+                tzinfo=ZoneInfo("America/New_York"),
+            ),
             **kwargs,
         )
 
@@ -310,7 +342,8 @@ class InventoryPostgresTests(unittest.TestCase):
             day=warning_day,
             at_hour=3,
         )
-        self.assertEqual(warned["readiness"]["status"], "WARN")
+        self.assertEqual(warned["readiness"]["status"], "FAIL")
+        self.assertTrue(warned["readiness"]["blocks_po"])
         self.assertIn("unknown incoming", warned["readiness"]["message"])
 
         failure_day = warning_day + timedelta(days=1)
@@ -323,7 +356,7 @@ class InventoryPostgresTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(gate, ("FAIL", True))
 
-    def test_stale_snapshot_warns_and_status_readback_is_select_only(self):
+    def test_stale_snapshot_blocks_and_status_readback_is_select_only(self):
         self.insert_current("1")
         self.conn.commit()
         self.capture([self.row("1", 1)])
@@ -333,7 +366,8 @@ class InventoryPostgresTests(unittest.TestCase):
             self.conn, as_of_date=self.BUSINESS_DATE + timedelta(days=3)
         )
         after_xid = self.conn.execute("SELECT txid_current_if_assigned()").fetchone()[0]
-        self.assertEqual(status["status"], "WARN")
+        self.assertEqual(status["status"], "FAIL")
+        self.assertTrue(status["evidence"]["age_days"] > 1)
         self.assertIn("3 day", status["message"])
         self.assertIsNone(before_xid)
         self.assertIsNone(after_xid)
@@ -378,6 +412,24 @@ class InventoryPostgresTests(unittest.TestCase):
                        ) VALUES (%s,'COMPLETED','fixture',%s)""",
                     (self.BUSINESS_DATE, "not-a-sha"),
                 )
+
+    def test_completed_run_and_rows_are_durable_evidence(self):
+        self.insert_current("1")
+        self.conn.commit()
+        self.capture([self.row("1", 1)])
+        self.conn.commit()
+        attempts = (
+            "UPDATE inventory_snapshot_runs SET source='rewritten'",
+            "DELETE FROM inventory_snapshot_runs",
+            "UPDATE inventory_snapshot_run_rows SET available_quantity=99",
+            "DELETE FROM inventory_snapshot_run_rows",
+        )
+        for statement in attempts:
+            with self.subTest(statement=statement), self.assertRaisesRegex(
+                Exception, "immutable|durable|append-only"
+            ):
+                self.conn.execute(statement)
+            self.conn.rollback()
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_economics.py": 4,
     "test_historical_sales_review_api.py": 17,
     "test_identity_investigation.py": 32,
-    "test_inventory.py": 13,
+    "test_inventory.py": 15,
     "test_matching.py": 3,
     "test_phase4_historical_sales.py": 33,
     "test_phase4_identity_manifest.py": 16,
@@ -47,7 +47,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_shopify_queries.py": 1,
     "test_storage.py": 5,
     "test_test_runner.py": 20,
-    "test_vendor_rules.py": 13,
+    "test_vendor_rules.py": 15,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())
 

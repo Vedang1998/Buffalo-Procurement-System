@@ -10,6 +10,7 @@ from typing import Any
 
 
 PO_LEDGER_LOCK = 5_920_230_301
+RECONCILIATION_CLOCK_TOLERANCE_SECONDS = 5
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 FINALIZATION_APPLICABLE_GATES = frozenset(
     {
@@ -85,6 +86,10 @@ def _trusted_incoming_state(
         and bool(str(reconciled_by).strip())
         and isinstance(evidence, dict)
         and bool(evidence)
+        and isinstance(evidence.get("source"), str)
+        and bool(evidence["source"].strip())
+        and isinstance(evidence.get("reference"), str)
+        and bool(evidence["reference"].strip())
     )
 
 
@@ -153,6 +158,8 @@ def ensure_draft_po(
     expected_receipt_at: datetime | None = None,
 ) -> dict[str, Any]:
     fingerprint = _fingerprint(input_fingerprint)
+    if expected_receipt_at is not None:
+        expected_receipt_at = _validated_as_of(expected_receipt_at)
     with conn.transaction():
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         _transaction_lock(conn)
@@ -173,7 +180,8 @@ def ensure_draft_po(
         if vendor is None or not vendor[0]:
             raise ProcurementLedgerError("draft PO requires an active vendor")
         existing = conn.execute(
-            """SELECT po_id,po_status,input_fingerprint,po_revision
+            """SELECT po_id,po_status,input_fingerprint,po_revision,
+                      expected_receipt_at
                FROM purchase_orders WHERE run_id=%s AND vendor_id=%s FOR UPDATE""",
             (run_id, vendor_id),
         ).fetchone()
@@ -189,6 +197,10 @@ def ensure_draft_po(
             if existing[1] != "DRAFT" or existing[2] != fingerprint:
                 raise ProcurementLedgerError(
                     "existing vendor PO is not the identical mutable DRAFT"
+                )
+            if existing[4] != expected_receipt_at:
+                raise ProcurementLedgerError(
+                    "existing vendor DRAFT has a different expected receipt"
                 )
             return {
                 "po_id": str(existing[0]),
@@ -725,6 +737,7 @@ def record_po_reconciliation(
 ) -> dict[str, Any]:
     received = _nonnegative(received_units, field="received_units")
     cancelled = _nonnegative(cancelled_units, field="cancelled_units")
+    requested_at = _validated_as_of(as_of) if as_of is not None else None
     status = str(reconciliation_status).strip().upper()
     if not isinstance(actor, str):
         raise ProcurementLedgerError("actor and direct reconciliation evidence are required")
@@ -733,9 +746,29 @@ def record_po_reconciliation(
         raise ProcurementLedgerError("unsupported reconciliation status")
     if not actor or not isinstance(evidence, dict) or not evidence:
         raise ProcurementLedgerError("actor and direct reconciliation evidence are required")
+    source = evidence.get("source")
+    if not isinstance(source, str) or not source.strip():
+        raise ProcurementLedgerError(
+            "direct reconciliation evidence requires a nonblank source"
+        )
+    if status == "OPEN":
+        reference = evidence.get("reference")
+        if not isinstance(reference, str) or not reference.strip():
+            raise ProcurementLedgerError(
+                "open incoming evidence requires a nonblank reference"
+            )
     with conn.transaction():
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         _transaction_lock(conn)
+        recorded_at = conn.execute("SELECT clock_timestamp()").fetchone()[0]
+        if (
+            requested_at is not None
+            and abs((requested_at - recorded_at).total_seconds())
+            > RECONCILIATION_CLOCK_TOLERANCE_SECONDS
+        ):
+            raise ProcurementLedgerError(
+                "reconciliation as_of must match the database recording clock"
+            )
         row = conn.execute(
             """SELECT l.ordered_units,l.received_units,l.cancelled_units,
                       l.variant_id,l.offer_id,p.vendor_id,p.run_id,p.po_id,
@@ -784,16 +817,26 @@ def record_po_reconciliation(
             """UPDATE purchase_order_lines SET
                    received_units=%s,cancelled_units=%s,line_status=%s,
                    reconciliation_status=%s,reconciliation_evidence=%s::jsonb,
-                   last_reconciled_at=now(),last_reconciled_by=%s
+                   last_reconciled_at=%s,last_reconciled_by=%s
                WHERE po_line_id=%s""",
-            (received, cancelled, line_status, status, json.dumps(evidence, sort_keys=True), actor, po_line_id),
+            (
+                received,
+                cancelled,
+                line_status,
+                status,
+                json.dumps(evidence, sort_keys=True),
+                recorded_at,
+                actor,
+                po_line_id,
+            ),
         )
-        evaluation = evaluate_open_po_reconciliation(conn, as_of=as_of)
+        evaluation = evaluate_open_po_reconciliation(conn, as_of=recorded_at)
         _persist_open_po_gates(conn, evaluation)
     return {
         "po_line_id": int(po_line_id),
         "line_status": line_status,
         "reconciliation_status": status,
         "open_units": open_units,
+        "recorded_at": recorded_at,
         "readiness": evaluation,
     }

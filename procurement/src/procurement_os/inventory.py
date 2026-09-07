@@ -8,9 +8,11 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 
 INVENTORY_CAPTURE_LOCK = 5_920_230_101
+BUFFALO_BUSINESS_TIMEZONE = ZoneInfo("America/New_York")
 QUANTITY_FIELDS = (
     "available_quantity",
     "incoming_quantity",
@@ -35,6 +37,13 @@ class InventoryLevel:
     committed_quantity: Decimal | None = None
     reserved_quantity: Decimal | None = None
     damaged_quantity: Decimal | None = None
+
+
+def inventory_business_date(at: datetime | None = None) -> date:
+    instant = at or datetime.now(timezone.utc)
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise InventoryValidationError("inventory business-date instant must be timezone-aware")
+    return instant.astimezone(BUFFALO_BUSINESS_TIMEZONE).date()
 
 
 def _quantity(value: Any, *, field: str) -> Decimal | None:
@@ -215,10 +224,10 @@ def evaluate_inventory_history(
         status = "FAIL"
         message = f"Inventory snapshot has {invalid_rows} invalid eligible row(s)."
     elif age_days > stale_after_days:
-        status = "WARN"
+        status = "FAIL"
         message = f"Latest owned inventory snapshot is {age_days} day(s) old."
     elif incomplete_rows:
-        status = "WARN"
+        status = "FAIL"
         message = (
             f"Inventory is current, but {incomplete_rows} row(s) have unknown incoming; "
             "unknown is not treated as zero."
@@ -280,8 +289,12 @@ def capture_daily_inventory(
     if not clean_source:
         raise InventoryValidationError("inventory source is required")
     captured_at = captured_at or datetime.now(timezone.utc)
-    if captured_at.tzinfo is None:
+    if captured_at.tzinfo is None or captured_at.utcoffset() is None:
         raise InventoryValidationError("captured_at must be timezone-aware")
+    if inventory_business_date(captured_at) != business_date:
+        raise InventoryValidationError(
+            "captured_at must correspond to the inventory business date"
+        )
     source_hash = inventory_source_hash(normalized, business_date=business_date)
 
     with conn.transaction():

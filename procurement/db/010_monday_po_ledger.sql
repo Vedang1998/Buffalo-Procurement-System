@@ -427,9 +427,19 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     old_parent_status TEXT;
     new_parent_status TEXT;
+    old_parent_finalized_at TIMESTAMPTZ;
+    old_parent_imported_at TIMESTAMPTZ;
 BEGIN
-    SELECT po_status INTO old_parent_status
-      FROM purchase_orders WHERE po_id=OLD.po_id;
+    SELECT p.po_status,p.finalized_at,
+           (
+               SELECT max(e.recorded_at)
+                 FROM po_operational_events e
+                WHERE e.po_id=p.po_id
+                  AND e.event_type='SHOPIFY_IMPORT_STATUS'
+                  AND e.new_status='IMPORTED'
+           )
+      INTO old_parent_status,old_parent_finalized_at,old_parent_imported_at
+      FROM purchase_orders p WHERE p.po_id=OLD.po_id;
     IF TG_OP <> 'DELETE' THEN
         SELECT po_status INTO new_parent_status
           FROM purchase_orders WHERE po_id=NEW.po_id;
@@ -485,7 +495,22 @@ BEGIN
                OR NEW.last_reconciled_by IS NULL
                OR btrim(NEW.last_reconciled_by)=''
                OR jsonb_typeof(NEW.reconciliation_evidence) <> 'object'
-               OR NEW.reconciliation_evidence='{}'::jsonb THEN
+               OR NEW.reconciliation_evidence='{}'::jsonb
+               OR jsonb_typeof(NEW.reconciliation_evidence->'source') <> 'string'
+               OR btrim(COALESCE(NEW.reconciliation_evidence->>'source',''))=''
+               OR (
+                   NEW.reconciliation_status='OPEN'
+                   AND (
+                       jsonb_typeof(NEW.reconciliation_evidence->'reference') <> 'string'
+                       OR btrim(COALESCE(NEW.reconciliation_evidence->>'reference',''))=''
+                   )
+               )
+               OR old_parent_finalized_at IS NULL
+               OR old_parent_imported_at IS NULL
+               OR NEW.last_reconciled_at < old_parent_finalized_at
+               OR NEW.last_reconciled_at < old_parent_imported_at
+               OR NEW.last_reconciled_at < clock_timestamp() - interval '5 minutes'
+               OR NEW.last_reconciled_at > clock_timestamp() + interval '5 seconds' THEN
                 RAISE EXCEPTION 'FINAL Procurement PO receipt change requires attributed direct evidence';
             END IF;
         END IF;
@@ -970,6 +995,10 @@ WHERE p.po_status='FINAL'
   AND btrim(l.last_reconciled_by) <> ''
   AND jsonb_typeof(l.reconciliation_evidence)='object'
   AND l.reconciliation_evidence <> '{}'::jsonb
+  AND btrim(COALESCE(l.reconciliation_evidence->>'source','')) <> ''
+  AND btrim(COALESCE(l.reconciliation_evidence->>'reference','')) <> ''
+  AND jsonb_typeof(l.reconciliation_evidence->'source')='string'
+  AND jsonb_typeof(l.reconciliation_evidence->'reference')='string'
 GROUP BY l.variant_id,p.vendor_id;
 
 INSERT INTO meta(key, value)

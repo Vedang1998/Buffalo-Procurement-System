@@ -98,6 +98,25 @@ def _days(value: Iterable[str], *, field: str) -> tuple[str, ...]:
     return tuple(day for day in WEEKDAYS if day in set(provided))
 
 
+def _whole_days(value: Any, *, field: str) -> int:
+    if isinstance(value, bool):
+        raise VendorRuleValidationError(f"{field} must be a whole number of days")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise VendorRuleValidationError(
+            f"{field} must be a whole number of days"
+        ) from exc
+    if (
+        not parsed.is_finite()
+        or parsed != parsed.to_integral_value()
+        or parsed > 2_147_483_647
+        or parsed < -2_147_483_648
+    ):
+        raise VendorRuleValidationError(f"{field} must be a whole number of days")
+    return int(parsed)
+
+
 def validate_vendor_rules_input(value: VendorRulesInput | dict[str, Any]) -> VendorRulesInput:
     raw = asdict(value) if isinstance(value, VendorRulesInput) else dict(value)
     cutoff = raw.get("order_cutoff_local")
@@ -115,11 +134,12 @@ def validate_vendor_rules_input(value: VendorRulesInput | dict[str, Any]) -> Ven
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise VendorRuleValidationError("timezone_name must be a valid IANA timezone") from exc
 
-    try:
-        order_cycle_days = int(raw.get("order_cycle_days"))
-        lead_time_days = int(raw.get("lead_time_days"))
-    except (TypeError, ValueError) as exc:
-        raise VendorRuleValidationError("order cycle and lead time must be whole days") from exc
+    order_cycle_days = _whole_days(
+        raw.get("order_cycle_days"), field="order_cycle_days"
+    )
+    lead_time_days = _whole_days(
+        raw.get("lead_time_days"), field="lead_time_days"
+    )
     if order_cycle_days < 1:
         raise VendorRuleValidationError("order_cycle_days must be at least one")
     if lead_time_days < 0:
@@ -151,6 +171,8 @@ def validate_vendor_rules_input(value: VendorRulesInput | dict[str, Any]) -> Ven
         raise VendorRuleValidationError(
             "CASE and DOLLAR minimums require a positive minimum_value"
         )
+    if minimum_type == "CASE" and minimum_value != minimum_value.to_integral_value():
+        raise VendorRuleValidationError("CASE minimum_value must be a whole case count")
 
     below_fee = _decimal(
         raw.get("below_minimum_fee"), field="below_minimum_fee", scale=2
@@ -400,6 +422,7 @@ def update_vendor_rules(
             )
         if current is not None and _business_payload(current) == desired_payload:
             evaluation = evaluate_vendor_rules(conn)
+            _persist_vendor_gates(conn, evaluation)
             return {
                 "vendor_id": str(vendor_id),
                 "vendor_name": vendor[0],

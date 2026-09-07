@@ -71,6 +71,19 @@ class ProcurementLedgerPureTests(unittest.TestCase):
                 evidence={"source": "fixture"},
                 actor=None,
             )
+        for evidence in ({}, {"source": ""}, {"source": "fixture"}):
+            with self.subTest(evidence=evidence), self.assertRaisesRegex(
+                ProcurementLedgerError, "evidence|reference"
+            ):
+                record_po_reconciliation(
+                    object(),
+                    po_line_id=1,
+                    received_units=0,
+                    cancelled_units=0,
+                    reconciliation_status="OPEN",
+                    evidence=evidence,
+                    actor="owner",
+                )
         with self.assertRaisesRegex(ProcurementLedgerError, "actor"):
             record_po_reconciliation(
                 object(),
@@ -314,7 +327,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                       expected_receipt_at=%s
                WHERE po_id=%s""",
             (
-                datetime(2026, 9, 7, 12, tzinfo=timezone.utc),
+                datetime(2026, 9, 7, 0, tzinfo=timezone.utc),
                 expected_receipt_at,
                 draft["po_id"],
             ),
@@ -325,7 +338,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             self.conn,
             po_id=draft["po_id"],
             actor="fixture-owner",
-            finalized_at=datetime(2026, 9, 7, 13, tzinfo=timezone.utc),
+            finalized_at=datetime(2026, 9, 7, 0, 30, tzinfo=timezone.utc),
         )
         self.assertFalse(finalized["release_performed"])
         self.conn.commit()
@@ -369,6 +382,22 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
         self.assertEqual(draft["po_id"], draft_replay["po_id"])
         with self.assertRaisesRegex(ProcurementLedgerError, "match the frozen"):
             self.add_draft(run["run_id"], vendor_id, fingerprint="e" * 64)
+        with self.assertRaisesRegex(ProcurementLedgerError, "different expected receipt"):
+            ensure_draft_po(
+                self.conn,
+                run_id=run["run_id"],
+                vendor_id=vendor_id,
+                input_fingerprint="a" * 64,
+                expected_receipt_at=datetime(2099, 9, 10, tzinfo=timezone.utc),
+            )
+        with self.assertRaisesRegex(ProcurementLedgerError, "timezone-aware"):
+            ensure_draft_po(
+                self.conn,
+                run_id=run["run_id"],
+                vendor_id=vendor_id,
+                input_fingerprint="a" * 64,
+                expected_receipt_at=datetime(2099, 9, 9),
+            )
         self.assertEqual(
             self.conn.execute("SELECT count(*) FROM purchase_orders").fetchone()[0], 1
         )
@@ -458,13 +487,11 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             reconciliation_status="OPEN",
             evidence={"source": "direct-receipt", "reference": "fixture-2"},
             actor="fixture-owner",
-            as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
         )
         position = open_po_position(
             self.conn,
             variant_id="1001",
             vendor_id=vendor_id,
-            as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
         )
         self.assertEqual(position["trusted_incoming_units"], Decimal("10.0000"))
         self.assertFalse(position["blocks_reorder"])
@@ -485,7 +512,6 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             self.conn,
             variant_id="1001",
             vendor_id=candidate_vendor,
-            as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
         )
         self.assertEqual(position["trusted_incoming_units"], Decimal("12.0000"))
         self.assertEqual(position["trusted_sources"][0]["source_vendor_id"], source_vendor)
@@ -524,34 +550,32 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
         self.assertTrue(overdue["blockers"][0]["expected_receipt_overdue"])
         self.assertTrue(overdue["blockers"][0]["direct_evidence_present"])
 
-    def test_as_of_evaluation_rejects_receipt_evidence_from_the_future(self):
+    def test_reconciliation_chronology_rejects_future_or_backdated_evidence(self):
         _run, _draft, vendor_id, _offer, line_id = self.make_final_open(
             trustworthy=True
         )
-        self.conn.execute(
-            """UPDATE purchase_order_lines
-                  SET last_reconciled_at=%s,
-                      reconciliation_evidence=%s::jsonb,
-                      last_reconciled_by='future-fixture'
-                WHERE po_line_id=%s""",
-            (
-                datetime(2099, 1, 1, tzinfo=timezone.utc),
-                '{"source":"synthetic-future-evidence"}',
-                line_id,
-            ),
-        )
-        self.conn.commit()
-        position = open_po_position(
-            self.conn,
-            variant_id="1001",
-            vendor_id=vendor_id,
-            as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
-        )
-        self.assertEqual(position["trusted_incoming_units"], Decimal("0"))
-        self.assertTrue(position["blocks_reorder"])
+        for impossible_at in (
+            datetime(2020, 1, 1, tzinfo=timezone.utc),
+            datetime(2099, 1, 1, tzinfo=timezone.utc),
+        ):
+            with self.subTest(impossible_at=impossible_at), self.assertRaisesRegex(
+                ProcurementLedgerError, "database recording clock"
+            ):
+                record_po_reconciliation(
+                    self.conn,
+                    po_line_id=line_id,
+                    received_units=0,
+                    cancelled_units=0,
+                    reconciliation_status="OPEN",
+                    evidence={"source": "direct-confirmation", "reference": "fixture"},
+                    actor="owner",
+                    as_of=impossible_at,
+                )
         self.assertEqual(
-            self.conn.execute("SELECT count(*) FROM v_open_procurement_incoming").fetchone()[0],
-            0,
+            open_po_position(self.conn, variant_id="1001", vendor_id=vendor_id)[
+                "trusted_incoming_units"
+            ],
+            Decimal("12.0000"),
         )
 
     def test_ambiguous_or_untrusted_open_line_blocks_reorder_and_gate(self):
@@ -665,7 +689,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             received_units=0,
             cancelled_units=0,
             reconciliation_status="OPEN",
-            evidence={"source": "direct-order-confirmation"},
+            evidence={"source": "direct-order-confirmation", "reference": "fixture"},
             actor="owner",
         )
         self.assertEqual(opened["readiness"]["status"], "PASS")
@@ -724,7 +748,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                 received_units=0,
                 cancelled_units=0,
                 reconciliation_status="OPEN",
-                evidence={"source": "fixture"},
+                evidence={"source": "fixture", "reference": "fixture"},
                 actor="owner",
             )
         self.conn.execute(
@@ -761,7 +785,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                 received_units=12,
                 cancelled_units=0,
                 reconciliation_status="AMBIGUOUS",
-                evidence={"source": "fixture"},
+                evidence={"source": "fixture", "reference": "fixture"},
                 actor="owner",
             )
 
@@ -783,7 +807,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                 received_units=10,
                 cancelled_units=3,
                 reconciliation_status="OPEN",
-                evidence={"source": "fixture"},
+                evidence={"source": "fixture", "reference": "fixture"},
                 actor="owner",
             )
         self.assertEqual(
@@ -957,7 +981,7 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             received_units=2,
             cancelled_units=0,
             reconciliation_status="OPEN",
-            evidence={"source": "direct-receipt"},
+            evidence={"source": "direct-receipt", "reference": "fixture"},
             actor="owner",
         )
         event = self.conn.execute(
@@ -1040,6 +1064,16 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                     (draft["po_id"], payload),
                 )
             self.conn.rollback()
+        typed_at = self.conn.execute("SELECT clock_timestamp()").fetchone()[0]
+        with self.assertRaisesRegex(Exception, "attributed direct evidence"):
+            self.conn.execute(
+                """UPDATE purchase_order_lines
+                      SET reconciliation_evidence='{"source":1,"reference":2}'::jsonb,
+                          last_reconciled_at=%s,last_reconciled_by='owner'
+                    WHERE po_line_id=%s""",
+                (typed_at, line_id),
+            )
+        self.conn.rollback()
         self.assertEqual(
             self.conn.execute(
                 """SELECT reconciliation_evidence,last_reconciled_at,last_reconciled_by
@@ -1227,6 +1261,9 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             with self.subTest(statement=statement), self.assertRaisesRegex(Exception, message):
                 self.conn.execute(statement, arguments)
             self.conn.rollback()
+        direct_recorded_at = self.conn.execute(
+            "SELECT clock_timestamp()"
+        ).fetchone()[0]
         self.conn.execute(
             """UPDATE purchase_order_lines
                   SET received_units=1,line_status='PARTIALLY_RECEIVED',
@@ -1235,8 +1272,8 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                       last_reconciled_at=%s,last_reconciled_by='owner'
                 WHERE po_line_id=%s""",
             (
-                '{"source":"synthetic-direct-receipt"}',
-                datetime(2026, 9, 7, 14, tzinfo=timezone.utc),
+                '{"source":"synthetic-direct-receipt","reference":"fixture"}',
+                direct_recorded_at,
                 line_id,
             ),
         )
@@ -1254,7 +1291,6 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                 self.conn,
                 variant_id="1001",
                 vendor_id=vendor_id,
-                as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
             )["trusted_incoming_units"],
             Decimal("12.0000"),
         )
@@ -1657,7 +1693,6 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             reconciliation_status="OPEN",
             evidence={"source": "vendor-partial-cancellation", "reference": "fixture"},
             actor="owner",
-            as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
         )
         self.assertEqual(result["line_status"], "PARTIALLY_CANCELLED")
         self.assertEqual(result["open_units"], Decimal("9.0000"))
@@ -1666,7 +1701,6 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
                 self.conn,
                 variant_id="1001",
                 vendor_id=vendor_id,
-                as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
             )["trusted_incoming_units"],
             Decimal("9.0000"),
         )
@@ -1690,7 +1724,6 @@ class ProcurementLedgerPostgresTests(unittest.TestCase):
             reconciliation_status="RECONCILED",
             evidence={"source": "vendor-cancellation", "reference": "fixture"},
             actor="owner",
-            as_of=datetime(2026, 9, 7, tzinfo=timezone.utc),
         )
         self.assertEqual(result["line_status"], "PARTIALLY_RECEIVED_CANCELLED")
         self.assertEqual(result["open_units"], Decimal("0.0000"))

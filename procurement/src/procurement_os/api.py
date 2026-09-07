@@ -14,7 +14,7 @@ from .catalog import (
 from .config import load_rules
 from .economics import qualifying_quantity, target_cost
 from .health import data_sync_run_status, full_health
-from .inventory import latest_inventory_snapshot_status
+from .inventory import inventory_business_date, latest_inventory_snapshot_status
 from .matching import MatchCandidate, score_candidate
 from .pricing import rollover
 from .readiness import po_readiness
@@ -348,7 +348,9 @@ def data_sync_runs_page():
 def inventory_snapshots_status(as_of: date | None = None):
     """Read-only owned inventory snapshot evidence; never starts a capture."""
     with _db_conn() as conn:
-        return latest_inventory_snapshot_status(conn, as_of_date=as_of or date.today())
+        return latest_inventory_snapshot_status(
+            conn, as_of_date=as_of or inventory_business_date()
+        )
 
 
 def _vendor_rules_html(result: dict) -> str:
