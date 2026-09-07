@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import date
 import os
+from uuid import UUID
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from .catalog import (
@@ -16,13 +17,88 @@ from .economics import qualifying_quantity, target_cost
 from .health import data_sync_run_status, full_health
 from .inventory import inventory_business_date, latest_inventory_snapshot_status
 from .matching import MatchCandidate, score_candidate
-from .pricing import rollover
+from .price_book import (
+    MAX_PRICE_BOOK_BYTES,
+    PriceBookError,
+    get_price_book_batch,
+    list_price_book_batches,
+    normalized_price_book_template,
+    promote_price_book_batch,
+    read_raw_price_book,
+    reject_price_book_batch,
+    stage_and_validate_price_book,
+)
 from .readiness import po_readiness
+from .storage import get_storage
 from .vendor_rules import evaluate_vendor_rules, update_vendor_rules
 from . import catalog as catalog_service
 from . import sales as sales_service
 
+MAX_PRICE_BOOK_REQUEST_BYTES = MAX_PRICE_BOOK_BYTES + 65_536
+
+
+class _BoundedPriceBookUploadMiddleware:
+    """Bound the multipart request before Starlette parses or spools it."""
+
+    def __init__(self, app, *, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope.get("type") != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") != "/price-books/import"
+        ):
+            await self.app(scope, receive, send)
+            return
+        headers = {key.lower(): value for key, value in scope.get("headers", ())}
+        raw_length = headers.get(b"content-length")
+        if raw_length is not None:
+            try:
+                declared_length = int(raw_length)
+            except ValueError:
+                declared_length = self.max_bytes + 1
+            if declared_length < 0 or declared_length > self.max_bytes:
+                await Response("Price-book request is too large", status_code=413)(
+                    scope, receive, send
+                )
+                return
+        body = bytearray()
+        disconnected = False
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                disconnected = True
+                break
+            if message["type"] != "http.request":
+                continue
+            body.extend(message.get("body", b""))
+            if len(body) > self.max_bytes:
+                await Response("Price-book request is too large", status_code=413)(
+                    scope, receive, send
+                )
+                return
+            if not message.get("more_body", False):
+                break
+        delivered = False
+
+        async def replay_receive():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                if disconnected:
+                    return {"type": "http.disconnect"}
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
+
+
 app = FastAPI(title="Buffalo Procurement OS", version="1.3.0")
+app.add_middleware(
+    _BoundedPriceBookUploadMiddleware, max_bytes=MAX_PRICE_BOOK_REQUEST_BYTES
+)
 
 
 class TargetCostRequest(BaseModel):
@@ -76,6 +152,20 @@ def _require_review_token(supplied: str | None) -> None:
                             detail="Reconciliation decisions are disabled: RECONCILIATION_REVIEW_TOKEN is not configured")
     if not supplied or not hmac.compare_digest(str(supplied), expected):
         raise HTTPException(status_code=403, detail="Invalid review token")
+
+
+def _require_price_book_review_token(supplied: str | None) -> None:
+    """FUTURE price activation has a distinct fail-closed authority."""
+    import hmac
+
+    expected = os.getenv("PRICE_BOOK_REVIEW_TOKEN")
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Price-book actions are disabled: PRICE_BOOK_REVIEW_TOKEN is not configured",
+        )
+    if not supplied or not hmac.compare_digest(str(supplied), expected):
+        raise HTTPException(status_code=403, detail="Invalid price-book review token")
 
 
 def _db_conn():
@@ -1201,14 +1291,211 @@ def historical_sales_review_decide(
             f'<p>{html.escape(str(decision), quote=True)} recorded. Returning to the review queue…</p>')
 
 
+def _price_book_list_html(batches: list[dict]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td><a href='price-books/{_html_escape(batch['price_book_batch_id'])}'>"
+        f"{_html_escape(batch['batch_ref'])}</a></td>"
+        f"<td>{_html_escape(batch['vendor_name'])}</td>"
+        f"<td>{_html_escape(batch['target_price_state'])}</td>"
+        f"<td>{_html_escape(batch['effective_from'])}</td>"
+        f"<td>{_html_escape(batch['operational_status'])}</td>"
+        f"<td>{_html_escape(batch['valid_row_count'])}/{_html_escape(batch['row_count'])}</td>"
+        f"<td>{_html_escape(batch['error_count'])}</td>"
+        "</tr>"
+        for batch in batches
+    ) or "<tr><td colspan='7'>No price-book batches have been staged.</td></tr>"
+    return f"""<!doctype html><html><head><title>Price Books</title></head><body>
+<h1>Price Book Import / Validation</h1>
+<p>Uploads may prepare FUTURE pricing only. CURRENT remains untouched until a separately guarded rollover.</p>
+<p><a href='price-books/template.csv'>Download strict normalized CSV template</a></p>
+<form method='post' action='price-books/import' enctype='multipart/form-data'>
+<label>Normalized CSV <input type='file' name='price_book_file' accept='.csv,text/csv' required></label><br>
+<label>Operator <input name='actor' required></label><br>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Stage and validate FUTURE</button>
+</form>
+<h2>Durable batches</h2>
+<table border='1' cellpadding='5'><thead><tr><th>Batch</th><th>Vendor</th><th>State</th>
+<th>Effective</th><th>Status</th><th>Valid rows</th><th>Errors</th></tr></thead>
+<tbody>{rows}</tbody></table>
+</body></html>"""
+
+
+def _price_book_detail_html(batch: dict) -> str:
+    issues = "".join(
+        "<tr>"
+        f"<td>{_html_escape(issue['source_row_number'])}</td>"
+        f"<td>{_html_escape(issue['severity'])}</td>"
+        f"<td>{_html_escape(issue['issue_code'])}</td>"
+        f"<td>{_html_escape(issue['message'])}</td>"
+        "</tr>"
+        for issue in batch["issues"]
+    ) or "<tr><td colspan='4'>No validation issues.</td></tr>"
+    batch_id = _html_escape(batch["price_book_batch_id"])
+    promotable = (
+        batch["status"] == "VALIDATED"
+        and batch["operational_status"] == "VALIDATED"
+    )
+    disabled = "" if promotable else " disabled aria-disabled='true'"
+    blocker = "" if promotable else (
+        f"<p><b>Promotion unavailable:</b> operational status is "
+        f"{_html_escape(batch['operational_status'])}.</p>"
+    )
+    warning_reason = (
+        "<label>Warning review reason <input name='warning_review_reason' required></label><br>"
+        if batch["warning_count"] else ""
+    )
+    reject_form = ""
+    if batch["status"] in {"INVALID", "VALIDATED"}:
+        reject_form = f"""<h2>Reject / discard typed staging</h2>
+<form method='post' action='../price-books/{batch_id}/reject'>
+<input type='hidden' name='expected_validation_fingerprint' value='{_form_value(batch['validation_fingerprint'])}'>
+<label>Operator <input name='actor' required></label><br>
+<label>Reason <input name='reason' required></label><br>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Reject and purge typed staging</button></form>"""
+    return f"""<!doctype html><html><head><title>Price Book {_html_escape(batch['batch_ref'])}</title></head><body>
+<p><a href='../price-books'>Back to Price Books</a></p>
+<h1>{_html_escape(batch['batch_ref'])}</h1>
+<dl><dt>Vendor</dt><dd>{_html_escape(batch['vendor_name'])}</dd>
+<dt>Target</dt><dd>{_html_escape(batch['target_price_state'])}</dd>
+  <dt>Status</dt><dd>{_html_escape(batch['operational_status'])}</dd>
+<dt>Rows</dt><dd>{_html_escape(batch['valid_row_count'])}/{_html_escape(batch['row_count'])}</dd>
+<dt>Coverage</dt><dd>{_html_escape(batch['covered_offer_count'])}/{_html_escape(batch['expected_offer_count'])}</dd>
+<dt>Validation fingerprint</dt><dd><code>{_html_escape(batch['validation_fingerprint'])}</code></dd></dl>
+<p><a href='../price-books/{batch_id}/raw.csv'>Download immutable raw evidence</a></p>
+<h2>Exceptions / diagnostics</h2>
+<table border='1' cellpadding='5'><thead><tr><th>Row</th><th>Severity</th><th>Code</th><th>Message</th></tr></thead>
+<tbody>{issues}</tbody></table>
+{blocker}
+<form method='post' action='../price-books/{batch_id}/promote'>
+<input type='hidden' name='expected_validation_fingerprint' value='{_form_value(batch['validation_fingerprint'])}'>
+<label>Operator <input name='actor' required></label><br>
+{warning_reason}
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'{disabled}>Promote VERIFIED FUTURE pricing</button>
+</form>{reject_form}
+</body></html>"""
+
+
+@app.get("/price-books/template.csv")
+def price_book_template():
+    return Response(
+        normalized_price_book_template(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=normalized-price-book-template.csv"},
+    )
+
+
+@app.get("/price-books", response_class=HTMLResponse)
+def price_books_page():
+    with _db_conn() as conn:
+        batches = list_price_book_batches(conn)
+    return _price_book_list_html(batches)
+
+
+@app.get("/price-books/{batch_id}", response_class=HTMLResponse)
+def price_book_detail(batch_id: UUID):
+    try:
+        with _db_conn() as conn:
+            batch = get_price_book_batch(conn, str(batch_id))
+    except PriceBookError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _price_book_detail_html(batch)
+
+
+@app.get("/price-books/{batch_id}/raw.csv")
+def price_book_raw(batch_id: UUID):
+    try:
+        with _db_conn() as conn:
+            data = read_raw_price_book(conn, get_storage(), batch_id=str(batch_id))
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return Response(
+        data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=price-book-{batch_id}.csv"},
+    )
+
+
+@app.post("/price-books/import")
+async def price_book_import(
+    price_book_file: UploadFile = File(...),
+    actor: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    data = await price_book_file.read(MAX_PRICE_BOOK_BYTES + 1)
+    if len(data) > MAX_PRICE_BOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Price-book CSV is too large")
+    try:
+        with _db_conn() as conn:
+            result = stage_and_validate_price_book(
+                conn, get_storage(), csv_bytes=data, actor=actor
+            )
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../price-books/{result['price_book_batch_id']}", status_code=303
+    )
+
+
+@app.post("/price-books/{batch_id}/promote")
+def price_book_promote(
+    batch_id: UUID,
+    expected_validation_fingerprint: str = Form(...),
+    actor: str = Form(...),
+    warning_review_reason: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            promote_price_book_batch(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                expected_validation_fingerprint=expected_validation_fingerprint,
+                actor=actor,
+                warning_review_reason=warning_review_reason,
+            )
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
+
+
+@app.post("/price-books/{batch_id}/reject")
+def price_book_reject(
+    batch_id: UUID,
+    expected_validation_fingerprint: str = Form(...),
+    actor: str = Form(...),
+    reason: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            reject_price_book_batch(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                expected_validation_fingerprint=expected_validation_fingerprint,
+                actor=actor,
+                reason=reason,
+            )
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
+
+
 @app.post("/pricing/rollover")
 def pricing_rollover(req: RolloverRequest):
-    db = os.getenv("DATABASE_URL")
-    if not db:
-        raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
-    import psycopg
-    try:
-        with psycopg.connect(db) as conn:
-            return rollover(conn, req.as_of)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    del req
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "Price rollover is disabled until an authenticated, audited "
+            "backup/completeness/rollover transaction is separately reviewed."
+        ),
+    )

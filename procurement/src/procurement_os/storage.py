@@ -37,7 +37,8 @@ class LocalFilesystemStorage(StorageAdapter):
 
     def __init__(self, root: str | Path):
         self._root = Path(root)
-        self._root.mkdir(parents=True, exist_ok=True)
+        # Construction and every read path are side-effect free. The write
+        # boundary creates only the parent directories needed for that object.
 
     def _path(self, key: str) -> Path:
         if Path(key).is_absolute():

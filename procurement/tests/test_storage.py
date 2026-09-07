@@ -36,6 +36,14 @@ class TestLocalFilesystemStorage(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.put_bytes("a/../../escape.txt", b"x")
 
+    def test_construction_and_read_paths_do_not_create_storage_root(self):
+        root = Path(self.tmp.name) / "read-only-root"
+        store = LocalFilesystemStorage(root)
+        self.assertFalse(root.exists())
+        self.assertFalse(store.exists("missing.csv"))
+        self.assertEqual(store.list_keys(), [])
+        self.assertFalse(root.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

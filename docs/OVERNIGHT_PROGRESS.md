@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Overnight Monday MVP Progress
 
-Updated: 2026-09-07 00:11 EDT
+Updated: 2026-09-07 01:31 EDT
 
 This is an operational engineering log for the authorized offline emergency workstream. It does not change canonical phase authority or authorize production activity.
 
@@ -61,6 +61,20 @@ Feature work freezes at 06:30 America/New_York for integration, full validation,
 - The affected focused suite then passed `85 / 85`, with failures/errors/skips/expected failures/unexpected successes all `0`.
 - Exact registered branch floor after these added tests: `452`.
 - Two independent read-only re-audits returned `APPROVE` with no remaining P0/P1 blocker in this bounded remediation. The full authoritative suite has not yet run on this candidate.
+
+## Packet 4 — universal FUTURE price-book staging checkpoint
+
+- Added a strict normalized CSV template, bounded upload, raw content-addressed evidence, deterministic validation results, explicit authenticated promote/reject actions, and read-only batch/exception screens.
+- Uploads are FUTURE-only. There is no Packet-4 rollover table, status, API, or executable CURRENT transition; the legacy rollover entrypoint now fails closed.
+- Promotion re-reads and hashes the raw object, reparses it, revalidates the locked database state, requires exact mapping/pack/assortment/coverage evidence, records warning acknowledgement, and replaces the vendor's complete FUTURE set in one serializable transaction.
+- Effective month outranks upload generation: an older effective book cannot replace a newer one. Same-month corrections bind the exact active predecessor batch and supersede/purge prior typed economics transactionally.
+- SQL guards independently enforce complete eligible-offer coverage, one BASE per offer, BT/CS ladder monotonicity, case/unit arithmetic, mapping eligibility, offer/vendor stability, exact event-to-batch claims, and append-only audit evidence.
+- Existing verified source-null CURRENT rows are grandfathered but immutable. Fresh-install/idempotent August seed writes require the exact reviewed six-file seed manifest, every file SHA-256/count, the exact 85-offer/271-price controls, a transaction-scoped append-only seed event, and a deferred semantic digest over vendor/variant eligibility, offer mapping/pack/trust fields, and price economics. Tampered offer or price evidence is rejected before price writes.
+- Rejected/superseded batches purge typed staging rows and resolve their diagnostics while retaining raw supplier evidence plus compact audit controls; no reusable operational price archive is created.
+- Candidate FUTURE imports do not poison operational CURRENT readiness. Trusted views exclude unverified offers/prices, inactive vendors, and non-CURRENT/non-LIVE variants.
+- Focused price-book validation passed `42 / 42`; Packet-4/pricing/storage passed `52 / 52`; the combined Packet-0-through-4 affected suite passed `137 / 137`. All abnormal counters were `0`; the only warning was the pre-existing Starlette `TestClient` deprecation notice.
+- Registered deterministic-suite floor is now `496` (`452` foundation checkpoint + `42` price-book + one pricing + one storage test).
+- Two independent read-only Packet-4 audits returned PASS with no remaining concrete P0/P1 blocker. This offline checkpoint still requires morning business-rule and broader independent review before any operational reliance.
 
 ## Review and release status
 

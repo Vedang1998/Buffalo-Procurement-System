@@ -23,6 +23,7 @@ MIGRATION_ORDER = [
     "008_monday_inventory_foundation.sql",
     "009_monday_vendor_rules.sql",
     "010_monday_po_ledger.sql",
+    "011_monday_price_book_staging.sql",
 ]
 
 
