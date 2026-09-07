@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from procurement_os.storage import LocalFilesystemStorage
 
@@ -43,6 +44,18 @@ class TestLocalFilesystemStorage(unittest.TestCase):
         self.assertFalse(store.exists("missing.csv"))
         self.assertEqual(store.list_keys(), [])
         self.assertFalse(root.exists())
+
+    def test_failed_atomic_replace_preserves_prior_object_and_removes_temporary_file(self):
+        self.store.put_bytes("packets/review.zip", b"complete-prior-object")
+        with patch("procurement_os.storage.os.replace", side_effect=OSError("synthetic replace failure")):
+            with self.assertRaisesRegex(OSError, "synthetic replace failure"):
+                self.store.put_bytes("packets/review.zip", b"partial-new-object")
+        self.assertEqual(
+            self.store.get_bytes("packets/review.zip"), b"complete-prior-object"
+        )
+        self.assertEqual(
+            self.store.list_keys("packets/"), ["packets/review.zip"]
+        )
 
 
 if __name__ == "__main__":

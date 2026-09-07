@@ -15,6 +15,7 @@ from unittest import mock
 
 
 RUNNER_PATH = Path(__file__).resolve().parents[1] / "tools" / "run_tests.py"
+WRAPPER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "procurement-tests"
 SPEC = importlib.util.spec_from_file_location("procurement_test_runner", RUNNER_PATH)
 assert SPEC is not None and SPEC.loader is not None
 runner = importlib.util.module_from_spec(SPEC)
@@ -172,6 +173,19 @@ class TestModuleMinimums(unittest.TestCase):
 
 
 class TestDatabaseUrlSafety(unittest.TestCase):
+    def test_authoritative_wrapper_scrubs_runtime_database_and_shopify_credentials(self):
+        source = WRAPPER_PATH.read_text(encoding="utf-8")
+        for variable in (
+            "DATABASE_URL",
+            "SHOPIFY_SHOP",
+            "SHOPIFY_CLIENT_ID",
+            "SHOPIFY_CLIENT_SECRET",
+            "SHOPIFY_ACCESS_TOKEN",
+            "SHOPIFY_ADMIN_ACCESS_TOKEN",
+        ):
+            with self.subTest(variable=variable):
+                self.assertRegex(source, rf"(?m)^unset [^\n]*\b{variable}\b")
+
     def test_safe_loopback_test_database_is_accepted(self):
         target = runner._validated_test_database_target(
             "postgresql://test:test@127.0.0.1:5432/procurement_test"

@@ -36,6 +36,7 @@ CORE_TABLES = [
     "price_book_batches", "price_book_staging_rows",
     "price_book_validation_issues", "price_book_promotion_events",
     "price_book_disposition_events", "legacy_price_seed_events",
+    "monday_run_artifacts", "monday_packet_build_events",
 ]
 
 SHOPIFY_ENV_VARS = ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]

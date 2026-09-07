@@ -37,6 +37,7 @@ NAV_LABELS = (
     "Catalog Reconciliation",
     "Historical Sales Reconciliation",
     "Data/Sync Runs",
+    "Monday Procurement",
 )
 
 
@@ -249,7 +250,7 @@ class Phase5RenderingTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, lowered)
 
-    def test_all_four_surfaces_render_the_same_navigation(self):
+    def test_all_operational_surfaces_render_the_same_navigation(self):
         pages = [
             api._admin_status_html(health_report(), nav_root="../"),
             api._data_sync_runs_html(run_status_report(), nav_root=""),
@@ -269,11 +270,12 @@ class Phase5RenderingTests(unittest.TestCase):
 
     def test_shared_navigation_itself_is_get_only_and_non_actionable(self):
         nav = api._operational_nav("../", current="Historical Sales Reconciliation")
-        self.assertEqual(nav.count("<a "), 4)
+        self.assertEqual(nav.count("<a "), 5)
         self.assertIn("../admin/status", nav)
         self.assertIn("../reconciliation", nav)
         self.assertIn("../historical-sales/review", nav)
         self.assertIn("../data-sync-runs", nav)
+        self.assertIn("../monday-runs", nav)
         self.assertEqual(
             urljoin(
                 "https://example.test/procurement/historical-sales/review",

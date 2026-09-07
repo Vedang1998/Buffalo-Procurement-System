@@ -479,6 +479,12 @@ def open_po_position(
                     "source_vendor_id": source_vendor_id,
                     "open_units": quantity,
                     "expected_receipt_at": expected,
+                    "reconciliation_status": reconciliation,
+                    "line_status": line_status,
+                    "shopify_import_status": import_status,
+                    "last_reconciled_at": reconciled_at,
+                    "last_reconciled_by": reconciled_by,
+                    "reconciliation_evidence": evidence,
                 }
             )
         else:
@@ -494,12 +500,15 @@ def open_po_position(
                     "expected_receipt_overdue": (
                         expected is not None and expected < evaluated_at
                     ),
-                    "direct_evidence_present": (
+                        "direct_evidence_present": (
                         bool(evidence)
                         and reconciled_at is not None
                         and reconciled_by is not None
-                        and bool(str(reconciled_by).strip())
-                    ),
+                            and bool(str(reconciled_by).strip())
+                        ),
+                        "last_reconciled_at": reconciled_at,
+                        "last_reconciled_by": reconciled_by,
+                        "reconciliation_evidence": evidence,
                 }
             )
     return {

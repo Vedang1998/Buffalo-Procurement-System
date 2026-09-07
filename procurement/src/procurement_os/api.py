@@ -14,9 +14,20 @@ from .catalog import (
 )
 from .config import load_rules
 from .economics import qualifying_quantity, target_cost
+from .draft_po import DraftPoError, get_vendor_drafts
+from .emergency_packet import (
+    EmergencyPacketError,
+    list_monday_artifacts,
+    read_monday_artifact,
+)
 from .health import data_sync_run_status, full_health
 from .inventory import inventory_business_date, latest_inventory_snapshot_status
 from .matching import MatchCandidate, score_candidate
+from .monday_run import (
+    build_after_review,
+    prepare as prepare_monday_run,
+    preview_after_review,
+)
 from .price_book import (
     MAX_PRICE_BOOK_BYTES,
     PriceBookError,
@@ -28,7 +39,19 @@ from .price_book import (
     reject_price_book_batch,
     stage_and_validate_price_book,
 )
+from .po_csv import PoCsvError
 from .readiness import po_readiness
+from .procurement_review import (
+    ProcurementReviewError,
+    list_review_queue,
+    preview_recommendation_review,
+    record_recommendation_review,
+)
+from .recommendations import (
+    MondayRecommendationError,
+    get_monday_run,
+    list_monday_runs,
+)
 from .storage import get_storage
 from .vendor_rules import evaluate_vendor_rules, update_vendor_rules
 from . import catalog as catalog_service
@@ -198,6 +221,7 @@ _OPERATIONAL_NAV_ITEMS = (
     ("Catalog Reconciliation", "reconciliation"),
     ("Historical Sales Reconciliation", "historical-sales/review"),
     ("Data/Sync Runs", "data-sync-runs"),
+    ("Monday Procurement", "monday-runs"),
 )
 
 
@@ -1289,6 +1313,386 @@ def historical_sales_review_decide(
     import html
     return (f'<meta http-equiv="refresh" content="0;url=../review">'
             f'<p>{html.escape(str(decision), quote=True)} recorded. Returning to the review queue…</p>')
+
+
+def _monday_runs_html(runs: list[dict]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td><a href='monday-runs/{_html_escape(run['run_id'])}'>{_html_escape(run['run_id'])}</a></td>"
+        f"<td>{_html_escape(run['business_date'])}</td>"
+        f"<td>{_html_escape(run['workflow_stage'])}</td>"
+        f"<td>{_html_escape(run['exception_count'])}</td>"
+        "</tr>"
+        for run in runs
+    ) or "<tr><td colspan='4'>No emergency Monday runs exist.</td></tr>"
+    return f"""<!doctype html><html><head><title>Monday Procurement Runs</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1120px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}form{{display:grid;gap:9px;max-width:700px}}input,button{{padding:7px}}</style></head><body>
+{_operational_nav('', current='Monday Procurement')}
+<p class='warning'>TEST DATA — NOT FOR ORDERING. Internal DRAFT review only. No release or Shopify action is available.</p>
+<h1>Monday Procurement Runs</h1>
+<form method='post' action='monday-runs/prepare'>
+<label>Business date <input type='date' name='business_date' value='{_form_value(inventory_business_date())}' required></label>
+<label>Idempotency key <input name='idempotency_key' required></label>
+<label>Canonical Shopify Variant IDs (comma separated) <input name='variant_ids' required></label>
+<label>Operator <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Prepare recommendations and stop for review</button></form>
+<h2>Frozen runs</h2><table><thead><tr><th>Run</th><th>Business date</th><th>Stage</th><th>Open blockers</th></tr></thead>
+<tbody>{rows}</tbody></table></body></html>"""
+
+
+def _monday_run_html(
+    run: dict, review: dict, drafts: dict, artifacts: list[dict]
+) -> str:
+    run_id = _html_escape(run["run_id"])
+    blockers = "".join(
+        "<tr>"
+        f"<td>{_html_escape(item['variant_id'])}</td>"
+        f"<td>{_html_escape(item['vendor_id'])}</td>"
+        f"<td>{_html_escape(item['message'])}</td>"
+        "</tr>"
+        for item in run["blockers"]
+    ) or "<tr><td colspan='3'>No open run blockers.</td></tr>"
+    review_rows = []
+    for item in review["items"]:
+        frozen_terms = (item.get("metrics") or {}).get("frozen_vendor_terms") or {}
+        minimum_evidence = (
+            f"Vendor minimum: {_html_escape(frozen_terms.get('minimum_type'))} "
+            f"{_html_escape(frozen_terms.get('minimum_value'))}; below-minimum fee "
+            f"${_html_escape(frozen_terms.get('below_minimum_fee'))}."
+        )
+        if item["decision_id"] is not None:
+            decision = (
+                f"<b>{_html_escape(item['action'])}</b>: "
+                f"{_html_escape(item['approved_cases'])} case(s) + "
+                f"{_html_escape(item['approved_loose_units'])} loose; "
+                f"{_html_escape(item['approved_units'])} unit(s) "
+                f"@ ${_html_escape(item['approved_unit_cost'])}; "
+                f"merchandise ${_html_escape(item['approved_merchandise_total'])}; "
+                f"loose-order fee ${_html_escape(item['approved_loose_order_fee'])}; "
+                f"reviewed line total ${_html_escape(item['approved_line_total'])}; "
+                f"resulting inventory {_html_escape(item['resulting_inventory_units'])} unit(s), "
+                f"{_html_escape(item['resulting_days_supply'])} days supply "
+                f"({_html_escape(item['days_supply_status'])})"
+            )
+        else:
+            decision = f"""<form method='post' action='{run_id}/recommendations/{item['recommendation_id']}/review'>
+<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
+<label>Decision <select name='action'><option>ACCEPT</option><option>EDIT_QUANTITY</option><option>REJECT</option></select></label>
+<label>Cases <input type='number' min='0' step='1' name='approved_cases' value='{_form_value(item['recommended_cases'])}'></label>
+<label>Loose units <input type='number' min='0' step='1' name='approved_loose_units' value='{_form_value(item['recommended_loose_units'])}'></label>
+<label>Comment <input name='comment'></label><label>Reviewer <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Record immutable decision</button></form>"""
+        review_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(item['variant_id'])}<br><small>{_html_escape(item['product_title'])} / {_html_escape(item['variant_title'])}</small></td>"
+            f"<td>{_html_escape(item['vendor_name'])}</td>"
+            f"<td>{_html_escape(item['recommended_cases'])} case(s) + {_html_escape(item['recommended_loose_units'])} loose<br>"
+            f"{_html_escape(item['recommended_units'])} unit(s) @ ${_html_escape(item['unit_cost'])}"
+            f"<br><small>{minimum_evidence}</small>"
+            f"<details><summary>Frozen calculation evidence</summary><pre>{_html_escape(item['metrics'])}</pre></details></td>"
+            f"<td>{decision}</td></tr>"
+        )
+    draft_sections = []
+    for draft in drafts["drafts"]:
+        line_rows = "".join(
+            "<tr>"
+            f"<td>{_html_escape(line['variant_id'])}</td><td>{_html_escape(line['supplier_sku'])}</td>"
+            f"<td>{_html_escape(line['cases'])}</td><td>{_html_escape(line['loose_units'])}</td>"
+            f"<td>{_html_escape(line['ordered_units'])}</td><td>${_html_escape(line['unit_cost'])}</td>"
+            f"<td>${_html_escape(line['merchandise_total'])}</td>"
+            f"<td>${_html_escape(line['loose_order_fee'])}</td>"
+            f"<td>${_html_escape(line['line_total'])}</td></tr>"
+            for line in draft["lines"]
+        )
+        draft_sections.append(
+            f"<h3>{_html_escape(draft['vendor_name'])} — DRAFT</h3>"
+            f"<p>PO {_html_escape(draft['po_id'])}; merchandise ${_html_escape(draft['merchandise_total'])}; "
+            f"loose-order fees ${_html_escape(draft['loose_order_fee_total'])}; "
+            f"below-minimum fee ${_html_escape(draft['below_minimum_fee'])}; "
+            f"total fees ${_html_escape(draft['delivery_fee'])}; total ${_html_escape(draft['po_total'])}; "
+            f"minimum shortfall {_html_escape(draft.get('minimum_shortfall'))}; "
+            f"disposition {_html_escape(draft.get('minimum_disposition'))}; confirmed by "
+            f"{_html_escape(draft.get('economics_confirmed_by'))}</p>"
+            "<table><thead><tr><th>Variant</th><th>Supplier SKU</th><th>Cases</th><th>Loose</th>"
+            "<th>Units</th><th>Unit cost</th><th>Merchandise</th><th>Loose fee</th>"
+            f"<th>Line total</th></tr></thead><tbody>{line_rows}</tbody></table>"
+        )
+    artifact_rows = "".join(
+        "<tr>"
+        f"<td>{_html_escape(item['artifact_type'])}</td><td>{_html_escape(item['vendor_id'])}</td>"
+        f"<td>{_html_escape(item['size_bytes'])}</td>"
+        f"<td><a href='{run_id}/artifacts/{item['artifact_id']}'>Download hash-checked artifact</a></td></tr>"
+        for item in artifacts
+    ) or "<tr><td colspan='4'>No artifacts built.</td></tr>"
+    build_form = ""
+    if run["workflow_stage"] in {"REVIEWED", "DRAFTS_BUILT", "PACKET_BUILT"}:
+        build_form = f"""<form method='post' action='{run_id}/build'>
+<label>Builder <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Build/replay internal DRAFTs and review packet</button></form>"""
+    return f"""<!doctype html><html><head><title>Monday Run {run_id}</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1240px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}
+table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;vertical-align:top;text-align:left}}form{{display:grid;gap:6px}}input,select,button{{padding:6px}}</style></head><body>
+{_operational_nav('../', current='Monday Procurement')}<p><a href='../monday-runs'>Back to Monday runs</a></p>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED. DRAFT output only.</p>
+<h1>Monday run {run_id}</h1><p>Stage: <b>{_html_escape(run['workflow_stage'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
+<h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Reason</th></tr></thead><tbody>{blockers}</tbody></table>
+<h2>Human review</h2><table><thead><tr><th>Item</th><th>Vendor</th><th>Recommendation</th><th>Decision</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="4">No eligible recommendations.</td></tr>'}</tbody></table>
+{build_form}<h2>Vendor DRAFT POs</h2>{''.join(draft_sections) or '<p>No DRAFTs built.</p>'}
+<h2>Internal artifacts</h2><table><thead><tr><th>Type</th><th>Vendor</th><th>Bytes</th><th>Download</th></tr></thead><tbody>{artifact_rows}</tbody></table>
+    </body></html>"""
+
+
+def _monday_review_preview_html(
+    *,
+    run_id: UUID,
+    recommendation_id: int,
+    preview: dict,
+    actor: str,
+    comment: str,
+) -> str:
+    metrics = preview.get("metrics") or {}
+    terms = metrics.get("frozen_vendor_terms") or {}
+    case_price = preview.get("approved_case_price")
+    case_price_text = (
+        f"${_html_escape(case_price)}"
+        if case_price is not None
+        else "not separately quoted"
+    )
+    return f"""<!doctype html><html><head><title>Confirm edited recommendation</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}dl{{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px}}dt{{font-weight:700}}form{{display:grid;gap:9px}}input,button{{padding:7px}}</style></head><body>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. Review these exact calculations before creating an immutable RUN_ONLY decision.</p>
+<h1>Confirm recommendation economics</h1>
+<dl><dt>Cases</dt><dd>{_html_escape(preview['approved_cases'])}</dd>
+<dt>Loose units</dt><dd>{_html_escape(preview['approved_loose_units'])}</dd>
+<dt>Ordered units</dt><dd>{_html_escape(preview['approved_units'])}</dd>
+<dt>Frozen applicable unit cost</dt><dd>${_html_escape(preview['approved_unit_cost'])}</dd>
+<dt>Frozen applicable case price</dt><dd>{case_price_text}</dd>
+<dt>Merchandise total</dt><dd>${_html_escape(preview['approved_merchandise_total'])}</dd>
+<dt>Loose-order fee</dt><dd>${_html_escape(preview['approved_loose_order_fee'])}</dd>
+<dt>Recalculated line total</dt><dd>${_html_escape(preview['approved_line_total'])}</dd>
+<dt>Resulting inventory units</dt><dd>{_html_escape(preview['resulting_inventory_units'])}</dd>
+<dt>Resulting days of supply</dt><dd>{_html_escape(preview['resulting_days_supply'])} ({_html_escape(preview['days_supply_status'])})</dd>
+<dt>Vendor minimum</dt><dd>{_html_escape(terms.get('minimum_type'))} {_html_escape(terms.get('minimum_value'))}</dd>
+<dt>Below-minimum fee</dt><dd>${_html_escape(terms.get('below_minimum_fee'))}</dd></dl>
+<p>Vendor-level minimum and fee are rechecked across all accepted lines when DRAFTs are built.</p>
+<form method='post'>
+<input type='hidden' name='action' value='{_form_value(preview['action'])}'>
+<input type='hidden' name='actor' value='{_form_value(actor)}'>
+<input type='hidden' name='expected_input_fingerprint' value='{_form_value(preview['input_fingerprint'])}'>
+<input type='hidden' name='approved_cases' value='{_form_value(preview['approved_cases'])}'>
+<input type='hidden' name='approved_loose_units' value='{_form_value(preview['approved_loose_units'])}'>
+<input type='hidden' name='comment' value='{_form_value(comment)}'>
+<input type='hidden' name='review_preview_fingerprint' value='{_form_value(preview['preview_fingerprint'])}'>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Confirm immutable {_html_escape(preview['action'])} decision</button></form>
+<p><a href='../../../{_html_escape(run_id)}'>Cancel and return without recording a decision</a></p>
+</body></html>"""
+
+
+def _monday_draft_preview_html(*, run_id: UUID, preview: dict) -> str:
+    vendor_rows = "".join(
+        "<tr>"
+        f"<td>{_html_escape(item['vendor_id'])}</td>"
+        f"<td>${_html_escape(item['merchandise_total'])}</td>"
+        f"<td>{_html_escape(item['case_count'])}</td>"
+        f"<td>{_html_escape(item['minimum_type'])} {_html_escape(item['minimum_value'])}</td>"
+        f"<td>{_html_escape(item['minimum_shortfall'])}</td>"
+        f"<td>${_html_escape(item['loose_order_fee_total'])}</td>"
+        f"<td>${_html_escape(item['below_minimum_fee'])}</td>"
+        f"<td>${_html_escape(item['delivery_fee'])}</td>"
+        f"<td>${_html_escape(item['po_total'])}</td>"
+        "</tr>"
+        for item in preview["vendors"]
+    ) or "<tr><td colspan='9'>No positive reviewed quantities; the packet will record a no-order run.</td></tr>"
+    disposition_text = (
+        "PAY_FEE for every below-minimum vendor"
+        if preview["minimum_disposition"] == "PAY_FEE"
+        else "NOT_APPLICABLE — no vendor is below minimum"
+    )
+    return f"""<!doctype html><html><head><title>Confirm vendor DRAFT economics</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1040px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}form{{display:grid;gap:9px;max-width:700px}}input,button{{padding:7px}}</style></head><body>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. Confirm exact vendor totals and fee disposition before DRAFT persistence.</p>
+<h1>Confirm vendor DRAFT economics</h1>
+<table><thead><tr><th>Vendor ID</th><th>Merchandise</th><th>Cases</th><th>Minimum</th><th>Shortfall</th><th>Loose-order fees</th><th>Below-minimum fee</th><th>Total fees</th><th>DRAFT total</th></tr></thead><tbody>{vendor_rows}</tbody></table>
+<p><b>Minimum disposition:</b> {_html_escape(disposition_text)}. DELAY or ADD_LEGITIMATE_NEED requires cancelling and changing the reviewed run; the system never adds filler.</p>
+<form method='post'>
+<input type='hidden' name='actor' value='{_form_value(preview['actor'])}'>
+<input type='hidden' name='draft_preview_fingerprint' value='{_form_value(preview['preview_fingerprint'])}'>
+<input type='hidden' name='minimum_disposition' value='{_form_value(preview['minimum_disposition'])}'>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Confirm reviewed economics and build internal DRAFTs</button></form>
+<p><a href='../{_html_escape(run_id)}'>Cancel without building DRAFTs</a></p>
+</body></html>"""
+
+
+@app.get("/monday-runs")
+def monday_runs_page():
+    with _db_conn() as conn:
+        runs = list_monday_runs(conn)
+    return HTMLResponse(_monday_runs_html(runs), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/monday-runs/prepare")
+def monday_runs_prepare(
+    business_date: date = Form(...),
+    idempotency_key: str = Form(...),
+    variant_ids: str = Form(...),
+    actor: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    canonical_ids = tuple(value.strip() for value in variant_ids.split(",") if value.strip())
+    if not canonical_ids:
+        raise HTTPException(status_code=400, detail="At least one canonical Variant ID is required")
+    try:
+        with _db_conn() as conn:
+            result = prepare_monday_run(
+                conn,
+                business_date=business_date,
+                idempotency_key=idempotency_key,
+                variant_ids=canonical_ids,
+                actor=actor,
+            )
+    except MondayRecommendationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../monday-runs/{result['run_id']}",
+        status_code=303,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/monday-runs/{run_id}")
+def monday_run_detail(run_id: UUID):
+    try:
+        with _db_conn() as conn:
+            run = get_monday_run(conn, str(run_id))
+            review = list_review_queue(conn, str(run_id))
+            drafts = get_vendor_drafts(conn, str(run_id))
+            artifacts = list_monday_artifacts(conn, str(run_id))
+    except (MondayRecommendationError, ProcurementReviewError, DraftPoError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return HTMLResponse(
+        _monday_run_html(run, review, drafts, artifacts),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/monday-runs/{run_id}/recommendations/{recommendation_id}/review")
+def monday_recommendation_review(
+    run_id: UUID,
+    recommendation_id: int,
+    action: str = Form(...),
+    actor: str = Form(...),
+    expected_input_fingerprint: str = Form(...),
+    approved_cases: str | None = Form(None),
+    approved_loose_units: str | None = Form(None),
+    comment: str = Form(""),
+    review_preview_fingerprint: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            queue = list_review_queue(conn, str(run_id))
+            if recommendation_id not in {item["recommendation_id"] for item in queue["items"]}:
+                raise ProcurementReviewError("recommendation does not belong to this Monday run")
+            if (
+                action.strip().upper() in {"ACCEPT", "EDIT_QUANTITY"}
+                and not review_preview_fingerprint
+            ):
+                preview = preview_recommendation_review(
+                    conn,
+                    recommendation_id=recommendation_id,
+                    action=action,
+                    actor=actor,
+                    expected_input_fingerprint=expected_input_fingerprint,
+                    approved_cases=approved_cases,
+                    approved_loose_units=approved_loose_units,
+                    comment=comment,
+                )
+                return HTMLResponse(
+                    _monday_review_preview_html(
+                        run_id=run_id,
+                        recommendation_id=recommendation_id,
+                        preview=preview,
+                        actor=actor,
+                        comment=comment,
+                    ),
+                    headers={"Cache-Control": "no-store"},
+                )
+            record_recommendation_review(
+                conn,
+                recommendation_id=recommendation_id,
+                action=action,
+                actor=actor,
+                expected_input_fingerprint=expected_input_fingerprint,
+                approved_cases=approved_cases,
+                approved_loose_units=approved_loose_units,
+                comment=comment,
+                expected_review_preview_fingerprint=review_preview_fingerprint,
+            )
+    except ProcurementReviewError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../../../{run_id}", status_code=303, headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.post("/monday-runs/{run_id}/build")
+def monday_run_build(
+    run_id: UUID,
+    actor: str = Form(...),
+    draft_preview_fingerprint: str | None = Form(None),
+    minimum_disposition: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            if not draft_preview_fingerprint:
+                preview = preview_after_review(conn, run_id=str(run_id), actor=actor)
+                if not preview.get("already_built"):
+                    return HTMLResponse(
+                        _monday_draft_preview_html(run_id=run_id, preview=preview),
+                        headers={"Cache-Control": "no-store"},
+                    )
+            build_after_review(
+                conn,
+                storage=get_storage(),
+                run_id=str(run_id),
+                actor=actor,
+                expected_preview_fingerprint=draft_preview_fingerprint,
+                minimum_disposition=minimum_disposition,
+            )
+    except (DraftPoError, EmergencyPacketError, PoCsvError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../{run_id}", status_code=303, headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/monday-runs/{run_id}/artifacts/{artifact_id}")
+def monday_run_artifact(run_id: UUID, artifact_id: int):
+    try:
+        with _db_conn() as conn:
+            artifact = read_monday_artifact(
+                conn, storage=get_storage(), run_id=str(run_id), artifact_id=artifact_id
+            )
+    except EmergencyPacketError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        artifact["data"],
+        media_type=artifact["content_type"],
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename={artifact['filename']}",
+        },
+    )
 
 
 def _price_book_list_html(batches: list[dict]) -> str:
