@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-07T02:12:33Z (UTC)
+**Updated:** 2026-09-07T03:17:20Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,75 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### G10 Autoscale read-only production-preflight bridge — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+### G10 narrow subprocess-supervision remediation — IMPLEMENTED / AWAITING NARROW RE-REVIEW
+
+- ChatGPT requested the bounded remediation from reviewed G10 head
+  `69f951cbccf81f1623d4b7cba94695cd6159d628`, tree
+  `d13e29e58d8d21266870a8970b375539f7425274`, on
+  `codex/phase4-autoscale-preflight-bridge`. Remediation commit
+  `4502de85888ccaf47ef0538fb665d041d22498e1`, tree
+  `f6a450eea91ee7632f0879756d98283354edb3bb`, changes only the purpose-built
+  bridge supervisor, its focused tests, and the fail-closed test floor. This
+  handoff update is the only additional file in the remediation checkpoint.
+- Child stdout and stderr are now drained concurrently through nonblocking
+  selector reads. Each stream retains at most its fixed 1 MiB limit; the first
+  byte over either limit stops normal collection and begins bounded group
+  cleanup. Cleanup continues to drain and discard both pipes, so neither can
+  deadlock the other and neither memory buffer can grow after the limit.
+- Direct-child exit and pipe EOF are no longer accepted as process-group
+  completion. Every started-child supervision outcome requires the direct
+  child to be reaped, the exact launched process group to be kernel-proven
+  absent, and both owned pipes to be closed. Timeout, overflow, supervision
+  error, and a surviving descendant use
+  separate fixed execution, TERM-grace, and KILL-grace deadlines. There is no
+  `communicate()`, unbounded `wait()`, automatic retry, temporary output file,
+  or caller-configurable timeout/cap.
+- If group absence, direct-child reaping, or pipe closure cannot be proven,
+  the request returns a bounded cleanup-unproven failure and sets a persistent
+  process-local quarantine before releasing the mutex. Subsequent requests
+  cannot create another child until the application process restarts. A later
+  request is admitted only after the preceding cleanup was fully proven.
+- Real, credential-free and network-free Linux subprocess regressions reproduce
+  the rejected orphan case: the direct child exits on TERM while a same-group
+  descendant ignores TERM and redirects stdout/stderr; cleanup does not return
+  at leader exit or pipe EOF, escalates to KILL, and proves the descendant and
+  process group absent. Additional real tests cover excess stdout, excess
+  stderr, simultaneous stdout/stderr, continued emission after the cap,
+  timeout with a surviving descendant, normal valid completion, successful
+  subsequent requests after proven output-limit and timeout cleanup, and
+  quarantine after ordinary cleanup or pipe-close exceptions. Every synthetic
+  supervisor test process uses an empty environment and defensive
+  bounded cleanup.
+- Deterministic validation passed: focused G10 **33/33**, complete Phase 4
+  **245/245**, unchanged G9 corrective module **70/70**, Phase 5 **22/22**,
+  startup hardening **10/10**, and authoritative full suite **430/430**.
+  Failures, errors, skips, expected failures, and unexpected successes were all
+  exactly zero. Pinned `uv 0.12.3` lock verification, Python compilation,
+  `/bin/sh` bootstrap syntax, `git diff --check`, credential-pattern scan, and
+  tracked generated-artifact scan passed. Database-backed tests used only the
+  launcher-created loopback PostgreSQL 16.9 `procurement_test` database; the
+  launcher cleared production `DATABASE_URL` and libpq redirects.
+- The frozen G9 SHA/tree, literal `--preflight-only`, bootstrap, corrective
+  executor, migration 007, manifests, business rules, API route, deployment
+  configuration, and emergency-MVP branch remain unchanged. Production
+  database connections/writes: **0 / 0**. Shopify calls/writes: **0 / 0**. PO
+  actions: **0**. No PR was opened, and no merge, deployment, republish, or
+  deployed/production endpoint invocation occurred.
+- Server-side token equality authorizes/enables this one operation; it is not
+  caller authentication. Production use still requires re-proving the private
+  Replit access shield before enabling invocation. Nix/runtime viability and
+  dependency provenance remain **STOP / UNPROVEN**; `PYTHONPATH` and
+  `REPLIT_PYTHONPATH` are still server-owned runtime requirements, not an
+  immutable dependency-byte proof. G10 remains preflight-only and supplies no
+  production-mutation path. Published-production Phase 4 remains **OPEN** and
+  Phase 6 remains **OWNER AUTHORIZED but PAUSED**.
+- **Exact next action:** ChatGPT narrow re-review plus independent adversarial
+  review of the exact remediation head before any PR authorization. No PR,
+  merge, Autoscale republish, endpoint invocation, production connection,
+  correction execution, Shopify action, or PO action is authorized by this
+  checkpoint.
+
+### Prior G10 Autoscale read-only production-preflight bridge — SUPERSEDED BY SUPERVISION REMEDIATION
 
 - G10 began from authoritative `main`
   `f308ac666a2377f540e528bc873463daecc20cf8`, tree
@@ -83,7 +151,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `psycopg` is supplied through `REPLIT_PYTHONPATH`, this checkpoint does not
   claim immutable dependency-byte provenance. Those are runtime evidence
   requirements, not offline production evidence.
-- **Exact next action:** ChatGPT implementation review plus independent
+- **Boundary at that checkpoint:** ChatGPT implementation review plus independent
   adversarial review of this exact branch head before PR authorization. No PR,
   merge, Autoscale republish, endpoint invocation, production connection,
   correction execution, Shopify access, or PO action is authorized by this
@@ -1418,12 +1486,15 @@ Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
 Phase 4 implementation and G9 read-only preflight mode are merged and green at
 authoritative `main` `f308ac666a2377f540e528bc873463daecc20cf8`, tree
 `0a8a2ea80721a97858c2120545d1e6b6f3805247`; production execution and
-independent post-action reconciliation remain outstanding. G10 is validated
-only on `codex/phase4-autoscale-preflight-bridge` and has not been reviewed,
-merged, deployed, republished, externally shield-verified, or invoked. The
-production release remains **STOP / UNPROVEN**. Phase 6 is owner-authorized but
-**PAUSED** on this prerequisite. The exact next action is ChatGPT
-implementation review and independent adversarial review of the G10 branch
-before PR authorization. Vendor Rules, inventory snapshots, price books,
-forecasting, procurement, PO generation/release, Shopify mutation, and other
-downstream implementation remain out of scope.
+independent post-action reconciliation remain outstanding. G10 plus its narrow
+subprocess-supervision remediation are validated only on
+`codex/phase4-autoscale-preflight-bridge`; the remediation implementation is
+`4502de85888ccaf47ef0538fb665d041d22498e1`, tree
+`f6a450eea91ee7632f0879756d98283354edb3bb`. It has not received post-remediation
+narrow review, been merged, deployed, republished, externally shield-verified,
+or invoked. The production release remains **STOP / UNPROVEN**. Phase 6 is
+owner-authorized but **PAUSED** on this prerequisite. The exact next action is
+ChatGPT narrow re-review and independent adversarial review of the exact G10
+remediation head before PR authorization. Vendor Rules, inventory snapshots,
+price books, forecasting, procurement, PO generation/release, Shopify
+mutation, and other downstream implementation remain out of scope.
