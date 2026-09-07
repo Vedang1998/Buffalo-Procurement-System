@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-06T17:01:01Z (UTC)
+**Updated:** 2026-09-07T02:12:33Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,94 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### G9 read-only published-production preflight mode — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+### G10 Autoscale read-only production-preflight bridge — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+
+- G10 began from authoritative `main`
+  `f308ac666a2377f540e528bc873463daecc20cf8`, tree
+  `0a8a2ea80721a97858c2120545d1e6b6f3805247`, on dedicated branch
+  `codex/phase4-autoscale-preflight-bridge`. Implementation commit
+  `1d7c7ebaa6f27044535e1724fb6c55cada76adb5`, tree
+  `fdfe391adf3ced6d60f3aada4ef62c55d7fc4904`, changes only the FastAPI route,
+  one purpose-built bridge module, its focused test module, and the
+  fail-closed test-count floor. The reviewed G9 bootstrap, G9 executor,
+  migration 007, manifests, identity authority, business logic, startup
+  command, and deployment configuration remain byte-identical.
+- The temporary, hidden, parameterless
+  `POST /internal/phase4-production-preflight` route is not linked from
+  navigation and is excluded from OpenAPI. It accepts no command, SHA, tree,
+  mode, database URL, token, or environment input. A valid request launches
+  exactly one fixed child process from the repository root with argv
+  `/bin/sh`, `./scripts/phase4-published-production-bootstrap.sh`, G9 SHA
+  `f308ac666a2377f540e528bc873463daecc20cf8`, G9 tree
+  `0a8a2ea80721a97858c2120545d1e6b6f3805247`, and literal
+  `--preflight-only`. It uses an argv list, `shell=False`, and no dynamic
+  interpolation, fallback, retry, or caller-controlled value.
+- Before process creation, G10 snapshots a six-name server-owned environment
+  allowlist and requires both `RECONCILIATION_REVIEW_TOKEN` and
+  `PHASE4_REVIEW_TOKEN_INPUT`, then applies the existing constant-time
+  `require_review_authorization` check to that same captured snapshot. The
+  child receives unchanged `REPLIT_DEPLOYMENT`, `DATABASE_URL`, both review
+  tokens, `PYTHONPATH`, and `REPLIT_PYTHONPATH` only. Request data and ambient
+  PATH, libpq, Git, loader, Shopify, and all Python-control variables other
+  than the two explicitly listed import paths cannot reach the subprocess.
+  Secret values and the database URL never enter argv, logs, or a successful
+  response.
+- G10 itself has no database, SQL, readiness, migration, identity resolver,
+  finalizer, Shopify-client, or PO execution path. Only the unchanged G9 child
+  can connect, and G9 remains the sole State-A evidence authority. Success is
+  accepted only for the exact G9 result, `READ_ONLY` mode,
+  `A_FROZEN_PRODUCTION_BASELINE`, exact execution SHA/tree, a strict Boolean
+  `mutation_state_machine_entered=false`, and exactly four true integer-zero
+  production-action counters. Malformed, nonstandard, oversized, nonzero,
+  contract-drifted, secret-bearing, or PostgreSQL-URI-bearing output fails
+  closed with a bounded, redacted, `no-store` response.
+- A nonblocking process-local lock permits only one child per application
+  process; overlap returns conflict without a second launch. The fixed
+  180-second timeout targets the isolated process group with TERM, escalates to
+  KILL if the grace period expires, reaps the direct child, returns failure,
+  releases the lock in `finally`, and never retries. This is intentionally
+  process-local because the approved operation is read-only; Autoscale can
+  host more than one process.
+- Deterministic validation passed: focused G10 **23/23**; unchanged G9
+  corrective module **70/70**; complete Phase 4 **235/235**; Phase 5
+  **22/22**; startup hardening **10/10**; and the authoritative full suite
+  **420/420**, with failures, errors, skips, expected failures, and unexpected
+  successes all exactly zero. Pinned `uv 0.12.3` lock verification, Python
+  compilation, `/bin/sh` bootstrap syntax, `git diff --check`, credential
+  pattern review, generated-artifact cleanup/scan, and frozen G9 authority-file
+  identity checks passed. Database-backed tests used only an explicitly
+  validated disposable loopback PostgreSQL 16.9 database named
+  `procurement_test`; production `DATABASE_URL` was cleared as fixture
+  authority.
+- G10 has not been deployed, republished, or invoked against production.
+  Production database connections/writes: **0 / 0**. Shopify calls/writes:
+  **0 / 0**. PO actions: **0**. Published-production Phase 4 remains **OPEN**;
+  Phase 6 remains **OWNER AUTHORIZED but PAUSED**; and the emergency-MVP branch
+  remains paused and untouched by G10.
+- External release gates remain **STOP / UNPROVEN**. The repository proxy does
+  not itself authenticate callers; the owner-stated private Replit shield must
+  be re-proven to intercept an unauthenticated external POST after republish
+  and before any invocation. Runtime viability must also prove the exact G9
+  bootstrap/Nix boundary. The approved Nix Python needs the server-owned
+  `PYTHONPATH` and `REPLIT_PYTHONPATH` to import project dependencies; because
+  `psycopg` is supplied through `REPLIT_PYTHONPATH`, this checkpoint does not
+  claim immutable dependency-byte provenance. Those are runtime evidence
+  requirements, not offline production evidence.
+- **Exact next action:** ChatGPT implementation review plus independent
+  adversarial review of this exact branch head before PR authorization. No PR,
+  merge, Autoscale republish, endpoint invocation, production connection,
+  correction execution, Shopify access, or PO action is authorized by this
+  checkpoint. The bridge must be removed as a Phase-4 closeout task after a
+  successful correction and verification.
+
+### G9 read-only published-production preflight mode — MERGED / CI PASS / NOT EXECUTED
+
+- G9 PR [#22](https://github.com/Vedang1998/Buffalo-Procurement-System/pull/22)
+  merged through a normal two-parent commit
+  `f308ac666a2377f540e528bc873463daecc20cf8`, tree
+  `0a8a2ea80721a97858c2120545d1e6b6f3805247`. Exact post-merge `main` push CI
+  run `34068687049` completed successfully with **397/397** tests and all
+  abnormal-result counters zero. G9 has not been invoked against production.
 
 - G9 began from authoritative `main`
   `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`, tree
@@ -71,10 +158,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   actions: **0**. Published-production Phase 4 remains **OPEN** and Phase 6
   remains **OWNER AUTHORIZED but PAUSED**. The separate paused
   `codex/emergency-monday-procurement-mvp` workstream remains untouched by G9.
-- **Exact next action:** ChatGPT implementation review plus independent
-  adversarial review of this exact branch head before PR authorization. No PR,
-  merge, deployment, production connection, correction execution, Shopify
-  access, or PO action is authorized by this checkpoint.
+- **Boundary after G9 merge:** a separately reviewed transport and explicit
+  runtime authorization were still required before the read-only production
+  preflight could run. No production connection or mutation was authorized by
+  the G9 merge.
 
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 
@@ -1328,15 +1415,15 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Authorization boundary / next action
 
 Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
-Phase 4 implementation, authority, review, merge, and CI gates are complete at
-`main` `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`, but production execution and
-independent post-action reconciliation remain outstanding. G9 read-only
-preflight-mode implementation is validated on
-`codex/phase4-production-preflight-mode` but has not been reviewed, merged, or
-run in the published Scheduled Deployment. No deployment or production
-connection is authorized yet. Phase 6 is owner-authorized but **PAUSED** on
-this prerequisite. The exact next action is ChatGPT implementation review and
-independent adversarial review of the G9 branch before PR authorization.
-Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
-generation/release, Shopify mutation, and other downstream implementation
-remain out of scope.
+Phase 4 implementation and G9 read-only preflight mode are merged and green at
+authoritative `main` `f308ac666a2377f540e528bc873463daecc20cf8`, tree
+`0a8a2ea80721a97858c2120545d1e6b6f3805247`; production execution and
+independent post-action reconciliation remain outstanding. G10 is validated
+only on `codex/phase4-autoscale-preflight-bridge` and has not been reviewed,
+merged, deployed, republished, externally shield-verified, or invoked. The
+production release remains **STOP / UNPROVEN**. Phase 6 is owner-authorized but
+**PAUSED** on this prerequisite. The exact next action is ChatGPT
+implementation review and independent adversarial review of the G10 branch
+before PR authorization. Vendor Rules, inventory snapshots, price books,
+forecasting, procurement, PO generation/release, Shopify mutation, and other
+downstream implementation remain out of scope.
