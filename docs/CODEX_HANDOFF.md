@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-06T02:59:44Z (UTC)
+**Updated:** 2026-09-06T17:01:01Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,14 +10,80 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### G9 read-only published-production preflight mode — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
+
+- G9 began from authoritative `main`
+  `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`, tree
+  `8de8b332ff71e353a359d8f02bf2c5a4f76cf446`, on dedicated branch
+  `codex/phase4-production-preflight-mode`. Implementation commit
+  `353acb72f9184523ce6327c70426b020574c8885`, tree
+  `52810e629d9c8fb3142672c27d18c1ae3f08148e`, changes only the corrective
+  executor, its immutable bootstrap, the focused corrective test module, and
+  the fail-closed test-count floor.
+- The executor now accepts an explicit, non-abbreviated `--preflight-only`
+  mode. It still completes the existing deployment, authorization, manifest,
+  clean-Git, exact-SHA/tree, and database-target checks, then uses the existing
+  read-only classifier. It succeeds only for exact
+  `A_FROZEN_PRODUCTION_BASELINE`; States B, C, D, E, partial, drifted, or
+  unknown states fail closed. The branch returns before construction or entry
+  of the mutation-stage loop.
+- A fresh `REPEATABLE READ, READ ONLY` snapshot re-attests exact State A and
+  reports the database identity, NULL transaction IDs before and after the
+  evidence reads, all six frozen protected fingerprints, all seven canonical
+  readiness rows, exact migration markers through 006, migration 007 absent,
+  no partial terminal schema, exact PRE-007 semantic hash
+  `cf7e091c334c3a78e9ced12731025b2b7d08529cdf34e6cbe3818b85df36253a`,
+  State-A source/resolution/sales/decision/exclusion/alias counts, zero
+  residual `phase5_ui_%` schemas, and purchase orders / lines **0 / 0**.
+  Output contains only presence booleans for the two review-token environment
+  names and for `DATABASE_URL`; it never emits their values or claims that the
+  URL was Replit-injected.
+- Structural dispatch tests prove the original-manifest, migration-007,
+  terminal, terminal-no-op, rebuild, and canonical sales re-resolution/
+  finalizer paths are unreachable in preflight mode. Real disposable-database
+  tests additionally prove exact before/after database snapshots, stable
+  readiness/fingerprints, NULL XIDs, stale-classification rejection, and
+  failure before mutation for States B-E and material count, fingerprint,
+  marker, semantic-schema, and residual-fixture drift.
+- The reviewed bootstrap keeps the exact immutable Nix interpreter and Git/
+  PATH isolation boundary. Its original two-argument behavior is unchanged.
+  A third argument is accepted only when it is literally `--preflight-only`;
+  malformed, abbreviated, environment-selected, or additional arguments fail
+  before clone or Python execution. The flag is forwarded exactly once as a
+  source-coded literal, never through `$@`, `eval`, PATH discovery, an
+  interpreter fallback, or a caller-controlled environment value.
+- Deterministic validation passed: complete corrective module **70/70**;
+  complete Phase 4 suite **212/212**; Phase 5 **22/22**; startup hardening
+  **10/10**; and the authoritative full suite **397/397**, with failures,
+  errors, skips, expected failures, and unexpected successes all exactly zero.
+  Pinned `uv 0.12.3` lock verification, Python compilation, `/bin/sh` bootstrap
+  syntax, `git diff --check`, added-line credential-pattern review, and tracked
+  generated-artifact/cache scan also pass. All PostgreSQL validation used an
+  explicitly validated disposable loopback PostgreSQL 16.9 database named
+  `procurement_test`; ordinary production `DATABASE_URL` was never fixture
+  authority.
+- This implementation has not been run in a Scheduled Deployment or against
+  published production. Actual deployment ID/status, Replit injection
+  provenance for `DATABASE_URL`, immutable-Nix viability in that deployment
+  image, and actual `neondb` State-A evidence therefore remain **STOP /
+  UNPROVEN** until a separately authorized runtime preflight. Production
+  database connections/writes: **0 / 0**. Shopify calls/writes: **0 / 0**. PO
+  actions: **0**. Published-production Phase 4 remains **OPEN** and Phase 6
+  remains **OWNER AUTHORIZED but PAUSED**. The separate paused
+  `codex/emergency-monday-procurement-mvp` workstream remains untouched by G9.
+- **Exact next action:** ChatGPT implementation review plus independent
+  adversarial review of this exact branch head before PR authorization. No PR,
+  merge, deployment, production connection, correction execution, Shopify
+  access, or PO action is authorized by this checkpoint.
+
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 
 - Corrective published-production reconciliation PR
   [#20](https://github.com/Vedang1998/Buffalo-Procurement-System/pull/20)
   merged successfully using a normal two-parent merge commit. Pre-merge
   `main` was `631bd95e2680b1fcdba80a39f52669d83c8e93ac`; the approved PR head was
-  `946623bc59fbfa8b0c6abce7b5f1bf9c35ac2691`; and the merge commit/current
-  `main` is `74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, tree
+  `946623bc59fbfa8b0c6abce7b5f1bf9c35ac2691`; and that PR's merge commit
+  was `74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, tree
   `ce728ec4016cd68be63c1563453838427f556579`.
 - Exact-head pull-request CI run `34006299559` was **completed / success** on
   the approved PR head. Exact post-merge `main` push CI run `34007212711` was
@@ -1263,11 +1329,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
 Phase 4 implementation, authority, review, merge, and CI gates are complete at
-`main` `74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, but production execution and
-independent post-action reconciliation remain outstanding. No Scheduled
-Deployment or production connection is authorized yet. Phase 6 is
-owner-authorized but **PAUSED** on this prerequisite. The exact next action is
-ChatGPT-controlled final published-production release preflight before any
-mutation. Vendor Rules, inventory snapshots, price books, forecasting,
-procurement, PO generation/release, Shopify mutation, and other downstream
-implementation remain out of scope.
+`main` `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`, but production execution and
+independent post-action reconciliation remain outstanding. G9 read-only
+preflight-mode implementation is validated on
+`codex/phase4-production-preflight-mode` but has not been reviewed, merged, or
+run in the published Scheduled Deployment. No deployment or production
+connection is authorized yet. Phase 6 is owner-authorized but **PAUSED** on
+this prerequisite. The exact next action is ChatGPT implementation review and
+independent adversarial review of the G9 branch before PR authorization.
+Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
+generation/release, Shopify mutation, and other downstream implementation
+remain out of scope.
