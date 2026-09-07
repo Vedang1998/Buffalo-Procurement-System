@@ -4,7 +4,7 @@ from datetime import date
 import os
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from .catalog import (
@@ -16,6 +16,10 @@ from .economics import qualifying_quantity, target_cost
 from .health import data_sync_run_status, full_health
 from .matching import MatchCandidate, score_candidate
 from .pricing import rollover
+from .phase4_preflight_bridge import (
+    Phase4PreflightBridgeError,
+    run_phase4_production_preflight,
+)
 from .readiness import po_readiness
 from . import catalog as catalog_service
 from . import sales as sales_service
@@ -93,6 +97,21 @@ def health():
 def health_full():
     """Component-level health: app, DB, schema, seed, Shopify creds, foundation gates."""
     return full_health()
+
+
+@app.post("/internal/phase4-production-preflight", include_in_schema=False)
+def phase4_production_preflight():
+    """Temporary Phase 4 bridge; the frozen G9 subprocess owns all DB access."""
+
+    try:
+        report = run_phase4_production_preflight()
+    except Phase4PreflightBridgeError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.public_detail(),
+            headers={"Cache-Control": "no-store"},
+        ) from None
+    return JSONResponse(report, headers={"Cache-Control": "no-store"})
 
 
 STATUS_BADGE = {

@@ -1,0 +1,330 @@
+"""Temporary, read-only transport bridge to the reviewed Phase 4 G9 preflight.
+
+This module deliberately has no database, Shopify, readiness, migration,
+finalizer, or purchase-order execution path.  Its only operational action is
+launching the frozen G9 bootstrap in a child process after server-side
+authorization.  Remove the bridge after published-production Phase 4 closeout.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import threading
+from typing import Any, Mapping
+
+from .historical_sales_manifest import require_review_authorization
+
+
+G9_EXECUTION_SHA = "f308ac666a2377f540e528bc873463daecc20cf8"
+G9_EXECUTION_TREE = "0a8a2ea80721a97858c2120545d1e6b6f3805247"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+G9_BOOTSTRAP_ARGUMENT = "./scripts/phase4-published-production-bootstrap.sh"
+G9_PREFLIGHT_ARGV = (
+    "/bin/sh",
+    G9_BOOTSTRAP_ARGUMENT,
+    G9_EXECUTION_SHA,
+    G9_EXECUTION_TREE,
+    "--preflight-only",
+)
+
+PREFLIGHT_TIMEOUT_SECONDS = 180
+TERMINATION_GRACE_SECONDS = 2
+MAX_CHILD_STREAM_BYTES = 1_048_576
+MAX_PUBLIC_DIAGNOSTIC_CHARACTERS = 1_000
+
+_CHILD_ENVIRONMENT_NAMES = (
+    "REPLIT_DEPLOYMENT",
+    "DATABASE_URL",
+    "RECONCILIATION_REVIEW_TOKEN",
+    "PHASE4_REVIEW_TOKEN_INPUT",
+    # The approved Nix executable relies on Replit's immutable sitecustomize
+    # plus the locked deployment environment for installed project packages.
+    # These are copied unchanged; PATH and all other Python variables remain
+    # unavailable to the child.
+    "PYTHONPATH",
+    "REPLIT_PYTHONPATH",
+)
+_EXPECTED_PRODUCTION_ACTIONS = {
+    "ddl": 0,
+    "dml": 0,
+    "rebuild": 0,
+    "readiness_writes": 0,
+}
+_POSTGRESQL_URI = re.compile(r"(?i)postgres(?:ql)?://[^\s\"']+")
+_PREFLIGHT_LOCK = threading.Lock()
+
+
+class Phase4PreflightBridgeError(RuntimeError):
+    """A fail-closed bridge error containing only API-safe information."""
+
+    def __init__(
+        self,
+        *,
+        status_code: int,
+        code: str,
+        message: str,
+        diagnostic: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+        self.diagnostic = diagnostic
+
+    def public_detail(self) -> dict[str, str]:
+        detail = {"error": self.code, "message": self.message}
+        if self.diagnostic:
+            detail["diagnostic"] = self.diagnostic
+        return detail
+
+
+def _server_child_environment() -> dict[str, str]:
+    """Copy only unchanged values that the reviewed bootstrap consumes."""
+
+    return {
+        name: os.environ[name]
+        for name in _CHILD_ENVIRONMENT_NAMES
+        if name in os.environ
+    }
+
+
+def _authorize_server_environment(environment: Mapping[str, str]) -> None:
+    configured = environment.get("RECONCILIATION_REVIEW_TOKEN")
+    supplied = environment.get("PHASE4_REVIEW_TOKEN_INPUT")
+    if not configured:
+        raise Phase4PreflightBridgeError(
+            status_code=503,
+            code="PHASE4_REVIEW_AUTHORIZATION_NOT_CONFIGURED",
+            message="Phase 4 production preflight authorization is unavailable.",
+        )
+    if not supplied:
+        raise Phase4PreflightBridgeError(
+            status_code=503,
+            code="PHASE4_REVIEW_AUTHORIZATION_INPUT_UNAVAILABLE",
+            message="Phase 4 production preflight authorization is unavailable.",
+        )
+    try:
+        require_review_authorization(configured, supplied)
+    except PermissionError:
+        raise Phase4PreflightBridgeError(
+            status_code=403,
+            code="PHASE4_REVIEW_AUTHORIZATION_FAILED",
+            message="Phase 4 production preflight authorization failed.",
+        ) from None
+    if not environment.get("PYTHONPATH") or not environment.get("REPLIT_PYTHONPATH"):
+        raise Phase4PreflightBridgeError(
+            status_code=503,
+            code="G9_RUNTIME_ENVIRONMENT_UNAVAILABLE",
+            message="The reviewed Phase 4 preflight runtime is unavailable.",
+        )
+
+
+def _redact_child_text(raw: bytes, environment: Mapping[str, str]) -> str:
+    text = raw.decode("utf-8", errors="replace")
+    for name in (
+        "DATABASE_URL",
+        "RECONCILIATION_REVIEW_TOKEN",
+        "PHASE4_REVIEW_TOKEN_INPUT",
+    ):
+        value = environment.get(name)
+        if value:
+            encoded_values = {
+                value,
+                json.dumps(value)[1:-1],
+                json.dumps(value, ensure_ascii=False)[1:-1],
+                value.encode("unicode_escape").decode("ascii"),
+            }
+            for encoded in sorted(encoded_values, key=len, reverse=True):
+                if encoded:
+                    text = text.replace(encoded, "[REDACTED]")
+    text = _POSTGRESQL_URI.sub("postgresql://[REDACTED]", text)
+    text = " ".join(text.split())
+    return text[:MAX_PUBLIC_DIAGNOSTIC_CHARACTERS]
+
+
+def _safe_failure_diagnostic(
+    stdout: bytes, stderr: bytes, environment: Mapping[str, str]
+) -> str | None:
+    raw = stderr if stderr.strip() else stdout
+    if not raw:
+        return None
+    diagnostic = _redact_child_text(raw, environment)
+    return diagnostic or None
+
+
+def _signal_process_group(process: subprocess.Popen[bytes], sig: signal.Signals) -> None:
+    try:
+        os.killpg(process.pid, sig)
+    except ProcessLookupError:
+        return
+
+
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Terminate and reap the complete bootstrap/Git/Python process group."""
+
+    _signal_process_group(process, signal.SIGTERM)
+    try:
+        process.communicate(timeout=TERMINATION_GRACE_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        _signal_process_group(process, signal.SIGKILL)
+        process.communicate()
+
+
+def _launch_g9_preflight(environment: Mapping[str, str]) -> tuple[bytes, bytes]:
+    try:
+        process = subprocess.Popen(
+            list(G9_PREFLIGHT_ARGV),
+            cwd=REPOSITORY_ROOT,
+            env=dict(environment),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        diagnostic = _redact_child_text(str(exc).encode(), environment)
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_START_FAILED",
+            message="The reviewed Phase 4 preflight could not be started.",
+            diagnostic=diagnostic or None,
+        ) from None
+
+    try:
+        stdout, stderr = process.communicate(timeout=PREFLIGHT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        _terminate_process_group(process)
+        raise Phase4PreflightBridgeError(
+            status_code=504,
+            code="G9_PREFLIGHT_TIMEOUT",
+            message="The reviewed Phase 4 preflight exceeded its execution limit.",
+        ) from None
+
+    if (
+        len(stdout) > MAX_CHILD_STREAM_BYTES
+        or len(stderr) > MAX_CHILD_STREAM_BYTES
+    ):
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_OUTPUT_LIMIT",
+            message="The reviewed Phase 4 preflight exceeded its output limit.",
+        )
+    if process.returncode != 0:
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_FAILED",
+            message="The reviewed Phase 4 preflight failed closed.",
+            diagnostic=_safe_failure_diagnostic(stdout, stderr, environment),
+        )
+    return stdout, stderr
+
+
+def _parse_success_report(stdout: bytes, environment: Mapping[str, str]) -> dict[str, Any]:
+    def reject_nonstandard_json_constant(value: str) -> None:
+        raise ValueError(f"nonstandard JSON constant: {value}")
+
+    try:
+        report = json.loads(
+            stdout.decode("utf-8", errors="strict"),
+            parse_constant=reject_nonstandard_json_constant,
+        )
+    except (UnicodeDecodeError, ValueError):
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_INVALID_OUTPUT",
+            message="The reviewed Phase 4 preflight returned invalid output.",
+            diagnostic=_safe_failure_diagnostic(stdout, b"", environment),
+        ) from None
+    if not isinstance(report, dict):
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_INVALID_OUTPUT",
+            message="The reviewed Phase 4 preflight returned invalid output.",
+        )
+
+    production_actions = report.get("production_actions")
+    exact_zero_actions = (
+        isinstance(production_actions, dict)
+        and set(production_actions) == set(_EXPECTED_PRODUCTION_ACTIONS)
+        and all(
+            type(production_actions[name]) is int and production_actions[name] == 0
+            for name in _EXPECTED_PRODUCTION_ACTIONS
+        )
+    )
+    valid_contract = (
+        report.get("result") == "PHASE4_PUBLISHED_PRODUCTION_PREFLIGHT"
+        and report.get("mode") == "READ_ONLY"
+        and report.get("state") == "A_FROZEN_PRODUCTION_BASELINE"
+        and report.get("mutation_state_machine_entered") is False
+        and report.get("execution_git_sha") == G9_EXECUTION_SHA
+        and report.get("execution_tree_sha") == G9_EXECUTION_TREE
+        and exact_zero_actions
+    )
+    if not valid_contract:
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_CONTRACT_MISMATCH",
+            message="The reviewed Phase 4 preflight result failed contract validation.",
+        )
+
+    report_strings: list[str] = []
+    pending: list[Any] = [report]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            report_strings.extend(str(key) for key in value)
+            pending.extend(value.values())
+        elif isinstance(value, (list, tuple)):
+            pending.extend(value)
+        elif isinstance(value, str):
+            report_strings.append(value)
+
+    serialized = json.dumps(report, sort_keys=True, separators=(",", ":"))
+    for name in (
+        "DATABASE_URL",
+        "RECONCILIATION_REVIEW_TOKEN",
+        "PHASE4_REVIEW_TOKEN_INPUT",
+    ):
+        value = environment.get(name)
+        if value and (
+            any(value in item for item in report_strings) or value in serialized
+        ):
+            raise Phase4PreflightBridgeError(
+                status_code=502,
+                code="G9_PREFLIGHT_UNSAFE_OUTPUT",
+                message="The reviewed Phase 4 preflight returned unsafe output.",
+            )
+    if any(_POSTGRESQL_URI.search(item) for item in report_strings) or _POSTGRESQL_URI.search(
+        serialized
+    ):
+        raise Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_UNSAFE_OUTPUT",
+            message="The reviewed Phase 4 preflight returned unsafe output.",
+        )
+    return report
+
+
+def run_phase4_production_preflight() -> dict[str, Any]:
+    """Authorize and run one exact, frozen G9 read-only preflight subprocess."""
+
+    child_environment = _server_child_environment()
+    _authorize_server_environment(child_environment)
+    if not _PREFLIGHT_LOCK.acquire(blocking=False):
+        raise Phase4PreflightBridgeError(
+            status_code=409,
+            code="G9_PREFLIGHT_BUSY",
+            message="A Phase 4 production preflight is already running in this process.",
+        )
+    try:
+        stdout, _stderr = _launch_g9_preflight(child_environment)
+        return _parse_success_report(stdout, child_environment)
+    finally:
+        _PREFLIGHT_LOCK.release()
