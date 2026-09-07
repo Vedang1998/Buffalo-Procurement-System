@@ -171,6 +171,33 @@ direct-invocation test-harness hardening item, is authorized but implementation
 has not started. Do not begin until the corrective published-production Phase 4
 closeout is independently reviewed, executed, and verified.
 
+## Authorized emergency Monday offline checkpoint
+
+**OFFLINE IMPLEMENTATION CANDIDATE READY FOR REVIEW — NOT FORMAL PHASE ACCEPTANCE**
+
+- Emergency branch: `codex/emergency-monday-procurement-mvp`.
+- Exact tested implementation commit:
+  `4b342cf67ec1d488a2f84433042a468609624d84`; tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`.
+- The offline path now integrates validated/frozen inputs, deterministic
+  baseline recommendations, explicit human preview/confirmation, separate
+  vendor DRAFT POs, and a reconciled internal review packet. It is restricted
+  to immutable `INTERNAL_DRAFT_ONLY` runs; strategic extra quantity remains
+  zero and unvalidated.
+- The authoritative disposable PostgreSQL 16 suite passed `569/569` with every
+  abnormal counter at zero; startup hardening passed `10/10`. Supplemental
+  Codex specialist/static review found no concrete in-scope P0/P1.
+- Required independent Claude review is pending because the installed CLI's
+  OAuth session expired before it could read the repository. Real source
+  freshness, private access, runtime, storage, migration/backup, native Shopify
+  CSV, browser/shadow, deployment, and production acceptance remain unproven.
+- Every retained synthetic artifact is labeled `TEST DATA — NOT FOR ORDERING`.
+  Production database and Shopify actions remain `0 / 0`; FINAL, release,
+  supplier-transmission, and real-money actions remain `0`.
+
+This emergency checkpoint does not close or renumber a canonical phase, reopen
+production permissions, or alter the Phase 4/Phase 6 statuses above.
+
 ## Post-foundation ordered workstreams
 
 After the required foundation gates pass, continue in the canonical order:

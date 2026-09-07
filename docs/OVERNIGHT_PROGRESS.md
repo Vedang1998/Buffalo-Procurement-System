@@ -1,85 +1,107 @@
-# Buffalo Procurement OS — Overnight Monday MVP Progress
+# Monday overnight implementation progress
 
-Updated: 2026-09-07 01:31 EDT
+Updated: 2026-09-07 05:25 EDT
 
-This is an operational engineering log for the authorized offline emergency workstream. It does not change canonical phase authority or authorize production activity.
+## Workspace and safety
 
-## Execution boundary
-
-- Isolated worktree: `/home/runner/workspace/.ai-auth/codex/worktrees/emergency-monday-procurement-mvp`
 - Branch: `codex/emergency-monday-procurement-mvp`
-- Starting emergency head: `7068f54fe2fb8b54397888aadba6990d3644b19a`
-- Starting emergency tree: `d00efd71a3f7b2e1ad55f2258767d6765122c88b`
-- Upstream at setup: exact same head; no unpushed commits.
-- Accepted `main` recorded by the execution contract: `f308ac666a2377f540e528bc873463daecc20cf8`.
-- The emergency history intentionally remains based on `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`; current `main` and G10 will not be merged or cherry-picked overnight.
-- Frozen G10 worktree remains separate at `86da9669a9f83f81fa3a49c59cf62e9fc1a7a3b6`, tree `045395d55046fa78013b4a79d64e15139ad1f933`.
-- Codex is the sole writer. Parallel agents are read-only auditors.
-
-## Setup checkpoint
-
-- The owner-supplied execution contract is saved as `docs/OVERNIGHT_MONDAY_RUN.md`.
-- The worktree was clean before that contract file was saved; no unrelated local changes were found.
-- Local disposable database safety was proven with PostgreSQL 16.9 on `127.0.0.1`, database `overnight_setup_test`.
-- The shared validator confirmed the database name ends in `_test`, server major version 16, and `current_database()` before fixture DDL.
-- `txid_current_if_assigned()` was `NULL` before fixture DDL; setup fixture DDL count was zero.
-- Ambient `DATABASE_URL` and libpq redirect variables were scrubbed without reading or displaying their values. There was no fallback to `DATABASE_URL`.
-- The disposable cluster was stopped and removed after the proof.
-- Production DB connections/writes: `0 / 0`.
+- Tested implementation commit: `4b342cf67ec1d488a2f84433042a468609624d84`;
+  tree `01a451f66ca8ee8d3aaad57090d00de201f30a1c`.
+- Before the documentation closeout, the last pushed head was
+  `c042ad09ae1289168e826805118201c000b90131`. The only post-implementation
+  changes are four closeout documents: this progress record, the morning
+  handoff, `docs/CODEX_HANDOFF.md`, and `procurement/docs/PHASE_STATUS.md`.
+- Focused database tests used only the validated loopback PostgreSQL 16 database
+  `overnight_price_test`. The authoritative wrapper independently provisioned
+  and destroyed loopback PostgreSQL 16 database `procurement_test`. Both names
+  end in `_test`; neither came from `DATABASE_URL`.
+- Production database connections/writes: `0 / 0`.
 - Shopify calls/writes: `0 / 0`.
-- Production PO actions: `0`.
+- PO releases, exports to Shopify, supplier transmissions, or real-money actions:
+  `0`.
 
-## Existing packet inventory
+## Verified checkpoints
 
-| Packet | Commit | Evidence status at overnight start |
-|---|---|---|
-| Design | `7c24419` | Approved emergency design present. |
-| Packet 0 — PostgreSQL test isolation | `d0834a8` | Implemented; exact-current audit and tests pending. |
-| Packet 1 — inventory snapshots | `955d468` | Implemented; exact-current audit and tests pending. |
-| Packet 2 — vendor rules | `3c81704` | Implemented; exact-current audit and tests pending. |
-| Packet 3 — PO ledger | `7068f54` | Implemented; exact-current high-risk audit and tests pending. |
-| Packet 4 onward | — | Not yet implemented on this branch. |
+- Packet 0–3 foundation remediation was independently approved and committed.
+- Packet 4 FUTURE-only price-book staging/promotion was independently approved,
+  committed, and pushed. Focused result: `42/42`; affected Packet 0–4 result:
+  `137/137`.
+- Deterministic forecast, replenishment, and strategic evidence modules pass
+  `32/32`; an independent Codex adversarial review also passed a 3,020-case pure
+  invariant sweep. Strategic extra quantity remains exactly zero and explicitly
+  unvalidated.
+- The integrated recommendation → immutable human accept/edit/reject →
+  vendor-separated DRAFT → internal packet workflow passes `39/39` against real
+  disposable PostgreSQL. It includes two pack sizes/vendors, exact Decimal
+  economics, stale-input checks, computed readiness failure, rollbacks,
+  idempotent replay, two-connection lock conflicts, storage tamper detection,
+  and the real FastAPI HTTP chain.
+- The latest affected multi-module checkpoint passed `231/231` while the Monday
+  module contained 38 tests. The subsequently added exact canonical sales
+  run-fact regression passed independently, and the complete current Monday
+  module then passed `39/39` in 33.389 seconds. All failures, errors, skips,
+  expected failures, and unexpected successes were zero. The sole warning is
+  the pre-existing Starlette TestClient/httpx deprecation warning.
+- Monday UI/API has six DRAFT-only routes, shared operational navigation,
+  authorization before domain DB/storage work on every POST, no-store reads,
+  escaped output, recalculated approved edit economics, and no FINAL/release or
+  Shopify route. Credential-free independent API probing passed.
+- Packet artifacts are deterministic, labeled `TEST DATA — NOT FOR ORDERING`,
+  formula-safe, content-addressed, storage-readback checked, and transactionally
+  bound to an append-only build event. Immutable DB payload evidence is bound to
+  exact size/SHA and provides a read-only fallback if the storage copy is absent.
+- The latest stabilization closes two additional fail-open paths. Forecast input
+  now accepts only a complete canonical ShopifyQL readiness authority, or an
+  exact per-variant synthetic daily manifest that is usable only in a database
+  ending `_test`; unrelated fresh rows and overlapping ad-hoc sources cannot
+  establish current coverage. Vendor minimum shortfall/fee/PO totals now require
+  a read-only preview plus fingerprint-bound human `PAY_FEE` confirmation before
+  the first DRAFT write. The confirmed economics are retained in DRAFT evidence,
+  internal CSVs, and the review packet.
+- The deterministic test wrapper now removes runtime database, Shopify, and
+  review credentials before launching tests. Local filesystem writes use a
+  same-directory temporary file and atomic replacement.
+- Latest post-remediation focused results are Monday workflow `39/39`, storage
+  `7/7`, and runner safety `21/21`. The authoritative wrapper then discovered,
+  executed, and passed `569/569` tests in 662.685 seconds. Failures, errors,
+  skips, expected failures, and unexpected successes were all exactly zero;
+  all 33 registered modules met their floor.
+- Startup hardening passed `10/10`. Python compilation, pinned offline lock
+  validation, shell syntax, diff checks, secret scans, and candidate
+  generated-file scans passed. The only generated ZIP found by the broad scan
+  is a pre-existing tracked attachment outside this candidate delta.
+- Operator input/fallback templates, a requirements-to-test evidence matrix,
+  and the final-results morning handoff now exist.
+- A retained synthetic FastAPI/service-chain run reached `PACKET_BUILT` with two
+  DRAFT POs, zero non-DRAFT POs, two vendor CSVs, one 11-entry review packet,
+  hash/readback verification, and replay PASS. Its root is
+  `/tmp/buffalo-monday-handoff.Zgr3zh` on this host.
+- Independent Codex specialist/static reviews report no remaining concrete
+  in-scope P0/P1. Claude Code 2.1.227 is installed, but its OAuth session is
+  expired and could not refresh; it read no repository content and supplied no
+  verdict. Independent completed-candidate review therefore remains PENDING.
 
-Code presence is not acceptance. Packets 0–3 remain under audit until their focused tests, affected suites, and control invariants pass on the exact candidate.
+## Open review items and blockers
 
-## Current work
+- An intentional same-database-role direct-SQL attacker can still construct
+  hash-consistent arbitrary artifact bytes and the matching terminal event. The
+  application has no SQL endpoint and the normal service path re-renders and
+  readback-verifies every byte, but eliminating this stronger actor requires a
+  separately accepted role/signature boundary or database-native semantic ZIP
+  rendering. This remains an explicit independent-review item; it is not being
+  misrepresented as cryptographically impossible.
+- `holiday_blackout_notes` and vendor `special_rules` are frozen and displayed as
+  evidence but remain free text. A nonempty note is not automatically interpreted
+  as an active blackout; real use requires owner review of those facts.
+- The historical `SALES_BACKFILL` PASS in the disposable workflow fixture is a
+  narrowly labeled synthetic evidence row because no lightweight evaluator
+  exists. Production readiness is neither changed nor claimed.
+- Native Shopify PO CSV format, production runtime, production data freshness,
+  browser acceptance, and every deployment/production gate remain unproven.
 
-1. Reconcile read-only gap audits for Packets 0–3.
-2. Run focused disposable-PostgreSQL validation and repair concrete defects.
-3. Continue with the universal price-book staging packet, then the minimum end-to-end Monday workflow in the approved priority order.
+## Exact next eligible action
 
-Feature work freezes at 06:30 America/New_York for integration, full validation, gap reporting, and handoff. If a packet cannot be completed coherently before that boundary, it will remain explicitly deferred rather than being left half-implemented.
-
-## Packet 0–3 remediation checkpoint
-
-- The first exact-current focused run discovered 81 tests: 77 passed and four Packet 3 trusted-incoming assertions failed. The cause was a split clock: reconciliation wrote database `now()` but evaluated the caller's frozen `as_of` timestamp.
-- Reconciliation now uses one database-owned evidence timestamp for both the durable ledger write and trust evaluation; caller `as_of` is only a narrow clock-consistency assertion. SQL requires the evidence to follow FINAL/import events and to be near the database clock. Trusted open incoming requires nonblank JSON-string source and reference evidence in both Python and the database view.
-- DRAFT PO replay now rejects a changed expected receipt and rejects timezone-naive receipt timestamps.
-- Inventory readiness now blocks on stale snapshots and unknown incoming quantities. Capture timestamps must equal the `America/New_York` business date, and default status evaluation uses that store timezone rather than the host UTC date.
-- Completed inventory run evidence and inventory run rows are database-protected; vendor-rule revisions are append-only.
-- Vendor cycle/lead times reject booleans and fractional days; CASE minimums require whole case counts in both service validation and the database.
-- The affected focused suite then passed `85 / 85`, with failures/errors/skips/expected failures/unexpected successes all `0`.
-- Exact registered branch floor after these added tests: `452`.
-- Two independent read-only re-audits returned `APPROVE` with no remaining P0/P1 blocker in this bounded remediation. The full authoritative suite has not yet run on this candidate.
-
-## Packet 4 — universal FUTURE price-book staging checkpoint
-
-- Added a strict normalized CSV template, bounded upload, raw content-addressed evidence, deterministic validation results, explicit authenticated promote/reject actions, and read-only batch/exception screens.
-- Uploads are FUTURE-only. There is no Packet-4 rollover table, status, API, or executable CURRENT transition; the legacy rollover entrypoint now fails closed.
-- Promotion re-reads and hashes the raw object, reparses it, revalidates the locked database state, requires exact mapping/pack/assortment/coverage evidence, records warning acknowledgement, and replaces the vendor's complete FUTURE set in one serializable transaction.
-- Effective month outranks upload generation: an older effective book cannot replace a newer one. Same-month corrections bind the exact active predecessor batch and supersede/purge prior typed economics transactionally.
-- SQL guards independently enforce complete eligible-offer coverage, one BASE per offer, BT/CS ladder monotonicity, case/unit arithmetic, mapping eligibility, offer/vendor stability, exact event-to-batch claims, and append-only audit evidence.
-- Existing verified source-null CURRENT rows are grandfathered but immutable. Fresh-install/idempotent August seed writes require the exact reviewed six-file seed manifest, every file SHA-256/count, the exact 85-offer/271-price controls, a transaction-scoped append-only seed event, and a deferred semantic digest over vendor/variant eligibility, offer mapping/pack/trust fields, and price economics. Tampered offer or price evidence is rejected before price writes.
-- Rejected/superseded batches purge typed staging rows and resolve their diagnostics while retaining raw supplier evidence plus compact audit controls; no reusable operational price archive is created.
-- Candidate FUTURE imports do not poison operational CURRENT readiness. Trusted views exclude unverified offers/prices, inactive vendors, and non-CURRENT/non-LIVE variants.
-- Focused price-book validation passed `42 / 42`; Packet-4/pricing/storage passed `52 / 52`; the combined Packet-0-through-4 affected suite passed `137 / 137`. All abnormal counters were `0`; the only warning was the pre-existing Starlette `TestClient` deprecation notice.
-- Registered deterministic-suite floor is now `496` (`452` foundation checkpoint + `42` price-book + one pricing + one storage test).
-- Two independent read-only Packet-4 audits returned PASS with no remaining concrete P0/P1 blocker. This offline checkpoint still requires morning business-rule and broader independent review before any operational reliance.
-
-## Review and release status
-
-- Emergency candidate review: pending.
-- Browser acceptance: pending availability of installed browser tooling.
-- Published-production Phase 4 remains OPEN.
-- Phase 6 remains OWNER AUTHORIZED but PAUSED.
-- Deployment, production connection, production mutation, Shopify access, and real PO creation/release remain unauthorized.
+The branch handoff boundary is one normal documentation-only closeout push,
+followed by a stop for ChatGPT/owner review plus an independently authenticated
+reviewer. No further implementation, PR, merge, deployment, production
+connection, Shopify action, or PO release is authorized.

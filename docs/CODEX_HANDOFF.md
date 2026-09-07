@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-06T02:59:44Z (UTC)
+**Updated:** 2026-09-07T09:25:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,70 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Emergency Monday offline procurement candidate — READY FOR REVIEW / PRODUCTION NOT AUTHORIZED
+
+- The owner-authorized emergency offline workstream is implemented on
+  `codex/emergency-monday-procurement-mvp`. The exact tested implementation
+  commit is `4b342cf67ec1d488a2f84433042a468609624d84`, tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. It inherits the pre-authorized
+  emergency history from `1920a16`; no current-main or G10 merge occurred.
+- The working offline service chain is: validated/frozen inputs → deterministic
+  recommendations → explicit human review preview/confirmation → one immutable
+  DRAFT per vendor → reconciled internal CSV/ZIP packet. Strategic extra units
+  are always zero and explicitly unvalidated. The emergency run mode is
+  `INTERNAL_DRAFT_ONLY`; database and service guards forbid REVIEW/FINAL/import,
+  and the Monday API exposes no release, Shopify, or supplier-transmission path.
+- Material facts fail closed. Current sales require either the exact completed
+  canonical ShopifyQL run plus per-day run-fact/aggregate reconciliation, or an
+  exact synthetic per-variant manifest usable only in a loopback `_test`
+  database. Inventory requires a completed owned same-day capture. Vendor,
+  calendar, offer/mapping/pack, CURRENT price, and open-PO evidence are frozen
+  into the run fingerprint; material drift invalidates review and DRAFT build.
+- Exact reviewed economics use the frozen applicable case price for cases and
+  unit price for loose units. Merchandise excludes loose-order and
+  below-minimum fees. DOLLAR minimums compare merchandise only; fees are
+  separately calculated, human-previewed, and reconciled into each DRAFT total.
+  Each vendor records its own `PAY_FEE` or `NOT_APPLICABLE` disposition.
+- Authoritative validation on the exact implementation candidate provisioned
+  and destroyed its own loopback PostgreSQL 16.9 `procurement_test` database:
+  discovered `569`, executed `569`, passed `569` in 662.685 seconds; failures,
+  errors, skips, expected failures, and unexpected successes were all `0`; all
+  33 registered modules met their floor. Startup hardening passed `10/10`.
+  Compilation, pinned offline lock validation, shell syntax, diff, whitespace,
+  UTF-8/newline, high-risk secret, and candidate generated-file checks passed.
+- A retained synthetic in-process FastAPI HTTP run exercised prepare, review
+  preview/confirm, DRAFT preview/confirm, download, and replay against disposable
+  PostgreSQL. Run `62cdeab4-c952-471f-93d5-aa14d7dcc386` produced two DRAFTs,
+  zero non-DRAFT POs, two hash-verified internal CSVs, and one hash-verified
+  11-entry packet under `/tmp/buffalo-monday-handoff.Zgr3zh`. Every output is
+  labeled `TEST DATA — NOT FOR ORDERING`; the native Shopify PO format remains
+  `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`.
+- Supplemental independent Codex specialist/static reviews found no remaining
+  concrete in-scope P0/P1. Required independent Claude review is **PENDING**:
+  Claude Code 2.1.227 is installed, but its OAuth session expired and could not
+  refresh, so it read no repository content and supplied no verdict. This is
+  not represented as independent approval.
+- Real September sales coverage, same-day inventory, open-order reconciliation,
+  confirmed vendor facts, verified mappings/packs, and verified CURRENT prices
+  remain unproven. FUTURE price uploads cannot update CURRENT because the
+  separately guarded rollover is absent. Browser/started-server acceptance,
+  Replit App Storage, private caller protection, production runtime/Nix
+  dependency viability, backup/restore, real-environment migration, shadow
+  mode, and native Shopify CSV validation remain outstanding.
+- The stronger trusted-database-writer threat can construct self-consistent
+  arbitrary artifact bytes and metadata; eliminating that actor requires a
+  separately accepted role/signature or database-native rendering boundary.
+  The application has no SQL endpoint; the normal service path renders exact
+  bytes, verifies storage readback, and binds immutable DB payload/SHA evidence.
+- This checkpoint changes no formal phase completion. Published-production
+  Phase 4 remains OPEN, and formal Phase 6 remains owner-authorized but PAUSED.
+  Production database connections/writes: `0 / 0`; Shopify calls/writes:
+  `0 / 0`; FINAL/release/transmission/real-money actions: `0`.
+- **Exact next authorization boundary:** push the documentation closeout, then
+  stop for ChatGPT/owner review and an authenticated independent reviewer. No
+  PR, merge, deployment, republish, production connection, Shopify action,
+  supplier communication, or PO release is authorized.
 
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 
