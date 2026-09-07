@@ -225,9 +225,46 @@ def build_emergency_review_packet(
             raise EmergencyPacketError("frozen input manifest is missing")
         entries["human-review-decisions.csv"] = _review_csv(conn, run_id)
         exceptions = [
-            {"exception_id": int(row[0]),"type": row[1],"severity": row[2],"variant_id": row[3],"message": row[4],"status": row[5]}
+            {
+                "exception_id": int(row[0]),"type": row[1],"severity": row[2],
+                "variant_id": row[3],"message": row[4],"status": row[5],
+                "run_only_exclusion": (
+                    {
+                        "exclusion_id": int(row[6]),"action": row[7],
+                        "scope": row[8],"actor": row[9],"reason": row[10],
+                        "input_fingerprint": row[11],"created_at": row[12],
+                        "evidence": row[13],
+                    }
+                    if row[6] is not None else None
+                ),
+            }
             for row in conn.execute(
-                "SELECT exception_id,exception_type,severity,variant_id,message,status FROM exceptions WHERE run_id=%s ORDER BY exception_id",
+                """SELECT e.exception_id,e.exception_type,e.severity,e.variant_id,
+                          e.message,e.status,x.exclusion_id,x.action,x.scope,x.actor,
+                          x.reason,x.input_fingerprint,x.created_at,x.evidence_json
+                     FROM exceptions e
+                     LEFT JOIN monday_run_blocker_exclusions x
+                       ON x.run_id=e.run_id AND x.exception_id=e.exception_id
+                    WHERE e.run_id=%s ORDER BY e.exception_id""",
+                (run_id,),
+            ).fetchall()
+        ]
+        material_edit_confirmations = [
+            {
+                "material_edit_confirmation_id": int(row[0]),
+                "recommendation_id": int(row[1]),"input_fingerprint": row[2],
+                "review_preview_fingerprint": row[3],"approved_cases": row[4],
+                "approved_loose_units": row[5],"approved_units": row[6],
+                "action": row[7],"confirmed_by": row[8],"reason": row[9],
+                "evidence": row[10],"created_at": row[11],
+            }
+            for row in conn.execute(
+                """SELECT material_edit_confirmation_id,recommendation_id,
+                          input_fingerprint,review_preview_fingerprint,approved_cases,
+                          approved_loose_units,approved_units,action,confirmed_by,
+                          reason,evidence_json,created_at
+                     FROM monday_material_edit_confirmations WHERE run_id=%s
+                    ORDER BY material_edit_confirmation_id""",
                 (run_id,),
             ).fetchall()
         ]
@@ -290,6 +327,14 @@ def build_emergency_review_packet(
     entries["frozen-price-economics.json"] = _json_entry({**evidence_label, "items": prices})
     entries["supplier-mapping-evidence.json"] = _json_entry({**evidence_label, "items": mappings})
     entries["open-po-ledger-evidence.json"] = _json_entry({**evidence_label, "items": open_ledger})
+    entries["blocked-item-exclusions.json"] = _json_entry(
+        {**evidence_label, "items": [
+            item for item in exceptions if item["run_only_exclusion"] is not None
+        ]}
+    )
+    entries["material-edit-confirmations.json"] = _json_entry(
+        {**evidence_label, "items": material_edit_confirmations}
+    )
     entries["draft-readiness-evidence.json"] = _json_entry(
         {
             **evidence_label,

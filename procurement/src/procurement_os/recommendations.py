@@ -12,6 +12,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .forecasting import DemandObservation, METHOD_VERSION, forecast_demand
+from .monday_controls import MondayControlError, load_material_edit_policy
 from .po_ledger import open_po_position
 from .replenishment import calculate_baseline_need
 from .strategic import PriceTier, evaluate_price_tiers
@@ -584,6 +585,9 @@ def _load_context(
     if need.status == "BLOCKED":
         context["blockers"].extend(need.reason_codes)
         return context
+    if need.loose_units > 0 and Decimal(vendor[9] or 0) > 0:
+        context["blockers"].append("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED")
+        return context
     try:
         tiers = _price_tiers_from_rows(prices)
         strategic = evaluate_price_tiers(
@@ -619,6 +623,10 @@ def prepare_monday_run(
     normalized_ids = tuple(sorted({str(value).strip() for value in variant_ids if str(value).strip()}))
     if not key or not reviewer or not normalized_ids:
         raise MondayRecommendationError("business run key, actor, and Variant IDs are required")
+    try:
+        material_edit_policy = load_material_edit_policy().evidence()
+    except MondayControlError as exc:
+        raise MondayRecommendationError(str(exc)) from exc
     with conn.transaction():
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         if not conn.execute("SELECT pg_try_advisory_xact_lock(%s)", (MONDAY_ANALYSIS_LOCK,)).fetchone()[0]:
@@ -634,6 +642,20 @@ def prepare_monday_run(
             existing[3] != "INTERNAL_DRAFT_ONLY" or existing[4] != "RUNNING"
         ):
             raise MondayRecommendationError("run key belongs to an incompatible workflow")
+        active_same_day = conn.execute(
+            """SELECT run_id,idempotency_key FROM runs
+                WHERE run_type='MONDAY_PROCUREMENT' AND status='RUNNING'
+                  AND business_date=%s
+                ORDER BY run_id FOR UPDATE""",
+            (business_date,),
+        ).fetchone()
+        if active_same_day is not None and (
+            existing is None or active_same_day[0] != existing[0]
+        ):
+            raise MondayRecommendationError(
+                "an active Monday Procurement run already exists for this business date; "
+                "same-day replacement/supersession is not implemented"
+            )
         evaluation_at = (
             existing[5]
             if existing is not None
@@ -653,6 +675,7 @@ def prepare_monday_run(
             "variant_ids": normalized_ids,
             "method_version": METHOD_VERSION,
             "evaluation_at": evaluation_at,
+            "material_edit_policy": material_edit_policy,
             "contexts": contexts,
         }
         input_manifest = _canonical_json(frozen_manifest)
@@ -770,6 +793,7 @@ def prepare_monday_run(
                     "updated_at": context["vendor_rules"][21],
                 },
                 "frozen_offer_evidence": context["offer_evidence"],
+                "material_edit_policy": material_edit_policy,
                 "safety_label": SAFETY_LABEL,
             }
             conn.execute(
@@ -805,7 +829,7 @@ def monday_run_inputs_match(conn: Any, run_id: str, expected_fingerprint: str) -
 
     run = conn.execute(
         """SELECT business_date,model_version,procurement_output_mode,input_fingerprint,
-                  started_at
+                  started_at,procurement_input_manifest
              FROM runs WHERE run_id=%s AND run_type='MONDAY_PROCUREMENT'""",
         (run_id,),
     ).fetchone()
@@ -816,15 +840,19 @@ def monday_run_inputs_match(conn: Any, run_id: str, expected_fingerprint: str) -
         or run[3] != expected_fingerprint
     ):
         return False
-    variant_ids = tuple(
-        row[0]
-        for row in conn.execute(
-            """SELECT variant_id FROM procurement_recommendations
-                WHERE run_id=%s ORDER BY variant_id""",
-            (run_id,),
-        ).fetchall()
-    )
-    if not variant_ids:
+    try:
+        manifest = json.loads(run[5])
+        manifest_variant_ids = manifest["variant_ids"]
+        variant_ids = tuple(str(value) for value in manifest_variant_ids)
+        material_edit_policy = load_material_edit_policy().evidence()
+    except (json.JSONDecodeError, KeyError, MondayControlError, TypeError, ValueError):
+        return False
+    if (
+        not variant_ids
+        or variant_ids != tuple(sorted(set(variant_ids)))
+        or any(not value.strip() for value in variant_ids)
+        or manifest.get("material_edit_policy") != material_edit_policy
+    ):
         return False
     contexts = [
         _load_context(
@@ -838,6 +866,7 @@ def monday_run_inputs_match(conn: Any, run_id: str, expected_fingerprint: str) -
             "variant_ids": variant_ids,
             "method_version": METHOD_VERSION,
             "evaluation_at": run[4],
+            "material_edit_policy": material_edit_policy,
             "contexts": contexts,
         }
     )
@@ -870,9 +899,28 @@ def get_monday_run(conn: Any, run_id: str, *, idempotent_replay: bool = False) -
             ).fetchall()
         ]
         blockers = [
-            {"exception_id": int(row[0]),"variant_id": row[1],"vendor_id": str(row[2]) if row[2] else None,"message": row[3]}
+            {
+                "exception_id": int(row[0]),"variant_id": row[1],
+                "vendor_id": str(row[2]) if row[2] else None,"message": row[3],
+                "excluded": row[4] is not None,
+                "exclusion": (
+                    {
+                        "exclusion_id": int(row[4]),"action": row[5],
+                        "actor": row[6],"reason": row[7],"created_at": row[8],
+                        "input_fingerprint": row[9],
+                    }
+                    if row[4] is not None else None
+                ),
+            }
             for row in conn.execute(
-                "SELECT exception_id,variant_id,vendor_id,message FROM exceptions WHERE run_id=%s AND status='OPEN' ORDER BY exception_id",
+                """SELECT e.exception_id,e.variant_id,e.vendor_id,e.message,
+                          x.exclusion_id,x.action,x.actor,x.reason,x.created_at,
+                          x.input_fingerprint
+                     FROM exceptions e
+                     LEFT JOIN monday_run_blocker_exclusions x
+                       ON x.exception_id=e.exception_id AND x.run_id=e.run_id
+                    WHERE e.run_id=%s AND e.status='OPEN'
+                    ORDER BY e.exception_id""",
                 (run_id,),
             ).fetchall()
         ]

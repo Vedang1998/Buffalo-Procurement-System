@@ -43,6 +43,8 @@ from .po_csv import PoCsvError
 from .readiness import po_readiness
 from .procurement_review import (
     ProcurementReviewError,
+    acknowledge_and_exclude_blocked_item,
+    confirm_material_recommendation_edit,
     list_review_queue,
     preview_recommendation_review,
     record_recommendation_review,
@@ -1346,14 +1348,35 @@ def _monday_run_html(
     run: dict, review: dict, drafts: dict, artifacts: list[dict]
 ) -> str:
     run_id = _html_escape(run["run_id"])
-    blockers = "".join(
-        "<tr>"
-        f"<td>{_html_escape(item['variant_id'])}</td>"
-        f"<td>{_html_escape(item['vendor_id'])}</td>"
-        f"<td>{_html_escape(item['message'])}</td>"
-        "</tr>"
-        for item in run["blockers"]
-    ) or "<tr><td colspan='3'>No open run blockers.</td></tr>"
+    blocker_rows = []
+    for item in run["blockers"]:
+        if item.get("excluded"):
+            exclusion = item["exclusion"]
+            control = (
+                "<b>ACKNOWLEDGE_AND_EXCLUDE — RUN_ONLY</b><br>"
+                f"Actor {_html_escape(exclusion['actor'])}; reason "
+                f"{_html_escape(exclusion['reason'])}; at "
+                f"{_html_escape(exclusion['created_at'])}. Original blocker retained."
+            )
+        elif run["workflow_stage"] == "AWAITING_REVIEW":
+            control = f"""<form method='post' action='{run_id}/blockers/{item['exception_id']}/exclude'>
+<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
+<label>Exclusion reason <input name='reason' required></label>
+<label>Owner/reviewer <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Acknowledge and exclude from this run only</button></form>"""
+        else:
+            control = "Not excluded before review completion."
+        blocker_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(item['variant_id'])}</td>"
+            f"<td>{_html_escape(item['vendor_id'])}</td>"
+            f"<td>{_html_escape(item['message'])}</td>"
+            f"<td>{control}</td></tr>"
+        )
+    blockers = "".join(blocker_rows) or (
+        "<tr><td colspan='4'>No original run blockers.</td></tr>"
+    )
     review_rows = []
     for item in review["items"]:
         frozen_terms = (item.get("metrics") or {}).get("frozen_vendor_terms") or {}
@@ -1439,7 +1462,7 @@ table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px soli
 {_operational_nav('../', current='Monday Procurement')}<p><a href='../monday-runs'>Back to Monday runs</a></p>
 <p class='warning'>TEST DATA — NOT FOR ORDERING. SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED. DRAFT output only.</p>
 <h1>Monday run {run_id}</h1><p>Stage: <b>{_html_escape(run['workflow_stage'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
-<h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Reason</th></tr></thead><tbody>{blockers}</tbody></table>
+<h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Original reason</th><th>RUN_ONLY disposition</th></tr></thead><tbody>{blockers}</tbody></table>
 <h2>Human review</h2><table><thead><tr><th>Item</th><th>Vendor</th><th>Recommendation</th><th>Decision</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="4">No eligible recommendations.</td></tr>'}</tbody></table>
 {build_form}<h2>Vendor DRAFT POs</h2>{''.join(draft_sections) or '<p>No DRAFTs built.</p>'}
 <h2>Internal artifacts</h2><table><thead><tr><th>Type</th><th>Vendor</th><th>Bytes</th><th>Download</th></tr></thead><tbody>{artifact_rows}</tbody></table>
@@ -1453,6 +1476,7 @@ def _monday_review_preview_html(
     preview: dict,
     actor: str,
     comment: str,
+    material_edit_confirmation_id: int | None = None,
 ) -> str:
     metrics = preview.get("metrics") or {}
     terms = metrics.get("frozen_vendor_terms") or {}
@@ -1462,6 +1486,31 @@ def _monday_review_preview_html(
         if case_price is not None
         else "not separately quoted"
     )
+    materiality = preview.get("materiality") or {}
+    multiplier = materiality.get("baseline_multiplier")
+    multiplier_text = (
+        f"{_html_escape(multiplier)}x"
+        if multiplier is not None
+        else _html_escape(materiality.get("baseline_multiplier_status"))
+    )
+    material_confirmation = ""
+    if materiality.get("materiality_tier") == "MATERIAL":
+        if material_edit_confirmation_id is None:
+            material_confirmation = """<label>Distinct MATERIAL edit confirmation reason
+<input name='material_confirmation_reason' required></label>
+<button type='submit'>Record distinct MATERIAL-risk confirmation</button>"""
+        else:
+            material_confirmation = (
+                "<input type='hidden' name='material_edit_confirmation_id' "
+                f"value='{_form_value(material_edit_confirmation_id)}'>"
+                "<p><b>Distinct MATERIAL-risk confirmation recorded.</b> "
+                "The next action creates the immutable RUN_ONLY decision.</p>"
+                "<button type='submit'>Confirm immutable MATERIAL EDIT_QUANTITY decision</button>"
+            )
+    else:
+        material_confirmation = (
+            f"<button type='submit'>Confirm immutable {_html_escape(preview['action'])} decision</button>"
+        )
     return f"""<!doctype html><html><head><title>Confirm edited recommendation</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}dl{{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px}}dt{{font-weight:700}}form{{display:grid;gap:9px}}input,button{{padding:7px}}</style></head><body>
 <p class='warning'>TEST DATA — NOT FOR ORDERING. Review these exact calculations before creating an immutable RUN_ONLY decision.</p>
@@ -1476,6 +1525,14 @@ def _monday_review_preview_html(
 <dt>Recalculated line total</dt><dd>${_html_escape(preview['approved_line_total'])}</dd>
 <dt>Resulting inventory units</dt><dd>{_html_escape(preview['resulting_inventory_units'])}</dd>
 <dt>Resulting days of supply</dt><dd>{_html_escape(preview['resulting_days_supply'])} ({_html_escape(preview['days_supply_status'])})</dd>
+<dt>Edit materiality</dt><dd>{_html_escape(materiality.get('materiality_tier'))}: {_html_escape(materiality.get('materiality_reason_codes'))}</dd>
+<dt>Raw baseline units</dt><dd>{_html_escape(materiality.get('baseline_units'))}</dd>
+<dt>Original recommended units</dt><dd>{_html_escape(materiality.get('recommended_units'))}</dd>
+<dt>Edited / baseline multiplier</dt><dd>{multiplier_text}</dd>
+<dt>Original recommended line cash</dt><dd>${_html_escape(materiality.get('recommended_line_cash'))}</dd>
+<dt>Incremental line cash</dt><dd>${_html_escape(materiality.get('incremental_line_cash'))}</dd>
+<dt>Final line cash</dt><dd>${_html_escape(materiality.get('final_line_cash'))}</dd>
+<dt>Emergency thresholds</dt><dd>{_html_escape(materiality.get('policy'))}</dd>
 <dt>Vendor minimum</dt><dd>{_html_escape(terms.get('minimum_type'))} {_html_escape(terms.get('minimum_value'))}</dd>
 <dt>Below-minimum fee</dt><dd>${_html_escape(terms.get('below_minimum_fee'))}</dd></dl>
 <p>Vendor-level minimum and fee are rechecked across all accepted lines when DRAFTs are built.</p>
@@ -1488,7 +1545,7 @@ def _monday_review_preview_html(
 <input type='hidden' name='comment' value='{_form_value(comment)}'>
 <input type='hidden' name='review_preview_fingerprint' value='{_form_value(preview['preview_fingerprint'])}'>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
-<button type='submit'>Confirm immutable {_html_escape(preview['action'])} decision</button></form>
+{material_confirmation}</form>
 <p><a href='../../../{_html_escape(run_id)}'>Cancel and return without recording a decision</a></p>
 </body></html>"""
 
@@ -1582,6 +1639,30 @@ def monday_run_detail(run_id: UUID):
     )
 
 
+@app.post("/monday-runs/{run_id}/blockers/{exception_id}/exclude")
+def monday_blocked_item_exclude(
+    run_id: UUID,
+    exception_id: int,
+    actor: str = Form(...),
+    reason: str = Form(...),
+    expected_input_fingerprint: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            acknowledge_and_exclude_blocked_item(
+                conn,run_id=str(run_id),exception_id=exception_id,actor=actor,
+                reason=reason,expected_input_fingerprint=expected_input_fingerprint,
+            )
+    except ProcurementReviewError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../../../{run_id}", status_code=303,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/monday-runs/{run_id}/recommendations/{recommendation_id}/review")
 def monday_recommendation_review(
     run_id: UUID,
@@ -1593,6 +1674,8 @@ def monday_recommendation_review(
     approved_loose_units: str | None = Form(None),
     comment: str = Form(""),
     review_preview_fingerprint: str | None = Form(None),
+    material_confirmation_reason: str = Form(""),
+    material_edit_confirmation_id: int | None = Form(None),
     review_token: str = Form(...),
 ):
     _require_review_token(review_token)
@@ -1625,6 +1708,39 @@ def monday_recommendation_review(
                     ),
                     headers={"Cache-Control": "no-store"},
                 )
+            if action.strip().upper() == "EDIT_QUANTITY" and review_preview_fingerprint:
+                preview = preview_recommendation_review(
+                    conn,recommendation_id=recommendation_id,action=action,actor=actor,
+                    expected_input_fingerprint=expected_input_fingerprint,
+                    approved_cases=approved_cases,
+                    approved_loose_units=approved_loose_units,comment=comment,
+                )
+                if preview["preview_fingerprint"] != review_preview_fingerprint:
+                    raise ProcurementReviewError(
+                        "edited economics changed after the displayed preview"
+                    )
+                if (
+                    preview["materiality"]["materiality_tier"] == "MATERIAL"
+                    and material_edit_confirmation_id is None
+                ):
+                    confirmation = confirm_material_recommendation_edit(
+                        conn,recommendation_id=recommendation_id,actor=actor,
+                        expected_input_fingerprint=expected_input_fingerprint,
+                        expected_review_preview_fingerprint=review_preview_fingerprint,
+                        approved_cases=approved_cases,
+                        approved_loose_units=approved_loose_units,comment=comment,
+                        confirmation_reason=material_confirmation_reason,
+                    )
+                    return HTMLResponse(
+                        _monday_review_preview_html(
+                            run_id=run_id,recommendation_id=recommendation_id,
+                            preview=preview,actor=actor,comment=comment,
+                            material_edit_confirmation_id=confirmation[
+                                "material_edit_confirmation_id"
+                            ],
+                        ),
+                        headers={"Cache-Control": "no-store"},
+                    )
             record_recommendation_review(
                 conn,
                 recommendation_id=recommendation_id,
@@ -1635,6 +1751,7 @@ def monday_recommendation_review(
                 approved_loose_units=approved_loose_units,
                 comment=comment,
                 expected_review_preview_fingerprint=review_preview_fingerprint,
+                material_edit_confirmation_id=material_edit_confirmation_id,
             )
     except ProcurementReviewError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -30,7 +30,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_identity_investigation.py": 32,
     "test_inventory.py": 15,
     "test_matching.py": 3,
-    "test_monday_workflow.py": 39,
+    "test_monday_workflow.py": 54,
     "test_phase4_historical_sales.py": 33,
     "test_phase4_identity_manifest.py": 16,
     "test_phase4_identity_manifest_postgres.py": 24,
@@ -43,7 +43,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_po_ledger.py": 35,
     "test_price_book.py": 42,
     "test_pricing.py": 4,
-    "test_readiness.py": 19,
+    "test_readiness.py": 21,
     "test_replenishment.py": 9,
     "test_review.py": 3,
     "test_sales.py": 18,
@@ -52,7 +52,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_storage.py": 7,
     "test_strategic.py": 13,
     "test_test_runner.py": 21,
-    "test_vendor_rules.py": 15,
+    "test_vendor_rules.py": 16,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())
 

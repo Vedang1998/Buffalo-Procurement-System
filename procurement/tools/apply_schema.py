@@ -25,6 +25,7 @@ MIGRATION_ORDER = [
     "010_monday_po_ledger.sql",
     "011_monday_price_book_staging.sql",
     "012_monday_review_draft_packet.sql",
+    "013_monday_p1_remediation.sql",
 ]
 
 

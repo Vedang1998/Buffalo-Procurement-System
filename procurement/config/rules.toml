@@ -76,6 +76,12 @@ permanent_scope = true
 never_silently_change_global_rules = true
 structured_writeback_required = true
 
+[review.emergency_material_edit]
+policy_version = "EMERGENCY_MONDAY_MATERIAL_EDIT_V1"
+owner_approval_status = "PENDING_OWNER_APPROVAL"
+max_normal_baseline_multiplier = 2.0
+max_normal_resulting_days_supply = 30.0
+
 [data_quality]
 material_ambiguity_blocks_affected_item = true
 penny_level_difference_blocks = false

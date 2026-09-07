@@ -131,6 +131,11 @@ def _vendor_economics(
         for line in vendor_lines
     ):
         raise DraftPoError("frozen vendor minimum terms disagree across reviewed lines")
+    if any(
+        line["loose_units"] > 0 and line["loose_unit_fee"] > 0
+        for line in vendor_lines
+    ):
+        raise DraftPoError("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED")
     merchandise = sum(
         (line["merchandise_total"] for line in vendor_lines), Decimal("0")
     )
@@ -241,9 +246,7 @@ def _require_complete_reviews(conn: Any, run_id: str) -> None:
         (run_id,),
     ).fetchone()[0]
     blockers = conn.execute(
-        """SELECT count(*) FROM exceptions
-            WHERE run_id=%s AND status='OPEN' AND severity IN ('HIGH','CRITICAL')""",
-        (run_id,),
+        "SELECT monday_effective_material_blocker_count(%s)", (run_id,)
     ).fetchone()[0]
     if pending or blockers:
         raise DraftPoError(

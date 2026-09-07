@@ -159,9 +159,15 @@ class VendorRulesPostgresTests(unittest.TestCase):
     def test_seed_placeholders_do_not_pass_without_confirmed_profile(self):
         vendor_id = self.add_vendor("Unconfirmed Distributor")
         result = evaluate_vendor_rules(self.conn)
-        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual((result["status"],result["blocks_po"]), ("WARN",False))
         self.assertEqual(result["evidence"]["failing_vendor_ids"], [vendor_id])
         self.assertEqual(result["vendors"][0]["missing"], ["CONFIRMED_RULE_PROFILE"])
+
+    def test_no_active_vendor_remains_a_true_global_blocker(self):
+        result = evaluate_vendor_rules(self.conn)
+        self.assertEqual((result["status"],result["blocks_po"]),("FAIL",True))
+        self.assertEqual(result["evidence"]["active_vendors"],0)
+        self.assertIn("No active vendors",result["message"])
 
     def test_complete_confirmed_vendor_passes_global_and_scoped_gates(self):
         vendor_id = self.add_vendor("Complete Distributor")

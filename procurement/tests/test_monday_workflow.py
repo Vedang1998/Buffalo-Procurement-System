@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from contextlib import nullcontext
@@ -12,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+from threading import Barrier
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -21,6 +23,7 @@ import zipfile
 
 from fastapi.testclient import TestClient
 from psycopg import sql
+from psycopg.errors import UniqueViolation
 
 from postgres_test_support import validated_test_connection
 from procurement_os import api
@@ -41,11 +44,19 @@ from procurement_os.emergency_packet import (
     read_monday_artifact,
 )
 from procurement_os.inventory import capture_daily_inventory, recompute_inventory_history_gate
+from procurement_os.monday_controls import (
+    MaterialEditPolicy,
+    classify_material_edit,
+    load_material_edit_policy,
+)
 from procurement_os.po_csv import FORMAT_WARNING, render_vendor_draft_csv
 from procurement_os.po_ledger import open_po_position, recompute_open_po_reconciliation_gate
+from procurement_os.readiness import po_readiness
 from procurement_os.procurement_review import (
     REVIEW_LOCK,
     ProcurementReviewError,
+    acknowledge_and_exclude_blocked_item,
+    confirm_material_recommendation_edit,
     preview_recommendation_review,
     record_recommendation_review,
 )
@@ -56,6 +67,7 @@ from procurement_os.recommendations import (
     _price_tiers_from_rows,
     _sales_coverage_digest,
     _whole as recommendation_whole,
+    monday_run_inputs_match,
     prepare_monday_run,
 )
 from procurement_os.storage import LocalFilesystemStorage
@@ -72,6 +84,7 @@ PRE_PRICE_MIGRATIONS = (
 )
 POST_PRICE_MIGRATIONS = (
     "011_monday_price_book_staging.sql","012_monday_review_draft_packet.sql",
+    "013_monday_p1_remediation.sql",
 )
 BUSINESS_DATE = date(2026, 9, 7)
 
@@ -115,7 +128,10 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         finally:
             self.conn.close()
 
-    def _vendor(self,name: str,*,loose: bool,pack: int) -> str:
+    def _vendor(
+        self,name: str,*,loose: bool,pack: int,
+        loose_fee: Decimal | None=None,
+    ) -> str:
         vendor_id = self.conn.execute(
             "INSERT INTO vendors(vendor_name,active) VALUES (%s,TRUE) RETURNING vendor_id",(name,),
         ).fetchone()[0]
@@ -127,7 +143,11 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                        confirmation_source,confirmed_by,rules_version)
                 VALUES (%s,ARRAY['MONDAY'],'12:00','America/New_York',ARRAY['THURSDAY'],
                         2,1,0,1,'DOLLAR',100,5,%s,%s,'synthetic owner fixture','test-owner',1)""",
-            (vendor_id,loose,Decimal("3") if loose else None),
+            (
+                vendor_id,loose,
+                (Decimal("0") if loose_fee is None else loose_fee)
+                if loose else None,
+            ),
         )
         return str(vendor_id)
 
@@ -209,6 +229,9 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             raise AssertionError("synthetic catalog/vendor evidence did not produce PASS readiness")
         if open_orders["status"] != "PASS":
             raise AssertionError("synthetic open-PO evidence did not produce PASS readiness")
+        self._refresh_synthetic_sales_gate()
+
+    def _refresh_synthetic_sales_gate(self) -> None:
         sales_rows = self.conn.execute(
             "SELECT count(*) FROM sales_daily WHERE source='SYNTHETIC_TEST'"
         ).fetchone()[0]
@@ -280,6 +303,20 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                     **kwargs,
                 )
                 kwargs["expected_review_preview_fingerprint"] = preview["preview_fingerprint"]
+                if preview["materiality"]["materiality_tier"] == "MATERIAL":
+                    confirmation = confirm_material_recommendation_edit(
+                        self.conn,recommendation_id=item["recommendation_id"],
+                        actor="test-reviewer",
+                        expected_input_fingerprint=run["input_fingerprint"],
+                        expected_review_preview_fingerprint=preview["preview_fingerprint"],
+                        approved_cases=kwargs.get("approved_cases"),
+                        approved_loose_units=kwargs.get("approved_loose_units"),
+                        comment=kwargs.get("comment", ""),
+                        confirmation_reason="synthetic material edit confirmation",
+                    )
+                    kwargs["material_edit_confirmation_id"] = confirmation[
+                        "material_edit_confirmation_id"
+                    ]
             decisions.append(record_recommendation_review(
                 self.conn,recommendation_id=item["recommendation_id"],action=action,
                 actor="test-reviewer",expected_input_fingerprint=run["input_fingerprint"],**kwargs,
@@ -304,10 +341,14 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         )
 
     def test_migration_applies_twice_and_contract_marker_exists(self):
-        sql_text=(DB_DIR/"012_monday_review_draft_packet.sql").read_text()
-        self.conn.execute(sql_text); self.conn.commit()
+        for name in ("012_monday_review_draft_packet.sql","013_monday_p1_remediation.sql"):
+            self.conn.execute((DB_DIR/name).read_text())
+            self.conn.commit()
         self.assertEqual(
             self.conn.execute("SELECT value FROM meta WHERE key='monday_review_draft_packet_contract'").fetchone()[0],"v2",
+        )
+        self.assertEqual(
+            self.conn.execute("SELECT value FROM meta WHERE key='monday_p1_remediation_contract'").fetchone()[0],"v1",
         )
         self.assertEqual(self.conn.execute("SELECT count(*) FROM monday_run_artifacts").fetchone()[0],0)
 
@@ -339,6 +380,34 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         with self.assertRaisesRegex(MondayRecommendationError,"different frozen inputs"):
             self._prepare()
         self.assertEqual(first["run_id"],replay["run_id"])
+
+    def test_material_edit_policy_drift_invalidates_frozen_run_before_review(self):
+        run=self._prepare("frozen-material-policy")
+        recommendation=run["recommendations"][0]
+        changed_rules={
+            "review":{
+                "emergency_material_edit":{
+                    "policy_version":"EMERGENCY_MONDAY_MATERIAL_EDIT_V1",
+                    "owner_approval_status":"PENDING_OWNER_APPROVAL",
+                    "max_normal_baseline_multiplier":Decimal("1.9"),
+                    "max_normal_resulting_days_supply":Decimal("30.0"),
+                }
+            }
+        }
+        with patch(
+            "procurement_os.monday_controls.load_rules",return_value=changed_rules
+        ):
+            self.assertFalse(
+                monday_run_inputs_match(
+                    self.conn,run["run_id"],run["input_fingerprint"]
+                )
+            )
+            with self.assertRaisesRegex(ProcurementReviewError,"stale|changed"):
+                preview_recommendation_review(
+                    self.conn,recommendation_id=recommendation["recommendation_id"],
+                    action="ACCEPT",actor="reviewer",
+                    expected_input_fingerprint=run["input_fingerprint"],
+                )
 
     def test_missing_inventory_and_stale_sales_are_visible_blockers(self):
         capture_daily_inventory(
@@ -534,13 +603,14 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.assertEqual(preview["approved_unit_cost"],Decimal("10.0000"))
         self.assertEqual(preview["approved_case_price"],Decimal("120.0000"))
         self.assertEqual(preview["approved_merchandise_total"],Decimal("140.00"))
-        self.assertEqual(preview["approved_loose_order_fee"],Decimal("3.00"))
-        self.assertEqual(preview["approved_line_total"],Decimal("143.00"))
+        self.assertEqual(preview["approved_loose_order_fee"],Decimal("0.00"))
+        self.assertEqual(preview["approved_line_total"],Decimal("140.00"))
         self.assertEqual(preview["resulting_inventory_units"],Decimal("14"))
         self.assertEqual(preview["resulting_days_supply"],Decimal("14.00"))
         self.assertEqual(
             preview["days_supply_status"],"CALCULATED_FROM_FROZEN_FORECAST"
         )
+        self.assertEqual(preview["materiality"]["materiality_tier"],"MATERIAL")
         after=self.conn.execute(
             """SELECT (SELECT count(*) FROM review_decisions),
                       (SELECT workflow_stage FROM runs WHERE run_id=%s),
@@ -566,16 +636,31 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             ).fetchone()[0],0,
         )
         self.conn.commit()
+        with self.assertRaisesRegex(ProcurementReviewError,"distinct confirmation"):
+            record_recommendation_review(
+                self.conn,recommendation_id=beta["recommendation_id"],action="EDIT_QUANTITY",
+                actor="test-reviewer",expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=1,approved_loose_units=2,comment="reviewed edit",
+                expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            )
+        confirmation=confirm_material_recommendation_edit(
+            self.conn,recommendation_id=beta["recommendation_id"],
+            actor="test-reviewer",expected_input_fingerprint=run["input_fingerprint"],
+            expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            approved_cases=1,approved_loose_units=2,comment="reviewed edit",
+            confirmation_reason="reviewed exceptional cash and days exposure",
+        )
         decision=record_recommendation_review(
             self.conn,recommendation_id=beta["recommendation_id"],action="EDIT_QUANTITY",
             actor="test-reviewer",expected_input_fingerprint=run["input_fingerprint"],
             approved_cases=1,approved_loose_units=2,comment="reviewed edit",
             expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            material_edit_confirmation_id=confirmation["material_edit_confirmation_id"],
         )
         self.assertEqual(decision["approved_unit_cost"],Decimal("10.0000"))
         self.assertEqual(decision["approved_merchandise_total"],Decimal("140.00"))
-        self.assertEqual(decision["approved_loose_order_fee"],Decimal("3.00"))
-        self.assertEqual(decision["approved_line_total"],Decimal("143.00"))
+        self.assertEqual(decision["approved_loose_order_fee"],Decimal("0.00"))
+        self.assertEqual(decision["approved_line_total"],Decimal("140.00"))
 
     def test_stale_fingerprint_and_unconfirmed_loose_edit_reject(self):
         run=self._prepare()
@@ -630,31 +715,26 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 beta_preview["minimum_disposition"],
             ),
             (
-                Decimal("140.00"),Decimal("3.00"),Decimal("0"),
-                Decimal("3.00"),Decimal("143.00"),"NOT_APPLICABLE",
+                Decimal("140.00"),Decimal("0.00"),Decimal("0"),
+                Decimal("0.00"),Decimal("140.00"),"NOT_APPLICABLE",
             ),
         )
-        threshold_probe=_vendor_economics(
-            "threshold-vendor",
-            [{
-                "minimum_type":"DOLLAR","minimum_value":Decimal("100"),
-                "below_minimum_fee":Decimal("5"),"cases":1,
-                "merchandise_total":Decimal("97"),"loose_order_fee":Decimal("3"),
-                "recommendation_id":1,"decision_id":1,"variant_id":"probe",
-                "offer_id":1,"loose_units":1,"ordered_units":7,
-                "unit_cost":Decimal("13.8571"),"case_price":Decimal("83.14"),
-                "line_total":Decimal("100"),
-            }],
-        )
-        self.assertEqual(
-            (
-                threshold_probe["minimum_shortfall"],
-                threshold_probe["loose_order_fee_total"],
-                threshold_probe["below_minimum_fee"],
-                threshold_probe["delivery_fee"],threshold_probe["po_total"],
-            ),
-            (Decimal("3"),Decimal("3"),Decimal("5"),Decimal("8"),Decimal("105.00")),
-        )
+        with self.assertRaisesRegex(
+            DraftPoError,"LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"
+        ):
+            _vendor_economics(
+                "threshold-vendor",
+                [{
+                    "minimum_type":"DOLLAR","minimum_value":Decimal("100"),
+                    "below_minimum_fee":Decimal("5"),"cases":1,
+                    "merchandise_total":Decimal("97"),"loose_order_fee":Decimal("3"),
+                    "loose_unit_fee":Decimal("3"),
+                    "recommendation_id":1,"decision_id":1,"variant_id":"probe",
+                    "offer_id":1,"loose_units":1,"ordered_units":7,
+                    "unit_cost":Decimal("13.8571"),"case_price":Decimal("83.14"),
+                    "line_total":Decimal("100"),
+                }],
+            )
         after=self.conn.execute(
             """SELECT (SELECT count(*) FROM purchase_orders WHERE run_id=%s),
                       (SELECT workflow_stage FROM runs WHERE run_id=%s),
@@ -685,9 +765,9 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.assertEqual({draft["po_status"] for draft in result["drafts"]},{"DRAFT"})
         beta=next(draft for draft in result["drafts"] if draft["vendor_id"]==self.vendor_b)
         self.assertEqual((beta["lines"][0]["cases"],beta["lines"][0]["loose_units"]),(1,2))
-        self.assertEqual(beta["lines"][0]["line_total"],Decimal("143.00"))
+        self.assertEqual(beta["lines"][0]["line_total"],Decimal("140.00"))
         self.assertEqual(beta["lines"][0]["merchandise_total"],Decimal("140.00"))
-        self.assertEqual(beta["lines"][0]["loose_order_fee"],Decimal("3.00"))
+        self.assertEqual(beta["lines"][0]["loose_order_fee"],Decimal("0.00"))
         self.assertEqual(beta["minimum_disposition"],"NOT_APPLICABLE")
         alpha=next(draft for draft in result["drafts"] if draft["vendor_id"]==self.vendor_a)
         self.assertEqual(alpha["lines"][0]["line_total"],Decimal("10.01"))
@@ -748,6 +828,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 "recommendations-and-reasons.json","frozen-price-economics.json",
                 "supplier-mapping-evidence.json","open-po-ledger-evidence.json",
                 "draft-readiness-evidence.json","frozen-input-manifest.json",
+                "blocked-item-exclusions.json","material-edit-confirmations.json",
             ):
                 self.assertIn(required,names)
             self.assertIn("TEST DATA — NOT FOR ORDERING",archive.read("packet-summary.json").decode())
@@ -767,7 +848,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 if item["vendor_id"]==self.vendor_b
             )
             self.assertEqual(beta_economics["minimum_disposition"],"NOT_APPLICABLE")
-            self.assertEqual(beta_economics["loose_order_fee_total"],"3.00")
+            self.assertEqual(beta_economics["loose_order_fee_total"],"0.00")
             self.assertEqual(beta_economics["below_minimum_fee"],"0")
             readiness=json.loads(archive.read("draft-readiness-evidence.json"))
             self.assertEqual(len(readiness["items"]),2)
@@ -777,6 +858,31 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                     for item in readiness["items"]
                     for evidence in item["readiness_by_variant"]
                 )
+            )
+            confirmations=json.loads(archive.read("material-edit-confirmations.json"))
+            self.assertEqual(len(confirmations["items"]),1)
+            confirmation=confirmations["items"][0]
+            self.assertEqual(confirmation["action"],"CONFIRM_MATERIAL_EDIT")
+            self.assertEqual(confirmation["input_fingerprint"],run["input_fingerprint"])
+            self.assertRegex(confirmation["review_preview_fingerprint"],r"^[0-9a-f]{64}$")
+            self.assertEqual(confirmation["confirmed_by"],"test-reviewer")
+            self.assertEqual(confirmation["reason"],"synthetic material edit confirmation")
+            self.assertEqual(Decimal(confirmation["approved_cases"]),Decimal("1"))
+            self.assertEqual(Decimal(confirmation["approved_loose_units"]),Decimal("2"))
+            self.assertEqual(Decimal(confirmation["approved_units"]),Decimal("14"))
+            self.assertEqual(confirmation["evidence"]["materiality_tier"],"MATERIAL")
+            self.assertEqual(confirmation["evidence"]["baseline_multiplier"],"4.6667")
+            self.assertEqual(confirmation["evidence"]["recommended_line_cash"],"30.00")
+            self.assertEqual(confirmation["evidence"]["incremental_line_cash"],"110.00")
+            self.assertEqual(confirmation["evidence"]["final_line_cash"],"140.00")
+            self.assertEqual(
+                confirmation["evidence"]["policy"],
+                {
+                    "max_normal_baseline_multiplier":"2.0",
+                    "max_normal_resulting_days_supply":"30.0",
+                    "owner_approval_status":"PENDING_OWNER_APPROVAL",
+                    "policy_version":"EMERGENCY_MONDAY_MATERIAL_EDIT_V1",
+                },
             )
             for name in (entry for entry in names if entry.endswith(".internal.csv")):
                 rows=list(csv.DictReader(io.StringIO(archive.read(name).decode())))
@@ -915,9 +1021,9 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             ),
             (Decimal("1.6600"),Decimal("10.0100"),Decimal("10.01"),Decimal("10.01")),
         )
-        self.assertEqual((beta["approved_units"],beta["approved_unit_cost"],beta["approved_line_total"]),(14,Decimal("10"),Decimal("143.00")))
+        self.assertEqual((beta["approved_units"],beta["approved_unit_cost"],beta["approved_line_total"]),(14,Decimal("10"),Decimal("140.00")))
         rendered=api._monday_run_html(run,queue,get_vendor_drafts(self.conn,run["run_id"]),[])
-        self.assertIn("reviewed line total $143.00",rendered)
+        self.assertIn("reviewed line total $140.00",rendered)
 
     def test_direct_review_with_unfrozen_economics_is_rejected(self):
         run=self._prepare()
@@ -1212,6 +1318,647 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         finally:
             other.close()
 
+    def test_mixed_blocked_and_eligible_run_excludes_only_blocked_item(self):
+        self.conn.execute(
+            """UPDATE vendor_operating_rules
+                  SET loose_unit_fee=3,rules_version=rules_version+1,updated_at=now()
+                WHERE vendor_id=%s""",
+            (self.vendor_b,),
+        )
+        recompute_vendor_rules_gates(self.conn)
+        self.conn.commit()
+        run=self._prepare("mixed-blocked-eligible")
+        self.assertTrue(monday_run_inputs_match(self.conn,run["run_id"],run["input_fingerprint"]))
+        self.assertEqual([item["variant_id"] for item in run["recommendations"]],[self.variant_a])
+        self.assertEqual(len(run["blockers"]),1)
+        blocker=run["blockers"][0]
+        self.assertEqual(blocker["variant_id"],self.variant_b)
+        self.assertIn("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED",blocker["message"])
+        original=self.conn.execute(
+            """SELECT run_id,exception_type,severity,variant_id,vendor_id,offer_id,
+                      supplier_sku,message,status,created_at
+                 FROM exceptions WHERE exception_id=%s""",
+            (blocker["exception_id"],),
+        ).fetchone()
+        self.conn.commit()
+        with self.assertRaisesRegex(ProcurementReviewError,"stale"):
+            acknowledge_and_exclude_blocked_item(
+                self.conn,run_id=run["run_id"],exception_id=blocker["exception_id"],
+                actor="test-owner",reason="exclude unresolved loose-fee item from this run",
+                expected_input_fingerprint="f"*64,
+            )
+        exclusion=acknowledge_and_exclude_blocked_item(
+            self.conn,run_id=run["run_id"],exception_id=blocker["exception_id"],
+            actor="test-owner",reason="exclude unresolved loose-fee item from this run",
+            expected_input_fingerprint=run["input_fingerprint"],
+        )
+        self.assertFalse(exclusion["idempotent_replay"])
+        replayed_exclusion=acknowledge_and_exclude_blocked_item(
+            self.conn,run_id=run["run_id"],exception_id=blocker["exception_id"],
+            actor="test-owner",reason="exclude unresolved loose-fee item from this run",
+            expected_input_fingerprint=run["input_fingerprint"],
+        )
+        self.assertTrue(replayed_exclusion["idempotent_replay"])
+        self.assertEqual(replayed_exclusion["exclusion_id"],exclusion["exclusion_id"])
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT run_id,exception_type,severity,variant_id,vendor_id,offer_id,
+                          supplier_sku,message,status,created_at
+                     FROM exceptions WHERE exception_id=%s""",
+                (blocker["exception_id"],),
+            ).fetchone(),
+            original,
+        )
+        refreshed=api.get_monday_run(self.conn,run["run_id"])
+        self.assertTrue(refreshed["blockers"][0]["excluded"])
+        eligible=run["recommendations"][0]
+        self.conn.commit()
+        preview=preview_recommendation_review(
+            self.conn,recommendation_id=eligible["recommendation_id"],action="ACCEPT",
+            actor="reviewer",expected_input_fingerprint=run["input_fingerprint"],
+        )
+        record_recommendation_review(
+            self.conn,recommendation_id=eligible["recommendation_id"],action="ACCEPT",
+            actor="reviewer",expected_input_fingerprint=run["input_fingerprint"],
+            expected_review_preview_fingerprint=preview["preview_fingerprint"],
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT workflow_stage FROM runs WHERE run_id=%s",(run["run_id"],)
+            ).fetchone()[0],"REVIEWED",
+        )
+        self.conn.commit()
+        drafts=self._build_drafts(run,actor="builder")
+        self.assertEqual(len(drafts["drafts"]),1)
+        self.assertEqual(
+            (
+                drafts["drafts"][0]["vendor_id"],
+                drafts["drafts"][0]["lines"][0]["variant_id"],
+                drafts["drafts"][0]["lines"][0]["line_total"],
+            ),
+            (self.vendor_a,self.variant_a,Decimal("10.01")),
+        )
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT count(*) FROM procurement_recommendations WHERE run_id=%s AND variant_id=%s""",
+                (run["run_id"],self.variant_b),
+            ).fetchone()[0],0,
+        )
+        self.conn.commit()
+        packet=build_emergency_review_packet(
+            self.conn,storage=self.storage,run_id=run["run_id"],actor="packet-owner"
+        )
+        with zipfile.ZipFile(io.BytesIO(self.storage.get_bytes(packet["storage_key"]))) as archive:
+            evidence=json.loads(archive.read("blocked-item-exclusions.json"))
+            self.assertEqual(len(evidence["items"]),1)
+            self.assertEqual(
+                evidence["items"][0]["run_only_exclusion"]["action"],
+                "ACKNOWLEDGE_AND_EXCLUDE",
+            )
+            self.assertIn(
+                "LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED",
+                evidence["items"][0]["message"],
+            )
+        self.conn.commit()
+        with self.assertRaises(Exception):
+            self.conn.execute(
+                "UPDATE monday_run_blocker_exclusions SET reason='changed' WHERE exclusion_id=%s",
+                (exclusion["exclusion_id"],),
+            )
+        self.conn.rollback()
+        with self.assertRaises(Exception):
+            self.conn.execute(
+                "DELETE FROM monday_run_blocker_exclusions WHERE exclusion_id=%s",
+                (exclusion["exclusion_id"],),
+            )
+        self.conn.rollback()
+
+    def test_same_day_second_run_is_blocked_after_draft_and_claim_cannot_release(self):
+        first=self._prepare("sole-active-monday-run")
+        self._review_all(first)
+        built=self._build_drafts(first)
+        original_ids={draft["po_id"] for draft in built["drafts"]}
+        original_counts=self.conn.execute(
+            """SELECT count(*),(SELECT count(*) FROM purchase_order_lines l
+                    JOIN purchase_orders p ON p.po_id=l.po_id WHERE p.run_id=%s)
+                 FROM purchase_orders WHERE run_id=%s""",
+            (first["run_id"],first["run_id"]),
+        ).fetchone()
+        self.conn.commit()
+        with self.assertRaisesRegex(Exception,"cannot release its business-date claim"):
+            self.conn.execute(
+                "UPDATE runs SET workflow_stage='FAILED',status='FAILED' WHERE run_id=%s",
+                (first["run_id"],),
+            )
+        self.conn.rollback()
+        with self.assertRaisesRegex(
+            MondayRecommendationError,"active Monday Procurement run already exists"
+        ):
+            prepare_monday_run(
+                self.conn,business_date=BUSINESS_DATE,
+                idempotency_key="forbidden-same-day-replacement",
+                variant_ids=(self.variant_a,self.variant_b),actor="second-operator",
+            )
+        self.assertEqual(
+            original_counts,
+            self.conn.execute(
+                """SELECT count(*),(SELECT count(*) FROM purchase_order_lines l
+                        JOIN purchase_orders p ON p.po_id=l.po_id WHERE p.run_id=%s)
+                     FROM purchase_orders WHERE run_id=%s""",
+                (first["run_id"],first["run_id"]),
+            ).fetchone(),
+        )
+        self.assertEqual(
+            {
+                str(row[0]) for row in self.conn.execute(
+                    "SELECT po_id FROM purchase_orders WHERE run_id=%s",(first["run_id"],)
+                ).fetchall()
+            },original_ids,
+        )
+
+    def test_prebuild_failed_run_releases_business_date_for_one_replacement(self):
+        first=self._prepare("failed-before-draft")
+        self.conn.execute(
+            "UPDATE runs SET workflow_stage='FAILED',status='FAILED' WHERE run_id=%s",
+            (first["run_id"],),
+        )
+        self.conn.commit()
+        with self.assertRaisesRegex(Exception,"DRAFT requires the run to hold"):
+            self.conn.execute(
+                """INSERT INTO purchase_orders(run_id,vendor_id,po_status)
+                    VALUES (%s,%s,'DRAFT')""",
+                (first["run_id"],self.vendor_a),
+            )
+        self.conn.rollback()
+        second=self._prepare("replacement-after-clean-failure")
+        self.assertNotEqual(first["run_id"],second["run_id"])
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT count(*) FROM runs WHERE run_type='MONDAY_PROCUREMENT'
+                      AND business_date=%s AND status='RUNNING'""",
+                (BUSINESS_DATE,),
+            ).fetchone()[0],1,
+        )
+
+    def test_migration_rejects_preexisting_nonrunning_monday_draft(self):
+        run=self._prepare("pre-013-nonrunning-draft")
+        self._review_all(run)
+        self._build_drafts(run)
+        self.conn.commit()
+        self.conn.execute(
+            "DROP TRIGGER trg_guard_monday_p1_failed_run_with_draft ON runs"
+        )
+        self.conn.execute("DROP INDEX uq_active_monday_run_business_date")
+        self.conn.commit()
+        self.conn.execute(
+            "UPDATE runs SET workflow_stage='FAILED',status='FAILED' WHERE run_id=%s",
+            (run["run_id"],),
+        )
+        self.conn.commit()
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT r.status,p.po_status FROM runs r
+                    JOIN purchase_orders p ON p.run_id=r.run_id
+                   WHERE r.run_id=%s LIMIT 1""",
+                (run["run_id"],),
+            ).fetchone(),
+            ("FAILED","DRAFT"),
+        )
+        self.conn.commit()
+        with self.assertRaisesRegex(
+            Exception,"non-running Monday run owns a DRAFT"
+        ):
+            self.conn.execute((DB_DIR/"013_monday_p1_remediation.sql").read_text())
+        self.conn.rollback()
+
+    def test_migration_rejects_active_pre_p1_run_without_frozen_policy(self):
+        upgrade_schema=f"monday_p1_upgrade_{uuid.uuid4().hex}"
+        def cleanup_upgrade_schema():
+            cleanup_conn,_,_=validated_test_connection()
+            try:
+                cleanup_conn.execute("SET search_path TO public")
+                cleanup_conn.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(upgrade_schema)
+                    )
+                )
+                cleanup_conn.commit()
+            finally:
+                cleanup_conn.close()
+        self.addCleanup(cleanup_upgrade_schema)
+        self.conn.commit()
+        self.conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(upgrade_schema)))
+        self.conn.execute(
+            sql.SQL("SET search_path TO {}, {}, public").format(
+                sql.Identifier(upgrade_schema),sql.Identifier(self.schema)
+            )
+        )
+        for name in PRE_PRICE_MIGRATIONS+POST_PRICE_MIGRATIONS[:-1]:
+            self.conn.execute((DB_DIR/name).read_text())
+        legacy_manifest=json.dumps({"variant_ids":["legacy-blocked-variant"]})
+        legacy_fingerprint=hashlib.sha256(legacy_manifest.encode()).hexdigest()
+        self.conn.execute(
+            """INSERT INTO runs(
+                       run_type,status,business_date,idempotency_key,input_fingerprint,
+                       workflow_stage,model_version,notes,procurement_output_mode,
+                       procurement_input_manifest)
+                VALUES ('MONDAY_PROCUREMENT','RUNNING',%s,'legacy-pre-p1',%s,
+                        'PREPARING','legacy-pre-p1','synthetic legacy upgrade probe',
+                        'INTERNAL_DRAFT_ONLY',%s)""",
+            (BUSINESS_DATE,legacy_fingerprint,legacy_manifest),
+        )
+        self.conn.commit()
+        with self.assertRaisesRegex(
+            Exception,"active legacy Monday run lacks the frozen policy"
+        ):
+            self.conn.execute((DB_DIR/"013_monday_p1_remediation.sql").read_text())
+        self.conn.rollback()
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT to_regclass(%s)",
+                (f"{upgrade_schema}.monday_run_blocker_exclusions",),
+            ).fetchone()[0]
+        )
+        self.conn.commit()
+        self.conn.execute(
+            sql.SQL("SET search_path TO {}, public").format(sql.Identifier(self.schema))
+        )
+        self.conn.execute(
+            sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(upgrade_schema))
+        )
+        self.conn.commit()
+
+    def test_database_allows_only_one_concurrent_active_same_day_claim(self):
+        manifest="{}"
+        fingerprint=hashlib.sha256(manifest.encode()).hexdigest()
+        barrier=Barrier(2)
+
+        def claim(number):
+            connection,_,_=validated_test_connection()
+            try:
+                connection.execute(
+                    sql.SQL("SET search_path TO {}, public").format(
+                        sql.Identifier(self.schema)
+                    )
+                )
+                connection.commit()
+                try:
+                    with connection.transaction():
+                        barrier.wait(timeout=5)
+                        connection.execute(
+                            """INSERT INTO runs(
+                                       run_type,status,business_date,idempotency_key,
+                                       input_fingerprint,workflow_stage,model_version,notes,
+                                       procurement_output_mode,procurement_input_manifest)
+                                VALUES ('MONDAY_PROCUREMENT','RUNNING',%s,%s,%s,
+                                        'PREPARING','concurrency-test','synthetic',
+                                        'INTERNAL_DRAFT_ONLY',%s)""",
+                            (BUSINESS_DATE,f"direct-concurrent-{number}",fingerprint,manifest),
+                        )
+                    return "COMMIT"
+                except UniqueViolation:
+                    return "UNIQUE_VIOLATION"
+            finally:
+                connection.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results=sorted(pool.map(claim,(1,2)))
+        self.assertEqual(results,["COMMIT","UNIQUE_VIOLATION"])
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT count(*) FROM runs WHERE run_type='MONDAY_PROCUREMENT'
+                      AND business_date=%s AND status='RUNNING'""",
+                (BUSINESS_DATE,),
+            ).fetchone()[0],1,
+        )
+
+    def test_unrelated_incomplete_vendor_is_scoped_and_valid_vendors_build(self):
+        incomplete=str(self.conn.execute(
+            "INSERT INTO vendors(vendor_name,active) VALUES ('Incomplete Unrelated',TRUE) RETURNING vendor_id"
+        ).fetchone()[0])
+        evaluation=recompute_vendor_rules_gates(self.conn)
+        self.assertEqual((evaluation["status"],evaluation["blocks_po"]),("WARN",False))
+        self.conn.commit()
+        # Reproduce the persisted pre-remediation summary: one unrelated
+        # incomplete vendor used to poison the GLOBAL row for every vendor.
+        self.conn.execute(
+            """UPDATE readiness_gates
+                  SET status='FAIL',blocks_po=TRUE,
+                      message='legacy all-vendor failure',
+                      evidence_json='{"legacy_global_fail":true}'::jsonb
+                WHERE gate_name='VENDOR_RULES'
+                  AND scope_type='GLOBAL' AND scope_id=''"""
+        )
+        self.conn.commit()
+        self.conn.execute((DB_DIR/"013_monday_p1_remediation.sql").read_text())
+        self.conn.commit()
+        gates=self.conn.execute(
+            """SELECT scope_type,scope_id,status,blocks_po FROM readiness_gates
+                WHERE gate_name='VENDOR_RULES' ORDER BY scope_type,scope_id"""
+        ).fetchall()
+        self.assertIn(("GLOBAL","","WARN",False),gates)
+        self.assertIn(("VENDOR",self.vendor_a,"PASS",False),gates)
+        self.assertIn(("VENDOR",self.vendor_b,"PASS",False),gates)
+        self.assertIn(("VENDOR",incomplete,"FAIL",True),gates)
+        blocked=po_readiness(
+            self.conn,vendor_id=incomplete,applicable_gate_names={"VENDOR_RULES"}
+        )
+        self.assertFalse(blocked["po_generation_enabled"])
+        self.conn.commit()
+        run=self._prepare("unrelated-incomplete-vendor")
+        self._review_all(run)
+        result=self._build_drafts(run)
+        self.assertEqual({draft["vendor_id"] for draft in result["drafts"]},{self.vendor_a,self.vendor_b})
+
+    def test_python_and_database_materiality_match_at_days_supply_boundary(self):
+        capture_daily_inventory(
+            self.conn,
+            business_date=BUSINESS_DATE,
+            captured_at=datetime(2026,9,7,13,tzinfo=timezone.utc),
+            source="SYNTHETIC_DAYS_SUPPLY_BOUNDARY",
+            rows=(
+                {"variant_id":self.variant_a,"location_gid":"location-test",
+                 "available_quantity":0,"incoming_quantity":0},
+                {"variant_id":self.variant_b,"location_gid":"location-test",
+                 "available_quantity":Decimal("0.0040"),"incoming_quantity":0},
+            ),
+        )
+        self.conn.execute(
+            """UPDATE vendor_operating_rules
+                  SET order_cycle_days=10,lead_time_days=10,
+                      rules_version=rules_version+1,updated_at=now()
+                WHERE vendor_id=%s""",
+            (self.vendor_b,),
+        )
+        recompute_vendor_rules_gates(self.conn)
+        self.conn.commit()
+        run=prepare_monday_run(
+            self.conn,business_date=BUSINESS_DATE,
+            idempotency_key="days-supply-sql-parity",
+            variant_ids=(self.variant_b,),actor="test-owner",
+        )
+        item=run["recommendations"][0]
+        self.assertEqual(item["baseline_units"],Decimal("20.0000"))
+        raw_thirty_day_supply=self.conn.execute(
+            """SELECT ((metrics->>'available_units')::numeric
+                         +(metrics->>'trusted_incoming_units')::numeric+30)
+                        /(metrics->>'forecast_daily_velocity')::numeric
+                   FROM procurement_recommendations WHERE recommendation_id=%s""",
+            (item["recommendation_id"],),
+        ).fetchone()[0]
+        self.assertEqual(raw_thirty_day_supply,Decimal("30.0040000000000000"))
+        for units,tier in ((29,"NORMAL"),(30,"NORMAL"),(31,"MATERIAL")):
+            with self.subTest(units=units):
+                preview=preview_recommendation_review(
+                    self.conn,recommendation_id=item["recommendation_id"],
+                    action="EDIT_QUANTITY",actor="boundary-reviewer",
+                    expected_input_fingerprint=run["input_fingerprint"],
+                    approved_cases=2,approved_loose_units=units-24,
+                    comment=f"{units}-day boundary probe",
+                )
+                database_tier=self.conn.execute(
+                    "SELECT monday_edit_materiality(%s,%s)",
+                    (item["recommendation_id"],units),
+                ).fetchone()[0]
+                self.assertEqual(preview["resulting_days_supply"],Decimal(units))
+                self.assertEqual(preview["materiality"]["materiality_tier"],tier)
+                self.assertEqual(database_tier,tier)
+
+    def test_python_and_database_materiality_match_at_multiplier_boundary(self):
+        run=prepare_monday_run(
+            self.conn,business_date=BUSINESS_DATE,
+            idempotency_key="multiplier-sql-parity",
+            variant_ids=(self.variant_b,),actor="test-owner",
+        )
+        item=run["recommendations"][0]
+        self.assertEqual(item["baseline_units"],Decimal("3.0000"))
+        expected=(
+            (5,"NORMAL",Decimal("1.6667"),Decimal("50.00"),Decimal("20.00")),
+            (6,"NORMAL",Decimal("2.0000"),Decimal("60.00"),Decimal("30.00")),
+            (7,"MATERIAL",Decimal("2.3333"),Decimal("70.00"),Decimal("40.00")),
+        )
+        for units,tier,multiplier,final_cash,incremental_cash in expected:
+            with self.subTest(units=units):
+                preview=preview_recommendation_review(
+                    self.conn,recommendation_id=item["recommendation_id"],
+                    action="EDIT_QUANTITY",actor="boundary-reviewer",
+                    expected_input_fingerprint=run["input_fingerprint"],
+                    approved_cases=0,approved_loose_units=units,
+                    comment=f"{units}-unit multiplier boundary probe",
+                )
+                database_tier=self.conn.execute(
+                    "SELECT monday_edit_materiality(%s,%s)",
+                    (item["recommendation_id"],units),
+                ).fetchone()[0]
+                self.assertEqual(preview["materiality"]["materiality_tier"],tier)
+                self.assertEqual(preview["materiality"]["baseline_multiplier"],multiplier)
+                self.assertEqual(preview["materiality"]["final_line_cash"],final_cash)
+                self.assertEqual(
+                    preview["materiality"]["incremental_line_cash"],incremental_cash
+                )
+                self.assertEqual(database_tier,tier)
+
+    def test_positive_loose_fee_blocks_loose_but_case_only_order_proceeds(self):
+        self.conn.execute(
+            """UPDATE vendor_operating_rules
+                  SET loose_unit_fee=3,rules_version=rules_version+1,updated_at=now()
+                WHERE vendor_id=%s""",
+            (self.vendor_b,),
+        )
+        self.conn.execute(
+            "UPDATE sales_daily SET units_sold=4 WHERE variant_id=%s AND source='SYNTHETIC_TEST'",
+            (self.variant_b,),
+        )
+        self._refresh_synthetic_sales_gate()
+        recompute_vendor_rules_gates(self.conn)
+        self.conn.commit()
+        run=prepare_monday_run(
+            self.conn,business_date=BUSINESS_DATE,idempotency_key="case-only-positive-fee",
+            variant_ids=(self.variant_b,),actor="test-owner",
+        )
+        self.assertEqual(run["blockers"],[])
+        item=run["recommendations"][0]
+        self.assertEqual((item["recommended_cases"],item["recommended_loose_units"]),(1,0))
+        self.conn.commit()
+        with self.assertRaisesRegex(Exception,"LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"):
+            self.conn.execute(
+                """UPDATE procurement_recommendations
+                      SET recommended_cases=0,recommended_loose_units=1,recommended_units=1
+                    WHERE recommendation_id=%s""",
+                (item["recommendation_id"],),
+            )
+        self.conn.rollback()
+        with self.assertRaisesRegex(
+            ProcurementReviewError,"LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"
+        ):
+            preview_recommendation_review(
+                self.conn,recommendation_id=item["recommendation_id"],
+                action="EDIT_QUANTITY",actor="reviewer",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=0,approved_loose_units=1,comment="unsafe loose edit",
+            )
+        with self.assertRaises(Exception):
+            self.conn.execute(
+                """INSERT INTO review_decisions(
+                           run_id,recommendation_id,decision_type,scope,action,comment,
+                           decided_by,writeback_type,input_fingerprint,decision_fingerprint,
+                           approved_cases,approved_loose_units,approved_units,
+                           approved_unit_cost,approved_line_total,evidence_json)
+                    VALUES (%s,%s,'PROCUREMENT_RECOMMENDATION','RUN_ONLY','EDIT_QUANTITY',
+                            'forged loose edit','attacker','EDIT_QUANTITY',%s,%s,
+                            0,1,1,10,13,%s::jsonb)""",
+                (
+                    run["run_id"],item["recommendation_id"],run["input_fingerprint"],
+                    "f"*64,json.dumps({"review":{
+                        "approved_case_price":"120","approved_merchandise_total":"10",
+                        "approved_loose_order_fee":"3",
+                    }}),
+                ),
+            )
+        self.conn.rollback()
+        preview=preview_recommendation_review(
+            self.conn,recommendation_id=item["recommendation_id"],action="ACCEPT",
+            actor="reviewer",expected_input_fingerprint=run["input_fingerprint"],
+        )
+        decision=record_recommendation_review(
+            self.conn,recommendation_id=item["recommendation_id"],action="ACCEPT",
+            actor="reviewer",expected_input_fingerprint=run["input_fingerprint"],
+            expected_review_preview_fingerprint=preview["preview_fingerprint"],
+        )
+        self.assertEqual(
+            (decision["approved_cases"],decision["approved_loose_units"],decision["approved_line_total"]),
+            (1,0,Decimal("120.00")),
+        )
+        drafts=self._build_drafts(run,actor="positive-fee-case-builder")
+        self.assertEqual(len(drafts["drafts"]),1)
+        draft=drafts["drafts"][0]
+        self.assertEqual(
+            (
+                draft["merchandise_total"],draft["loose_order_fee_total"],
+                draft["below_minimum_fee"],draft["delivery_fee"],draft["po_total"],
+            ),
+            (
+                Decimal("120.00"),Decimal("0.00"),Decimal("0"),
+                Decimal("0.00"),Decimal("120.00"),
+            ),
+        )
+        self.assertEqual(
+            (
+                draft["lines"][0]["cases"],draft["lines"][0]["loose_units"],
+                draft["lines"][0]["line_total"],
+            ),
+            (1,0,Decimal("120.00")),
+        )
+
+    def test_extreme_material_edit_requires_separate_audited_confirmation(self):
+        run=self._prepare("extreme-material-edit")
+        beta=next(item for item in run["recommendations"] if item["variant_id"]==self.variant_b)
+        preview=preview_recommendation_review(
+            self.conn,recommendation_id=beta["recommendation_id"],action="EDIT_QUANTITY",
+            actor="risk-reviewer",expected_input_fingerprint=run["input_fingerprint"],
+            approved_cases=250,approved_loose_units=0,comment="extreme synthetic probe",
+        )
+        materiality=preview["materiality"]
+        self.assertEqual(materiality["materiality_tier"],"MATERIAL")
+        self.assertEqual(materiality["baseline_multiplier"],Decimal("1000.0000"))
+        self.assertEqual(materiality["final_line_cash"],Decimal("30000.00"))
+        self.assertEqual(materiality["incremental_line_cash"],Decimal("29970.00"))
+        with self.assertRaisesRegex(ProcurementReviewError,"distinct confirmation"):
+            record_recommendation_review(
+                self.conn,recommendation_id=beta["recommendation_id"],action="EDIT_QUANTITY",
+                actor="risk-reviewer",expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=250,approved_loose_units=0,comment="extreme synthetic probe",
+                expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            )
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM review_decisions").fetchone()[0],0)
+        self.conn.commit()
+        with self.assertRaisesRegex(Exception,"MATERIAL EDIT_QUANTITY requires"):
+            self.conn.execute(
+                """INSERT INTO review_decisions(
+                           run_id,recommendation_id,decision_type,scope,action,comment,
+                           decided_by,writeback_type,input_fingerprint,decision_fingerprint,
+                           approved_cases,approved_loose_units,approved_units,
+                           approved_unit_cost,approved_line_total,evidence_json)
+                    VALUES (%s,%s,'PROCUREMENT_RECOMMENDATION','RUN_ONLY','EDIT_QUANTITY',
+                            'extreme synthetic probe','direct-writer','EDIT_QUANTITY',%s,%s,
+                            250,0,3000,10,30000,%s::jsonb)""",
+                (
+                    run["run_id"],beta["recommendation_id"],run["input_fingerprint"],
+                    preview["preview_fingerprint"],json.dumps({"review":{
+                        "approved_case_price":"120.0000",
+                        "approved_merchandise_total":"30000.00",
+                        "approved_loose_order_fee":"0.00",
+                        "material_edit_confirmation_id":None,
+                    }}),
+                ),
+            )
+        self.conn.rollback()
+        confirmation=confirm_material_recommendation_edit(
+            self.conn,recommendation_id=beta["recommendation_id"],actor="risk-reviewer",
+            expected_input_fingerprint=run["input_fingerprint"],
+            expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            approved_cases=250,approved_loose_units=0,comment="extreme synthetic probe",
+            confirmation_reason="explicitly reviewed 1000x baseline and $30000 cash",
+        )
+        stored_confirmation=self.conn.execute(
+            """SELECT run_id::text,recommendation_id,input_fingerprint,
+                      review_preview_fingerprint,approved_cases,approved_loose_units,
+                      approved_units,action,confirmed_by,reason,evidence_json,created_at
+                 FROM monday_material_edit_confirmations
+                WHERE material_edit_confirmation_id=%s""",
+            (confirmation["material_edit_confirmation_id"],),
+        ).fetchone()
+        self.assertEqual(
+            stored_confirmation[:10],
+            (
+                run["run_id"],beta["recommendation_id"],run["input_fingerprint"],
+                preview["preview_fingerprint"],Decimal("250"),Decimal("0"),
+                Decimal("3000"),"CONFIRM_MATERIAL_EDIT","risk-reviewer",
+                "explicitly reviewed 1000x baseline and $30000 cash",
+            ),
+        )
+        self.assertEqual(stored_confirmation[10]["baseline_multiplier"],"1000.0000")
+        self.assertEqual(stored_confirmation[10]["incremental_line_cash"],"29970.00")
+        self.assertEqual(stored_confirmation[10]["final_line_cash"],"30000.00")
+        self.assertEqual(stored_confirmation[10]["resulting_days_supply"],"3000.00")
+        self.assertIsNotNone(stored_confirmation[11])
+        self.conn.commit()
+        with self.assertRaisesRegex(
+            ProcurementReviewError,"previewed and confirmed|exact distinct confirmation"
+        ):
+            record_recommendation_review(
+                self.conn,recommendation_id=beta["recommendation_id"],
+                action="EDIT_QUANTITY",actor="risk-reviewer",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=249,approved_loose_units=0,
+                comment="extreme synthetic probe",
+                expected_review_preview_fingerprint=preview["preview_fingerprint"],
+                material_edit_confirmation_id=confirmation["material_edit_confirmation_id"],
+            )
+        decision=record_recommendation_review(
+            self.conn,recommendation_id=beta["recommendation_id"],action="EDIT_QUANTITY",
+            actor="risk-reviewer",expected_input_fingerprint=run["input_fingerprint"],
+            approved_cases=250,approved_loose_units=0,comment="extreme synthetic probe",
+            expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            material_edit_confirmation_id=confirmation["material_edit_confirmation_id"],
+        )
+        self.assertEqual(decision["approved_line_total"],Decimal("30000.00"))
+        self.conn.commit()
+        with self.assertRaises(Exception):
+            self.conn.execute(
+                """UPDATE monday_material_edit_confirmations SET reason='changed'
+                    WHERE material_edit_confirmation_id=%s""",
+                (confirmation["material_edit_confirmation_id"],),
+            )
+        self.conn.rollback()
+        with self.assertRaises(Exception):
+            self.conn.execute(
+                """DELETE FROM monday_material_edit_confirmations
+                    WHERE material_edit_confirmation_id=%s""",
+                (confirmation["material_edit_confirmation_id"],),
+            )
+        self.conn.rollback()
+
     def test_malformed_pack_values_raise_typed_validation_errors(self):
         for value in (None,"",True,"NaN","1.5",0,-1):
             with self.subTest(value=value),self.assertRaises(MondayRecommendationError):
@@ -1231,6 +1978,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 "/monday-runs": ["GET"],
                 "/monday-runs/prepare": ["POST"],
                 "/monday-runs/{run_id}": ["GET"],
+                "/monday-runs/{run_id}/blockers/{exception_id}/exclude": ["POST"],
                 "/monday-runs/{run_id}/recommendations/{recommendation_id}/review": ["POST"],
                 "/monday-runs/{run_id}/build": ["POST"],
                 "/monday-runs/{run_id}/artifacts/{artifact_id}": ["GET"],
@@ -1268,9 +2016,23 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                     data={"actor": "test", "review_token": "wrong"},
                 )
                 self.assertEqual(response.status_code, 403)
+                response = client.post(
+                    f"/monday-runs/{uuid.uuid4()}/blockers/1/exclude",
+                    data={
+                        "actor":"test","reason":"synthetic",
+                        "expected_input_fingerprint":"f"*64,
+                        "review_token":"wrong",
+                    },
+                )
+                self.assertEqual(response.status_code,403)
 
     def test_monday_http_review_rejects_cross_run_recommendation_before_recording(self):
         first=self._prepare("http-run-a")
+        self.conn.execute(
+            "UPDATE runs SET workflow_stage='FAILED',status='FAILED' WHERE run_id=%s",
+            (first["run_id"],),
+        )
+        self.conn.commit()
         second=self._prepare("http-run-b")
         foreign_recommendation=second["recommendations"][0]["recommendation_id"]
         token="synthetic-cross-run-token"
@@ -1366,9 +2128,17 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 self.assertEqual(reviewed.status_code, 200)
                 self.assertEqual(reviewed.headers["cache-control"], "no-store")
                 if is_beta:
-                    self.assertIn("Recalculated line total</dt><dd>$143.00", reviewed.text)
+                    self.assertIn("Recalculated line total</dt><dd>$140.00", reviewed.text)
                     self.assertIn("Resulting inventory units</dt><dd>14", reviewed.text)
                     self.assertIn("Resulting days of supply</dt><dd>14.00", reviewed.text)
+                    self.assertIn("Edit materiality</dt><dd>MATERIAL",reviewed.text)
+                    self.assertIn("Raw baseline units</dt><dd>3.0000",reviewed.text)
+                    self.assertIn("Original recommended units</dt><dd>3.0000",reviewed.text)
+                    self.assertIn("Edited / baseline multiplier</dt><dd>4.6667x",reviewed.text)
+                    self.assertIn("Original recommended line cash</dt><dd>$30.00",reviewed.text)
+                    self.assertIn("Incremental line cash</dt><dd>$110.00",reviewed.text)
+                    self.assertIn("Final line cash</dt><dd>$140.00",reviewed.text)
+                    self.assertIn("EMERGENCY_MONDAY_MATERIAL_EDIT_V1",reviewed.text)
                 self.assertNotIn(token, reviewed.text)
                 match = re.search(
                     r"name='review_preview_fingerprint' value='([0-9a-f]{64})'",
@@ -1384,11 +2154,29 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 )
                 self.conn.commit()
                 review_data["review_preview_fingerprint"] = match.group(1)
+                if is_beta:
+                    review_data["material_confirmation_reason"] = (
+                        "synthetic review of material quantity exposure"
+                    )
                 reviewed = client.post(
                     f"/monday-runs/{run_id}/recommendations/{item['recommendation_id']}/review",
                     data=review_data,
                     follow_redirects=False,
                 )
+                if is_beta:
+                    self.assertEqual(reviewed.status_code, 200)
+                    self.assertIn("Distinct MATERIAL-risk confirmation recorded",reviewed.text)
+                    confirmation_match = re.search(
+                        r"name='material_edit_confirmation_id' value='([0-9]+)'",
+                        reviewed.text,
+                    )
+                    self.assertIsNotNone(confirmation_match)
+                    review_data["material_edit_confirmation_id"] = confirmation_match.group(1)
+                    reviewed = client.post(
+                        f"/monday-runs/{run_id}/recommendations/{item['recommendation_id']}/review",
+                        data=review_data,
+                        follow_redirects=False,
+                    )
                 self.assertEqual(reviewed.status_code, 303)
             built = client.post(
                 f"/monday-runs/{run_id}/build",
@@ -1469,6 +2257,95 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             self.conn.execute("SELECT count(*) FROM monday_run_artifacts WHERE run_id=%s", (run_id,)).fetchone()[0],
             3,
         )
+
+
+class MondayMaterialEditPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.policy=MaterialEditPolicy(
+            "EMERGENCY_MONDAY_MATERIAL_EDIT_V1","PENDING_OWNER_APPROVAL",
+            Decimal("2.0"),Decimal("30.0"),
+        )
+
+    def _classify(self,*,baseline,edited,days,original,final):
+        return classify_material_edit(
+            action="EDIT_QUANTITY",baseline_units=Decimal(str(baseline)),
+            recommended_units=Decimal(str(baseline)),edited_units=Decimal(str(edited)),
+            resulting_days_supply=Decimal(str(days)) if days is not None else None,
+            days_supply_status=(
+                "CALCULATED_FROM_FROZEN_FORECAST" if days is not None
+                else "UNDEFINED_ZERO_FORECAST"
+            ),
+            recommended_line_cash=Decimal(str(original)),
+            final_line_cash=Decimal(str(final)),policy=self.policy,
+        )
+
+    def test_config_declares_exact_owner_reviewable_emergency_thresholds(self):
+        loaded=load_material_edit_policy()
+        self.assertEqual(loaded,self.policy)
+        self.assertEqual(
+            loaded.evidence(),
+            {
+                "policy_version":"EMERGENCY_MONDAY_MATERIAL_EDIT_V1",
+                "owner_approval_status":"PENDING_OWNER_APPROVAL",
+                "max_normal_baseline_multiplier":"2.0",
+                "max_normal_resulting_days_supply":"30.0",
+            },
+        )
+
+    def test_multiplier_boundary_is_normal_below_and_at_material_above(self):
+        expected=(
+            (5,"NORMAL",Decimal("1.6667"),Decimal("20"),Decimal("50")),
+            (6,"NORMAL",Decimal("2.0000"),Decimal("30"),Decimal("60")),
+            (7,"MATERIAL",Decimal("2.3333"),Decimal("40"),Decimal("70")),
+        )
+        for edited,tier,multiplier,incremental,final in expected:
+            with self.subTest(edited=edited):
+                result=self._classify(
+                    baseline=3,edited=edited,days=edited,original=30,final=edited*10
+                )
+                self.assertEqual(
+                    (
+                        result["materiality_tier"],result["baseline_multiplier"],
+                        result["incremental_line_cash"],result["final_line_cash"],
+                    ),
+                    (tier,multiplier,incremental,final),
+                )
+
+    def test_days_supply_boundary_is_normal_below_and_at_material_above(self):
+        expected=(
+            (29,Decimal("29.99"),"NORMAL",Decimal("1.4500"),Decimal("90"),Decimal("290")),
+            (30,Decimal("30.00"),"NORMAL",Decimal("1.5000"),Decimal("100"),Decimal("300")),
+            (31,Decimal("30.01"),"MATERIAL",Decimal("1.5500"),Decimal("110"),Decimal("310")),
+        )
+        for edited,days,tier,multiplier,incremental,final in expected:
+            with self.subTest(days=days):
+                result=self._classify(
+                    baseline=20,edited=edited,days=days,original=200,final=final
+                )
+                self.assertEqual(result["materiality_tier"],tier)
+                self.assertEqual(result["baseline_multiplier"],multiplier)
+                self.assertEqual(result["incremental_line_cash"],incremental)
+                self.assertEqual(result["final_line_cash"],final)
+        zero_forecast=self._classify(
+            baseline=3,edited=4,days=None,original=30,final=40
+        )
+        self.assertEqual(zero_forecast["materiality_tier"],"MATERIAL")
+        self.assertIn(
+            "EDIT_POSITIVE_WITH_ZERO_FORECAST",
+            zero_forecast["materiality_reason_codes"],
+        )
+        downward_but_high_days=self._classify(
+            baseline=40,edited=20,days=31,original=400,final=200
+        )
+        self.assertEqual(downward_but_high_days["materiality_tier"],"MATERIAL")
+        self.assertEqual(
+            downward_but_high_days["materiality_reason_codes"],
+            ["EDIT_ABOVE_RESULTING_DAYS_SUPPLY"],
+        )
+        zero_order=self._classify(
+            baseline=3,edited=0,days=None,original=30,final=0
+        )
+        self.assertEqual(zero_order["materiality_tier"],"NORMAL")
 
 
 if __name__ == "__main__":

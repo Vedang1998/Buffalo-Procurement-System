@@ -304,9 +304,10 @@ def evaluate_vendor_rules(conn: Any) -> dict[str, Any]:
         global_status = "FAIL"
         global_message = "No active vendors exist for Monday procurement."
     elif failing:
-        global_status = "FAIL"
+        global_status = "WARN"
         global_message = (
-            f"Vendor operating rules are incomplete for {len(failing)} active vendor(s)."
+            f"Vendor operating rules are incomplete for {len(failing)} active vendor(s); "
+            "affected vendors remain blocked by their VENDOR-scoped gates."
         )
     else:
         global_status = "PASS"
@@ -314,7 +315,7 @@ def evaluate_vendor_rules(conn: Any) -> dict[str, Any]:
     return {
         "status": global_status,
         "message": global_message,
-        "blocks_po": global_status == "FAIL",
+        "blocks_po": not active_vendors,
         "evidence": {
             "active_vendors": len(active_vendors),
             "passing_vendors": len(active_vendors) - len(failing),
