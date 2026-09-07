@@ -1,107 +1,180 @@
-# Monday overnight implementation progress
+# Monday P1 remediation progress
 
-Updated: 2026-09-07 05:25 EDT
+Updated: 2026-09-07 13:12 EDT
 
-## Workspace and safety
+## Candidate identity and safety
 
-- Branch: `codex/emergency-monday-procurement-mvp`
-- Tested implementation commit: `4b342cf67ec1d488a2f84433042a468609624d84`;
-  tree `01a451f66ca8ee8d3aaad57090d00de201f30a1c`.
-- Before the documentation closeout, the last pushed head was
-  `c042ad09ae1289168e826805118201c000b90131`. The only post-implementation
-  changes are four closeout documents: this progress record, the morning
-  handoff, `docs/CODEX_HANDOFF.md`, and `procurement/docs/PHASE_STATUS.md`.
-- Focused database tests used only the validated loopback PostgreSQL 16 database
-  `overnight_price_test`. The authoritative wrapper independently provisioned
-  and destroyed loopback PostgreSQL 16 database `procurement_test`. Both names
-  end in `_test`; neither came from `DATABASE_URL`.
+- Branch: `codex/emergency-monday-procurement-mvp`.
+- Independent review requested changes to implementation commit
+  `4b342cf67ec1d488a2f84433042a468609624d84`, tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`.
+- The branch entered this remediation at documentation head
+  `3aed22dd09f951b27f30e04517fd3fd104f99dcd`, tree
+  `8574d92621d8f265deba5f740d49f94ab84920c9`.
+- P1 implementation commit:
+  `dda6b0986710f032f05f50273527af160cacde5c`, tree
+  `6fc845669afa056854b9306d3cf05074fa57afe3`.
+- The final documentation commit/head is reported in the session return because
+  a commit cannot contain its own Git identity.
 - Production database connections/writes: `0 / 0`.
 - Shopify calls/writes: `0 / 0`.
-- PO releases, exports to Shopify, supplier transmissions, or real-money actions:
-  `0`.
+- FINAL transitions, releases, supplier transmissions, imports, deployments,
+  or real-money actions: `0`.
+- G10 and `main` were not merged or modified.
 
-## Verified checkpoints
+## P1 remediation
 
-- Packet 0–3 foundation remediation was independently approved and committed.
-- Packet 4 FUTURE-only price-book staging/promotion was independently approved,
-  committed, and pushed. Focused result: `42/42`; affected Packet 0–4 result:
-  `137/137`.
-- Deterministic forecast, replenishment, and strategic evidence modules pass
-  `32/32`; an independent Codex adversarial review also passed a 3,020-case pure
-  invariant sweep. Strategic extra quantity remains exactly zero and explicitly
-  unvalidated.
-- The integrated recommendation → immutable human accept/edit/reject →
-  vendor-separated DRAFT → internal packet workflow passes `39/39` against real
-  disposable PostgreSQL. It includes two pack sizes/vendors, exact Decimal
-  economics, stale-input checks, computed readiness failure, rollbacks,
-  idempotent replay, two-connection lock conflicts, storage tamper detection,
-  and the real FastAPI HTTP chain.
-- The latest affected multi-module checkpoint passed `231/231` while the Monday
-  module contained 38 tests. The subsequently added exact canonical sales
-  run-fact regression passed independently, and the complete current Monday
-  module then passed `39/39` in 33.389 seconds. All failures, errors, skips,
-  expected failures, and unexpected successes were zero. The sole warning is
-  the pre-existing Starlette TestClient/httpx deprecation warning.
-- Monday UI/API has six DRAFT-only routes, shared operational navigation,
-  authorization before domain DB/storage work on every POST, no-store reads,
-  escaped output, recalculated approved edit economics, and no FINAL/release or
-  Shopify route. Credential-free independent API probing passed.
-- Packet artifacts are deterministic, labeled `TEST DATA — NOT FOR ORDERING`,
-  formula-safe, content-addressed, storage-readback checked, and transactionally
-  bound to an append-only build event. Immutable DB payload evidence is bound to
-  exact size/SHA and provides a read-only fallback if the storage copy is absent.
-- The latest stabilization closes two additional fail-open paths. Forecast input
-  now accepts only a complete canonical ShopifyQL readiness authority, or an
-  exact per-variant synthetic daily manifest that is usable only in a database
-  ending `_test`; unrelated fresh rows and overlapping ad-hoc sources cannot
-  establish current coverage. Vendor minimum shortfall/fee/PO totals now require
-  a read-only preview plus fingerprint-bound human `PAY_FEE` confirmation before
-  the first DRAFT write. The confirmed economics are retained in DRAFT evidence,
-  internal CSVs, and the review packet.
-- The deterministic test wrapper now removes runtime database, Shopify, and
-  review credentials before launching tests. Local filesystem writes use a
-  same-directory temporary file and atomic replacement.
-- Latest post-remediation focused results are Monday workflow `39/39`, storage
-  `7/7`, and runner safety `21/21`. The authoritative wrapper then discovered,
-  executed, and passed `569/569` tests in 662.685 seconds. Failures, errors,
-  skips, expected failures, and unexpected successes were all exactly zero;
-  all 33 registered modules met their floor.
-- Startup hardening passed `10/10`. Python compilation, pinned offline lock
-  validation, shell syntax, diff checks, secret scans, and candidate
-  generated-file scans passed. The only generated ZIP found by the broad scan
-  is a pre-existing tracked attachment outside this candidate delta.
-- Operator input/fallback templates, a requirements-to-test evidence matrix,
-  and the final-results morning handoff now exist.
-- A retained synthetic FastAPI/service-chain run reached `PACKET_BUILT` with two
-  DRAFT POs, zero non-DRAFT POs, two vendor CSVs, one 11-entry review packet,
-  hash/readback verification, and replay PASS. Its root is
-  `/tmp/buffalo-monday-handoff.Zgr3zh` on this host.
-- Independent Codex specialist/static reviews report no remaining concrete
-  in-scope P0/P1. Claude Code 2.1.227 is installed, but its OAuth session is
-  expired and could not refresh; it read no repository content and supplied no
-  verdict. Independent completed-candidate review therefore remains PENDING.
+### P1-1: mixed blocked and eligible inputs
 
-## Open review items and blockers
+- Prepare, replay, review preview, review confirmation, and DRAFT build now
+  reproduce the fingerprint from the same complete requested variant set. The
+  comparison no longer infers that set from recommendation rows alone.
+- The original `MONDAY_INPUT_BLOCKER` exception remains immutable and OPEN.
+  A new append-only `monday_run_blocker_exclusions` row may record only
+  `ACKNOWLEDGE_AND_EXCLUDE`, `RUN_ONLY`, for that exact exception, run, and
+  frozen input fingerprint, with actor, timestamp, nonblank reason, and retained
+  blocker evidence.
+- Exclusion changes no catalog, vendor, mapping, price, or global readiness
+  fact and never converts the blocked item into an eligible recommendation.
+  REJECT remains a separate decision for an eligible recommendation.
+- Effective blocker checks and the review packet recognize only an exact bound
+  exclusion. The action must occur before DRAFT build.
 
-- An intentional same-database-role direct-SQL attacker can still construct
-  hash-consistent arbitrary artifact bytes and the matching terminal event. The
-  application has no SQL endpoint and the normal service path re-renders and
-  readback-verifies every byte, but eliminating this stronger actor requires a
-  separately accepted role/signature boundary or database-native semantic ZIP
-  rendering. This remains an explicit independent-review item; it is not being
-  misrepresented as cryptographically impossible.
-- `holiday_blackout_notes` and vendor `special_rules` are frozen and displayed as
-  evidence but remain free text. A nonempty note is not automatically interpreted
-  as an active blackout; real use requires owner review of those facts.
-- The historical `SALES_BACKFILL` PASS in the disposable workflow fixture is a
-  narrowly labeled synthetic evidence row because no lightweight evaluator
-  exists. Production readiness is neither changed nor claimed.
-- Native Shopify PO CSV format, production runtime, production data freshness,
-  browser acceptance, and every deployment/production gate remain unproven.
+### P1-2: duplicate same-day DRAFTs
 
-## Exact next eligible action
+- The authorized simpler fallback was selected. Supersession was not added
+  because the existing immutable DRAFT/artifact model cannot represent it
+  cleanly within this remediation.
+- PostgreSQL now permits at most one RUNNING `MONDAY_PROCUREMENT` run per
+  `business_date`. The service also reports a typed conflict before loading
+  inputs when a different active same-day key exists.
+- Database triggers require a Monday DRAFT's run to own the active RUNNING
+  claim and prevent a run that owns any DRAFT from leaving RUNNING. Migration
+  013 refuses unsafe pre-existing non-running Monday DRAFT state.
+- A pre-build failed run releases the date; once a DRAFT exists, that date stays
+  claimed until a separately designed and reviewed supersession lifecycle
+  exists. DRAFT is still never trusted incoming.
 
-The branch handoff boundary is one normal documentation-only closeout push,
-followed by a stop for ChatGPT/owner review plus an independently authenticated
-reviewer. No further implementation, PR, merge, deployment, production
-connection, Shopify action, or PO release is authorized.
+### P1-4: unrelated vendor isolation
+
+- A mix of complete and incomplete active vendors now produces a GLOBAL
+  `VENDOR_RULES` WARN with `blocks_po=false`; each incomplete vendor retains its
+  own VENDOR FAIL with `blocks_po=true`.
+- A genuine GLOBAL PASS remains valid evidence. A WARN summary cannot replace
+  missing required vendor-scoped evidence, and a matching VENDOR FAIL blocks
+  only that vendor.
+- Migration 013 deterministically refreshes legacy persisted GLOBAL
+  `VENDOR_RULES` state from existing per-vendor evidence, without inventing a
+  vendor PASS. No active vendors remains a genuine global blocker.
+
+### P1-5: material EDIT_QUANTITY
+
+- The single deterministic policy location is
+  `procurement/config/rules.toml` under
+  `[review.emergency_material_edit]`:
+  `EMERGENCY_MONDAY_MATERIAL_EDIT_V1`, owner status
+  `PENDING_OWNER_APPROVAL`, maximum NORMAL multiplier `2.0`, and maximum NORMAL
+  resulting days of supply `30.0`.
+- An edit is MATERIAL when it is strictly above either threshold. Exactly
+  `2.0x` and exactly `30.0` days remain NORMAL. A positive edit from zero raw
+  baseline units, or with zero forecast, is MATERIAL. Quantities are never
+  silently capped.
+- The multiplier denominator is the frozen raw `baseline_units`, not the
+  pack-rounded recommended order. The preview separately shows both values.
+- The policy is frozen into the run manifest and recommendation evidence;
+  runtime policy drift invalidates the run.
+- ACCEPT and EDIT require a read-only exact economics preview. A MATERIAL EDIT
+  additionally requires a distinct append-only confirmation action before the
+  immutable review decision. It binds the exact run, recommendation,
+  input/preview fingerprints, and quantities. Actor, database timestamp, and
+  reason are audited; immutable evidence records tier/reasons, resulting
+  inventory/days supply, incremental cash, and final line cash. Python and SQL
+  independently enforce the same classification.
+
+### P1-3: loose-fee semantics still awaiting owner decision
+
+- No flat, per-line, or per-unit fee meaning was guessed.
+- Any baseline recommendation that needs loose units while the confirmed
+  `loose_unit_fee` is positive is retained as the visible blocking exception
+  `LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED`.
+- Python and SQL reject later positive-fee loose edits or decisions, and
+  migration 013 refuses unsafe active pre-remediation evidence.
+- Case-only recommendations may continue even when the configured loose fee is
+  positive. Confirmed zero-fee loose ordering may continue when loose ordering
+  itself is allowed.
+- Owner decision remains required on the exact fee unit/application semantics
+  before production reliance.
+
+## Machine evidence
+
+- Baseline focused checkpoint: Monday `39/39` plus vendor rules `15/15`.
+- Final Monday workflow module: `54/54` passed in 64.674 seconds.
+- Readiness: `21/21`; vendor rules: `16/16`; Packet 3 PO ledger compatibility:
+  `35/35`.
+- Final affected inventory/vendor/PO/price/forecast/replenishment/strategic/
+  review/readiness/Monday surface: `218/218` passed in 161.769 seconds.
+- An earlier, non-accepted 217-test affected run exposed the overly strict
+  global-PASS compatibility edge (one failure and 18 errors). It was corrected;
+  the clean 218-test rerun above is the accepted evidence.
+- Authoritative exact-commit wrapper: discovered `587`, executed `587`, passed
+  `587` in 842.923 seconds. Failures `0`, errors `0`, skips `0`, expected
+  failures `0`, unexpected successes `0`; all 33 registered module floors met.
+- Runtime proof: Python `3.13.11`, PostgreSQL `16.9`, loopback database
+  `procurement_test`. The wrapper created and destroyed the `_test` database
+  and scrubbed runtime DB, libpq, Shopify, and review credentials.
+- Startup hardening: `10/10` passed.
+- Python compilation, pinned `uv 0.12.3` lock check, Bash/POSIX shell syntax,
+  `git diff --check`, high-risk secret scan, generated/binary candidate scan,
+  and forbidden Monday runtime-call scan: PASS.
+- The only warning was the pre-existing Starlette TestClient/httpx deprecation
+  warning.
+
+### Independent hard-coded boundary values
+
+- Raw baseline `3`, unit price `$10`: edited units `5 / 6 / 7` produce
+  multipliers `1.6667 / 2.0000 / 2.3333`, incremental cash
+  `$20 / $30 / $40`, final cash `$50 / $60 / $70`, and tiers
+  `NORMAL / NORMAL / MATERIAL`.
+- Raw baseline `20`, original cash `$200`: resulting days
+  `29.99 / 30.00 / 30.01` produce edited units `29 / 30 / 31`, incremental
+  cash `$90 / $100 / $110`, final cash `$290 / $300 / $310`, and tiers
+  `NORMAL / NORMAL / MATERIAL`.
+- A database ratio of `30.004` is canonically rounded to displayed `30.00` in
+  both Python and SQL and remains NORMAL.
+- The `1000x` probe is MATERIAL with `$30,000.00` final line cash and
+  `$29,970.00` incremental cash; it cannot use the normal one-confirm path.
+- Positive-fee case-only proof persists exactly one case, zero loose units,
+  `$120.00` merchandise, `$0.00` delivery fee, and `$120.00` DRAFT total.
+
+## Deferred P2 and production blockers
+
+- A malicious holder of the trusted database write role can construct
+  arbitrary but internally hash-consistent artifact payloads and terminal
+  evidence. Eliminating that stronger actor requires a separately accepted
+  role/signature or database-native semantic-rendering boundary.
+- `holiday_blackout_notes` and `special_rules` are frozen and displayed but
+  remain human-interpreted free text.
+- The disposable `_test` workflow uses a narrow synthetic sales authority
+  because no lightweight canonical sales evaluator exists for that fixture.
+- Native Shopify PO CSV format, started-Uvicorn/browser acceptance, App Storage,
+  private caller protection, production authentication, Nix/runtime/dependency
+  viability, backup/restore, real-environment migration, and shadow mode remain
+  unproven. Review-token equality authorizes an operation; it does not prove the
+  caller or entered actor's identity.
+- Strategic forward buying remains evidence-only and cannot add units.
+- Real current sales, same-day inventory, open-order reconciliation, vendor
+  terms, mappings/packs, and CURRENT price authority have not been supplied.
+  No controlled real-data DRAFT candidate exists yet.
+- The former `/tmp` pre-remediation synthetic sample is no longer present and
+  is not claimed as P1 evidence. Tests used self-cleaning temporary artifacts;
+  no post-remediation sample path is invented.
+
+## Exact next action
+
+Push the P1 implementation and documentation commits, then stop for narrow
+ChatGPT/owner re-review and independent completed-candidate review. The owner
+must explicitly accept or replace the temporary `2.0x` / `30.0 days` policy and
+decide loose-fee semantics before production reliance.
+
+No PR, merge, deployment, production connection, Shopify action, supplier
+communication, FINAL transition, release, or real PO is authorized.

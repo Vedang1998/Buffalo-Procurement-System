@@ -173,27 +173,34 @@ closeout is independently reviewed, executed, and verified.
 
 ## Authorized emergency Monday offline checkpoint
 
-**OFFLINE IMPLEMENTATION CANDIDATE READY FOR REVIEW — NOT FORMAL PHASE ACCEPTANCE**
+**P1-REMEDIATED OFFLINE CANDIDATE READY FOR RE-REVIEW — NOT FORMAL PHASE ACCEPTANCE**
 
 - Emergency branch: `codex/emergency-monday-procurement-mvp`.
-- Exact tested implementation commit:
-  `4b342cf67ec1d488a2f84433042a468609624d84`; tree
-  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`.
+- Independent review requested changes to commit
+  `4b342cf67ec1d488a2f84433042a468609624d84`, tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. Exact tested P1 implementation:
+  `dda6b0986710f032f05f50273527af160cacde5c`, tree
+  `6fc845669afa056854b9306d3cf05074fa57afe3`.
 - The offline path now integrates validated/frozen inputs, deterministic
   baseline recommendations, explicit human preview/confirmation, separate
-  vendor DRAFT POs, and a reconciled internal review packet. It is restricted
-  to immutable `INTERNAL_DRAFT_ONLY` runs; strategic extra quantity remains
-  zero and unvalidated.
-- The authoritative disposable PostgreSQL 16 suite passed `569/569` with every
-  abnormal counter at zero; startup hardening passed `10/10`. Supplemental
-  Codex specialist/static review found no concrete in-scope P0/P1.
-- Required independent Claude review is pending because the installed CLI's
-  OAuth session expired before it could read the repository. Real source
-  freshness, private access, runtime, storage, migration/backup, native Shopify
-  CSV, browser/shadow, deployment, and production acceptance remain unproven.
-- Every retained synthetic artifact is labeled `TEST DATA — NOT FOR ORDERING`.
-  Production database and Shopify actions remain `0 / 0`; FINAL, release,
-  supplier-transmission, and real-money actions remain `0`.
+  vendor DRAFT POs, and a reconciled internal review packet. P1 remediation
+  adds full-set fingerprinting plus audited run-only blocker exclusion, one
+  active Monday run per business date, vendor-scoped incomplete-rule blocking,
+  and a distinct confirmation for edits above the temporary `2.0x` raw-
+  baseline or `30.0`-day thresholds. Positive-fee loose quantities remain
+  blocked pending owner semantics. It stays restricted to immutable
+  `INTERNAL_DRAFT_ONLY` runs; strategic extra quantity remains zero.
+- The authoritative disposable PostgreSQL 16.9 suite passed `587/587` in
+  842.923 seconds with every abnormal counter at zero; affected tests passed
+  `218/218`, and startup hardening passed `10/10`. Supplemental read-only Codex
+  specialist review found no remaining concrete in-scope P0/P1; completed-
+  candidate independent re-review and owner acceptance remain pending.
+- Real source freshness, private access, runtime, storage, migration/backup,
+  native Shopify CSV, browser/shadow, deployment, and production acceptance
+  remain unproven. No durable post-P1 artifact is claimed.
+- Production database connections/writes and Shopify calls/writes remain
+  `0 / 0`; FINAL, release, supplier-transmission, and real-money actions remain
+  `0`.
 
 This emergency checkpoint does not close or renumber a canonical phase, reopen
 production permissions, or alter the Phase 4/Phase 6 statuses above.
