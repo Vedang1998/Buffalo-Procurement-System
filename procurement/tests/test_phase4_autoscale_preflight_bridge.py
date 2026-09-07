@@ -13,7 +13,10 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
+import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -34,6 +37,7 @@ SERVER_ENVIRONMENT = {
     "PYTHONPATH": "/nix/store/reviewed-sitecustomize/lib/python/site-packages",
     "REPLIT_PYTHONPATH": "/app/.pythonlibs/lib/python3.13/site-packages",
 }
+_REAL_POPEN = subprocess.Popen
 
 
 def success_report(**updates):
@@ -68,22 +72,26 @@ class FakeProcess:
         stderr: bytes = b"",
         returncode: int | None = 0,
         effects: list[object] | None = None,
-        pid: int = 42420,
     ) -> None:
         self.stdout = report_bytes() if stdout is None else stdout
         self.stderr = stderr
         self.returncode = returncode
         self.effects = list(effects or [])
-        self.pid = pid
-        self.communicate_timeouts: list[float | None] = []
 
-    def communicate(self, timeout=None):
-        self.communicate_timeouts.append(timeout)
+    def supervise(self):
         if self.effects:
             effect = self.effects.pop(0)
             if isinstance(effect, BaseException):
                 raise effect
             return effect
+        if len(self.stdout) > bridge.MAX_CHILD_STREAM_BYTES or len(
+            self.stderr
+        ) > bridge.MAX_CHILD_STREAM_BYTES:
+            raise bridge.Phase4PreflightBridgeError(
+                status_code=502,
+                code="G9_PREFLIGHT_OUTPUT_LIMIT",
+                message="The reviewed Phase 4 preflight exceeded its output limit.",
+            )
         return self.stdout, self.stderr
 
 
@@ -93,26 +101,89 @@ class BlockingProcess(FakeProcess):
         self.entered = entered
         self.release = release
 
-    def communicate(self, timeout=None):
-        self.communicate_timeouts.append(timeout)
+    def supervise(self):
         self.entered.set()
         if not self.release.wait(5):
             raise AssertionError("test did not release blocked child")
         return self.stdout, self.stderr
 
 
+def _defensively_stop_real_process(process: subprocess.Popen[bytes]) -> None:
+    """Keep every credential-free test subprocess bounded on assertion failure."""
+
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=2)
+    for pipe in (process.stdout, process.stderr):
+        if pipe is not None and not pipe.closed:
+            pipe.close()
+
+
+def _wait_for_file(path: Path, *, timeout: float = 2) -> str:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        time.sleep(0.01)
+    raise AssertionError(f"test subprocess did not create {path}")
+
+
+def _assert_process_group_absent(test: unittest.TestCase, process_group_id: int) -> None:
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return
+    test.fail(f"test process group {process_group_id} remains alive")
+
+
+def _assert_pid_absent(test: unittest.TestCase, process_id: int) -> None:
+    try:
+        os.kill(process_id, 0)
+    except ProcessLookupError:
+        return
+    test.fail(f"test process {process_id} remains alive")
+
+
 class BridgeTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(api.app)
         self.assertFalse(bridge._PREFLIGHT_LOCK.locked())
+        self.assertFalse(bridge._PREFLIGHT_CAPACITY_QUARANTINED.is_set())
 
     def tearDown(self) -> None:
         self.assertFalse(bridge._PREFLIGHT_LOCK.locked())
+        self.assertFalse(bridge._PREFLIGHT_CAPACITY_QUARANTINED.is_set())
+
+    def spawn_real_process(
+        self,
+        source: str,
+        *arguments: str,
+    ) -> subprocess.Popen[bytes]:
+        process = _REAL_POPEN(
+            [sys.executable, "-I", "-S", "-c", source, *arguments],
+            cwd="/",
+            env={},
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+            start_new_session=True,
+        )
+        self.addCleanup(_defensively_stop_real_process, process)
+        return process
 
     def post_with_process(self, process: FakeProcess, **request_kwargs):
         with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
             bridge.subprocess, "Popen", return_value=process
-        ) as popen:
+        ) as popen, patch.object(
+            bridge, "_supervise_g9_process", side_effect=lambda child: child.supervise()
+        ):
             response = self.client.post(
                 "/internal/phase4-production-preflight", **request_kwargs
             )
@@ -189,7 +260,9 @@ class InvocationBoundaryTests(BridgeTestCase):
             side_effect=authorize_and_mutate_ambient_environment,
         ) as authorize, patch.object(
             bridge.subprocess, "Popen", return_value=process
-        ) as popen:
+        ) as popen, patch.object(
+            bridge, "_supervise_g9_process", side_effect=lambda child: child.supervise()
+        ):
             response = self.client.post("/internal/phase4-production-preflight")
         self.assertEqual(response.status_code, 200)
         authorize.assert_called_once_with(CONFIGURED_TOKEN, CONFIGURED_TOKEN)
@@ -253,7 +326,9 @@ class InvocationBoundaryTests(BridgeTestCase):
         }
         with patch.dict(os.environ, environment, clear=True), patch.object(
             bridge.subprocess, "Popen", return_value=FakeProcess()
-        ) as popen:
+        ) as popen, patch.object(
+            bridge, "_supervise_g9_process", side_effect=lambda child: child.supervise()
+        ):
             response = self.client.post(
                 "/internal/phase4-production-preflight",
                 json={"REPLIT_DEPLOYMENT": "0", "CALLER_ENV": "injected"},
@@ -341,46 +416,7 @@ class ResultContractTests(BridgeTestCase):
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["detail"]["error"], "G9_PREFLIGHT_FAILED")
         popen.assert_called_once()
-        self.assertEqual(len(process.communicate_timeouts), 1)
         self.assertEqual(response.headers["cache-control"], "no-store")
-
-    def test_timeout_kills_process_group_without_retry_and_releases_lock(self):
-        initial_timeout = subprocess.TimeoutExpired(
-            cmd=list(bridge.G9_PREFLIGHT_ARGV), timeout=bridge.PREFLIGHT_TIMEOUT_SECONDS
-        )
-        grace_timeout = subprocess.TimeoutExpired(
-            cmd=list(bridge.G9_PREFLIGHT_ARGV), timeout=bridge.TERMINATION_GRACE_SECONDS
-        )
-        timed_out = FakeProcess(
-            returncode=None,
-            effects=[initial_timeout, grace_timeout, (b"", b"")],
-            pid=54321,
-        )
-        succeeding = FakeProcess()
-        with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
-            bridge.subprocess, "Popen", side_effect=[timed_out, succeeding]
-        ) as popen, patch.object(bridge.os, "killpg") as killpg:
-            first = self.client.post("/internal/phase4-production-preflight")
-            self.assertEqual(first.status_code, 504)
-            self.assertEqual(popen.call_count, 1)
-            second = self.client.post("/internal/phase4-production-preflight")
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(popen.call_count, 2)
-        self.assertEqual(
-            killpg.call_args_list,
-            [
-                unittest.mock.call(54321, signal.SIGTERM),
-                unittest.mock.call(54321, signal.SIGKILL),
-            ],
-        )
-        self.assertEqual(
-            timed_out.communicate_timeouts,
-            [
-                bridge.PREFLIGHT_TIMEOUT_SECONDS,
-                bridge.TERMINATION_GRACE_SECONDS,
-                None,
-            ],
-        )
 
     def test_stderr_is_redacted_flattened_and_bounded(self):
         secret_text = (
@@ -472,6 +508,478 @@ class ResultContractTests(BridgeTestCase):
                 self.assertEqual(caught.exception.code, "G9_PREFLIGHT_UNSAFE_OUTPUT")
 
 
+class RealSubprocessSupervisionTests(BridgeTestCase):
+    _FAST_SUPERVISOR_LIMITS = {
+        "PREFLIGHT_TIMEOUT_SECONDS": 2,
+        "TERMINATION_GRACE_SECONDS": 0.05,
+        "KILL_GRACE_SECONDS": 1,
+    }
+
+    @staticmethod
+    def _assert_closed_pipes(
+        test: unittest.TestCase, process: subprocess.Popen[bytes]
+    ) -> None:
+        test.assertIsNotNone(process.stdout)
+        test.assertIsNotNone(process.stderr)
+        test.assertTrue(process.stdout.closed)
+        test.assertTrue(process.stderr.closed)
+
+    def test_real_orphan_ignoring_term_with_closed_pipes_is_killed_and_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "descendant.pid"
+            descendant = """
+import os
+from pathlib import Path
+import signal
+import sys
+import time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+Path(sys.argv[1]).write_text(str(os.getpid()), encoding='utf-8')
+while True:
+    time.sleep(1)
+"""
+            leader = """
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+subprocess.Popen(
+    [sys.executable, '-I', '-S', '-c', sys.argv[1], sys.argv[2]],
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    close_fds=True,
+)
+deadline = time.monotonic() + 2
+while not Path(sys.argv[2]).exists():
+    if time.monotonic() >= deadline:
+        raise RuntimeError('descendant did not become ready')
+    time.sleep(0.01)
+os.write(1, sys.argv[3].encode('utf-8'))
+os._exit(0)
+"""
+            process = self.spawn_real_process(
+                leader,
+                descendant,
+                str(pid_path),
+                report_bytes().decode("utf-8"),
+            )
+            started = time.monotonic()
+            with patch.multiple(bridge, **self._FAST_SUPERVISOR_LIMITS):
+                with self.assertRaises(bridge.Phase4PreflightBridgeError) as caught:
+                    bridge._supervise_g9_process(process)
+            elapsed = time.monotonic() - started
+            descendant_pid = int(_wait_for_file(pid_path))
+            self.assertEqual(
+                caught.exception.code, "G9_PREFLIGHT_PROCESS_GROUP_REMAINED"
+            )
+            self.assertLess(elapsed, 2)
+            self.assertIsNotNone(process.returncode)
+            _assert_process_group_absent(self, process.pid)
+            _assert_pid_absent(self, descendant_pid)
+            self._assert_closed_pipes(self, process)
+
+    def test_real_stdout_limit_is_enforced_during_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            completed_path = Path(directory) / "completed"
+            source = """
+import os
+from pathlib import Path
+import sys
+for _ in range(10000):
+    os.write(1, b'x' * 1024)
+Path(sys.argv[1]).write_text('unbounded write completed', encoding='utf-8')
+"""
+            process = self.spawn_real_process(source, str(completed_path))
+            real_stream_type = bridge._BoundedChildStreams
+            observed_streams = []
+
+            class ObservedStreams(real_stream_type):
+                def __init__(self, child):
+                    super().__init__(child)
+                    observed_streams.append(self)
+
+            started = time.monotonic()
+            with patch.multiple(
+                bridge,
+                **self._FAST_SUPERVISOR_LIMITS,
+                MAX_CHILD_STREAM_BYTES=4_096,
+                _BoundedChildStreams=ObservedStreams,
+            ):
+                with self.assertRaises(bridge.Phase4PreflightBridgeError) as caught:
+                    bridge._supervise_g9_process(process)
+            elapsed = time.monotonic() - started
+            self.assertEqual(caught.exception.code, "G9_PREFLIGHT_OUTPUT_LIMIT")
+            self.assertIn("stdout", caught.exception.diagnostic)
+            self.assertLess(elapsed, 2)
+            self.assertFalse(completed_path.exists())
+            self.assertEqual(len(observed_streams), 1)
+            stdout, stderr = observed_streams[0].output()
+            self.assertLessEqual(len(stdout), 4_096)
+            self.assertLessEqual(len(stderr), 4_096)
+            _assert_process_group_absent(self, process.pid)
+            self._assert_closed_pipes(self, process)
+
+    def test_real_stderr_limit_is_enforced_during_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            completed_path = Path(directory) / "completed"
+            source = """
+import os
+from pathlib import Path
+import sys
+for _ in range(10000):
+    os.write(2, b'e' * 1024)
+Path(sys.argv[1]).write_text('unbounded write completed', encoding='utf-8')
+"""
+            process = self.spawn_real_process(source, str(completed_path))
+            real_stream_type = bridge._BoundedChildStreams
+            observed_streams = []
+
+            class ObservedStreams(real_stream_type):
+                def __init__(self, child):
+                    super().__init__(child)
+                    observed_streams.append(self)
+
+            started = time.monotonic()
+            with patch.multiple(
+                bridge,
+                **self._FAST_SUPERVISOR_LIMITS,
+                MAX_CHILD_STREAM_BYTES=4_096,
+                _BoundedChildStreams=ObservedStreams,
+            ):
+                with self.assertRaises(bridge.Phase4PreflightBridgeError) as caught:
+                    bridge._supervise_g9_process(process)
+            elapsed = time.monotonic() - started
+            self.assertEqual(caught.exception.code, "G9_PREFLIGHT_OUTPUT_LIMIT")
+            self.assertIn("stderr", caught.exception.diagnostic)
+            self.assertLess(elapsed, 2)
+            self.assertFalse(completed_path.exists())
+            self.assertEqual(len(observed_streams), 1)
+            stdout, stderr = observed_streams[0].output()
+            self.assertLessEqual(len(stdout), 4_096)
+            self.assertLessEqual(len(stderr), 4_096)
+            _assert_process_group_absent(self, process.pid)
+            self._assert_closed_pipes(self, process)
+
+    def test_real_simultaneous_stdout_and_stderr_are_drained_without_deadlock(self):
+        source = """
+import os
+import threading
+def emit(fd, value):
+    for _ in range(128):
+        os.write(fd, value * 128)
+threads = [
+    threading.Thread(target=emit, args=(1, b'o')),
+    threading.Thread(target=emit, args=(2, b'e')),
+]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+"""
+        process = self.spawn_real_process(source)
+        with patch.multiple(
+            bridge,
+            **self._FAST_SUPERVISOR_LIMITS,
+            MAX_CHILD_STREAM_BYTES=32_768,
+        ):
+            stdout, stderr = bridge._supervise_g9_process(process)
+        self.assertEqual(stdout, b"o" * 16_384)
+        self.assertEqual(stderr, b"e" * 16_384)
+        _assert_process_group_absent(self, process.pid)
+        self._assert_closed_pipes(self, process)
+
+    def test_real_continued_emission_after_crossing_limit_is_stopped(self):
+        source = """
+import os
+import signal
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+while True:
+    os.write(1, b'x' * 1024)
+"""
+        process = self.spawn_real_process(source)
+        started = time.monotonic()
+        with patch.multiple(
+            bridge,
+            **self._FAST_SUPERVISOR_LIMITS,
+            MAX_CHILD_STREAM_BYTES=1_024,
+        ):
+            with self.assertRaises(bridge.Phase4PreflightBridgeError) as caught:
+                bridge._supervise_g9_process(process)
+        elapsed = time.monotonic() - started
+        self.assertEqual(caught.exception.code, "G9_PREFLIGHT_OUTPUT_LIMIT")
+        self.assertEqual(process.returncode, -signal.SIGKILL)
+        self.assertGreaterEqual(elapsed, 0.04)
+        self.assertLess(elapsed, 2)
+        _assert_process_group_absent(self, process.pid)
+        self._assert_closed_pipes(self, process)
+
+    def test_real_timeout_with_surviving_descendant_is_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "descendant.pid"
+            descendant = """
+import os
+from pathlib import Path
+import signal
+import sys
+import time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+Path(sys.argv[1]).write_text(str(os.getpid()), encoding='utf-8')
+while True:
+    time.sleep(1)
+"""
+            leader = """
+import subprocess
+import sys
+import time
+subprocess.Popen(
+    [sys.executable, '-I', '-S', '-c', sys.argv[1], sys.argv[2]],
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    close_fds=True,
+)
+while True:
+    time.sleep(1)
+"""
+            process = self.spawn_real_process(leader, descendant, str(pid_path))
+            descendant_pid = int(_wait_for_file(pid_path))
+            started = time.monotonic()
+            with patch.multiple(
+                bridge,
+                PREFLIGHT_TIMEOUT_SECONDS=0.1,
+                TERMINATION_GRACE_SECONDS=0.05,
+                KILL_GRACE_SECONDS=1,
+            ):
+                with self.assertRaises(bridge.Phase4PreflightBridgeError) as caught:
+                    bridge._supervise_g9_process(process)
+            elapsed = time.monotonic() - started
+            self.assertEqual(caught.exception.status_code, 504)
+            self.assertEqual(caught.exception.code, "G9_PREFLIGHT_TIMEOUT")
+            self.assertEqual(process.returncode, -signal.SIGTERM)
+            self.assertGreaterEqual(elapsed, 0.14)
+            self.assertLess(elapsed, 2)
+            _assert_process_group_absent(self, process.pid)
+            _assert_pid_absent(self, descendant_pid)
+            self._assert_closed_pipes(self, process)
+            self.assertFalse(bridge._PREFLIGHT_LOCK.locked())
+
+    def test_real_normal_valid_completion_returns_exact_streams(self):
+        expected_stdout = report_bytes()
+        expected_stderr = b"bounded safe diagnostic"
+        source = """
+import os
+import sys
+os.write(1, bytes.fromhex(sys.argv[1]))
+os.write(2, bytes.fromhex(sys.argv[2]))
+"""
+        process = self.spawn_real_process(
+            source, expected_stdout.hex(), expected_stderr.hex()
+        )
+        with patch.multiple(bridge, **self._FAST_SUPERVISOR_LIMITS):
+            stdout, stderr = bridge._supervise_g9_process(process)
+        self.assertEqual(stdout, expected_stdout)
+        self.assertEqual(stderr, expected_stderr)
+        self.assertEqual(
+            bridge._parse_success_report(stdout, SERVER_ENVIRONMENT),
+            success_report(),
+        )
+        _assert_process_group_absent(self, process.pid)
+        self._assert_closed_pipes(self, process)
+
+    def test_verified_cleanup_allows_subsequent_request(self):
+        emitting_source = """
+import os
+import signal
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+while True:
+    os.write(1, b'x' * 1024)
+"""
+        valid_source = """
+import os
+import sys
+os.write(1, bytes.fromhex(sys.argv[1]))
+"""
+        processes = []
+        sources = [
+            (emitting_source, ()),
+            (valid_source, (report_bytes().hex(),)),
+        ]
+
+        def start_safe_test_process(command, **kwargs):
+            self.assertEqual(command, list(bridge.G9_PREFLIGHT_ARGV))
+            self.assertEqual(kwargs["cwd"], bridge.REPOSITORY_ROOT)
+            self.assertEqual(kwargs["env"], SERVER_ENVIRONMENT)
+            source, arguments = sources.pop(0)
+            process = self.spawn_real_process(source, *arguments)
+            processes.append(process)
+            return process
+
+        with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
+            bridge.subprocess, "Popen", side_effect=start_safe_test_process
+        ) as popen, patch.multiple(
+            bridge,
+            **self._FAST_SUPERVISOR_LIMITS,
+            MAX_CHILD_STREAM_BYTES=1_024,
+        ):
+            first = self.client.post("/internal/phase4-production-preflight")
+            second = self.client.post("/internal/phase4-production-preflight")
+        self.assertEqual(first.status_code, 502)
+        self.assertEqual(first.json()["detail"]["error"], "G9_PREFLIGHT_OUTPUT_LIMIT")
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(popen.call_count, 2)
+        self.assertEqual(len(processes), 2)
+        for process in processes:
+            _assert_process_group_absent(self, process.pid)
+            self._assert_closed_pipes(self, process)
+        self.assertFalse(bridge._PREFLIGHT_CAPACITY_QUARANTINED.is_set())
+
+    def test_timeout_cleanup_allows_subsequent_request_without_retry(self):
+        timeout_source = """
+import signal
+import time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+while True:
+    time.sleep(1)
+"""
+        valid_source = """
+import os
+import sys
+os.write(1, bytes.fromhex(sys.argv[1]))
+"""
+        processes = []
+        sources = [
+            (timeout_source, ()),
+            (valid_source, (report_bytes().hex(),)),
+        ]
+
+        def start_safe_test_process(command, **kwargs):
+            self.assertEqual(command, list(bridge.G9_PREFLIGHT_ARGV))
+            self.assertEqual(kwargs["env"], SERVER_ENVIRONMENT)
+            source, arguments = sources.pop(0)
+            process = self.spawn_real_process(source, *arguments)
+            processes.append(process)
+            return process
+
+        with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
+            bridge.subprocess, "Popen", side_effect=start_safe_test_process
+        ) as popen, patch.multiple(
+            bridge,
+            PREFLIGHT_TIMEOUT_SECONDS=0.1,
+            TERMINATION_GRACE_SECONDS=0.05,
+            KILL_GRACE_SECONDS=1,
+        ):
+            first = self.client.post("/internal/phase4-production-preflight")
+            second = self.client.post("/internal/phase4-production-preflight")
+        self.assertEqual(first.status_code, 504)
+        self.assertEqual(first.json()["detail"]["error"], "G9_PREFLIGHT_TIMEOUT")
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(popen.call_count, 2)
+        self.assertEqual(len(processes), 2)
+        self.assertEqual(processes[0].returncode, -signal.SIGKILL)
+        for process in processes:
+            _assert_process_group_absent(self, process.pid)
+            self._assert_closed_pipes(self, process)
+        self.assertFalse(bridge._PREFLIGHT_CAPACITY_QUARANTINED.is_set())
+
+    def test_uncertain_cleanup_quarantines_and_blocks_subsequent_launch(self):
+        source = """
+import os
+import signal
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+while True:
+    os.write(1, b'x' * 1024)
+"""
+        processes = []
+        real_terminate = bridge._terminate_process_group
+
+        def start_safe_test_process(_command, **_kwargs):
+            process = self.spawn_real_process(source)
+            processes.append(process)
+            return process
+
+        def terminate_then_report_uncertainty(*args, **kwargs):
+            real_terminate(*args, **kwargs)
+            raise RuntimeError("test unexpected cleanup exception")
+
+        try:
+            with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
+                bridge.subprocess, "Popen", side_effect=start_safe_test_process
+            ) as popen, patch.object(
+                bridge,
+                "_terminate_process_group",
+                side_effect=terminate_then_report_uncertainty,
+            ), patch.multiple(
+                bridge,
+                **self._FAST_SUPERVISOR_LIMITS,
+                MAX_CHILD_STREAM_BYTES=1_024,
+            ):
+                first = self.client.post("/internal/phase4-production-preflight")
+                second = self.client.post("/internal/phase4-production-preflight")
+            self.assertEqual(first.status_code, 503)
+            self.assertEqual(
+                first.json()["detail"]["error"],
+                "G9_PREFLIGHT_CLEANUP_UNPROVEN",
+            )
+            self.assertEqual(second.status_code, 503)
+            self.assertEqual(
+                second.json()["detail"]["error"],
+                "G9_PREFLIGHT_CLEANUP_UNPROVEN",
+            )
+            popen.assert_called_once()
+            self.assertTrue(bridge._PREFLIGHT_CAPACITY_QUARANTINED.is_set())
+            self.assertEqual(len(processes), 1)
+            _assert_process_group_absent(self, processes[0].pid)
+            self._assert_closed_pipes(self, processes[0])
+        finally:
+            bridge._PREFLIGHT_CAPACITY_QUARANTINED.clear()
+
+    def test_stream_close_exception_quarantines_and_blocks_subsequent_launch(self):
+        valid_source = """
+import os
+import sys
+os.write(1, bytes.fromhex(sys.argv[1]))
+"""
+        processes = []
+        real_stream_type = bridge._BoundedChildStreams
+
+        class CloseErrorStreams(real_stream_type):
+            def close(self):
+                super().close()
+                raise RuntimeError("test unexpected close exception")
+
+        def start_safe_test_process(_command, **_kwargs):
+            process = self.spawn_real_process(valid_source, report_bytes().hex())
+            processes.append(process)
+            return process
+
+        try:
+            with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
+                bridge.subprocess, "Popen", side_effect=start_safe_test_process
+            ) as popen, patch.object(
+                bridge, "_BoundedChildStreams", CloseErrorStreams
+            ), patch.multiple(
+                bridge,
+                **self._FAST_SUPERVISOR_LIMITS,
+            ):
+                first = self.client.post("/internal/phase4-production-preflight")
+                second = self.client.post("/internal/phase4-production-preflight")
+            self.assertEqual(first.status_code, 503)
+            self.assertEqual(
+                first.json()["detail"]["error"],
+                "G9_PREFLIGHT_CLEANUP_UNPROVEN",
+            )
+            self.assertEqual(second.status_code, 503)
+            popen.assert_called_once()
+            self.assertTrue(bridge._PREFLIGHT_CAPACITY_QUARANTINED.is_set())
+            self.assertEqual(len(processes), 1)
+            _assert_process_group_absent(self, processes[0].pid)
+            self._assert_closed_pipes(self, processes[0])
+        finally:
+            bridge._PREFLIGHT_CAPACITY_QUARANTINED.clear()
+
+
 class ConcurrencyTests(BridgeTestCase):
     def test_overlapping_request_is_rejected_without_second_child(self):
         entered = threading.Event()
@@ -479,7 +987,9 @@ class ConcurrencyTests(BridgeTestCase):
         process = BlockingProcess(entered, release)
         with patch.dict(os.environ, SERVER_ENVIRONMENT, clear=True), patch.object(
             bridge.subprocess, "Popen", return_value=process
-        ) as popen:
+        ) as popen, patch.object(
+            bridge, "_supervise_g9_process", side_effect=lambda child: child.supervise()
+        ):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 first_future = executor.submit(
                     TestClient(api.app).post,
@@ -526,6 +1036,9 @@ class IsolationTests(BridgeTestCase):
         self.assertNotIn("psycopg", imports)
         for forbidden in ("_db_conn", "connect_database", "connect", "execute", "cursor"):
             self.assertNotIn(forbidden, names)
+        source = Path(bridge.__file__).read_text(encoding="utf-8")
+        self.assertNotIn(".communicate(", source)
+        self.assertNotIn(".wait(", source)
 
     def test_endpoint_has_no_shopify_client_or_call_path(self):
         from procurement_os.shopify import graphql

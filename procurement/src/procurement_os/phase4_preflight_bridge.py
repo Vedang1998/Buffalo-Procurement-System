@@ -12,9 +12,11 @@ import json
 import os
 from pathlib import Path
 import re
+import selectors
 import signal
 import subprocess
 import threading
+import time
 from typing import Any, Mapping
 
 from .historical_sales_manifest import require_review_authorization
@@ -34,8 +36,11 @@ G9_PREFLIGHT_ARGV = (
 
 PREFLIGHT_TIMEOUT_SECONDS = 180
 TERMINATION_GRACE_SECONDS = 2
+KILL_GRACE_SECONDS = 2
 MAX_CHILD_STREAM_BYTES = 1_048_576
 MAX_PUBLIC_DIAGNOSTIC_CHARACTERS = 1_000
+_STREAM_READ_CHUNK_BYTES = 65_536
+_SUPERVISOR_POLL_SECONDS = 0.02
 
 _CHILD_ENVIRONMENT_NAMES = (
     "REPLIT_DEPLOYMENT",
@@ -57,6 +62,7 @@ _EXPECTED_PRODUCTION_ACTIONS = {
 }
 _POSTGRESQL_URI = re.compile(r"(?i)postgres(?:ql)?://[^\s\"']+")
 _PREFLIGHT_LOCK = threading.Lock()
+_PREFLIGHT_CAPACITY_QUARANTINED = threading.Event()
 
 
 class Phase4PreflightBridgeError(RuntimeError):
@@ -81,6 +87,102 @@ class Phase4PreflightBridgeError(RuntimeError):
         if self.diagnostic:
             detail["diagnostic"] = self.diagnostic
         return detail
+
+
+class _ProcessGroupCleanupUncertain(RuntimeError):
+    """The child/group/resource cleanup contract could not be proven."""
+
+
+class _BoundedChildStreams:
+    """Drain both child pipes fairly while retaining at most the fixed caps."""
+
+    def __init__(self, process: subprocess.Popen[bytes]) -> None:
+        if process.stdout is None or process.stderr is None:
+            raise ValueError("G9 child stdout and stderr must both be pipes")
+        self._selector = selectors.DefaultSelector()
+        self._pipes = {
+            "stdout": process.stdout,
+            "stderr": process.stderr,
+        }
+        self._buffers = {
+            "stdout": bytearray(),
+            "stderr": bytearray(),
+        }
+        try:
+            for name, pipe in self._pipes.items():
+                os.set_blocking(pipe.fileno(), False)
+                self._selector.register(pipe, selectors.EVENT_READ, name)
+        except Exception:
+            self.close()
+            raise
+
+    @property
+    def at_eof(self) -> bool:
+        return not self._selector.get_map()
+
+    def output(self) -> tuple[bytes, bytes]:
+        return bytes(self._buffers["stdout"]), bytes(self._buffers["stderr"])
+
+    def pump(self, timeout: float, *, retain: bool) -> str | None:
+        """Read at most one fixed chunk per ready stream.
+
+        Returns the first stream whose next byte crossed its independent cap.
+        During cleanup, callers set ``retain=False`` to drain without growing
+        either buffer.
+        """
+
+        if not self._selector.get_map():
+            if timeout > 0:
+                time.sleep(timeout)
+            return None
+
+        exceeded: str | None = None
+        for key, _events in self._selector.select(timeout):
+            name = str(key.data)
+            if retain:
+                room = MAX_CHILD_STREAM_BYTES - len(self._buffers[name])
+                read_size = min(_STREAM_READ_CHUNK_BYTES, room + 1)
+            else:
+                room = 0
+                read_size = _STREAM_READ_CHUNK_BYTES
+            try:
+                chunk = os.read(key.fd, read_size)
+            except BlockingIOError:
+                continue
+            if not chunk:
+                self._selector.unregister(key.fileobj)
+                key.fileobj.close()
+                continue
+            if retain:
+                self._buffers[name].extend(chunk[:room])
+                if len(chunk) > room and exceeded is None:
+                    exceeded = name
+        return exceeded
+
+    def close(self) -> bool:
+        """Close the selector and every owned child pipe; report exact success."""
+
+        closed_cleanly = True
+        for key in list(self._selector.get_map().values()):
+            try:
+                self._selector.unregister(key.fileobj)
+            except Exception:
+                closed_cleanly = False
+            try:
+                key.fileobj.close()
+            except Exception:
+                closed_cleanly = False
+        for pipe in self._pipes.values():
+            if not pipe.closed:
+                try:
+                    pipe.close()
+                except Exception:
+                    closed_cleanly = False
+        try:
+            self._selector.close()
+        except Exception:
+            closed_cleanly = False
+        return closed_cleanly
 
 
 def _server_child_environment() -> dict[str, str]:
@@ -157,23 +259,192 @@ def _safe_failure_diagnostic(
     return diagnostic or None
 
 
-def _signal_process_group(process: subprocess.Popen[bytes], sig: signal.Signals) -> None:
+def _process_group_exists(process_group_id: int) -> bool:
+    """Return False only when the kernel proves that the process group is gone."""
+
     try:
-        os.killpg(process.pid, sig)
+        os.killpg(process_group_id, 0)
     except ProcessLookupError:
-        return
+        return False
+    return True
 
 
-def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    """Terminate and reap the complete bootstrap/Git/Python process group."""
+def _signal_process_group(process_group_id: int, sig: signal.Signals) -> bool:
+    """Signal the exact launched process group; False means it was already gone."""
 
-    _signal_process_group(process, signal.SIGTERM)
     try:
-        process.communicate(timeout=TERMINATION_GRACE_SECONDS)
+        os.killpg(process_group_id, sig)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _cleanup_is_proven(process: subprocess.Popen[bytes], process_group_id: int) -> bool:
+    """Require both direct-child reaping and kernel-proven group absence."""
+
+    direct_child_reaped = process.poll() is not None
+    return direct_child_reaped and not _process_group_exists(process_group_id)
+
+
+def _wait_for_cleanup_proof(
+    process: subprocess.Popen[bytes],
+    process_group_id: int,
+    streams: _BoundedChildStreams | None,
+    *,
+    deadline: float,
+) -> bool:
+    """Drain/discard and poll until cleanup is proven or the deadline expires."""
+
+    while True:
+        try:
+            if _cleanup_is_proven(process, process_group_id):
+                return True
+        except OSError:
+            # A later successful probe may still prove cleanup before deadline.
+            pass
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        wait_for = min(_SUPERVISOR_POLL_SECONDS, remaining)
+        if streams is None:
+            time.sleep(wait_for)
+        else:
+            try:
+                streams.pump(wait_for, retain=False)
+            except OSError:
+                # Closing the owned descriptors is the final resource proof.
+                time.sleep(wait_for)
+
+
+def _terminate_process_group(
+    process: subprocess.Popen[bytes],
+    process_group_id: int,
+    streams: _BoundedChildStreams | None,
+) -> None:
+    """Boundedly terminate, reap, and prove absence of the launched group."""
+
+    try:
+        _signal_process_group(process_group_id, signal.SIGTERM)
+    except OSError:
+        # Still attempt hard termination and proof before quarantining capacity.
+        pass
+    if _wait_for_cleanup_proof(
+        process,
+        process_group_id,
+        streams,
+        deadline=time.monotonic() + TERMINATION_GRACE_SECONDS,
+    ):
         return
-    except subprocess.TimeoutExpired:
-        _signal_process_group(process, signal.SIGKILL)
-        process.communicate()
+
+    try:
+        _signal_process_group(process_group_id, signal.SIGKILL)
+    except OSError:
+        pass
+    if _wait_for_cleanup_proof(
+        process,
+        process_group_id,
+        streams,
+        deadline=time.monotonic() + KILL_GRACE_SECONDS,
+    ):
+        return
+    raise _ProcessGroupCleanupUncertain(
+        "direct-child reaping or process-group absence could not be proven"
+    )
+
+
+def _supervise_g9_process(
+    process: subprocess.Popen[bytes],
+) -> tuple[bytes, bytes]:
+    """Collect one G9 child with live stream caps and exact group completion."""
+
+    process_group_id = process.pid
+    streams: _BoundedChildStreams | None = None
+    failure: Phase4PreflightBridgeError | None = None
+    result: tuple[bytes, bytes] | None = None
+    cleanup_required = False
+    try:
+        streams = _BoundedChildStreams(process)
+        execution_deadline = time.monotonic() + PREFLIGHT_TIMEOUT_SECONDS
+        while True:
+            remaining = execution_deadline - time.monotonic()
+            if remaining <= 0:
+                cleanup_required = True
+                failure = Phase4PreflightBridgeError(
+                    status_code=504,
+                    code="G9_PREFLIGHT_TIMEOUT",
+                    message="The reviewed Phase 4 preflight exceeded its execution limit.",
+                )
+                break
+
+            exceeded = streams.pump(
+                min(_SUPERVISOR_POLL_SECONDS, remaining), retain=True
+            )
+            if exceeded is not None:
+                cleanup_required = True
+                failure = Phase4PreflightBridgeError(
+                    status_code=502,
+                    code="G9_PREFLIGHT_OUTPUT_LIMIT",
+                    message="The reviewed Phase 4 preflight exceeded its output limit.",
+                    diagnostic=f"{exceeded} exceeded its fixed byte limit.",
+                )
+                break
+
+            if process.poll() is None:
+                continue
+            try:
+                group_exists = _process_group_exists(process_group_id)
+            except OSError:
+                cleanup_required = True
+                failure = Phase4PreflightBridgeError(
+                    status_code=502,
+                    code="G9_PREFLIGHT_SUPERVISION_FAILED",
+                    message="The reviewed Phase 4 preflight could not be supervised safely.",
+                )
+                break
+            if group_exists:
+                cleanup_required = True
+                failure = Phase4PreflightBridgeError(
+                    status_code=502,
+                    code="G9_PREFLIGHT_PROCESS_GROUP_REMAINED",
+                    message="The reviewed Phase 4 preflight left a child process running.",
+                )
+                break
+            if streams.at_eof:
+                result = streams.output()
+                break
+    except Exception:
+        cleanup_required = True
+        failure = Phase4PreflightBridgeError(
+            status_code=502,
+            code="G9_PREFLIGHT_SUPERVISION_FAILED",
+            message="The reviewed Phase 4 preflight could not be supervised safely.",
+        )
+
+    cleanup_uncertain: _ProcessGroupCleanupUncertain | None = None
+    try:
+        if cleanup_required:
+            try:
+                _terminate_process_group(process, process_group_id, streams)
+            except Exception:
+                cleanup_uncertain = _ProcessGroupCleanupUncertain(
+                    "G9 process-group cleanup raised before proof completed"
+                )
+    finally:
+        try:
+            streams_closed = streams.close() if streams is not None else False
+        except Exception:
+            streams_closed = False
+    if cleanup_uncertain is not None or not streams_closed:
+        raise _ProcessGroupCleanupUncertain(
+            "G9 process-group or pipe cleanup could not be proven"
+        ) from None
+    if failure is not None:
+        raise failure
+    if result is None:
+        raise _ProcessGroupCleanupUncertain(
+            "G9 completion did not produce a fully supervised result"
+        )
+    return result
 
 
 def _launch_g9_preflight(environment: Mapping[str, str]) -> tuple[bytes, bytes]:
@@ -197,25 +468,7 @@ def _launch_g9_preflight(environment: Mapping[str, str]) -> tuple[bytes, bytes]:
             diagnostic=diagnostic or None,
         ) from None
 
-    try:
-        stdout, stderr = process.communicate(timeout=PREFLIGHT_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        _terminate_process_group(process)
-        raise Phase4PreflightBridgeError(
-            status_code=504,
-            code="G9_PREFLIGHT_TIMEOUT",
-            message="The reviewed Phase 4 preflight exceeded its execution limit.",
-        ) from None
-
-    if (
-        len(stdout) > MAX_CHILD_STREAM_BYTES
-        or len(stderr) > MAX_CHILD_STREAM_BYTES
-    ):
-        raise Phase4PreflightBridgeError(
-            status_code=502,
-            code="G9_PREFLIGHT_OUTPUT_LIMIT",
-            message="The reviewed Phase 4 preflight exceeded its output limit.",
-        )
+    stdout, stderr = _supervise_g9_process(process)
     if process.returncode != 0:
         raise Phase4PreflightBridgeError(
             status_code=502,
@@ -317,6 +570,12 @@ def run_phase4_production_preflight() -> dict[str, Any]:
 
     child_environment = _server_child_environment()
     _authorize_server_environment(child_environment)
+    if _PREFLIGHT_CAPACITY_QUARANTINED.is_set():
+        raise Phase4PreflightBridgeError(
+            status_code=503,
+            code="G9_PREFLIGHT_CLEANUP_UNPROVEN",
+            message="Phase 4 preflight capacity is blocked pending process restart.",
+        )
     if not _PREFLIGHT_LOCK.acquire(blocking=False):
         raise Phase4PreflightBridgeError(
             status_code=409,
@@ -324,7 +583,21 @@ def run_phase4_production_preflight() -> dict[str, Any]:
             message="A Phase 4 production preflight is already running in this process.",
         )
     try:
-        stdout, _stderr = _launch_g9_preflight(child_environment)
-        return _parse_success_report(stdout, child_environment)
+        if _PREFLIGHT_CAPACITY_QUARANTINED.is_set():
+            raise Phase4PreflightBridgeError(
+                status_code=503,
+                code="G9_PREFLIGHT_CLEANUP_UNPROVEN",
+                message="Phase 4 preflight capacity is blocked pending process restart.",
+            )
+        try:
+            stdout, _stderr = _launch_g9_preflight(child_environment)
+            return _parse_success_report(stdout, child_environment)
+        except _ProcessGroupCleanupUncertain:
+            _PREFLIGHT_CAPACITY_QUARANTINED.set()
+            raise Phase4PreflightBridgeError(
+                status_code=503,
+                code="G9_PREFLIGHT_CLEANUP_UNPROVEN",
+                message="Phase 4 preflight cleanup could not be proven; capacity is blocked pending process restart.",
+            ) from None
     finally:
         _PREFLIGHT_LOCK.release()
