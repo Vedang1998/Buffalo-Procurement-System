@@ -240,6 +240,337 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertEqual((conversions["la-marca"]["physical_units_per_supplier_case"], conversions["la-marca"]["shopify_units_per_supplier_case"], conversions["la-marca"]["inner_pack_units"]), (24, 8, 3))
         self.assertEqual((conversions["minus-196"]["physical_units_per_supplier_case"], conversions["minus-196"]["shopify_units_per_supplier_case"], conversions["minus-196"]["inner_pack_units"]), (24, 6, 4))
 
+    def test_eight_synthetic_layout_known_answers_preserve_review_boundaries(self):
+        rows = [
+            offer(
+                "layout-1-nested",
+                variant_id="TEST-L1",
+                supplier_sku="000TEST-L1",
+                physical_units_per_supplier_case=120,
+                supplier_case_pack=12,
+                supplier_retail_pack=10,
+                proposed_shopify_sellable_units_per_case=120,
+                supplier_order_increment=None,
+                supplier_qualifying_unit=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=Decimal("137.28"),
+                unit_price=Decimal("1.144"),
+                printed_inner_price=Decimal("12.75"),
+                tiers=[
+                    {"unit": "BASE", "case_price": Decimal("137.28")},
+                    {"unit": "BT", "threshold": 6, "case_price": Decimal("131.04")},
+                    {"unit": "BT", "threshold": 12, "case_price": Decimal("125.76")},
+                ],
+                selected_tier=None,
+            ),
+            offer(
+                "layout-2-standard",
+                variant_id="TEST-L2",
+                supplier_sku="000TEST-L2-S",
+                physical_units_per_supplier_case=6,
+                supplier_case_pack=6,
+                proposed_shopify_sellable_units_per_case=6,
+                case_price=Decimal("168.60"),
+                unit_price=Decimal("28.10"),
+                split_inclusive_price=Decimal("31.25"),
+                general_case_split_charge=Decimal("45.60"),
+            ),
+            offer(
+                "layout-2-gift",
+                variant_id="TEST-L2",
+                supplier_sku="000TEST-L2-G",
+                offer_type="GIFT_WITH_GLASS",
+                candidate_disposition="SEARCH_LEAD_ONLY",
+                mapping_status="SEARCH_LEAD_ONLY",
+                physical_units_per_supplier_case=None,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_unit=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                components=[
+                    {"kind": "PRIMARY_BOTTLE", "quantity": 1},
+                    {"kind": "GLASSWARE", "quantity": 2},
+                ],
+                standard_assortment_allowed=False,
+            ),
+            offer(
+                "layout-3-fixed-combo",
+                variant_id="TEST-L3",
+                supplier_sku="000TEST-L3",
+                offer_type="FIXED_COMBO",
+                physical_units_per_supplier_case=12,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_unit=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                whole_combo_total=Decimal("207.36"),
+                components=[
+                    {"expression": value, "bottles": 3, "size_ml": 750}
+                    for value in ("A", "B", "C", "D")
+                ],
+                unrelated_expression_match="REJECTED_NOT_COMPONENT",
+                whole_combo_to_one_variant=False,
+            ),
+            offer(
+                "layout-4-retail-pack",
+                variant_id="TEST-L4-A",
+                supplier_sku="000TEST-L4-A",
+                physical_units_per_supplier_case=24,
+                supplier_case_pack=6,
+                supplier_retail_pack=4,
+                proposed_shopify_sellable_units_per_case=6,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+            ),
+            offer(
+                "layout-4-ounce-price",
+                variant_id="TEST-L4-B",
+                supplier_sku="000TEST-L4-B",
+                physical_units_per_supplier_case=12,
+                supplier_case_pack=12,
+                proposed_shopify_sellable_units_per_case=12,
+                supplier_qualifying_units_per_case=None,
+                case_price=Decimal("61.44"),
+                unit_price=Decimal("5.12"),
+                fluid_ounces_each=32,
+                per_ounce_price=Decimal("0.16"),
+                channel="TEST ON PREMISE ONLY",
+            ),
+            offer(
+                "layout-5-mixed-sizes",
+                variant_id="TEST-L5",
+                supplier_sku="000TEST-L5",
+                offer_type="FIXED_COMBO",
+                physical_units_per_supplier_case=9,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_unit=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                whole_combo_total=Decimal("184.10"),
+                printed_aggregate_unit_price=Decimal("20.41"),
+                components=[
+                    {"bottles": 3, "size_ml": 1750},
+                    {"bottles": 3, "size_ml": 1000},
+                    {"bottles": 3, "size_ml": 750},
+                ],
+                fabricated_average_variant_size=None,
+                component_cost_allocation=None,
+            ),
+            offer(
+                "layout-6-blank-case",
+                variant_id="TEST-L6",
+                supplier_sku="000TEST-L6-S",
+                physical_units_per_supplier_case=None,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_unit="BT",
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                tier={"unit": "BT", "quantity": 6, "unit_price": Decimal("47.35")},
+            ),
+            offer(
+                "layout-6-alcohol-gift",
+                variant_id="TEST-L6",
+                supplier_sku="000TEST-L6-G",
+                offer_type="ALCOHOL_GIFT",
+                physical_units_per_supplier_case=24,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                components=[
+                    {"kind": "PRIMARY", "count": 6, "size_ml": 750},
+                    {"kind": "MINI", "count": 18, "size_ml": 50},
+                ],
+                allocated_component_cost=None,
+            ),
+            offer(
+                "layout-7-combo-column",
+                variant_id="TEST-L7-A",
+                supplier_sku="000TEST-L7-NV/6PK",
+                offer_type="FIXED_COMBO",
+                physical_units_per_supplier_case=6,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                source_size_raw="700 ML",
+                components=[
+                    {"expression": "RED", "quantity": 2},
+                    {"expression": "BLACK", "quantity": 2},
+                    {"expression": "PURPLE", "quantity": 2},
+                ],
+                boundary_case_fee=None,
+                missing_extracted_occurrence_id=None,
+            ),
+            offer(
+                "layout-7-next-standard",
+                variant_id="TEST-L7-B",
+                supplier_sku="000TEST-L7-NV-STD",
+                physical_units_per_supplier_case=12,
+                supplier_case_pack=12,
+                supplier_retail_pack=1,
+                proposed_shopify_sellable_units_per_case=12,
+                source_size_raw="1000 ML",
+            ),
+            offer(
+                "layout-8-missing-pack",
+                variant_id="TEST-L8",
+                supplier_sku="000TEST-L8-24/6PK",
+                physical_units_per_supplier_case=None,
+                supplier_case_pack=None,
+                supplier_retail_pack=None,
+                proposed_shopify_sellable_units_per_case=None,
+                supplier_order_increment=None,
+                supplier_qualifying_unit=None,
+                supplier_qualifying_units_per_case=None,
+                case_price=None,
+                unit_price=None,
+                source_size_raw=None,
+                source_period_raw="FALL / WINTER TEST YEAR",
+                automatic_next_month_effectivity=False,
+                split_permission=None,
+            ),
+        ]
+        report = build_offer_family_report(rows)
+        items = {
+            item["identity"]["offer_id"]: item
+            for family in report["offer_families"]
+            for item in family["alternatives"]
+        }
+
+        nested = items["layout-1-nested"]
+        self.assertEqual(
+            (
+                nested["conversions"]["physical_units_per_supplier_case"],
+                nested["conversions"]["retail_units_per_supplier_case"],
+                nested["conversions"]["inner_pack_units"],
+                nested["conversions"]["shopify_units_per_supplier_case"],
+            ),
+            (Decimal("120"), Decimal("12"), Decimal("10"), Decimal("120")),
+        )
+        self.assertEqual(Decimal("137.28") / Decimal("120"), Decimal("1.144"))
+        self.assertEqual(Decimal("137.28") / Decimal("12"), Decimal("11.44"))
+        self.assertEqual(nested["raw"]["printed_inner_price"], Decimal("12.75"))
+        self.assertNotEqual(Decimal("11.44"), nested["raw"]["printed_inner_price"])
+        self.assertEqual(len(nested["raw"]["tiers"]), 3)
+        self.assertIsNone(nested["raw"]["selected_tier"])
+
+        split = items["layout-2-standard"]
+        self.assertEqual(Decimal("31.25") - Decimal("28.10"), Decimal("3.15"))
+        self.assertEqual(Decimal("45.60") / Decimal("6"), Decimal("7.60"))
+        self.assertEqual(split["raw"]["split_inclusive_price"], Decimal("31.25"))
+        self.assertIn("SPLIT_INCLUSION_REQUIRES_SCOPE", split["exception_codes"])
+        self.assertFalse(items["layout-2-gift"]["raw"]["standard_assortment_allowed"])
+        self.assertNotEqual(split["identity"], items["layout-2-gift"]["identity"])
+
+        fixed = items["layout-3-fixed-combo"]
+        self.assertEqual(sum(part["bottles"] for part in fixed["raw"]["components"]), 12)
+        self.assertEqual(
+            sum(
+                Decimal(part["bottles"]) * Decimal(part["size_ml"]) / Decimal("1000")
+                for part in fixed["raw"]["components"]
+            ),
+            Decimal("9"),
+        )
+        self.assertEqual(fixed["raw"]["whole_combo_total"], Decimal("207.36"))
+        self.assertTrue(all("allocated_component_cost" not in part for part in fixed["raw"]["components"]))
+        self.assertFalse(fixed["raw"]["whole_combo_to_one_variant"])
+
+        retail = items["layout-4-retail-pack"]
+        self.assertEqual(
+            (
+                retail["conversions"]["physical_units_per_supplier_case"],
+                retail["conversions"]["shopify_units_per_supplier_case"],
+                retail["conversions"]["inner_pack_units"],
+            ),
+            (Decimal("24"), Decimal("6"), Decimal("4")),
+        )
+        ounce = items["layout-4-ounce-price"]
+        self.assertEqual(
+            ounce["raw"]["case_price"]
+            / Decimal(ounce["raw"]["physical_units_per_supplier_case"])
+            / Decimal(ounce["raw"]["fluid_ounces_each"]),
+            Decimal("0.16"),
+        )
+        self.assertIn("PER_OUNCE_NOT_A_TIER_PRICE", ounce["exception_codes"])
+        self.assertEqual(ounce["raw"]["channel"], "TEST ON PREMISE ONLY")
+
+        mixed = items["layout-5-mixed-sizes"]
+        self.assertEqual(
+            sum(
+                Decimal(part["bottles"]) * Decimal(part["size_ml"]) / Decimal("1000")
+                for part in mixed["raw"]["components"]
+            ),
+            Decimal("10.5"),
+        )
+        self.assertEqual(Decimal("9") * Decimal("20.41"), Decimal("183.69"))
+        self.assertEqual(mixed["raw"]["whole_combo_total"], Decimal("184.10"))
+        self.assertNotEqual(Decimal("183.69"), mixed["raw"]["whole_combo_total"])
+        self.assertIsNone(mixed["raw"]["component_cost_allocation"])
+        self.assertIsNone(mixed["raw"]["fabricated_average_variant_size"])
+
+        blank = items["layout-6-blank-case"]
+        gift = items["layout-6-alcohol-gift"]
+        self.assertIsNone(blank["conversions"]["retail_units_per_supplier_case"])
+        self.assertIsNone(blank["conversions"]["shopify_units_per_supplier_case"])
+        self.assertEqual(blank["raw"]["tier"]["quantity"], 6)
+        self.assertEqual(sum(part["count"] for part in gift["raw"]["components"]), 24)
+        self.assertEqual([part["count"] for part in gift["raw"]["components"]], [6, 18])
+        self.assertIsNone(gift["conversions"]["shopify_units_per_supplier_case"])
+        self.assertIsNone(gift["raw"]["allocated_component_cost"])
+
+        combo_column = items["layout-7-combo-column"]
+        next_standard = items["layout-7-next-standard"]
+        self.assertEqual(sum(part["quantity"] for part in combo_column["raw"]["components"]), 6)
+        self.assertEqual(combo_column["raw"]["source_size_raw"], "700 ML")
+        self.assertEqual(next_standard["raw"]["source_size_raw"], "1000 ML")
+        self.assertEqual(next_standard["program_type"], "STANDARD")
+        self.assertIsNone(combo_column["raw"]["boundary_case_fee"])
+        self.assertIsNone(combo_column["raw"]["missing_extracted_occurrence_id"])
+
+        missing = items["layout-8-missing-pack"]
+        self.assertEqual(missing["supplier_sku"], "000TEST-L8-24/6PK")
+        for field in (
+            "physical_units_per_supplier_case",
+            "retail_units_per_supplier_case",
+            "shopify_units_per_supplier_case",
+            "supplier_qualifying_units_per_case",
+        ):
+            self.assertIsNone(missing["conversions"][field])
+        self.assertEqual(missing["raw"]["source_period_raw"], "FALL / WINTER TEST YEAR")
+        self.assertFalse(missing["raw"]["automatic_next_month_effectivity"])
+        self.assertEqual(
+            (
+                report["invariants"]["mapping_approvals"],
+                report["invariants"]["price_approvals"],
+                report["invariants"]["import_ready_rows"],
+            ),
+            (0, 0, 0),
+        )
+
     def test_identity_expression_combo_and_review_nulls_never_gain_authority(self):
         rows = [
             offer("bloodlines", variant_id="B", supplier_title="Bloodlines", historical_title="Palermo", historical_sales_attribution_resolved=False),
@@ -290,6 +621,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 variant_id="OLD",
                 vendor="Empire",
                 supplier_sku="REUSE-01",
+                expression="TEST RYE",
+                physical_units_per_supplier_case=6,
             )
         ]
         current = [
@@ -298,6 +631,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 variant_id="NEW",
                 vendor="Empire",
                 supplier_sku="REUSE-01",
+                expression="TEST CITRUS",
+                physical_units_per_supplier_case=12,
             )
         ]
 
@@ -317,6 +652,14 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertEqual(comparison["summary"]["added"], 1)
         self.assertEqual(comparison["summary"]["missing_not_retired"], 1)
         self.assertFalse(comparison["missing_occurrences"][0]["retirement_inferred"])
+        self.assertEqual(
+            comparison["added_occurrences"][0]["current"]["expression"],
+            "TEST CITRUS",
+        )
+        self.assertEqual(
+            comparison["missing_occurrences"][0]["previous"]["physical_units_per_supplier_case"],
+            6,
+        )
 
     def test_real_field_aliases_remain_fail_closed_and_diffable(self):
         guarded = build_offer_family_report([
@@ -757,6 +1100,264 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertIn("GIFT_DISAPPEARED_NOT_RETIREMENT", gift_missing["categories"])
         self.assertFalse(gift_missing["missing_occurrences"][0]["retirement_inferred"])
 
+        limited_expression = compare_review_snapshots(
+            [offer("standard", supplier_sku="TEST-CODE", expression="NORMAL")],
+            [
+                offer("standard", supplier_sku="TEST-CODE", expression="NORMAL"),
+                offer(
+                    "limited",
+                    supplier_sku="TEST-CODE",
+                    expression="LIMITED TEST EXPRESSION",
+                    offer_type="LIMITED_EXPRESSION",
+                ),
+            ],
+        )
+        self.assertIn("SIMULTANEOUS_PACKAGES", limited_expression["categories"])
+        self.assertEqual(
+            limited_expression["simultaneous_packages"],
+            [
+                {
+                    "variant_id": "1001",
+                    "source_occurrence_ids": ["limited", "standard"],
+                    "program_types": ["LIMITED_EXPRESSION", "STANDARD"],
+                    "selection_created": False,
+                }
+            ],
+        )
+        self.assertEqual(len(limited_expression["sku_reuse_or_replacement"]), 1)
+        self.assertEqual(
+            limited_expression["operational_effects"],
+            {"mapping_approvals": 0, "retirements": 0, "price_approvals": 0},
+        )
+
+    def test_twelve_simulated_next_month_cases_have_literal_non_authoritative_answers(self):
+        def simulated(
+            previous: list[dict[str, object]],
+            current: list[dict[str, object]],
+            *,
+            previous_tiers: list[dict[str, object]] | None = None,
+            current_tiers: list[dict[str, object]] | None = None,
+        ) -> dict[str, object]:
+            result = compare_review_snapshots(
+                previous,
+                current,
+                previous_tiers=previous_tiers or [],
+                current_tiers=current_tiers or [],
+                simulated=True,
+            )
+            self.assertIs(result["simulated"], True)
+            self.assertEqual(result["authority"], "REVIEW_ONLY")
+            self.assertEqual(
+                result["operational_effects"],
+                {"mapping_approvals": 0, "retirements": 0, "price_approvals": 0},
+            )
+            return result
+
+        with self.subTest(case="SIMULATED-NEXT-01-UNCHANGED"):
+            result = simulated([offer("same")], [offer("same")])
+            self.assertEqual(result["summary"]["unchanged"], 1)
+            self.assertEqual(result["categories"], [])
+
+        with self.subTest(case="SIMULATED-NEXT-02-REPLACEMENT-CODE"):
+            result = simulated(
+                [offer("same", supplier_sku="000TEST-A01-R")],
+                [offer("same", supplier_sku="000TEST-A02-R")],
+            )
+            self.assertEqual(result["categories"], ["SUPPLIER_SKU_CHANGED"])
+            self.assertEqual(result["alias_transition_candidates"][0]["authority"], "CANDIDATE_ONLY")
+            self.assertFalse(result["alias_transition_candidates"][0]["approval_created"])
+
+        with self.subTest(case="SIMULATED-NEXT-03-CODE-REUSED-OTHER-LIQUID-PACK"):
+            result = simulated(
+                [
+                    offer(
+                        "old",
+                        variant_id="TEST-OLD",
+                        supplier_sku="000TEST-REUSED",
+                        expression="TEST RYE",
+                        physical_units_per_supplier_case=6,
+                    )
+                ],
+                [
+                    offer(
+                        "new",
+                        variant_id="TEST-NEW",
+                        supplier_sku="000TEST-REUSED",
+                        expression="TEST BOURBON",
+                        physical_units_per_supplier_case=12,
+                    )
+                ],
+            )
+            self.assertEqual(
+                (result["summary"]["added"], result["summary"]["missing_not_retired"]),
+                (1, 1),
+            )
+            self.assertEqual(len(result["sku_reuse_or_replacement"]), 1)
+            self.assertFalse(result["missing_occurrences"][0]["retirement_inferred"])
+            self.assertEqual(result["added_occurrences"][0]["current"]["expression"], "TEST BOURBON")
+
+        with self.subTest(case="SIMULATED-NEXT-04-GIFT-COEXISTS"):
+            result = simulated(
+                [offer("standard")],
+                [offer("standard"), offer("gift", offer_type="GIFT_WITH_GLASS")],
+            )
+            self.assertIn("SIMULTANEOUS_GIFT_ALTERNATIVES", result["categories"])
+            self.assertFalse(result["simultaneous_packages"][0]["selection_created"])
+
+        with self.subTest(case="SIMULATED-NEXT-05-GIFT-DISAPPEARS"):
+            result = simulated(
+                [offer("standard"), offer("gift", offer_type="GIFT_WITH_GLASS")],
+                [offer("standard")],
+            )
+            self.assertIn("GIFT_DISAPPEARED_NOT_RETIREMENT", result["categories"])
+            self.assertFalse(result["missing_occurrences"][0]["retirement_inferred"])
+
+        with self.subTest(case="SIMULATED-NEXT-06-VINTAGE"):
+            result = simulated(
+                [offer("same", supplier_vintage="TEST-YEAR-0")],
+                [offer("same", supplier_vintage="TEST-YEAR-1")],
+            )
+            self.assertEqual(result["categories"], ["VINTAGE_CHANGED"])
+
+        with self.subTest(case="SIMULATED-NEXT-07-CASE-PACK"):
+            result = simulated(
+                [offer("same", physical_units_per_supplier_case=6)],
+                [offer("same", physical_units_per_supplier_case=12)],
+            )
+            self.assertEqual(result["categories"], ["PACK_CHANGED"])
+            self.assertEqual(
+                result["changed"][0]["changes"]["physical_units_per_supplier_case"]["after"],
+                12,
+            )
+
+        with self.subTest(case="SIMULATED-NEXT-08-RETAIL-PACK-REVIEWED-NULL"):
+            current = offer(
+                "same",
+                physical_units_per_supplier_case=24,
+                supplier_case_pack=8,
+                supplier_retail_pack=3,
+            )
+            current["reviewed_shopify_units_per_case"] = None
+            result = simulated([offer("same")], [current])
+            self.assertEqual(result["categories"], ["PACK_CHANGED"])
+            self.assertEqual(
+                result["changed"][0]["changes"]["shopify_units_per_supplier_case"],
+                {
+                    "before_present": True,
+                    "before": 12,
+                    "after_present": True,
+                    "after": None,
+                },
+            )
+
+        with self.subTest(case="SIMULATED-NEXT-09-BT-CS-QUALIFICATION"):
+            result = simulated(
+                [offer("same", supplier_qualifying_unit="BT")],
+                [offer("same", supplier_qualifying_unit="CS")],
+                previous_tiers=[
+                    offer(
+                        "same",
+                        source_tier_id="TEST-BT6",
+                        supplier_qualifying_unit="BT",
+                        break_unit="BT",
+                        break_quantity=6,
+                    )
+                ],
+                current_tiers=[
+                    offer(
+                        "same",
+                        source_tier_id="TEST-CS2",
+                        supplier_qualifying_unit="CS",
+                        break_unit="CS",
+                        break_quantity=2,
+                    )
+                ],
+            )
+            self.assertTrue(
+                {"BT_CS_THRESHOLD_CHANGED", "ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"}.issubset(
+                    result["categories"]
+                )
+            )
+            self.assertEqual(
+                {item["kind"] for item in result["tier_changes"]},
+                {"ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"},
+            )
+
+        with self.subTest(case="SIMULATED-NEXT-10-TIER-ADDED-REMOVED"):
+            result = simulated(
+                [offer("same")],
+                [offer("same")],
+                previous_tiers=[
+                    offer(
+                        "same", source_tier_id="TEST-BASE",
+                        supplier_qualifying_unit="BASE", break_unit="BASE", break_quantity=None,
+                    ),
+                    offer(
+                        "same", source_tier_id="TEST-BT6",
+                        supplier_qualifying_unit="BT", break_unit="BT", break_quantity=6,
+                    ),
+                    offer(
+                        "same", source_tier_id="TEST-BT12",
+                        supplier_qualifying_unit="BT", break_unit="BT", break_quantity=12,
+                    ),
+                ],
+                current_tiers=[
+                    offer(
+                        "same", source_tier_id="TEST-BASE",
+                        supplier_qualifying_unit="BASE", break_unit="BASE", break_quantity=None,
+                    ),
+                    offer(
+                        "same", source_tier_id="TEST-BT6",
+                        supplier_qualifying_unit="BT", break_unit="BT", break_quantity=6,
+                    ),
+                    offer(
+                        "same", source_tier_id="TEST-BT24",
+                        supplier_qualifying_unit="BT", break_unit="BT", break_quantity=24,
+                    ),
+                ],
+            )
+            self.assertEqual(
+                {item["kind"] for item in result["tier_changes"]},
+                {"ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"},
+            )
+
+        with self.subTest(case="SIMULATED-NEXT-11-DATE-CHANNEL-TERRITORY"):
+            result = simulated(
+                [
+                    offer(
+                        "same",
+                        source_period="TEST-T0",
+                        channel="TEST OFF PREMISE",
+                        territory="TEST ZONE A",
+                    )
+                ],
+                [
+                    offer(
+                        "same",
+                        source_period="TEST-T1-LIMITED",
+                        channel="TEST ON PREMISE",
+                        territory="TEST ZONE B",
+                    )
+                ],
+            )
+            self.assertTrue(
+                {"SOURCE_PERIOD_CHANGED", "CHANNEL_OR_TERRITORY_SCOPE_CHANGED", "DATE_OR_TERRITORY_CHANGED"}.issubset(
+                    result["categories"]
+                )
+            )
+
+        with self.subTest(case="SIMULATED-NEXT-12-REJECTED-RECURS"):
+            rejected = offer(
+                "same",
+                expression="TEST BOURBON",
+                candidate_disposition="REJECTED_ATTRIBUTE_CONFLICT",
+                mapping_status="REJECTED_ATTRIBUTE_CONFLICT",
+                prior_rejection="EXPRESSION_MISMATCH",
+            )
+            result = simulated([rejected], [dict(rejected)])
+            self.assertIn("REJECTED_MATCH_RECURRED", result["categories"])
+            self.assertEqual(result["summary"]["unchanged"], 1)
+
     def test_monthly_pack_vintage_null_and_scope_changes_preserve_exact_evidence(self):
         vintage = compare_review_snapshots(
             [offer("same", supplier_vintage="2021")],
@@ -879,7 +1480,9 @@ class SupplierMappingReviewTests(unittest.TestCase):
 
         previous = package()
         current = package({"period_id": "2026-10"})
-        self.assertEqual(compare_review_packages(previous, current)["status"], "PASS")
+        comparable = compare_review_packages(previous, current)
+        self.assertEqual(comparable["status"], "PASS")
+        self.assertIs(comparable["simulated"], True)
         missing = package(
             {
                 "period_id": "2026-10",
@@ -927,7 +1530,41 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 "new_gift_sidecar_id": "gift-1",
             },
         )
-        sidecar = ({"variant_id": "1001", "source_offer_id": "book:gift", "relationship_id": "gift-1"},)
+        sidecar = (
+            {
+                "variant_id": "1001",
+                "source_offer_id": "book:gift",
+                "relationship_id": "gift-1",
+                "diagnostic_relationship_type": "CONDITIONAL_GIFT",
+                "exact_gift_contents_and_acceptance": "one bottle plus two glasses",
+                "allocated_component_cost": None,
+                "whole_offer_to_single_variant_allowed": False,
+                "mapping_approved": False,
+                "price_approved": False,
+                "import_ready": False,
+            },
+        )
+        fixed_component = (
+            {
+                "variant_id": "1001",
+                "source_anchor_offer_ids": ["book:standard"],
+                "component_relationship_id": "component-1",
+                "relationship_type": "COMPONENT_ONLY",
+                "component_description_raw": "Fixture Component A",
+                "component_quantity_raw": 3,
+                "component_quantity_unit_raw": "BOTTLES",
+                "component_size_raw": "750 ML",
+                "component_supplier_sku": "COMP-001",
+                "whole_combo_total_cost": Decimal("207.36"),
+                "allocated_component_cost": None,
+                "cost_allocation_status": "NOT_ALLOCATED",
+                "whole_combo_to_variant_mapping_allowed": False,
+                "combo_auto_add": False,
+                "mapping_approved": False,
+                "price_approved": False,
+                "import_ready": False,
+            },
+        )
         tables = {
             "variant_offer_relationships_v5": PackageTable(
                 "variant_offer_relationships_v5", "relationships", "jsonl", relationships,
@@ -937,11 +1574,15 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 "conditional_gift_relationships_v5", "gifts", "jsonl", sidecar,
                 "4" * 64, "5" * 64,
             ),
+            "fixed_combo_component_relationships_v5": PackageTable(
+                "fixed_combo_component_relationships_v5", "components", "jsonl",
+                fixed_component, "7" * 64, "8" * 64,
+            ),
         }
         package = ReviewPackage(
             "fixture", "V5_CHANGED_TABLES_AND_EVIDENCE", "v5-fixture",
             "BASELINE_REQUIRED", REVIEW_LABEL,
-            2, 2, "6" * 64, tables, {}, (), ("ORIGINAL_SUPPLIER_PDFS",),
+            3, 3, "6" * 64, tables, {}, (), ("ORIGINAL_SUPPLIER_PDFS",),
         )
         first = build_review_batches(package)
         second = build_review_batches(package)
@@ -956,6 +1597,16 @@ class SupplierMappingReviewTests(unittest.TestCase):
         })
         self.assertIn("CONDITIONAL_GIFT_REQUIRES_SEPARATE_REVIEW", gift["blockers"]["packaging"])
         self.assertEqual(gift["related_sidecar_records"][0]["table"], "conditional_gift_relationships_v5")
+        self.assertEqual(
+            gift["related_sidecar_records"][0]["review_evidence"]["exact_gift_contents_and_acceptance"],
+            "one bottle plus two glasses",
+        )
+        standard = first[0]["offers"][1]
+        component_evidence = standard["related_sidecar_records"][0]["review_evidence"]
+        self.assertEqual(component_evidence["component_quantity_raw"], 3)
+        self.assertEqual(component_evidence["whole_combo_total_cost"], Decimal("207.36"))
+        self.assertIsNone(component_evidence["allocated_component_cost"])
+        self.assertFalse(component_evidence["whole_combo_to_variant_mapping_allowed"])
         document = report_document(package)
         self.assertEqual(document["review_batches"], first)
         self.assertEqual(document["package"]["source"], "v5:v5-fixture")
@@ -972,6 +1623,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertIn("Fixture Standard", rendered)
         self.assertIn("Fixture Gift", rendered)
         self.assertIn(first[0]["offers"][0]["offer_preview_fingerprint"], rendered)
+        self.assertIn("Fixture Component A", rendered)
+        self.assertIn("207.36", rendered)
         self.assertIn("<td>2</td>", rendered)
         self.assertNotIn("<script", rendered.lower())
 

@@ -898,6 +898,47 @@ def _validate_joins(tables: Mapping[str, PackageTable], joins: Any) -> None:
                 )
 
 
+def _validate_corrected_locator_rows(
+    baseline_rows: Sequence[Mapping[str, Any]],
+    corrected_keys_by_row: Mapping[int, Mapping[str, Any]],
+    *,
+    table_name: str,
+) -> None:
+    """Prove each corrected locator uniquely selects its recorded base row."""
+
+    for row_number, key in corrected_keys_by_row.items():
+        if (
+            isinstance(row_number, bool)
+            or not isinstance(row_number, int)
+            or row_number <= 0
+            or row_number > len(baseline_rows)
+            or not isinstance(key, Mapping)
+            or not key
+        ):
+            raise ReviewPackageError(
+                "LOCATOR_CORRECTION_MISMATCH",
+                "corrected locator metadata is invalid",
+                table=table_name,
+            )
+        matches = [
+            index
+            for index, candidate in enumerate(baseline_rows, start=1)
+            if all(
+                field in candidate
+                and type(candidate[field]) is type(value)
+                and _canonical_json(candidate[field]) == _canonical_json(value)
+                for field, value in key.items()
+            )
+        ]
+        if matches != [row_number]:
+            raise ReviewPackageError(
+                "LOCATOR_CORRECTION_MISMATCH",
+                "corrected locator must identify exactly the recorded baseline row",
+                table=table_name,
+                row=row_number,
+            )
+
+
 def replay_patch_table(
     base_rows: Sequence[Mapping[str, Any]],
     patches: Sequence[Mapping[str, Any]],
@@ -2832,23 +2873,11 @@ def _read_real_delta(
                         ("candidate_projection_eligibility", candidate_external),
                         ("owner_question_batch", question_external),
                     ):
-                        baseline_rows = base_rows_by_table[table_name]
-                        for row_number, key in external_rows.items():
-                            matches = [
-                                index
-                                for index, candidate in enumerate(baseline_rows, start=1)
-                                if all(
-                                    field in candidate and candidate[field] == value
-                                    for field, value in key.items()
-                                )
-                            ]
-                            if matches != [row_number]:
-                                raise ReviewPackageError(
-                                    "LOCATOR_CORRECTION_MISMATCH",
-                                    "corrected locator must identify exactly the recorded baseline row",
-                                    table=table_name,
-                                    row=row_number,
-                                )
+                        _validate_corrected_locator_rows(
+                            base_rows_by_table[table_name],
+                            external_rows,
+                            table_name=table_name,
+                        )
                 link_rows = tables["normalized_price_contract_links_delta"].rows
                 normalized_external = {
                     int(row["normalized_table_row_number_1based"]): {

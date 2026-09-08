@@ -1073,7 +1073,10 @@ def compare_review_snapshots(
     *,
     previous_tiers: Sequence[Mapping[str, Any]] = (),
     current_tiers: Sequence[Mapping[str, Any]] = (),
+    simulated: bool = False,
 ) -> dict[str, Any]:
+    if not isinstance(simulated, bool):
+        raise SupplierReviewError("simulated must be an explicit boolean")
     previous = _index_occurrences(previous_rows)
     current = _index_occurrences(current_rows)
     previous_keys, current_keys = set(previous), set(current)
@@ -1259,6 +1262,7 @@ def compare_review_snapshots(
         "label": REVIEW_LABEL,
         "status": "PASS",
         "authority": "REVIEW_ONLY",
+        "simulated": simulated,
         "summary": {
             "previous_occurrences": len(previous),
             "current_occurrences": len(current),
@@ -1295,6 +1299,86 @@ def compare_review_snapshots(
             "price_approvals": 0,
         },
     }
+
+
+_REVIEWABLE_SIDECAR_FIELDS: Mapping[str, tuple[str, ...]] = {
+    "conditional_gift_relationships_v5": (
+        "relationship_id",
+        "diagnostic_relationship_type",
+        "exact_gift_contents_and_acceptance",
+        "source_description_raw",
+        "source_case_pack_raw",
+        "shopify_units_per_case",
+        "qualifying_units_per_case",
+        "source_fee_basis",
+        "source_split_permission",
+        "allocated_component_cost",
+        "whole_offer_to_single_variant_allowed",
+        "candidate_identity_disposition",
+        "preference",
+        "mapping_approved",
+        "price_approved",
+        "import_ready",
+    ),
+    "fixed_combo_component_relationships_v5": (
+        "component_relationship_id",
+        "relationship_type",
+        "component_description_raw",
+        "component_quantity_raw",
+        "component_quantity_unit_raw",
+        "component_size_raw",
+        "component_supplier_sku",
+        "whole_combo_total_cost",
+        "allocated_component_cost",
+        "cost_allocation_status",
+        "whole_combo_to_variant_mapping_allowed",
+        "combo_auto_add",
+        "mapping_approved",
+        "price_approved",
+        "import_ready",
+    ),
+    "remaining_combo_component_relationships_v5": (
+        "research_relationship_id",
+        "component_description_raw",
+        "component_quantity_raw",
+        "component_quantity_unit_raw",
+        "component_size_raw",
+        "component_supplier_sku_raw",
+        "component_cost_allocation",
+        "shopify_sellable_units_per_combo_component",
+        "shopify_sellable_units_per_entire_combo",
+        "whole_combo_maps_to_single_variant",
+        "component_relationship_disposition",
+        "mapping_approved",
+        "price_approved",
+        "import_ready",
+    ),
+    "alcohol_gift_components_v5": (
+        "root_relationship_review_id",
+        "relationship_classification",
+        "components",
+        "primary_bottles_per_case_candidate",
+        "additional_50ml_bottles_per_case_candidate",
+        "total_physical_alcohol_containers_per_case_candidate",
+        "component_shopify_units_per_case",
+        "component_qualifying_units_per_case",
+        "allocated_component_cost",
+        "whole_gift_to_single_variant_mapping_allowed",
+        "whole_gift_mapping_disposition",
+        "mapping_approved",
+        "price_approved",
+        "import_ready",
+    ),
+}
+
+
+def _reviewable_sidecar_record(
+    table_name: str, row: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    fields = _REVIEWABLE_SIDECAR_FIELDS.get(table_name)
+    if fields is None:
+        return None
+    return {field: row[field] for field in fields if field in row}
 
 
 def _v5_occurrence_projection(package: ReviewPackage) -> list[dict[str, Any]]:
@@ -1372,27 +1456,37 @@ def build_review_batches(package: ReviewPackage) -> list[dict[str, Any]]:
     relationship_table = package.tables.get("variant_offer_relationships_v5")
     if relationship_table is None:
         return []
-    sidecars: defaultdict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    sidecars: defaultdict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for table_name, table in sorted(package.tables.items()):
         if table_name == "variant_offer_relationships_v5" or table_name.startswith("v5_patch_"):
             continue
         for row in table.rows:
-            variant = row.get("variant_id")
+            variant = row.get("variant_id", row.get("catalog_variant_id"))
             if not isinstance(variant, str):
                 continue
             offers: list[str] = []
-            direct = row.get("source_offer_id")
+            direct = row.get("source_offer_id", row.get("source_combo_offer_id"))
             if isinstance(direct, str):
                 offers.append(direct)
+            nested_offer = row.get("source_offer")
+            if isinstance(nested_offer, Mapping):
+                nested_id = nested_offer.get("source_offer_id")
+                if isinstance(nested_id, str):
+                    offers.append(nested_id)
             for field in ("source_offer_ids", "source_anchor_offer_ids"):
                 values = row.get(field)
                 if isinstance(values, list):
                     offers.extend(value for value in values if isinstance(value, str))
             record_hash = hashlib.sha256(_canonical_json(dict(row))).hexdigest()
             for offer in sorted(set(offers)):
-                sidecars[(variant, offer)].append(
-                    {"table": table_name, "record_sha256": record_hash}
-                )
+                sidecar: dict[str, Any] = {
+                    "table": table_name,
+                    "record_sha256": record_hash,
+                }
+                review_evidence = _reviewable_sidecar_record(table_name, row)
+                if review_evidence is not None:
+                    sidecar["review_evidence"] = review_evidence
+                sidecars[(variant, offer)].append(sidecar)
 
     grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     global_source_missing = any(
@@ -1626,6 +1720,10 @@ def compare_review_packages(previous: ReviewPackage, current: ReviewPackage) -> 
         _package_occurrences(current),
         previous_tiers=previous.table("tiers"),
         current_tiers=current.table("tiers"),
+        simulated=(
+            previous_scope.get("simulated") is True
+            and current_scope.get("simulated") is True
+        ),
     )
     result["previous_period_id"] = previous_scope.get("period_id")
     result["current_period_id"] = current_scope.get("period_id")
@@ -1918,6 +2016,7 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                 evidence.get("source_file", evidence.get("file")),
                 evidence.get("source_page", evidence.get("page")),
                 preview.get("offer_preview_fingerprint"),
+                preview.get("related_sidecar_records", ()),
             )
         )
     exception_counts_value = family.get("exception_counts", {})
@@ -1979,6 +2078,7 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                         "Source file",
                         "Source page",
                         "Offer preview fingerprint",
+                        "Related gift/component evidence",
                     ),
                     alternative_rows,
                 ),

@@ -51,9 +51,9 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_shopify_queries.py": 1,
     "test_storage.py": 7,
     "test_strategic.py": 13,
-    "test_supplier_mapping_review.py": 28,
+    "test_supplier_mapping_review.py": 30,
     "test_supplier_review_package.py": 15,
-    "test_supplier_review_v5.py": 15,
+    "test_supplier_review_v5.py": 16,
     "test_test_runner.py": 21,
     "test_vendor_rules.py": 16,
 }

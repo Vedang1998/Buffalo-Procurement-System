@@ -257,6 +257,25 @@ class SupplierReviewPackageTests(unittest.TestCase):
             root = Path(temp)
             _write_v1_package(
                 root,
+                payloads={"typed.csv": b"value\n0012A\n"},
+                tables=[
+                    {
+                        "name": "typed",
+                        "path": "typed.csv",
+                        "format": "csv",
+                        "rows": 1,
+                        "fields": ["value"],
+                        "type_sidecar": "typed.types.jsonl",
+                    }
+                ],
+            )
+            with self.assertRaisesRegex(ReviewPackageError, "UNDECLARED_TABLE_FILE"):
+                read_review_package(root)
+
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            _write_v1_package(
+                root,
                 payloads={"numbers.jsonl": b'{"value":1e999999999}\n'},
                 tables=[{"name": "numbers", "path": "numbers.jsonl", "format": "jsonl", "rows": 1}],
             )

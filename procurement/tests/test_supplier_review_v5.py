@@ -19,6 +19,7 @@ from procurement_os.supplier_review_package import (
     ReviewLimits,
     ReviewPackageError,
     _canonical_json,
+    _validate_corrected_locator_rows,
     canonical_jsonl_sha256,
     read_review_package,
     replay_patch_table,
@@ -686,6 +687,136 @@ class SupplierReviewV5Tests(unittest.TestCase):
         self.assertEqual(second.rows[0], {"id": "one", "value": 3, "approved": False})
         self.assertFalse(replayed.applied)
 
+    def test_synthetic_v4_v4_1_locator_v5_chain_requires_exact_order(self):
+        baseline = (
+            {
+                "variant_id": "TEST-V1",
+                "source_offer_id": "TEST-O1",
+                "value": 1,
+                "approved": False,
+            },
+            {
+                "variant_id": "TEST-V2",
+                "source_offer_id": "TEST-O2",
+                "value": 10,
+                "approved": False,
+            },
+        )
+        locator_overlay = {
+            1: {"variant_id": "TEST-V1", "source_offer_id": "TEST-O1"}
+        }
+        _validate_corrected_locator_rows(
+            baseline,
+            locator_overlay,
+            table_name="synthetic_candidate_projection",
+        )
+        with self.assertRaisesRegex(ReviewPackageError, "LOCATOR_CORRECTION_MISMATCH"):
+            _validate_corrected_locator_rows(
+                baseline,
+                {1: {"variant_id": "TEST-V2", "source_offer_id": "TEST-O2"}},
+                table_name="synthetic_candidate_projection",
+            )
+        duplicated = (*baseline, dict(baseline[0]))
+        with self.assertRaisesRegex(ReviewPackageError, "LOCATOR_CORRECTION_MISMATCH"):
+            _validate_corrected_locator_rows(
+                duplicated,
+                locator_overlay,
+                table_name="synthetic_candidate_projection",
+            )
+
+        v4_1_after = {
+            **baseline[0],
+            "value": 2,
+            "owner_decision_id": "TEST-DECISION-1",
+        }
+        original_v4_1_patch = (
+            {
+                "table": "synthetic_candidate_projection",
+                "operation": "replace_fields",
+                # Like the corrected V4.1 rows, this is a post-state key and
+                # is not allowed to locate the V4 baseline by itself.
+                "stable_key": {"owner_decision_id": "TEST-DECISION-1"},
+                "base_row_number_1based": 1,
+                "before_record_sha256": _sha(_canonical_json(baseline[0])),
+                "after_record_sha256": _sha(_canonical_json(v4_1_after)),
+                "changes": [
+                    {
+                        "field": "owner_decision_id",
+                        "before_present": False,
+                        "before": None,
+                        "after_present": True,
+                        "after": "TEST-DECISION-1",
+                    },
+                    {
+                        "field": "value",
+                        "before_present": True,
+                        "before": 1,
+                        "after_present": True,
+                        "after": 2,
+                    },
+                ],
+            },
+        )
+        v4_1 = replay_patch_table(
+            baseline,
+            original_v4_1_patch,
+            allowed_fields={"owner_decision_id", "value"},
+            expected_stable_key_fields=("owner_decision_id",),
+            key_mode="POSTCONDITION_WITH_EXTERNAL_BASE",
+            external_keys_by_row=locator_overlay,
+            immutable_fields={"variant_id", "source_offer_id", "approved"},
+            allow_field_removal=False,
+        )
+        v5_after = {**v4_1_after, "value": 3}
+        v5_patch = (
+            {
+                "table": "synthetic_candidate_projection",
+                "operation": "replace_fields",
+                "stable_key": {"owner_decision_id": "TEST-DECISION-1"},
+                "base_row_number_1based": 1,
+                "before_record_sha256": _sha(_canonical_json(v4_1_after)),
+                "after_record_sha256": _sha(_canonical_json(v5_after)),
+                "changes": [
+                    {
+                        "field": "value",
+                        "before_present": True,
+                        "before": 2,
+                        "after_present": True,
+                        "after": 3,
+                    }
+                ],
+            },
+        )
+        with self.assertRaises(ReviewPackageError):
+            replay_patch_table(
+                baseline,
+                v5_patch,
+                allowed_fields={"value"},
+                expected_stable_key_fields=("owner_decision_id",),
+                immutable_fields={"variant_id", "source_offer_id", "approved"},
+                allow_field_removal=False,
+            )
+        v5 = replay_patch_table(
+            v4_1.rows,
+            v5_patch,
+            allowed_fields={"value"},
+            expected_stable_key_fields=("owner_decision_id",),
+            immutable_fields={"variant_id", "source_offer_id", "approved"},
+            allow_field_removal=False,
+        )
+        replayed = replay_patch_table(
+            v5.rows,
+            v5_patch,
+            allowed_fields={"value"},
+            expected_stable_key_fields=("owner_decision_id",),
+            immutable_fields={"variant_id", "source_offer_id", "approved"},
+            allow_field_removal=False,
+        )
+        self.assertEqual(v5.rows[0], v5_after)
+        self.assertEqual(v5.rows[1], baseline[1])
+        self.assertEqual((v4_1.applied, v5.applied, replayed.already_applied), (1, 1, 1))
+        self.assertFalse(v5.rows[0]["approved"])
+
     def test_fabricated_large_patch_replay_is_exact_bounded_and_idempotent(self):
         baseline = tuple(
             {"id": f"row-{index:05d}", "value": index, "approved": False}
@@ -748,6 +879,29 @@ class SupplierReviewV5Tests(unittest.TestCase):
             expected_rows=12_080,
             expected_sha256=expected_hash,
         )
+        baseline_digest = canonical_jsonl_sha256(baseline)
+
+        class InterruptedPatchStream(list[dict[str, object]]):
+            def __iter__(self):
+                for index, row in enumerate(super().__iter__()):
+                    if index == 50:
+                        raise RuntimeError("synthetic replay interruption")
+                    yield row
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic replay interruption"):
+            replay_patch_table(
+                baseline,
+                InterruptedPatchStream(patches),
+                allowed_fields={"value"},
+                append_allowed_fields={"id", "value", "approved"},
+                required_append_fields={"id", "value", "approved"},
+                expected_stable_key_fields=("id",),
+                immutable_fields={"id", "approved"},
+                allow_field_removal=False,
+                append_changes_required=False,
+            )
+        self.assertEqual(canonical_jsonl_sha256(baseline), baseline_digest)
+
         replay = replay_patch_table(
             first.rows,
             patches,
