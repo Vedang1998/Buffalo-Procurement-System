@@ -177,4 +177,3 @@ Independent read-only review follows machine validation. Any P0/P1 is remediated
 and re-reviewed before the Daytime checkpoint. Missing baseline/source evidence,
 policy approvals, deployment, operational data, and authenticated private access
 remain explicit blockers rather than guessed completion.
-

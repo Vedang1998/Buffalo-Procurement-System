@@ -13,24 +13,37 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 **REVIEW-ONLY CHECKPOINT — NOT A PHASE COMPLETION OR OPERATIONAL AUTHORITY**
 
-Branch `codex/supplier-mapping-review-bridge` adds bounded, deterministic
-package validation and occurrence-preserving local review/diff reports. Its
-final implementation checkpoint is `ecc1835dc025c21c9c0e9c5879328a01b81c04dd`,
-tree `6eaf41bfe0eb62afa7cfbd379d13bc1456a8dc11`; authoritative regression passed
-`623/623` plus startup `10/10`, and targeted independent re-review passed
-`36/36` with no concrete P0/P1. The final remediation makes HTML a concise,
-bounded review summary, explicitly proves same-vendor SKU reuse and report
-round-trip, and removes the private not-returned status association from public
-code while retaining structural cohort validation.
-The separately requested Claude Code review could not start because its
-existing OAuth session had expired and could not be refreshed, so that review
-is `REVIEW PENDING`, not an approval; no workaround or paid API was used.
-The supplied V4.1 delta remains `BASELINE_REQUIRED` because the exact V4 base
-and original PDFs plus required Tier/source and effective-projection proof are
-absent. Even future mechanical table replay remains source-evidence-gated.
-Nothing is mapping-approved, price-approved, import-ready, activated, or
-written to an operational database. This milestone does not change Phase 4,
-Phase 6, CURRENT pricing, readiness, or PO status.
+The Night 2 bridge remains immutable at branch
+`codex/supplier-mapping-review-bridge`, commit
+`2a7192ff16c86630f01300f493560ccee8d2685f`, tree
+`6a6bf1fcecfd13f8b51ec1267411572a8799d34c`; its reviewed implementation
+history and `623/623` result remain preserved.
+
+The isolated Daytime child branch `codex/supplier-mapping-v5-validation`
+extends that review-only tooling for the actual supplied V5 diagnostic layout
+and a code-owned synthetic portable transport. Its exact frozen
+implementation/test/review candidate is
+`21aa6fc803f9a4c0d6a7a47f617bcdf583ce3831`, tree
+`353823f3a5abe2493e21fbb90df21e2ccc54113d`. The actual V5 package verifies
+201/200 archive/manifest members and its structural schema, but remains
+`BASELINE_REQUIRED`, `SOURCE_EVIDENCE_REQUIRED`, `REVIEW_REQUIRED`,
+`NOT_APPROVED`, and not import-ready because the exact V4 baseline, original
+PDFs/source bundles, actual portable root, and unchanged source bytes are not
+available. The complete synthetic portable fixture is `STRUCTURED_REPLAY` but
+remains simulated, unapproved, and not import-ready.
+
+Final authoritative validation passed `645/645` across 36 registered modules,
+startup hardening passed `10/10`, and all abnormal counters were zero. A
+read-only same-model Codex adversarial review of the exact frozen candidate
+independently passed `58/58` and found no concrete P0/P1. It does not replace
+the Claude-specific review; Claude remains `REVIEW PENDING` because the
+existing OAuth session expired, with no workaround or paid API used. The
+persistent multi-offer mapping-authority packet is design-only: no migration,
+UI, mapping/price approval, selected offer, writeback, or cutover was
+implemented. Nothing is activated or written to an operational database. This
+milestone does not change Phase 4, Phase 6, CURRENT/FUTURE pricing, readiness,
+mapping, or PO status. Exact next action is ChatGPT/owner review of the frozen
+V5 checkpoint and host-local evidence.
 
 ## Official implementation phases
 
@@ -247,9 +260,9 @@ closeout is independently reviewed, executed, and verified.
 
 This emergency checkpoint does not close or renumber a canonical phase, reopen
 production permissions, or alter the Phase 4/Phase 6 statuses above.
-The only next authorized repository boundary is one documentation-only
-checkpoint and draft PR/configured CI, followed by ChatGPT PR/CI review. No
-merge or integration-conflict resolution is authorized.
+Its documentation-only checkpoint and draft PR/configured CI have occurred.
+PR #23 remains draft with unexplained non-green CI and awaits ChatGPT/owner
+review. No merge or integration-conflict resolution is authorized.
 
 ## Post-foundation ordered workstreams
 
