@@ -61,12 +61,49 @@ PORTABLE_SYNTHETIC_REVISION = "SYNTHETIC_V5_COMPLETE_TEST_ONLY_V1"
 UNAPPROVED_AUTHORITY = "UNAPPROVED_REVIEW"
 PORTABLE_COMPARISON_CONTRACT = "BUFFALO_SUPPLIER_REVIEW_COMPARISON_V1"
 PORTABLE_IDENTITY_CONTRACT = "SHOPIFY_VARIANT_VENDOR_SOURCE_OCCURRENCE_V1"
+
+
+def _synthetic_lineage_ref(path: str, stage: str) -> dict[str, Any]:
+    payload = _canonical_json(
+        {
+            "format": "BUFFALO_SYNTHETIC_LINEAGE_ANCHOR_V1",
+            "source_revision": PORTABLE_SYNTHETIC_REVISION,
+            "stage": stage,
+        }
+    ) + b"\n"
+    return {"path": path, "bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+
+
+_PORTABLE_SYNTHETIC_LOCATOR_ROW = {
+    "action": "SYNTHETIC_LOCATOR_CONTRACT",
+    "row": 1,
+    "source_revision": PORTABLE_SYNTHETIC_REVISION,
+}
+_PORTABLE_SYNTHETIC_LINEAGE_ANCHORS: Mapping[str, Any] = {
+    "v4_manifest_refs": (
+        _synthetic_lineage_ref("synthetic-contract/v4.json", "V4"),
+    ),
+    "v4_1_patch_refs": (
+        _synthetic_lineage_ref("synthetic-contract/v4-1.jsonl", "V4_1"),
+    ),
+    "v4_1_locator_corrections": {
+        "path": "synthetic-contract/locators.jsonl",
+        "row_count": 1,
+        "canonical_jsonl_sha256": canonical_jsonl_sha256(
+            (_PORTABLE_SYNTHETIC_LOCATOR_ROW,)
+        ),
+    },
+    "v5_patch_refs": (
+        _synthetic_lineage_ref("synthetic-contract/v5.jsonl", "V5"),
+    ),
+}
 PORTABLE_LINEAGE_FAMILY_SHA256 = hashlib.sha256(
     _canonical_json(
         {
             "comparison_contract": PORTABLE_COMPARISON_CONTRACT,
             "identity_contract": PORTABLE_IDENTITY_CONTRACT,
             "source_revision": PORTABLE_SYNTHETIC_REVISION,
+            "lineage_anchors": _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS,
         }
     )
 ).hexdigest()
@@ -107,6 +144,8 @@ _PORTABLE_TABLE_CONTRACTS: Mapping[str, tuple[frozenset[str], frozenset[str], tu
         frozenset(
             {
                 "variant_id", "vendor", "source_occurrence_id", "supplier_code",
+                "source_file", "source_page", "source_sha256", "source_period",
+                "territory", "channel",
                 "candidate_disposition", "mapping_approved", "price_approved", "import_ready",
             }
         ),
@@ -2353,7 +2392,10 @@ def read_v5_review_delta(
                 "manifest_files": "PASS",
                 "table_catalog_and_profiles": "PASS",
                 "patch_contracts": "PASS",
-                "locator_overlay": "PASS" if prior_package is not None else "PRIOR_DELTA_REQUIRED",
+                "locator_overlay": "PASS" if mechanical_replay else "BASELINE_REQUIRED",
+                "locator_overlay_patch_binding": (
+                    "PASS" if prior_package is not None else "PRIOR_DELTA_REQUIRED"
+                ),
                 "relationships": relationships,
                 "unchanged_artifact_descriptor_records": unchanged_count,
                 "external_evidence": external_evidence or "NOT_SUPPLIED",
@@ -2482,6 +2524,21 @@ def _validate_portable_lineage(
     if locator_count <= 0:
         raise ReviewPackageError("INVALID_PORTABLE_ROOT", "locator correction proof cannot be empty")
     _require_sha256(locator.get("canonical_jsonl_sha256"), path="locator corrections")
+
+    observed_anchors = {
+        field: lineage[field]
+        for field in (
+            "v4_manifest_refs",
+            "v4_1_patch_refs",
+            "v4_1_locator_corrections",
+            "v5_patch_refs",
+        )
+    }
+    if not _same_json_value(observed_anchors, _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS):
+        raise ReviewPackageError(
+            "LINEAGE_MISMATCH",
+            "portable lineage does not match the code-owned synthetic revision",
+        )
 
     effective_rows = _require_sequence(
         lineage.get("v5_effective_tables"),
@@ -2664,6 +2721,11 @@ def _portable_source_evidence_specs(
         code="INVALID_PORTABLE_ROOT",
         message="source_evidence must be an array",
     )
+    if not values:
+        raise ReviewPackageError(
+            "SOURCE_EVIDENCE_MISMATCH",
+            "the supported portable revision requires explicit source evidence descriptors",
+        )
     evidence_fields = frozenset(
         {
             "logical_path", "source_pdf_sha256", "physical_page", "evidence_content_sha256",
@@ -2733,6 +2795,149 @@ def _portable_source_evidence_specs(
             unavailable.append(f"SOURCE_EVIDENCE:{logical}")
         result.append(dict(row))
     return result, unavailable, delivered
+
+
+def _validate_portable_scope_and_source_coverage(
+    scope: Mapping[str, Any],
+    tables: Mapping[str, PackageTable],
+    source_evidence: Sequence[Mapping[str, Any]],
+) -> None:
+    """Bind declared monthly scope to reconstructed offers and source descriptors."""
+
+    offers = tables["offers"].rows
+    if not offers:
+        raise ReviewPackageError(
+            "PORTABLE_SCOPE_MISMATCH",
+            "the supported portable revision requires at least one supplier offer",
+        )
+
+    evidence_by_source: dict[tuple[str, str, int], Mapping[str, Any]] = {}
+    for row in source_evidence:
+        logical_path = _nonblank_text(
+            row.get("logical_path"),
+            code="SOURCE_EVIDENCE_MISMATCH",
+            context="source evidence logical path",
+        )
+        source_hash = _require_sha256(row.get("source_pdf_sha256"), path=logical_path)
+        page = _nonnegative_int(
+            row.get("physical_page"),
+            code="SOURCE_EVIDENCE_MISMATCH",
+            context="source evidence physical page",
+        )
+        if page <= 0 or row.get("source_review_scope") != "SYNTHETIC_TEST_ONLY":
+            raise ReviewPackageError(
+                "SOURCE_EVIDENCE_MISMATCH",
+                "synthetic source evidence page or review scope differs",
+            )
+        key = (logical_path, source_hash, page)
+        if key in evidence_by_source:
+            raise ReviewPackageError(
+                "DUPLICATE_DECLARATION",
+                "portable source evidence identity is duplicated",
+                path=logical_path,
+            )
+        evidence_by_source[key] = row
+
+    suppliers: set[str] = set()
+    periods: set[str] = set()
+    channels: set[str] = set()
+    territories: set[str] = set()
+    supplier_period_complete: dict[tuple[str, str], bool] = {}
+    used_evidence: set[tuple[str, str, int]] = set()
+    for row_number, row in enumerate(offers, start=1):
+        vendor = _nonblank_text(
+            row.get("vendor"),
+            code="PORTABLE_SCOPE_MISMATCH",
+            context=f"offers[{row_number}].vendor",
+        )
+        period = _nonblank_text(
+            row.get("source_period"),
+            code="PORTABLE_SCOPE_MISMATCH",
+            context=f"offers[{row_number}].source_period",
+        )
+        channel = _nonblank_text(
+            row.get("channel"),
+            code="PORTABLE_SCOPE_MISMATCH",
+            context=f"offers[{row_number}].channel",
+        )
+        territory = _nonblank_text(
+            row.get("territory"),
+            code="PORTABLE_SCOPE_MISMATCH",
+            context=f"offers[{row_number}].territory",
+        )
+        source_file = _nonblank_text(
+            row.get("source_file"),
+            code="SOURCE_EVIDENCE_MISMATCH",
+            context=f"offers[{row_number}].source_file",
+        )
+        source_hash = _require_sha256(
+            row.get("source_sha256"), path=f"offers[{row_number}].source_sha256"
+        )
+        source_page = _nonnegative_int(
+            row.get("source_page"),
+            code="SOURCE_EVIDENCE_MISMATCH",
+            context=f"offers[{row_number}].source_page",
+        )
+        if source_page <= 0:
+            raise ReviewPackageError(
+                "SOURCE_EVIDENCE_MISMATCH", "offer source pages must be positive"
+            )
+        source_key = (source_file, source_hash, source_page)
+        evidence = evidence_by_source.get(source_key)
+        if evidence is None:
+            raise ReviewPackageError(
+                "SOURCE_EVIDENCE_MISMATCH",
+                "an offer is not bound to an exact source evidence descriptor",
+                row=row_number,
+            )
+        used_evidence.add(source_key)
+        pair = (vendor, period)
+        supplier_period_complete[pair] = supplier_period_complete.get(pair, True) and (
+            evidence.get("availability") == "DELIVERED"
+        )
+        suppliers.add(vendor)
+        periods.add(period)
+        channels.add(channel)
+        territories.add(territory)
+
+    if used_evidence != set(evidence_by_source):
+        raise ReviewPackageError(
+            "SOURCE_EVIDENCE_MISMATCH",
+            "portable source evidence contains an occurrence-unbound descriptor",
+        )
+    if (
+        list(scope.get("supplier_scope", ())) != sorted(suppliers)
+        or list(scope.get("channels", ())) != sorted(channels)
+        or list(scope.get("territories", ())) != sorted(territories)
+        or periods != {scope.get("period_id")}
+    ):
+        raise ReviewPackageError(
+            "PORTABLE_SCOPE_MISMATCH",
+            "declared supplier, period, channel, or territory scope differs from offer rows",
+        )
+    expected_pairs = {
+        (supplier, scope["period_id"])
+        for supplier in scope["supplier_scope"]
+    }
+    if set(supplier_period_complete) != expected_pairs:
+        raise ReviewPackageError(
+            "PORTABLE_SCOPE_MISMATCH",
+            "declared supplier-period coverage differs from reconstructed offers",
+        )
+    derived_missing = sorted(
+        f"{supplier}/{period}"
+        for (supplier, period), complete in supplier_period_complete.items()
+        if not complete
+    )
+    derived_complete = not derived_missing
+    if (
+        scope.get("supplier_period_coverage_complete") is not derived_complete
+        or list(scope.get("missing_supplier_periods", ())) != derived_missing
+    ):
+        raise ReviewPackageError(
+            "PORTABLE_SCOPE_COVERAGE_MISMATCH",
+            "supplier-period completeness is not supported by exact source evidence",
+        )
 
 
 def read_portable_review_package(source: _PackageSource) -> ReviewPackage:
@@ -2865,7 +3070,7 @@ def read_portable_review_package(source: _PackageSource) -> ReviewPackage:
             raise ReviewPackageError("ROW_COUNT_MISMATCH", "portable table part rows do not reconcile")
         table_specs.append(dict(spec))
     lineage = _validate_portable_lineage(root.get("lineage"), table_specs, limits=source.limits)
-    _, evidence_unavailable, delivered_evidence = _portable_source_evidence_specs(
+    source_evidence, evidence_unavailable, delivered_evidence = _portable_source_evidence_specs(
         root, limits=source.limits
     )
     for archive, path in delivered_evidence:
@@ -3009,6 +3214,7 @@ def read_portable_review_package(source: _PackageSource) -> ReviewPackage:
         f"G{index:02d}" for index in range(1, 22)
     }:
         raise ReviewPackageError("CONTROL_TOTAL_MISMATCH", "portable representation-gap IDs differ")
+    _validate_portable_scope_and_source_coverage(scope, tables, source_evidence)
 
     unavailable = _portable_sorted_unique_texts(
         root.get("missing_prerequisites"), context="missing_prerequisites"

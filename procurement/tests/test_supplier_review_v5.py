@@ -13,6 +13,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
+from procurement_os.supplier_mapping_review import compare_review_packages
 from procurement_os.supplier_review_package import (
     REVIEW_LABEL,
     ReviewLimits,
@@ -32,6 +33,7 @@ from procurement_os.supplier_review_v5 import (
     PORTABLE_SEAL_FORMAT,
     PORTABLE_SYNTHETIC_REVISION,
     _PORTABLE_ENCODING,
+    _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS,
 )
 
 
@@ -60,7 +62,17 @@ def _gap_rows() -> list[dict[str, object]]:
     ]
 
 
-def _portable_rows(*, pad: int = 0) -> dict[str, list[dict[str, object]]]:
+def _portable_rows(
+    *, period: str = "2026-09", pad: int = 0
+) -> dict[str, list[dict[str, object]]]:
+    source_scope = {
+        "source_file": "sources/fixture-september-page-1.pdf",
+        "source_page": 1,
+        "source_sha256": "1" * 64,
+        "source_period": period,
+        "territory": "TEST TERRITORY",
+        "channel": "TEST BOOK",
+    }
     return {
         "variants": [
             {"variant_id": "1001", "product_title": "Fixture One", "catalog_status": "ACTIVE"},
@@ -78,12 +90,7 @@ def _portable_rows(*, pad: int = 0) -> dict[str, list[dict[str, object]]]:
                 "qualifying_units_per_case": Decimal("6.0"),
                 "physical_units_per_case": 12,
                 "retail_pack": 2,
-                "source_file": "fixture-september.pdf",
-                "source_page": 1,
-                "source_sha256": "1" * 64,
-                "source_period": "2026-09",
-                "territory": "TEST TERRITORY",
-                "channel": "TEST BOOK",
+                **source_scope,
                 "candidate_disposition": "PROPOSED_REVIEW_CANDIDATE",
                 "mapping_approved": False,
                 "price_approved": False,
@@ -97,6 +104,7 @@ def _portable_rows(*, pad: int = 0) -> dict[str, list[dict[str, object]]]:
                 "supplier_code": "GIFT-2",
                 "program_type": "GIFT",
                 "shopify_units_per_case": None,
+                **source_scope,
                 "candidate_disposition": "SEARCH_LEAD_ONLY",
                 "mapping_approved": False,
                 "price_approved": False,
@@ -109,6 +117,7 @@ def _portable_rows(*, pad: int = 0) -> dict[str, list[dict[str, object]]]:
                 "supplier_code": "ALT-3",
                 "program_type": "ALTERNATE_CASE",
                 "shopify_units_per_case": 0,
+                **source_scope,
                 "candidate_disposition": "REJECTED_ATTRIBUTE_CONFLICT",
                 "mapping_approved": False,
                 "price_approved": False,
@@ -165,7 +174,7 @@ def _write_portable(
     pad: int = 0,
     mutate_rows=None,
 ) -> None:
-    rows = _portable_rows(pad=pad)
+    rows = _portable_rows(period=period, pad=pad)
     if mutate_rows is not None:
         mutate_rows(rows)
     parts = {
@@ -227,14 +236,18 @@ def _write_portable(
         )
     lineage = {
         "identity_contract": PORTABLE_IDENTITY_CONTRACT,
-        "v4_manifest_refs": [{"path": "synthetic/v4.json", "bytes": 1, "sha256": "2" * 64}],
-        "v4_1_patch_refs": [{"path": "synthetic/v4-1.jsonl", "bytes": 1, "sha256": "3" * 64}],
-        "v4_1_locator_corrections": {
-            "path": "synthetic/locators.jsonl",
-            "row_count": 1,
-            "canonical_jsonl_sha256": "4" * 64,
-        },
-        "v5_patch_refs": [{"path": "synthetic/v5.jsonl", "bytes": 1, "sha256": "5" * 64}],
+        "v4_manifest_refs": [
+            dict(row) for row in _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS["v4_manifest_refs"]
+        ],
+        "v4_1_patch_refs": [
+            dict(row) for row in _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS["v4_1_patch_refs"]
+        ],
+        "v4_1_locator_corrections": dict(
+            _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS["v4_1_locator_corrections"]
+        ),
+        "v5_patch_refs": [
+            dict(row) for row in _PORTABLE_SYNTHETIC_LINEAGE_ANCHORS["v5_patch_refs"]
+        ],
         "v5_effective_tables": [
             {
                 "name": item["name"],
@@ -280,7 +293,7 @@ def _write_portable(
             "period_semantics": "MONTHLY_SUPPLIER_BOOK_PERIOD",
             "period_id": period,
             "supplier_period_coverage_complete": not missing_source,
-            "missing_supplier_periods": [] if not missing_source else ["Fixture Supplier/2026-09"],
+            "missing_supplier_periods": [] if not missing_source else [f"Fixture Supplier/{period}"],
             "channels": ["TEST BOOK"],
             "territories": ["TEST TERRITORY"],
             "simulated": True,
@@ -436,6 +449,80 @@ class SupplierReviewV5Tests(unittest.TestCase):
                 _rewrite_root(root, mutation)
                 with self.assertRaises(ReviewPackageError):
                     read_review_package(root)
+
+    def test_portable_lineage_references_are_bound_to_the_supported_revision(self):
+        mutations = (
+            lambda root: root["lineage"]["v4_manifest_refs"][0].update(
+                {"bytes": 987_654_321, "sha256": "9" * 64}
+            ),
+            lambda root: root["lineage"]["v4_1_patch_refs"][0].__setitem__(
+                "sha256", "8" * 64
+            ),
+            lambda root: root["lineage"]["v4_1_locator_corrections"].__setitem__(
+                "row_count", 2
+            ),
+            lambda root: root["lineage"]["v5_patch_refs"][0].__setitem__(
+                "path", "synthetic/substitute-v5.jsonl"
+            ),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), TemporaryDirectory() as temp:
+                root = Path(temp) / "portable"
+                _write_portable(root)
+                _rewrite_root(root, mutation)
+                with self.assertRaisesRegex(ReviewPackageError, "LINEAGE_MISMATCH"):
+                    read_review_package(root)
+
+    def test_portable_scope_and_source_coverage_are_derived_from_offer_rows(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp) / "portable"
+            _write_portable(root)
+            _rewrite_root(root, lambda value: value["source_evidence"].clear())
+            with self.assertRaisesRegex(ReviewPackageError, "SOURCE_EVIDENCE_MISMATCH"):
+                read_review_package(root)
+
+        root_mutations = (
+            lambda value: value["snapshot_scope"].__setitem__(
+                "supplier_scope", ["Unscoped Supplier"]
+            ),
+            lambda value: value["snapshot_scope"].__setitem__("period_id", "1999-01"),
+            lambda value: value["snapshot_scope"].__setitem__("channels", ["OTHER CHANNEL"]),
+            lambda value: value["snapshot_scope"].__setitem__(
+                "territories", ["OTHER TERRITORY"]
+            ),
+        )
+        for mutation in root_mutations:
+            with self.subTest(mutation=mutation), TemporaryDirectory() as temp:
+                root = Path(temp) / "portable"
+                _write_portable(root)
+                _rewrite_root(root, mutation)
+                with self.assertRaisesRegex(ReviewPackageError, "PORTABLE_SCOPE_MISMATCH"):
+                    read_review_package(root)
+
+        row_mutations = (
+            lambda rows: rows["offers"][1].__setitem__("vendor", "Unscoped Supplier"),
+            lambda rows: rows["offers"][0].__setitem__("source_period", "1999-01"),
+            lambda rows: rows["offers"][0].__setitem__("channel", "OTHER CHANNEL"),
+            lambda rows: rows["offers"][0].__setitem__("territory", "OTHER TERRITORY"),
+        )
+        for mutation in row_mutations:
+            with self.subTest(mutation=mutation), TemporaryDirectory() as temp:
+                root = Path(temp) / "portable"
+                _write_portable(root, mutate_rows=mutation)
+                with self.assertRaisesRegex(ReviewPackageError, "PORTABLE_SCOPE_MISMATCH"):
+                    read_review_package(root)
+
+        with TemporaryDirectory() as temp:
+            previous_root = Path(temp) / "previous"
+            current_root = Path(temp) / "current"
+            _write_portable(previous_root, period="2026-09")
+            _write_portable(current_root, period="2026-10")
+            comparison = compare_review_packages(
+                read_review_package(previous_root), read_review_package(current_root)
+            )
+        self.assertEqual(comparison["status"], "PASS")
+        self.assertEqual(comparison["previous_period_id"], "2026-09")
+        self.assertEqual(comparison["current_period_id"], "2026-10")
 
     def test_portable_logical_table_limit_cannot_be_bypassed_by_sharding(self):
         with TemporaryDirectory() as temp:
