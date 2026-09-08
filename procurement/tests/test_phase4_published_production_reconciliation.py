@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 import hashlib
 import inspect
+import json
 import os
 from pathlib import Path
 import stat
@@ -428,7 +429,11 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         )
 
     def run_bootstrap_with_fake_tools(
-        self, git_body: str
+        self,
+        git_body: str,
+        *,
+        extra_args: tuple[str, ...] = (),
+        environment_overrides: dict[str, str] | None = None,
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -438,7 +443,8 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         git.write_text("#!/bin/sh\n" + textwrap.dedent(git_body), encoding="utf-8")
         python = root / "approved-python"
         python.write_text(
-            f"#!/bin/sh\nprintf invoked > '{invoked}'\nexit 0\n", encoding="utf-8"
+            f"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{invoked}'\nexit 0\n",
+            encoding="utf-8",
         )
         git.chmod(git.stat().st_mode | stat.S_IXUSR)
         python.chmod(python.stat().st_mode | stat.S_IXUSR)
@@ -481,9 +487,16 @@ class CorrectiveBootstrapTests(unittest.TestCase):
             **os.environ,
             "PATH": f"{root}:{os.environ['PATH']}",
             "REPLIT_DEPLOYMENT": "1",
+            **(environment_overrides or {}),
         }
         result = subprocess.run(
-            ["/bin/sh", str(test_bootstrap), EXECUTION_SHA, TREE_SHA],
+            [
+                "/bin/sh",
+                str(test_bootstrap),
+                EXECUTION_SHA,
+                TREE_SHA,
+                *extra_args,
+            ],
             text=True,
             capture_output=True,
             env=environment,
@@ -532,6 +545,93 @@ class CorrectiveBootstrapTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not clean", result.stderr)
         self.assertFalse(invoked.exists())
+
+    @staticmethod
+    def successful_fake_git_body() -> str:
+        return f"""
+            if [ "$1" = clone ]; then
+              for clone_dir in "$@"; do :; done
+              mkdir -p "$clone_dir"
+              exit 0
+            fi
+            shift
+            if [ "$2" = remote ]; then
+              printf '%s\\n' '{corrective.CANONICAL_ORIGIN}'
+              exit 0
+            fi
+            if [ "$2" = rev-parse ] && [ "$4" = 'HEAD^{{commit}}' ]; then
+              printf '%s\\n' '{EXECUTION_SHA}'
+              exit 0
+            fi
+            if [ "$2" = rev-parse ] && [ "$4" = 'HEAD^{{tree}}' ]; then
+              printf '%s\\n' '{TREE_SHA}'
+              exit 0
+            fi
+            exit 0
+        """
+
+    def test_bootstrap_two_argument_path_preserves_exact_normal_executor_argv(self):
+        result, invoked = self.run_bootstrap_with_fake_tools(
+            self.successful_fake_git_body()
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            invoked.read_text(encoding="utf-8").splitlines()[1:],
+            [
+                "--expected-execution-git-sha",
+                EXECUTION_SHA,
+                "--expected-execution-tree-sha",
+                TREE_SHA,
+            ],
+        )
+
+    def test_bootstrap_forwards_only_the_exact_literal_preflight_flag(self):
+        result, invoked = self.run_bootstrap_with_fake_tools(
+            self.successful_fake_git_body(), extra_args=("--preflight-only",)
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            invoked.read_text(encoding="utf-8").splitlines()[1:],
+            [
+                "--expected-execution-git-sha",
+                EXECUTION_SHA,
+                "--expected-execution-tree-sha",
+                TREE_SHA,
+                "--preflight-only",
+            ],
+        )
+
+    def test_bootstrap_rejects_every_other_or_extra_argument_before_python(self):
+        for arguments in (
+            ("--preflight",),
+            ("--preflight-only=1",),
+            ("",),
+            (" --preflight-only",),
+            ("--preflight-only ",),
+            ("--preflight-only;touch-unexpected",),
+            ("--preflight-only", "unexpected-fourth-argument"),
+        ):
+            with self.subTest(arguments=arguments):
+                result, invoked = self.run_bootstrap_with_fake_tools(
+                    self.successful_fake_git_body(), extra_args=arguments
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(invoked.exists())
+
+    def test_bootstrap_environment_cannot_select_preflight_mode(self):
+        result, invoked = self.run_bootstrap_with_fake_tools(
+            self.successful_fake_git_body(),
+            environment_overrides={"PHASE4_PREFLIGHT_ONLY": "1"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(
+            "--preflight-only",
+            invoked.read_text(encoding="utf-8").splitlines(),
+        )
+        self.assertNotIn(
+            "PHASE4_PREFLIGHT_ONLY",
+            BOOTSTRAP.read_text(encoding="utf-8"),
+        )
 
     def test_bootstrap_orders_all_clone_proofs_before_python(self):
         source = BOOTSTRAP.read_text(encoding="utf-8")
@@ -620,10 +720,12 @@ class CorrectiveBootstrapTests(unittest.TestCase):
             verified_python = root / "verified-python"
             verified_execution_path = root / "verified-execution-path"
             verified_parent_path = root / "verified-parent-path"
+            verified_argv = root / "verified-argv"
             runner.write_text(
                 textwrap.dedent(
                     f"""
                     import os
+                    import sys
                     from pathlib import Path
 
                     expected = (
@@ -642,6 +744,9 @@ class CorrectiveBootstrapTests(unittest.TestCase):
                     )
                     Path({str(verified_parent_path)!r}).write_text(
                         os.environ.get("PATH", ""), encoding="utf-8"
+                    )
+                    Path({str(verified_argv)!r}).write_text(
+                        "\\n".join(sys.argv[1:]), encoding="utf-8"
                     )
                     """
                 ),
@@ -766,7 +871,13 @@ class CorrectiveBootstrapTests(unittest.TestCase):
                 "PHASE4_REVIEW_TOKEN_INPUT": "synthetic-input-token",
             }
             result = subprocess.run(
-                ["/bin/sh", str(test_bootstrap), commit, tree],
+                [
+                    "/bin/sh",
+                    str(test_bootstrap),
+                    commit,
+                    tree,
+                    "--preflight-only",
+                ],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -779,6 +890,16 @@ class CorrectiveBootstrapTests(unittest.TestCase):
             )
             self.assertEqual(
                 verified_parent_path.read_text(encoding="utf-8"), environment["PATH"]
+            )
+            self.assertEqual(
+                verified_argv.read_text(encoding="utf-8").splitlines(),
+                [
+                    "--expected-execution-git-sha",
+                    commit,
+                    "--expected-execution-tree-sha",
+                    tree,
+                    "--preflight-only",
+                ],
             )
             cloned_runner = Path(
                 verified_execution_path.read_text(encoding="utf-8")
@@ -977,6 +1098,171 @@ class CorrectiveStateMachineDispatchTests(unittest.TestCase):
             "rebuild": rebuild.call_count,
         }
         return {"result": result, "calls": calls}
+
+    def run_preflight_from(
+        self, classified: tuple[str, dict[str, object]] | BaseException
+    ) -> dict[str, object]:
+        prepared = MagicMock()
+        prepared.database_url = "postgresql://redacted.invalid/neondb"
+        prepared.execution.git_sha = EXECUTION_SHA
+        prepared.execution.tree_sha = TREE_SHA
+        prepared.original_manifest.sha256 = "original-manifest-sha256"
+        prepared.terminal_artifact.sha256 = "terminal-manifest-sha256"
+        classify_arguments = (
+            {"side_effect": classified}
+            if isinstance(classified, BaseException)
+            else {"return_value": classified}
+        )
+        with patch.object(
+            corrective, "prepare_execution", return_value=prepared
+        ), patch.object(
+            corrective,
+            "verified_connection",
+            side_effect=lambda _url: self.connection_context(),
+        ) as connection, patch.object(
+            corrective, "classify_state", **classify_arguments
+        ), patch.object(
+            corrective,
+            "collect_state_a_preflight_evidence",
+            return_value={"transaction": {"xid_before": None, "xid_after": None}},
+        ) as collector, patch.object(
+            corrective, "apply_original_manifest_stage"
+        ) as manifest, patch.object(
+            corrective, "apply_migration_007_stage"
+        ) as migration, patch.object(
+            corrective, "apply_terminal_stage"
+        ) as terminal, patch.object(
+            corrective, "prove_terminal_noop"
+        ) as replay, patch.object(
+            corrective, "apply_rebuild_stage"
+        ) as rebuild, patch.object(
+            corrective, "rerun_sales_identity_resolution"
+        ) as finalizer:
+            try:
+                outcome: object = corrective.execute(
+                    [
+                        "--expected-execution-git-sha",
+                        EXECUTION_SHA,
+                        "--expected-execution-tree-sha",
+                        TREE_SHA,
+                        "--preflight-only",
+                    ],
+                    environ={},
+                )
+            except BaseException as exc:
+                outcome = exc
+        return {
+            "outcome": outcome,
+            "connection_count": connection.call_count,
+            "collector_count": collector.call_count,
+            "mutation_calls": {
+                "manifest": manifest.call_count,
+                "migration": migration.call_count,
+                "terminal": terminal.call_count,
+                "replay": replay.call_count,
+                "rebuild": rebuild.call_count,
+                "finalizer": finalizer.call_count,
+            },
+        }
+
+    def test_preflight_state_a_returns_before_every_mutation_path(self):
+        observed = self.run_preflight_from(
+            ("A_FROZEN_PRODUCTION_BASELINE", {"read_only": "classification"})
+        )
+        result = observed["outcome"]
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["result"], "PHASE4_PUBLISHED_PRODUCTION_PREFLIGHT")
+        self.assertEqual(result["mode"], "READ_ONLY")
+        self.assertEqual(result["state"], "A_FROZEN_PRODUCTION_BASELINE")
+        self.assertFalse(result["mutation_state_machine_entered"])
+        self.assertEqual(
+            result["pre_database_checks"],
+            {
+                "replit_deployment": True,
+                "database_url_present": True,
+                "review_token_presence": {
+                    "RECONCILIATION_REVIEW_TOKEN": True,
+                    "PHASE4_REVIEW_TOKEN_INPUT": True,
+                },
+                "constant_time_authorization_passed": True,
+                "git_identity": {
+                    "origin": corrective.CANONICAL_ORIGIN,
+                    "head": EXECUTION_SHA,
+                    "tree": TREE_SHA,
+                    "clean": True,
+                },
+                "authority_artifacts": {
+                    "original_manifest_sha256": "original-manifest-sha256",
+                    "terminal_manifest_sha256": "terminal-manifest-sha256",
+                    "terminal_embeds_original_manifest": True,
+                },
+            },
+        )
+        self.assertEqual(
+            result["production_actions"],
+            {"ddl": 0, "dml": 0, "rebuild": 0, "readiness_writes": 0},
+        )
+        self.assertEqual(observed["connection_count"], 1)
+        self.assertEqual(observed["collector_count"], 1)
+        self.assertEqual(set(observed["mutation_calls"].values()), {0})
+
+    def test_preflight_rejects_states_b_c_d_and_e_before_every_mutation_path(self):
+        for state in (
+            "B_ORIGINAL_MANIFEST_PERSISTED_PRE_007",
+            "C_POST_007_PRE_TERMINAL",
+            "D_CURRENT_TERMINAL_PRE_REBUILD",
+            "E_CURRENT_TERMINAL_POST_REBUILD",
+        ):
+            with self.subTest(state=state):
+                observed = self.run_preflight_from((state, {}))
+                self.assertIsInstance(
+                    observed["outcome"], corrective.CorrectiveValidationError
+                )
+                self.assertIn("exact frozen State A", str(observed["outcome"]))
+                self.assertEqual(observed["connection_count"], 1)
+                self.assertEqual(observed["collector_count"], 0)
+                self.assertEqual(set(observed["mutation_calls"].values()), {0})
+
+    def test_preflight_partial_or_drifted_state_stops_before_every_mutation_path(self):
+        observed = self.run_preflight_from(
+            corrective.CorrectiveValidationError("partial or drifted")
+        )
+        self.assertIsInstance(
+            observed["outcome"], corrective.CorrectiveValidationError
+        )
+        self.assertIn("partial or drifted", str(observed["outcome"]))
+        self.assertEqual(observed["collector_count"], 0)
+        self.assertEqual(set(observed["mutation_calls"].values()), {0})
+
+    def test_preflight_parser_is_explicit_non_abbreviated_and_opt_in(self):
+        base = [
+            "--expected-execution-git-sha",
+            EXECUTION_SHA,
+            "--expected-execution-tree-sha",
+            TREE_SHA,
+        ]
+        self.assertFalse(corrective._parser().parse_args(base).preflight_only)
+        self.assertTrue(
+            corrective._parser().parse_args([*base, "--preflight-only"]).preflight_only
+        )
+        with patch("sys.stderr"):
+            with self.assertRaises(SystemExit):
+                corrective._parser().parse_args([*base, "--preflight"])
+
+    def test_preflight_return_is_structurally_before_mutation_state_machine(self):
+        source = inspect.getsource(corrective.execute)
+        branch = source.index("if args.preflight_only:")
+        mutation_loop = source.index("stages: list", branch)
+        self.assertLess(branch, mutation_loop)
+        self.assertIn("return {", source[branch:mutation_loop])
+        for operation in (
+            "apply_original_manifest_stage",
+            "apply_migration_007_stage",
+            "apply_terminal_stage",
+            "prove_terminal_noop",
+            "apply_rebuild_stage",
+        ):
+            self.assertGreater(source.index(operation), mutation_loop)
 
     def test_restart_from_state_a_runs_each_permitted_stage_once(self):
         result = self.run_from(
@@ -1393,6 +1679,11 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
                     "SELECT COUNT(*)::int FROM historical_sales_exclusion_authority_runs"
                 )
                 authority = int(cursor.fetchone()[0])
+            cursor.execute(
+                """SELECT COUNT(*)::int FROM pg_namespace
+                   WHERE nspname LIKE 'phase5\\_ui\\_%' ESCAPE '\\'"""
+            )
+            residual_phase5_schemas = int(cursor.fetchone()[0])
         return {
             "markers": markers,
             "variants": variants,
@@ -1402,11 +1693,71 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             "review_aliases": review_aliases,
             "change_log": change_log,
             "authority": authority,
+            "residual_phase5_schemas": residual_phase5_schemas,
             "fingerprints": protected_state_fingerprints(conn),
             "semantic_schema_sha256": corrective._migration_007_semantic_signature(
                 conn, self.schema
             )["sha256"],
         }
+
+    def _execute_real_preflight(self):
+        @contextmanager
+        def fixture_connection(_database_url):
+            yield self.conn, {
+                "database": self.target.database,
+                "postgresql_version": self.database_info.server_version,
+                "postgresql_major": self.database_info.server_major,
+                "schema": self.schema,
+                "identity_xid": None,
+            }
+
+        with patch.object(
+            corrective, "prepare_execution", return_value=self.prepared
+        ), patch.object(
+            corrective, "verified_connection", side_effect=fixture_connection
+        ), patch.object(
+            corrective, "apply_original_manifest_stage"
+        ) as manifest, patch.object(
+            corrective, "apply_migration_007_stage"
+        ) as migration, patch.object(
+            corrective, "apply_terminal_stage"
+        ) as terminal, patch.object(
+            corrective, "prove_terminal_noop"
+        ) as replay, patch.object(
+            corrective, "apply_rebuild_stage"
+        ) as rebuild, patch.object(
+            corrective, "rerun_sales_identity_resolution"
+        ) as finalizer:
+            try:
+                return corrective.execute(
+                    [
+                        "--expected-execution-git-sha",
+                        EXECUTION_SHA,
+                        "--expected-execution-tree-sha",
+                        TREE_SHA,
+                        "--preflight-only",
+                    ],
+                    environ={},
+                )
+            finally:
+                for operation in (
+                    manifest,
+                    migration,
+                    terminal,
+                    replay,
+                    rebuild,
+                    finalizer,
+                ):
+                    operation.assert_not_called()
+
+    def _assert_real_preflight_rejected_without_change(self, message: str) -> None:
+        before = self._stage_snapshot(self.conn)
+        self.conn.rollback()
+        with self.assertRaisesRegex(Exception, message):
+            self._execute_real_preflight()
+        after = self._stage_snapshot(self.conn)
+        self.conn.rollback()
+        self.assertEqual(after, before)
 
     def _advance_to_c(self, *, actor: str = "corrective-semantic-test") -> None:
         corrective.apply_original_manifest_stage(self.conn, self.prepared, actor=actor)
@@ -1420,6 +1771,175 @@ class CorrectivePublishedProductionIntegrationTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "partial or drifted"):
                 corrective.classify_state(self.conn, self.prepared)
         terminal.assert_not_called()
+
+    def test_real_state_a_preflight_is_xid_free_and_exactly_read_only(self):
+        before = self._stage_snapshot(self.conn)
+        self.conn.rollback()
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ):
+            report = self._execute_real_preflight()
+        after = self._stage_snapshot(self.conn)
+        self.conn.rollback()
+
+        self.assertEqual(after, before)
+        self.assertEqual(report["result"], "PHASE4_PUBLISHED_PRODUCTION_PREFLIGHT")
+        self.assertEqual(report["state"], "A_FROZEN_PRODUCTION_BASELINE")
+        self.assertFalse(report["mutation_state_machine_entered"])
+        self.assertEqual(report["database_identity"]["database"], self.target.database)
+        self.assertIsNone(report["database_identity"]["identity_xid"])
+        serialized_report = json.dumps(report, default=str)
+        self.assertNotIn(self.target.url, serialized_report)
+        self.assertNotIn("postgresql://", serialized_report.casefold())
+        evidence = report["preflight_evidence"]
+        self.assertEqual(
+            evidence["transaction"],
+            {
+                "read_only": True,
+                "isolation": "repeatable read",
+                "xid_before": None,
+                "xid_after": None,
+            },
+        )
+        self.assertEqual(len(evidence["readiness_gates"]), 7)
+        self.assertEqual(
+            evidence["readiness_gate_statuses"],
+            corrective.EXPECTED_INITIAL_GATE_STATUSES,
+        )
+        self.assertEqual(evidence["protected_fingerprints_before"], self.frozen)
+        self.assertEqual(evidence["protected_fingerprints_after"], self.frozen)
+        self.assertEqual(
+            evidence["migration_007"]["migration_markers"],
+            corrective.EXPECTED_PRE_007_MARKERS,
+        )
+        self.assertEqual(
+            evidence["migration_007"]["semantic_schema_sha256"],
+            corrective.EXPECTED_PRE_007_SCHEMA_SHA256,
+        )
+        self.assertEqual(evidence["residual_phase5_ui_schemas"], 0)
+        self.assertEqual(evidence["purchase_orders"], 0)
+        self.assertEqual(evidence["purchase_order_lines"], 0)
+        manifest = report["classification_evidence"]["manifest"]
+        self.assertEqual(manifest["transaction_read_only"], "on")
+        self.assertIsNone(manifest["txid_before"])
+        self.assertIsNone(manifest["txid_after"])
+
+    def test_real_preflight_rejects_states_b_c_d_and_e_without_changes(self):
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ), self.execution_patch():
+            corrective.apply_original_manifest_stage(
+                self.conn, self.prepared, actor="preflight-state-test"
+            )
+            self._assert_real_preflight_rejected_without_change("exact frozen State A")
+
+            corrective.apply_migration_007_stage(self.conn, self.prepared)
+            self._assert_real_preflight_rejected_without_change("exact frozen State A")
+
+            corrective.apply_terminal_stage(
+                self.conn, self.prepared, actor="preflight-state-test"
+            )
+            self._assert_real_preflight_rejected_without_change("exact frozen State A")
+
+            corrective.apply_rebuild_stage(self.conn, self.prepared)
+            self._assert_real_preflight_rejected_without_change("exact frozen State A")
+
+    def test_real_preflight_rejects_count_fingerprint_schema_marker_and_residue_drift(self):
+        catalog_message = self.conn.execute(
+            """SELECT message FROM readiness_gates
+               WHERE gate_name='CATALOG_SYNC' AND scope_type='GLOBAL' AND scope_id=''"""
+        ).fetchone()[0]
+        self.conn.rollback()
+
+        drift_cases = (
+            (
+                "count",
+                """INSERT INTO variants(
+                     variant_id,product_id,product_title,variant_title,active,catalog_state
+                   ) VALUES ('PREFLIGHT-COUNT-DRIFT','PREFLIGHT-PRODUCT',
+                             'Preflight Drift','750ML',TRUE,'LIVE')""",
+                "DELETE FROM variants WHERE variant_id='PREFLIGHT-COUNT-DRIFT'",
+            ),
+            (
+                "fingerprint",
+                """UPDATE readiness_gates SET message=message || ' drift'
+                   WHERE gate_name='CATALOG_SYNC' AND scope_type='GLOBAL' AND scope_id=''""",
+                """UPDATE readiness_gates SET message=%s
+                   WHERE gate_name='CATALOG_SYNC' AND scope_type='GLOBAL' AND scope_id=''""",
+            ),
+            (
+                "schema hash",
+                "ALTER TABLE variants ALTER COLUMN product_id DROP NOT NULL",
+                "ALTER TABLE variants ALTER COLUMN product_id SET NOT NULL",
+            ),
+            (
+                "marker",
+                "INSERT INTO meta(key,value) VALUES ('migration:008_unapproved.sql','applied')",
+                "DELETE FROM meta WHERE key='migration:008_unapproved.sql'",
+            ),
+            (
+                "residual fixture schema",
+                "CREATE SCHEMA phase5_ui_preflight_probe",
+                "DROP SCHEMA phase5_ui_preflight_probe",
+            ),
+        )
+        with patch.object(
+            corrective, "FROZEN_PROTECTED_FINGERPRINTS", self.frozen
+        ):
+            for name, apply_sql, restore_sql in drift_cases:
+                with self.subTest(drift=name):
+                    self.conn.execute(apply_sql)
+                    self.conn.commit()
+                    self._assert_real_preflight_rejected_without_change(
+                        "fingerprint|controls|partial|drifted|residual|State"
+                    )
+                    if name == "fingerprint":
+                        self.conn.execute(restore_sql, (catalog_message,))
+                    else:
+                        self.conn.execute(restore_sql)
+                    self.conn.commit()
+                    restored, _ = corrective.classify_state(self.conn, self.prepared)
+                    self.conn.rollback()
+                    self.assertEqual(restored, "A_FROZEN_PRODUCTION_BASELINE")
+
+            state, stale_evidence = corrective.classify_state(
+                self.conn, self.prepared
+            )
+            self.conn.rollback()
+            self.assertEqual(state, "A_FROZEN_PRODUCTION_BASELINE")
+            mapped = next(
+                row
+                for row in self.prepared.original_manifest.rows
+                if row.review_disposition == "MAP"
+                and row.source_variant_id not in (None, "0")
+            )
+            wrong_target = self.conn.execute(
+                "SELECT variant_id FROM variants WHERE variant_id<>%s ORDER BY variant_id LIMIT 1",
+                (mapped.canonical_variant_id,),
+            ).fetchone()[0]
+            self.conn.execute(
+                """INSERT INTO variant_aliases(
+                     variant_id,old_variant_id,match_method,confidence,source,approved
+                   ) VALUES (%s,%s,'MANUAL',1,'G9_PREFLIGHT_RACE',TRUE)""",
+                (wrong_target, mapped.source_variant_id),
+            )
+            self.conn.commit()
+            raced = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            with self.assertRaisesRegex(
+                Exception,
+                "approved alias conflict|existing identity evidence conflicts|exact State A",
+            ):
+                corrective.collect_state_a_preflight_evidence(
+                    self.conn, self.prepared, stale_evidence
+                )
+            after_race = self._stage_snapshot(self.conn)
+            self.conn.rollback()
+            self.assertEqual(after_race, raced)
+            self.conn.execute(
+                "DELETE FROM variant_aliases WHERE source='G9_PREFLIGHT_RACE'"
+            )
+            self.conn.commit()
 
     def test_exact_state_a_through_e_and_completed_replay(self):
         with patch.object(
