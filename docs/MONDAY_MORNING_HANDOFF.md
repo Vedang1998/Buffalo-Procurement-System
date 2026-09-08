@@ -1,11 +1,14 @@
 # Monday emergency procurement morning handoff
 
-Updated: 2026-09-07 13:12 America/New_York
+Updated: 2026-09-07 21:56 America/New_York
 
-This is an offline P1-remediated implementation checkpoint. Every DRAFT and
+This is an independently reviewed offline draft-PR/CI checkpoint. Every DRAFT and
 artifact remains `TEST DATA — NOT FOR ORDERING`. Nothing here authorizes a
 production connection, Shopify call, supplier communication, FINAL PO, release,
 deployment, or real-money action.
+
+This week's orders are outside this checkpoint and are being handled separately
+by the owner. No purchasing deadline or real-order task applies here.
 
 ## 1. Candidate identity
 
@@ -20,6 +23,9 @@ deployment, or real-money action.
 - Exact tested P1 implementation commit:
   `dda6b0986710f032f05f50273527af160cacde5c`, tree
   `6fc845669afa056854b9306d3cf05074fa57afe3`.
+- Exact independently reviewed, source-tested, and browser-accepted candidate:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`.
 - The documentation-only closeout commit/final pushed head is reported in the
   session return; it changes no implementation or test.
 - Frozen G10 was not modified or cherry-picked. `main` was not modified.
@@ -116,8 +122,10 @@ the caller or the entered actor. Verified private caller authentication remains
 a live-use prerequisite. There is still no Monday FINAL, release, import,
 Shopify, or supplier-send route.
 
-The integrated HTTP evidence uses in-process FastAPI TestClient. It is not a
-started-Uvicorn, network, or browser acceptance claim.
+The deterministic suite includes in-process FastAPI TestClient coverage. Codex
+also completed a separate one-time, offline acceptance with an actual local
+Uvicorn server and Chromium browser on the exact candidate. This is not
+production, private-access, shadow-mode, or full-application acceptance.
 
 The detailed requirement mapping is in
 `docs/MONDAY_MVP_EVIDENCE_MATRIX.md`.
@@ -149,8 +157,24 @@ allowing GLOBAL WARN to replace missing vendor evidence, and the accepted
 218-test rerun is clean.
 
 Independent Codex P1 specialists report PASS on the stabilized implementation.
-The original independent verdict remains REQUEST CHANGES until the completed
-commit receives narrow independent re-review; no owner acceptance is claimed.
+Claude's completed-candidate re-review returned **APPROVE WITH NONBLOCKING
+FINDINGS**. Claude's independent full suite passed `587/587` and startup
+hardening passed `10/10`, with failures, errors, skips, expected failures, and
+unexpected successes all `0`. ChatGPT accepts that as code-review evidence; no
+merge, production, policy, or owner acceptance is claimed.
+
+The retained nonblocking findings are:
+
+- **N-1:** the database guard contains the exact exclusion `run_id` check; the
+  Python-side defense-in-depth check is absent.
+- **N-2:** material confirmation is a distinct action, not a second-person
+  requirement.
+- **N-3:** days-of-supply classification uses the canonical rounded value.
+- **N-4:** material-policy changes invalidate in-flight runs.
+- **N-5:** a targeted positive CASE-minimum arithmetic assertion remains to be
+  added.
+- **N-6:** confidential Monday GET/list/detail/download surfaces still need
+  verified caller protection.
 
 ## 5. Independently calculated boundary proof
 
@@ -181,15 +205,30 @@ unset TEST_DATABASE_URL
 ```
 
 Do not set `DATABASE_URL`, substitute a remote database, or run schema tools
-against an ambient environment. No separate focused shortcut or started-server
-recipe is approved.
+against an ambient environment. The retained started-server harness was a
+one-time, explicitly authorized acceptance exercise outside the repository; it
+is not standing authority to rerun or use an operational database.
 
 ## 7. Output/sample status
 
-No durable post-P1 sample DRAFT or packet was generated. Database tests use
-self-cleaning temporary storage, and paths are not invented. The former
-pre-remediation `/tmp/buffalo-monday-handoff.Zgr3zh` sample no longer exists and
-must not be used as proof of the remediated controls.
+The successful synthetic acceptance evidence is retained outside Git at
+`/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`.
+It contains raw browser/server traces, screenshots, the downloaded vendor CSV
+and 12-entry packet, database/download/ZIP verification, shutdown proof, and a
+53-record checksum manifest covering every other retained file.
+`SHA256SUMS_TEST_DATA.txt` has SHA-256
+`fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`;
+`ACCEPTANCE_REPORT_TEST_DATA.md` has SHA-256
+`b4bad03c7f885221e0594c7163a74cecb2bf2e598e654e7589813cb845fe7887`.
+All evidence remains `TEST DATA — NOT FOR ORDERING`, host-local, and not proven
+backed up off-host. The former pre-remediation `/tmp` sample is deleted and is
+not current evidence.
+
+The browser exercise passed `48/48` assertions, and the separate verifier passed
+`144/144`. It proved one DRAFT, one line, two artifacts, one packet event,
+idempotent replay, and exact `$20.02` merchandise + `$5.00` fee = `$25.02`.
+Every internal packet-manifest hash matched; Uvicorn, Chromium, listeners, and
+the disposable PostgreSQL resources were stopped.
 
 The content-addressed layout, when run in an approved environment, remains:
 
@@ -228,9 +267,11 @@ explicitly excluded only from this run.
 - The disposable `_test` workflow uses a narrow synthetic sales authority
   because no lightweight canonical evaluator exists for that fixture.
 - Native Shopify PO CSV format remains unvalidated.
-- Started-Uvicorn/browser acceptance, App Storage, private caller protection,
-  production authentication, Nix/runtime/dependency viability, backup/restore,
-  real-environment migrations, and shadow-mode acceptance are unproven.
+- App Storage, private caller protection, production authentication,
+  Nix/runtime/dependency viability, backup/restore, real-environment migrations,
+  and production/private browser and shadow-mode acceptance are unproven. The
+  local started-Uvicorn/Chromium acceptance is complete only for the offline
+  synthetic candidate.
 - Strategic forward buying remains evidence-only and disabled.
 
 ## 10. Production boundary and next action
@@ -240,10 +281,12 @@ migration/rollback, private access, storage, runtime, browser/shadow, native CSV
 and explicit human DRAFT/release gates remain required. Offline test success
 does not satisfy them.
 
-Exact next action: push this branch and STOP for narrow ChatGPT/owner re-review
-and independent completed-candidate review.
+Exact next action: create the documentation-only checkpoint, open one draft PR,
+obtain the existing configured CI if GitHub can form an integration tree, and
+then STOP for ChatGPT PR/CI review. Any current-main conflict requires separately
+reviewed resolution.
 
-`OFFLINE P1 CANDIDATE READY FOR RE-REVIEW.`
+`OFFLINE DRAFT-ONLY FOUNDATION — NOT PRODUCTION READY.`
 
 `PRODUCTION PURCHASING: NOT AUTHORIZED.`
 

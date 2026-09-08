@@ -4,6 +4,10 @@ Status labels describe only the offline emergency branch. They do not close a
 canonical phase, authorize production, validate a native Shopify PO format, or
 authorize a supplier order.
 
+Exact reviewed and tested source candidate: `e59ea665408cb881f25cff995cc2a6957fa59f94`,
+tree `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`. This week's orders are outside
+this checkpoint and are being handled separately by the owner.
+
 | Requirement | Implementation evidence | Deterministic evidence |
 | --- | --- | --- |
 | Test DB cannot fall through to production | `procurement/tools/run_tests.py`, `scripts/procurement-tests`, `postgres_test_support.py` | full wrapper proved Python 3.13.11, loopback PostgreSQL 16.9, exact `_test` DB identity, and credential scrubbing |
@@ -31,7 +35,7 @@ authorize a supplier order.
 | Internal CSV deterministic and non-native | `po_csv.py` fixed schema/warning | deterministic bytes, formula escaping, exact line/vendor totals |
 | Packet complete, deterministic, and hash/readback integrity-checked within the application trust boundary | `emergency_packet.py`, DB payload/build event, content-addressed storage | exclusions/material confirmations, ZIP manifest, storage/DB hashes, missing replica, rollback/retry tests |
 | Local writes cannot leave partial authority objects | temporary file, fsync, atomic replacement, directory fsync | failed-replace preserves old bytes and removes temp |
-| Actual FastAPI routes use the same services | Monday GET/POST routes and shared navigation | in-process TestClient prepare, exclusion/review confirmations, DRAFT preview/build, download, replay |
+| Actual FastAPI routes use the same services | Monday GET/POST routes and shared navigation | in-process TestClient plus started local Uvicorn/Chromium: mixed blocked/eligible prepare, exclusion, NORMAL and MATERIAL previews, distinct material confirmation, vendor preview, DRAFT build, download, and replay |
 | Secrets excluded from artifacts and tests | no secret renderer fields; wrapper clears DB/Shopify/review credentials | high-risk scan, wrapper regression, output/form-token assertions |
 
 ## Exact P1 test gate
@@ -41,6 +45,29 @@ authorize a supplier order.
 - Affected surface: `218/218`.
 - Authoritative full suite: `587/587`; failures, errors, skips, expected failures,
   and unexpected successes all `0`.
+- Startup hardening: `10/10`. Claude independently reproduced these gates and
+  returned **APPROVE WITH NONBLOCKING FINDINGS**.
+- Separate Codex offline acceptance: browser `48/48`; database/download/ZIP
+  verifier `144/144`; one DRAFT, one line, two artifacts, one packet event;
+  `$20.02 + $5.00 = $25.02`; 12 packet entries; clean replay and shutdown.
+- Retained host-local evidence:
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`.
+  The 53-record manifest covers every other retained file and has SHA-256
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`;
+  off-host backup is not proven.
+
+## Independent nonblocking findings
+
+- **N-1:** the database guard contains the exclusion `run_id` check; the
+  Python-side defense-in-depth check is absent.
+- **N-2:** material confirmation is a distinct action, not a second-person
+  requirement.
+- **N-3:** days-of-supply classification uses canonical rounded values.
+- **N-4:** material-policy changes invalidate in-flight runs.
+- **N-5:** a targeted positive CASE-minimum arithmetic assertion remains to be
+  added.
+- **N-6:** confidential Monday GET/list/detail/download surfaces still need
+  verified caller protection.
 
 ## Deliberately unproven or blocked
 
@@ -56,7 +83,9 @@ authorize a supplier order.
 - `holiday_blackout_notes` and `special_rules` are visible but free text.
 - Strategic forward buying remains disabled.
 - `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED` remains mandatory.
-- Trusted-write-role artifact forgery, browser/started-server acceptance, App
-  Storage, private access/authentication, Nix/runtime/dependencies,
-  backup/restore, real-environment migration, shadow mode, production DB,
-  Shopify, supplier communication, and real-order acceptance remain unproven.
+- Trusted-write-role artifact forgery, App Storage, private
+  access/authentication, Nix/runtime/dependencies, backup/restore,
+  real-environment migration, production/private browser and shadow mode,
+  production DB, Shopify, supplier communication, and real-order acceptance
+  remain unproven. Local synthetic started-server/browser acceptance is complete.
+- The deleted pre-remediation `/tmp` sample is not current evidence.

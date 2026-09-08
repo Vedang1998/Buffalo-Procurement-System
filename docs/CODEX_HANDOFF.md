@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-07T17:12:04Z (UTC)
+**Updated:** 2026-09-08T01:56:28Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,17 +10,20 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Emergency Monday P1 remediation — READY FOR RE-REVIEW / PRODUCTION NOT AUTHORIZED
+### Emergency Monday offline draft-PR/CI checkpoint — NOT PRODUCTION READY
 
-- Independent review returned REQUEST CHANGES on implementation commit
+- Independent review originally returned REQUEST CHANGES on implementation commit
   `4b342cf67ec1d488a2f84433042a468609624d84`, tree
   `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. The branch entered remediation at
   documentation head `3aed22dd09f951b27f30e04517fd3fd104f99dcd`, tree
   `8574d92621d8f265deba5f740d49f94ab84920c9`.
-- Exact tested P1 implementation commit:
+- Exact reviewed and tested source candidate:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`, on
+  `codex/emergency-monday-procurement-mvp`. The material P1 implementation commit
+  within that candidate is
   `dda6b0986710f032f05f50273527af160cacde5c`, tree
-  `6fc845669afa056854b9306d3cf05074fa57afe3`, on
-  `codex/emergency-monday-procurement-mvp`. It inherits the pre-authorized
+  `6fc845669afa056854b9306d3cf05074fa57afe3`. It inherits the pre-authorized
   emergency history from `1920a16`; no `main` or G10 merge occurred.
 - P1-1 is fail-closed with one full requested-variant manifest/fingerprint
   across prepare/replay/preview/confirm/build. Original blocked-input exceptions
@@ -69,28 +72,58 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   cash; `29.99/30.00/30.01` days are NORMAL/NORMAL/MATERIAL; raw `30.004`
   rounds to `30.00` consistently; and a `1000x` edit is MATERIAL at
   `$30,000.00` final / `$29,970.00` incremental cash.
-- Supplemental read-only Codex specialist audits found no remaining concrete
-  in-scope P0/P1 in the stabilized implementation. This does not replace the
-  requested completed-candidate independent re-review; owner acceptance remains
-  pending.
+- Claude independently re-reviewed the completed candidate and returned
+  **APPROVE WITH NONBLOCKING FINDINGS**. Its independent validation passed the
+  full suite `587/587` and startup hardening `10/10`; failures, errors, skips,
+  expected failures, and unexpected successes were all `0`. ChatGPT accepts
+  this as code-review evidence, not as merge, production, or policy approval.
+- The preserved nonblocking findings are: **N-1**, the database guard contains
+  the exact exclusion `run_id` check but the Python-side defense-in-depth check
+  is absent; **N-2**, material confirmation is a distinct action and not a
+  second-person requirement; **N-3**, days-of-supply classification uses the
+  canonical rounded value; **N-4**, material-policy changes invalidate in-flight
+  runs; **N-5**, a targeted positive CASE-minimum arithmetic assertion remains
+  to be added; and **N-6**, confidential Monday GET/list/detail/download
+  surfaces still need verified caller protection.
+- Codex separately completed the authorized local started-server/browser
+  acceptance on the exact source candidate using synthetic data, loopback
+  PostgreSQL 16 `_test` resources, Uvicorn, and Chromium. All `48/48` browser
+  assertions and `144/144` database/download/ZIP assertions passed. The one
+  DRAFT and one line reconcile `$20.02` merchandise plus `$5.00` fee to
+  `$25.02`; two artifacts and one packet event were preserved; the packet has
+  12 entries with a valid internal manifest; replay was idempotent; and the
+  server, browser, listeners, and disposable database were stopped.
+- That evidence remains host-local and outside Git at
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`.
+  `SHA256SUMS_TEST_DATA.txt` contains 53 records covering every other retained
+  file and has SHA-256
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`;
+  `ACCEPTANCE_REPORT_TEST_DATA.md` has SHA-256
+  `b4bad03c7f885221e0594c7163a74cecb2bf2e598e654e7589813cb845fe7887`.
+  Off-host backup is not proven. The deleted pre-remediation `/tmp` sample is
+  not current evidence.
 - Owner decisions remain required for the temporary `2.0x`/`30.0 days` policy,
   positive loose-fee application semantics, and any future supersession design.
   Real current sales, same-day inventory, open orders, vendor facts,
-  mappings/packs, and CURRENT prices remain unproven. No durable post-P1 sample
-  exists; the old pre-remediation `/tmp` sample is gone and is not evidence.
+  mappings/packs, and CURRENT prices remain unproven. This week's orders are
+  explicitly out of scope and are being handled separately by the owner.
 - Deferred P2 items remain explicit: trusted-write-role artifact semantics,
   human-interpreted blackout/special-rule text, synthetic `_test` sales fixture
-  authority, native Shopify CSV, started-server/browser, App Storage/private
-  access/auth, Nix/runtime/dependencies, backup/restore, real migrations, shadow
-  mode, and disabled strategic forward buying.
+  authority, native Shopify CSV, App Storage/private access/auth,
+  Nix/runtime/dependencies, backup/restore, real migrations, production/private
+  browser and shadow-mode acceptance, and disabled strategic forward buying.
+  The accepted local started-server/browser exercise closes only that offline
+  acceptance gap.
 - This remediation changes no formal phase completion. Published-production
   Phase 4 remains OPEN and formal Phase 6 remains owner-authorized but PAUSED.
   Production database connections/writes: `0 / 0`; Shopify calls/writes:
   `0 / 0`; FINAL/release/transmission/real-money actions: `0`.
-- **Exact next authorization boundary:** push the P1 implementation and docs,
-  then stop for narrow ChatGPT/owner re-review plus independent completed-
-  candidate review. No PR, merge, deployment, republish, production connection,
-  Shopify action, supplier communication, or PO release is authorized.
+- **Exact next authorization boundary:** create one documentation-only checkpoint,
+  open one draft PR, obtain the existing configured CI if GitHub can form an
+  integration tree, then stop for ChatGPT PR/CI review. This is an
+  **OFFLINE DRAFT-ONLY FOUNDATION — NOT PRODUCTION READY**. No merge,
+  deployment, republish, production connection, Shopify action, supplier
+  communication, or PO release is authorized.
 
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 

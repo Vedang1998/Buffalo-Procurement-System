@@ -173,7 +173,7 @@ closeout is independently reviewed, executed, and verified.
 
 ## Authorized emergency Monday offline checkpoint
 
-**P1-REMEDIATED OFFLINE CANDIDATE READY FOR RE-REVIEW — NOT FORMAL PHASE ACCEPTANCE**
+**INDEPENDENTLY REVIEWED OFFLINE DRAFT-PR/CI CHECKPOINT — NOT FORMAL PHASE OR PRODUCTION ACCEPTANCE**
 
 - Emergency branch: `codex/emergency-monday-procurement-mvp`.
 - Independent review requested changes to commit
@@ -181,6 +181,9 @@ closeout is independently reviewed, executed, and verified.
   `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. Exact tested P1 implementation:
   `dda6b0986710f032f05f50273527af160cacde5c`, tree
   `6fc845669afa056854b9306d3cf05074fa57afe3`.
+- Exact reviewed and tested source candidate for the offline checkpoint:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`.
 - The offline path now integrates validated/frozen inputs, deterministic
   baseline recommendations, explicit human preview/confirmation, separate
   vendor DRAFT POs, and a reconciled internal review packet. P1 remediation
@@ -192,18 +195,38 @@ closeout is independently reviewed, executed, and verified.
   `INTERNAL_DRAFT_ONLY` runs; strategic extra quantity remains zero.
 - The authoritative disposable PostgreSQL 16.9 suite passed `587/587` in
   842.923 seconds with every abnormal counter at zero; affected tests passed
-  `218/218`, and startup hardening passed `10/10`. Supplemental read-only Codex
-  specialist review found no remaining concrete in-scope P0/P1; completed-
-  candidate independent re-review and owner acceptance remain pending.
-- Real source freshness, private access, runtime, storage, migration/backup,
-  native Shopify CSV, browser/shadow, deployment, and production acceptance
-  remain unproven. No durable post-P1 artifact is claimed.
+  `218/218`, and startup hardening passed `10/10`. Claude independently passed
+  `587/587` plus startup `10/10` with every abnormal counter zero and returned
+  **APPROVE WITH NONBLOCKING FINDINGS**. Supplemental Codex reviews found no
+  remaining concrete in-scope P0/P1.
+- Separate offline local acceptance on the exact candidate used actual Uvicorn,
+  Chromium, synthetic data, and disposable loopback PostgreSQL 16 `_test`
+  resources: browser `48/48`, database/download/ZIP verifier `144/144`, one
+  DRAFT, one line, two artifacts, one packet event, `$20.02 + $5.00 = $25.02`,
+  and 12 packet entries with verified replay and cleanup. The host-local
+  53-record manifest covers every other retained file and is outside Git at
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`;
+  its SHA-256 is
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`.
+- Nonblocking N-1 through N-6 remain recorded in the Monday handoff/evidence
+  documents: Python exclusion defense-in-depth, distinct-action semantics,
+  rounded days-of-supply classification, policy-drift invalidation, a missing
+  targeted positive CASE-minimum assertion, and confidential GET/download
+  caller protection.
+- Real source freshness, private access, runtime, App Storage,
+  migration/backup, native Shopify CSV, production/private browser/shadow,
+  deployment, and production acceptance remain unproven. Host-local evidence
+  is not proven backed up off-host. This week's orders are out of scope and are
+  being handled separately by the owner.
 - Production database connections/writes and Shopify calls/writes remain
   `0 / 0`; FINAL, release, supplier-transmission, and real-money actions remain
   `0`.
 
 This emergency checkpoint does not close or renumber a canonical phase, reopen
 production permissions, or alter the Phase 4/Phase 6 statuses above.
+The only next authorized repository boundary is one documentation-only
+checkpoint and draft PR/configured CI, followed by ChatGPT PR/CI review. No
+merge or integration-conflict resolution is authorized.
 
 ## Post-foundation ordered workstreams
 

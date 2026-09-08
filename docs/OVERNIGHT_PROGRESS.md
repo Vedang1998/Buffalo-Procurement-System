@@ -1,6 +1,6 @@
 # Monday P1 remediation progress
 
-Updated: 2026-09-07 13:12 EDT
+Updated: 2026-09-07 21:56 EDT
 
 ## Candidate identity and safety
 
@@ -14,6 +14,9 @@ Updated: 2026-09-07 13:12 EDT
 - P1 implementation commit:
   `dda6b0986710f032f05f50273527af160cacde5c`, tree
   `6fc845669afa056854b9306d3cf05074fa57afe3`.
+- Exact independently reviewed, source-tested, and browser-accepted candidate:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`.
 - The final documentation commit/head is reported in the session return because
   a commit cannot contain its own Git identity.
 - Production database connections/writes: `0 / 0`.
@@ -128,6 +131,43 @@ Updated: 2026-09-07 13:12 EDT
   and forbidden Monday runtime-call scan: PASS.
 - The only warning was the pre-existing Starlette TestClient/httpx deprecation
   warning.
+- Claude independently reran the full `587/587` and startup `10/10` gates with
+  every abnormal counter at zero, then returned **APPROVE WITH NONBLOCKING
+  FINDINGS**. ChatGPT accepts this as code-review evidence, not merge,
+  production, policy, or owner approval.
+
+### Independent nonblocking findings
+
+- **N-1:** the database guard contains the exact exclusion `run_id` check; the
+  Python-side defense-in-depth check is absent.
+- **N-2:** material confirmation is a distinct action, not a second-person
+  requirement.
+- **N-3:** days-of-supply classification uses the canonical rounded value.
+- **N-4:** material-policy changes invalidate in-flight runs.
+- **N-5:** a targeted positive CASE-minimum arithmetic assertion remains to be
+  added.
+- **N-6:** confidential Monday GET/list/detail/download surfaces still need
+  verified caller protection.
+
+### Offline started-server/browser acceptance
+
+- Codex separately exercised the exact candidate with an actual local Uvicorn
+  server, Chromium, synthetic data, and validated disposable loopback
+  PostgreSQL 16 `_test` resources.
+- Browser assertions passed `48/48`; database/download/ZIP assertions passed
+  `144/144`. The accepted output has one DRAFT, one line, two artifacts, one
+  packet event, and exact `$20.02` merchandise + `$5.00` fee = `$25.02`.
+  The packet has 12 entries with a verified internal manifest. Replay preserved
+  all identities and counts, and all server/browser/database processes and
+  listeners were stopped.
+- Host-local evidence remains outside Git at
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`.
+  Its `SHA256SUMS_TEST_DATA.txt` manifest has 53 records covering every other
+  retained file and has SHA-256
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`;
+  the report hash is
+  `b4bad03c7f885221e0594c7163a74cecb2bf2e598e654e7589813cb845fe7887`.
+  It is not proven backed up off-host.
 
 ### Independent hard-coded boundary values
 
@@ -156,25 +196,31 @@ Updated: 2026-09-07 13:12 EDT
   remain human-interpreted free text.
 - The disposable `_test` workflow uses a narrow synthetic sales authority
   because no lightweight canonical sales evaluator exists for that fixture.
-- Native Shopify PO CSV format, started-Uvicorn/browser acceptance, App Storage,
-  private caller protection, production authentication, Nix/runtime/dependency
-  viability, backup/restore, real-environment migration, and shadow mode remain
-  unproven. Review-token equality authorizes an operation; it does not prove the
-  caller or entered actor's identity.
+- Native Shopify PO CSV format, App Storage, private caller protection,
+  production authentication, Nix/runtime/dependency viability, backup/restore,
+  real-environment migration, and production/private browser and shadow mode
+  remain unproven. Review-token equality authorizes an operation; it does not
+  prove the caller or entered actor's identity. Local synthetic
+  started-Uvicorn/Chromium acceptance is complete only for this offline
+  candidate.
 - Strategic forward buying remains evidence-only and cannot add units.
 - Real current sales, same-day inventory, open-order reconciliation, vendor
   terms, mappings/packs, and CURRENT price authority have not been supplied.
   No controlled real-data DRAFT candidate exists yet.
-- The former `/tmp` pre-remediation synthetic sample is no longer present and
-  is not claimed as P1 evidence. Tests used self-cleaning temporary artifacts;
-  no post-remediation sample path is invented.
+- The retained post-remediation evidence is synthetic and host-local. The
+  former `/tmp` pre-remediation sample is deleted and is not current evidence.
 
 ## Exact next action
 
-Push the P1 implementation and documentation commits, then stop for narrow
-ChatGPT/owner re-review and independent completed-candidate review. The owner
-must explicitly accept or replace the temporary `2.0x` / `30.0 days` policy and
-decide loose-fee semantics before production reliance.
+Create and push one documentation-only checkpoint, open one draft PR, obtain
+the configured CI if GitHub can form an integration tree, and then stop for
+ChatGPT PR/CI review. Any current-main conflict requires separately reviewed
+resolution. The owner must explicitly accept or replace the temporary `2.0x` /
+`30.0 days` policy and decide loose-fee semantics before production reliance.
 
-No PR, merge, deployment, production connection, Shopify action, supplier
-communication, FINAL transition, release, or real PO is authorized.
+This week's orders are explicitly outside this checkpoint and are being handled
+separately by the owner.
+
+This is an **OFFLINE DRAFT-ONLY FOUNDATION — NOT PRODUCTION READY**. No merge,
+deployment, production connection, Shopify action, supplier communication,
+FINAL transition, release, or real PO is authorized.
