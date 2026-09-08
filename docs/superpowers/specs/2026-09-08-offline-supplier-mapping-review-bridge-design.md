@@ -165,6 +165,35 @@ already-required FUTURE-to-CURRENT rollover authority; private caller identity
 for confidential review/download surfaces; and supplier-specific parser
 adapters proven against licensed source fixtures. None belongs in this branch.
 
+## Completion-audit remediation design
+
+The final contract audit found that structural hash agreement was narrower
+than the required review-package authority. The V4.1 adapter must therefore
+own an immutable contract for every patched table: exact nonempty stable-key
+fields, separately enumerated replace/append fields, protected identity
+fields, required projection fields, expected-count evidence, and documented
+cross-table relationships. A patch cannot authorize its own changed fields.
+The normalized 27-column table is the one deliberate exception to an intrinsic
+row key: its empty source key is accepted only when the same original row
+number is bound to a nonempty Tier ID by the independently validated companion
+link patch. Duplicate append keys, key mutation/removal, undeclared fields,
+unmatched counts, and broken joins all fail closed before baseline replay.
+
+The report layer will materialize all 21 supplied Contract Gaps as explicit
+review-only routing records without copying commercial rows into Git. It will
+also emit deterministic supplier-name vocabulary and alias-transition
+candidates, never approvals; recognize the actual V4.1 pack/program/vintage
+field names during comparison; and surface stale-owner, missing-source, blank-
+price, and contradictory-arithmetic evidence as machine-readable exceptions.
+
+Focused proof will add independent known answers for those controls, stable
+keys and allowlists, real-delta counts/joins, added/missing tiers, exact decimal
+quantities, replacement/simultaneous packages, missing supplier evidence,
+partial-real versus complete-synthetic comparison, and interrupted atomic
+publication cleanup. After focused validation, the changed candidate receives
+one authoritative full regression, startup/static checks, and targeted
+read-only re-review. PR #23 and all operational surfaces remain frozen.
+
 ## Packet A checkpoint inherited by this branch
 
 PR #23 remains draft. Its history-preserving integration commit is
