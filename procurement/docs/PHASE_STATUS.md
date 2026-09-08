@@ -15,16 +15,19 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 Branch `codex/supplier-mapping-review-bridge` adds bounded, deterministic
 package validation and occurrence-preserving local review/diff reports. Its
-implementation checkpoint is `fa594b641aa47a107bc51c3ed504ff7974e93c25`,
-tree `b7648d0442b049dd0ac7d1186a6ca22938dab513`; authoritative regression passed
-`607/607` plus startup `10/10`, and two targeted independent re-reviews passed.
+final implementation checkpoint is `bc160a71a1a56b8951b6c2f8cc52991c5a48176b`,
+tree `81ee0925c81215e137ca60e9f4d79a65131ea965`; authoritative regression passed
+`622/622` plus startup `10/10`, and the final exact five-file snapshot received
+a targeted independent PASS with no concrete P0/P1.
 The separately requested Claude Code review could not start because its
 existing OAuth session had expired and could not be refreshed, so that review
 is `REVIEW PENDING`, not an approval; no workaround or paid API was used.
 The supplied V4.1 delta remains `BASELINE_REQUIRED` because the exact V4 base
-and original PDFs are absent. Nothing is mapping-approved, price-approved,
-import-ready, activated, or written to an operational database. This milestone
-does not change Phase 4, Phase 6, CURRENT pricing, readiness, or PO status.
+and original PDFs plus required Tier/source and effective-projection proof are
+absent. Even future mechanical table replay remains source-evidence-gated.
+Nothing is mapping-approved, price-approved, import-ready, activated, or
+written to an operational database. This milestone does not change Phase 4,
+Phase 6, CURRENT pricing, readiness, or PO status.
 
 ## Official implementation phases
 

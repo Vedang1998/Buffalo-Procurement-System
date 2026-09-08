@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-08T05:35:56Z (UTC)
+**Updated:** 2026-09-08T08:27:38Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -12,6 +12,9 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### Night 2 offline supplier-mapping review bridge — REVIEW ONLY / NOT_IMPORT_READY
 
+- The bounded Night 2 execution began at `2026-09-08T03:35:50Z` /
+  `2026-09-07T23:35:50-0400` in `America/New_York`; the final validation and
+  handoff remained inside the eight-hour contract window.
 - Packet A integrated exact `main`
   `f308ac666a2377f540e528bc873463daecc20cf8` into the PR #23 feature
   branch with history-preserving merge commit
@@ -25,30 +28,40 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   seconds. The public API exposes no diagnostic beyond exit code 1 and the
   detailed log endpoint requires repository-admin rights. It was not retried
   and is not green. No PR merge, auto-merge, workflow change, or branch-
-  protection change occurred.
+  protection change occurred. GitHub created synthetic pull-request merge
+  `f7bbb45a31953eccd4ec5016269057e9e2c003d3`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`, with parents exact main then
+  `ec71fe9...`; because detailed logs returned `403`, its use as the Actions
+  checkout is inferred from workflow semantics rather than directly proven.
 - The separate branch `codex/supplier-mapping-review-bridge` was therefore
   based on the contract-authorized verified fallback
   `88bf800708881e5801a51d0cb165e84e8c8cf198`, tree
-  `54357c11531018c49bfc4035dfe40d9858c1f788`. Its implementation checkpoint is
-  `fa594b641aa47a107bc51c3ed504ff7974e93c25`, tree
-  `b7648d0442b049dd0ac7d1186a6ca22938dab513`.
+  `54357c11531018c49bfc4035dfe40d9858c1f788`. Its final implementation
+  checkpoint is `bc160a71a1a56b8951b6c2f8cc52991c5a48176b`, tree
+  `81ee0925c81215e137ca60e9f4d79a65131ea965`.
 - The bridge adds a bounded directory/ZIP review-package reader, raw and
   canonical hash validation, exact typed CSV sidecars, fail-closed joins and
   patch replay, occurrence-preserving offer-family reports, candidate monthly
   comparison, escaped deterministic HTML/JSON, and a database-free CLI whose
   default is no-write dry-run. Explicit output uses atomic no-replace
-  publication and exact replay. It does not call or modify mapping, price,
-  readiness, inventory, forecast, PO, Shopify, or deployment authority.
-- Final focused bridge plus runner-contract validation passed `41/41`.
-  Startup hardening passed `10/10`. The authoritative final suite discovered,
-  executed, and passed `607/607` in 638.527 seconds across 35 registered
-  modules; failures, errors, skips, expected failures, and unexpected
-  successes were all zero. Compilation, shell syntax, exact discovery/floors,
-  diff, secret, and forbidden-call checks passed.
-- Two independent read-only reviews initially found concrete package-integrity
-  and report-semantic P1 defects. After narrow remediation, both targeted
-  re-reviews returned PASS with no remaining concrete P0/P1. No paid tool,
-  database, Shopify, or network data source was used by the bridge review.
+  publication and exact replay. Code-owned V4.1 table contracts prevent a
+  patch from authorizing its own fields; strict identity, type, count, join,
+  hash, replay, archive, and authority guards fail closed. It does not call or
+  modify mapping, price, readiness, inventory, forecast, PO, Shopify, or
+  deployment authority.
+- Final focused validation passed `35/35` (`20` mapping and `15` package).
+  Startup hardening passed `10/10` in 0.003 seconds. The one authoritative
+  final suite discovered, executed, and passed `622/622` in 741.324 seconds
+  across 35 registered modules; failures, errors, skips, expected failures,
+  and unexpected successes were all zero. Compilation, pinned lock, exact
+  discovery/floors, diff, generated/private-extension, secret-prefix, and
+  operational-call/import checks passed.
+- Independent read-only reviews found concrete integrity and semantic P1s in
+  earlier snapshots. After bounded remediation, the final exact five-file
+  snapshot received a targeted independent PASS with no remaining concrete
+  P0/P1; that reviewer independently reran `35/35` and reconciled the actual
+  private delta. No paid tool, database, Shopify, or network data source was
+  used by that review.
 - The contract-requested Claude Code review was attempted once against frozen
   head `1df36b3ce33ce2f2426fd0d7bb72d668e45a906d`, tree
   `4f90f2b87cf1fe8cb0770ace66d8e6f07b9d02d0`, with only read/search tools
@@ -59,20 +72,34 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `26fe5bce614ace923093f39a549fd7c657662d8c73ad3ff0a08d96c8458cfd6c`.
 - The supplied private V4.1 delta ZIP contains 35 members including its hash
   manifest; all 34 declared members verified. The tool reproduces the supplied
-  typed 27-column delta view and reports exactly `BASELINE_REQUIRED`. The exact
-  389 MB V4 baseline archive and original supplier PDFs were not supplied, so
-  no complete patch replay, whole 80,661-row claim, or purchasing-ready result
-  is made. Real mapping approvals, current-price approvals, and import-ready
-  rows remain zero.
+  typed 27-column delta view, reconciles 1,302 companion patches, 5,172
+  workbook patches, 189 unchanged-artifact records and the exact 2,000/2,003
+  cohorts, and reports exactly `BASELINE_REQUIRED`. The exact 389 MB V4
+  baseline archive, original supplier PDFs, Tier/source registry adapter, and
+  exposed/effective projection proof were not supplied, so no complete patch
+  replay, whole 80,661-row claim, or purchasing-ready result is made. Even a
+  future twelve-table mechanical replay remains `SOURCE_EVIDENCE_REQUIRED`.
+  Real mapping approvals, current-price approvals, application IDs, and
+  import-ready rows remain zero.
 - Private kit bytes, commercial rows, and rendered reports remain outside Git
   under
   `/home/runner/workspace/.ai-auth/codex/evidence/night2-20260908T033550Z`.
-  The final bundle is `v4_1-review-only-report-reviewed`; its report JSON SHA-256
-  is `e906b110802c36758739ead09218a5e342dcc2effede0c4c163b55a8a569585f`.
-  `NIGHT2_EVIDENCE_SHA256SUMS_TEST_DATA.txt` covers the three final bundle files
-  and has SHA-256
-  `5d1d991ddd49feb6a016956fe081cb4383b3bbf02fa6d771037f6f37d38ca2f1`.
-  The evidence is host-local; off-host backup is not proven.
+  The current directory report is
+  `v4_1-review-only-report-bc160a71-test-data`; its report JSON SHA-256 is
+  `7f4f0adb18d0c2f3c99a6dbe26a35de22ea58a9d01c10b752b45313cf43f2fb9`.
+  ZIP-input parity is retained separately; after removing only the deliberately
+  different source-path field, both semantic reports hash to
+  `fb4d74f468148b6f646ed65b73b965d4cc911b82588ccaa637795ff802f29437`.
+  `bc160a7-validation-test-data/SHA256SUMS_TEST_DATA.txt` verifies eight current
+  evidence files and has SHA-256
+  `8f8148d2e550b50e6264d054d0dbcafec16de41c23067cb1527bb3d5bd050863`.
+  Older pre-remediation report directories are not current evidence. The
+  current evidence is host-local; off-host backup is not proven.
+- Process disclosure: three read-only child agents were briefly live at once,
+  exceeding the contract maximum of two; one was immediately interrupted.
+  Root remained the sole writer, no child made a repository/DB/network
+  mutation, and the final independent reviewer classified the deviation as
+  documentation-only rather than a code-verdict defect.
 - **Next integration proposal, not authorization:** independently review a
   minimal immutable mapping-decision/selected-offer schema and private UI;
   retain every rejected/alternate occurrence; separately design guarded
@@ -80,8 +107,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   parser fixtures. Do not weaken `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`
   before that reviewed selection authority exists.
 - **Exact next authorization boundary:** ChatGPT/owner review of the frozen
-  bridge candidate, its two completed targeted independent reviews, and the
-  pending Claude review limitation. No bridge PR, application integration,
+  bridge candidate, its completed targeted independent review, and the pending
+  Claude review limitation. No bridge PR, application integration,
   schema/UI change, mapping/price approval, import, or operational action is
   authorized by this checkpoint.
 - This is an offline engineering checkpoint only. This week's orders remain
