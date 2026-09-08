@@ -136,14 +136,15 @@ exact V4 baseline archive and original supplier PDFs were not supplied. It
 does not claim full 80,661-row reconstruction or business approval.
 
 The final implementation checkpoint is
-`bc160a71a1a56b8951b6c2f8cc52991c5a48176b`, tree
-`81ee0925c81215e137ca60e9f4d79a65131ea965`. Focused validation passed `35/35`
-(`20` mapping and `15` package), startup hardening passed `10/10`, and the one
-authoritative final suite discovered, executed, and passed `622/622` in
-741.324 seconds across 35 registered modules. Failures, errors, skips, expected
+`ecc1835dc025c21c9c0e9c5879328a01b81c04dd`, tree
+`6eaf41bfe0eb62afa7cfbd379d13bc1456a8dc11`. Focused validation passed `36/36`
+(`21` mapping and `15` package), startup hardening passed `10/10`, and the one
+authoritative final suite discovered, executed, and passed `623/623` in
+643.625 seconds across 35 registered modules. Failures, errors, skips, expected
 failures, and unexpected successes were all zero. Earlier independent reviews
 found fail-closed and semantic defects; the exact final five-file snapshot
-received a targeted independent PASS with no remaining concrete P0/P1.
+received a targeted independent PASS, and the strict-completion remediation
+received a second targeted independent PASS with no remaining concrete P0/P1.
 
 The additional contract-requested Claude Code review was attempted against the
 frozen final documentation head with read/search-only permissions, but Claude
@@ -154,11 +155,13 @@ OAuth workaround, plugin installation, or paid API was used.
 Private input bytes and rendered commercial evidence remain outside Git. The
 final reviewed report bundle is under
 `/home/runner/workspace/.ai-auth/codex/evidence/night2-20260908T033550Z/`
-as `v4_1-review-only-report-bc160a71-test-data` and is labeled
+as `v4_1-review-only-report-ecc1835-test-data` and is labeled
 `REVIEW ONLY / NOT_IMPORT_READY`. Its report JSON SHA-256 is
 `7f4f0adb18d0c2f3c99a6dbe26a35de22ea58a9d01c10b752b45313cf43f2fb9`.
-The eight-record current evidence manifest has SHA-256
-`8f8148d2e550b50e6264d054d0dbcafec16de41c23067cb1527bb3d5bd050863`.
+Its concise 9,254-byte HTML has six tables, no raw JSON `<pre>`, and SHA-256
+`4fb69ebabe2c55f5491d5f993d24b69232fffa440e4c7612a34a70386cfa20ed`.
+The nine-record current remediation evidence manifest has SHA-256
+`38150950ee5baa7103b6c4cb9e8e525477f77fa0b2d7d4405783fa2695e79f5f`.
 Host-local evidence is not claimed to be backed up off-host.
 
 ## Deferred integration proposal (not authorized implementation)
@@ -233,3 +236,13 @@ immediately interrupted. Root remained the sole writer and no child performed
 a repository, database, or network mutation. The final independent reviewer
 classified the deviation as documentation-only rather than a code-verdict
 defect.
+
+The strict completion audit additionally proved the exact G01–G21 workbook
+gap sequence and an actual partial-delta `NOT_COMPARABLE` monthly boundary in
+private supplemental evidence. It also closed three final public deliverable
+gaps: the HTML is now a bounded escaped reviewer summary with machine detail
+left in JSON; same-vendor SKU reuse and true serialization/reload are explicit
+known answers; and public source no longer hard-codes the private association
+between a catalog ID and the not-returned classification. Runtime validation
+still preserves exactly one supplied nonblank ID, exact cohort arithmetic, and
+the no-retirement invariant.

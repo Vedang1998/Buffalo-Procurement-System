@@ -15,10 +15,13 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 Branch `codex/supplier-mapping-review-bridge` adds bounded, deterministic
 package validation and occurrence-preserving local review/diff reports. Its
-final implementation checkpoint is `bc160a71a1a56b8951b6c2f8cc52991c5a48176b`,
-tree `81ee0925c81215e137ca60e9f4d79a65131ea965`; authoritative regression passed
-`622/622` plus startup `10/10`, and the final exact five-file snapshot received
-a targeted independent PASS with no concrete P0/P1.
+final implementation checkpoint is `ecc1835dc025c21c9c0e9c5879328a01b81c04dd`,
+tree `6eaf41bfe0eb62afa7cfbd379d13bc1456a8dc11`; authoritative regression passed
+`623/623` plus startup `10/10`, and targeted independent re-review passed
+`36/36` with no concrete P0/P1. The final remediation makes HTML a concise,
+bounded review summary, explicitly proves same-vendor SKU reuse and report
+round-trip, and removes the private not-returned status association from public
+code while retaining structural cohort validation.
 The separately requested Claude Code review could not start because its
 existing OAuth session had expired and could not be refreshed, so that review
 is `REVIEW PENDING`, not an approval; no workaround or paid API was used.

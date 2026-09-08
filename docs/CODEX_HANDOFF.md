@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-08T08:27:38Z (UTC)
+**Updated:** 2026-09-08T09:31:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -33,12 +33,17 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `543be91aee06386b7889a1fc4198eaafe89e74df`, with parents exact main then
   `ec71fe9...`; because detailed logs returned `403`, its use as the Actions
   checkout is inferred from workflow semantics rather than directly proven.
+  The public PR description still names the pre-integration `88bf800...`
+  checkpoint and says the conflict/CI are pending; GitHub metadata credentials
+  were unavailable, so it could not be corrected. Repository handoff evidence
+  below is current, but the stale reviewer-facing PR body and unexplained
+  non-green CI remain Packet A release blockers.
 - The separate branch `codex/supplier-mapping-review-bridge` was therefore
   based on the contract-authorized verified fallback
   `88bf800708881e5801a51d0cb165e84e8c8cf198`, tree
   `54357c11531018c49bfc4035dfe40d9858c1f788`. Its final implementation
-  checkpoint is `bc160a71a1a56b8951b6c2f8cc52991c5a48176b`, tree
-  `81ee0925c81215e137ca60e9f4d79a65131ea965`.
+  checkpoint is `ecc1835dc025c21c9c0e9c5879328a01b81c04dd`, tree
+  `6eaf41bfe0eb62afa7cfbd379d13bc1456a8dc11`.
 - The bridge adds a bounded directory/ZIP review-package reader, raw and
   canonical hash validation, exact typed CSV sidecars, fail-closed joins and
   patch replay, occurrence-preserving offer-family reports, candidate monthly
@@ -48,20 +53,25 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   patch from authorizing its own fields; strict identity, type, count, join,
   hash, replay, archive, and authority guards fail closed. It does not call or
   modify mapping, price, readiness, inventory, forecast, PO, Shopify, or
-  deployment authority.
-- Final focused validation passed `35/35` (`20` mapping and `15` package).
+  deployment authority. Its human HTML is a bounded escaped summary rather
+  than a raw JSON dump; full canonical detail remains in `report.json`.
+- Final focused validation passed `36/36` (`21` mapping and `15` package).
   Startup hardening passed `10/10` in 0.003 seconds. The one authoritative
-  final suite discovered, executed, and passed `622/622` in 741.324 seconds
+  final suite discovered, executed, and passed `623/623` in 643.625 seconds
   across 35 registered modules; failures, errors, skips, expected failures,
   and unexpected successes were all zero. Compilation, pinned lock, exact
   discovery/floors, diff, generated/private-extension, secret-prefix, and
   operational-call/import checks passed.
 - Independent read-only reviews found concrete integrity and semantic P1s in
-  earlier snapshots. After bounded remediation, the final exact five-file
-  snapshot received a targeted independent PASS with no remaining concrete
-  P0/P1; that reviewer independently reran `35/35` and reconciled the actual
-  private delta. No paid tool, database, Shopify, or network data source was
-  used by that review.
+  earlier snapshots. After bounded remediation, the prior exact five-file
+  snapshot received a targeted independent PASS. A strict completion audit
+  then identified the raw-JSON HTML, explicit SKU-reuse/round-trip coverage,
+  and a private classification literal; commit `ecc1835...` corrected all
+  three without changing operational code. Its targeted independent re-review
+  returned PASS with no concrete P0/P1 and independently reran `36/36`.
+  The exact private not-returned value is now preserved only from runtime
+  evidence; public code requires one nonblank textual ID and cohort arithmetic
+  without embedding the private status association.
 - The contract-requested Claude Code review was attempted once against frozen
   head `1df36b3ce33ce2f2426fd0d7bb72d668e45a906d`, tree
   `4f90f2b87cf1fe8cb0770ace66d8e6f07b9d02d0`, with only read/search tools
@@ -85,14 +95,20 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   under
   `/home/runner/workspace/.ai-auth/codex/evidence/night2-20260908T033550Z`.
   The current directory report is
-  `v4_1-review-only-report-bc160a71-test-data`; its report JSON SHA-256 is
+  `v4_1-review-only-report-ecc1835-test-data`; its concise HTML is 9,254 bytes,
+  contains six tables and no raw JSON `<pre>`, and has SHA-256
+  `4fb69ebabe2c55f5491d5f993d24b69232fffa440e4c7612a34a70386cfa20ed`.
+  Its report JSON SHA-256 remains
   `7f4f0adb18d0c2f3c99a6dbe26a35de22ea58a9d01c10b752b45313cf43f2fb9`.
   ZIP-input parity is retained separately; after removing only the deliberately
   different source-path field, both semantic reports hash to
   `fb4d74f468148b6f646ed65b73b965d4cc911b82588ccaa637795ff802f29437`.
-  `bc160a7-validation-test-data/SHA256SUMS_TEST_DATA.txt` verifies eight current
-  evidence files and has SHA-256
-  `8f8148d2e550b50e6264d054d0dbcafec16de41c23067cb1527bb3d5bd050863`.
+  `ecc1835-validation-test-data/SHA256SUMS_TEST_DATA.txt` verifies nine current
+  remediation/report/supplement files and has SHA-256
+  `38150950ee5baa7103b6c4cb9e8e525477f77fa0b2d7d4405783fa2695e79f5f`.
+  The supplement proves the private workbook's exact G01–G21 sequence and
+  review-only routing, and proves the actual partial delta comparison returns
+  `NOT_COMPARABLE` with zero invented change claims.
   Older pre-remediation report directories are not current evidence. The
   current evidence is host-local; off-host backup is not proven.
 - Process disclosure: three read-only child agents were briefly live at once,
