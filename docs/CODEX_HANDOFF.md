@@ -184,12 +184,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   Phase 4 remains OPEN and formal Phase 6 remains owner-authorized but PAUSED.
   Production database connections/writes: `0 / 0`; Shopify calls/writes:
   `0 / 0`; FINAL/release/transmission/real-money actions: `0`.
-- **Exact next authorization boundary:** create one documentation-only checkpoint,
-  open one draft PR, obtain the existing configured CI if GitHub can form an
-  integration tree, then stop for ChatGPT PR/CI review. This is an
-  **OFFLINE DRAFT-ONLY FOUNDATION — NOT PRODUCTION READY**. No merge,
-  deployment, republish, production connection, Shopify action, supplier
-  communication, or PO release is authorized.
+- The formerly stated documentation/draft-PR/CI boundary was completed by
+  Night 2 Packet A and is recorded above. PR #23 now awaits ChatGPT/owner
+  review of its non-green CI; no retry, source change, merge, deployment,
+  republish, production connection, Shopify action, supplier communication, or
+  PO release is authorized.
 
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 
