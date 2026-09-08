@@ -142,6 +142,17 @@ class ReviewPackage:
     def is_complete(self) -> bool:
         return self.status == "PASS"
 
+    @property
+    def is_structurally_complete(self) -> bool:
+        readiness = self.metadata.get("readiness", {})
+        if isinstance(readiness, Mapping):
+            structural = readiness.get("structural_replay")
+            if structural == "PASS":
+                return True
+            if structural not in {None, "PASS"}:
+                return False
+        return self.is_complete
+
     def table(self, name: str) -> tuple[dict[str, Any], ...]:
         table = self.tables.get(name)
         return () if table is None else table.rows
@@ -170,6 +181,12 @@ class ReviewPackage:
             "cohorts": dict(self.cohorts),
             "issues": [issue.as_dict() for issue in self.issues],
             "unavailable_evidence": list(self.unavailable_evidence),
+            "readiness": dict(self.metadata.get("readiness", {}))
+            if isinstance(self.metadata.get("readiness", {}), Mapping)
+            else {},
+            "snapshot_scope": dict(self.metadata.get("snapshot_scope", {}))
+            if isinstance(self.metadata.get("snapshot_scope", {}), Mapping)
+            else {},
         }
 
 
@@ -884,6 +901,7 @@ def replay_patch_table(
     external_keys_by_row: Mapping[int, Mapping[str, Any]] | None = None,
     immutable_fields: set[str] | None = None,
     allow_field_removal: bool = True,
+    append_changes_required: bool = True,
     expected_rows: int | None = None,
     expected_sha256: str | None = None,
 ) -> PatchReplay:
@@ -954,28 +972,34 @@ def replay_patch_table(
                 raise ReviewPackageError("PATCH_KEY_MISMATCH", "append stable key does not match record")
             if patch.get("before_record_sha256") is not None:
                 raise ReviewPackageError("INVALID_PATCH", "append before hash must be null")
-            changes = _require_sequence(
-                patch.get("changes"), code="INVALID_PATCH", message="append requires changes"
-            )
-            changed_fields: set[str] = set()
-            for raw_change in changes:
-                change = _require_mapping(raw_change, code="INVALID_PATCH", message="change must be an object")
-                if set(change) != {"field", "before_present", "before", "after_present", "after"}:
-                    raise ReviewPackageError("INVALID_PATCH", "change fields differ from the exact patch contract")
-                field_name = change.get("field")
-                if not isinstance(field_name, str) or not field_name or field_name in changed_fields:
-                    raise ReviewPackageError("DUPLICATE_PATCH_FIELD", "changed fields must be unique and nonblank")
-                changed_fields.add(field_name)
-                if (
-                    change.get("before_present") is not False
-                    or change.get("before") is not None
-                    or change.get("after_present") is not True
-                    or field_name not in record
-                    or change.get("after") != record[field_name]
-                ):
-                    raise ReviewPackageError("PATCH_APPEND_CHANGE_MISMATCH", "append changes do not exactly describe append_record")
-            if changed_fields != set(record):
-                raise ReviewPackageError("PATCH_APPEND_CHANGE_MISMATCH", "append changes and append_record fields differ")
+            if append_changes_required:
+                changes = _require_sequence(
+                    patch.get("changes"), code="INVALID_PATCH", message="append requires changes"
+                )
+                changed_fields: set[str] = set()
+                for raw_change in changes:
+                    change = _require_mapping(raw_change, code="INVALID_PATCH", message="change must be an object")
+                    if set(change) != {"field", "before_present", "before", "after_present", "after"}:
+                        raise ReviewPackageError("INVALID_PATCH", "change fields differ from the exact patch contract")
+                    field_name = change.get("field")
+                    if not isinstance(field_name, str) or not field_name or field_name in changed_fields:
+                        raise ReviewPackageError("DUPLICATE_PATCH_FIELD", "changed fields must be unique and nonblank")
+                    changed_fields.add(field_name)
+                    if (
+                        change.get("before_present") is not False
+                        or change.get("before") is not None
+                        or change.get("after_present") is not True
+                        or field_name not in record
+                        or change.get("after") != record[field_name]
+                    ):
+                        raise ReviewPackageError("PATCH_APPEND_CHANGE_MISMATCH", "append changes do not exactly describe append_record")
+                if changed_fields != set(record):
+                    raise ReviewPackageError("PATCH_APPEND_CHANGE_MISMATCH", "append changes and append_record fields differ")
+            elif "changes" in patch:
+                raise ReviewPackageError(
+                    "INVALID_PATCH",
+                    "this versioned append contract does not carry a changes vector",
+                )
             target = ("append", tuple((key, _canonical_json(value)) for key, value in sorted(stable_key.items())))
             if target in touched:
                 raise ReviewPackageError("DUPLICATE_PATCH", "the same append stable key appears more than once")
@@ -2444,6 +2468,7 @@ def _read_real_delta(
     *,
     manifest_name: str,
     baseline_path: str | Path | None,
+    locator_corrections: Mapping[str, Mapping[int, Mapping[str, Any]]] | None = None,
 ) -> ReviewPackage:
     manifest_bytes = _read_bounded(source, manifest_name, source.limits.max_manifest_bytes)
     manifest = _parse_json_bytes(manifest_bytes, path=manifest_name, limits=source.limits)
@@ -2748,17 +2773,73 @@ def _read_real_delta(
                         raise ReviewPackageError("BASELINE_TABLE_MISMATCH", "baseline rows or bytes differ", path=base_name)
                     base_rows_by_table[table_name] = base_rows
                     base_raw_sha_by_table[table_name] = base_raw_sha
-                candidate_external = {
-                    row_number: dict(patch["stable_key"])
-                    for row_number, patch in match_patches.items()
-                }
-                question_external = {
-                    row_number: {
-                        "question_id": row["question_id"],
-                        "variant_id": row["variant_id"],
+                corrected_projection = (
+                    None
+                    if locator_corrections is None
+                    else locator_corrections.get("candidate_projection_eligibility")
+                )
+                corrected_questions = (
+                    None
+                    if locator_corrections is None
+                    else locator_corrections.get("owner_question_batch")
+                )
+                candidate_external = (
+                    {row_number: dict(value) for row_number, value in corrected_projection.items()}
+                    if corrected_projection is not None
+                    else {
+                        row_number: dict(patch["stable_key"])
+                        for row_number, patch in match_patches.items()
                     }
-                    for row_number, row in enumerate(tables["owner_question_batch_effective"].rows, start=1)
-                }
+                )
+                question_external = (
+                    {row_number: dict(value) for row_number, value in corrected_questions.items()}
+                    if corrected_questions is not None
+                    else {
+                        row_number: {
+                            "question_id": row["question_id"],
+                            "variant_id": row["variant_id"],
+                        }
+                        for row_number, row in enumerate(
+                            tables["owner_question_batch_effective"].rows,
+                            start=1,
+                        )
+                    }
+                )
+                if set(candidate_external) != set(projection_patches):
+                    raise ReviewPackageError(
+                        "LOCATOR_CORRECTION_MISMATCH",
+                        "candidate projection locator corrections do not cover the exact patch rows",
+                    )
+                if set(question_external) != {
+                    int(row["base_row_number_1based"])
+                    for row in patches_by_table["owner_question_batch"]
+                }:
+                    raise ReviewPackageError(
+                        "LOCATOR_CORRECTION_MISMATCH",
+                        "owner-question locator corrections do not cover the exact patch rows",
+                    )
+                if locator_corrections is not None:
+                    for table_name, external_rows in (
+                        ("candidate_projection_eligibility", candidate_external),
+                        ("owner_question_batch", question_external),
+                    ):
+                        baseline_rows = base_rows_by_table[table_name]
+                        for row_number, key in external_rows.items():
+                            matches = [
+                                index
+                                for index, candidate in enumerate(baseline_rows, start=1)
+                                if all(
+                                    field in candidate and candidate[field] == value
+                                    for field, value in key.items()
+                                )
+                            ]
+                            if matches != [row_number]:
+                                raise ReviewPackageError(
+                                    "LOCATOR_CORRECTION_MISMATCH",
+                                    "corrected locator must identify exactly the recorded baseline row",
+                                    table=table_name,
+                                    row=row_number,
+                                )
                 link_rows = tables["normalized_price_contract_links_delta"].rows
                 normalized_external = {
                     int(row["normalized_table_row_number_1based"]): {
@@ -2971,16 +3052,63 @@ def read_review_package(
     path: str | Path,
     *,
     baseline_path: str | Path | None = None,
+    prior_delta_path: str | Path | None = None,
+    external_evidence_root: str | Path | None = None,
     limits: ReviewLimits = DEFAULT_LIMITS,
 ) -> ReviewPackage:
     """Read and validate a versioned offline package without extracting it."""
 
     with _open_source(path, limits) as source:
         v1_names = [name for name in ("REVIEW_PACKAGE_MANIFEST.json", "review_package_manifest.json") if name in source.names]
-        if len(v1_names) > 1:
-            raise ReviewPackageError("AMBIGUOUS_MANIFEST", "multiple review-package manifests are present")
+        root_families = len(v1_names) + int("BUFFALO_REVIEW_PACKAGE_ROOT.json" in source.names) + int(
+            "PACKAGE_FILE_HASHES.json" in source.names
+        )
+        if root_families > 1:
+            raise ReviewPackageError("AMBIGUOUS_MANIFEST", "multiple review-package root families are present")
         if v1_names:
+            if external_evidence_root is not None:
+                raise ReviewPackageError("UNEXPECTED_EXTERNAL_EVIDENCE", "V1 input has no external evidence contract")
             return _read_v1(source, manifest_name=v1_names[0])
+        if "BUFFALO_REVIEW_PACKAGE_ROOT.json" in source.names:
+            if external_evidence_root is not None:
+                raise ReviewPackageError(
+                    "UNEXPECTED_EXTERNAL_EVIDENCE",
+                    "portable input is self-contained and accepts no external root",
+                )
+            from .supplier_review_v5 import read_portable_review_package
+
+            return read_portable_review_package(source)
         if "PACKAGE_FILE_HASHES.json" in source.names:
-            return _read_real_delta(source, manifest_name="PACKAGE_FILE_HASHES.json", baseline_path=baseline_path)
+            manifest_bytes = _read_bounded(
+                source,
+                "PACKAGE_FILE_HASHES.json",
+                source.limits.max_manifest_bytes,
+            )
+            manifest_value = _parse_json_bytes(
+                manifest_bytes,
+                path="PACKAGE_FILE_HASHES.json",
+                limits=source.limits,
+            )
+            if isinstance(manifest_value, list):
+                if prior_delta_path is not None or external_evidence_root is not None:
+                    raise ReviewPackageError(
+                        "UNEXPECTED_PREREQUISITE",
+                        "V4.1 input does not accept V5 prerequisite arguments",
+                    )
+                return _read_real_delta(source, manifest_name="PACKAGE_FILE_HASHES.json", baseline_path=baseline_path)
+            if isinstance(manifest_value, dict) and manifest_value.get("version") == "V5":
+                from .supplier_review_v5 import read_v5_review_delta
+
+                return read_v5_review_delta(
+                    source,
+                    manifest_value=manifest_value,
+                    manifest_bytes=manifest_bytes,
+                    baseline_path=baseline_path,
+                    prior_delta_path=prior_delta_path,
+                    external_evidence_root=external_evidence_root,
+                )
+            raise ReviewPackageError(
+                "UNSUPPORTED_PACKAGE_VERSION",
+                "PACKAGE_FILE_HASHES.json is neither the V4.1 list nor supported V5 object",
+            )
         raise ReviewPackageError("MISSING_MANIFEST", "package has no recognized versioned manifest")

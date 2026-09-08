@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import io
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,11 +15,13 @@ from procurement_os.supplier_mapping_review import (
     REVIEW_LABEL,
     SupplierReviewError,
     build_offer_family_report,
+    build_review_batches,
     canonical_report_bytes,
     compare_review_packages,
     compare_review_snapshots,
     occurrence_identity,
     protect_spreadsheet_text,
+    report_document,
     render_report_html,
 )
 from procurement_os.supplier_review_package import PackageTable, ReviewPackage
@@ -574,8 +577,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            [item["kind"] for item in result["tier_changes"]],
-            ["ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"],
+            {item["kind"] for item in result["tier_changes"]},
+            {"ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"},
         )
         self.assertEqual(
             set(result["categories"]),
@@ -631,6 +634,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
             set(result["categories"]),
             {
                 "DATE_OR_TERRITORY_CHANGED",
+                "CHANNEL_OR_TERRITORY_SCOPE_CHANGED",
+                "EFFECTIVE_DATE_CHANGED",
                 "EXPRESSION_OR_PROOF_CHANGED",
                 "PACK_CHANGED",
                 "SIMULTANEOUS_GIFT_ALTERNATIVES",
@@ -689,6 +694,23 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 cohorts={},
                 issues=(),
                 unavailable_evidence=unavailable,
+                metadata={
+                    "snapshot_scope": {
+                        "comparison_contract": "fixture-comparison-v1",
+                        "identity_contract": "fixture-identity-v1",
+                        "lineage_family_sha256": "3" * 64,
+                        "supplier_scope_kind": "COMPLETE",
+                        "supplier_scope": ["Empire"],
+                        "cohort_scope": "FIXTURE",
+                        "period_semantics": "MONTHLY",
+                        "period_id": "2026-09",
+                        "supplier_period_coverage_complete": status == "PASS",
+                        "missing_supplier_periods": [] if status == "PASS" else ["Empire/2026-09"],
+                        "channels": ["BOOK"],
+                        "territories": ["TEST"],
+                        "simulated": True,
+                    }
+                },
             )
 
         partial = package(
@@ -700,6 +722,256 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertEqual(blocked["missing_prerequisites"], ["EXACT_BASELINE"])
         self.assertEqual(blocked["change_claims"]["changed"], [])
         self.assertEqual(compare_review_packages(complete, complete)["status"], "PASS")
+
+    def test_monthly_identity_code_reuse_gift_and_missing_are_non_authoritative(self):
+        same = compare_review_snapshots([offer("same")], [offer("same")])
+        self.assertEqual(same["summary"]["unchanged"], 1)
+        self.assertEqual(same["categories"], [])
+
+        changed_code = compare_review_snapshots(
+            [offer("same", supplier_sku="A01")],
+            [offer("same", supplier_sku="A02")],
+        )
+        self.assertEqual(changed_code["categories"], ["SUPPLIER_SKU_CHANGED"])
+        self.assertEqual(changed_code["alias_transition_candidates"][0]["authority"], "CANDIDATE_ONLY")
+        self.assertFalse(changed_code["alias_transition_candidates"][0]["approval_created"])
+
+        reuse = compare_review_snapshots(
+            [offer("old", supplier_sku="REUSED")],
+            [offer("new", variant_id="1002", supplier_sku="REUSED")],
+        )
+        self.assertEqual((reuse["summary"]["added"], reuse["summary"]["missing_not_retired"]), (1, 1))
+        self.assertEqual(len(reuse["sku_reuse_or_replacement"]), 1)
+        self.assertFalse(reuse["missing_occurrences"][0]["retirement_inferred"])
+
+        gift_added = compare_review_snapshots(
+            [offer("standard")],
+            [offer("standard"), offer("gift", offer_type="GIFT_WITH_GLASS")],
+        )
+        self.assertIn("SIMULTANEOUS_GIFT_ALTERNATIVES", gift_added["categories"])
+        self.assertFalse(gift_added["simultaneous_packages"][0]["selection_created"])
+        gift_missing = compare_review_snapshots(
+            [offer("standard"), offer("gift", offer_type="GIFT_WITH_GLASS")],
+            [offer("standard")],
+        )
+        self.assertIn("GIFT_DISAPPEARED_NOT_RETIREMENT", gift_missing["categories"])
+        self.assertFalse(gift_missing["missing_occurrences"][0]["retirement_inferred"])
+
+    def test_monthly_pack_vintage_null_and_scope_changes_preserve_exact_evidence(self):
+        vintage = compare_review_snapshots(
+            [offer("same", supplier_vintage="2021")],
+            [offer("same", supplier_vintage="2022")],
+        )
+        self.assertEqual(vintage["categories"], ["VINTAGE_CHANGED"])
+
+        pack = compare_review_snapshots(
+            [offer("same", physical_units_per_supplier_case=12)],
+            [offer("same", physical_units_per_supplier_case=9)],
+        )
+        self.assertEqual(pack["categories"], ["PACK_CHANGED"])
+        self.assertEqual(
+            pack["changed"][0]["changes"]["physical_units_per_supplier_case"]["after"],
+            9,
+        )
+
+        explicit_null = offer("same", proposed_shopify_sellable_units_per_case=24)
+        explicit_null["reviewed_shopify_units_per_case"] = None
+        null_change = compare_review_snapshots(
+            [offer("same", proposed_shopify_sellable_units_per_case=24)],
+            [explicit_null],
+        )
+        state = null_change["changed"][0]["changes"]["shopify_units_per_supplier_case"]
+        self.assertEqual(state, {"before_present": True, "before": 24, "after_present": True, "after": None})
+        self.assertIn("PACK_CHANGED", null_change["categories"])
+
+        scoped = compare_review_snapshots(
+            [
+                offer(
+                    "same", source_file="fixture.pdf", source_page=10,
+                    source_sha256="1" * 64, source_period="2026-09",
+                    channel="BOOK", territory="NORTH", effective_from="2026-09-01",
+                )
+            ],
+            [
+                offer(
+                    "same", source_file="fixture.pdf", source_page=11,
+                    source_sha256="1" * 64, source_period="2026-10",
+                    channel="DIRECT", territory="SOUTH", effective_from="2026-10-01",
+                )
+            ],
+        )
+        self.assertTrue(
+            {
+                "SOURCE_REPAGINATED", "SOURCE_PERIOD_CHANGED",
+                "CHANNEL_OR_TERRITORY_SCOPE_CHANGED", "EFFECTIVE_DATE_CHANGED",
+            }.issubset(scoped["categories"])
+        )
+        self.assertNotIn("SOURCE_DOCUMENT_CHANGED", scoped["categories"])
+
+    def test_monthly_tiers_thresholds_and_rejected_memory_never_select_or_retire(self):
+        previous = [offer("same", break_unit="BT", supplier_qualifying_unit="BT", break_quantity=12)]
+        current = [offer("same", break_unit="CS", supplier_qualifying_unit="CS", break_quantity=12)]
+        old_tier = [offer("same", source_tier_id="tier-bt12", break_unit="BT", break_quantity=12)]
+        new_tier = [offer("same", source_tier_id="tier-cs12", break_unit="CS", supplier_qualifying_unit="CS", break_quantity=12)]
+        result = compare_review_snapshots(
+            previous, current, previous_tiers=old_tier, current_tiers=new_tier
+        )
+        self.assertIn("BT_CS_THRESHOLD_CHANGED", result["categories"])
+        self.assertIn("ADDED_TIER", result["categories"])
+        self.assertIn("MISSING_TIER_NOT_RETIREMENT", result["categories"])
+        self.assertEqual(
+            {item["kind"] for item in result["tier_changes"]},
+            {"ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"},
+        )
+
+        moved_tier = compare_review_snapshots(
+            [offer("same")],
+            [offer("same")],
+            previous_tiers=[offer("same", source_tier_id="bt12", break_unit="BT", break_quantity=12)],
+            current_tiers=[offer("same", source_tier_id="bt24", break_unit="BT", break_quantity=24)],
+        )
+        self.assertEqual(
+            {item["kind"] for item in moved_tier["tier_changes"]},
+            {"ADDED_TIER", "MISSING_TIER_NOT_RETIREMENT"},
+        )
+
+        rejected = compare_review_snapshots(
+            [offer("same", candidate_disposition="REJECTED_ATTRIBUTE_CONFLICT", mapping_status="REJECTED_ATTRIBUTE_CONFLICT")],
+            [offer("same", candidate_disposition="REJECTED_ATTRIBUTE_CONFLICT", mapping_status="REJECTED_ATTRIBUTE_CONFLICT")],
+        )
+        self.assertIn("REJECTED_MATCH_RECURRED", rejected["categories"])
+        self.assertEqual(rejected["operational_effects"]["mapping_approvals"], 0)
+
+    def test_monthly_source_hash_change_is_not_merely_repagination(self):
+        result = compare_review_snapshots(
+            [offer("same", source_page=10, source_sha256="1" * 64)],
+            [offer("same", source_page=11, source_sha256="2" * 64)],
+        )
+        self.assertIn("SOURCE_DOCUMENT_CHANGED", result["categories"])
+        self.assertNotIn("SOURCE_REPAGINATED", result["categories"])
+
+    def test_package_comparison_requires_compatible_complete_supplier_period_scope(self):
+        def package(scope_changes: dict[str, object] | None = None) -> ReviewPackage:
+            scope: dict[str, object] = {
+                "comparison_contract": "comparison-v1",
+                "identity_contract": "identity-v1",
+                "lineage_family_sha256": "a" * 64,
+                "supplier_scope_kind": "COMPLETE",
+                "supplier_scope": ["Fixture Supplier"],
+                "cohort_scope": "FIXTURE",
+                "period_semantics": "MONTHLY",
+                "period_id": "2026-09",
+                "supplier_period_coverage_complete": True,
+                "missing_supplier_periods": [],
+                "channels": ["BOOK"],
+                "territories": ["TEST"],
+                "simulated": True,
+            }
+            scope.update(scope_changes or {})
+            table = PackageTable(
+                "offers", "offers", "jsonl", (offer("same"),), "b" * 64, "c" * 64
+            )
+            return ReviewPackage(
+                "portable:fixture", "SYNTHETIC", "fixture", "STRUCTURED_REPLAY",
+                REVIEW_LABEL, 1, 1, "d" * 64, {"offers": table}, {}, (), (),
+                {"readiness": {"structural_replay": "PASS"}, "snapshot_scope": scope},
+            )
+
+        previous = package()
+        current = package({"period_id": "2026-10"})
+        self.assertEqual(compare_review_packages(previous, current)["status"], "PASS")
+        missing = package(
+            {
+                "period_id": "2026-10",
+                "supplier_period_coverage_complete": False,
+                "missing_supplier_periods": ["Fixture Supplier/2026-10"],
+            }
+        )
+        blocked = compare_review_packages(previous, missing)
+        self.assertEqual(blocked["status"], "NOT_COMPARABLE")
+        self.assertIn("CURRENT_SUPPLIER_PERIOD_COVERAGE_INCOMPLETE", blocked["reason_codes"])
+        self.assertEqual(blocked["change_claims"]["added"], [])
+        incompatible = compare_review_packages(previous, package({"channels": ["DIRECT"]}))
+        self.assertIn("CHANNEL_SCOPE_MISMATCH", incompatible["reason_codes"])
+        actual = compare_review_packages(previous, package({"simulated": False}))
+        self.assertIn("SIMULATION_SCOPE_MISMATCH", actual["reason_codes"])
+
+    def test_v5_review_batches_bind_occurrences_sidecars_and_zero_authority(self):
+        relationships = (
+            {
+                "variant_id": "1001", "supplier_name_raw": "Fixture Supplier",
+                "source_offer_id": "book:standard", "supplier_code_exact": "001",
+                "source_description_raw": "Fixture Standard", "source_package_type_raw": "STANDARD",
+                "candidate_disposition": "PROPOSED_REVIEW_CANDIDATE", "preference": "UNDECIDED",
+                "reviewed_shopify_units_per_case": 6, "reviewed_qualifying_units_per_case": None,
+                "source_case_pack_raw": 12, "source_physical_count_raw": 12,
+                "source_retail_pack_raw": 2, "source_size_raw": "750 ML",
+                "source_file": "fixture.pdf", "source_page": 1, "source_sha256": "1" * 64,
+                "source_period_raw": "2026-09", "source_territory": "TEST",
+                "catalog_source_status": "PROPOSED MATCH", "source_split_fee_basis": None,
+                "mapping_approved": False, "price_approved": False, "import_ready": False,
+                "new_gift_sidecar_id": None,
+            },
+            {
+                "variant_id": "1001", "supplier_name_raw": "Fixture Supplier",
+                "source_offer_id": "book:gift", "supplier_code_exact": "GIFT-001",
+                "source_description_raw": "Fixture Gift", "source_package_type_raw": "GIFT_PACK",
+                "candidate_disposition": "SEARCH_LEAD_ONLY", "preference": "UNDECIDED",
+                "reviewed_shopify_units_per_case": None, "reviewed_qualifying_units_per_case": None,
+                "source_case_pack_raw": 6, "source_physical_count_raw": None,
+                "source_retail_pack_raw": None, "source_size_raw": "750 ML + GIFT",
+                "source_file": "fixture.pdf", "source_page": 2, "source_sha256": "1" * 64,
+                "source_period_raw": "2026-09", "source_territory": "TEST",
+                "catalog_source_status": "PROPOSED MATCH", "source_split_fee_basis": "UNRESOLVED",
+                "mapping_approved": False, "price_approved": False, "import_ready": False,
+                "new_gift_sidecar_id": "gift-1",
+            },
+        )
+        sidecar = ({"variant_id": "1001", "source_offer_id": "book:gift", "relationship_id": "gift-1"},)
+        tables = {
+            "variant_offer_relationships_v5": PackageTable(
+                "variant_offer_relationships_v5", "relationships", "jsonl", relationships,
+                "2" * 64, "3" * 64,
+            ),
+            "conditional_gift_relationships_v5": PackageTable(
+                "conditional_gift_relationships_v5", "gifts", "jsonl", sidecar,
+                "4" * 64, "5" * 64,
+            ),
+        }
+        package = ReviewPackage(
+            "fixture", "V5", "v5-fixture", "BASELINE_REQUIRED", REVIEW_LABEL,
+            2, 2, "6" * 64, tables, {}, (), ("ORIGINAL_SUPPLIER_PDFS",),
+        )
+        first = build_review_batches(package)
+        second = build_review_batches(package)
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 1)
+        self.assertEqual(len(first[0]["offers"]), 2)
+        gift = first[0]["offers"][0]
+        self.assertEqual(gift["label"], "REVIEW PREVIEW — NOT APPROVED")
+        self.assertEqual(gift["authority"], {
+            "mapping_approved": False, "price_approved": False,
+            "import_ready": False, "selection_created": False,
+        })
+        self.assertIn("CONDITIONAL_GIFT_REQUIRES_SEPARATE_REVIEW", gift["blockers"]["packaging"])
+        self.assertEqual(gift["related_sidecar_records"][0]["table"], "conditional_gift_relationships_v5")
+        document = report_document(package)
+        self.assertEqual(document["review_batches"], first)
+        self.assertEqual(
+            document["offer_family"]["occurrence_storage"],
+            "REVIEW_BATCHES_ONLY_NO_DUPLICATED_RAW_RECORDS",
+        )
+        self.assertEqual(document["offer_family"]["summary"]["source_rows"], 2)
+        self.assertEqual(document["offer_family"]["summary"]["blocked_alternatives"], 2)
+        self.assertNotIn("occurrences", document["offer_family"])
+        self.assertNotIn("offer_families", document["offer_family"])
+        self.assertEqual(document["operational_effects"]["database_writes"], 0)
+        rendered = render_report_html(document)
+        self.assertIn("Fixture Standard", rendered)
+        self.assertIn("Fixture Gift", rendered)
+        self.assertIn(first[0]["offers"][0]["offer_preview_fingerprint"], rendered)
+        self.assertIn("<td>2</td>", rendered)
+        self.assertNotIn("<script", rendered.lower())
 
     def test_interrupted_atomic_output_publishes_nothing_and_cleans_staging(self):
         with TemporaryDirectory() as temp:
@@ -724,6 +996,30 @@ class SupplierMappingReviewTests(unittest.TestCase):
                     )
             self.assertFalse(output.exists())
             self.assertEqual(list(root.iterdir()), [])
+
+    def test_output_mode_stdout_is_bounded_and_does_not_serialize_report_twice(self):
+        class Stdout:
+            def __init__(self) -> None:
+                self.buffer = io.BytesIO()
+
+        stdout = Stdout()
+        report = {
+            "label": REVIEW_LABEL,
+            "status": "BASELINE_REQUIRED",
+            "large_private_detail": "must-not-be-repeated-on-stdout",
+        }
+        with (
+            patch.object(report_cli, "execute", return_value=report),
+            patch.object(report_cli.sys, "stdout", stdout),
+        ):
+            self.assertEqual(
+                report_cli.main(["fixture.zip", "--output", "fixture-report"]),
+                0,
+            )
+        result = json.loads(stdout.buffer.getvalue())
+        self.assertEqual(result["status"], "BASELINE_REQUIRED")
+        self.assertTrue(result["report_written"])
+        self.assertNotIn("large_private_detail", result)
 
 
 if __name__ == "__main__":

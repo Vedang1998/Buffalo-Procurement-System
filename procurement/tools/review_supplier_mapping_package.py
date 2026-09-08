@@ -86,6 +86,33 @@ def _parser() -> argparse.ArgumentParser:
             "Missing prerequisites remain BASELINE_REQUIRED."
         ),
     )
+    parser.add_argument(
+        "--prior-delta",
+        type=Path,
+        metavar="V4_1_DELTA",
+        help=(
+            "Exact preceding V4.1 delta required to validate a V5 locator "
+            "overlay. Missing lineage remains explicitly unavailable."
+        ),
+    )
+    parser.add_argument(
+        "--compare-prior-delta",
+        type=Path,
+        metavar="PREVIOUS_V4_1_DELTA",
+        help=(
+            "Exact preceding V4.1 delta for --compare when that package is "
+            "a V5 diagnostic package."
+        ),
+    )
+    parser.add_argument(
+        "--external-evidence-root",
+        type=Path,
+        metavar="DIRECTORY",
+        help=(
+            "Caller-authorized directory containing V5 workbook/developer "
+            "artifacts named by the package. Producer scratch paths are never followed."
+        ),
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--dry-run",
@@ -387,21 +414,38 @@ def _bundle_result(
     }
 
 
-def _load(path: Path, *, baseline: Path | None = None) -> Any:
-    if baseline is None:
-        return read_review_package(path)
-    return read_review_package(path, baseline_path=baseline)
+def _load(
+    path: Path,
+    *,
+    baseline: Path | None = None,
+    prior_delta: Path | None = None,
+    external_evidence_root: Path | None = None,
+) -> Any:
+    return read_review_package(
+        path,
+        baseline_path=baseline,
+        prior_delta_path=prior_delta,
+        external_evidence_root=external_evidence_root,
+    )
 
 
 def execute(argv: Sequence[str] | None = None) -> dict[str, Any]:
     """Execute the offline review and return its report document."""
 
     args = _parser().parse_args(argv)
-    package = _load(args.package, baseline=args.baseline)
+    package = _load(
+        args.package,
+        baseline=args.baseline,
+        prior_delta=args.prior_delta,
+        external_evidence_root=args.external_evidence_root,
+    )
 
     comparison: Mapping[str, Any] | None = None
     if args.compare is not None:
-        previous = _load(args.compare)
+        previous = _load(
+            args.compare,
+            prior_delta=args.compare_prior_delta,
+        )
         comparison = mapping_review.compare_review_packages(previous, package)
 
     report = mapping_review.report_document(package, comparison=comparison)
@@ -410,6 +454,12 @@ def execute(argv: Sequence[str] | None = None) -> dict[str, Any]:
     if report.get("label") != REVIEW_LABEL:
         raise RuntimeError("supplier review report is missing its review-only label")
 
+    # The actual V5 diagnostic package retains hundreds of megabytes of
+    # verified source rows. The report contains only bounded projections and
+    # hashes, so release the package before materializing JSON/HTML bytes.
+    del package
+    if args.compare is not None:
+        del previous
     report_json = _canonical_report_bytes(report)
     report_html = _html_report_bytes(report)
     if args.output is not None:
@@ -422,12 +472,24 @@ def _safe_error(exc: Exception) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
     try:
-        report = execute(argv)
+        output = _parser().parse_args(arguments).output
+        report = execute(arguments)
     except Exception as exc:
         print(f"ERROR: {type(exc).__name__}: {_safe_error(exc)}", file=sys.stderr)
         return 2
-    sys.stdout.buffer.write(_canonical_report_bytes(report))
+    stdout_document: Mapping[str, Any]
+    if output is None:
+        stdout_document = report
+    else:
+        stdout_document = {
+            "label": REVIEW_LABEL,
+            "output": str(output),
+            "report_written": True,
+            "status": report.get("status"),
+        }
+    sys.stdout.buffer.write(_canonical_report_bytes(stdout_document))
     sys.stdout.buffer.flush()
     return 0
 

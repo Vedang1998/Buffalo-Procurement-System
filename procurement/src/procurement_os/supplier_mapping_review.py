@@ -13,6 +13,9 @@ import unicodedata
 from .supplier_review_package import REVIEW_LABEL, ReviewPackage, _canonical_json
 
 
+REVIEW_PREVIEW_LABEL = "REVIEW PREVIEW — NOT APPROVED"
+
+
 BLOCKED_DISPOSITIONS = frozenset(
     {
         "CONFLICT",
@@ -479,13 +482,20 @@ def _supplier_name_vocabulary(occurrences: Sequence[Mapping[str, Any]]) -> list[
     evidence: defaultdict[tuple[str, str], set[str]] = defaultdict(set)
     fields: defaultdict[tuple[str, str], set[str]] = defaultdict(set)
     for occurrence in occurrences:
-        raw = occurrence["raw"]
+        raw_value = occurrence.get("raw")
+        raw = raw_value if isinstance(raw_value, Mapping) else {}
         for field_name in ("supplier_title", "reviewed_supplier_title", "supplier_description"):
             value = raw.get(field_name)
             if isinstance(value, str) and value != "":
                 key = (str(occurrence["vendor"]), value)
                 evidence[key].add(str(occurrence["occurrence_id"]))
                 fields[key].add(field_name)
+        if not raw:
+            value = occurrence.get("supplier_description")
+            if isinstance(value, str) and value != "":
+                key = (str(occurrence["vendor"]), value)
+                evidence[key].add(str(occurrence["occurrence_id"]))
+                fields[key].add("supplier_description")
     result = []
     for (vendor, observed), occurrence_ids in sorted(evidence.items()):
         record = {
@@ -510,8 +520,11 @@ def _snapshot_alias_candidates(occurrences: Sequence[Mapping[str, Any]]) -> list
     for (variant_id, vendor), values in grouped.items():
         for occurrence in values:
             current_code = occurrence.get("supplier_sku")
+            raw_value = occurrence.get("raw")
+            if not isinstance(raw_value, Mapping):
+                continue
             prior_code = _text(
-                occurrence["raw"],
+                raw_value,
                 "predecessor_supplier_sku",
                 "previous_supplier_code",
                 "replaces_supplier_sku",
@@ -540,6 +553,8 @@ def build_offer_family_report(
     cohorts: Mapping[str, Any] | None = None,
     integrity: Mapping[str, Any] | None = None,
     dependency_groups: Sequence[Mapping[str, Any]] = (),
+    retain_raw_records: bool = True,
+    include_flat_occurrences: bool = True,
 ) -> dict[str, Any]:
     """Build an occurrence-preserving projection; never select an offer."""
 
@@ -549,6 +564,7 @@ def build_offer_family_report(
     conflicting_occurrences: list[dict[str, Any]] = []
     duplicate_occurrences: list[dict[str, Any]] = []
     status_counts: Counter[str] = Counter()
+    exception_counts: Counter[str] = Counter()
     sku_vendors: defaultdict[str, set[str]] = defaultdict(set)
     sku_variants: defaultdict[str, set[str]] = defaultdict(set)
     dependencies: Counter[str] = Counter()
@@ -560,32 +576,34 @@ def build_offer_family_report(
         if key in identities:
             if identities[key][0] == fingerprint:
                 duplicate_count += 1
-                duplicate_occurrences.append(
-                    {
-                        "identity": {"variant_id": key[0], "vendor": key[1], "offer_id": key[2]},
-                        "row": position,
-                        "source_references": _source_references(row),
-                        "raw": row,
-                    }
-                )
+                duplicate: dict[str, Any] = {
+                    "identity": {"variant_id": key[0], "vendor": key[1], "offer_id": key[2]},
+                    "row": position,
+                    "source_references": _source_references(row),
+                    "record_sha256": fingerprint,
+                }
+                if retain_raw_records:
+                    duplicate["raw"] = row
+                duplicate_occurrences.append(duplicate)
                 continue
             prior_position = identities[key][1]
-            conflict = {
+            conflict: dict[str, Any] = {
                 "identity": {"variant_id": key[0], "vendor": key[1], "offer_id": key[2]},
                 "first_row": prior_position,
                 "conflicting_row": position,
                 "first_commercial_sha256": identities[key][0],
                 "conflicting_commercial_sha256": fingerprint,
-                "raw": row,
             }
+            if retain_raw_records:
+                conflict["raw"] = row
             conflicting_occurrences.append(conflict)
+            exception_counts["CONFLICTING_COMMERCIAL_FACTS"] += 1
             for retained in occurrences:
                 if retained["variant_id"] == key[0] and retained["vendor"] == key[1] and retained["occurrence_id"] == key[2]:
                     retained["blocked"] = True
                     retained["effective_disposition"] = "BLOCKED"
                     retained["guard_reasons"] = sorted(set(retained["guard_reasons"] + ["CONFLICTING_COMMERCIAL_FACTS"]))
-                    retained["exceptions"].append(
-                        _exception(
+                    conflict_exception = _exception(
                             "CONFLICTING_COMMERCIAL_FACTS",
                             identity=key,
                             affected_fields=("commercial_facts",),
@@ -598,6 +616,10 @@ def build_offer_family_report(
                             source_references=_source_references(row),
                             dependency_ids=_dependency_ids(row),
                         )
+                    if retain_raw_records:
+                        retained["exceptions"].append(conflict_exception)
+                    retained["exception_codes"] = sorted(
+                        set(retained["exception_codes"] + ["CONFLICTING_COMMERCIAL_FACTS"])
                     )
                     break
             continue
@@ -687,6 +709,7 @@ def build_offer_family_report(
             alias_conflicts=alias_conflicts,
             conversions=conversions,
         )
+        exception_counts.update(item["code"] for item in exceptions)
         policy_excluded = row.get("policy_excluded") is True
         blocked = (
             disposition in BLOCKED_DISPOSITIONS
@@ -714,8 +737,7 @@ def build_offer_family_report(
             guard_reasons.append("STALE_OWNER_DECISION")
         if alias_conflicts:
             guard_reasons.append("ALIAS_FIELD_CONFLICT")
-        occurrences.append(
-            {
+        occurrence: dict[str, Any] = {
                 "authority": "UNAPPROVED_REVIEW_EVIDENCE",
                 "blocked": blocked,
                 "candidate_only": candidate,
@@ -725,7 +747,8 @@ def build_offer_family_report(
                 "effective_disposition": "BLOCKED" if blocked else "REVIEW_CANDIDATE",
                 "guard_reasons": sorted(set(guard_reasons)),
                 "evidence": _source_references(row),
-                "exceptions": exceptions,
+                "exceptions": exceptions if retain_raw_records else [],
+                "exception_codes": sorted({item["code"] for item in exceptions}),
                 "applicability": {
                     "effective_from": None
                     if _is_missing_or_blank(effective_from)
@@ -755,15 +778,17 @@ def build_offer_family_report(
                 "occurrence_id": key[2],
                 "identity": {"variant_id": key[0], "vendor": key[1], "offer_id": key[2]},
                 "program_type": program_type,
-                "raw": row,
                 "supplier_description": _text(
                     row, "reviewed_supplier_title", "supplier_title", "supplier_description"
                 ),
                 "supplier_sku": sku,
                 "variant_id": key[0],
                 "vendor": key[1],
+                "source_record_sha256": fingerprint,
             }
-        )
+        if retain_raw_records:
+            occurrence["raw"] = row
+        occurrences.append(occurrence)
 
     occurrences.sort(key=lambda item: (item["variant_id"], item["vendor"], item["occurrence_id"]))
     variant_rows = [dict(row) for row in variants]
@@ -775,20 +800,24 @@ def build_offer_family_report(
         {"variant_id": variant_id, "alternatives": alternatives}
         for variant_id, alternatives in sorted(families_by_variant.items())
     ]
-    all_exceptions = sorted(
-        (item for occurrence in occurrences for item in occurrence["exceptions"]),
-        key=lambda item: (
-            item["scope"]["variant_id"],
-            item["scope"]["vendor"],
-            item["scope"]["source_occurrence_id"],
-            item["code"],
-        ),
+    all_exceptions = (
+        sorted(
+            (item for occurrence in occurrences for item in occurrence["exceptions"]),
+            key=lambda item: (
+                item["scope"]["variant_id"],
+                item["scope"]["vendor"],
+                item["scope"]["source_occurrence_id"],
+                item["code"],
+            ),
+        )
+        if retain_raw_records
+        else []
     )
     gap_evidence = [
         dict(gap) if isinstance(gap, Mapping) else {"description": str(gap)}
         for gap in representation_gaps
     ]
-    return {
+    result: dict[str, Any] = {
         "label": REVIEW_LABEL,
         "status": "PASS",
         "authority": "REVIEW_ONLY",
@@ -800,7 +829,6 @@ def build_offer_family_report(
             "conflicting_occurrences": len(conflicting_occurrences),
             "dispositions": dict(sorted(status_counts.items())),
         },
-        "occurrences": occurrences,
         "offer_families": offer_families,
         "simultaneous_alternatives": [
             {"variant_id": family["variant_id"], "count": len(family["alternatives"])}
@@ -810,7 +838,7 @@ def build_offer_family_report(
         "duplicate_occurrences": duplicate_occurrences,
         "conflicting_occurrences": conflicting_occurrences,
         "exceptions": all_exceptions,
-        "exception_counts": dict(sorted(Counter(item["code"] for item in all_exceptions).items())),
+        "exception_counts": dict(sorted(exception_counts.items())),
         "variants": variant_rows,
         "sku_reuse": [
             {
@@ -836,6 +864,11 @@ def build_offer_family_report(
             "import_ready_rows": 0,
         },
     }
+    if include_flat_occurrences:
+        result["occurrences"] = occurrences
+    else:
+        result["occurrence_storage"] = "OFFER_FAMILIES_ONLY_NO_DUPLICATED_RAW_RECORDS"
+    return result
 
 
 def _index_occurrences(rows: Sequence[Mapping[str, Any]]) -> dict[tuple[str, str, str], Mapping[str, Any]]:
@@ -877,13 +910,21 @@ _COMPARISON_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("retail_units_per_supplier_case", ("supplier_case_pack", "retail_units_per_case")),
     (
         "shopify_units_per_supplier_case",
-        ("proposed_shopify_sellable_units_per_case", "shopify_units_per_case"),
+        (
+            "reviewed_shopify_units_per_case",
+            "proposed_shopify_sellable_units_per_case",
+            "shopify_units_per_case",
+        ),
     ),
     ("inner_pack_units", ("supplier_retail_pack", "containers_per_retail_unit", "inner_pack_units")),
     ("supplier_order_increment", ("supplier_order_increment", "order_increment")),
     (
         "supplier_qualifying_units_per_case",
-        ("supplier_qualifying_units_per_case", "qualifying_units_per_case"),
+        (
+            "reviewed_qualifying_units_per_case",
+            "supplier_qualifying_units_per_case",
+            "qualifying_units_per_case",
+        ),
     ),
     ("abv_percent", ("abv_percent", "alcohol_by_volume")),
     ("proof", ("proof",)),
@@ -893,6 +934,23 @@ _COMPARISON_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("effective_from", ("effective_from", "valid_from", "start_date")),
     ("effective_through", ("effective_through", "effective_to", "valid_to", "end_date")),
     ("territory", ("territory", "territory_applicability")),
+    ("channel", ("channel", "source_channel")),
+    ("source_period", ("source_period", "source_period_raw", "period_id")),
+    ("source_file", ("source_file",)),
+    ("source_page", ("source_page",)),
+    ("printed_page", ("printed_page", "physical_page")),
+    ("source_sha256", ("source_sha256",)),
+    ("source_size_raw", ("source_size_raw", "supplier_size_raw")),
+    ("source_case_pack_raw", ("source_case_pack_raw",)),
+    ("source_physical_count_raw", ("source_physical_count_raw",)),
+    ("source_retail_pack_raw", ("source_retail_pack_raw",)),
+    ("source_split_fee_basis", ("source_split_fee_basis", "split_fee_basis")),
+    ("source_split_availability", ("source_split_availability",)),
+    ("catalog_status", ("authoritative_catalog_status", "catalog_status", "catalog_source_status")),
+    ("policy_excluded", ("policy_excluded",)),
+    ("mapping_approved", ("mapping_approved",)),
+    ("price_approved", ("price_approved",)),
+    ("import_ready", ("import_ready",)),
     (
         "candidate_disposition",
         ("candidate_disposition", "disposition", "source_status", "status"),
@@ -905,13 +963,41 @@ def _comparison_values(row: Mapping[str, Any]) -> dict[str, Any]:
     values: dict[str, Any] = {}
     conflicts: list[dict[str, Any]] = []
     for canonical, aliases in _COMPARISON_FIELDS:
-        value, found = _aliased_value(row, canonical, aliases)
+        reviewed_field = {
+            "shopify_units_per_supplier_case": "reviewed_shopify_units_per_case",
+            "supplier_qualifying_units_per_case": "reviewed_qualifying_units_per_case",
+        }.get(canonical)
+        if reviewed_field is not None and reviewed_field in row:
+            value, found = row[reviewed_field], []
+        else:
+            value, found = _aliased_value(row, canonical, aliases)
         values[canonical] = None if value is _MISSING else value
         conflicts.extend(found)
     if conflicts:
         fields = sorted({str(item["canonical_field"]) for item in conflicts})
         raise SupplierReviewError(f"conflicting monthly aliases for fields: {fields!r}")
     return values
+
+
+def _comparison_states(row: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    states: dict[str, dict[str, Any]] = {}
+    conflicts: list[dict[str, Any]] = []
+    for canonical, aliases in _COMPARISON_FIELDS:
+        reviewed_field = {
+            "shopify_units_per_supplier_case": "reviewed_shopify_units_per_case",
+            "supplier_qualifying_units_per_case": "reviewed_qualifying_units_per_case",
+        }.get(canonical)
+        if reviewed_field is not None and reviewed_field in row:
+            value, found, present = row[reviewed_field], [], True
+        else:
+            value, found = _aliased_value(row, canonical, aliases)
+            present = value is not _MISSING
+        states[canonical] = {"present": present, "value": None if not present else value}
+        conflicts.extend(found)
+    if conflicts:
+        fields = sorted({str(item["canonical_field"]) for item in conflicts})
+        raise SupplierReviewError(f"conflicting monthly aliases for fields: {fields!r}")
+    return states
 
 
 def _comparison_alias_candidates(
@@ -998,10 +1084,24 @@ def compare_review_snapshots(
     for key in sorted(common):
         before_values = _comparison_values(previous[key])
         after_values = _comparison_values(current[key])
+        before_states = _comparison_states(previous[key])
+        after_states = _comparison_states(current[key])
         differences = {
-            field: {"before": before_values[field], "after": after_values[field]}
-            for field in before_values
-            if before_values[field] != after_values[field]
+            field: {
+                "before_present": before_states[field]["present"],
+                "before": before_states[field]["value"],
+                "after_present": after_states[field]["present"],
+                "after": after_states[field]["value"],
+            }
+            for field in before_states
+            if (
+                before_states[field]["present"] != after_states[field]["present"]
+                or (
+                    before_states[field]["present"]
+                    and _canonical_json(before_states[field]["value"])
+                    != _canonical_json(after_states[field]["value"])
+                )
+            )
         }
         item = {"variant_id": key[0], "vendor": key[1], "occurrence_id": key[2]}
         if differences:
@@ -1024,6 +1124,10 @@ def compare_review_snapshots(
                     "inner_pack_units",
                     "supplier_order_increment",
                     "supplier_qualifying_units_per_case",
+                    "source_size_raw",
+                    "source_case_pack_raw",
+                    "source_physical_count_raw",
+                    "source_retail_pack_raw",
                 )
             ):
                 categories.add("PACK_CHANGED")
@@ -1031,8 +1135,25 @@ def compare_review_snapshots(
                 categories.add("EXPRESSION_OR_PROOF_CHANGED")
             if "vintage" in differences or "vintage_raw" in differences:
                 categories.add("VINTAGE_CHANGED")
+            if any(field in differences for field in ("effective_from", "effective_through")):
+                categories.add("EFFECTIVE_DATE_CHANGED")
+            if any(field in differences for field in ("channel", "territory")):
+                categories.add("CHANNEL_OR_TERRITORY_SCOPE_CHANGED")
+            if "source_period" in differences:
+                categories.add("SOURCE_PERIOD_CHANGED")
             if any(field in differences for field in ("effective_from", "effective_through", "territory")):
                 categories.add("DATE_OR_TERRITORY_CHANGED")
+            if "source_sha256" in differences:
+                categories.add("SOURCE_DOCUMENT_CHANGED")
+            elif "source_page" in differences:
+                categories.add("SOURCE_REPAGINATED")
+            elif "source_file" in differences:
+                categories.add("SOURCE_FILE_REFERENCE_CHANGED")
+            if any(
+                field in differences
+                for field in ("source_split_fee_basis", "source_split_availability")
+            ):
+                categories.add("PROGRAM_TERMS_CHANGED")
             if "candidate_disposition" in differences:
                 before_disposition = str(before_values["candidate_disposition"] or "")
                 after_disposition = str(after_values["candidate_disposition"] or "")
@@ -1129,6 +1250,11 @@ def compare_review_snapshots(
         }
         for key in sorted(previous_keys - current_keys)
     ]
+    if any(
+        "GIFT" in str(_comparison_values(previous[key])["program_type"] or "").upper()
+        for key in previous_keys - current_keys
+    ):
+        categories.add("GIFT_DISAPPEARED_NOT_RETIREMENT")
     return {
         "label": REVIEW_LABEL,
         "status": "PASS",
@@ -1171,7 +1297,68 @@ def compare_review_snapshots(
     }
 
 
+def _v5_occurrence_projection(package: ReviewPackage) -> list[dict[str, Any]]:
+    dependencies: defaultdict[str, list[str]] = defaultdict(list)
+    for dependency in package.table("unresolved_dependencies_v5"):
+        variant = dependency.get("variant_id")
+        identifier = dependency.get("dependency_id")
+        if isinstance(variant, str) and isinstance(identifier, str):
+            dependencies[variant].append(identifier)
+    result: list[dict[str, Any]] = []
+    for raw in package.table("variant_offer_relationships_v5"):
+        # Keep the report projection bounded. The immutable 44-field source
+        # relationship remains available in the verified PackageTable and is
+        # bound here by its exact canonical record hash.
+        row = {
+            "variant_id": raw.get("variant_id"),
+            "vendor": raw.get("supplier_name_raw"),
+            "source_occurrence_id": raw.get("source_offer_id"),
+            "supplier_code": raw.get("supplier_code_exact"),
+            "supplier_description": raw.get("source_description_raw"),
+            "program_type": raw.get("source_package_type_raw"),
+            # Reviewed fields are authoritative only as review evidence.
+            # Their explicit nulls must not fall back to raw/legacy pack facts.
+            "reviewed_shopify_units_per_case": raw.get("reviewed_shopify_units_per_case"),
+            "reviewed_qualifying_units_per_case": raw.get("reviewed_qualifying_units_per_case"),
+            "shopify_units_per_case": raw.get("reviewed_shopify_units_per_case"),
+            "qualifying_units_per_case": raw.get("reviewed_qualifying_units_per_case"),
+            "authoritative_catalog_status": raw.get("catalog_source_status"),
+            "candidate_disposition": raw.get("candidate_disposition"),
+            "source_file": raw.get("source_file"),
+            "source_page": raw.get("source_page"),
+            "printed_page": raw.get("printed_page"),
+            "source_sha256": raw.get("source_sha256"),
+            "source_period": raw.get("source_period_raw"),
+            "territory": raw.get("source_territory"),
+            "source_vintage": raw.get("source_vintage_raw"),
+            "supplier_vintage_raw": raw.get("source_vintage_raw"),
+            "source_case_pack_raw": raw.get("source_case_pack_raw"),
+            "source_physical_count_raw": raw.get("source_physical_count_raw"),
+            "source_retail_pack_raw": raw.get("source_retail_pack_raw"),
+            "source_size_raw": raw.get("source_size_raw"),
+            "source_split_fee_basis": raw.get("source_split_fee_basis"),
+            "source_split_availability": raw.get("source_split_availability"),
+            "preference": raw.get("preference"),
+            "new_gift_sidecar_id": raw.get("new_gift_sidecar_id"),
+            "source_tier_ids": raw.get("source_tier_ids"),
+            "mapping_approved": False,
+            "price_approved": False,
+            "import_ready": False,
+            "approval_status": "UNAPPROVED_CANDIDATE",
+            "dependencies": sorted(dependencies.get(str(raw.get("variant_id")), ())),
+            "relationship_record_sha256": hashlib.sha256(
+                _canonical_json(dict(raw))
+            ).hexdigest(),
+        }
+        if raw.get("reviewed_shopify_units_per_case") is None:
+            row["reviewed_null"] = True
+        result.append(row)
+    return result
+
+
 def _package_occurrences(package: ReviewPackage) -> Sequence[Mapping[str, Any]]:
+    if package.table("variant_offer_relationships_v5"):
+        return _v5_occurrence_projection(package)
     for name in ("offers", "affected_candidates", "normalized_price_contract_review_delta"):
         rows = package.table(name)
         if rows:
@@ -1179,15 +1366,249 @@ def _package_occurrences(package: ReviewPackage) -> Sequence[Mapping[str, Any]]:
     return ()
 
 
-def compare_review_packages(previous: ReviewPackage, current: ReviewPackage) -> dict[str, Any]:
-    if not previous.is_complete or not current.is_complete:
-        missing = sorted(
-            set(previous.unavailable_evidence) | set(current.unavailable_evidence)
+def build_review_batches(package: ReviewPackage) -> list[dict[str, Any]]:
+    """Build deterministic review-preview batches with no approval capability."""
+
+    relationship_table = package.tables.get("variant_offer_relationships_v5")
+    if relationship_table is None:
+        return []
+    sidecars: defaultdict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    for table_name, table in sorted(package.tables.items()):
+        if table_name == "variant_offer_relationships_v5" or table_name.startswith("v5_patch_"):
+            continue
+        for row in table.rows:
+            variant = row.get("variant_id")
+            if not isinstance(variant, str):
+                continue
+            offers: list[str] = []
+            direct = row.get("source_offer_id")
+            if isinstance(direct, str):
+                offers.append(direct)
+            for field in ("source_offer_ids", "source_anchor_offer_ids"):
+                values = row.get(field)
+                if isinstance(values, list):
+                    offers.extend(value for value in values if isinstance(value, str))
+            record_hash = hashlib.sha256(_canonical_json(dict(row))).hexdigest()
+            for offer in sorted(set(offers)):
+                sidecars[(variant, offer)].append(
+                    {"table": table_name, "record_sha256": record_hash}
+                )
+
+    grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    global_source_missing = any(
+        value.startswith(("SOURCE_PAGE_ARCHIVE:", "ORIGINAL_SUPPLIER_PDFS"))
+        for value in package.unavailable_evidence
+    )
+    for row in relationship_table.rows:
+        variant = str(row["variant_id"])
+        offer = str(row["source_offer_id"])
+        candidate = str(row.get("candidate_disposition") or "UNRESOLVED")
+        identity_blockers = []
+        if candidate != "PROPOSED_REVIEW_CANDIDATE":
+            identity_blockers.append(candidate)
+        if str(row.get("catalog_source_status") or "").upper() in BLOCKED_DISPOSITIONS:
+            identity_blockers.append("CATALOG_STATUS_BLOCKS_USE")
+        packaging_blockers = []
+        if row.get("reviewed_shopify_units_per_case") is None:
+            packaging_blockers.append("SHOPIFY_UNITS_EXPLICITLY_UNRESOLVED")
+        if row.get("new_gift_sidecar_id") is not None:
+            packaging_blockers.append("CONDITIONAL_GIFT_REQUIRES_SEPARATE_REVIEW")
+        program_price_blockers = ["NO_CURRENT_PRICE_OR_TIER_AUTHORITY"]
+        if row.get("source_split_fee_basis") not in {None, ""}:
+            program_price_blockers.append("SPLIT_FEE_SCOPE_REQUIRES_REVIEW")
+        source_blockers = ["SOURCE_BYTES_UNAVAILABLE"] if global_source_missing else []
+        related = sorted(
+            sidecars.get((variant, offer), ()),
+            key=lambda item: (item["table"], item["record_sha256"]),
         )
+        preview = {
+            "label": REVIEW_PREVIEW_LABEL,
+            "variant_id": variant,
+            "vendor": row.get("supplier_name_raw"),
+            "source_occurrence_id": offer,
+            "supplier_code": row.get("supplier_code_exact"),
+            "supplier_description": row.get("source_description_raw"),
+            "program_type": row.get("source_package_type_raw"),
+            "candidate_disposition": candidate,
+            "preference": row.get("preference"),
+            "owner_preference_decision_ids": row.get("owner_preference_decision_ids"),
+            "reviewed_shopify_units_per_case": row.get("reviewed_shopify_units_per_case"),
+            "reviewed_qualifying_units_per_case": row.get("reviewed_qualifying_units_per_case"),
+            "raw_packaging": {
+                "source_case_pack_raw": row.get("source_case_pack_raw"),
+                "source_physical_count_raw": row.get("source_physical_count_raw"),
+                "source_retail_pack_raw": row.get("source_retail_pack_raw"),
+                "source_size_raw": row.get("source_size_raw"),
+            },
+            "source": {
+                "file": row.get("source_file"),
+                "page": row.get("source_page"),
+                "sha256": row.get("source_sha256"),
+                "period": row.get("source_period_raw"),
+                "territory": row.get("source_territory"),
+            },
+            "blockers": {
+                "identity": sorted(set(identity_blockers)),
+                "packaging": sorted(set(packaging_blockers)),
+                "program_price": sorted(set(program_price_blockers)),
+                "source_availability": sorted(set(source_blockers)),
+            },
+            "relationship_record_sha256": hashlib.sha256(
+                _canonical_json(dict(row))
+            ).hexdigest(),
+            "related_sidecar_records": related,
+            "authority": {
+                "mapping_approved": False,
+                "price_approved": False,
+                "import_ready": False,
+                "selection_created": False,
+            },
+        }
+        fingerprint_basis = {
+            "package_manifest_sha256": package.manifest_sha256,
+            "relationship_table_sha256": relationship_table.canonical_jsonl_sha256,
+            "preview": preview,
+        }
+        preview["offer_preview_fingerprint"] = hashlib.sha256(
+            _canonical_json(fingerprint_basis)
+        ).hexdigest()
+        grouped[variant].append(preview)
+
+    batches = []
+    for variant, offers in sorted(grouped.items()):
+        offers.sort(key=lambda item: (str(item["vendor"]), str(item["source_occurrence_id"])))
+        batch = {
+            "label": REVIEW_PREVIEW_LABEL,
+            "package_id": package.snapshot_id,
+            "package_manifest_sha256": package.manifest_sha256,
+            "relationship_table_sha256": relationship_table.canonical_jsonl_sha256,
+            "variant_id": variant,
+            "offers": offers,
+            "authority": {
+                "mapping_approvals": 0,
+                "price_approvals": 0,
+                "import_ready_rows": 0,
+            },
+        }
+        batch["batch_fingerprint"] = hashlib.sha256(_canonical_json(batch)).hexdigest()
+        batch["variant_review_fingerprint"] = batch["batch_fingerprint"]
+        batches.append(batch)
+    return batches
+
+
+def _v5_review_family_summary(
+    package: ReviewPackage,
+    review_batches: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Summarize V5 once; occurrence detail lives only in review_batches."""
+
+    dispositions: Counter[str] = Counter()
+    blocker_counts: Counter[str] = Counter()
+    multi_offer = []
+    occurrence_count = 0
+    blocked_count = 0
+    for batch in review_batches:
+        offers_value = batch.get("offers", ())
+        offers = (
+            offers_value
+            if isinstance(offers_value, Sequence) and not isinstance(offers_value, str)
+            else ()
+        )
+        occurrence_count += len(offers)
+        if len(offers) > 1:
+            multi_offer.append(
+                {"variant_id": batch.get("variant_id"), "count": len(offers)}
+            )
+        for offer in offers:
+            if not isinstance(offer, Mapping):
+                continue
+            dispositions[str(offer.get("candidate_disposition") or "UNRESOLVED")] += 1
+            blockers = offer.get("blockers", {})
+            if not isinstance(blockers, Mapping):
+                continue
+            is_blocked = False
+            for values in blockers.values():
+                if isinstance(values, Sequence) and not isinstance(values, str):
+                    blocker_counts.update(str(value) for value in values)
+                    if values:
+                        is_blocked = True
+            if is_blocked:
+                blocked_count += 1
+    integrity = package.metadata.get("integrity_checks", {})
+    return {
+        "label": REVIEW_LABEL,
+        "status": package.status,
+        "authority": "REVIEW_ONLY",
+        "cohorts": dict(package.cohorts),
+        "summary": {
+            "source_rows": occurrence_count,
+            "distinct_occurrences": occurrence_count,
+            "offer_families": len(review_batches),
+            "multi_offer_families": len(multi_offer),
+            "blocked_alternatives": blocked_count,
+            "dispositions": dict(sorted(dispositions.items())),
+        },
+        "occurrence_storage": "REVIEW_BATCHES_ONLY_NO_DUPLICATED_RAW_RECORDS",
+        "simultaneous_alternatives": multi_offer,
+        "exception_counts": dict(sorted(blocker_counts.items())),
+        "representation_gaps": [dict(gap) for gap in REPRESENTATION_GAP_CATALOG],
+        "supplier_name_vocabulary": [
+            dict(row) for row in package.table("supplier_vocabulary_candidates_v5")
+        ],
+        "integrity": dict(integrity) if isinstance(integrity, Mapping) else {},
+        "invariants": {
+            "missing_source_is_retirement": False,
+            "names_or_skus_are_identity": False,
+            "mapping_approvals": 0,
+            "price_approvals": 0,
+            "import_ready_rows": 0,
+        },
+    }
+
+
+def compare_review_packages(previous: ReviewPackage, current: ReviewPackage) -> dict[str, Any]:
+    missing = sorted(set(previous.unavailable_evidence) | set(current.unavailable_evidence))
+    reasons: list[str] = []
+    if not previous.is_structurally_complete:
+        reasons.append("PREVIOUS_STRUCTURAL_REPLAY_REQUIRED")
+    if not current.is_structurally_complete:
+        reasons.append("CURRENT_STRUCTURAL_REPLAY_REQUIRED")
+    previous_scope = previous.metadata.get("snapshot_scope")
+    current_scope = current.metadata.get("snapshot_scope")
+    if not isinstance(previous_scope, Mapping) or not isinstance(current_scope, Mapping):
+        reasons.append("SNAPSHOT_SCOPE_REQUIRED")
+    else:
+        if previous_scope.get("supplier_period_coverage_complete") is not True:
+            reasons.append("PREVIOUS_SUPPLIER_PERIOD_COVERAGE_INCOMPLETE")
+        if current_scope.get("supplier_period_coverage_complete") is not True:
+            reasons.append("CURRENT_SUPPLIER_PERIOD_COVERAGE_INCOMPLETE")
+        compatibility = (
+            ("comparison_contract", "COMPARISON_CONTRACT_MISMATCH"),
+            ("identity_contract", "IDENTITY_CONTRACT_MISMATCH"),
+            ("lineage_family_sha256", "LINEAGE_FAMILY_MISMATCH"),
+            ("supplier_scope_kind", "SUPPLIER_SCOPE_MISMATCH"),
+            ("supplier_scope", "SUPPLIER_SCOPE_MISMATCH"),
+            ("cohort_scope", "COHORT_SCOPE_MISMATCH"),
+            ("period_semantics", "PERIOD_SEMANTICS_MISMATCH"),
+            ("channels", "CHANNEL_SCOPE_MISMATCH"),
+            ("territories", "TERRITORY_SCOPE_MISMATCH"),
+            ("simulated", "SIMULATION_SCOPE_MISMATCH"),
+        )
+        for field, reason in compatibility:
+            if (
+                field not in previous_scope
+                or field not in current_scope
+                or type(previous_scope.get(field)) is not type(current_scope.get(field))
+                or _canonical_json(previous_scope.get(field))
+                != _canonical_json(current_scope.get(field))
+            ):
+                reasons.append(reason)
+    if reasons:
         return {
             "label": REVIEW_LABEL,
             "status": "NOT_COMPARABLE",
             "authority": "REVIEW_ONLY",
+            "reason_codes": sorted(set(reasons)),
             "missing_prerequisites": missing,
             "unavailable_evidence": missing,
             "change_claims": {
@@ -1200,17 +1621,22 @@ def compare_review_packages(previous: ReviewPackage, current: ReviewPackage) -> 
             },
             "missing_is_retirement": False,
         }
-    return compare_review_snapshots(
+    result = compare_review_snapshots(
         _package_occurrences(previous),
         _package_occurrences(current),
         previous_tiers=previous.table("tiers"),
         current_tiers=current.table("tiers"),
     )
+    result["previous_period_id"] = previous_scope.get("period_id")
+    result["current_period_id"] = current_scope.get("period_id")
+    return result
 
 
 def report_document(package: ReviewPackage, *, comparison: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    rows = _package_occurrences(package)
-    family = None
+    is_v5 = bool(package.table("variant_offer_relationships_v5"))
+    review_batches = build_review_batches(package)
+    rows = () if is_v5 else _package_occurrences(package)
+    family = _v5_review_family_summary(package, review_batches) if is_v5 else None
     if rows:
         if not all(
             _text(row, "variant_id", "canonical_variant_id", "shopify_variant_id")
@@ -1227,9 +1653,21 @@ def report_document(package: ReviewPackage, *, comparison: Mapping[str, Any] | N
             raise SupplierReviewError(
                 "review rows require Variant ID, vendor, and source occurrence ID"
             )
+        variant_rows: Sequence[Mapping[str, Any]]
+        if is_v5:
+            variant_rows = [
+                {
+                    "variant_id": row.get("variant_id"),
+                    "status": row.get("status"),
+                    "display_status": row.get("v5_display_status"),
+                }
+                for row in package.table("catalog_coverage_v5")
+            ]
+        else:
+            variant_rows = package.table("affected_variants") or package.table("variants")
         family = build_offer_family_report(
             rows,
-            variants=package.table("affected_variants") or package.table("variants"),
+            variants=variant_rows,
             representation_gaps=package.table("representation_gaps"),
             cohorts=package.cohorts,
             integrity={
@@ -1237,13 +1675,19 @@ def report_document(package: ReviewPackage, *, comparison: Mapping[str, Any] | N
                 "manifest_sha256": package.manifest_sha256,
                 "available_checks": dict(package.metadata.get("integrity_checks", {})),
             },
-            dependency_groups=package.table("dependency_groups"),
+            dependency_groups=(
+                package.table("dependency_evidence_groups_v5")
+                or package.table("dependency_groups")
+            ),
+            retain_raw_records=not is_v5,
+            include_flat_occurrences=not is_v5,
         )
     return {
         "label": REVIEW_LABEL,
         "status": package.status,
         "package": package.summary(),
         "offer_family": family,
+        "review_batches": review_batches,
         "representation_gaps": [dict(gap) for gap in REPRESENTATION_GAP_CATALOG],
         "unavailable_evidence": list(package.unavailable_evidence),
         "comparison": None if comparison is None else dict(comparison),
@@ -1319,6 +1763,29 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
         if isinstance(gaps_value, Sequence) and not isinstance(gaps_value, str)
         else ()
     )
+    readiness_value = package.get("readiness", {})
+    readiness = readiness_value if isinstance(readiness_value, Mapping) else {}
+    review_batches_value = report.get("review_batches", ())
+    review_batches = (
+        review_batches_value
+        if isinstance(review_batches_value, Sequence) and not isinstance(review_batches_value, str)
+        else ()
+    )
+    preview_by_identity: dict[tuple[str, str, str], Mapping[str, Any]] = {}
+    for batch in review_batches:
+        if not isinstance(batch, Mapping):
+            continue
+        offers = batch.get("offers", ())
+        if not isinstance(offers, Sequence) or isinstance(offers, str):
+            continue
+        for offer in offers:
+            if isinstance(offer, Mapping):
+                key = (
+                    str(offer.get("variant_id")),
+                    str(offer.get("vendor")),
+                    str(offer.get("source_occurrence_id")),
+                )
+                preview_by_identity[key] = offer
 
     alternatives: list[Mapping[str, Any]] = []
     families_value = family.get("offer_families", ())
@@ -1331,7 +1798,24 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                 candidate_alternatives, str
             ):
                 alternatives.extend(item for item in candidate_alternatives if isinstance(item, Mapping))
-    blocked_count = sum(1 for item in alternatives if item.get("blocked") is True)
+    if not alternatives:
+        for batch in review_batches:
+            if not isinstance(batch, Mapping):
+                continue
+            offers = batch.get("offers", ())
+            if isinstance(offers, Sequence) and not isinstance(offers, str):
+                alternatives.extend(item for item in offers if isinstance(item, Mapping))
+    computed_blocked_count = 0
+    for item in alternatives:
+        blockers_value = item.get("blockers", {})
+        blockers = blockers_value if isinstance(blockers_value, Mapping) else {}
+        if item.get("blocked") is True or any(
+            isinstance(values, Sequence)
+            and not isinstance(values, str)
+            and bool(values)
+            for values in blockers.values()
+        ):
+            computed_blocked_count += 1
     package_rows = (
         ("Package kind", package.get("package_kind", "—")),
         ("Snapshot", package.get("snapshot_id", "—")),
@@ -1344,38 +1828,96 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
         ("Distinct occurrences", summary.get("distinct_occurrences", len(alternatives))),
         (
             "Offer families",
-            len(families_value)
-            if isinstance(families_value, Sequence) and not isinstance(families_value, str)
-            else 0,
+            summary.get(
+                "offer_families",
+                len(families_value)
+                if isinstance(families_value, Sequence) and not isinstance(families_value, str)
+                else 0,
+            ),
         ),
         ("Alternatives shown", min(len(alternatives), 200)),
-        ("Blocked alternatives", blocked_count),
+        (
+            "Blocked alternatives",
+            summary.get("blocked_alternatives", computed_blocked_count),
+        ),
         ("Conflicting occurrences", summary.get("conflicting_occurrences", 0)),
         ("Import-ready rows", invariants.get("import_ready_rows", 0)),
         ("Representation gaps", len(gaps)),
+        ("Review-preview batches", len(review_batches)),
     )
     alternative_rows = []
     for item in alternatives[:200]:
         conversions_value = item.get("conversions", {})
-        conversions = conversions_value if isinstance(conversions_value, Mapping) else {}
+        conversions = dict(conversions_value) if isinstance(conversions_value, Mapping) else {}
+        if not conversions:
+            conversions = {
+                "shopify_units_per_supplier_case": item.get(
+                    "reviewed_shopify_units_per_case"
+                ),
+                "supplier_qualifying_units_per_case": item.get(
+                    "reviewed_qualifying_units_per_case"
+                ),
+            }
+        occurrence_id = item.get("occurrence_id", item.get("source_occurrence_id"))
+        preview = preview_by_identity.get(
+            (str(item.get("variant_id")), str(item.get("vendor")), str(occurrence_id)),
+            item if item.get("offer_preview_fingerprint") else {},
+        )
+        raw_packaging_value = item.get("raw_packaging", {})
+        raw_packaging = (
+            raw_packaging_value if isinstance(raw_packaging_value, Mapping) else {}
+        )
+        evidence_value = item.get("evidence", {})
+        if not isinstance(evidence_value, Mapping):
+            evidence_value = {}
+        source_value = item.get("source", {})
+        evidence = (
+            source_value
+            if not evidence_value and isinstance(source_value, Mapping)
+            else evidence_value
+        )
+        guard_reasons = item.get("guard_reasons", ())
+        if not guard_reasons:
+            blockers = item.get("blockers", {})
+            if isinstance(blockers, Mapping):
+                guard_reasons = sorted(
+                    {
+                        str(reason)
+                        for values in blockers.values()
+                        if isinstance(values, Sequence) and not isinstance(values, str)
+                        for reason in values
+                    }
+                )
         alternative_rows.append(
             (
                 item.get("variant_id"),
                 item.get("vendor"),
-                item.get(
-                    "occurrence_id",
+                occurrence_id
+                if occurrence_id is not None
+                else (
                     item.get("identity", {}).get("offer_id")
                     if isinstance(item.get("identity"), Mapping)
-                    else None,
+                    else None
                 ),
-                item.get("supplier_sku"),
+                item.get("supplier_sku", item.get("supplier_code")),
                 item.get("supplier_description"),
                 item.get("program_type"),
-                item.get("effective_disposition"),
-                item.get("guard_reasons", ()),
-                conversions.get("physical_units_per_supplier_case"),
-                conversions.get("retail_units_per_supplier_case"),
+                item.get("effective_disposition", item.get("candidate_disposition")),
+                item.get("owner_preference_decision_ids"),
+                guard_reasons,
+                raw_packaging.get("source_case_pack_raw"),
+                raw_packaging.get(
+                    "source_physical_count_raw",
+                    conversions.get("physical_units_per_supplier_case"),
+                ),
+                raw_packaging.get(
+                    "source_retail_pack_raw",
+                    conversions.get("retail_units_per_supplier_case"),
+                ),
                 conversions.get("shopify_units_per_supplier_case"),
+                evidence.get("source_file", evidence.get("file")),
+                evidence.get("source_page", evidence.get("page")),
+                preview.get("offer_preview_fingerprint"),
             )
         )
     exception_counts_value = family.get("exception_counts", {})
@@ -1394,8 +1936,15 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
     comparison = comparison_value if isinstance(comparison_value, Mapping) else None
 
     sections = [
+        (
+            f"<p><strong>{html.escape(REVIEW_PREVIEW_LABEL)}</strong></p>"
+            if review_batches
+            else ""
+        ),
         "<h2>Package integrity</h2>",
         _html_table(("Check", "Value"), package_rows, css_class="summary"),
+        "<h2>Readiness (separate gates)</h2>",
+        _html_table(("Gate", "Status"), sorted(readiness.items()), css_class="summary"),
         "<h2>Review summary</h2>",
         _html_table(("Measure", "Value"), review_rows, css_class="summary"),
         "<h2>Operational effects</h2>",
@@ -1421,10 +1970,15 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                         "Description",
                         "Program",
                         "Disposition",
+                        "Owner decision IDs",
                         "Guards",
-                        "Physical/case",
-                        "Retail/case",
-                        "Shopify/case",
+                        "Raw case pack",
+                        "Raw physical/case",
+                        "Raw retail/case",
+                        "Reviewed Shopify/case",
+                        "Source file",
+                        "Source page",
+                        "Offer preview fingerprint",
                     ),
                     alternative_rows,
                 ),
