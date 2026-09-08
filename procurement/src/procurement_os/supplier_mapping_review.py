@@ -2105,7 +2105,10 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
         )
     if comparison is not None:
         comparison_summary = comparison.get("summary", {})
-        comparison_rows = [("Status", comparison.get("status", "—"))]
+        comparison_rows = [
+            ("Status", comparison.get("status", "—")),
+            ("Simulated", comparison.get("simulated", "—")),
+        ]
         if isinstance(comparison_summary, Mapping):
             comparison_rows.extend(sorted(comparison_summary.items()))
         sections.extend(

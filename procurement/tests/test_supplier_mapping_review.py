@@ -274,6 +274,7 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 unit_price=Decimal("28.10"),
                 split_inclusive_price=Decimal("31.25"),
                 general_case_split_charge=Decimal("45.60"),
+                split_price_plus_second_fee=None,
             ),
             offer(
                 "layout-2-gift",
@@ -344,6 +345,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
                 fluid_ounces_each=32,
                 per_ounce_price=Decimal("0.16"),
                 channel="TEST ON PREMISE ONLY",
+                off_premise_eligible=False,
+                split_charge_from_per_ounce=None,
             ),
             offer(
                 "layout-5-mixed-sizes",
@@ -482,6 +485,7 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertEqual(Decimal("31.25") - Decimal("28.10"), Decimal("3.15"))
         self.assertEqual(Decimal("45.60") / Decimal("6"), Decimal("7.60"))
         self.assertEqual(split["raw"]["split_inclusive_price"], Decimal("31.25"))
+        self.assertIsNone(split["raw"]["split_price_plus_second_fee"])
         self.assertIn("SPLIT_INCLUSION_REQUIRES_SCOPE", split["exception_codes"])
         self.assertFalse(items["layout-2-gift"]["raw"]["standard_assortment_allowed"])
         self.assertNotEqual(split["identity"], items["layout-2-gift"]["identity"])
@@ -517,6 +521,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
         )
         self.assertIn("PER_OUNCE_NOT_A_TIER_PRICE", ounce["exception_codes"])
         self.assertEqual(ounce["raw"]["channel"], "TEST ON PREMISE ONLY")
+        self.assertFalse(ounce["raw"]["off_premise_eligible"])
+        self.assertIsNone(ounce["raw"]["split_charge_from_per_ounce"])
 
         mixed = items["layout-5-mixed-sizes"]
         self.assertEqual(
@@ -1483,6 +1489,17 @@ class SupplierMappingReviewTests(unittest.TestCase):
         comparable = compare_review_packages(previous, current)
         self.assertEqual(comparable["status"], "PASS")
         self.assertIs(comparable["simulated"], True)
+        rendered = render_report_html(
+            {
+                "label": REVIEW_LABEL,
+                "status": "PASS",
+                "package": {},
+                "offer_family": {},
+                "operational_effects": {},
+                "comparison": comparable,
+            }
+        )
+        self.assertIn("<td>Simulated</td><td>yes</td>", rendered)
         missing = package(
             {
                 "period_id": "2026-10",
