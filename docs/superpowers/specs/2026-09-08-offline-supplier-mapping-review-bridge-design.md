@@ -143,6 +143,12 @@ Two independent read-only targeted reviews initially found fail-closed and
 semantic defects; the remediated snapshot passed both targeted re-reviews with
 no remaining concrete P0/P1.
 
+The additional contract-requested Claude Code review was attempted against the
+frozen final documentation head with read/search-only permissions, but Claude
+Code exited before repository review because its existing OAuth session had
+expired and could not be refreshed. That review remains `REVIEW PENDING`; no
+OAuth workaround, plugin installation, or paid API was used.
+
 Private input bytes and rendered commercial evidence remain outside Git. The
 final reviewed report bundle is under
 `/home/runner/workspace/.ai-auth/codex/evidence/night2-20260908T033550Z/`

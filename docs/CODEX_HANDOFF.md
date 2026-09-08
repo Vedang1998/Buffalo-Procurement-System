@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-08T05:23:57Z (UTC)
+**Updated:** 2026-09-08T05:35:56Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -49,6 +49,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   and report-semantic P1 defects. After narrow remediation, both targeted
   re-reviews returned PASS with no remaining concrete P0/P1. No paid tool,
   database, Shopify, or network data source was used by the bridge review.
+- The contract-requested Claude Code review was attempted once against frozen
+  head `1df36b3ce33ce2f2426fd0d7bb72d668e45a906d`, tree
+  `4f90f2b87cf1fe8cb0770ace66d8e6f07b9d02d0`, with only read/search tools
+  permitted. Claude Code `2.1.227` exited before reviewing because its OAuth
+  session was expired and could not be refreshed. Its disposition is therefore
+  **REVIEW PENDING**, not approval; no OAuth workaround or paid API was used.
+  The outside-Git attempt record has SHA-256
+  `26fe5bce614ace923093f39a549fd7c657662d8c73ad3ff0a08d96c8458cfd6c`.
 - The supplied private V4.1 delta ZIP contains 35 members including its hash
   manifest; all 34 declared members verified. The tool reproduces the supplied
   typed 27-column delta view and reports exactly `BASELINE_REQUIRED`. The exact
@@ -71,6 +79,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   initial CURRENT bootstrap/FUTURE rollover and supplier-specific licensed
   parser fixtures. Do not weaken `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`
   before that reviewed selection authority exists.
+- **Exact next authorization boundary:** ChatGPT/owner review of the frozen
+  bridge candidate, its two completed targeted independent reviews, and the
+  pending Claude review limitation. No bridge PR, application integration,
+  schema/UI change, mapping/price approval, import, or operational action is
+  authorized by this checkpoint.
 - This is an offline engineering checkpoint only. This week's orders remain
   owner-handled and out of scope. Production/development operational database
   connections/writes: `0 / 0`; Shopify calls/writes: `0 / 0`; mapping/price
