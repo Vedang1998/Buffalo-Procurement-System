@@ -158,9 +158,18 @@ class ReviewPackage:
         return () if table is None else table.rows
 
     def summary(self) -> dict[str, Any]:
+        # V5/portable reports must be byte-identical when the same validated
+        # package is opened from another private workspace. Preserve legacy
+        # V1/V4.1 display behavior, while replacing V5 host paths with the
+        # manifest-bound logical snapshot identity.
+        report_source = (
+            f"v5:{self.snapshot_id}"
+            if self.package_kind == "V5_CHANGED_TABLES_AND_EVIDENCE"
+            else self.source
+        )
         return {
             "label": self.label,
-            "source": self.source,
+            "source": report_source,
             "package_kind": self.package_kind,
             "snapshot_id": self.snapshot_id,
             "status": self.status,

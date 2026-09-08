@@ -939,7 +939,8 @@ class SupplierMappingReviewTests(unittest.TestCase):
             ),
         }
         package = ReviewPackage(
-            "fixture", "V5", "v5-fixture", "BASELINE_REQUIRED", REVIEW_LABEL,
+            "fixture", "V5_CHANGED_TABLES_AND_EVIDENCE", "v5-fixture",
+            "BASELINE_REQUIRED", REVIEW_LABEL,
             2, 2, "6" * 64, tables, {}, (), ("ORIGINAL_SUPPLIER_PDFS",),
         )
         first = build_review_batches(package)
@@ -957,6 +958,7 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertEqual(gift["related_sidecar_records"][0]["table"], "conditional_gift_relationships_v5")
         document = report_document(package)
         self.assertEqual(document["review_batches"], first)
+        self.assertEqual(document["package"]["source"], "v5:v5-fixture")
         self.assertEqual(
             document["offer_family"]["occurrence_storage"],
             "REVIEW_BATCHES_ONLY_NO_DUPLICATED_RAW_RECORDS",
