@@ -9,6 +9,20 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.
 
+## Offline supplier-mapping review tooling
+
+**REVIEW-ONLY CHECKPOINT — NOT A PHASE COMPLETION OR OPERATIONAL AUTHORITY**
+
+Branch `codex/supplier-mapping-review-bridge` adds bounded, deterministic
+package validation and occurrence-preserving local review/diff reports. Its
+implementation checkpoint is `fa594b641aa47a107bc51c3ed504ff7974e93c25`,
+tree `b7648d0442b049dd0ac7d1186a6ca22938dab513`; authoritative regression passed
+`607/607` plus startup `10/10`, and two targeted independent re-reviews passed.
+The supplied V4.1 delta remains `BASELINE_REQUIRED` because the exact V4 base
+and original PDFs are absent. Nothing is mapping-approved, price-approved,
+import-ready, activated, or written to an operational database. This milestone
+does not change Phase 4, Phase 6, CURRENT pricing, readiness, or PO status.
+
 ## Official implementation phases
 
 ### Phase 0 — Safe working repository / baseline

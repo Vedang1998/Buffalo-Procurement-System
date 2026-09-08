@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-08T01:56:28Z (UTC)
+**Updated:** 2026-09-08T05:23:57Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,72 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Night 2 offline supplier-mapping review bridge — REVIEW ONLY / NOT_IMPORT_READY
+
+- Packet A integrated exact `main`
+  `f308ac666a2377f540e528bc873463daecc20cf8` into the PR #23 feature
+  branch with history-preserving merge commit
+  `ec71fe9c5a6f13832a8cad65b065be9747010486`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. Only
+  `docs/CODEX_HANDOFF.md` required manual conflict resolution; both the Monday
+  and main G9 histories were retained. Local exact-merge validation passed
+  `599/599` plus startup `10/10`.
+- PR #23 remains draft and frozen. Configured pull-request CI run
+  `34185466802` passed startup, but its full-suite step exited `1` after 959
+  seconds. The public API exposes no diagnostic beyond exit code 1 and the
+  detailed log endpoint requires repository-admin rights. It was not retried
+  and is not green. No PR merge, auto-merge, workflow change, or branch-
+  protection change occurred.
+- The separate branch `codex/supplier-mapping-review-bridge` was therefore
+  based on the contract-authorized verified fallback
+  `88bf800708881e5801a51d0cb165e84e8c8cf198`, tree
+  `54357c11531018c49bfc4035dfe40d9858c1f788`. Its implementation checkpoint is
+  `fa594b641aa47a107bc51c3ed504ff7974e93c25`, tree
+  `b7648d0442b049dd0ac7d1186a6ca22938dab513`.
+- The bridge adds a bounded directory/ZIP review-package reader, raw and
+  canonical hash validation, exact typed CSV sidecars, fail-closed joins and
+  patch replay, occurrence-preserving offer-family reports, candidate monthly
+  comparison, escaped deterministic HTML/JSON, and a database-free CLI whose
+  default is no-write dry-run. Explicit output uses atomic no-replace
+  publication and exact replay. It does not call or modify mapping, price,
+  readiness, inventory, forecast, PO, Shopify, or deployment authority.
+- Final focused bridge plus runner-contract validation passed `41/41`.
+  Startup hardening passed `10/10`. The authoritative final suite discovered,
+  executed, and passed `607/607` in 638.527 seconds across 35 registered
+  modules; failures, errors, skips, expected failures, and unexpected
+  successes were all zero. Compilation, shell syntax, exact discovery/floors,
+  diff, secret, and forbidden-call checks passed.
+- Two independent read-only reviews initially found concrete package-integrity
+  and report-semantic P1 defects. After narrow remediation, both targeted
+  re-reviews returned PASS with no remaining concrete P0/P1. No paid tool,
+  database, Shopify, or network data source was used by the bridge review.
+- The supplied private V4.1 delta ZIP contains 35 members including its hash
+  manifest; all 34 declared members verified. The tool reproduces the supplied
+  typed 27-column delta view and reports exactly `BASELINE_REQUIRED`. The exact
+  389 MB V4 baseline archive and original supplier PDFs were not supplied, so
+  no complete patch replay, whole 80,661-row claim, or purchasing-ready result
+  is made. Real mapping approvals, current-price approvals, and import-ready
+  rows remain zero.
+- Private kit bytes, commercial rows, and rendered reports remain outside Git
+  under
+  `/home/runner/workspace/.ai-auth/codex/evidence/night2-20260908T033550Z`.
+  The final bundle is `v4_1-review-only-report-reviewed`; its report JSON SHA-256
+  is `e906b110802c36758739ead09218a5e342dcc2effede0c4c163b55a8a569585f`.
+  `NIGHT2_EVIDENCE_SHA256SUMS_TEST_DATA.txt` covers the three final bundle files
+  and has SHA-256
+  `5d1d991ddd49feb6a016956fe081cb4383b3bbf02fa6d771037f6f37d38ca2f1`.
+  The evidence is host-local; off-host backup is not proven.
+- **Next integration proposal, not authorization:** independently review a
+  minimal immutable mapping-decision/selected-offer schema and private UI;
+  retain every rejected/alternate occurrence; separately design guarded
+  initial CURRENT bootstrap/FUTURE rollover and supplier-specific licensed
+  parser fixtures. Do not weaken `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`
+  before that reviewed selection authority exists.
+- This is an offline engineering checkpoint only. This week's orders remain
+  owner-handled and out of scope. Production/development operational database
+  connections/writes: `0 / 0`; Shopify calls/writes: `0 / 0`; mapping/price
+  activations, supplier transmissions, and real PO actions: `0`.
 
 ### Emergency Monday offline draft-PR/CI checkpoint — NOT PRODUCTION READY
 
