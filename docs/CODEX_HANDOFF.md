@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-08T15:35:00Z (UTC)
+**Updated:** 2026-09-08T17:11:28Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -25,16 +25,18 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `6a6bf1fcecfd13f8b51ec1267411572a8799d34c`. Work proceeded only on isolated
   child branch `codex/supplier-mapping-v5-validation`; neither `main`, PR #23,
   nor G10 was merged into it. Design commit `48f5b355...`, initial
-  implementation `5dffb755...`, and intermediate remediation `72f2d12...` are
-  retained in history.
+  implementation `5dffb755...`, intermediate remediation `72f2d12...`, strict
+  completion remediation `f7edd300...`, and the final bounded HTML follow-up
+  `bb0aaf33...` are retained in history.
 - The exact frozen implementation/test/review candidate is
-  `21aa6fc803f9a4c0d6a7a47f617bcdf583ce3831`, tree
-  `353823f3a5abe2493e21fbb90df21e2ccc54113d`. Its nine-file delta from the
-  Night 2 base consists only of two design documents, three review-only Python
-  modules, one review-only CLI, two test modules, and test-runner floors. It
-  changes no schema, migration, canonical rule, workflow, operational price,
-  or production configuration. The final closeout commit changes documentation
-  only; all non-document bytes remain identical to this candidate.
+  `bb0aaf3312742d59a1937d8538e729c7b3a5da99`, tree
+  `016e33dea31ad0b91ed4ccee7daf5657b4c615de`. Its 12-file delta from the
+  Night 2 base consists only of four Markdown handoff/design documents, three
+  review-only Python modules, one review-only CLI, three test modules, and
+  test-runner floors. It changes no schema, migration, canonical rule,
+  workflow, operational price, or production configuration. The final
+  closeout commit changes documentation only; all non-document bytes remain
+  identical to this candidate.
 - The reader now handles the actual supplied V5 layout as an explicitly
   versioned, fail-closed diagnostic format and retains V4.1 compatibility. It
   validates manifests, table profiles, nine patch streams, the 17-row locator
@@ -68,53 +70,73 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   scope against reconstructed rows and source evidence, and distinguishes
   locator patch binding `PASS` from base-backed locator replay
   `BASELINE_REQUIRED`.
-- Final actual report JSON is 23,339,757 bytes with SHA-256
-  `57015d0c6b1c151ea5f0f41912bb1e7b8a4730ee2ed19971e247ddf2c873b787`;
-  its bounded HTML is 115,926 bytes with SHA-256
-  `1a8970c9c501ecb99d5552eca080a966380203785d3337a99619b3a6b6588ed6`.
-  CLI execution took 24.890332 seconds with peak RSS 335,736 KiB. Synthetic
-  JSON/HTML are 32,531/6,783 bytes with SHA-256
+- Strict completion remediation adds a typed unique-row locator validator in
+  the real replay path; bounded reviewable gift/combo sidecar projections;
+  hard-coded independent known answers for all eight supplied synthetic layout
+  boundaries and all 12 simulated next-month cases; missing-sidecar,
+  wrong-order, duplicate-locator, and interrupted-replay challenges; and an
+  explicit simulation marker in JSON and HTML. It does not create a mapping,
+  selected offer, tier, price, or operational action.
+- Final actual report JSON is 23,614,092 bytes with SHA-256
+  `35c5551a642b52bc02a91b1fa6164d61219e84e85bb6cacc53acf047c6941f93`;
+  its bounded tabular HTML is 137,164 bytes with SHA-256
+  `c99d7aae9b1dfa7777411969e5ef9ad482659a8d2401e5fd8e3ad0c6e3d4a7cc`.
+  CLI execution took 29.723974 seconds with peak RSS 335,640 KiB. Synthetic
+  JSON/HTML are 32,531/6,850 bytes with SHA-256
   `fa20cad453d671deb0389ade982cb4f16079fe39fa22c1d52efb9a1829f73ce1` /
-  `355a731f152adfee18b826c0adcc2eb37e133e72a6d3b3451b9f521d85eb4434`;
-  its CLI took 0.217104 seconds with peak RSS 35,820 KiB. Chromium 152 rendered
-  both local `file://` reports with networking disabled. This is local report
-  rendering, not started-server or production-browser acceptance.
+  `38166d89ff7c7a69fe650691ce938383ab75e4882bac06c83e97474b833223a6`.
+  A synthetic self-comparison is explicitly simulated and has JSON/HTML hashes
+  `fdd579a932cdc5da00a998fb029f53230b860cee555f587ac3906c265a82fdb5` /
+  `ecc91c1e1dd80acc77f428fba0a082b5816fe41b9a179a4a2788d10beeb057f5`.
+  Chromium 152 rendered all three local `file://` reports with networking
+  disabled and exposed `Simulated: yes` in the comparison DOM. This is local
+  report rendering, not started-server or production-browser acceptance.
 - Fabricated scale evidence replays 12,000 baseline rows plus 120 replacements
   and 80 appends to exactly 12,080 rows, including exact second-replay
-  idempotency; the test took 0.948 seconds and the measured process took
-  1.198234 seconds with peak RSS 36,160 KiB. Older 220 MB/48 MB reports and
-  `final-v3` evidence are retained only as superseded diagnostics.
-- Final focused validation passed `79/79` (package `15`, V5 `15`, mapping
-  `28`, runner `21`). Startup hardening passed `10/10`. The authoritative
+  idempotency and unchanged-baseline proof. A separately instrumented run
+  measured 10,554,020 peak Python-tracked bytes in 34.266422 seconds; its outer
+  process took 36.302799 seconds with peak RSS 49,896 KiB. Older 220 MB/48 MB
+  reports and prior `final-v*` evidence remain superseded diagnostics.
+- Final focused pure validation passed `61/61` (package `15`, V5 `16`, mapping
+  `30`). Startup hardening passed `10/10`. The authoritative
   disposable-loopback PostgreSQL 16.9 run discovered, executed, and passed
-  `645/645` in 778.530 seconds across 36 registered module floors; failures,
+  `648/648` in 842.975 seconds across 36 registered module floors; failures,
   errors, skips, expected failures, and unexpected successes were all zero.
-  Its wrapper exited zero after 809.541605 seconds with peak RSS 138,048 KiB.
-  The net `+22` from the distinct 623-test Night 2 baseline is seven additional
-  mapping-review tests plus 15 V5 tests; no integration merge supplied tests.
+  Its wrapper exited zero after 858.882607 seconds with peak RSS 138,388 KiB.
+  The net `+25` from the distinct 623-test Night 2 baseline is nine additional
+  mapping-review tests plus 16 V5 tests; no integration merge supplied tests.
   Pinned `uv 0.12.3` lock validation, Python compilation/AST parsing, exact
   floor discovery, changed-file secret/private-data scans, and final diff
   checks passed.
 - A read-only same-model Codex adversarial reviewer (`/root/v5_adapter_review`,
-  GPT-5 family) reviewed exact `21aa6fc...` / `353823f...`, independently ran
-  `58/58`, and returned PASS with no concrete P0/P1. That does not satisfy a
-  Claude-specific review. The prior Claude Code OAuth session remains expired,
-  so Claude disposition is **REVIEW PENDING**; no OAuth workaround or
-  separately billed API was used.
+  GPT-5 family) reviewed intermediate snapshots and drove fail-closed fixes. A
+  final read-only same-model reviewer (`/root/final_completion_reaudit`) then
+  reviewed exact `bb0aaf3...` / `016e33d...`, independently ran `61/61`, and
+  returned PASS with no concrete P0/P1. That does not satisfy a Claude-specific
+  review. The prior Claude Code OAuth session remains expired, so Claude
+  disposition is **REVIEW PENDING**; no OAuth workaround or separately billed
+  API was used. A precise frozen-candidate Claude prompt is retained outside
+  Git as `CLAUDE_READ_ONLY_REVIEW_PROMPT_BB0AAF3_TEST_DATA.md`.
 - Host-local test evidence is retained outside Git under
   `/home/runner/workspace/.ai-auth/codex/evidence/daytime-20260908T113017Z`.
-  The exact-candidate verifier passes `136/136` assertions over report,
-  browser, suite, startup, and static evidence. The final evidence index and
-  SHA-256 manifest identify current versus superseded files. Off-host backup is
-  not proven.
+  Current report directories are `actual-v5-bb0aaf3-report-test-data/`,
+  `synthetic-portable-bb0aaf3-report-test-data/`, and
+  `synthetic-portable-bb0aaf3-compare-report-test-data/`; current Chromium
+  evidence is `browser-bb0aaf3/`.
+  The final evidence verifier and SHA-256 manifest cover report, browser,
+  focused, suite, startup, static, scale, Git, and cleanup evidence and identify
+  current versus superseded files. Off-host backup is not proven.
 - PR #23 remains a separate draft integration concern: base
   `f308ac666a2377f540e528bc873463daecc20cf8`, source
   `ec71fe9c5a6f13832a8cad65b065be9747010486`, and synthetic merge
   `f7bbb45a31953eccd4ec5016269057e9e2c003d3`, tree
   `543be91aee06386b7889a1fc4198eaafe89e74df`. GitHub run `34185466802`
-  passed startup but its full suite exited 1 after 959 seconds. Detailed logs
-  remain admin-only (`403`), its sole annotation is generic, and no artifact
-  establishes a cause. One exact local synthetic-tree reproduction passed
+  was pull-request attempt 1; startup passed but its full suite exited 1 after
+  959 seconds. The public API reported the draft PR mergeable with state
+  `unstable`; detailed logs remain admin-only (`403`), its sole annotation is
+  generic, and no artifact establishes a cause. The raw API payload was not
+  retained, and use of the synthetic merge as the remote checkout is inferred,
+  not directly proven. One exact local synthetic-tree reproduction passed
   startup `10/10` and suite `599/599` in 787.161 seconds with every abnormal
   counter zero. Local green is not green GitHub CI; there was no retry or PR23
   change, and its public body remains stale because update credentials were
@@ -127,6 +149,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   price approval, and Shopify SKU writeback separate. All six owner decisions
   in that design remain open; no schema, migration, UI, approval, selected
   offer, price promotion, or cutover was implemented.
+- Historical process evidence is not rewritten as success: durable checkpoints
+  at 11:30, 13:04, 14:15, and 15:40 exceeded the requested approximate
+  30-minute cadence; K6 design-first timing is not independently provable
+  because design and some implementation appeared in one commit; and focused
+  review logs before the final run were summary-only. These are disclosed
+  process limitations, not product approval or grounds to weaken a blocker.
 - Actual portable bytes, the V4 baseline, original PDFs/source bundles,
   unchanged source bytes, a genuine next-month book, authenticated private
   caller, persistent mapping authority, current-price approval, and production

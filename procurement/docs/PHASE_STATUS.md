@@ -23,8 +23,8 @@ The isolated Daytime child branch `codex/supplier-mapping-v5-validation`
 extends that review-only tooling for the actual supplied V5 diagnostic layout
 and a code-owned synthetic portable transport. Its exact frozen
 implementation/test/review candidate is
-`21aa6fc803f9a4c0d6a7a47f617bcdf583ce3831`, tree
-`353823f3a5abe2493e21fbb90df21e2ccc54113d`. The actual V5 package verifies
+`bb0aaf3312742d59a1937d8538e729c7b3a5da99`, tree
+`016e33dea31ad0b91ed4ccee7daf5657b4c615de`. The actual V5 package verifies
 201/200 archive/manifest members and its structural schema, but remains
 `BASELINE_REQUIRED`, `SOURCE_EVIDENCE_REQUIRED`, `REVIEW_REQUIRED`,
 `NOT_APPROVED`, and not import-ready because the exact V4 baseline, original
@@ -32,12 +32,19 @@ PDFs/source bundles, actual portable root, and unchanged source bytes are not
 available. The complete synthetic portable fixture is `STRUCTURED_REPLAY` but
 remains simulated, unapproved, and not import-ready.
 
-Final authoritative validation passed `645/645` across 36 registered modules,
+Strict completion remediation directly proves the supplied eight synthetic
+layout boundaries, all 12 simulated monthly cases, exact locator replay order,
+missing-sidecar and interruption failures, and reviewable gift/combo evidence.
+The report exposes simulation in JSON and HTML without granting authority.
+Final authoritative validation passed `648/648` across 36 registered modules,
 startup hardening passed `10/10`, and all abnormal counters were zero. A
 read-only same-model Codex adversarial review of the exact frozen candidate
-independently passed `58/58` and found no concrete P0/P1. It does not replace
+independently passed `61/61` and found no concrete P0/P1. It does not replace
 the Claude-specific review; Claude remains `REVIEW PENDING` because the
-existing OAuth session expired, with no workaround or paid API used. The
+existing OAuth session expired, with no workaround or paid API used; an exact
+frozen-candidate prompt is retained in host-local evidence. Historical
+checkpoint-cadence and design-timestamp proof limitations are explicitly
+disclosed in `docs/CODEX_HANDOFF.md`. The
 persistent multi-offer mapping-authority packet is design-only: no migration,
 UI, mapping/price approval, selected offer, writeback, or cutover was
 implemented. Nothing is activated or written to an operational database. This
