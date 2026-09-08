@@ -85,6 +85,15 @@ class SupplierMappingReviewTests(unittest.TestCase):
             ["ALTERNATE_CASE", "GIFT_WITH_GLASS", "STANDARD"],
         )
         self.assertEqual(len(report["simultaneous_alternatives"]), 1)
+        replayed = json.loads(canonical_report_bytes(report))
+        self.assertEqual(
+            [item["identity"]["offer_id"] for item in replayed["offer_families"][0]["alternatives"]],
+            ["alternate", "gift", "std"],
+        )
+        self.assertEqual(
+            [item["program_type"] for item in replayed["offer_families"][0]["alternatives"]],
+            ["ALTERNATE_CASE", "GIFT_WITH_GLASS", "STANDARD"],
+        )
 
     def test_unit_conversions_are_separate_and_catalog_guards_win(self):
         rows = [
@@ -174,6 +183,10 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertNotIn("<script>", html)
         self.assertIn("&lt;script&gt;", html)
         self.assertIn("&lt;Night &amp; Review&gt;", html)
+        self.assertIn("<table", html)
+        self.assertNotIn("<pre>", html)
+        self.assertIn("Full canonical machine detail", html)
+        self.assertLess(len(html.encode("utf-8")), len(first))
         self.assertEqual(protect_spreadsheet_text("=2+2"), "'=2+2")
         self.assertEqual(protect_spreadsheet_text("ordinary"), "ordinary")
         self.assertEqual(report["offer_families"][0]["alternatives"][0]["raw"]["review_note"], "=2+2")
@@ -266,6 +279,41 @@ class SupplierMappingReviewTests(unittest.TestCase):
         self.assertEqual(old["raw"]["per_ounce_price"], Decimal("1.2345"))
         self.assertEqual(old["raw"]["split_inclusive_price"], Decimal("10.2500"))
         self.assertEqual(report["invariants"]["names_or_skus_are_identity"], False)
+
+    def test_monthly_diff_flags_same_vendor_sku_reuse_without_merging_identity(self):
+        previous = [
+            offer(
+                "old-occurrence",
+                variant_id="OLD",
+                vendor="Empire",
+                supplier_sku="REUSE-01",
+            )
+        ]
+        current = [
+            offer(
+                "new-occurrence",
+                variant_id="NEW",
+                vendor="Empire",
+                supplier_sku="REUSE-01",
+            )
+        ]
+
+        comparison = compare_review_snapshots(previous, current)
+
+        self.assertEqual(
+            comparison["sku_reuse_or_replacement"],
+            [
+                {
+                    "vendor": "Empire",
+                    "supplier_sku": "REUSE-01",
+                    "before": [["OLD", "Empire", "old-occurrence"]],
+                    "after": [["NEW", "Empire", "new-occurrence"]],
+                }
+            ],
+        )
+        self.assertEqual(comparison["summary"]["added"], 1)
+        self.assertEqual(comparison["summary"]["missing_not_retired"], 1)
+        self.assertFalse(comparison["missing_occurrences"][0]["retirement_inferred"])
 
     def test_real_field_aliases_remain_fail_closed_and_diffable(self):
         guarded = build_offer_family_report([

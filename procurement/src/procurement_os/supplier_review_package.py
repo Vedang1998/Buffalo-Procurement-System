@@ -2207,9 +2207,15 @@ def _validate_v4_controls_and_relationships(
             "CONTROL_TOTAL_MISMATCH",
             "source outcomes or candidate dispositions differ from the code-owned V4.1 checkpoint",
         )
-    original_not_returned = validation.get("original_not_returned")
+    original_not_returned = _require_sequence(
+        validation.get("original_not_returned"),
+        code="INVALID_VALIDATION",
+        message="original_not_returned must be an array",
+    )
     if (
-        original_not_returned != ["42035918438475"]
+        len(original_not_returned) != 1
+        or not isinstance(original_not_returned[0], str)
+        or not original_not_returned[0].strip()
         or validation.get("not_returned_is_deletion") is not False
         or validation["original_returned"] + len(original_not_returned) != validation["original_variants"]
         or validation["original_returned"] + validation["current_additions"] != validation["current_census"]

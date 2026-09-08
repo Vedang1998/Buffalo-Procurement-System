@@ -1265,23 +1265,215 @@ def canonical_report_json(report: Mapping[str, Any]) -> str:
     return canonical_report_bytes(report).decode("utf-8")
 
 
-def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapping review") -> str:
-    """Render a compact escaped report; input markup and formulas stay inert."""
+def _html_value(value: Any) -> str:
+    if value is None:
+        text = "—"
+    elif isinstance(value, bool):
+        text = "yes" if value else "no"
+    elif isinstance(value, Mapping):
+        text = "; ".join(f"{key}: {item}" for key, item in sorted(value.items()))
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        text = "; ".join(str(item) for item in value)
+    else:
+        text = str(value)
+    return html.escape(protect_spreadsheet_text(text))
 
+
+def _html_table(headers: Sequence[str], rows: Iterable[Sequence[Any]], *, css_class: str = "") -> str:
+    class_attr = f' class="{html.escape(css_class)}"' if css_class else ""
+    head = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{_html_value(value)}</td>" for value in row) + "</tr>"
+        for row in rows
+    )
+    return f"<table{class_attr}><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapping review") -> str:
+    """Render a bounded reviewer summary; canonical detail remains in report.json."""
+
+    package_value = report.get("package", {})
+    package = package_value if isinstance(package_value, Mapping) else {}
     label = html.escape(str(report.get("label", REVIEW_LABEL)))
-    status = html.escape(str(report.get("status", report.get("package", {}).get("status", "REVIEW"))))
-    payload = canonical_report_json(report)
-    escaped_payload = html.escape(protect_spreadsheet_text(payload))
+    status = html.escape(str(report.get("status", package.get("status", "REVIEW"))))
     escaped_title = html.escape(title)
+    family_value = report.get("offer_family")
+    if not isinstance(family_value, Mapping):
+        family_value = report if isinstance(report.get("offer_families"), Sequence) else {}
+    family = family_value
+    summary_value = family.get("summary", {})
+    summary = summary_value if isinstance(summary_value, Mapping) else {}
+    invariants_value = family.get("invariants", {})
+    invariants = invariants_value if isinstance(invariants_value, Mapping) else {}
+    operational_value = report.get("operational_effects", {})
+    operational = operational_value if isinstance(operational_value, Mapping) else {}
+    unavailable_value = report.get("unavailable_evidence", package.get("unavailable_evidence", ()))
+    unavailable = (
+        unavailable_value
+        if isinstance(unavailable_value, Sequence) and not isinstance(unavailable_value, str)
+        else ()
+    )
+    gaps_value = report.get("representation_gaps", family.get("representation_gaps", ()))
+    gaps = (
+        gaps_value
+        if isinstance(gaps_value, Sequence) and not isinstance(gaps_value, str)
+        else ()
+    )
+
+    alternatives: list[Mapping[str, Any]] = []
+    families_value = family.get("offer_families", ())
+    if isinstance(families_value, Sequence) and not isinstance(families_value, str):
+        for offer_family in families_value:
+            if not isinstance(offer_family, Mapping):
+                continue
+            candidate_alternatives = offer_family.get("alternatives", ())
+            if isinstance(candidate_alternatives, Sequence) and not isinstance(
+                candidate_alternatives, str
+            ):
+                alternatives.extend(item for item in candidate_alternatives if isinstance(item, Mapping))
+    blocked_count = sum(1 for item in alternatives if item.get("blocked") is True)
+    package_rows = (
+        ("Package kind", package.get("package_kind", "—")),
+        ("Snapshot", package.get("snapshot_id", "—")),
+        ("Files verified", f"{package.get('verified_file_count', '—')} / {package.get('file_count', '—')}"),
+        ("Manifest SHA-256", package.get("manifest_sha256", "—")),
+        ("Unavailable evidence", len(unavailable)),
+    )
+    review_rows = (
+        ("Source rows", summary.get("source_rows", len(alternatives))),
+        ("Distinct occurrences", summary.get("distinct_occurrences", len(alternatives))),
+        (
+            "Offer families",
+            len(families_value)
+            if isinstance(families_value, Sequence) and not isinstance(families_value, str)
+            else 0,
+        ),
+        ("Alternatives shown", min(len(alternatives), 200)),
+        ("Blocked alternatives", blocked_count),
+        ("Conflicting occurrences", summary.get("conflicting_occurrences", 0)),
+        ("Import-ready rows", invariants.get("import_ready_rows", 0)),
+        ("Representation gaps", len(gaps)),
+    )
+    alternative_rows = []
+    for item in alternatives[:200]:
+        conversions_value = item.get("conversions", {})
+        conversions = conversions_value if isinstance(conversions_value, Mapping) else {}
+        alternative_rows.append(
+            (
+                item.get("variant_id"),
+                item.get("vendor"),
+                item.get(
+                    "occurrence_id",
+                    item.get("identity", {}).get("offer_id")
+                    if isinstance(item.get("identity"), Mapping)
+                    else None,
+                ),
+                item.get("supplier_sku"),
+                item.get("supplier_description"),
+                item.get("program_type"),
+                item.get("effective_disposition"),
+                item.get("guard_reasons", ()),
+                conversions.get("physical_units_per_supplier_case"),
+                conversions.get("retail_units_per_supplier_case"),
+                conversions.get("shopify_units_per_supplier_case"),
+            )
+        )
+    exception_counts_value = family.get("exception_counts", {})
+    exception_counts = exception_counts_value if isinstance(exception_counts_value, Mapping) else {}
+    gap_rows = [
+        (
+            gap.get("gap_id"),
+            gap.get("area"),
+            gap.get("current_handling"),
+            gap.get("later_route_status"),
+        )
+        for gap in gaps[:100]
+        if isinstance(gap, Mapping)
+    ]
+    comparison_value = report.get("comparison")
+    comparison = comparison_value if isinstance(comparison_value, Mapping) else None
+
+    sections = [
+        "<h2>Package integrity</h2>",
+        _html_table(("Check", "Value"), package_rows, css_class="summary"),
+        "<h2>Review summary</h2>",
+        _html_table(("Measure", "Value"), review_rows, css_class="summary"),
+        "<h2>Operational effects</h2>",
+        _html_table(("Effect", "Count"), sorted(operational.items()), css_class="summary"),
+    ]
+    if unavailable:
+        sections.extend(
+            (
+                "<h2>Unavailable evidence</h2>",
+                "<ul>" + "".join(f"<li>{_html_value(item)}</li>" for item in unavailable) + "</ul>",
+            )
+        )
+    if alternative_rows:
+        sections.extend(
+            (
+                "<h2>Offer alternatives</h2>",
+                _html_table(
+                    (
+                        "Variant ID",
+                        "Vendor",
+                        "Occurrence",
+                        "Supplier code",
+                        "Description",
+                        "Program",
+                        "Disposition",
+                        "Guards",
+                        "Physical/case",
+                        "Retail/case",
+                        "Shopify/case",
+                    ),
+                    alternative_rows,
+                ),
+            )
+        )
+        if len(alternatives) > len(alternative_rows):
+            sections.append(
+                f"<p>Showing {_html_value(len(alternative_rows))} of "
+                f"{_html_value(len(alternatives))} alternatives.</p>"
+            )
+    if exception_counts:
+        sections.extend(
+            (
+                "<h2>Machine-readable exception counts</h2>",
+                _html_table(("Exception", "Count"), sorted(exception_counts.items())),
+            )
+        )
+    if gap_rows:
+        sections.extend(
+            (
+                "<h2>Representation-gap routes</h2>",
+                _html_table(("Gap", "Area", "Current handling", "Later status"), gap_rows),
+            )
+        )
+    if comparison is not None:
+        comparison_summary = comparison.get("summary", {})
+        comparison_rows = [("Status", comparison.get("status", "—"))]
+        if isinstance(comparison_summary, Mapping):
+            comparison_rows.extend(sorted(comparison_summary.items()))
+        sections.extend(
+            (
+                "<h2>Monthly comparison</h2>",
+                _html_table(("Measure", "Value"), comparison_rows),
+            )
+        )
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"robots\" content=\"noindex,nofollow\">"
         f"<title>{escaped_title}</title>"
         "<style>body{font-family:system-ui;max-width:1000px;margin:2rem auto;padding:0 1rem}"
-        "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4f4;padding:1rem}</style>"
+        "table{border-collapse:collapse;width:100%;margin:0 0 1.25rem}"
+        "th,td{border:1px solid #bbb;padding:.45rem;text-align:left;vertical-align:top}"
+        "th{background:#eee}.summary{max-width:48rem}code{overflow-wrap:anywhere}</style>"
         f"</head><body><h1>{escaped_title}</h1><p>{label}</p><p>Status: <strong>{status}</strong></p>"
         "<p>No mapping, price, inventory, readiness, Shopify, or purchase-order write occurred.</p>"
-        f"<pre>{escaped_payload}</pre></body></html>"
+        + "".join(sections)
+        + "<p>Full canonical machine detail, including raw evidence and exceptions, "
+        "is retained in <code>report.json</code>.</p>"
+        "</body></html>"
     )
 
 
