@@ -205,6 +205,21 @@ _V5_MANIFEST_FIELDS = frozenset(
 )
 _EXTERNAL_DESCRIPTOR_FIELDS = frozenset({"path", "workspace_relative_path", "bytes", "sha256"})
 _V5_STATUS = "PRIVATE_UNAPPROVED_REVIEW_DELTA_NOT_STANDALONE_IMPORT"
+_V5_UNDECIDED_PREFERENCE = "UNDECIDED"
+_V5_NONPREFERRED_CONFIGURATION = (
+    "NOT_THE_OWNER_PREFERRED_24_INDIVIDUAL_CONFIGURATION; SEPARATE_REVIEW_REQUIRED"
+)
+_V5_CONVERSION_AUTHORITY = (
+    "V5_EXPLICIT_FIELD_IF_PRESENT_THEN_PRIOR_REVIEW; "
+    "NONPROPOSED_OR_CONDITIONAL_GIFT_ALWAYS_NULL"
+)
+_V5_REASON_PRECEDENCE = (
+    "V5 > V4.1 > V4 > V2; historical reasons retained, not current authority"
+)
+_V5_UNDECIDED_PREFERENCE = "UNDECIDED"
+_V5_NONPREFERRED_CONFIGURATION = (
+    "NOT_THE_OWNER_PREFERRED_24_INDIVIDUAL_CONFIGURATION; SEPARATE_REVIEW_REQUIRED"
+)
 _V5_TABLE_CATALOG_RAW_SHA256 = "2d291637e5f4e34ca23ec3d742712cccf102c718600f5ba40b6dfbf583e66fee"
 _V5_FIELD_PROFILES_RAW_SHA256 = "5748ee81f403a59c14f13e49ad31c310025af8765530fcde5b43c20a38dc031e"
 _V5_CHANGED_TABLE_HASHES_RAW_SHA256 = "af712200158c5a2b7198d74634bf5fa7ec6a399ff56a15b96219be77dae9ec59"
@@ -1636,7 +1651,307 @@ def _require_unique_text_values(
     return values
 
 
-def _validate_v5_normalized_contract_row(row: Mapping[str, Any], *, row_number: int) -> None:
+def _validate_alcohol_gift_components(row: Mapping[str, Any]) -> int:
+    components = row.get("components")
+    if not isinstance(components, list) or len(components) not in {2, 3}:
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "alcohol gift component list differs"
+        )
+    base_fields = {
+        "description_raw",
+        "quantity_per_gift_candidate",
+        "role",
+        "size_ml_candidate",
+    }
+    primary_roles = {
+        "PRIMARY",
+        "PRIMARY_IDENTITY_ABBREVIATED",
+        "PRIMARY_COMPONENT_QUANTITY_SIZE_UNRESOLVED",
+    }
+    secondary_roles = {
+        "ADDITIONAL_ALCOHOL_IDENTITY_UNRESOLVED",
+        "ADDITIONAL_ALCOHOL_IDENTITY_AND_QUANTITY_UNRESOLVED",
+        "ADDITIONAL_50ML_IDENTITY_AND_QUANTITY_UNRESOLVED",
+        "SECONDARY_COMPONENT_QUANTITY_SIZE_UNRESOLVED",
+        "UNRESOLVED_ABBREVIATION_CONTENT",
+    }
+    descriptions: set[str] = set()
+    for index, component in enumerate(components):
+        if not isinstance(component, Mapping) or frozenset(component) not in {
+            frozenset(base_fields),
+            frozenset(base_fields | {"contains_alcohol"}),
+        }:
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "alcohol gift component schema differs"
+            )
+        description = _nonblank_text(
+            component.get("description_raw"),
+            code="JOIN_MISMATCH",
+            context="alcohol gift component description",
+        )
+        if description in descriptions:
+            raise ReviewPackageError(
+                "DUPLICATE_OCCURRENCE", "alcohol gift component is duplicated"
+            )
+        descriptions.add(description)
+        quantity = component.get("quantity_per_gift_candidate")
+        size = component.get("size_ml_candidate")
+        if (
+            (quantity is not None and (type(quantity) is not int or quantity <= 0))
+            or (size is not None and (type(size) is not int or size <= 0))
+            or (
+                "contains_alcohol" in component
+                and component.get("contains_alcohol") is not None
+            )
+            or component.get("role")
+            not in (primary_roles if index == 0 else secondary_roles)
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "alcohol gift component facts differ"
+            )
+
+    case_pack = row.get("source_case_pack_raw_preserved")
+    if type(case_pack) is not int or case_pack <= 0:
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "alcohol gift preserved case pack differs"
+        )
+    primary_quantity = components[0].get("quantity_per_gift_candidate")
+    expected_primary = (
+        case_pack * primary_quantity if type(primary_quantity) is int else None
+    )
+    secondary_quantities = [
+        component.get("quantity_per_gift_candidate") for component in components[1:]
+    ]
+    expected_additional = (
+        case_pack * sum(secondary_quantities)
+        if all(type(value) is int for value in secondary_quantities)
+        else None
+    )
+    expected_total = (
+        expected_primary + expected_additional
+        if expected_primary is not None and expected_additional is not None
+        else None
+    )
+    if (
+        row.get("primary_bottles_per_case_candidate") != expected_primary
+        or row.get("additional_50ml_bottles_per_case_candidate")
+        != expected_additional
+        or row.get("total_physical_alcohol_containers_per_case_candidate")
+        != expected_total
+    ):
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "alcohol gift component arithmetic differs"
+        )
+    ambiguities = row.get("published_ambiguities")
+    remaining = row.get("remaining_evidence_needed")
+    if (
+        not isinstance(ambiguities, list)
+        or not ambiguities
+        or any(not isinstance(value, str) or not value for value in ambiguities)
+        or not isinstance(remaining, list)
+        or len(remaining) != 3
+        or any(
+            not isinstance(value, Mapping)
+            or set(value) != {"evidence", "who"}
+            or any(not isinstance(item, str) or not item for item in value.values())
+            for value in remaining
+        )
+    ):
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "alcohol gift ambiguity/evidence record differs"
+        )
+    return len(components)
+
+
+def _validate_v5_gift_chains(
+    relationship_gifts: Mapping[str, Mapping[str, Any]],
+    gift_rows: Sequence[Mapping[str, Any]],
+    alcohol_rows: Sequence[Mapping[str, Any]],
+) -> None:
+    """Bind gift sidecar IDs and alcohol-component reviews to exact occurrences."""
+
+    conditional_by_id: dict[str, Mapping[str, Any]] = {}
+    conditional_by_pair: dict[tuple[str, str], Mapping[str, Any]] = {}
+    relationship_fields = (
+        ("source_supplier_code", "supplier_code_exact"),
+        ("source_description_raw", "source_description_raw"),
+        ("source_case_pack_raw", "source_case_pack_raw"),
+        ("source_file", "source_file"),
+        ("source_page", "source_page"),
+        ("printed_page", "printed_page"),
+        ("source_sha256", "source_sha256"),
+        ("source_period_raw", "source_period_raw"),
+        ("source_territory_raw", "source_territory"),
+        ("source_size_raw", "source_size_raw"),
+        ("source_fee_basis", "source_split_fee_basis"),
+        ("source_split_permission", "source_split_availability"),
+        ("complete_source_tier_ids", "source_tier_ids"),
+        ("preference", "preference"),
+    )
+    for row in gift_rows:
+        identifier = _nonblank_text(
+            row.get("relationship_id"),
+            code="JOIN_MISMATCH",
+            context="conditional gift relationship ID",
+        )
+        pair = (
+            _nonblank_text(
+                row.get("variant_id"), code="JOIN_MISMATCH", context="gift Variant ID"
+            ),
+            _nonblank_text(
+                row.get("source_offer_id"),
+                code="JOIN_MISMATCH",
+                context="gift source offer ID",
+            ),
+        )
+        if identifier in conditional_by_id or pair in conditional_by_pair:
+            raise ReviewPackageError(
+                "DUPLICATE_OCCURRENCE", "conditional gift identity is duplicated"
+            )
+        relationship = relationship_gifts.get(identifier)
+        relationship_pair = (
+            relationship.get("variant_id"),
+            relationship.get("source_offer_id"),
+        ) if relationship is not None else None
+        if (
+            relationship_pair != pair
+            or any(
+                row.get(gift_field) != relationship.get(relationship_field)
+                for gift_field, relationship_field in relationship_fields
+            )
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH",
+                "conditional gift ID or source facts resolve to another occurrence",
+            )
+        if (
+            row.get("whole_offer_to_single_variant_allowed") is not False
+            or row.get("may_influence_normalized_price_projection") is not False
+            or row.get("explicit_null_precedence") is not True
+            or any(
+                row.get(field) is not None
+                for field in (
+                    "allocated_component_cost",
+                    "order_increment",
+                    "qualifying_units_per_case",
+                    "shopify_units_per_case",
+                )
+            )
+        ):
+            raise ReviewPackageError(
+                "UNAUTHORIZED_APPROVAL_CLAIM",
+                "conditional gift cannot map a whole offer or affect normalized pricing",
+            )
+        conditional_by_id[identifier] = row
+        conditional_by_pair[pair] = row
+    if set(conditional_by_id) != set(relationship_gifts):
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "conditional gifts do not match occurrence sidecars"
+        )
+
+    alcohol_pairs: set[tuple[str, str]] = set()
+    component_counts: Counter[int] = Counter()
+    known_physical_totals = 0
+    for row in alcohol_rows:
+        pair = (
+            _nonblank_text(
+                row.get("variant_id"),
+                code="JOIN_MISMATCH",
+                context="alcohol-gift Variant ID",
+            ),
+            _nonblank_text(
+                row.get("source_offer_id"),
+                code="JOIN_MISMATCH",
+                context="alcohol-gift source offer ID",
+            ),
+        )
+        conditional = conditional_by_pair.get(pair)
+        relationship = (
+            relationship_gifts.get(str(conditional.get("relationship_id")))
+            if conditional is not None
+            else None
+        )
+        root_references = (
+            conditional.get("root_review_references") if conditional is not None else None
+        )
+        source = row.get("source")
+        component_counts[_validate_alcohol_gift_components(row)] += 1
+        if row.get("total_physical_alcohol_containers_per_case_candidate") is not None:
+            known_physical_totals += 1
+        if (
+            pair in alcohol_pairs
+            or conditional is None
+            or relationship is None
+            or not isinstance(root_references, list)
+            or not isinstance(source, Mapping)
+            or row.get("root_relationship_review_id") not in root_references
+            or row.get("challenge_review_id")
+            != conditional.get("specialist_challenge_id")
+            or row.get("root_reviewed_at_utc")
+            != conditional.get("root_reviewed_at_utc")
+            or source.get("source_offer_id") != pair[1]
+            or source.get("supplier_sku") != conditional.get("source_supplier_code")
+            or source.get("source_file") != conditional.get("source_file")
+            or source.get("source_page") != conditional.get("source_page")
+            or source.get("source_sha256") != conditional.get("source_sha256")
+            or row.get("supplier_code_exact")
+            != conditional.get("source_supplier_code")
+            or row.get("source_case_pack_raw_preserved")
+            != conditional.get("source_case_pack_raw")
+            or row.get("source_physical_units_per_case_raw_preserved")
+            != relationship.get("source_physical_count_raw")
+            or row.get("whole_gift_to_single_variant_mapping_allowed") is not False
+            or row.get("may_influence_normalized_price_projection") is not False
+            or row.get("explicit_null_precedence")
+            != (
+                "REVIEWED_NULL: no fallback to original normal-bottle conversion "
+                "estimates or generic product-level metadata"
+            )
+            or row.get("retail_packaging_acceptance") != "NOT_APPROVED"
+            or any(
+                row.get(field) is not None
+                for field in (
+                    "allocated_component_cost",
+                    "component_qualifying_units_per_case",
+                    "component_shopify_units_per_case",
+                    "quantity_order_increment",
+                    "shopify_units_per_case",
+                    "split_fee_applied",
+                    "supplier_qualifying_units_per_case",
+                )
+            )
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH",
+                "alcohol gift component does not bind to its conditional relationship",
+            )
+        alcohol_pairs.add(pair)
+    challenged_conditional_pairs = {
+        pair
+        for pair, row in conditional_by_pair.items()
+        if row.get("specialist_challenge_id") is not None
+    }
+    if alcohol_pairs != challenged_conditional_pairs:
+        raise ReviewPackageError(
+            "JOIN_MISMATCH",
+            "alcohol specialist rows do not exactly cover challenged gifts",
+        )
+    if len(alcohol_rows) == 8 and (
+        component_counts != Counter({2: 7, 3: 1})
+        or known_physical_totals != 4
+    ):
+        raise ReviewPackageError(
+            "CONTROL_TOTAL_MISMATCH", "alcohol gift component controls differ"
+        )
+
+
+def _validate_v5_normalized_contract_row(
+    row: Mapping[str, Any],
+    *,
+    row_number: int,
+    allow_null_supplier_sku: bool = False,
+    allow_null_supplier_description: bool = False,
+) -> None:
     """Validate V5's exact 27 fields while preserving explicitly reviewed nulls."""
 
     if set(row) != set(PRICE_BOOK_HEADERS):
@@ -1655,6 +1970,12 @@ def _validate_v5_normalized_contract_row(row: Mapping[str, Any], *, row_number: 
         "package_type", "size_text", "level_type",
         "raw_pack", "assortment_scope", "assortment_group", "assortment_evidence", "break_unit",
     }
+    if allow_null_supplier_sku:
+        required_text.remove("supplier_sku")
+        optional_text.add("supplier_sku")
+    if allow_null_supplier_description:
+        required_text.remove("supplier_description")
+        optional_text.add("supplier_description")
     for field in required_text:
         if not isinstance(row[field], str) or not row[field].strip():
             raise ReviewPackageError("NORMALIZED_TYPE_MISMATCH", f"{field} must be nonblank text", row=row_number)
@@ -1688,24 +2009,279 @@ def _validate_v5_normalized_contract_row(row: Mapping[str, Any], *, row_number: 
         raise ReviewPackageError("UNAUTHORIZED_APPROVAL_CLAIM", "V5 extraction confidence must remain unapproved", row=row_number)
 
 
+_V5_FALSE_AUTHORITY_FIELDS = frozenset(
+    {
+            "approval_by_same_model_review",
+            "approved",
+            "approved_alias",
+            "approved_alias_created",
+            "approved_identity_alias",
+            "auto_add_authorized",
+            "buying_authority_granted",
+            "combo_auto_add",
+            "cross_variant_or_all_supplier_generalization_allowed",
+            "current_approval_claim",
+            "current_price_activated",
+            "future_price_activated",
+            "historical_sales_transfer_allowed",
+            "import_ready",
+            "mapping_approved",
+            "mapping_or_price_approval",
+            "may_influence_normalized_price_projection",
+            "new_mapping_approval",
+            "new_mapping_approved",
+            "pack_breaking_authorized",
+            "price_approved",
+            "price_ladder_eligible",
+            "price_ladder_selected",
+            "price_or_mapping_approval",
+            "projection_authority",
+            "quantity_import_eligible",
+            "quantity_or_import_eligible",
+            "root_mapping_approved",
+            "root_mapping_or_price_approval",
+            "root_price_approved",
+            "rule_scope_approved",
+            "routine_purchase_candidate",
+            "source_price_activation",
+            "tier_selected",
+            "verified_current_price",
+            "v4_normalized_alcohol_import_allowed",
+            "whole_combo_maps_to_single_variant",
+            "whole_combo_to_variant_mapping_allowed",
+            "whole_gift_to_single_variant_mapping_allowed",
+            "whole_offer_to_single_variant_allowed",
+            "whole_package_breaking_authorized",
+            "wholesale_price_authority",
+            "wholesale_price_or_account_authority",
+    }
+)
+
+_V5_ZERO_AUTHORITY_FIELDS = frozenset(
+    {
+        "application_changes",
+        "canonical_mutations",
+        "operational_database_access",
+        "questions_sent",
+        "root_mutations",
+        "shopify_writes",
+        "supplier_contacts",
+    }
+)
+
+
+def _validate_v5_row_authority(
+    row: Mapping[str, Any], *, table_name: str, row_number: int
+) -> None:
+    """Reject operational authority in one effective V5 review row."""
+
+    for field in _V5_FALSE_AUTHORITY_FIELDS:
+        value = row.get(field)
+        count_control = (
+            table_name == "supplier_coverage_controls_v5"
+            and field in {"mapping_approved", "price_approved"}
+            and type(value) is int
+            and value == 0
+        )
+        if field in row and value is not False and not count_control:
+            raise ReviewPackageError(
+                "UNAUTHORIZED_APPROVAL_CLAIM",
+                f"{field} must remain false",
+                table=table_name,
+                row=row_number,
+            )
+    for field in _V5_ZERO_AUTHORITY_FIELDS:
+        if field in row and (type(row[field]) is not int or row[field] != 0):
+            raise ReviewPackageError(
+                "UNAUTHORIZED_OPERATIONAL_EFFECT",
+                f"{field} must remain exact integer zero",
+                table=table_name,
+                row=row_number,
+            )
+    if (
+        table_name == "targeted_candidate_after_records"
+        and row.get("approval_status") != "UNAPPROVED_CANDIDATE"
+    ):
+        raise ReviewPackageError(
+            "UNAUTHORIZED_APPROVAL_CLAIM",
+            "candidate approval status must remain unapproved",
+            table=table_name,
+            row=row_number,
+        )
+    applicable_tier = row.get("applicable_tier_selected")
+    if (
+        "applicable_tier_selected" in row
+        and applicable_tier is not None
+        and applicable_tier is not False
+    ):
+        raise ReviewPackageError(
+            "UNAUTHORIZED_APPROVAL_CLAIM",
+            "applicable_tier_selected must remain false or explicit null",
+            table=table_name,
+            row=row_number,
+        )
+    if table_name == "supplier_vocabulary_candidates_v5" and row.get(
+        "approved_vendor_uuid_crosswalk"
+    ) is not None:
+        raise ReviewPackageError(
+            "UNAUTHORIZED_APPROVAL_CLAIM",
+            "approved vendor UUID crosswalk must remain explicit null",
+            table=table_name,
+            row=row_number,
+        )
+    if (
+        table_name == "variant_offer_relationships_v5"
+        and row.get("tier_selection") is not None
+    ):
+        raise ReviewPackageError(
+            "UNAUTHORIZED_APPROVAL_CLAIM",
+            "relationship tier_selection must remain explicit null",
+            table=table_name,
+            row=row_number,
+        )
+
+
+def _validate_v5_owner_preference_contract(
+    family_rows: Sequence[Mapping[str, Any]],
+    relationship_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Bind private owner choices without copying those choices into public code."""
+
+    family_by_id: dict[str, Mapping[str, Any]] = {}
+    owner_scoped_family_ids: set[str] = set()
+    referenced_decision_ids: set[str] = set()
+    for family in family_rows:
+        family_id = _nonblank_text(
+            family.get("family_id"),
+            code="JOIN_MISMATCH",
+            context="owner-preference family ID",
+        )
+        decision_ids = family.get("owner_preference_decision_ids")
+        if (
+            not isinstance(decision_ids, list)
+            or len(decision_ids) > 1
+            or len(decision_ids) != len(set(decision_ids))
+            or any(not isinstance(value, str) or not value for value in decision_ids)
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "family owner-preference decision references differ"
+            )
+        preference = _nonblank_text(
+            family.get("preference"),
+            code="JOIN_MISMATCH",
+            context="family owner preference",
+        )
+        if decision_ids:
+            if preference in {
+                _V5_UNDECIDED_PREFERENCE,
+                _V5_NONPREFERRED_CONFIGURATION,
+            }:
+                raise ReviewPackageError(
+                    "JOIN_MISMATCH", "scoped family owner preference is not preserved"
+                )
+            owner_scoped_family_ids.add(family_id)
+            referenced_decision_ids.update(decision_ids)
+        elif preference != _V5_UNDECIDED_PREFERENCE:
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "unscoped family gained an owner preference"
+            )
+        family_by_id[family_id] = family
+
+    owner_scoped_relationships = 0
+    family_preference_occurrences = 0
+    nonpreferred_occurrences = 0
+    matched_scoped_families: set[str] = set()
+    for row in relationship_rows:
+        family_id = _nonblank_text(
+            row.get("family_id"),
+            code="JOIN_MISMATCH",
+            context="relationship owner-preference family ID",
+        )
+        family = family_by_id.get(family_id)
+        if family is None:
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "relationship owner preference has no family"
+            )
+        decision_ids = row.get("owner_preference_decision_ids")
+        if (
+            not isinstance(decision_ids, list)
+            or decision_ids != family.get("owner_preference_decision_ids")
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "relationship owner decision references differ from family"
+            )
+        if (
+            row.get("conversion_authority") != _V5_CONVERSION_AUTHORITY
+            or row.get("no_code_replacement_inference") is not True
+            or row.get("reason_precedence") != _V5_REASON_PRECEDENCE
+        ):
+            raise ReviewPackageError(
+                "UNAUTHORIZED_APPROVAL_CLAIM",
+                "relationship negative-authority contract differs",
+            )
+        preference = _nonblank_text(
+            row.get("preference"),
+            code="JOIN_MISMATCH",
+            context="relationship owner preference",
+        )
+        family_preference = str(family.get("preference"))
+        if decision_ids:
+            owner_scoped_relationships += 1
+            if preference == family_preference:
+                family_preference_occurrences += 1
+                matched_scoped_families.add(family_id)
+            elif preference == _V5_NONPREFERRED_CONFIGURATION:
+                nonpreferred_occurrences += 1
+            else:
+                raise ReviewPackageError(
+                    "JOIN_MISMATCH", "relationship owner preference differs from family scope"
+                )
+        elif preference != _V5_UNDECIDED_PREFERENCE:
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "unscoped relationship gained an owner preference"
+            )
+    if matched_scoped_families != owner_scoped_family_ids:
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "family owner preference has no matching occurrence"
+        )
+    return {
+        "owner_scoped_families": len(owner_scoped_family_ids),
+        "owner_scoped_relationships": owner_scoped_relationships,
+        "family_preference_occurrences": family_preference_occurrences,
+        "nonpreferred_occurrences": nonpreferred_occurrences,
+        "referenced_owner_decisions": len(referenced_decision_ids),
+    }
+
+
+def _validate_fixed_combo_provisional_units(row: Mapping[str, Any]) -> str:
+    conversion_basis = row.get("provisional_component_conversion_basis")
+    provisional_units = row.get("provisional_component_shopify_units")
+    if conversion_basis == (
+        "Printed component quantity times1 individually sellable standard bottle; "
+        "pending component-page check, not supplier BT qualification"
+    ) and provisional_units == row.get("component_quantity_raw"):
+        return "quantity_preserved"
+    if conversion_basis == (
+        "REVIEWED_NULL: component pack-or-bottle meaning/nested selling-unit "
+        "conversion unresolved; do not fall back to source case pack"
+    ) and provisional_units is None:
+        return "reviewed_null"
+    raise ReviewPackageError(
+        "JOIN_MISMATCH", "fixed combo provisional conversion differs"
+    )
+
+
 def _validate_v5_relationships_and_authority(
     tables: Mapping[str, PackageTable],
-    patches: Mapping[str, Sequence[Mapping[str, Any]]],
+    patches: Mapping[str, Sequence[Mapping[str, Any]]] | None,
 ) -> dict[str, Any]:
     for table_name, table in tables.items():
         if table_name.startswith("v5_patch_") or table_name in {"v5_table_catalog", "v5_field_profiles"}:
             continue
         for row_number, row in enumerate(table.rows, start=1):
-            for field in ("mapping_approved", "price_approved", "import_ready", "current_price_activated"):
-                value = row.get(field)
-                count_control = table_name == "supplier_coverage_controls_v5" and value == 0
-                if field in row and value is not False and not count_control:
-                    raise ReviewPackageError(
-                        "UNAUTHORIZED_APPROVAL_CLAIM",
-                        f"{field} must remain false",
-                        table=table_name,
-                        row=row_number,
-                    )
+            _validate_v5_row_authority(
+                row, table_name=table_name, row_number=row_number
+            )
 
     catalog_rows = tables["catalog_coverage_v5"].rows
     catalog_variants = _require_unique_text_values(
@@ -1714,6 +2290,15 @@ def _validate_v5_relationships_and_authority(
     catalog_statuses = Counter(row.get("status") for row in catalog_rows)
     if dict(catalog_statuses) != _V5_CONTROL_TOTALS["v5_catalog_statuses"]:
         raise ReviewPackageError("CONTROL_TOTAL_MISMATCH", "catalog status counts differ from V5 controls")
+    catalog_by_variant = {str(row["variant_id"]): row for row in catalog_rows}
+    variant_gid_prefix = "gid://shopify/ProductVariant/"
+    if any(
+        row.get("variant_gid") != f"{variant_gid_prefix}{row['variant_id']}"
+        for row in catalog_rows
+    ):
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "V5 catalog Variant GID projection differs"
+        )
 
     family_rows = tables["multi_offer_families_v5"].rows
     family_variants = _require_unique_text_values(
@@ -1727,8 +2312,37 @@ def _validate_v5_relationships_and_authority(
     }
     if len(family_by_id) != len(family_rows):
         raise ReviewPackageError("TABLE_KEY_NOT_UNIQUE", "family_id is duplicated")
+    family_catalog_fields = (
+        ("product_id", "product_id"),
+        ("product_title_raw", "product_title"),
+        ("variant_title_raw", "variant_title"),
+        ("catalog_source_status", "status"),
+        ("display_status", "v5_display_status"),
+    )
+    for family in family_rows:
+        catalog = catalog_by_variant[str(family["variant_id"])]
+        if any(
+            family.get(family_field) != catalog.get(catalog_field)
+            for family_field, catalog_field in family_catalog_fields
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "V5 family catalog identity projection differs"
+            )
 
     relationship_rows = tables["variant_offer_relationships_v5"].rows
+    owner_preference_controls = _validate_v5_owner_preference_contract(
+        family_rows, relationship_rows
+    )
+    if owner_preference_controls != {
+        "owner_scoped_families": 2,
+        "owner_scoped_relationships": 17,
+        "family_preference_occurrences": 6,
+        "nonpreferred_occurrences": 11,
+        "referenced_owner_decisions": 2,
+    }:
+        raise ReviewPackageError(
+            "CONTROL_TOTAL_MISMATCH", "V5 owner-preference controls differ"
+        )
     relationship_ids = _require_unique_text_values(
         relationship_rows, "relationship_id", table="variant_offer_relationships_v5"
     )
@@ -1738,7 +2352,7 @@ def _validate_v5_relationships_and_authority(
     occurrence_counts: Counter[str] = Counter()
     prior_pair_counts: Counter[bool] = Counter()
     source_hashes: set[str] = set()
-    gift_ids: set[str] = set()
+    relationship_gifts: dict[str, Mapping[str, Any]] = {}
     for row_number, row in enumerate(relationship_rows, start=1):
         variant = _nonblank_text(row.get("variant_id"), code="JOIN_MISMATCH", context="relationship variant")
         family = _nonblank_text(row.get("family_id"), code="JOIN_MISMATCH", context="relationship family")
@@ -1748,8 +2362,19 @@ def _validate_v5_relationships_and_authority(
         offer = _nonblank_text(row.get("source_offer_id"), code="JOIN_MISMATCH", context="relationship offer")
         if variant not in catalog_variants or family not in family_by_id:
             raise ReviewPackageError("JOIN_MISMATCH", "relationship does not resolve to catalog/family")
-        if family_by_id[family].get("variant_id") != variant:
-            raise ReviewPackageError("JOIN_MISMATCH", "relationship family belongs to another Variant ID")
+        family_row = family_by_id[family]
+        catalog_row = catalog_by_variant[variant]
+        if (
+            family_row.get("variant_id") != variant
+            or row.get("product_id") != family_row.get("product_id")
+            or row.get("catalog_source_status")
+            != family_row.get("catalog_source_status")
+            or row.get("product_id") != catalog_row.get("product_id")
+            or row.get("catalog_source_status") != catalog_row.get("status")
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "relationship catalog/family identity projection differs"
+            )
         key = (variant, supplier, offer)
         if key in relationship_keys:
             raise ReviewPackageError("DUPLICATE_OCCURRENCE", "V5 source occurrence is duplicated")
@@ -1774,7 +2399,14 @@ def _validate_v5_relationships_and_authority(
         source_hashes.add(_require_sha256(row.get("source_sha256"), path=f"relationship[{row_number}]"))
         gift = row.get("new_gift_sidecar_id")
         if gift is not None:
-            gift_ids.add(_nonblank_text(gift, code="JOIN_MISMATCH", context="gift relationship ID"))
+            gift_id = _nonblank_text(
+                gift, code="JOIN_MISMATCH", context="gift relationship ID"
+            )
+            if gift_id in relationship_gifts:
+                raise ReviewPackageError(
+                    "DUPLICATE_OCCURRENCE", "gift relationship ID is duplicated"
+                )
+            relationship_gifts[gift_id] = row
     if len(relationship_ids) != 14_812 or len({row["variant_id"] for row in relationship_rows}) != 1_886:
         raise ReviewPackageError("CONTROL_TOTAL_MISMATCH", "V5 relationship counts differ")
     if prior_pair_counts != Counter({True: 14_760, False: 52}):
@@ -1783,17 +2415,24 @@ def _validate_v5_relationships_and_authority(
         raise ReviewPackageError("JOIN_MISMATCH", "family occurrence count differs from relationship table")
 
     gift_rows = tables["conditional_gift_relationships_v5"].rows
-    observed_gifts = _require_unique_text_values(
-        gift_rows, "relationship_id", table="conditional_gift_relationships_v5"
-    )
-    if observed_gifts != gift_ids:
-        raise ReviewPackageError("JOIN_MISMATCH", "conditional gifts do not match occurrence sidecars")
-    for row in gift_rows:
-        if (row.get("variant_id"), row.get("source_offer_id")) not in source_offer_by_variant:
-            raise ReviewPackageError("JOIN_MISMATCH", "conditional gift does not resolve to an occurrence")
+    alcohol_gift_rows = tables["alcohol_gift_components_v5"].rows
+    _validate_v5_gift_chains(relationship_gifts, gift_rows, alcohol_gift_rows)
 
+    fixed_relationship_ids: set[str] = set()
+    fixed_component_ids: set[str] = set()
+    fixed_provisional_units: Counter[str] = Counter()
     for row in tables["fixed_combo_component_relationships_v5"].rows:
         variant = row.get("variant_id")
+        relationship_id = _nonblank_text(
+            row.get("component_relationship_id"),
+            code="JOIN_MISMATCH",
+            context="fixed combo relationship ID",
+        )
+        component_id = _nonblank_text(
+            row.get("source_component_id"),
+            code="JOIN_MISMATCH",
+            context="fixed combo source component ID",
+        )
         anchors = _require_sequence(
             row.get("source_anchor_offer_ids"),
             code="JOIN_MISMATCH",
@@ -1801,8 +2440,29 @@ def _validate_v5_relationships_and_authority(
         )
         if not anchors or any((variant, anchor) not in source_offer_by_variant for anchor in anchors):
             raise ReviewPackageError("JOIN_MISMATCH", "fixed-combo component anchor is unresolved")
-        if row.get("whole_combo_to_variant_mapping_allowed") is not False or row.get("combo_auto_add") is not False:
+        if relationship_id in fixed_relationship_ids or component_id in fixed_component_ids:
+            raise ReviewPackageError(
+                "DUPLICATE_OCCURRENCE", "fixed combo component identity is duplicated"
+            )
+        if (
+            row.get("whole_combo_to_variant_mapping_allowed") is not False
+            or row.get("combo_auto_add") is not False
+            or row.get("manual_visual_review_claimed") is not False
+            or row.get("allocated_component_cost") is not None
+            or row.get("supplier_qualifying_units_for_component") is not None
+        ):
             raise ReviewPackageError("UNAUTHORIZED_APPROVAL_CLAIM", "fixed combo cannot auto-map or auto-add")
+        fixed_provisional_units[
+            _validate_fixed_combo_provisional_units(row)
+        ] += 1
+        fixed_relationship_ids.add(relationship_id)
+        fixed_component_ids.add(component_id)
+    if len(fixed_relationship_ids) == 249 and fixed_provisional_units != Counter(
+        {"quantity_preserved": 245, "reviewed_null": 4}
+    ):
+        raise ReviewPackageError(
+            "CONTROL_TOTAL_MISMATCH", "fixed combo provisional conversion controls differ"
+        )
 
     registry_rows = tables["source_evidence_registry_v5"].rows
     registry_hashes: set[str] = set()
@@ -1821,6 +2481,10 @@ def _validate_v5_relationships_and_authority(
     dependency_ids = _require_unique_text_values(
         dependency_rows, "dependency_id", table="unresolved_dependencies_v5"
     )
+    if any(str(row.get("variant_id")) not in catalog_variants for row in dependency_rows):
+        raise ReviewPackageError(
+            "JOIN_MISMATCH", "V5 dependency references a Variant outside the catalog"
+        )
     member_rows = tables["dependency_group_members_v5"].rows
     grouped_ids = _require_unique_text_values(
         member_rows, "dependency_id", table="dependency_group_members_v5"
@@ -1842,7 +2506,16 @@ def _validate_v5_relationships_and_authority(
     members_by_group: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for member in member_rows:
         authoritative = dependency_by_id[member["dependency_id"]]
-        if any(member.get(field) != authoritative.get(field) for field in ("variant_id", "resolved")):
+        dependency_projection = (
+            ("variant_id", "variant_id"),
+            ("resolved", "resolved"),
+            ("source_status", "status"),
+            ("dependency_code_or_raw_text", "dependency"),
+        )
+        if any(
+            member.get(member_field) != authoritative.get(source_field)
+            for member_field, source_field in dependency_projection
+        ) or member.get("no_owner_contact_sent") is not True:
             raise ReviewPackageError(
                 "JOIN_MISMATCH", "dependency member differs from its authoritative dependency"
             )
@@ -1852,13 +2525,42 @@ def _validate_v5_relationships_and_authority(
                     "JOIN_MISMATCH", f"dependency member {field} differs from authority"
                 )
         members_by_group[member["group_id"]].append(member)
+    ungrouped_projection_fields = frozenset(
+        {
+            "dependency",
+            "dependency_id",
+            "evidence_provider",
+            "investigation_attempted",
+            "provider_routing_basis",
+            "resolution_evidence",
+            "resolution_owner_decision_id",
+            "resolved",
+            "review_id",
+            "source_reference",
+            "status",
+            "variant_id",
+        }
+    )
+    for row in ungrouped_rows:
+        authoritative = dependency_by_id[row["dependency_id"]]
+        if set(row) != set(ungrouped_projection_fields) or any(
+            field not in authoritative or row[field] != authoritative[field]
+            for field in ungrouped_projection_fields
+        ):
+            raise ReviewPackageError(
+                "JOIN_MISMATCH",
+                "ungrouped historical dependency differs from its authoritative record",
+            )
     for group in group_rows:
         members = members_by_group[group["group_id"]]
         active = [
             row for row in members
             if row.get("resolved") is False and row.get("historical_scope_only") is False
         ]
-        if group.get("no_approval") is not True:
+        if (
+            group.get("no_approval") is not True
+            or group.get("routing_recommendation_not_contact") is not True
+        ):
             raise ReviewPackageError("UNAUTHORIZED_APPROVAL_CLAIM", "dependency group claims approval")
         expected_values = {
             "baseline_or_created_dependency_ids": [row["dependency_id"] for row in members],
@@ -1938,10 +2640,30 @@ def _validate_v5_relationships_and_authority(
     ):
         raise ReviewPackageError("JOIN_MISMATCH", "supported targeted relationships differ")
 
-    for table_name in ("alcohol_gift_components_v5", "rejected_match_memory_v5"):
-        for row in tables[table_name].rows:
-            if (row.get("variant_id"), row.get("source_offer_id")) not in source_offer_by_variant:
-                raise ReviewPackageError("JOIN_MISMATCH", f"{table_name} occurrence is unresolved")
+    for row in tables["rejected_match_memory_v5"].rows:
+        if (row.get("variant_id"), row.get("source_offer_id")) not in source_offer_by_variant:
+            raise ReviewPackageError(
+                "JOIN_MISMATCH", "rejected_match_memory_v5 occurrence is unresolved"
+            )
+
+    # The complete A1 snapshot carries the exact effective V5 tables and
+    # sidecars, but deliberately omits the old V4 baseline/patch files.  Its
+    # dedicated raw-hash adapter can therefore reuse every snapshot join above
+    # while keeping original historical patch replay separately unavailable.
+    if patches is None:
+        return {
+            "authority_zeroes": "PASS",
+            "catalog_family_join": "PASS",
+            "occurrence_relationships": len(relationship_rows),
+            "conditional_gifts": len(gift_rows),
+            "fixed_combo_components": len(tables["fixed_combo_component_relationships_v5"].rows),
+            "source_registry_hash_join": "PASS",
+            "dependencies": len(dependency_rows),
+            "active_mapping_dependencies": len(active_members),
+            "targeted_normalized_rows": len(tables["targeted_normalized_contract_rows"].rows),
+            "targeted_patch_projections": "UNAVAILABLE_EXACT_V4_BASELINE_REQUIRED",
+            "owner_preferences": owner_preference_controls,
+        }
 
     normalized_rows = tables["targeted_normalized_contract_rows"].rows
     normalized_patch_by_row = {
@@ -2026,6 +2748,7 @@ def _validate_v5_relationships_and_authority(
         "active_mapping_dependencies": len(active_members),
         "targeted_normalized_rows": len(normalized_rows),
         "targeted_patch_projections": "PASS",
+        "owner_preferences": owner_preference_controls,
     }
 
 

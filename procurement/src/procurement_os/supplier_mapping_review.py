@@ -9,11 +9,13 @@ import html
 import json
 from typing import Any, Iterable, Mapping, Sequence
 import unicodedata
+from urllib.parse import quote
 
 from .supplier_review_package import REVIEW_LABEL, ReviewPackage, _canonical_json
 
 
 REVIEW_PREVIEW_LABEL = "REVIEW PREVIEW — NOT APPROVED"
+_A1_PACKAGE_KIND = "V5_DAYTIME_A1_COMPLETE_SNAPSHOT"
 
 
 BLOCKED_DISPOSITIONS = frozenset(
@@ -1375,6 +1377,14 @@ _REVIEWABLE_SIDECAR_FIELDS: Mapping[str, tuple[str, ...]] = {
 def _reviewable_sidecar_record(
     table_name: str, row: Mapping[str, Any]
 ) -> dict[str, Any] | None:
+    if table_name in {
+        "alcohol_gift_components_v5",
+        "conditional_gift_relationships_v5",
+    }:
+        # These bounded gift tables carry unresolved component identities,
+        # published ambiguities, and evidence requests that reviewers must see
+        # together; filtering individual fields can change their meaning.
+        return dict(row)
     fields = _REVIEWABLE_SIDECAR_FIELDS.get(table_name)
     if fields is None:
         return None
@@ -1450,7 +1460,11 @@ def _package_occurrences(package: ReviewPackage) -> Sequence[Mapping[str, Any]]:
     return ()
 
 
-def build_review_batches(package: ReviewPackage) -> list[dict[str, Any]]:
+def build_review_batches(
+    package: ReviewPackage,
+    *,
+    local_pdf_href_prefix: str | None = None,
+) -> list[dict[str, Any]]:
     """Build deterministic review-preview batches with no approval capability."""
 
     relationship_table = package.tables.get("variant_offer_relationships_v5")
@@ -1493,6 +1507,8 @@ def build_review_batches(package: ReviewPackage) -> list[dict[str, Any]]:
         value.startswith(("SOURCE_PAGE_ARCHIVE:", "ORIGINAL_SUPPLIER_PDFS"))
         for value in package.unavailable_evidence
     )
+    pdf_status_value = package.metadata.get("external_pdf_status", {})
+    pdf_status = pdf_status_value if isinstance(pdf_status_value, Mapping) else {}
     for row in relationship_table.rows:
         variant = str(row["variant_id"])
         offer = str(row["source_offer_id"])
@@ -1510,7 +1526,16 @@ def build_review_batches(package: ReviewPackage) -> list[dict[str, Any]]:
         program_price_blockers = ["NO_CURRENT_PRICE_OR_TIER_AUTHORITY"]
         if row.get("source_split_fee_basis") not in {None, ""}:
             program_price_blockers.append("SPLIT_FEE_SCOPE_REQUIRES_REVIEW")
-        source_blockers = ["SOURCE_BYTES_UNAVAILABLE"] if global_source_missing else []
+        if package.package_kind == _A1_PACKAGE_KIND:
+            occurrence_source = pdf_status.get(row.get("source_file"), {})
+            source_blockers = (
+                []
+                if isinstance(occurrence_source, Mapping)
+                and occurrence_source.get("availability") == "VERIFIED_ORIGINAL_BYTES"
+                else ["SOURCE_BYTES_UNAVAILABLE"]
+            )
+        else:
+            source_blockers = ["SOURCE_BYTES_UNAVAILABLE"] if global_source_missing else []
         related = sorted(
             sidecars.get((variant, offer), ()),
             key=lambda item: (item["table"], item["record_sha256"]),
@@ -1587,7 +1612,356 @@ def build_review_batches(package: ReviewPackage) -> list[dict[str, Any]]:
         batch["batch_fingerprint"] = hashlib.sha256(_canonical_json(batch)).hexdigest()
         batch["variant_review_fingerprint"] = batch["batch_fingerprint"]
         batches.append(batch)
+    if package.package_kind == _A1_PACKAGE_KIND:
+        return _augment_a1_review_batches(
+            package,
+            batches,
+            local_pdf_href_prefix=local_pdf_href_prefix,
+        )
     return batches
+
+
+def _augment_a1_review_batches(
+    package: ReviewPackage,
+    existing_batches: Sequence[Mapping[str, Any]],
+    *,
+    local_pdf_href_prefix: str | None,
+) -> list[dict[str, Any]]:
+    """Add the complete 2,000-Variant A1 display layer without selecting offers."""
+
+    batches = {str(row.get("variant_id")): dict(row) for row in existing_batches}
+    existing_offers: dict[tuple[str, str], dict[str, Any]] = {}
+    for variant, batch in batches.items():
+        offers = batch.get("offers", ())
+        if not isinstance(offers, Sequence) or isinstance(offers, str):
+            continue
+        copied = [dict(row) for row in offers if isinstance(row, Mapping)]
+        batch["offers"] = copied
+        for offer in copied:
+            existing_offers[(variant, str(offer.get("source_occurrence_id")))] = offer
+
+    metadata = package.metadata
+    ladder_value = metadata.get("price_ladders_by_offer", {})
+    ladders = ladder_value if isinstance(ladder_value, Mapping) else {}
+    source_detail_value = metadata.get("source_offer_details", {})
+    source_details = source_detail_value if isinstance(source_detail_value, Mapping) else {}
+    rejected_value = metadata.get("rejected_by_variant", {})
+    rejected = rejected_value if isinstance(rejected_value, Mapping) else {}
+    pdf_value = metadata.get("external_pdf_status", {})
+    pdf_status = pdf_value if isinstance(pdf_value, Mapping) else {}
+
+    sibling_by_pair = {
+        (str(row.get("variant_id")), str(row.get("source_offer_id"))): row
+        for row in package.table("sibling_offer_reviews")
+    }
+    diagnostic_by_pair = {
+        (str(row.get("variant_id")), str(row.get("source_offer_id"))): row
+        for row in package.table("same_code_sibling_display_context")
+    }
+    display_by_variant: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in package.table("approval_preview_offer_rows"):
+        display_by_variant[str(row.get("variant_id"))].append(row)
+
+    owner_records = {
+        str(row.get("owner_decision_id")): row for row in package.table("owner_decisions")
+    }
+    owners_by_variant: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for scope in package.table("owner_decision_display_scopes"):
+        variant_ids = scope.get("explicit_variant_ids")
+        if not isinstance(variant_ids, list):
+            continue
+        identifier = str(scope.get("owner_decision_id"))
+        for variant in variant_ids:
+            if isinstance(variant, str):
+                owners_by_variant[variant].append(
+                    {
+                        "display_scope": dict(scope),
+                        "owner_decision": dict(owner_records[identifier]),
+                    }
+                )
+
+    requirements_by_variant: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in package.table("requests__active_dependency_request_routes"):
+        variant = row.get("variant_id")
+        if isinstance(variant, str):
+            requirements_by_variant[variant].append(dict(row))
+    approval_requirements_by_variant: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in package.table("requests__owner_approval_requirement_interpretations"):
+        variant = row.get("variant_id")
+        if isinstance(variant, str):
+            approval_requirements_by_variant[variant].append(dict(row))
+    memory_by_variant: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in package.table("rejected_match_memory_v5"):
+        variant = row.get("variant_id")
+        if isinstance(variant, str):
+            memory_by_variant[variant].append(dict(row))
+    combo_by_variant: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for table_name in (
+        "fixed_combo_component_relationships_v5",
+        "remaining_combo_component_relationships_v5",
+    ):
+        for row in package.table(table_name):
+            variant = row.get("variant_id", row.get("catalog_variant_id"))
+            if isinstance(variant, str):
+                combo_by_variant[variant].append(
+                    {"source_table": table_name, "record": dict(row)}
+                )
+
+    for partition in package.table("approval_preview_partition"):
+        variant = str(partition.get("variant_id"))
+        batch = batches.setdefault(
+            variant,
+            {
+                "label": REVIEW_PREVIEW_LABEL,
+                "package_id": package.snapshot_id,
+                "package_manifest_sha256": package.manifest_sha256,
+                "relationship_table_sha256": package.tables[
+                    "variant_offer_relationships_v5"
+                ].canonical_jsonl_sha256,
+                "variant_id": variant,
+                "offers": [],
+                "authority": {
+                    "mapping_approvals": 0,
+                    "price_approvals": 0,
+                    "import_ready_rows": 0,
+                },
+            },
+        )
+        batch["catalog_review"] = dict(partition)
+        batch["owner_clarifications"] = owners_by_variant.get(variant, [])
+        batch["active_requirements"] = requirements_by_variant.get(variant, [])
+        batch["pending_approval_requirements"] = approval_requirements_by_variant.get(
+            variant, []
+        )
+        batch["rejected_matches"] = list(rejected.get(variant, ()))
+        batch["rejected_match_memory"] = memory_by_variant.get(variant, [])
+        batch["combo_relationships"] = combo_by_variant.get(variant, [])
+
+        display_rows = sorted(
+            display_by_variant.get(variant, ()),
+            key=lambda row: (str(row.get("supplier")), str(row.get("source_offer_id"))),
+        )
+        offers: list[dict[str, Any]] = []
+        for display in display_rows:
+            occurrence = str(display.get("source_offer_id"))
+            pair = (variant, occurrence)
+            frozen_offer = dict(existing_offers.get(pair, {}))
+            offer = dict(frozen_offer)
+            source_detail = source_details.get(occurrence, {})
+            if not isinstance(source_detail, Mapping):
+                source_detail = {}
+            sibling = sibling_by_pair.get(pair)
+            sibling_source = sibling.get("source_evidence", {}) if sibling else {}
+            if not isinstance(sibling_source, Mapping):
+                sibling_source = {}
+            if not offer:
+                offer = {
+                    "label": REVIEW_PREVIEW_LABEL,
+                    "variant_id": variant,
+                    "source_occurrence_id": occurrence,
+                    "supplier_description": source_detail.get("supplier_description"),
+                    "program_type": source_detail.get("program_type"),
+                    "related_sidecar_records": [],
+                }
+            display_disposition = str(display.get("disposition") or "UNRESOLVED")
+            display_shopify = display.get("reviewed_shopify_units_per_case")
+            display_qualifying = display.get("reviewed_qualifying_units_per_case")
+            frozen_raw_value = frozen_offer.get("raw_packaging", {})
+            frozen_raw = (
+                frozen_raw_value if isinstance(frozen_raw_value, Mapping) else {}
+            )
+            if frozen_offer and any(
+                (
+                    frozen_offer.get("vendor") != display.get("supplier"),
+                    frozen_offer.get("candidate_disposition") != display_disposition,
+                    frozen_offer.get("reviewed_shopify_units_per_case") != display_shopify,
+                    frozen_offer.get("reviewed_qualifying_units_per_case")
+                    != display_qualifying,
+                    frozen_raw.get("source_retail_pack_raw")
+                    != display.get("display_retail_packs"),
+                )
+            ):
+                offer["frozen_v5_relationship_preview"] = {
+                    "vendor": frozen_offer.get("vendor"),
+                    "candidate_disposition": frozen_offer.get("candidate_disposition"),
+                    "reviewed_shopify_units_per_case": frozen_offer.get(
+                        "reviewed_shopify_units_per_case"
+                    ),
+                    "reviewed_qualifying_units_per_case": frozen_offer.get(
+                        "reviewed_qualifying_units_per_case"
+                    ),
+                    "relationship_record_sha256": frozen_offer.get(
+                        "relationship_record_sha256"
+                    ),
+                    "raw_packaging": dict(frozen_raw),
+                    "scope": "PRESERVED_PRE_ADDENDUM_REVIEW_EVIDENCE",
+                }
+            offer.update(
+                {
+                    "label": REVIEW_PREVIEW_LABEL,
+                    "variant_id": variant,
+                    "vendor": display.get("supplier", source_detail.get("vendor")),
+                    "source_occurrence_id": occurrence,
+                    "supplier_code": display.get(
+                        "supplier_code_exact", source_detail.get("supplier_code")
+                    ),
+                    "candidate_disposition": display_disposition,
+                    "reviewed_shopify_units_per_case": display_shopify,
+                    "reviewed_qualifying_units_per_case": display_qualifying,
+                    "shopify_units_per_case": display_shopify,
+                    "qualifying_units_per_case": display_qualifying,
+                }
+            )
+            # Preserve the frozen V5 raw package fields byte-semantically.
+            # Daytime values are a separate reviewed display projection; an
+            # explicit null here must never overwrite or masquerade as raw
+            # supplier evidence.
+            offer["raw_packaging"] = dict(frozen_raw)
+            offer["reviewed_packaging_display"] = {
+                "source_physical_count_raw": display.get(
+                    "source_physical_count_raw"
+                ),
+                "display_physical_count": display.get("display_physical_count"),
+                "display_retail_packs": display.get("display_retail_packs"),
+                "display_containers_per_retail_pack": display.get(
+                    "display_containers_per_retail_pack"
+                ),
+                "explicit_null_precedence": display.get(
+                    "explicit_null_precedence"
+                ),
+            }
+            prior_blockers_value = frozen_offer.get("blockers", {})
+            prior_blockers = (
+                prior_blockers_value
+                if isinstance(prior_blockers_value, Mapping)
+                else {}
+            )
+            packaging_blockers = []
+            if display_shopify is None:
+                packaging_blockers.append("SHOPIFY_UNITS_EXPLICITLY_UNRESOLVED")
+            if "CONDITIONAL_GIFT_REQUIRES_SEPARATE_REVIEW" in prior_blockers.get(
+                "packaging", ()
+            ):
+                packaging_blockers.append("CONDITIONAL_GIFT_REQUIRES_SEPARATE_REVIEW")
+            program_blockers = ["NO_CURRENT_PRICE_OR_TIER_AUTHORITY"]
+            if "SPLIT_FEE_SCOPE_REQUIRES_REVIEW" in prior_blockers.get(
+                "program_price", ()
+            ):
+                program_blockers.append("SPLIT_FEE_SCOPE_REQUIRES_REVIEW")
+            identity_blockers = (
+                []
+                if display_disposition == "PROPOSED_REVIEW_CANDIDATE"
+                else [display_disposition]
+            )
+            if "CATALOG_STATUS_BLOCKS_USE" in prior_blockers.get("identity", ()):
+                identity_blockers.append("CATALOG_STATUS_BLOCKS_USE")
+            offer["blockers"] = {
+                "identity": sorted(set(identity_blockers)),
+                "packaging": sorted(set(packaging_blockers)),
+                "program_price": sorted(set(program_blockers)),
+                "source_availability": [],
+            }
+            offer["authority"] = {
+                "mapping_approved": False,
+                "price_approved": False,
+                "import_ready": False,
+                "selection_created": False,
+            }
+            source_value = offer.get("source", {})
+            source = dict(source_value) if isinstance(source_value, Mapping) else {}
+            source.setdefault(
+                "file", sibling_source.get("source_file", source_detail.get("source_file"))
+            )
+            source.setdefault("page", display.get("source_page", source_detail.get("source_page")))
+            source.setdefault("sha256", display.get("source_sha256", source_detail.get("source_sha256")))
+            source_status = pdf_status.get(source.get("file"), {})
+            if isinstance(source_status, Mapping):
+                source["availability"] = source_status.get("availability")
+                page = source.get("page")
+                if (
+                    source_status.get("availability") == "VERIFIED_ORIGINAL_BYTES"
+                    and local_pdf_href_prefix == "../original_sources/"
+                    and type(page) is int
+                    and 1 <= page <= source_status.get("physical_pages", 0)
+                ):
+                    filename = source.get("file")
+                    if isinstance(filename, str):
+                        source["local_pdf_href"] = (
+                            f"{local_pdf_href_prefix}{quote(filename, safe='')}#page={page}"
+                        )
+            if source.get("availability") != "VERIFIED_ORIGINAL_BYTES":
+                offer["blockers"]["source_availability"] = [
+                    "SOURCE_BYTES_UNAVAILABLE"
+                ]
+            offer["source"] = source
+            offer["display_evidence"] = dict(display)
+            offer["price_ladder"] = list(ladders.get(occurrence, ()))
+            offer["sibling_review"] = None if sibling is None else dict(sibling)
+            offer["same_code_diagnostic"] = (
+                None if pair not in diagnostic_by_pair else dict(diagnostic_by_pair[pair])
+            )
+            offer.pop("offer_preview_fingerprint", None)
+            fingerprint_basis = {
+                "package_manifest_sha256": package.manifest_sha256,
+                "relationship_table_sha256": package.tables[
+                    "variant_offer_relationships_v5"
+                ].canonical_jsonl_sha256,
+                "final_preview": offer,
+            }
+            offer["offer_preview_fingerprint"] = hashlib.sha256(
+                _canonical_json(fingerprint_basis)
+            ).hexdigest()
+            offers.append(offer)
+        batch["offers"] = offers
+        terms = [
+            variant,
+            str(partition.get("captured_product_title") or ""),
+            str(partition.get("captured_variant_options") or ""),
+            str(partition.get("supplier_batch") or ""),
+            str(partition.get("display_status") or ""),
+            str(partition.get("frozen_source_status") or ""),
+            str(partition.get("top_level_partition") or ""),
+            str(partition.get("partition_label") or ""),
+        ]
+        for offer in offers:
+            terms.extend(
+                str(offer.get(field) or "")
+                for field in (
+                    "vendor",
+                    "supplier_code",
+                    "supplier_description",
+                    "source_occurrence_id",
+                )
+            )
+        batch["search_text"] = " ".join(terms).casefold()
+        batch.pop("batch_fingerprint", None)
+        batch.pop("variant_review_fingerprint", None)
+        batch["batch_fingerprint"] = hashlib.sha256(_canonical_json(batch)).hexdigest()
+        batch["variant_review_fingerprint"] = batch["batch_fingerprint"]
+
+    result = sorted(batches.values(), key=lambda row: str(row.get("variant_id")))
+    disposition_counts = Counter(
+        str(offer.get("candidate_disposition"))
+        for batch in result
+        for offer in batch.get("offers", ())
+        if isinstance(offer, Mapping)
+    )
+    if (
+        len(result) != 2_000
+        or sum(len(row.get("offers", ())) for row in result) != 14_823
+        or disposition_counts
+        != Counter(
+            {
+                "PROPOSED_REVIEW_CANDIDATE": 1_609,
+                "REJECTED_ATTRIBUTE_CONFLICT": 7_140,
+                "REJECTED_IDENTITY_CONFLICT": 2,
+                "SAME_CODE_DIAGNOSTIC_NOT_REVIEWED_AS_IDENTITY": 6,
+                "SEARCH_LEAD_ONLY": 6_066,
+            }
+        )
+    ):
+        raise SupplierReviewError("A1 full-catalog review batches do not reconcile")
+    return result
 
 
 def _v5_review_family_summary(
@@ -1630,7 +2004,7 @@ def _v5_review_family_summary(
                 blocked_count += 1
     integrity = package.metadata.get("integrity_checks", {})
     return {
-        "label": REVIEW_LABEL,
+        "label": package.label,
         "status": package.status,
         "authority": "REVIEW_ONLY",
         "cohorts": dict(package.cohorts),
@@ -1730,9 +2104,17 @@ def compare_review_packages(previous: ReviewPackage, current: ReviewPackage) -> 
     return result
 
 
-def report_document(package: ReviewPackage, *, comparison: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def report_document(
+    package: ReviewPackage,
+    *,
+    comparison: Mapping[str, Any] | None = None,
+    local_pdf_href_prefix: str | None = None,
+) -> dict[str, Any]:
     is_v5 = bool(package.table("variant_offer_relationships_v5"))
-    review_batches = build_review_batches(package)
+    review_batches = build_review_batches(
+        package,
+        local_pdf_href_prefix=local_pdf_href_prefix,
+    )
     rows = () if is_v5 else _package_occurrences(package)
     family = _v5_review_family_summary(package, review_batches) if is_v5 else None
     if rows:
@@ -1780,8 +2162,8 @@ def report_document(package: ReviewPackage, *, comparison: Mapping[str, Any] | N
             retain_raw_records=not is_v5,
             include_flat_occurrences=not is_v5,
         )
-    return {
-        "label": REVIEW_LABEL,
+    document = {
+        "label": package.label,
         "status": package.status,
         "package": package.summary(),
         "offer_family": family,
@@ -1797,6 +2179,83 @@ def report_document(package: ReviewPackage, *, comparison: Mapping[str, Any] | N
             "po_actions": 0,
         },
     }
+    if package.package_kind == _A1_PACKAGE_KIND:
+        document["catalog_search"] = {
+            "variant_count": len(review_batches),
+            "displayed_occurrence_count": sum(
+                len(batch.get("offers", ())) for batch in review_batches
+            ),
+            "identity": "SHOPIFY_VARIANT_VENDOR_SOURCE_OCCURRENCE_V1",
+            "preferred_offer_selected": False,
+            "local_pdf_navigation": (
+                "VERIFIED_SIBLING_DIRECTORY_LINKS"
+                if local_pdf_href_prefix == "../original_sources/"
+                else "OMITTED_UNBOUND_OUTPUT_LAYOUT"
+            ),
+        }
+        document["owner_decision_ledger"] = [
+            dict(row) for row in package.table("owner_decisions")
+        ]
+        document["owner_decision_display_scopes"] = [
+            dict(row) for row in package.table("owner_decision_display_scopes")
+        ]
+        document["prior_owner_answers_do_not_reask"] = [
+            dict(row)
+            for row in package.table("requests__prior_owner_answers_do_not_reask")
+        ]
+        document["retained_owner_questions_policy_check"] = [
+            dict(row)
+            for row in package.table(
+                "requests__retained_owner_questions_policy_check"
+            )
+        ]
+        document["source_review_overlays"] = [
+            dict(row) for row in package.table("source_review_overlays")
+        ]
+        document["combo_review_ledger"] = {
+            "complete_combo_totals": [
+                dict(row) for row in package.table("complete_combos")
+            ],
+            "source_components": [
+                dict(row) for row in package.table("combo_components")
+            ],
+            "combo_validation": [
+                dict(row) for row in package.table("combo_validation")
+            ],
+            "fixed_component_relationships": [
+                dict(row)
+                for row in package.table("fixed_combo_component_relationships_v5")
+            ],
+            "remaining_component_diagnostics": [
+                dict(row)
+                for row in package.table("remaining_combo_component_relationships_v5")
+            ],
+            "remaining_combo_total_reviews": [
+                dict(row) for row in package.table("remaining_combo_total_reviews_v5")
+            ],
+            "remaining_supplier_family_reviews": [
+                dict(row) for row in package.table("remaining_supplier_family_reviews_v5")
+            ],
+        }
+        metadata = package.metadata
+        document["real_package_acceptance"] = {
+            key: dict(metadata.get(key, {}))
+            for key in (
+                "replacement_transport",
+                "tables_by_namespace",
+                "source_evidence",
+                "schema_controls",
+                "external_pdf_status",
+                "page_bundle_status",
+                "projection_controls",
+                "v5_sidecar_controls",
+                "relationship_controls",
+                "integrity_checks",
+                "authority",
+            )
+            if isinstance(metadata.get(key), Mapping)
+        }
+    return document
 
 
 def canonical_report_bytes(report: Mapping[str, Any]) -> bytes:
@@ -1831,11 +2290,208 @@ def _html_table(headers: Sequence[str], rows: Iterable[Sequence[Any]], *, css_cl
     return f"<table{class_attr}><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
+def _html_embedded_json(value: Any) -> str:
+    """Embed canonical JSON in an inert script node without an HTML escape seam."""
+
+    text = _canonical_json(value).decode("utf-8")
+    return (
+        text.replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
+def _a1_catalog_browser(
+    review_batches: Sequence[Mapping[str, Any]],
+    ledgers: Mapping[str, Any],
+) -> str:
+    """Render the code-owned offline browser for every A1 catalog Variant."""
+
+    data = _html_embedded_json(
+        {"batches": list(review_batches), "global_review_ledgers": dict(ledgers)}
+    )
+    return (
+        '<section id="catalog-browser" aria-labelledby="catalog-heading">'
+        '<h2 id="catalog-heading">Full catalog search and evidence drill-down</h2>'
+        '<p>Search all 2,000 original catalog Variants by Variant ID, title, option, '
+        'supplier, supplier code, description, or source occurrence. Results do not rank '
+        'or select a preferred offer.</p>'
+        '<label for="catalog-search">Search catalog</label> '
+        '<input id="catalog-search" type="search" autocomplete="off" '
+        'placeholder="Variant ID, product, supplier code…"> '
+        '<span id="catalog-count" role="status" aria-live="polite"></span>'
+        '<div class="catalog-layout"><nav id="catalog-results" '
+        'aria-label="Catalog search results"></nav>'
+        '<article id="catalog-detail" tabindex="-1">Enter a search or open a review.</article></div>'
+        '</section>'
+        '<section aria-labelledby="global-ledgers-heading">'
+        '<h2 id="global-ledgers-heading">Global review evidence ledgers</h2>'
+        '<p>These are preserved review records, not mappings, selections, prices, or approvals.</p>'
+        '<div id="a1-global-ledgers"></div></section>'
+        f'<script id="a1-catalog-data" type="application/json">{data}</script>'
+        r'''<script>
+"use strict";
+(() => {
+  const payload = JSON.parse(document.getElementById("a1-catalog-data").textContent);
+  const batches = payload.batches;
+  const globalLedgers = payload.global_review_ledgers || {};
+  const search = document.getElementById("catalog-search");
+  const results = document.getElementById("catalog-results");
+  const detail = document.getElementById("catalog-detail");
+  const count = document.getElementById("catalog-count");
+  const globalLedgerRoot = document.getElementById("a1-global-ledgers");
+  const make = (tag, text, className) => {
+    const node = document.createElement(tag);
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    if (className) node.className = className;
+    return node;
+  };
+  const appendJson = (target, heading, value, initiallyOpen = false) => {
+    const values = Array.isArray(value) ? value : (value ? [value] : []);
+    if (!values.length) return;
+    const box = make("details");
+    box.open = initiallyOpen;
+    box.append(make("summary", `${heading} (${values.length})`));
+    box.append(make("pre", JSON.stringify(value, null, 2)));
+    target.append(box);
+  };
+  const safePdfHref = value => {
+    if (typeof value !== "string") return null;
+    const match = /^\.\.\/original_sources\/([^/]+\.pdf)#page=([1-9][0-9]*)$/.exec(value);
+    if (!match) return null;
+    let filename;
+    try { filename = decodeURIComponent(match[1]); } catch (_) { return null; }
+    if (!filename || /[\\/\u0000-\u001f\u007f]/.test(filename)) return null;
+    const encoded = encodeURIComponent(filename).replace(/[!'()*]/g, character =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+    );
+    return value === `../original_sources/${encoded}#page=${match[2]}` ? value : null;
+  };
+  const openReview = batch => {
+    detail.replaceChildren();
+    const catalog = batch.catalog_review || {};
+    detail.append(make("h3", catalog.captured_product_title || `Variant ${batch.variant_id}`));
+    detail.append(make("p", `Variant ID ${batch.variant_id} · ${catalog.captured_variant_options || "option not captured"}`));
+    detail.append(make("p", "REVIEW PREVIEW — NOT APPROVED", "notice"));
+    detail.append(make("p", `${(batch.offers || []).length} displayed source occurrences; no preferred offer selected.`));
+    appendJson(detail, "Catalog capture and partition", catalog, true);
+    (batch.offers || []).forEach(offer => {
+      const box = make("section", null, "offer-card");
+      const heading = `${offer.vendor || "Unknown supplier"} · ${offer.supplier_code || "code unavailable"}`;
+      box.append(make("h4", heading));
+      box.append(make("p", `${offer.source_occurrence_id || "occurrence unavailable"} · ${offer.candidate_disposition || "UNRESOLVED"}`));
+      if (offer.supplier_description) box.append(make("p", offer.supplier_description));
+      const source = offer.source || {};
+      const sourceLine = make("p");
+      sourceLine.append(document.createTextNode(`Source: ${source.file || "unavailable"} · page ${source.page || "—"} · expected SHA-256 ${source.sha256 || "unavailable"} `));
+      const href = safePdfHref(source.local_pdf_href);
+      if (href) {
+        const link = make("a", "Open local PDF page (bytes verified when report was generated)");
+        link.setAttribute("href", href);
+        link.setAttribute("target", "_blank");
+        link.setAttribute("rel", "noopener noreferrer");
+        sourceLine.append(link);
+      } else {
+        sourceLine.append(make("span", `[${source.availability || "source bytes unavailable"}]`));
+      }
+      box.append(sourceLine);
+      const facts = {
+        program_type: offer.program_type,
+        reviewed_shopify_units_per_case: offer.reviewed_shopify_units_per_case,
+        reviewed_qualifying_units_per_case: offer.reviewed_qualifying_units_per_case,
+        raw_packaging: offer.raw_packaging,
+        reviewed_packaging_display: offer.reviewed_packaging_display,
+        display_evidence: offer.display_evidence,
+        frozen_v5_relationship_preview: offer.frozen_v5_relationship_preview,
+        blockers: offer.blockers,
+        authority: offer.authority,
+        offer_preview_fingerprint: offer.offer_preview_fingerprint
+      };
+      const factsBox = make("details");
+      factsBox.append(make("summary", "Conversion, package, blockers, and authority"));
+      factsBox.append(make("pre", JSON.stringify(facts, null, 2)));
+      box.append(factsBox);
+      const tiers = offer.price_ladder || [];
+      const tierBox = make("details");
+      tierBox.append(make("summary", `Price-ladder evidence (${tiers.length})`));
+      tierBox.append(make("pre", JSON.stringify(tiers, null, 2)));
+      box.append(tierBox);
+      if ((offer.related_sidecar_records || []).length) {
+        const sidecars = make("details");
+        sidecars.append(make("summary", `Gift, component, and other sidecar evidence (${offer.related_sidecar_records.length})`));
+        sidecars.append(make("pre", JSON.stringify(offer.related_sidecar_records, null, 2)));
+        box.append(sidecars);
+      }
+      if (offer.sibling_review) {
+        const sibling = make("details");
+        sibling.append(make("summary", "Daytime sibling-offer review"));
+        sibling.append(make("pre", JSON.stringify(offer.sibling_review, null, 2)));
+        box.append(sibling);
+      }
+      if (offer.same_code_diagnostic) {
+        const diagnostic = make("details");
+        diagnostic.append(make("summary", "Same-code diagnostic (not identity support)"));
+        diagnostic.append(make("pre", JSON.stringify(offer.same_code_diagnostic, null, 2)));
+        box.append(diagnostic);
+      }
+      detail.append(box);
+    });
+    appendJson(detail, "Rejected alternatives (base plus separate additions)", batch.rejected_matches);
+    appendJson(detail, "Negative match memory", batch.rejected_match_memory);
+    appendJson(detail, "Owner clarifications with exact scope", batch.owner_clarifications);
+    appendJson(detail, "Active unresolved evidence requirements", batch.active_requirements);
+    appendJson(detail, "Pending approval-only requirements", batch.pending_approval_requirements);
+    appendJson(detail, "Fixed and remaining combo relationships", batch.combo_relationships);
+    try {
+      history.replaceState(null, "", `#variant=${encodeURIComponent(batch.variant_id)}`);
+    } catch (_) {
+      // Some hardened file:// profiles prohibit history mutation. The detail
+      // remains fully usable; only the optional address fragment is omitted.
+    }
+    detail.focus({preventScroll: true});
+  };
+  const refresh = () => {
+    const query = search.value.trim().toLowerCase();
+    const matches = batches.filter(batch => !query || String(batch.search_text || "").includes(query));
+    count.textContent = `${matches.length} matching Variants; showing ${Math.min(matches.length, 100)}`;
+    results.replaceChildren();
+    matches.slice(0, 100).forEach(batch => {
+      const catalog = batch.catalog_review || {};
+      const button = make("button", `${batch.variant_id} — ${catalog.captured_product_title || "Untitled Variant"}`);
+      button.type = "button";
+      button.addEventListener("click", () => openReview(batch));
+      results.append(button);
+    });
+  };
+  search.addEventListener("input", refresh);
+  Object.entries(globalLedgers).forEach(([name, value]) => {
+    appendJson(globalLedgerRoot, name.replaceAll("_", " "), value);
+  });
+  refresh();
+  const match = /^#variant=([^&]+)$/.exec(location.hash);
+  if (match) {
+    let id = "";
+    try { id = decodeURIComponent(match[1]); } catch (_) { id = ""; }
+    const batch = batches.find(item => item.variant_id === id);
+    if (batch) {
+      search.value = id;
+      refresh();
+      openReview(batch);
+    }
+  }
+})();
+</script>'''
+    )
+
+
 def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapping review") -> str:
     """Render a bounded reviewer summary; canonical detail remains in report.json."""
 
     package_value = report.get("package", {})
     package = package_value if isinstance(package_value, Mapping) else {}
+    is_a1 = package.get("package_kind") == _A1_PACKAGE_KIND
     label = html.escape(str(report.get("label", REVIEW_LABEL)))
     status = html.escape(str(report.get("status", package.get("status", "REVIEW"))))
     escaped_title = html.escape(title)
@@ -1933,7 +2589,7 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                 else 0,
             ),
         ),
-        ("Alternatives shown", min(len(alternatives), 200)),
+        ("Alternatives shown", len(alternatives) if is_a1 else min(len(alternatives), 200)),
         (
             "Blocked alternatives",
             summary.get("blocked_alternatives", computed_blocked_count),
@@ -2056,7 +2712,22 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                 "<ul>" + "".join(f"<li>{_html_value(item)}</li>" for item in unavailable) + "</ul>",
             )
         )
-    if alternative_rows:
+    if is_a1:
+        ledger_keys = (
+            "owner_decision_ledger",
+            "owner_decision_display_scopes",
+            "prior_owner_answers_do_not_reask",
+            "retained_owner_questions_policy_check",
+            "source_review_overlays",
+            "combo_review_ledger",
+        )
+        sections.append(
+            _a1_catalog_browser(
+                review_batches,
+                {key: report[key] for key in ledger_keys if key in report},
+            )
+        )
+    elif alternative_rows:
         sections.extend(
             (
                 "<h2>Offer alternatives</h2>",
@@ -2117,19 +2788,43 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
                 _html_table(("Measure", "Value"), comparison_rows),
             )
         )
+    detail_note = (
+        "Full canonical report detail and review projections are retained in "
+        "<code>report.json</code>; the sealed portable package remains the source "
+        "for all 120 tables and 746,048 canonical records."
+        if is_a1
+        else "Full canonical machine detail, including raw evidence and exceptions, "
+        "is retained in <code>report.json</code>."
+    )
     return (
         "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
+        "img-src 'self' data: file:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+        "connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; "
+        "base-uri 'none'\">"
         "<meta name=\"robots\" content=\"noindex,nofollow\">"
         f"<title>{escaped_title}</title>"
-        "<style>body{font-family:system-ui;max-width:1000px;margin:2rem auto;padding:0 1rem}"
+        "<style>body{font-family:system-ui;max-width:1200px;margin:2rem auto;padding:0 1rem}"
         "table{border-collapse:collapse;width:100%;margin:0 0 1.25rem}"
         "th,td{border:1px solid #bbb;padding:.45rem;text-align:left;vertical-align:top}"
-        "th{background:#eee}.summary{max-width:48rem}code{overflow-wrap:anywhere}</style>"
+        "th{background:#eee}.summary{max-width:48rem}code,pre{overflow-wrap:anywhere}"
+        "#catalog-search{box-sizing:border-box;font:inherit;margin:.5rem 0;padding:.55rem;"
+        "width:min(42rem,100%)}#catalog-count{display:inline-block;margin-left:.5rem}"
+        ".catalog-layout{display:grid;gap:1rem;grid-template-columns:minmax(16rem,1fr) "
+        "minmax(0,2fr);margin-top:1rem}.catalog-layout nav{border:1px solid #bbb;"
+        "max-height:70vh;overflow:auto;padding:.4rem}.catalog-layout nav button{background:#fff;"
+        "border:0;border-bottom:1px solid #ddd;cursor:pointer;display:block;font:inherit;"
+        "padding:.55rem;text-align:left;width:100%}.catalog-layout nav button:hover,"
+        ".catalog-layout nav button:focus{background:#eef5ff}.catalog-layout article{"
+        "min-width:0}.offer-card{border:1px solid #bbb;border-radius:.25rem;margin:1rem 0;"
+        "padding:.75rem}.offer-card pre,details pre{background:#f6f6f6;max-height:32rem;"
+        "overflow:auto;padding:.65rem;white-space:pre-wrap}.notice{color:#8a2500;font-weight:700}"
+        "@media(max-width:760px){.catalog-layout{grid-template-columns:1fr}.catalog-layout nav{"
+        "max-height:18rem}}</style>"
         f"</head><body><h1>{escaped_title}</h1><p>{label}</p><p>Status: <strong>{status}</strong></p>"
         "<p>No mapping, price, inventory, readiness, Shopify, or purchase-order write occurred.</p>"
         + "".join(sections)
-        + "<p>Full canonical machine detail, including raw evidence and exceptions, "
-        "is retained in <code>report.json</code>.</p>"
+        + f"<p>{detail_note}</p>"
         "</body></html>"
     )
 

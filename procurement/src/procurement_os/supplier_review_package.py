@@ -22,7 +22,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
-from typing import Any, BinaryIO, Iterator, Mapping, Sequence
+from typing import Any, BinaryIO, Callable, Iterator, Mapping, Sequence
 import unicodedata
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
@@ -81,6 +81,10 @@ class ReviewLimits:
     max_line_bytes: int = 8_000_000
     max_json_depth: int = 24
     max_manifest_bytes: int = 5_000_000
+    # The sealed V5-DAYTIME-A1 addendum contains 2,124 regular members.  Its
+    # dedicated adapter applies this per-shard bound without relaxing the
+    # legacy package-entry limit above.
+    max_a1_archive_entries: int = 4_096
 
     def __post_init__(self) -> None:
         for name, value in self.__dict__.items():
@@ -120,6 +124,13 @@ class PackageTable:
     raw_sha256: str
     canonical_jsonl_sha256: str | None
     unknown_fields: tuple[str, ...] = ()
+    declared_row_count: int | None = None
+
+    @property
+    def record_count(self) -> int:
+        """Return the verified logical count for materialized or streamed tables."""
+
+        return len(self.rows) if self.declared_row_count is None else self.declared_row_count
 
 
 @dataclass(frozen=True)
@@ -137,6 +148,11 @@ class ReviewPackage:
     issues: tuple[ValidationIssue, ...]
     unavailable_evidence: tuple[str, ...]
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    table_loaders: Mapping[str, Callable[[], Iterator[dict[str, Any]]]] = field(
+        default_factory=dict,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def is_complete(self) -> bool:
@@ -155,7 +171,26 @@ class ReviewPackage:
 
     def table(self, name: str) -> tuple[dict[str, Any], ...]:
         table = self.tables.get(name)
-        return () if table is None else table.rows
+        if table is None:
+            return ()
+        if name in self.table_loaders:
+            raise ReviewPackageError(
+                "TABLE_NOT_MATERIALIZED",
+                "large streamed table requires iter_table()",
+                table=name,
+            )
+        return table.rows
+
+    def iter_table(self, name: str) -> Iterator[dict[str, Any]]:
+        """Iterate a table, reopening exact verified shards when it was streamed."""
+
+        table = self.tables.get(name)
+        if table is None:
+            return iter(())
+        loader = self.table_loaders.get(name)
+        if loader is not None:
+            return loader()
+        return iter(table.rows)
 
     def summary(self) -> dict[str, Any]:
         # V5/portable reports must be byte-identical when the same validated
@@ -164,10 +199,13 @@ class ReviewPackage:
         # manifest-bound logical snapshot identity.
         report_source = (
             f"v5:{self.snapshot_id}"
-            if self.package_kind == "V5_CHANGED_TABLES_AND_EVIDENCE"
+            if self.package_kind in {
+                "V5_CHANGED_TABLES_AND_EVIDENCE",
+                "V5_DAYTIME_A1_COMPLETE_SNAPSHOT",
+            }
             else self.source
         )
-        return {
+        summary = {
             "label": self.label,
             "source": report_source,
             "package_kind": self.package_kind,
@@ -180,7 +218,7 @@ class ReviewPackage:
                 name: {
                     "path": table.path,
                     "format": table.format,
-                    "row_count": len(table.rows),
+                    "row_count": table.record_count,
                     "raw_sha256": table.raw_sha256,
                     "canonical_jsonl_sha256": table.canonical_jsonl_sha256,
                     "unknown_fields": list(table.unknown_fields),
@@ -197,6 +235,12 @@ class ReviewPackage:
             if isinstance(self.metadata.get("snapshot_scope", {}), Mapping)
             else {},
         }
+        if self.package_kind == "V5_DAYTIME_A1_COMPLETE_SNAPSHOT":
+            integrity = self.metadata.get("integrity_checks", {})
+            summary["integrity_checks"] = (
+                dict(integrity) if isinstance(integrity, Mapping) else {}
+            )
+        return summary
 
 
 @dataclass(frozen=True)
@@ -298,18 +342,49 @@ class _DirectorySource(_PackageSource):
     def open(self, name: str) -> Iterator[BinaryIO]:
         self._require_name(name)
         candidate = self.path / PurePosixPath(name)
-        if candidate.is_symlink() or not candidate.is_file():
-            raise ReviewPackageError("FILE_CHANGED", "package member changed after scan", path=name)
-        with candidate.open("rb") as handle:
-            yield handle
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(candidate, flags)
+        except OSError as exc:
+            raise ReviewPackageError(
+                "FILE_CHANGED", "package member changed after scan", path=name
+            ) from exc
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_size != self._members[name]
+            ):
+                raise ReviewPackageError(
+                    "FILE_CHANGED", "package member changed after scan", path=name
+                )
+            with os.fdopen(descriptor, "rb", closefd=False) as handle:
+                yield handle
+        finally:
+            os.close(descriptor)
 
 
 class _ZipSource(_PackageSource):
-    def __init__(self, path: Path, limits: ReviewLimits):
-        super().__init__(path, limits)
+    def __init__(
+        self,
+        path: Path | bytes,
+        limits: ReviewLimits,
+        *,
+        display_path: Path | None = None,
+    ):
+        raw_buffer = io.BytesIO(path) if isinstance(path, bytes) else None
+        source_path = display_path if raw_buffer is not None else path
+        if not isinstance(source_path, Path):
+            raise TypeError("display_path is required for in-memory ZIP bytes")
+        super().__init__(source_path, limits)
+        self._raw_buffer = raw_buffer
         try:
-            self._zip = ZipFile(path)
+            self._zip = ZipFile(raw_buffer if raw_buffer is not None else path)
         except (BadZipFile, OSError) as exc:
+            if raw_buffer is not None:
+                raw_buffer.close()
             raise ReviewPackageError("INVALID_ZIP", "package is not a readable ZIP") from exc
         collisions: dict[str, str] = {}
         members: dict[str, ZipInfo] = {}
@@ -349,6 +424,8 @@ class _ZipSource(_PackageSource):
                 self._members[name] = info.file_size
         except BaseException:
             self._zip.close()
+            if raw_buffer is not None:
+                raw_buffer.close()
             raise
         self._infos = members
 
@@ -363,6 +440,8 @@ class _ZipSource(_PackageSource):
 
     def close(self) -> None:
         self._zip.close()
+        if self._raw_buffer is not None:
+            self._raw_buffer.close()
 
 
 def _open_source(path: str | Path, limits: ReviewLimits) -> _PackageSource:
@@ -3108,6 +3187,22 @@ def read_review_package(
                 raise ReviewPackageError("UNEXPECTED_EXTERNAL_EVIDENCE", "V1 input has no external evidence contract")
             return _read_v1(source, manifest_name=v1_names[0])
         if "BUFFALO_REVIEW_PACKAGE_ROOT.json" in source.names:
+            root_bytes = _read_bounded(
+                source,
+                "BUFFALO_REVIEW_PACKAGE_ROOT.json",
+                source.limits.max_manifest_bytes,
+            )
+            from .supplier_review_real_v5 import (
+                is_real_v5_a1_root,
+                read_real_v5_a1_package,
+            )
+
+            if is_real_v5_a1_root(root_bytes):
+                return read_real_v5_a1_package(
+                    source,
+                    root_bytes=root_bytes,
+                    external_evidence_root=external_evidence_root,
+                )
             if external_evidence_root is not None:
                 raise ReviewPackageError(
                     "UNEXPECTED_EXTERNAL_EVIDENCE",

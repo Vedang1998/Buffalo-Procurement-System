@@ -199,6 +199,10 @@ class SupplierMappingReviewTests(unittest.TestCase):
             output = Path(temp) / "evidence"
             first = write_report_bundle(output, b'{"label":"review"}\n', b"<p>review</p>\n")
             self.assertFalse(first["idempotent_replay"])
+            self.assertEqual(
+                json.loads((output / "SHA256SUMS.json").read_text())["label"],
+                "review",
+            )
             self.assertEqual(sorted(path.name for path in output.iterdir()), [
                 "SHA256SUMS.json", "report.html", "report.json"
             ])
@@ -1664,7 +1668,7 @@ class SupplierMappingReviewTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(OSError, "synthetic interrupted write"):
                     report_cli.write_report_bundle(
-                        output, b"{}\n", b"<p>fixture</p>\n"
+                        output, b'{"label":"review"}\n', b"<p>fixture</p>\n"
                     )
             self.assertFalse(output.exists())
             self.assertEqual(list(root.iterdir()), [])
@@ -1676,10 +1680,33 @@ class SupplierMappingReviewTests(unittest.TestCase):
 
         stdout = Stdout()
         report = {
-            "label": REVIEW_LABEL,
+            "label": "REVIEW ONLY / NOT_APPROVED / NOT_IMPORT_READY",
             "status": "BASELINE_REQUIRED",
             "large_private_detail": "must-not-be-repeated-on-stdout",
         }
+        package = ReviewPackage(
+            source="fixture",
+            package_kind="FIXTURE",
+            snapshot_id="fixture",
+            status="BASELINE_REQUIRED",
+            label=report["label"],
+            file_count=0,
+            verified_file_count=0,
+            manifest_sha256="a" * 64,
+            tables={},
+            cohorts={},
+            issues=(),
+            unavailable_evidence=(),
+        )
+        with (
+            patch.object(report_cli, "_load", return_value=package),
+            patch.object(
+                report_cli.mapping_review, "report_document", return_value=report
+            ),
+            patch.object(report_cli, "_canonical_report_bytes", return_value=b"{}\n"),
+            patch.object(report_cli, "_html_report_bytes", return_value=b"<p></p>\n"),
+        ):
+            self.assertIs(report_cli.execute(["fixture.zip"]), report)
         with (
             patch.object(report_cli, "execute", return_value=report),
             patch.object(report_cli.sys, "stdout", stdout),
@@ -1690,6 +1717,7 @@ class SupplierMappingReviewTests(unittest.TestCase):
             )
         result = json.loads(stdout.buffer.getvalue())
         self.assertEqual(result["status"], "BASELINE_REQUIRED")
+        self.assertEqual(result["label"], report["label"])
         self.assertTrue(result["report_written"])
         self.assertNotIn("large_private_detail", result)
 

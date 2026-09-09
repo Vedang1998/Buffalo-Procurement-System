@@ -33,7 +33,6 @@ sys.path.insert(0, str(PROCUREMENT_ROOT / "src"))
 
 from procurement_os import supplier_mapping_review as mapping_review  # noqa: E402
 from procurement_os.supplier_review_package import (  # noqa: E402
-    REVIEW_LABEL,
     ReviewPackageError,
     read_review_package,
 )
@@ -158,6 +157,15 @@ def _html_report_bytes(report: Mapping[str, Any]) -> bytes:
 
 
 def _manifest_bytes(report_json: bytes, report_html: bytes) -> bytes:
+    try:
+        report = json.loads(report_json)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TypeError("report JSON must be valid UTF-8 JSON") from exc
+    if not isinstance(report, Mapping):
+        raise TypeError("report JSON must contain an object")
+    label = report.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise TypeError("report JSON must contain a nonblank label")
     records = []
     for name, data in sorted(
         ((REPORT_JSON, report_json), (REPORT_HTML, report_html)),
@@ -173,7 +181,7 @@ def _manifest_bytes(report_json: bytes, report_html: bytes) -> bytes:
     document = {
         "files": records,
         "format": REPORT_MANIFEST_FORMAT,
-        "label": REVIEW_LABEL,
+        "label": label,
     }
     return (
         json.dumps(
@@ -399,6 +407,8 @@ def _bundle_result(
     *,
     idempotent_replay: bool,
 ) -> dict[str, Any]:
+    report = json.loads(expected[REPORT_JSON])
+    label = report["label"]
     return {
         "files": [
             {
@@ -409,7 +419,7 @@ def _bundle_result(
             for name in _REPORT_FILES
         ],
         "idempotent_replay": idempotent_replay,
-        "label": REVIEW_LABEL,
+        "label": label,
         "output": str(output),
     }
 
@@ -427,6 +437,34 @@ def _load(
         prior_delta_path=prior_delta,
         external_evidence_root=external_evidence_root,
     )
+
+
+def _local_pdf_href_prefix(
+    package: Any,
+    *,
+    output: Path | None,
+    external_evidence_root: Path | None,
+) -> str | None:
+    """Bind links only when report output and verified PDFs share a known layout."""
+
+    if (
+        getattr(package, "package_kind", None)
+        != "V5_DAYTIME_A1_COMPLETE_SNAPSHOT"
+        or output is None
+        or external_evidence_root is None
+    ):
+        return None
+    destination = _resolved_output_path(output)
+    expected = destination.parent / "original_sources"
+    try:
+        if (
+            external_evidence_root.resolve(strict=True)
+            == expected.resolve(strict=True)
+        ):
+            return "../original_sources/"
+    except OSError:
+        return None
+    return None
 
 
 def execute(argv: Sequence[str] | None = None) -> dict[str, Any]:
@@ -448,10 +486,18 @@ def execute(argv: Sequence[str] | None = None) -> dict[str, Any]:
         )
         comparison = mapping_review.compare_review_packages(previous, package)
 
-    report = mapping_review.report_document(package, comparison=comparison)
+    report = mapping_review.report_document(
+        package,
+        comparison=comparison,
+        local_pdf_href_prefix=_local_pdf_href_prefix(
+            package,
+            output=args.output,
+            external_evidence_root=args.external_evidence_root,
+        ),
+    )
     if not isinstance(report, dict):
         raise TypeError("supplier review report must be a dictionary")
-    if report.get("label") != REVIEW_LABEL:
+    if report.get("label") != package.label:
         raise RuntimeError("supplier review report is missing its review-only label")
 
     # The actual V5 diagnostic package retains hundreds of megabytes of
@@ -484,7 +530,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         stdout_document = report
     else:
         stdout_document = {
-            "label": REVIEW_LABEL,
+            "label": report.get("label"),
             "output": str(output),
             "report_written": True,
             "status": report.get("status"),
