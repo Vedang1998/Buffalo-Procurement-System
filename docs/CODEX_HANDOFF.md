@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-08T17:11:28Z (UTC)
+**Updated:** 2026-09-09T11:10:36Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,159 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Real sealed V5-DAYTIME-A1 package acceptance — REVIEW ONLY / NOT_APPROVED / NOT_IMPORT_READY
+
+- This offline follow-on began at `2026-09-09T00:56:09Z` from required
+  checkpoint `6528bc69b1a49c786d7a61fbf293989b6ec093f4`, tree
+  `26670893ead77e49627693fca9b7e27108751a0b`. Work remained isolated on
+  `codex/supplier-mapping-real-package-acceptance`. The approved scoped design
+  is `7e57301bd2e4ee2c76245ece5ca1012396ce7601`, tree
+  `a1d613655fc8bd4d1826cfe33e04e963b96831b6`; the exact material code/test
+  candidate is `482b1e63d84bd4e76d8a75444d124d3e724b083d`, tree
+  `a2546b23b3e932d5a7f5c4f774b4c4beaca58bc7`. Its eight-file implementation
+  commit adds the exact A1 adapter and tests and updates only the existing
+  offline reader, report, CLI, and test floor. Together with the design, the
+  base-to-candidate delta is nine Python/Markdown files. It changes no schema,
+  migration, canonical business rule, live route, production configuration,
+  mapping, price, inventory, forecast, PO, Shopify, or deployment authority.
+  The documentation-only closeout is the commit containing this entry.
+- The R1 replacement wrapper is 386,533,606 bytes with SHA-256
+  `5f8d07805f9cd83bf4421f6b355062188b04550d18adb207f60672b7b6604bce`.
+  Independent receiving inspection found its 26 members safe and byte-exact;
+  all 25 payload-manifest entries passed size/hash checks. The original root,
+  seal, and addendum SHA-256 values are respectively
+  `4eef2d6cfe6b89c94804a749be89d4848d48379bff1521f66cfb42d60d599f82`,
+  `02e81308aad9a242a9606d3b53598a625032dff00e21f61dcd7f8980c3ddc4cc`,
+  and `1e51bce76ea1afa02f9fcd8d7bb3d7d54fdae01c9bbb7b33b00b6aa4e31ca2f5`.
+  The unavailable old monolith SHA-256
+  `3a0bcdee8967aa51e1083f693d3e2fd39aa3ea83a7822cf2dc5cde9f7bc3ca09`
+  is explicitly `not_expected_for_this_replacement`; it is not an R1
+  acceptance prerequisite. The application reader receives only the portable
+  directory, so its own replacement-transport state truthfully remains
+  `NOT_EVALUATED_BY_PORTABLE_READER` rather than repeating external attestation.
+- Before changing code, the exact checkpoint reader was run unchanged against
+  the genuine package. It exited `2` with
+  `NONCANONICAL_MANIFEST: portable root bytes are not canonical` in 1.407028
+  seconds at 37,844 KiB peak RSS. The genuine revision intentionally uses
+  sealed, pretty-printed raw root/seal bytes and a materially different
+  120-table contract. The correction therefore adds an exact raw-root hash /
+  package-ID / semantic-revision dispatch to a dedicated validator; it does
+  not relax canonical handling for the synthetic portable or legacy V4/V5
+  paths. Unknown or near-match packages still fail closed.
+- The exact candidate verified five immutable sealed archives, all 2,853 inner
+  members, all nine portable top-level files, 120 logical tables / 746,048
+  rows / 139 parts, and all 2,684 embedded files. Namespace controls reconcile
+  to `effective_v5` 52 tables / 691,311 rows / 70 parts, `v5_sidecar` 44 /
+  36,222 / 45, and `daytime_addendum` 24 / 18,515 / 24. The reader preserves
+  absent/null/false/zero distinctions, leading-zero and suffixed supplier
+  codes, the unchanged 27-field normalized projection, comparison-parent
+  separation, duplicate logical-name namespaces, explicitly reviewed nulls,
+  and zero approval/import authority. It retains bounded lazy access only
+  through already verified immutable archive snapshots.
+- Structural and relational controls independently reconcile the original
+  2,000-Variant cohort and separate 2,003-ID historical census (1,999 returned,
+  four additions, one not returned without deletion inference), 38,032
+  ordinary source offers, 76,896 ordinary tiers, 936 comparison parents /
+  3,765 comparison rows, 80,661 normalized rows with exactly 27 fields, 2,000
+  review batches / 14,823 displayed occurrences, 714 active requirements
+  across 475 Variants and 120 requests, 20 owner decisions, 460 complete
+  combos, 25 additive source overlays, and seven sibling reviews. All mapping,
+  price, import-ready, selection, contact/send, mutation, database, Shopify,
+  supplier, and order effects remain zero.
+
+| Acceptance state | Exact result |
+| --- | --- |
+| R1 wrapper / transfer manifest | `PASS` as separate receiving evidence; application reader `NOT_EVALUATED` |
+| Raw portable-file integrity | `PASS` |
+| Complete effective-snapshot restoration | `PASS` |
+| Structural replay / relationship validation | `PASS` / `PASS` |
+| Ten separately transferred original PDFs | `PASS` for exact name, size, SHA-256, and page bounds |
+| Three declared page-image bundles | `UNAVAILABLE_3_DECLARED_BUNDLES` |
+| Original historical V4 patch replay | `UNAVAILABLE_EXACT_V4_BASELINE_REQUIRED` |
+| Semantic review | `TARGETED_UNAPPROVED_REVIEW` |
+| Mapping / price approval | `NOT_APPROVED` / `NOT_APPROVED` |
+| Import readiness | `NOT_IMPORT_READY` |
+| Genuine next-month supplier book | Not supplied; no real monthly comparison claimed |
+
+- The final private bundle is
+  `input/accepted-report-final-a1/{report.json,report.html,SHA256SUMS.json}`.
+  JSON is 96,655,733 bytes, SHA-256
+  `8374652283925fe89c8252e99e336586126bce2dbb8c14decc7700b42ed8e65a`;
+  HTML is 96,293,128 bytes, SHA-256
+  `37fb21c46b9d2eab6e2c077ea2cf7b3de3e60d355b3167adb1846458866e7514`;
+  the checksum manifest is 343 bytes, SHA-256
+  `9977553e983598a1b54a0ecbfa02e621e3d0c86ea226a489bf11b5e86357d904`.
+  First publication took 309.486822 seconds; exact replay took 298.865084
+  seconds. Both exited zero with empty stderr and 243-byte bounded stdout;
+  every output hash and nanosecond mtime remained identical. Peak child RSS
+  across the two executions was 1,397,300 KiB.
+- Chromium 152.0.7977.64 rendered the actual self-contained `file://` HTML
+  with CDP and host resolution blocking HTTP(S). It exercised all 2,000 unique
+  Variant batches / 14,823 occurrences, exact Variant, supplier, SKU, and
+  `Unfilled` search, occurrence detail, sidecar evidence, all six global
+  ledgers, all 14,823 bound path-safe PDF links, and three representative local
+  physical-page navigations. External anchors/HTTP requests, runtime
+  exceptions, console errors, navigation errors, and loading failures were all
+  zero. This proves offline file rendering only, not an authenticated server or
+  production interface.
+- Final focused validation passed `86/86` in 2.157 seconds; startup hardening
+  passed `10/10` in 0.003 seconds. The one exact-final authoritative
+  disposable-loopback PostgreSQL 16.9 run discovered, executed, and passed
+  `673/673` in 711.303 seconds (724-second wrapper), with failures, errors,
+  skips, expected failures, and unexpected successes all zero across the exact
+  37-module floor. AST parsing of 97 Python files, pinned `uv 0.12.3` lock
+  checking, diff checking, extension/private-generated checks, and added-line
+  secret/private-literal scans passed on the clean implementation tree.
+- Read-only same-model reviewer `/root/final_contract_report_review` found two
+  grouped P1s in an earlier candidate: collapsed integrity/restoration result
+  states and incomplete propagation/tests for the required three-part terminal
+  label. After remediation it returned: `PASS — no remaining P0/P1/P2 findings
+  in the second label-contract remediation.` This does not replace a
+  Claude-specific review. The existing Claude credential remains unavailable;
+  disposition is **REVIEW PENDING**, with the exact frozen prompt retained
+  outside Git as `CLAUDE_READ_ONLY_REVIEW_PROMPT_482B1E6.md`. No login loop,
+  OAuth bypass, or separately billed API was used.
+- The persistent multi-offer authority design remains a proposal with six open
+  owner decisions and no implementation under this task:
+
+  1. Keep routine selection Variant-wide unless the owner deliberately chooses
+     Variant-plus-vendor/channel scope; narrower scope permits simultaneous
+     channel choices but changes existing uniqueness and recommendation
+     semantics.
+  2. Prefer distinct mapping and selection confirmations with least-privilege
+     roles; allowing one owner for both reduces friction but weakens separation
+     of duties.
+  3. Require explicit validity/expiry and fail closed when a monthly book is
+     missing; this prevents stale economics from becoming current but requires
+     timely re-review.
+  4. Do not bootstrap any verified single offer automatically. If an owner
+     elects a bootstrap set, require an explicit fingerprinted batch review;
+     the tradeoff is review effort for auditable authority.
+  5. Use a private authenticated identity provider, server-derived actor
+     identity, and per-action roles for list/detail/download/mapping/selection;
+     this adds security administration but avoids shared-token or caller-
+     asserted authority.
+  6. Keep Shopify SKU writeback absent. Any future support needs a separately
+     authorized scope, compare-and-swap preconditions, immutable audit, and a
+     tested rollback; convenience does not justify silent identity drift.
+
+- Host-local evidence is retained outside Git under
+  `/home/runner/workspace/.ai-auth/codex/evidence/real-package-acceptance-20260909T005609Z`.
+  It includes the unchanged-reader failure, final focused/startup/full/static
+  evidence, exact publish/replay attestation, Chromium audit/trace, private
+  report bundle, frozen Claude prompt, and a final hash manifest. Off-host
+  backup is not proven. The follow-on closeout exceeded the contract's eight-
+  hour execution window; this is a disclosed process limitation and creates no
+  approval or exception. `PHASE_STATUS.md` is unchanged because no program
+  milestone changed. PR #23 remains untouched, draft, historically non-green,
+  and outside this branch.
+- Production/development operational database connections or writes, Shopify
+  calls/writes, mapping or price activations, supplier transmissions, orders or
+  POs, deployments, `main` merges, PR changes/retries, and new PRs: `0`.
+  **Exact next authorization boundary:** owner review of this frozen checkpoint,
+  its evidence, and the six design decisions. Do not merge, deploy, approve,
+  import, select, write back, contact a supplier, or order under this handoff.
 
 ### Daytime V5 supplier-review compatibility — REVIEW ONLY / NOT_IMPORT_READY / NO V5 PR
 
