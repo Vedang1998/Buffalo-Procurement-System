@@ -229,6 +229,9 @@ _CHECKSUM_SKIP_HEADER = (
     b"-- buffalo-migration-replay: checksum-skip-v1\n"
     b"-- buffalo-contract-validator: persistent-mapping-foundation\n"
 )
+_CHECKSUM_LOCK_KEY = (
+    "buffalo:checksum-pinned:persistent-mapping-foundation"
+)
 
 
 def _checksum_validator(name: str, raw_sql: bytes) -> str | None:
@@ -263,6 +266,14 @@ def apply_schema_connection(conn: Any, db_dir: Path) -> list[str]:
         marker_value = f"sha256:{hashlib.sha256(raw_sql).hexdigest()}"
         with conn.transaction():
             if validator is not None:
+                # Serialize marker observation, SQL execution/validation, and
+                # marker publication even when competing runners have
+                # different file bytes.
+                conn.execute(
+                    "SELECT pg_catalog.pg_advisory_xact_lock("
+                    "pg_catalog.hashtextextended(%s,0))",
+                    (_CHECKSUM_LOCK_KEY,),
+                )
                 row = conn.execute(
                     "SELECT value FROM meta WHERE key=%s", (marker_key,)
                 ).fetchone()
@@ -291,17 +302,24 @@ def apply_schema_connection(conn: Any, db_dir: Path) -> list[str]:
     return applied
 ```
 
-This is deliberately opt-in: migrations without the exact header retain the
-current execute-and-mark behavior. Once a marker contains `sha256:`, removing
-the header or changing any file byte fails before SQL execution. An exact
-replay calls the stable, current contract assertion and skips the historical
-file; skipped files are not falsely returned as newly applied. A later version
+This is deliberately scoped: existing and non-persistent-mapping migrations
+without the exact header retain the current execute-and-mark behavior; every
+numbered `persistent_mapping_*.sql` file must opt in and fails before execution
+if either header is absent. Once a marker contains `sha256:`, changing any file
+byte also fails before SQL execution. An exact replay calls the stable, current
+contract assertion and skips the historical file; skipped files are not
+falsely returned as newly applied. A later version
 migration must preserve/replace that stable assertion, use the same two
-headers, store its own checksum marker, and make its contract/signature
-transition atomically. Thus a full-chain replay validates the current version
-without letting a historical `v1` file recreate it. The implementation tests
-must cover initial apply, exact skip, changed-byte refusal, missing-header
-refusal, assertion failure, and replay after an intentional `v2` transition.
+headers and an `NNN_persistent_mapping_*.sql` name, store its own checksum
+marker, and make its contract/signature transition atomically. The
+transaction-level family lock is acquired before the marker read and remains
+held through validation/execution and marker publication, so two first
+appliers cannot both observe absence or overwrite one another's checksum.
+Thus a full-chain replay validates the current version without letting a
+historical `v1` file recreate it. The implementation tests must cover initial
+apply, exact skip, changed-byte refusal, missing-header refusal, assertion
+failure, concurrent same/different-byte first applies, and replay after an
+intentional `v2` transition.
 
 ## 4. Exact proposed SQL
 
@@ -379,7 +397,8 @@ WITH target_relations AS (
                'compression',a.attcompression,
                'collation',CASE WHEN a.attcollation=0 THEN NULL
                                 ELSE a.attcollation::regcollation::text END,
-               'default',pg_get_expr(d.adbin,d.adrelid,false)
+               'default',pg_get_expr(d.adbin,d.adrelid,false),
+               'acl',COALESCE(a.attacl::text,'')
            )
       FROM target_relations r
       JOIN pg_attribute a ON a.attrelid=r.oid
@@ -2218,8 +2237,7 @@ BEGIN
       FROM meta WHERE key='persistent_mapping_foundation_contract';
     SELECT value INTO installed_catalog_sha256
       FROM meta WHERE key='persistent_mapping_foundation_catalog_sha256';
-    IF installed_contract IS NOT NULL
-       AND installed_contract IS DISTINCT FROM 'v1-shadow-only' THEN
+    IF installed_contract IS DISTINCT FROM 'v1-shadow-only' THEN
         RAISE EXCEPTION 'persistent mapping foundation contract version differs: %',
             installed_contract;
     END IF;
@@ -2269,6 +2287,26 @@ BEGIN
            AND privilege.grantee<>c.relowner
     ) OR EXISTS (
         SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+          JOIN pg_attribute a ON a.attrelid=c.oid
+          CROSS JOIN LATERAL aclexplode(a.attacl) privilege
+         WHERE n.nspname=target_schema
+           AND c.relname IN (
+               'supplier_mapping_review_batches',
+               'supplier_mapping_review_candidates',
+               'supplier_mapping_decisions',
+               'supplier_offer_selection_events',
+               'supplier_offer_selection_heads',
+               'v_effective_supplier_mapping_decisions',
+               'v_supplier_offer_selection_diagnostics',
+               'v_selected_standard_supplier_offers',
+               'v_supplier_offer_selection_shadow'
+           )
+           AND a.attnum>0 AND NOT a.attisdropped
+           AND privilege.grantee<>c.relowner
+    ) OR EXISTS (
+        SELECT 1
           FROM pg_proc p
           JOIN pg_namespace n ON n.oid=p.pronamespace
           CROSS JOIN LATERAL aclexplode(p.proacl) privilege
@@ -2278,11 +2316,10 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'persistent mapping objects grant a non-owner principal';
     END IF;
-    IF installed_catalog_sha256 IS NOT NULL AND (
-       installed_catalog_sha256 !~ '^[0-9a-f]{64}$'
+    IF installed_catalog_sha256 IS NULL
+       OR installed_catalog_sha256 !~ '^[0-9a-f]{64}$'
        OR compute_persistent_mapping_catalog_sha256()
-            IS DISTINCT FROM installed_catalog_sha256
-    ) THEN
+            IS DISTINCT FROM installed_catalog_sha256 THEN
         RAISE EXCEPTION 'persistent mapping catalog signature differs';
     END IF;
 END
@@ -2322,6 +2359,7 @@ $revoke_public_function_execution$;
 DO $revoke_unconfigured_named_principals$
 DECLARE
     relation_grant RECORD;
+    column_grant RECORD;
     function_grant RECORD;
 BEGIN
     FOR relation_grant IN
@@ -2352,6 +2390,44 @@ BEGIN
         );
     END LOOP;
 
+    FOR column_grant IN
+        SELECT DISTINCT c.relname,a.attname,
+               privilege.grantee AS grantee_oid,
+               CASE WHEN privilege.grantee=0 THEN NULL
+                    ELSE pg_get_userbyid(privilege.grantee) END AS grantee_name
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+          JOIN pg_attribute a ON a.attrelid=c.oid
+          CROSS JOIN LATERAL aclexplode(a.attacl) privilege
+         WHERE n.nspname=current_schema()
+           AND c.relname IN (
+               'supplier_mapping_review_batches',
+               'supplier_mapping_review_candidates',
+               'supplier_mapping_decisions',
+               'supplier_offer_selection_events',
+               'supplier_offer_selection_heads',
+               'v_effective_supplier_mapping_decisions',
+               'v_supplier_offer_selection_diagnostics',
+               'v_selected_standard_supplier_offers',
+               'v_supplier_offer_selection_shadow'
+           )
+           AND a.attnum>0 AND NOT a.attisdropped
+           AND privilege.grantee<>c.relowner
+    LOOP
+        IF column_grant.grantee_oid=0 THEN
+            EXECUTE format(
+                'REVOKE ALL PRIVILEGES (%I) ON TABLE %I.%I FROM PUBLIC',
+                column_grant.attname,current_schema(),column_grant.relname
+            );
+        ELSE
+            EXECUTE format(
+                'REVOKE ALL PRIVILEGES (%I) ON TABLE %I.%I FROM %I',
+                column_grant.attname,current_schema(),column_grant.relname,
+                column_grant.grantee_name
+            );
+        END IF;
+    END LOOP;
+
     FOR function_grant IN
         SELECT DISTINCT p.oid::regprocedure AS function_identity,
                pg_get_userbyid(privilege.grantee) AS grantee_name
@@ -2371,7 +2447,6 @@ BEGIN
 END
 $revoke_unconfigured_named_principals$;
 
-SELECT assert_persistent_mapping_foundation_contract();
 INSERT INTO meta(key,value)
 VALUES ('persistent_mapping_foundation_contract','v1-shadow-only')
 ON CONFLICT(key) DO NOTHING;
@@ -2396,6 +2471,10 @@ BEGIN
     END IF;
 END
 $catalog_commit$;
+
+-- Final validation runs only after both exact metadata rows exist. It is the
+-- stable assertion invoked by checksum-skipped full-chain replay.
+SELECT assert_persistent_mapping_foundation_contract();
 ```
 
 ### SQL review notes that control implementation
@@ -2445,22 +2524,25 @@ $catalog_commit$;
   regular `STANDARD` offer may become the routine head.
 - The installed catalog-hash function and stored signature make checksum-skip
   validation fail closed on any changed/missing/extra owned column, constraint,
-  index, function, trigger, view, owner, or ACL. The runner never re-executes a
-  checksum-pinned historical file. Any later migration that intentionally
-  changes an owned object must preserve/replace the stable assertion and make
-  an explicit, checksum-pinned contract-version/signature transition; an
-  unrelated later migration leaves the signature unchanged.
+  index, function, trigger, view, owner, relation/function ACL, or per-column
+  ACL. The stable assertion requires both the exact contract-version row and a
+  valid matching catalog-signature row; deletion of either fails. The runner
+  never re-executes a checksum-pinned historical file. Any later migration that
+  intentionally changes an owned object must preserve/replace the stable
+  assertion and make an explicit, checksum-pinned contract-version/signature
+  transition; an unrelated later migration leaves the signature unchanged.
 - The exact predecessor check pins the referenced-offer trigger's nine-column
   `UPDATE OF` attachment as well as its function, events, timing, row scope,
   enablement, predicate, and function bytes. A weakened column list is not an
   acceptable predecessor.
-- All new relations, views, and functions explicitly deny `PUBLIC`, and the
-  migration removes any named-role grant inherited through default privileges
-  before it signs the catalog. Disposable migration tests run as the isolated
-  schema owner. No application-role grant belongs in this slice until the
-  private named-role configuration is supplied; that later grant must be
-  least-privilege, versioned, and must not expose raw GUC setting or direct
-  table mutation to a browser/client principal.
+- All new relations, views, functions, and columns explicitly deny non-owner
+  principals: the migration removes `PUBLIC`, named-role grants inherited
+  through default privileges, and any per-column grant before it signs the
+  catalog. Disposable migration tests run as the isolated schema owner. No
+  application-role grant belongs in this slice until the private named-role
+  configuration is supplied; that later grant must be least-privilege,
+  versioned, and must not expose raw GUC setting or direct table mutation to a
+  browser/client principal.
 - Existing `variants`, `vendors`, `supplier_offers`, `supplier_aliases`,
   `mapping_rejections`, `prices`, and artifact storage remain the only
   canonical contracts for their facts. This schema stores an opaque durable
@@ -2727,8 +2809,9 @@ simulation in test output.
 | Invariant/case | Boundary | Later executable test and required result |
 |---|---|---|
 | Exact predecessor only | Migration/PG | `test_upgrade_requires_exact_013_marker_set_and_contracts`: 012-only, unknown intervening marker, missing index/trigger, wrong referenced-offer `UPDATE OF` list, or altered contract refuses with no new object |
-| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker/signature; a fixture with named-role default table/function privileges leaves that role with no grant before the signature is stored; after valid authority rows are seeded, a second apply preserves every row/hash; dropped/altered constraint, index, function, trigger, view, owner, or ACL makes replay validation refuse and roll back |
-| Version-aware full-chain replay | Runner + migration/PG | `test_checksum_pinned_replay_preserves_later_contract_versions`: first apply stores the exact file SHA-256; exact replay skips SQL and calls the current assertion; changed bytes, removed headers, a legacy marker, or failed assertion refuses; after a synthetic `v2` transition with its own checksum marker, full-chain replay preserves every `v2` object/version/signature and executes neither historical mapping file |
+| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker/signature; a fixture with named-role default table/function privileges leaves that role with no grant before the signature is stored; after valid authority rows are seeded, a second apply preserves every row/hash; dropped/altered constraint, index, function, trigger, view, owner, relation ACL, function ACL, or column ACL makes replay validation refuse and roll back, including an explicit per-column grant to a synthetic role |
+| Version-aware full-chain replay | Runner + migration/PG | `test_checksum_pinned_replay_preserves_later_contract_versions`: first apply stores the exact file SHA-256; exact replay skips SQL and calls the current assertion; changed bytes, removed headers, a legacy marker, deleted contract/signature metadata, or failed assertion refuses; after a synthetic `v2` transition with its own checksum marker, full-chain replay preserves every `v2` object/version/signature and executes neither historical mapping file |
+| Concurrent first migration apply | Runner + migration/PG | `test_concurrent_checksum_pinned_first_apply_serializes_before_marker_read`: two transactions with the same migration name but different bytes contend on the family advisory lock; only the first executes and publishes its checksum, while the second re-reads that checksum and refuses without SQL or marker overwrite; identical bytes make the second validate/skip |
 | Historical upgrade | Migration/PG | `test_exact_013_upgrade_preserves_all_legacy_bytes_and_counts`: build through actual 013 files, seed legacy rows, snapshot table digests and recommendation output, then apply; new authority tables are empty |
 | Failed migration/late validation | Migration/PG | `test_migration_failure_and_late_validation_roll_back_every_object`: precondition failure and an injected failure after the final assertion both leave the predecessor byte/count snapshot and schema unchanged |
 | Late domain validation | Mapping + selection/PG | `test_late_decision_or_head_validation_rolls_back_the_whole_transaction`: a failure after inserting an offer/rejection or event but before commit leaves none of those rows and no head change |
@@ -2760,9 +2843,9 @@ simulation in test output.
 | Authority/config diff | Static/PURE | `test_mapping_authority_and_disabled_flags_match_approved_contract`: exact mirrored canonical/Master Plan text and false flags; CURRENT authority priority and price/Shopify/carry-forward flags unchanged |
 | Registration floor | Test runner/PURE | `test_persistent_mapping_modules_are_registered_at_exact_discovery_floors`: removal of one planned module/method trips its module floor and the sum-derived global floor |
 
-This matrix deliberately names 30 PostgreSQL test methods and three pure/static
+This matrix deliberately names 31 PostgreSQL test methods and three pure/static
 methods. Planned files and initial module floors are
-`procurement/tests/test_persistent_mapping_foundation_postgres.py` at 30 and
+`procurement/tests/test_persistent_mapping_foundation_postgres.py` at 31 and
 `procurement/tests/test_persistent_mapping_foundation_contract.py` at 3. The
 registration-floor test lives in the latter and imports the runner seams. At
 the implementation checkpoint, add both modules to `TEST_MODULES` and
