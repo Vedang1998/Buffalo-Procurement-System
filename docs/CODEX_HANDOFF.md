@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-09T11:10:36Z (UTC)
+**Updated:** 2026-09-10T02:10:01Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,123 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Claude review follow-up and owner policy design — OFFLINE CORRECTION COMPLETE / DESIGN ONLY
+
+- This bounded follow-up preserves branch
+  `codex/supplier-mapping-real-package-acceptance` at required checkpoint
+  `9ef51a2b7166df9ed58bc72c3f82f57ea8caeb55`, tree
+  `f3d563ac6b2d6d0b4f369fc57f96189831ab83d6`. Work is isolated on child
+  `codex/supplier-mapping-review-policy-followup`. The policy-design commit is
+  `db394295deafea53ac1d0eb944430b2d67b163ee`; the exact independently reviewed
+  Packet A code/report candidate is
+  `ea9c50841bcf48bfbb1b57f237231a229681fcfe`, tree
+  `b075fb935036da156b936b82481112c7e06ee669`; and the subsequent design-only
+  lineage/currency correction is
+  `46c6eb41c6c93d8764f5cfcd5df637e86d7e7ca2`, tree
+  `327ed93519e9c3240c3b9425db92ae1164b927ab`. The closeout commit containing
+  this entry changes documentation only. `main`, PR #23, and the unmerged
+  foundation history remain untouched.
+- The owner records Claude's exact disposition as **APPROVE WITH NONBLOCKING
+  FINDINGS**. Claude's reported focused result was `86/86`, startup `10/10`,
+  and full suite 673 executed / 670 pass / 3 fail. All three bootstrap failures
+  reproduced on the unchanged base. Claude did **not** run the private
+  real-data reproduction or private-manifest verification. Therefore Claude's
+  full suite is not described as green and no independent private replay is
+  claimed. The earlier writer `673/673` and private results remain separately
+  attributed writer evidence. The frozen Claude prompt in host-local evidence
+  is not a response artifact; the owner's message supplies this accepted
+  verdict.
+- Packet A closes each accepted follow-up finding without changing Phase 4
+  bootstrap safeguards: LOW-1 duplicate constant authority is removed; LOW-2
+  requires all 12 A1 ledger source tables, exact materialization/counts, and
+  canonical identities before report projection, and the renderer requires all
+  six outer ledgers; LOW-3 makes deep 8-row gift and 249-row fixed-combo control
+  totals explicit production preconditions with direct failure tests; LOW-4
+  exercises safe and hostile `local_pdf_href` values through actual Chromium;
+  LOW-5 simplifies the redundant file-count arithmetic. INFO-2 adds bounded
+  100-result pagination with honest total/range/page state so all broad-search
+  results are reachable. INFO-3 now says PDF page references are
+  `RANGE_CHECKED_AGAINST_PINNED_DECLARATION_NOT_INDEPENDENTLY_PARSED`; PDF page
+  counts were not independently parsed by this reader.
+- Writer validation on the follow-up branch passed focused `89/89`, startup
+  `10/10`, and the full safe harness `676/676` in 695.648 seconds, with zero
+  failures, errors, skips, expected failures, or unexpected successes. The
+  synthetic actual-browser audit passed `20/20`: 250/250 broad-search results
+  were reachable as 100 + 100 + 50, only the valid PDF link became an anchor,
+  JavaScript and raw/normalized/encoded traversal attempts remained inert, and
+  HTTP(S) requests, runtime exceptions, and console errors were zero.
+- Read-only reviewer `/root/final_code_review` independently checked exact
+  commit `ea9c508...`, ran focused `89/89` and browser `20/20`, and returned
+  `PASS` with no P0/P1/P2 finding. That reviewer did not run the private package
+  or full suite. A separate design review found three documentation gaps in the
+  first design: reversal lineage, authoritative currency when live `unitCost`
+  is null, and the migration-only `ADOPT_EXISTING_BASELINE` event vocabulary.
+  Commit `46c6eb4...` closes them by binding reversals to the current successful
+  unreversed effective head, binding `shop { id myshopifyDomain currencyCode }`
+  to cost preview/execution, and defining/testing baseline adoption. The same
+  reviewer then rechecked exact commit `46c6eb4...` and returned `PASS`: all
+  three findings resolved, with no remaining defect in the narrow scope. That
+  review made no edits and ran no private data or operational Shopify action.
+- The available private A1 input was re-read without rewriting source bytes.
+  Both writer executions returned `REVIEW_ONLY_VALIDATED` and
+  `REVIEW ONLY / NOT_APPROVED / NOT_IMPORT_READY`; the second exact replay left
+  every output byte and mtime unchanged. The fresh excluded bundle contains
+  report JSON 95,054,596 bytes, SHA-256
+  `27a7ec0d1fc7ad0a5d426428f6ce24fd5d9ec65060b4d8c195c6eda796760b22`;
+  HTML 94,690,398 bytes, SHA-256
+  `cd0e24bb57229c076afca3857982a2a628ce6d83b8799af29aee0c18ed9d3d78`;
+  and checksum manifest 343 bytes, SHA-256
+  `87460521dac8133c0cd5bc5d8bf9617ba3bb5994786f0040f4969866a1b53e4c`.
+  It projects 2,000 review batches / 14,823 offers and exact identities/counts
+  for all 12 required ledgers. This is writer private evidence only. Commercial
+  evidence remains outside Git.
+- The approximately 96 MB self-contained report and previously measured
+  approximately 1.397 GB peak-memory limitation remain. Off-host backup remains
+  unproven. Browser and private checks establish bounded offline behavior only,
+  not authenticated-server, deployment, production, mapping, price, purchasing,
+  or Shopify acceptance.
+- The revised persistent workflow design records the owner's six product
+  requirements separately from engineering recommendations: one usual primary
+  regular offer without deleting valid alternatives; one authenticated owner
+  may separately confirm mapping and routine selection; policy-bound base-book
+  carry-forward with monthly/seasonal/irregular schedules and scoped expiring
+  deal overlays; exact evidence-based automatic mapping with append-only system
+  provenance; private least-privilege access and separately confirmed cost,
+  retail, and SKU sync; and guarded high-confidence primary-regular SKU
+  writeback. The cost destination is Shopify InventoryItem Cost per item via
+  `inventoryItemUpdate(input.cost)`, read back through `InventoryItem.unitCost`,
+  for exactly one Shopify sellable unit. Quoted, received, invoiced, calculated,
+  and selected costs remain separate. No averaging or implied field authority
+  is introduced.
+- The design keeps human-approved mapping, policy-approved mapping, chosen
+  routine offer, supplier-price/carry-forward authority, owner-triggered cost
+  or retail sync, policy-eligible SKU sync, and order approval/release as
+  separately queryable states. It identifies exact canonical/config conflicts
+  and proposes later lifecycle/migration amendments, but changes no runtime
+  flag, schema, migration, OAuth scope, persistent table, route, recommendation,
+  price state, or commercial record now.
+- Four implementation details remain genuinely unanswered: the private identity
+  provider and named-role assignments; the final owner-published independent
+  initial-linkage evidence classes; whether a later separately approved service
+  policy may execute eligible SKU requests unattended after the owner-confirmed
+  first release; and actual cadence/validity/scope configuration for each
+  distributor/book family. The six owner policy questions and Shopify cost
+  destination are answered and must not be re-asked.
+- Read-only integration plan: compare the preserved parent to this child, then
+  review/cherry-pick only the exact reviewed commits in order onto a fresh
+  future integration branch created from the then-approved target. Verify
+  ancestry and conflicts without mutation first; do not rebase this child,
+  merge current `main`, absorb unmerged foundation history, or create/modify a
+  PR under this authorization. `PHASE_STATUS.md` is unchanged because no phase
+  milestone changed.
+- Operational database access/writes, Shopify reads/writes, mapping or price
+  approvals/activations, supplier contact, PO/order actions, deployments,
+  permission changes, PR changes/retries, new PRs, and merges: `0`.
+  **Exact next authorization boundary:** owner and independent read-only review
+  of this frozen child branch and its offline evidence. A later implementation,
+  migration, permission deployment, test-store execution, recommendation
+  cutover, or integration requires a new explicit authorization.
 
 ### Real sealed V5-DAYTIME-A1 package acceptance — REVIEW ONLY / NOT_APPROVED / NOT_IMPORT_READY
 
