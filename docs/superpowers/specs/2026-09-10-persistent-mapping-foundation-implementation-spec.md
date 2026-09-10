@@ -207,12 +207,110 @@ one database transaction. Therefore the migration file must contain no
 `BEGIN`, `COMMIT`, or autonomous transaction. The application operations below
 each require their own explicit `SERIALIZABLE` transaction.
 
+### Required checksum-pinned replay boundary
+
+Publishing this migration also requires the following narrow runner amendment.
+It is part of the first implementation change, not an edit made by this design
+package. The existing runner re-executes every migration forever. That is safe
+only while an old file continues to own the current form of every object it
+creates; it would make this file reject or overwrite a later, intentional
+`v2` contract transition before the later migration could run. Opt-in,
+content-addressed replay fixes that without changing legacy migration behavior.
+
+Add the two exact header lines shown below to this migration and to every later
+persistent-mapping contract-transition migration. Amend
+`procurement/tools/apply_schema.py` as follows, preserving the existing
+transaction around the marker read, validation or execution, and marker write:
+
+```python
+import hashlib
+
+_CHECKSUM_SKIP_HEADER = (
+    b"-- buffalo-migration-replay: checksum-skip-v1\n"
+    b"-- buffalo-contract-validator: persistent-mapping-foundation\n"
+)
+
+
+def _checksum_validator(name: str, raw_sql: bytes) -> str | None:
+    is_mapping_contract = (
+        len(name) > 4
+        and name[:3].isdigit()
+        and name[3] == "_"
+        and name[4:].startswith("persistent_mapping_")
+        and name.endswith(".sql")
+    )
+    if is_mapping_contract:
+        if not raw_sql.startswith(_CHECKSUM_SKIP_HEADER):
+            raise RuntimeError(
+                f"persistent-mapping migration lacks checksum header: {name}"
+            )
+        return "SELECT assert_persistent_mapping_foundation_contract()"
+    if raw_sql.startswith(_CHECKSUM_SKIP_HEADER):
+        raise RuntimeError(
+            f"checksum-skip header is not allowed for migration {name}"
+        )
+    return None
+
+
+def apply_schema_connection(conn: Any, db_dir: Path) -> list[str]:
+    """Apply every uninstalled file transactionally on a scoped connection."""
+    applied = []
+    for name in MIGRATION_ORDER:
+        raw_sql = (db_dir / name).read_bytes()
+        sql = raw_sql.decode("utf-8")
+        validator = _checksum_validator(name, raw_sql)
+        marker_key = f"migration:{name}"
+        marker_value = f"sha256:{hashlib.sha256(raw_sql).hexdigest()}"
+        with conn.transaction():
+            if validator is not None:
+                row = conn.execute(
+                    "SELECT value FROM meta WHERE key=%s", (marker_key,)
+                ).fetchone()
+                stored_marker = None if row is None else row[0]
+                if stored_marker is not None and not stored_marker.startswith(
+                    "sha256:"
+                ):
+                    raise RuntimeError(
+                        f"checksum-pinned migration has a legacy marker: {name}"
+                    )
+                if stored_marker is not None:
+                    if stored_marker != marker_value:
+                        raise RuntimeError(
+                            f"checksum-pinned migration bytes differ: {name}"
+                        )
+                    conn.execute(validator)
+                    continue
+            conn.execute(sql)
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES (%s,%s)"
+                " ON CONFLICT(key) DO UPDATE"
+                " SET value=EXCLUDED.value, updated_at=now()",
+                (marker_key, marker_value if validator is not None else "applied"),
+            )
+        applied.append(name)
+    return applied
+```
+
+This is deliberately opt-in: migrations without the exact header retain the
+current execute-and-mark behavior. Once a marker contains `sha256:`, removing
+the header or changing any file byte fails before SQL execution. An exact
+replay calls the stable, current contract assertion and skips the historical
+file; skipped files are not falsely returned as newly applied. A later version
+migration must preserve/replace that stable assertion, use the same two
+headers, store its own checksum marker, and make its contract/signature
+transition atomically. Thus a full-chain replay validates the current version
+without letting a historical `v1` file recreate it. The implementation tests
+must cover initial apply, exact skip, changed-byte refusal, missing-header
+refusal, assertion failure, and replay after an intentional `v2` transition.
+
 ## 4. Exact proposed SQL
 
 The following is the reviewable SQL proposed for the future migration. It is
 intentionally outside the automatically discovered migration directory.
 
 ```sql
+-- buffalo-migration-replay: checksum-skip-v1
+-- buffalo-contract-validator: persistent-mapping-foundation
 -- PROPOSED_UNNUMBERED_persistent_mapping_foundation.sql
 -- Exact predecessor under the reviewed chain: 013_monday_p1_remediation.sql.
 -- apply_schema.py supplies the enclosing transaction and migration marker.
@@ -237,8 +335,8 @@ BEGIN
 END
 $bootstrap_preconditions$;
 
--- Transaction-local migration helper. It is dropped before commit and is not
--- part of the installed contract.
+-- Installed same-contract catalog validator. The checksum-pinned runner calls
+-- the assertion that uses this function whenever it skips the historical file.
 CREATE OR REPLACE FUNCTION compute_persistent_mapping_catalog_sha256()
 RETURNS TEXT
 LANGUAGE sql STABLE
@@ -346,7 +444,7 @@ WITH target_relations AS (
       JOIN pg_namespace n ON n.oid=p.pronamespace
       JOIN pg_language l ON l.oid=p.prolang
      WHERE n.nspname=current_schema() AND p.proname ~
-       '^(persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+       '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
     UNION ALL
     SELECT 'view:'||r.relname,
            jsonb_build_object(
@@ -548,26 +646,41 @@ BEGIN
         RAISE EXCEPTION 'active vendor/supplier-code uniqueness contract is absent';
     END IF;
     IF NOT EXISTS (
-        SELECT 1 FROM pg_trigger
-         WHERE tgrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
-           AND tgname='trg_prevent_referenced_offer_identity_change'
-           AND tgfoid=to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change'))
-           AND tgtype=19 AND tgqual IS NULL
-           AND NOT tgisinternal AND tgenabled='O'
+        SELECT 1 FROM pg_trigger t
+         WHERE t.tgrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
+           AND t.tgname='trg_prevent_referenced_offer_identity_change'
+           AND t.tgfoid=to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change'))
+           AND t.tgtype=19 AND t.tgqual IS NULL
+           AND NOT t.tgisinternal AND t.tgenabled='O'
+           AND cardinality(t.tgattr)=9
+           AND ARRAY(
+               SELECT a.attname::text
+                 FROM unnest(t.tgattr) AS changed_attribute(attnum)
+                 JOIN pg_attribute a
+                   ON a.attrelid=t.tgrelid
+                  AND a.attnum=changed_attribute.attnum
+                ORDER BY a.attname::text
+           )=ARRAY[
+               'confidence','package_type','qualifying_units_per_case',
+               'raw_pack','shopify_units_per_case','size_text','supplier_sku',
+               'variant_id','vendor_id'
+           ]::text[]
     ) OR NOT EXISTS (
-        SELECT 1 FROM pg_trigger
-         WHERE tgrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
-           AND tgname='trg_protect_promoted_offer_contract'
-           AND tgfoid=to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract'))
-           AND tgtype=27 AND tgqual IS NULL
-           AND NOT tgisinternal AND tgenabled='O'
+        SELECT 1 FROM pg_trigger t
+         WHERE t.tgrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
+           AND t.tgname='trg_protect_promoted_offer_contract'
+           AND t.tgfoid=to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract'))
+           AND t.tgtype=27 AND t.tgqual IS NULL
+           AND cardinality(t.tgattr)=0
+           AND NOT t.tgisinternal AND t.tgenabled='O'
     ) OR NOT EXISTS (
-        SELECT 1 FROM pg_trigger
-         WHERE tgrelid=to_regclass(format('%I.%I',target_schema,'vendors'))
-           AND tgname='trg_protect_priced_vendor_contract'
-           AND tgfoid=to_regprocedure(format('%I.%I()',target_schema,'protect_priced_vendor_contract'))
-           AND tgtype=27 AND tgqual IS NULL
-           AND NOT tgisinternal AND tgenabled='O'
+        SELECT 1 FROM pg_trigger t
+         WHERE t.tgrelid=to_regclass(format('%I.%I',target_schema,'vendors'))
+           AND t.tgname='trg_protect_priced_vendor_contract'
+           AND t.tgfoid=to_regprocedure(format('%I.%I()',target_schema,'protect_priced_vendor_contract'))
+           AND t.tgtype=27 AND t.tgqual IS NULL
+           AND cardinality(t.tgattr)=0
+           AND NOT t.tgisinternal AND t.tgenabled='O'
     ) THEN
         RAISE EXCEPTION 'referenced/priced offer or vendor protection trigger is absent';
     END IF;
@@ -1040,6 +1153,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE expected_payload JSONB;
 BEGIN
+    IF current_setting('transaction_isolation')<>'serializable' THEN
+        RAISE EXCEPTION 'mapping review intake requires SERIALIZABLE isolation';
+    END IF;
     IF NEW.created_txid<>txid_current() THEN
         RAISE EXCEPTION 'review batch transaction identity differs';
     END IF;
@@ -2093,8 +2209,20 @@ CREATE OR REPLACE FUNCTION assert_persistent_mapping_foundation_contract()
 RETURNS VOID
 LANGUAGE plpgsql STABLE
 AS $$
-DECLARE target_schema TEXT := current_schema();
+DECLARE
+    target_schema TEXT := current_schema();
+    installed_contract TEXT;
+    installed_catalog_sha256 TEXT;
 BEGIN
+    SELECT value INTO installed_contract
+      FROM meta WHERE key='persistent_mapping_foundation_contract';
+    SELECT value INTO installed_catalog_sha256
+      FROM meta WHERE key='persistent_mapping_foundation_catalog_sha256';
+    IF installed_contract IS NOT NULL
+       AND installed_contract IS DISTINCT FROM 'v1-shadow-only' THEN
+        RAISE EXCEPTION 'persistent mapping foundation contract version differs: %',
+            installed_contract;
+    END IF;
     IF target_schema IS NULL
        OR to_regclass(format('%I.%I',target_schema,'supplier_mapping_review_batches')) IS NULL
        OR to_regclass(format('%I.%I',target_schema,'supplier_mapping_review_candidates')) IS NULL
@@ -2121,6 +2249,42 @@ BEGIN
     IF supplier_mapping_policy_is_published(NULL,NULL,NULL,NULL) THEN
         RAISE EXCEPTION 'absent mapping policy must fail closed';
     END IF;
+    IF EXISTS (
+        SELECT 1
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+          CROSS JOIN LATERAL aclexplode(c.relacl) privilege
+         WHERE n.nspname=target_schema
+           AND c.relname IN (
+               'supplier_mapping_review_batches',
+               'supplier_mapping_review_candidates',
+               'supplier_mapping_decisions',
+               'supplier_offer_selection_events',
+               'supplier_offer_selection_heads',
+               'v_effective_supplier_mapping_decisions',
+               'v_supplier_offer_selection_diagnostics',
+               'v_selected_standard_supplier_offers',
+               'v_supplier_offer_selection_shadow'
+           )
+           AND privilege.grantee<>c.relowner
+    ) OR EXISTS (
+        SELECT 1
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid=p.pronamespace
+          CROSS JOIN LATERAL aclexplode(p.proacl) privilege
+         WHERE n.nspname=target_schema AND p.proname ~
+           '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+           AND privilege.grantee<>p.proowner
+    ) THEN
+        RAISE EXCEPTION 'persistent mapping objects grant a non-owner principal';
+    END IF;
+    IF installed_catalog_sha256 IS NOT NULL AND (
+       installed_catalog_sha256 !~ '^[0-9a-f]{64}$'
+       OR compute_persistent_mapping_catalog_sha256()
+            IS DISTINCT FROM installed_catalog_sha256
+    ) THEN
+        RAISE EXCEPTION 'persistent mapping catalog signature differs';
+    END IF;
 END
 $$;
 
@@ -2144,12 +2308,68 @@ BEGIN
           FROM pg_proc p
           JOIN pg_namespace n ON n.oid=p.pronamespace
          WHERE n.nspname=current_schema() AND p.proname ~
-           '^(persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+           '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
     LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC',owned_function);
     END LOOP;
 END
 $revoke_public_function_execution$;
+
+-- Objects can inherit named-role privileges from ALTER DEFAULT PRIVILEGES.
+-- This first slice authorizes no non-owner role, so strip every such direct
+-- relation/function grant before the catalog is signed. Later role grants
+-- require their own approved contract-version transition.
+DO $revoke_unconfigured_named_principals$
+DECLARE
+    relation_grant RECORD;
+    function_grant RECORD;
+BEGIN
+    FOR relation_grant IN
+        SELECT DISTINCT c.relname,
+               pg_get_userbyid(privilege.grantee) AS grantee_name
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+          CROSS JOIN LATERAL aclexplode(c.relacl) privilege
+         WHERE n.nspname=current_schema()
+           AND c.relname IN (
+               'supplier_mapping_review_batches',
+               'supplier_mapping_review_candidates',
+               'supplier_mapping_decisions',
+               'supplier_offer_selection_events',
+               'supplier_offer_selection_heads',
+               'v_effective_supplier_mapping_decisions',
+               'v_supplier_offer_selection_diagnostics',
+               'v_selected_standard_supplier_offers',
+               'v_supplier_offer_selection_shadow'
+           )
+           AND privilege.grantee<>0
+           AND privilege.grantee<>c.relowner
+    LOOP
+        EXECUTE format(
+            'REVOKE ALL PRIVILEGES ON TABLE %I.%I FROM %I',
+            current_schema(),relation_grant.relname,
+            relation_grant.grantee_name
+        );
+    END LOOP;
+
+    FOR function_grant IN
+        SELECT DISTINCT p.oid::regprocedure AS function_identity,
+               pg_get_userbyid(privilege.grantee) AS grantee_name
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid=p.pronamespace
+          CROSS JOIN LATERAL aclexplode(p.proacl) privilege
+         WHERE n.nspname=current_schema() AND p.proname ~
+           '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+           AND privilege.grantee<>0
+           AND privilege.grantee<>p.proowner
+    LOOP
+        EXECUTE format(
+            'REVOKE ALL PRIVILEGES ON FUNCTION %s FROM %I',
+            function_grant.function_identity,function_grant.grantee_name
+        );
+    END LOOP;
+END
+$revoke_unconfigured_named_principals$;
 
 SELECT assert_persistent_mapping_foundation_contract();
 INSERT INTO meta(key,value)
@@ -2176,8 +2396,6 @@ BEGIN
     END IF;
 END
 $catalog_commit$;
-
-DROP FUNCTION compute_persistent_mapping_catalog_sha256();
 ```
 
 ### SQL review notes that control implementation
@@ -2225,16 +2443,24 @@ DROP FUNCTION compute_persistent_mapping_catalog_sha256();
   exact component relationships on the decision; policy approval remains
   limited to one deterministic regular `STANDARD` occurrence, and only a
   regular `STANDARD` offer may become the routine head.
-- The stored catalog signature makes same-contract reapply fail closed on any
-  changed/missing/extra owned column, constraint, index, function, trigger,
-  view, owner, or ACL. Any later migration that intentionally changes an owned
-  object must define an explicit contract-version/signature transition; an
-  unrelated later migration may leave the signature unchanged.
-- All new relations, views, and functions explicitly deny `PUBLIC`. Disposable
-  migration tests run as the isolated schema owner. No application-role grant
-  belongs in this slice until the private named-role configuration is supplied;
-  that later grant must be least-privilege and must not expose raw GUC setting
-  or direct table mutation to a browser/client principal.
+- The installed catalog-hash function and stored signature make checksum-skip
+  validation fail closed on any changed/missing/extra owned column, constraint,
+  index, function, trigger, view, owner, or ACL. The runner never re-executes a
+  checksum-pinned historical file. Any later migration that intentionally
+  changes an owned object must preserve/replace the stable assertion and make
+  an explicit, checksum-pinned contract-version/signature transition; an
+  unrelated later migration leaves the signature unchanged.
+- The exact predecessor check pins the referenced-offer trigger's nine-column
+  `UPDATE OF` attachment as well as its function, events, timing, row scope,
+  enablement, predicate, and function bytes. A weakened column list is not an
+  acceptable predecessor.
+- All new relations, views, and functions explicitly deny `PUBLIC`, and the
+  migration removes any named-role grant inherited through default privileges
+  before it signs the catalog. Disposable migration tests run as the isolated
+  schema owner. No application-role grant belongs in this slice until the
+  private named-role configuration is supplied; that later grant must be
+  least-privilege, versioned, and must not expose raw GUC setting or direct
+  table mutation to a browser/client principal.
 - Existing `variants`, `vendors`, `supplier_offers`, `supplier_aliases`,
   `mapping_rejections`, `prices`, and artifact storage remain the only
   canonical contracts for their facts. This schema stores an opaque durable
@@ -2500,12 +2726,13 @@ simulation in test output.
 
 | Invariant/case | Boundary | Later executable test and required result |
 |---|---|---|
-| Exact predecessor only | Migration/PG | `test_upgrade_requires_exact_013_marker_set_and_contracts`: 012-only, unknown intervening marker, missing index/trigger, or altered contract refuses with no new object |
-| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker/signature; after valid authority rows are seeded, a second apply preserves every row/hash; dropped/altered constraint, index, function, trigger, view, owner, or ACL makes reapply refuse and roll back |
+| Exact predecessor only | Migration/PG | `test_upgrade_requires_exact_013_marker_set_and_contracts`: 012-only, unknown intervening marker, missing index/trigger, wrong referenced-offer `UPDATE OF` list, or altered contract refuses with no new object |
+| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker/signature; a fixture with named-role default table/function privileges leaves that role with no grant before the signature is stored; after valid authority rows are seeded, a second apply preserves every row/hash; dropped/altered constraint, index, function, trigger, view, owner, or ACL makes replay validation refuse and roll back |
+| Version-aware full-chain replay | Runner + migration/PG | `test_checksum_pinned_replay_preserves_later_contract_versions`: first apply stores the exact file SHA-256; exact replay skips SQL and calls the current assertion; changed bytes, removed headers, a legacy marker, or failed assertion refuses; after a synthetic `v2` transition with its own checksum marker, full-chain replay preserves every `v2` object/version/signature and executes neither historical mapping file |
 | Historical upgrade | Migration/PG | `test_exact_013_upgrade_preserves_all_legacy_bytes_and_counts`: build through actual 013 files, seed legacy rows, snapshot table digests and recommendation output, then apply; new authority tables are empty |
 | Failed migration/late validation | Migration/PG | `test_migration_failure_and_late_validation_roll_back_every_object`: precondition failure and an injected failure after the final assertion both leave the predecessor byte/count snapshot and schema unchanged |
 | Late domain validation | Mapping + selection/PG | `test_late_decision_or_head_validation_rolls_back_the_whole_transaction`: a failure after inserting an offer/rejection or event but before commit leaves none of those rows and no head change |
-| Valid intake, zero authority effects | Intake/PG | `test_valid_intake_adds_only_immutable_batch_and_candidates`: exact counts; zero decisions, heads, events, prices, offer changes, Shopify calls, POs, orders, supplier effects |
+| Valid intake, zero authority effects | Intake/PG | `test_valid_intake_adds_only_immutable_batch_and_candidates`: exact counts; a direct READ COMMITTED insert is denied while the service's explicit SERIALIZABLE transaction succeeds; zero decisions, heads, events, prices, offer changes, Shopify calls, POs, orders, supplier effects |
 | Intake idempotency | Intake service/PG | `test_intake_exact_replay_returns_existing_and_payload_change_conflicts`: same key/hash returns IDs; same key/different payload changes nothing |
 | Altered/missing evidence | Reader + intake/PG | `test_intake_rejects_missing_or_altered_source_hash_page_and_prerequisite`: each changed artifact/root/seal/table/page-bound input rolls back fully |
 | Explicit null versus absent | Intake + DB/PG | `test_candidate_preserves_explicit_null_and_absent_states`: states and canonical hashes differ, values remain SQL null, replay is stable |
@@ -2516,7 +2743,7 @@ simulation in test output.
 | Append-only intake/decisions/events | DB/PG | `test_authority_history_rejects_update_delete_and_cascade`: each UPDATE/DELETE, including a linked rejection's evidence/actor/active state, fails and every row remains |
 | Exact decision replay | Mapping service/PG | `test_mapping_exact_replay_and_same_key_different_payload`: exact replay returns existing; changed payload has no partial offer/rejection |
 | Stale mapping preview/prior | Mapping/PG | `test_mapping_rejects_stale_preview_and_stale_or_forked_prior`: changed catalog/vendor/rejection/candidate or non-tip predecessor fails |
-| Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: every false/absent intake, human-map, policy-map, selection, and shadow-read flag denies before storage/DB access; forged/mismatched GUC, client actor, or shared token cannot insert; only matching enabled test configuration plus verified synthetic context can |
+| Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: every false/absent intake, human-map, policy-map, selection, and shadow-read flag denies before storage/DB access; forged/mismatched GUC, client actor, shared token, or a named role inherited through default privileges cannot insert; only matching enabled test configuration plus verified synthetic context can |
 | Policy fail closed | Authorization + mapping/PG | `test_policy_mapping_requires_published_policy_and_independent_evidence`: false stub rejects every policy event and creates no approved default |
 | Approval lifecycle | Mapping/PG | `test_mapping_approval_creates_inactive_unpriced_unselected_offer`: decision/offer commit atomically; zero price/head/recommendation effects |
 | Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head; exact selection replay returns its event and same-key/different-payload changes nothing |
@@ -2533,9 +2760,9 @@ simulation in test output.
 | Authority/config diff | Static/PURE | `test_mapping_authority_and_disabled_flags_match_approved_contract`: exact mirrored canonical/Master Plan text and false flags; CURRENT authority priority and price/Shopify/carry-forward flags unchanged |
 | Registration floor | Test runner/PURE | `test_persistent_mapping_modules_are_registered_at_exact_discovery_floors`: removal of one planned module/method trips its module floor and the sum-derived global floor |
 
-This matrix deliberately names 29 PostgreSQL test methods and three pure/static
+This matrix deliberately names 30 PostgreSQL test methods and three pure/static
 methods. Planned files and initial module floors are
-`procurement/tests/test_persistent_mapping_foundation_postgres.py` at 29 and
+`procurement/tests/test_persistent_mapping_foundation_postgres.py` at 30 and
 `procurement/tests/test_persistent_mapping_foundation_contract.py` at 3. The
 registration-floor test lives in the latter and imports the runner seams. At
 the implementation checkpoint, add both modules to `TEST_MODULES` and
@@ -2586,9 +2813,10 @@ the recommended next change is only:
 
 1. apply the approved first-slice canonical/config amendments with every new
    capability flag false;
-2. assign the next migration number after rechecking the exact chain, implement
-   the five tables, functions/triggers, empty shadow views, and no-backfill
-   contract above;
+2. implement and test the narrow checksum-pinned `apply_schema.py` replay
+   boundary, then assign the next migration number after rechecking the exact
+   chain and implement the five tables, functions/triggers, empty shadow views,
+   and no-backfill contract above;
 3. implement internal intake/mapping/selection domain services behind no public
    route, with policy hard-disabled;
 4. add and register the two planned test modules; prove fresh and exact-013
