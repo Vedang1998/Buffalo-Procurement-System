@@ -2180,6 +2180,11 @@ DROP FUNCTION compute_persistent_mapping_catalog_sha256();
   view, owner, or ACL. Any later migration that intentionally changes an owned
   object must define an explicit contract-version/signature transition; an
   unrelated later migration may leave the signature unchanged.
+- All new relations, views, and functions explicitly deny `PUBLIC`. Disposable
+  migration tests run as the isolated schema owner. No application-role grant
+  belongs in this slice until the private named-role configuration is supplied;
+  that later grant must be least-privilege and must not expose raw GUC setting
+  or direct table mutation to a browser/client principal.
 - Existing `variants`, `vendors`, `supplier_offers`, `supplier_aliases`,
   `mapping_rejections`, `prices`, and artifact storage remain the only
   canonical contracts for their facts. This schema stores an opaque durable
@@ -2260,10 +2265,12 @@ only after the authority/config changes are approved:
    `persistent_mapping.routine_selection_writes_enabled` flag to be exactly
    true. Start a new `SERIALIZABLE` transaction, set transaction-local
    `procurement.enabled_capability` exactly `routine_selection_writes_enabled`,
-   and require a new idempotency key, database-built
+   and require an idempotency key, database-built
    `HUMAN_ROUTINE_SELECTION_PREVIEW_V1` hash, separate confirmation hash, and
    the exact prior event/version. The same owner may act again, but the mapping
-   confirmation is not reusable.
+   confirmation is not reusable. Before mutation, return the existing event for
+   the same key and exact payload hash; refuse the same key with a different
+   payload without changing the head.
 2. Set the server-derived named-human authorization context; lock the Variant
    advisory key and current head.
 3. Recompute catalog, vendor, offer, mapping, and rejection fingerprints. A
@@ -2452,7 +2459,7 @@ simulation in test output.
 | Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: every false/absent intake, human-map, policy-map, selection, and shadow-read flag denies before storage/DB access; forged/mismatched GUC, client actor, or shared token cannot insert; only matching enabled test configuration plus verified synthetic context can |
 | Policy fail closed | Authorization + mapping/PG | `test_policy_mapping_requires_published_policy_and_independent_evidence`: false stub rejects every policy event and creates no approved default |
 | Approval lifecycle | Mapping/PG | `test_mapping_approval_creates_inactive_unpriced_unselected_offer`: decision/offer commit atomically; zero price/head/recommendation effects |
-| Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head |
+| Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head; exact selection replay returns its event and same-key/different-payload changes nothing |
 | Explicit reviewed null | Selection/PG | `test_clear_appends_event_and_preserves_prior_selection`: CLEAR is a head event, not deletion or offer deactivation |
 | Stale selection preview/head | Selection/PG | `test_selection_rejects_stale_offer_catalog_vendor_rejection_and_prior_head`: each mismatch rolls back event/head |
 | Concurrent selection | Selection/PG | `test_concurrent_selection_attempts_commit_one_complete_winner`: two SERIALIZABLE transactions from one prior head produce one event/head; loser leaves no partial event |
