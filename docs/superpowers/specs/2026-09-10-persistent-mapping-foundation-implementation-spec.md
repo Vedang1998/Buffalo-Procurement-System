@@ -184,6 +184,8 @@ currently intended integrated chain its exact predecessor is
   predecessor chain with no intervening migration;
 - `monday_price_book_contract='v2-future-only'` and
   `monday_p1_remediation_contract='v1'` survive integration;
+- the resolved `digest(bytea,text)` function is the `pgcrypto` extension member
+  from the integrated predecessor, not a search-path substitute;
 - the active vendor/SKU partial unique index and migration 010/011 protection
   triggers exist and are valid;
 - there are no partial objects from this contract;
@@ -218,6 +220,22 @@ intentionally outside the automatically discovered migration directory.
 SELECT pg_advisory_xact_lock(
     hashtextextended('buffalo:persistent-mapping-foundation:v1', 0)
 );
+
+DO $bootstrap_preconditions$
+DECLARE resolved_digest REGPROCEDURE := to_regprocedure('digest(bytea,text)');
+BEGIN
+    IF resolved_digest IS NULL OR NOT EXISTS (
+        SELECT 1
+          FROM pg_depend d
+          JOIN pg_extension e ON e.oid=d.refobjid
+         WHERE d.classid='pg_proc'::regclass
+           AND d.objid=resolved_digest::oid
+           AND d.deptype='e' AND e.extname='pgcrypto'
+    ) THEN
+        RAISE EXCEPTION 'the resolved digest(bytea,text) must belong to pgcrypto';
+    END IF;
+END
+$bootstrap_preconditions$;
 
 -- Transaction-local migration helper. It is dropped before commit and is not
 -- part of the installed contract.
@@ -450,7 +468,7 @@ BEGIN
           FROM meta WHERE key='persistent_mapping_foundation_catalog_sha256';
         SELECT min(marker),count(*)
           INTO installed_migration_marker,installed_migration_marker_count
-          FROM unnest(actual_markers) marker
+          FROM unnest(actual_markers) AS migration_markers(marker)
          WHERE marker ~
                '^migration:[0-9]{3}_persistent_mapping_foundation[.]sql$';
         IF installed_migration_marker_count=1 THEN
@@ -460,12 +478,14 @@ BEGIN
         END IF;
         IF actual_markers IS NULL
            OR EXISTS (
-                SELECT 1 FROM unnest(expected_markers) expected_marker
+                SELECT 1
+                  FROM unnest(expected_markers) AS expected(expected_marker)
                  WHERE NOT expected_marker=ANY(actual_markers)
               )
            OR installed_migration_marker_count<>1
            OR EXISTS (
-                SELECT 1 FROM unnest(actual_markers) actual_marker
+                SELECT 1
+                  FROM unnest(actual_markers) AS actual(actual_marker)
                  WHERE NOT actual_marker=ANY(expected_markers)
                    AND (
                        actual_marker !~ '^migration:[0-9]{3}_.+[.]sql$'
