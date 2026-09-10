@@ -52,6 +52,28 @@ Files changed on both sides including `procurement/tools/run_tests.py` appear
 auto-mergeable in that model, but this is not evidence that 39 commits are
 independently cherry-pickable or behaviorally compatible.
 
+### Exact prerequisite provenance
+
+| Prerequisite | Reviewed/provenance commit(s) |
+|---|---|
+| Core catalog, vendor, offer, alias, rejection, and price contracts now on main | Original PostgreSQL contract `fa66a8e8b868ca50a6a375a8f9ba434402caed74`; Phase-4 offer/alias safeguards through `326ad7659f41e63c9353e9372e7f67b94af47357`; current main `f308ac666a2377f540e528bc873463daecc20cf8` |
+| Monday design and PostgreSQL isolation | `7c24419db8075cc3069073590a1e83115e9a3b89`; `d0834a8c8cb729aec7a8fc0d77c79e9d9b508140` |
+| Migration 008 inventory foundation | `955d4685ae757cd80f1bd0442e71d910ff2063b2` |
+| Migration 009 vendor rules | `3c81704e500bcff085d366dfcbd0104422aa3e59` |
+| Migration 010 PO ledger and referenced-offer protection | `7068f54fe2fb8b54397888aadba6990d3644b19a`, with contract/hardening `21e967e39aba14860f8ededaf47cd03cd9a02397` and `41a4df21d523ee45059b256090f0fdb47664827a` |
+| Migration 011 price staging and priced-offer/vendor protections | `c042ad09ae1289168e826805118201c000b90131` |
+| Migration 012 workflow/recommendation boundary | `4b342cf67ec1d488a2f84433042a468609624d84` |
+| Migration 013 remediation and foundation review evidence | `dda6b0986710f032f05f50273527af160cacde5c`; reviewed/test evidence `e59ea665408cb881f25cff995cc2a6957fa59f94`; closeout `88bf800708881e5801a51d0cb165e84e8c8cf198` |
+| Offline review bridge/read contract | Start `fa594b641aa47a107bc51c3ed504ff7974e93c25`; fail-closed hardening `bc160a71a1a56b8951b6c2f8cc52991c5a48176b`; reviewed implementation `ecc1835dc025c21c9c0e9c5879328a01b81c04dd`; closeout `2a7192ff16c86630f01300f493560ccee8d2685f` |
+| V5 portable reader and sealed-package contract | Design `48f5b355dac9c3a5b3965f64c45e6fd9930ee706`; implementation/remediation `5dffb75591cfe1bc649dca2e5c3140c42e3c5807`, `72f2d12f67879153f728a628fe0392e00968e13c`, `21aa6fc803f9a4c0d6a7a47f617bcdf583ce3831`, `f7edd300264d45977e15fa143771c05cd48dbb11`; review checkpoint `bb0aaf3312742d59a1937d8538e729c7b3a5da99`; closeout `6528bc69b1a49c786d7a61fbf293989b6ec093f4` |
+| Real A1 adapter | Design `7e57301bd2e4ee2c76245ece5ca1012396ce7601`; implementation `482b1e63d84bd4e76d8a75444d124d3e724b083d`; closeout `9ef51a2b7166df9ed58bc72c3f82f57ea8caeb55` |
+| Reviewed persistent-policy revision, Packet A corrections, and closure protection | Design revision `db394295deafea53ac1d0eb944430b2d67b163ee`; corrections `ea9c50841bcf48bfbb1b57f237231a229681fcfe`; design correction `46c6eb41c6c93d8764f5cfcd5df637e86d7e7ca2`; handoff `6838ab3485c42c2b8b764a5d7aefe45a982f3106`; closure tests `438e416bc5ebec4ffc95cc1cef81669c41d64bef`; closeout `a056e111e2f21b96a9452be9a559e10f03805a6f` |
+
+The current persistent design blob is
+`362d37e9300a5ba7007bf5ca7308e09ad03d411d`. The implementation target must
+retain that exact reviewed content until a separately approved amendment says
+otherwise.
+
 ### One recommended future integration sequence
 
 1. Make the Monday foundation an approved integration baseline. Refresh PR #23
@@ -272,9 +294,31 @@ BEGIN
           FROM pg_index i
           JOIN pg_class c ON c.oid=i.indexrelid
          WHERE c.relname='uq_active_vendor_supplier_sku'
+           AND i.indrelid='public.supplier_offers'::regclass
            AND i.indisunique AND i.indisvalid AND i.indpred IS NOT NULL
+           AND i.indnkeyatts=2
+           AND pg_get_indexdef(i.indexrelid,1,true)='vendor_id'
+           AND pg_get_indexdef(i.indexrelid,2,true)='supplier_sku'
     ) THEN
         RAISE EXCEPTION 'active vendor/supplier-code uniqueness contract is absent';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+         WHERE tgrelid='public.supplier_offers'::regclass
+           AND tgname='trg_prevent_referenced_offer_identity_change'
+           AND NOT tgisinternal AND tgenabled<>'D'
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+         WHERE tgrelid='public.supplier_offers'::regclass
+           AND tgname='trg_protect_promoted_offer_contract'
+           AND NOT tgisinternal AND tgenabled<>'D'
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+         WHERE tgrelid='public.vendors'::regclass
+           AND tgname='trg_protect_priced_vendor_contract'
+           AND NOT tgisinternal AND tgenabled<>'D'
+    ) THEN
+        RAISE EXCEPTION 'referenced/priced offer or vendor protection trigger is absent';
     END IF;
 END
 $migration_preconditions$;
@@ -641,7 +685,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RAISE EXCEPTION '% is append-only and cannot be %d',TG_TABLE_NAME,lower(TG_OP);
+    RAISE EXCEPTION '% is append-only; % is forbidden',TG_TABLE_NAME,TG_OP;
 END
 $$;
 
