@@ -2371,10 +2371,20 @@ These diffs are proposals for the **next implementation change**, not changes
 made by this branch. They are limited to mapping intake/decision/selection and
 shadow reads.
 
-### Canonical specification proposal
+### Canonical authority proposal
 
-Insert the following immediately after canonical section `G. Human intelligence
-that must NEVER disappear`:
+Insert the same text below in both current authority bodies so the chain cannot
+diverge:
+
+- in `procurement/docs/authority/01_CANONICAL_SYSTEM_SPEC_v2_1.md`, immediately
+  after `G. Human intelligence that must NEVER disappear`;
+- in `procurement/docs/MASTER_PLAN_v2_0.md`, immediately after `Chat history is
+  never system memory` and before section 4.
+
+`procurement/docs/CURRENT_AUTHORITY.md` needs no content change because it
+already designates the Master Plan, and this proposal does not change authority
+priority. `procurement/docs/PHASE_STATUS.md` also remains unchanged until an
+actual implementation milestone is authorized and achieved.
 
 ```diff
 +Persistent supplier mapping authority
@@ -2492,7 +2502,7 @@ simulation in test output.
 | V5 non-adoption | Migration + intake/PG | `test_unapproved_v5_package_is_never_backfilled_or_relabelled`: migration creates zero rows; intake preserves fixed NOT_APPROVED/NOT_IMPORT_READY flags |
 | Legacy recommendations | Recommendation shadow/PG | `test_legacy_recommendations_are_identical_until_cutover`: before/after outputs and blocker semantics are exact; `_load_context` does not query new views |
 | Zero external/operational effects | Service boundary/PURE | `test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator`: dependency injection sentinels record zero calls for intake/map/select/error/replay paths |
-| Authority/config diff | Static/PURE | `test_mapping_authority_and_disabled_flags_match_approved_contract`: exact canonical text and false flags; no price/Shopify/carry-forward flags changed |
+| Authority/config diff | Static/PURE | `test_mapping_authority_and_disabled_flags_match_approved_contract`: exact mirrored canonical/Master Plan text and false flags; CURRENT authority priority and price/Shopify/carry-forward flags unchanged |
 | Registration floor | Test runner/PURE | `test_persistent_mapping_modules_are_registered_at_exact_discovery_floors`: removal of one planned module/method trips its module floor and the sum-derived global floor |
 
 This matrix deliberately names 29 PostgreSQL test methods and three pure/static
