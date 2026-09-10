@@ -186,8 +186,8 @@ currently intended integrated chain its exact predecessor is
   `monday_p1_remediation_contract='v1'` survive integration;
 - the resolved `digest(bytea,text)` function is the `pgcrypto` extension member
   from the integrated predecessor, not a search-path substitute;
-- the active vendor/SKU partial unique index and migration 010/011 protection
-  triggers exist and are valid;
+- the migration 008 eligibility predicate, active vendor/SKU partial unique
+  index, and migration 010/011 protection triggers exist with exact behavior;
 - there are no partial objects from this contract;
 - the finally assigned file name is exactly
   `NNN_persistent_mapping_foundation.sql`, where `NNN` is the next integrated
@@ -594,8 +594,16 @@ BEGIN
               AND p.prorettype='trigger'::regtype AND p.pronargs=0
               AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
               AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
-           IS DISTINCT FROM 'b2fd1ffccc54710d44d06050c884d2d31d6af5c6d3d409c70a43f23102f85589' THEN
-        RAISE EXCEPTION 'referenced/priced predecessor function body differs';
+           IS DISTINCT FROM 'b2fd1ffccc54710d44d06050c884d2d31d6af5c6d3d409c70a43f23102f85589'
+       OR (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
+             FROM pg_proc p
+            WHERE p.oid=to_regprocedure(format('%I.%I(text)',target_schema,'is_procurement_eligible_variant'))
+              AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='sql')
+              AND p.prorettype='boolean'::regtype AND p.pronargs=1
+              AND p.provolatile='s' AND NOT p.proisstrict AND NOT p.prosecdef
+              AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
+           IS DISTINCT FROM 'cde7b0dd0793ff9f8bc16cf42618d2f3542e2c442d2724a1b07d2f6fd170529a' THEN
+        RAISE EXCEPTION 'critical predecessor function body or metadata differs';
     END IF;
 END
 $migration_preconditions$;
