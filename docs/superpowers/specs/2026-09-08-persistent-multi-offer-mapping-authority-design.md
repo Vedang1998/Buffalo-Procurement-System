@@ -307,10 +307,14 @@ The later migration should add:
   source-valid-from/through, validity basis, supplier/source verification time,
   and price-scope key. Existing `effective_from/through` remain operational
   application dates and are not overloaded as those facts.
-- `supplier_price_authority_events`: append-only `APPLY_REPLACEMENT`,
-  `CARRY_FORWARD`, `WITHDRAW_SCOPE`, or `BLOCK_CONTRADICTION` events with source
-  batch, policy, evidence, expected prior-head, actor/service provenance, reason,
-  timestamp, idempotency key, and fingerprints.
+- `supplier_price_authority_events`: append-only `ADOPT_EXISTING_BASELINE`,
+  `APPLY_REPLACEMENT`, `CARRY_FORWARD`, `WITHDRAW_SCOPE`, or
+  `BLOCK_CONTRADICTION` events with source batch, policy, evidence, expected
+  prior-head, actor/service provenance, reason, timestamp, idempotency key, and
+  fingerprints. `ADOPT_EXISTING_BASELINE` is migration-only: it may seed an
+  empty authority head from exactly reconciled pre-migration CURRENT rows, but
+  cannot change their bytes, source period, validity, or verification time and
+  cannot claim replacement or carry-forward authority.
 - `supplier_price_authority_heads`: one narrow mutable pointer per vendor and
   price scope to the latest event and applicable base source.
 
@@ -461,6 +465,14 @@ version is `2026-07`.
   InventoryItem-ID-only read is insufficient. The future app installation
   needs only the corresponding `read_products` and `read_inventory` access
   required by those reads.
+- Cost previews and executions also query the authenticated shop through the
+  2026-07 [`shop`](https://shopify.dev/docs/api/admin-graphql/2026-07/queries/shop)
+  query and retrieve `id`, `myshopifyDomain`, and `currencyCode`. The shop ID,
+  domain, and currency are part of the preview and request fingerprint and are
+  re-read immediately before a cost mutation. This is the authoritative
+  currency proof when the current `InventoryItem.unitCost` is null; a null
+  current cost is not itself evidence of any currency. Unknown or changed shop
+  identity/currency blocks execution.
 - Selling price uses
   [`productVariantsBulkUpdate`](https://shopify.dev/docs/api/admin-graphql/2026-07/mutations/productVariantsBulkUpdate)
   with `write_products`, one exact Product/Variant, `allowPartialUpdates:false`,
@@ -484,6 +496,7 @@ Add append-only `shopify_field_sync_requests` and
 It binds:
 
 - exact canonical Variant ID and fresh catalog fingerprint;
+- exact shop ID, `myshopifyDomain`, and shop-currency fingerprint;
 - verified Product ID when price is targeted;
 - verified InventoryItem ID when cost or SKU is targeted;
 - expected live value and currency, requested value and currency, and the
@@ -507,6 +520,15 @@ creates or executes a request. Thus a pre-existing manual SKU lock and a pause
 created by a partial failure also block later requests; they are not merely
 attributes copied into one request.
 
+Add a separate narrowly constrained `shopify_field_sync_effective_heads` row
+per `(shop ID, Variant ID, field, target resource ID)`. It points to the latest
+successful, post-write-verified effect event for that exact field and resource.
+The pointer advances only in the same local transaction that appends a verified
+successful write or reversal event; conflicts and partial failures never
+advance it. Every effect event names its expected prior effective head, and a
+reversal names the event it reverses. This head is lineage state, not permission
+and not a substitute for the pause/manual-lock control head.
+
 ### Cost eligibility and execution
 
 The requested cost must be a positive amount in Shopify's shop currency and
@@ -516,8 +538,14 @@ preview. The selected evidence must prove the sellable-unit conversion: bottle
 cost for a one-bottle Variant, four-pack cost for a four-pack Variant, and so on.
 Unknown or conflicting pack, physical, retail, or Shopify-unit evidence blocks.
 
-Execution re-reads `InventoryItem.unitCost { amount currencyCode }`, refuses a
-changed expected value or currency, submits only `InventoryItemInput.cost`, and
+Preview and execution both read `shop { id myshopifyDomain currencyCode }` and
+bind that identity and currency. When current `InventoryItem.unitCost` is
+nonnull, its currency must also equal the bound shop currency. When it is null,
+the request records an expected null live cost and uses the bound shop currency
+as the currency authority; it may proceed only when the selected value's
+currency equals that known shop currency. Execution re-reads both shop currency
+and `InventoryItem.unitCost { amount currencyCode }`, refuses a changed expected
+value, shop identity, or currency, submits only `InventoryItemInput.cost`, and
 then re-reads amount and currency. It does not update quoted, received,
 invoiced, calculated, or PO values.
 
@@ -571,11 +599,19 @@ Variant/field scope, and require explicit reconciliation. An exact duplicate
 request returns the existing outcome; a reused idempotency key with a different
 payload conflicts. There is no blind retry.
 
-A reversal is a new confirmed event. It first verifies that the live field still
-exactly equals the value written by the event being reversed. If another actor
-changed it, reversal refuses. A failed reversal preserves all outcomes, leaves
-the scope paused, and requires explicit review. Cross-field compensation is
-never described as transactional rollback.
+A reversal is a new confirmed event. Its target must be the current
+`shopify_field_sync_effective_heads` event for the same shop, Variant, field,
+and resource; that target must be successful, post-write verified, and not
+already reversed. An older event is refused even if its after-value happens to
+recur later. The reversal also verifies that the live field still exactly
+equals the target event's recorded after-value and that the live resource and
+currency fingerprints still match. If another actor changed it, the target is
+stale/out of order, or the target was already reversed, reversal refuses. A
+successful verified reversal appends a new effect event and advances the head
+to that reversal outcome; it never rewrites the target event. A failed reversal
+preserves all outcomes, does not advance the effective head, leaves the scope
+paused, and requires explicit review. Cross-field compensation is never
+described as transactional rollback.
 
 ## Authority-state separation
 
@@ -687,6 +723,7 @@ and GET/write route seams in `procurement/src/procurement_os/api.py`.
 | Irregular book has no replacement and is not yet review-due | Exact base may carry forward under its approved scope; source verification timestamp is unchanged |
 | Irregular book passes its configured review-due boundary | Scoped PRICE_COVERAGE blocks until an explicit policy evaluation or replacement; no calendar guess |
 | Expired, withdrawn, or contradicted base | Scoped PRICE_COVERAGE failure; no carry-forward |
+| Existing CURRENT scope adopted during migration | Append `ADOPT_EXISTING_BASELINE` only after exact reconciliation and owner-approved scope/policy; seed an empty head without changing source bytes or verification time |
 | Approved replacement | Atomic scope-only CURRENT replacement with pre/post totals and event/head reconciliation |
 | No-price-archive check | No reusable superseded operational projection; finalized-run snapshot remains exact |
 | Deal email names three offers | Only those targets may be overlaid; no supplier-wide extrapolation |
@@ -699,6 +736,8 @@ and GET/write route seams in `procurement/src/procurement_os/api.py`.
 | One-bottle Variant cost | Selected one-bottle cost may be proposed; exact currency and InventoryItem required |
 | Four-pack-as-one-Variant cost | Selected four-pack cost is the one-unit Shopify cost; no bottle division |
 | Cost currency differs from Shopify shop/unitCost currency | Block before mutation |
+| Current `unitCost` is null and shop currency is known and matches selected evidence | Expected null may proceed after all other predicates pass; bind the shop identity/currency fingerprint and verify nonnull amount/currency after write |
+| Current `unitCost` is null and shop currency is unknown, changed, or mismatched | Block; null cost supplies no currency authority |
 | Explicit cost-only sync | Only InventoryItem cost attempted and read back with amount/currency |
 | Explicit retail-only sync | Only exact Variant price attempted and read back |
 | Cost and retail both selected | Independent requests/outcomes; one does not authorize or conceal failure of the other |
@@ -710,7 +749,9 @@ and GET/write route seams in `procurement/src/procurement_os/api.py`.
 | External edit during write/readback race | Conflict/partial failure, pause, append exact observed state |
 | Duplicate identical request | Idempotent replay of recorded result |
 | Same idempotency key, different payload | Conflict with no mutation |
-| Reversal while live value equals event's after-value | New confirmed reversal may restore exact before-value and verify it |
+| Reversal of current successful unreversed effective-head event while live value equals its after-value | New confirmed reversal may restore exact before-value, verify it, and advance the effective head |
+| Reversal targets an older event after the same value recurs | Refuse as stale/out of order even though the live value matches |
+| Reversal target is already reversed or is not the effective head | Refuse with no mutation |
 | Reversal after independent live edit | Refuse; preserve all events and pause state |
 | Cross-field second operation fails | Preserve each outcome; mark partial failure; no transactional rollback claim |
 | Rollback attempt fails | Preserve original, partial, and failed-reversal evidence; require explicit reconciliation |
