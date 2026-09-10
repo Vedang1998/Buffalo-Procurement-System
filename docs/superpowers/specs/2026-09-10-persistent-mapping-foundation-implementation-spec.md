@@ -2416,14 +2416,19 @@ BEGIN
     LOOP
         IF column_grant.grantee_oid=0 THEN
             EXECUTE format(
-                'REVOKE ALL PRIVILEGES (%I) ON TABLE %I.%I FROM PUBLIC',
-                column_grant.attname,current_schema(),column_grant.relname
+                'REVOKE SELECT (%I), INSERT (%I), UPDATE (%I), REFERENCES (%I) '
+                'ON TABLE %I.%I FROM PUBLIC',
+                column_grant.attname,column_grant.attname,
+                column_grant.attname,column_grant.attname,
+                current_schema(),column_grant.relname
             );
         ELSE
             EXECUTE format(
-                'REVOKE ALL PRIVILEGES (%I) ON TABLE %I.%I FROM %I',
-                column_grant.attname,current_schema(),column_grant.relname,
-                column_grant.grantee_name
+                'REVOKE SELECT (%I), INSERT (%I), UPDATE (%I), REFERENCES (%I) '
+                'ON TABLE %I.%I FROM %I',
+                column_grant.attname,column_grant.attname,
+                column_grant.attname,column_grant.attname,
+                current_schema(),column_grant.relname,column_grant.grantee_name
             );
         END IF;
     END LOOP;
