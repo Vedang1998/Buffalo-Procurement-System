@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
+from dataclasses import replace
 from decimal import Decimal
 import hashlib
 import json
@@ -2008,6 +2009,57 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
                 ),
                 "owner_decisions",
             )
+
+    def test_a1_required_ledger_table_rejects_misnamed_identity_only(self):
+        table_name = "owner_decisions"
+        rows = tuple(
+            {"owner_decision_id": f"owner-{index:02d}", "approved": False}
+            for index in range(20)
+        )
+        valid_table = _table(table_name, rows, declared=20)
+
+        def package(table: PackageTable) -> ReviewPackage:
+            return ReviewPackage(
+                source="fixture",
+                package_kind=real.A1_PACKAGE_KIND,
+                snapshot_id="fixture",
+                status="REVIEW_ONLY_VALIDATED",
+                label=real.A1_REVIEW_LABEL,
+                file_count=0,
+                verified_file_count=0,
+                manifest_sha256="a" * 64,
+                tables={table_name: table},
+                cohorts={},
+                issues=(),
+                unavailable_evidence=(),
+                table_loaders={},
+            )
+
+        valid_package = package(valid_table)
+        self.assertEqual(
+            _required_a1_ledger_rows(valid_package, table_name),
+            list(rows),
+        )
+
+        misnamed_table = replace(
+            valid_table,
+            name="daytime_addendum__owner_decisions",
+        )
+        subject = package(misnamed_table)
+        self.assertIs(subject.tables[table_name], misnamed_table)
+        self.assertNotIn(table_name, subject.table_loaders)
+        self.assertEqual(misnamed_table.declared_row_count, 20)
+        self.assertEqual(len(misnamed_table.rows), 20)
+        payload = b"".join(
+            _canonical_json(row) + b"\n" for row in misnamed_table.rows
+        )
+        self.assertEqual(_sha(payload), misnamed_table.canonical_jsonl_sha256)
+        self.assertEqual(replace(misnamed_table, name=table_name), valid_table)
+        with self.assertRaisesRegex(
+            SupplierReviewError,
+            r"^required A1 ledger table count or identity differs: owner_decisions$",
+        ):
+            _required_a1_ledger_rows(subject, table_name)
 
     def test_a1_html_is_inert_searchable_and_allows_only_bound_local_pdf_links(self):
         hostile = '</script><script src="https://evil.example/x.js">alert(1)</script>'

@@ -173,6 +173,19 @@ check(visited.includes("100249"), "the final result is reachable");
 await evaluate('document.getElementById("catalog-previous").click()');
 state = await pageState();
 check(state.count.endsWith("page 2/3"), "previous navigation works", state.count);
+await setSearch("no-match-sentinel");
+state = await pageState();
+check(state.ids.length === 0, "zero-result query renders no results", state);
+check(
+  state.count === "0 matching Variants; showing 0; page 0/0",
+  "zero-result count and page state are honest",
+  state.count,
+);
+check(
+  state.previousDisabled && state.nextDisabled,
+  "zero-result pagination controls are both disabled",
+  state,
+);
 await setSearch("variant-0249");
 state = await pageState();
 check(
@@ -184,6 +197,23 @@ await evaluate('document.querySelector("#catalog-results button").click()');
 check(
   (await evaluate('document.getElementById("catalog-detail").innerText')).includes("Variant ID 100249"),
   "the final broad-search result opens",
+);
+await setSearch("fixture-shared");
+state = await pageState();
+check(
+  state.ids.length === 100 && state.ids[0] === "100000" && state.ids[99] === "100099",
+  "returning to broad search restores the first 100 results",
+  state,
+);
+check(
+  state.count === "250 matching Variants; showing 1-100; page 1/3",
+  "returning to broad search resets the page text",
+  state.count,
+);
+check(
+  state.previousDisabled && !state.nextDisabled,
+  "returning to broad search resets pagination controls",
+  state,
 );
 check(client.httpRequests.length === 0, "no HTTP(S) requests escaped", client.httpRequests);
 check(client.exceptions.length === 0, "no runtime exceptions", client.exceptions);
