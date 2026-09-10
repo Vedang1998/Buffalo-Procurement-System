@@ -161,6 +161,73 @@ Chromium acceptance, and independent read-only review. Any database-backed
 suite uses only the existing disposable loopback PostgreSQL 16 `_test`
 infrastructure; this adapter itself should remain database-free.
 
+## Accepted Claude follow-up
+
+The owner accepted Claude's exact-candidate verdict as
+`APPROVE WITH NONBLOCKING FINDINGS`. The review evidence must retain its actual
+scope and attribution:
+
+- Claude focused tests: 86/86;
+- Claude startup tests: 10/10;
+- Claude full suite: 673 executed, 670 passed, and three failed;
+- all three bootstrap failures reproduced on the unchanged base;
+- Claude private real-data reproduction: not run;
+- Claude private-manifest verification: not run;
+- the writer's 673/673 suite and private real-data results remain separately
+  attributed writer evidence.
+
+The owner message accepting the verdict is the available authority for this
+follow-up. It does not make Claude's full suite green and does not turn writer
+private replay into independent replay. Phase 4 bootstrap safeguards remain
+unchanged; review-sandbox failures are not a reason to weaken them.
+
+Work occurs on child branch
+`codex/supplier-mapping-review-policy-followup`, descended from the preserved
+reviewed checkpoint `9ef51a2b7166df9ed58bc72c3f82f57ea8caeb55`, tree
+`f3d563ac6b2d6d0b4f369fc57f96189831ab83d6`.
+
+### Narrow correction design
+
+The correction remains additive and exact-format-specific:
+
+1. Remove the duplicate code-owned V5 preference constants without changing
+   either value.
+2. Require every A1 ledger source table by exact name, require materialized
+   rows, recompute its canonical JSONL digest, and reconcile these exact row
+   counts: owner decisions 20; owner display scopes 20; prior answers 20;
+   retained future questions 3; source overlays 25; complete combos 460; combo
+   components 1,822; combo validations 460; fixed-component relationships 249;
+   remaining-component relationships 19; remaining totals 7; and remaining
+   supplier-family reviews 24. Unknown or absent table names fail rather than
+   render an empty ledger. The renderer also requires every outer ledger key.
+3. Make deeper real-package control totals an explicit validation mode. In that
+   mode, the expected eight alcohol-gift rows and 249 fixed-component
+   relationships are preconditions for their distribution checks; missing
+   counts cannot silently skip reconciliation. Small fabricated semantic tests
+   must explicitly opt out.
+4. Exercise `local_pdf_href` through the actual network-disabled browser path.
+   Only the exact verified local layout may create a link; `javascript:`, raw
+   traversal, normalized traversal, and encoded traversal remain inert text.
+5. Replace redundant file-count algebra with the already derived total.
+6. Paginate broad catalog search in bounded pages so all honest matches remain
+   reachable. Navigation preserves the exact total, clamps page state, resets
+   on a new query, and continues to build DOM with escaped text.
+
+PDF page references are range-checked against the pinned A1 declarations. The
+reader verifies the separately supplied PDF names, bytes, and SHA-256 values,
+but does not independently parse their page counts. Reports and handoffs must
+say `range-checked against pinned declarations`, never `independently parsed`.
+
+The correction retains the approximately 96 MB self-contained report and its
+material memory requirement. Off-host backup remains unproven. Successful
+offline rendering is not production acceptance and creates no operational
+authority.
+
+Validation must include focused and startup tests, the safe authoritative
+suite, private read-only package/report replay without source-byte changes, and
+network-disabled browser acceptance. Claude evidence, writer evidence, and any
+new independent review remain separately attributed.
+
 ## Completion boundary
 
 Allowed changes are limited to the offline reader/validator/report/CLI, public
@@ -170,5 +237,6 @@ inputs, PDFs, real rows, traces, and rendered reports stay outside Git.
 No main merge, new PR, PR #23 mutation/retry, G10 change, deployment,
 operational database access, Shopify activity, SKU writeback, persistent mapping
 authority, mapping/price approval, CURRENT activation, supplier communication,
-or orders are part of this design. The existing six persistent-design owner
-decisions remain open and are reported without implementation.
+or orders are part of this design. The six persistent-workflow product
+decisions are now recorded in the revised persistent multi-offer design; they
+remain design-only and create no runtime authority.
