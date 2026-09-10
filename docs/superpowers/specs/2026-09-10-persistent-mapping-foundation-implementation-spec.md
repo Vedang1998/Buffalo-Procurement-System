@@ -285,6 +285,7 @@ WITH target_relations AS (
                'kind','index','relation',r.relname,'name',c.relname,
                'unique',i.indisunique,'primary',i.indisprimary,
                'exclusion',i.indisexclusion,'immediate',i.indimmediate,
+               'nulls_not_distinct',i.indnullsnotdistinct,
                'valid',i.indisvalid,'ready',i.indisready,'live',i.indislive,
                'definition',pg_get_indexdef(i.indexrelid)
            )
@@ -496,6 +497,10 @@ BEGIN
        OR to_regclass(format('%I.%I',target_schema,'purchase_order_lines')) IS NULL
        OR to_regclass(format('%I.%I',target_schema,'procurement_recommendations')) IS NULL
        OR to_regclass(format('%I.%I',target_schema,'run_price_snapshots')) IS NULL
+       OR to_regclass(format('%I.%I',target_schema,'combo_components')) IS NULL
+       OR to_regclass(format('%I.%I',target_schema,'exceptions')) IS NULL
+       OR to_regclass(format('%I.%I',target_schema,'price_book_staging_rows')) IS NULL
+       OR to_regclass(format('%I.%I',target_schema,'price_book_validation_issues')) IS NULL
        OR to_regprocedure(format('%I.%I(text)',target_schema,'is_procurement_eligible_variant')) IS NULL
        OR to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change')) IS NULL
        OR to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract')) IS NULL
@@ -509,8 +514,10 @@ BEGIN
          WHERE c.relname='uq_active_vendor_supplier_sku'
            AND i.indrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
            AND i.indisunique AND i.indisvalid AND i.indisready AND i.indislive
-           AND i.indpred IS NOT NULL
-           AND i.indnkeyatts=2
+           AND NOT i.indisprimary AND NOT i.indisexclusion AND i.indimmediate
+           AND NOT i.indnullsnotdistinct
+           AND i.indpred IS NOT NULL AND i.indexprs IS NULL
+           AND i.indnkeyatts=2 AND i.indnatts=2
            AND pg_get_indexdef(i.indexrelid,1,true)='vendor_id'
            AND pg_get_indexdef(i.indexrelid,2,true)='supplier_sku'
            AND pg_get_expr(i.indpred,i.indrelid,false) IN (
@@ -525,33 +532,48 @@ BEGIN
          WHERE tgrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
            AND tgname='trg_prevent_referenced_offer_identity_change'
            AND tgfoid=to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change'))
-           AND tgtype=19 AND NOT tgisinternal AND tgenabled='O'
+           AND tgtype=19 AND tgqual IS NULL
+           AND NOT tgisinternal AND tgenabled='O'
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_trigger
          WHERE tgrelid=to_regclass(format('%I.%I',target_schema,'supplier_offers'))
            AND tgname='trg_protect_promoted_offer_contract'
            AND tgfoid=to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract'))
-           AND tgtype=27 AND NOT tgisinternal AND tgenabled='O'
+           AND tgtype=27 AND tgqual IS NULL
+           AND NOT tgisinternal AND tgenabled='O'
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_trigger
          WHERE tgrelid=to_regclass(format('%I.%I',target_schema,'vendors'))
            AND tgname='trg_protect_priced_vendor_contract'
            AND tgfoid=to_regprocedure(format('%I.%I()',target_schema,'protect_priced_vendor_contract'))
-           AND tgtype=27 AND NOT tgisinternal AND tgenabled='O'
+           AND tgtype=27 AND tgqual IS NULL
+           AND NOT tgisinternal AND tgenabled='O'
     ) THEN
         RAISE EXCEPTION 'referenced/priced offer or vendor protection trigger is absent';
     END IF;
     IF (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
           FROM pg_proc p
-         WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change')))
+         WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change'))
+           AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')
+           AND p.prorettype='trigger'::regtype AND p.pronargs=0
+           AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
+           AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
            IS DISTINCT FROM '0c8caf40ba425c3dbf847862195f3caf131ec1221bd4e0739e3cd5ffd81219aa'
        OR (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
              FROM pg_proc p
-            WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract')))
+            WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract'))
+              AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')
+              AND p.prorettype='trigger'::regtype AND p.pronargs=0
+              AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
+              AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
            IS DISTINCT FROM '1799ba81c390728e069c2a73b7814f9e2be9596b8e082dbadfe9288c556318d6'
        OR (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
              FROM pg_proc p
-            WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'protect_priced_vendor_contract')))
+            WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'protect_priced_vendor_contract'))
+              AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')
+              AND p.prorettype='trigger'::regtype AND p.pronargs=0
+              AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
+              AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
            IS DISTINCT FROM 'b2fd1ffccc54710d44d06050c884d2d31d6af5c6d3d409c70a43f23102f85589' THEN
         RAISE EXCEPTION 'referenced/priced predecessor function body differs';
     END IF;
