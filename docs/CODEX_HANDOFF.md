@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-10T02:10:01Z (UTC)
+**Updated:** 2026-09-10T11:17:51Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,115 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### NEW-1 / NEW-2 / NEW-3 test-only closure — COMPLETE / STOPPED AT HANDOFF
+
+- The owner accepted Claude's narrow follow-up disposition as **APPROVE WITH
+  NONBLOCKING FINDINGS**. All seven earlier findings, `LOW-1` through `LOW-5`
+  and `INFO-2` / `INFO-3`, are closed and remain closed. Claude's separately
+  attributed pre-correction evidence is focused `89/89`, startup `10/10`, and
+  synthetic Chromium `20/20`. Claude's full-suite result is 676 executed / 673
+  passes / three failures, with all three failures reproduced as unchanged-base
+  environmental bootstrap failures; that run is not described as green.
+  Claude private replay: **NOT RUN**. Claude private-manifest verification:
+  **NOT RUN**.
+- This bounded correction began from exact synchronized branch
+  `codex/supplier-mapping-review-policy-followup` at
+  `6838ab3485c42c2b8b764a5d7aefe45a982f3106`, tree
+  `b6aa5fd37ca48f66c077fb1c449e4683c28c44c1`. The additive implementation
+  commit is `438e416bc5ebec4ffc95cc1cef81669c41d64bef`, tree
+  `15e361dec3abbb73d8fc3a753f3e1333863c1806`, with the starting checkpoint as
+  its sole parent. It changes exactly `procurement/tools/run_tests.py`,
+  `procurement/tests/test_supplier_review_real_v5.py`, and
+  `procurement/tools/audit_supplier_review_browser.py`. The documentation-only
+  closeout is the commit containing this entry.
+- **NEW-1 CLOSED:** the final A1 module population is 29, consisting of the 28
+  reviewed starting tests plus the NEW-3 regression, and its registered floor
+  is exactly `29`. `GLOBAL_MINIMUM_TESTS` remains the sum of all 37 unchanged
+  module registrations and is exactly `677`; no global literal was introduced.
+  An in-memory scratch probe used the existing discovery/count/minimum
+  machinery and removed only the three tests added by `ea9c508...`:
+  `test_deeper_control_totals_require_expected_counts_and_distributions`,
+  `test_a1_required_ledger_tables_fail_closed_on_name_count_and_digest`, and
+  `test_pdf_page_bounds_are_labelled_as_pinned_not_independently_parsed`. The
+  synthetic population became A1 `26/29` and global `674/677` and produced both
+  expected minimum errors. No real test was deleted or weakened, and
+  `test_test_runner.py` remains unchanged at `21/21`.
+- **NEW-2 CLOSED:** the synthetic, host-resolution-blocked Chromium audit keeps
+  the complete 250-result traversal as `100 + 100 + 50`, all 250 unique IDs,
+  page boundaries, Previous navigation, hostile-link filtering, escaping, and
+  zero external-request/runtime/console checks. It additionally proves an exact
+  zero-result render, honest `0 matching Variants; showing 0; page 0/0` text,
+  both controls disabled, recovery to the unique final result on page `1/1`,
+  and return to the broad query on the first 100 results at page `1/3` with
+  correctly reset controls. The actual final audit is `26/26`; the production
+  renderer was not changed.
+- **NEW-3 CLOSED:** a dedicated regression first passes a valid 20-row
+  `owner_decisions` control, then changes only `PackageTable.name` to the
+  namespace-prefixed `daytime_addendum__owner_decisions`. The package retains
+  the original `owner_decisions` lookup key, materialized state, rows, declared
+  count, raw/canonical digests, and every other dataclass field. The exact
+  name/identity guard refuses it with `required A1 ledger table count or
+  identity differs: owner_decisions`; no missing, streamed, short, or
+  wrong-digest condition can satisfy the regression.
+- Writer validation is separately attributed: supplier-review focus `90/90` in
+  1.595 seconds; runner self-tests `21/21` in 0.259 seconds; Chromium
+  `26/26`; startup hardening `10/10` in 0.003 seconds; and the authoritative
+  safe harness `677/677` in 675.504 seconds. The full harness independently
+  verified Python 3.13.11, PostgreSQL 16.9, loopback, and exact disposable
+  database `procurement_test`. Discovery, execution, passes, and the derived
+  global floor are all 677; failures, errors, skips, expected failures, and
+  unexpected successes are all zero. Pinned `uv 0.12.3` lock checking, AST
+  parsing of 99 tracked Python files, diff checking, and added-line secret
+  scanning passed.
+- Independent read-only reviewers `/root/closure_code_review` and
+  `/root/closure_scope_audit` reviewed exact `438e416...` and each returned
+  **PASS** with no P0/P1/P2 finding. The broad reviewer independently ran the
+  corrected focused set `90/90`, runner self-tests `21/21`, and Chromium
+  `26/26`; the targeted reviewer independently reproduced the one-test identity
+  guard and the count/floor probe. Neither reviewer ran the full database suite
+  or private package, and neither made an edit or operational action.
+- Base-to-implementation Git object proof shows `procurement/src` tree
+  `01b78c126549a576d3e182925a976e239a3ac84b`, `procurement/db` tree
+  `5033259c8a99d49a5900dc2db224dbf30484cf1e`, and `procurement/config` tree
+  `ecc9a177de316fa987f51c3079b8a8da25e3650e` at both checkpoints. The reviewed
+  persistent-authority and acceptance-adapter designs remain exact blobs
+  `362d37e9300a5ba7007bf5ca7308e09ad03d411d` and
+  `1a5318f7163bac6942c95a4b904e9abf4e200740`. Thus every product/runtime,
+  schema/migration/config, and reviewed-design byte remains unchanged from
+  `6838ab34`; the final base-to-closeout delta adds only this handoff to the
+  three implementation paths above.
+- The private A1 package, report, and manifest were not rerun or regenerated in
+  this test-only closure. Byte identity preserves the scope of the earlier
+  writer-only private evidence; it is not a new replay or independent private
+  verification. The approximately 96 MB self-contained report and previously
+  measured approximately 1.397 GB peak-memory limitation remain. Off-host
+  backup remains unproven.
+- Packet B is accepted as a reviewed design suitable for scoping its first
+  persistent implementation, not as migration or operational authority. The
+  six owner policy questions and Shopify cost destination remain answered and
+  were not re-asked. Four implementation/configuration details remain pending:
+  the private identity provider and named-role assignments; the final
+  owner-published independent initial-linkage evidence classes; whether a later
+  separately approved service policy may execute eligible SKU requests
+  unattended after the owner-confirmed first release; and actual
+  cadence/validity/scope configuration for each distributor/book family.
+- Read-only integration recommendation only: this branch is not a standalone
+  patch for `main`; it descends from the still-unmerged Monday foundation,
+  offline bridge, V5 reader, and real-A1 adapter lineage. Under a future explicit
+  authorization, first select a fresh approved integration target and verify
+  ancestry/conflicts, then integrate and review that dependency lineage in
+  order before the Packet A/runtime-report corrections, Packet B design
+  commits, this test-protection commit, and its closeout. Do not execute that
+  recommendation, rebase this branch, or assume direct cherry-pick safety.
+  `procurement/docs/PHASE_STATUS.md` remains unchanged because no phase or
+  program milestone changed.
+- Operational database connections/writes, Shopify reads/writes, mapping or
+  price approvals/activations, CURRENT activation, supplier communication,
+  orders/POs, deployments, PR creation/change/retry, merges, and integration
+  actions in this closure: `0`. **Exact next authorization boundary:** owner
+  review of this stopped test-only handoff. Any integration or persistent
+  Packet B implementation requires a new explicit authorization.
 
 ### Claude review follow-up and owner policy design — OFFLINE CORRECTION COMPLETE / DESIGN ONLY
 
