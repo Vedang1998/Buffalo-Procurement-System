@@ -37,6 +37,12 @@ The merge base of `origin/main` and the preserved design lineage is
 the design lineage has 39. Therefore neither this document nor the newest
 reader/follow-up commits are standalone cherry-picks onto main.
 
+The local branch named `main` is
+`4bde08152cf958dc97686e01a4f27d83fdb4961f`, tree
+`3bd9063502f782ebd93c3a4ed65130b73220ad62`, with two local-only and 52
+`origin/main`-only commits. It is diagnostic evidence only and must not be used
+as an integration target.
+
 PR #23 is open and draft. Its current public metadata reports 14 commits, 65
 files, `+20,781/-146`, `mergeable=true`, `rebaseable=false`, and
 `mergeable_state=unstable`; its body still describes the older `88bf800`
@@ -258,9 +264,11 @@ BEGIN
            OR to_regclass('public.supplier_offer_selection_heads') IS NOT NULL
            OR to_regclass('public.v_selected_standard_supplier_offers') IS NOT NULL
            OR to_regclass('public.v_supplier_offer_selection_shadow') IS NOT NULL
-           OR to_regprocedure('persistent_mapping_text_sha256(text)') IS NOT NULL
-           OR to_regprocedure('supplier_mapping_policy_is_published(text,text,text,text)')
-                IS NOT NULL THEN
+           OR EXISTS (
+                SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                 WHERE n.nspname='public' AND p.proname ~
+                   '^(persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped)|assert_persistent_mapping_)'
+              ) THEN
             RAISE EXCEPTION 'partial persistent mapping objects exist without contract marker';
         END IF;
     ELSIF installed_contract IS DISTINCT FROM 'v1-shadow-only' THEN
@@ -610,7 +618,7 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION persistent_mapping_rejection_fingerprint(
-    wanted_vendor_id UUID, wanted_source_key TEXT
+    wanted_vendor_id UUID, wanted_source_key TEXT, excluded_rejection_id BIGINT
 )
 RETURNS TEXT
 LANGUAGE sql STABLE
@@ -628,6 +636,7 @@ AS $$
      WHERE r.active AND r.mapping_type='SUPPLIER_OFFER'
        AND r.vendor_id IS NOT DISTINCT FROM wanted_vendor_id
        AND r.source_key=wanted_source_key
+       AND (excluded_rejection_id IS NULL OR r.rejection_id<>excluded_rejection_id)
 $$;
 
 CREATE OR REPLACE FUNCTION persistent_mapping_offer_fingerprint(wanted_offer_id BIGINT)
@@ -635,15 +644,37 @@ RETURNS TEXT
 LANGUAGE sql STABLE STRICT
 AS $$
     SELECT persistent_mapping_json_sha256(jsonb_build_object(
-        'offer_id',o.offer_id,'variant_id',o.variant_id,'vendor_id',o.vendor_id,
+        'contract_version','SUPPLIER_OFFER_CONTRACT_V1',
+        'variant_id',o.variant_id,'vendor_id',o.vendor_id,
         'supplier_sku',o.supplier_sku,'package_type',o.package_type,
         'size_text',o.size_text,'raw_pack',o.raw_pack,
         'shopify_units_per_case',o.shopify_units_per_case,
         'qualifying_units_per_case',o.qualifying_units_per_case,
         'assortment_scope',o.assortment_scope,'assortment_group',o.assortment_group,
         'assortable',o.assortable,'valid_from',o.valid_from,'valid_to',o.valid_to,
-        'active',o.active
+        'replaces_offer_id',o.replaces_offer_id,
+        'source_file',o.source_file,'source_page',o.source_page,
+        'confidence',o.confidence,'active',o.active
     )) FROM supplier_offers o WHERE o.offer_id=wanted_offer_id
+$$;
+
+CREATE OR REPLACE FUNCTION persistent_mapping_offer_has_prior_references(
+    wanted_offer_id BIGINT
+)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE STRICT
+AS $$
+    SELECT
+        EXISTS (SELECT 1 FROM prices WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM purchase_order_lines WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM procurement_recommendations WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM run_price_snapshots WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM combo_components WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM exceptions WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM price_book_staging_rows WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM price_book_validation_issues WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM supplier_offers
+                    WHERE replaces_offer_id=wanted_offer_id)
 $$;
 
 CREATE OR REPLACE FUNCTION persistent_mapping_require_human_context(
@@ -934,6 +965,46 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
     )
 );
 
+CREATE OR REPLACE FUNCTION persistent_mapping_decision_preview_sha256(
+    d supplier_mapping_decisions
+)
+RETURNS TEXT
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+    SELECT persistent_mapping_json_sha256(
+        (to_jsonb(d)-ARRAY[
+            'mapping_decision_id','canonical_payload','payload_sha256',
+            'decided_at','decided_txid','human_principal_ref','human_role_ref',
+            'human_authn_context_sha256','preview_sha256','confirmation_sha256',
+            'service_principal_ref','policy_ref','policy_version',
+            'policy_publication_sha256','policy_predicate_version',
+            'policy_predicate_result_sha256','result_offer_id','result_rejection_id'
+        ]) || jsonb_build_object(
+            'confirmation_contract_version','HUMAN_MAPPING_PREVIEW_V1',
+            'confirmed_existing_offer_id',CASE
+                WHEN d.offer_link_kind='LINKED_EXISTING' THEN d.result_offer_id
+                ELSE NULL
+            END
+        )
+    )
+$$;
+
+CREATE OR REPLACE FUNCTION persistent_mapping_decision_confirmation_sha256(
+    d supplier_mapping_decisions
+)
+RETURNS TEXT
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+        'confirmation_contract_version','HUMAN_MAPPING_CONFIRMATION_V1',
+        'preview_sha256',d.preview_sha256,
+        'principal_ref',d.human_principal_ref,
+        'role_ref',d.human_role_ref,
+        'action',d.action,
+        'idempotency_key',d.decision_idempotency_key
+    ))
+$$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mapping_decision_root_per_scope
     ON supplier_mapping_decisions(decision_scope_sha256)
     WHERE supersedes_mapping_decision_id IS NULL;
@@ -995,7 +1066,9 @@ BEGIN
        OR NEW.expected_rejection_memory_sha256 IS DISTINCT FROM
             persistent_mapping_rejection_fingerprint(
                 NEW.vendor_id,
-                'persistent-mapping:'||NEW.supplier_identity_key_sha256
+                'persistent-mapping:'||NEW.supplier_identity_key_sha256,
+                CASE WHEN NEW.action='REJECT_MAPPING'
+                     THEN NEW.result_rejection_id ELSE NULL END
             )
        OR NEW.decision_scope_sha256 IS DISTINCT FROM c.decision_scope_sha256
        OR NEW.supplier_identity_key_sha256 IS DISTINCT FROM c.supplier_identity_key_sha256
@@ -1048,6 +1121,12 @@ BEGIN
             NEW.human_principal_ref,NEW.human_role_ref,
             NEW.human_authn_context_sha256,'SUPPLIER_MAPPING_DECIDE'
         );
+        IF NEW.preview_sha256 IS DISTINCT FROM
+                persistent_mapping_decision_preview_sha256(NEW)
+           OR NEW.confirmation_sha256 IS DISTINCT FROM
+                persistent_mapping_decision_confirmation_sha256(NEW) THEN
+            RAISE EXCEPTION 'mapping preview or separate confirmation is not bound';
+        END IF;
     ELSIF NOT supplier_mapping_policy_is_published(
         NEW.policy_ref,NEW.policy_version,NEW.policy_publication_sha256,
         NEW.evidence_set_sha256
@@ -1123,17 +1202,18 @@ BEGIN
            OR o.assortment_scope IS DISTINCT FROM NEW.assortment_scope_value
            OR o.assortment_group IS DISTINCT FROM NEW.assortment_group_value
            OR o.assortable IS DISTINCT FROM NEW.assortable_value
+           OR o.confidence<>'VERIFIED'
            OR persistent_mapping_offer_fingerprint(o.offer_id)
                 IS DISTINCT FROM NEW.result_offer_contract_sha256 THEN
             RAISE EXCEPTION 'resulting supplier offer contract differs';
         END IF;
         IF NEW.offer_link_kind='CREATED_INACTIVE' AND (
             o.active
-            OR EXISTS (SELECT 1 FROM prices p WHERE p.offer_id=o.offer_id)
-            OR EXISTS (SELECT 1 FROM purchase_order_lines p WHERE p.offer_id=o.offer_id)
-            OR EXISTS (SELECT 1 FROM procurement_recommendations p WHERE p.offer_id=o.offer_id)
-            OR EXISTS (SELECT 1 FROM run_price_snapshots p WHERE p.offer_id=o.offer_id)
-            OR EXISTS (SELECT 1 FROM combo_components p WHERE p.offer_id=o.offer_id)
+            OR o.source_file IS DISTINCT FROM c.source_file_name
+            OR o.source_page IS DISTINCT FROM c.source_page_start
+            OR o.valid_from IS NOT NULL OR o.valid_to IS NOT NULL
+            OR o.replaces_offer_id IS NOT NULL
+            OR persistent_mapping_offer_has_prior_references(o.offer_id)
         ) THEN
             RAISE EXCEPTION 'mapping-created supplier offer must be inactive and unreferenced';
         END IF;
@@ -1252,6 +1332,39 @@ CREATE INDEX IF NOT EXISTS idx_offer_selection_events_mapping
     ON supplier_offer_selection_events(mapping_decision_id)
     WHERE mapping_decision_id IS NOT NULL;
 
+CREATE OR REPLACE FUNCTION persistent_mapping_selection_preview_sha256(
+    e supplier_offer_selection_events
+)
+RETURNS TEXT
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+    SELECT persistent_mapping_json_sha256(
+        (to_jsonb(e)-ARRAY[
+            'selection_event_id','canonical_payload','payload_sha256',
+            'selected_at','selected_txid','human_principal_ref','human_role_ref',
+            'human_authn_context_sha256','preview_sha256','confirmation_sha256'
+        ]) || jsonb_build_object(
+            'confirmation_contract_version','HUMAN_ROUTINE_SELECTION_PREVIEW_V1'
+        )
+    )
+$$;
+
+CREATE OR REPLACE FUNCTION persistent_mapping_selection_confirmation_sha256(
+    e supplier_offer_selection_events
+)
+RETURNS TEXT
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $$
+    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+        'confirmation_contract_version','HUMAN_ROUTINE_SELECTION_CONFIRMATION_V1',
+        'preview_sha256',e.preview_sha256,
+        'principal_ref',e.human_principal_ref,
+        'role_ref',e.human_role_ref,
+        'action',e.action,
+        'idempotency_key',e.selection_idempotency_key
+    ))
+$$;
+
 CREATE OR REPLACE FUNCTION validate_supplier_offer_selection_event_insert()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1273,6 +1386,12 @@ BEGIN
         NEW.human_principal_ref,NEW.human_role_ref,
         NEW.human_authn_context_sha256,'ROUTINE_OFFER_SELECT'
     );
+    IF NEW.preview_sha256 IS DISTINCT FROM
+            persistent_mapping_selection_preview_sha256(NEW)
+       OR NEW.confirmation_sha256 IS DISTINCT FROM
+            persistent_mapping_selection_confirmation_sha256(NEW) THEN
+        RAISE EXCEPTION 'selection preview or separate confirmation is not bound';
+    END IF;
     PERFORM pg_advisory_xact_lock(
         hashtextextended('routine-offer-selection:'||NEW.variant_id,0)
     );
@@ -1302,6 +1421,11 @@ BEGIN
          WHERE candidate_id=mapping.candidate_id FOR SHARE;
         IF mapping.mapping_decision_id IS NULL OR mapping.action<>'APPROVE_MAPPING'
            OR mapping.variant_id<>NEW.variant_id
+           OR NEW.selection_idempotency_key=mapping.decision_idempotency_key
+           OR (mapping.decision_origin='HUMAN' AND (
+                NEW.preview_sha256=mapping.preview_sha256
+                OR NEW.confirmation_sha256=mapping.confirmation_sha256
+              ))
            OR EXISTS (SELECT 1 FROM supplier_mapping_decisions successor
                        WHERE successor.supersedes_mapping_decision_id=mapping.mapping_decision_id)
            OR candidate.offer_class<>'REGULAR'
@@ -1317,7 +1441,8 @@ BEGIN
                 IS DISTINCT FROM NEW.expected_vendor_sha256
            OR persistent_mapping_rejection_fingerprint(
                 mapping.vendor_id,
-                'persistent-mapping:'||mapping.supplier_identity_key_sha256
+                'persistent-mapping:'||mapping.supplier_identity_key_sha256,
+                NULL
               ) IS DISTINCT FROM NEW.expected_rejection_memory_sha256
            OR NOT is_procurement_eligible_variant(NEW.variant_id)
            OR NOT EXISTS (SELECT 1 FROM vendors v
@@ -1340,12 +1465,12 @@ BEGIN
             RAISE EXCEPTION 'selected offer is stale, ineligible, rejected, or not regular';
         END IF;
         IF NOT offer.active AND (
-            mapping.offer_link_kind<>'CREATED_INACTIVE'
-            OR EXISTS (SELECT 1 FROM prices p WHERE p.offer_id=offer.offer_id)
-            OR EXISTS (SELECT 1 FROM purchase_order_lines p WHERE p.offer_id=offer.offer_id)
-            OR EXISTS (SELECT 1 FROM procurement_recommendations p WHERE p.offer_id=offer.offer_id)
-            OR EXISTS (SELECT 1 FROM run_price_snapshots p WHERE p.offer_id=offer.offer_id)
-            OR EXISTS (SELECT 1 FROM combo_components p WHERE p.offer_id=offer.offer_id)
+            NOT EXISTS (
+                SELECT 1 FROM supplier_mapping_decisions origin
+                 WHERE origin.result_offer_id=offer.offer_id
+                   AND origin.offer_link_kind='CREATED_INACTIVE'
+            )
+            OR persistent_mapping_offer_has_prior_references(offer.offer_id)
         ) THEN
             RAISE EXCEPTION 'inactive selection is not a fresh unpriced mapping result';
         END IF;
@@ -1450,12 +1575,14 @@ BEGIN
         OR ROW(NEW.variant_id,NEW.vendor_id,NEW.supplier_sku,NEW.package_type,
                NEW.size_text,NEW.raw_pack,NEW.shopify_units_per_case,
                NEW.qualifying_units_per_case,NEW.assortment_scope,
-               NEW.assortment_group,NEW.assortable)
+               NEW.assortment_group,NEW.assortable,NEW.valid_from,NEW.valid_to,
+               NEW.replaces_offer_id,NEW.source_file,NEW.source_page,NEW.confidence)
            IS DISTINCT FROM
            ROW(OLD.variant_id,OLD.vendor_id,OLD.supplier_sku,OLD.package_type,
                OLD.size_text,OLD.raw_pack,OLD.shopify_units_per_case,
                OLD.qualifying_units_per_case,OLD.assortment_scope,
-               OLD.assortment_group,OLD.assortable)
+               OLD.assortment_group,OLD.assortable,OLD.valid_from,OLD.valid_to,
+               OLD.replaces_offer_id,OLD.source_file,OLD.source_page,OLD.confidence)
         OR NEW.active IS DISTINCT FROM OLD.active
     ) THEN
         RAISE EXCEPTION
@@ -1525,7 +1652,8 @@ SELECT
       WHEN persistent_mapping_vendor_fingerprint(d.vendor_id)
            IS DISTINCT FROM e.expected_vendor_sha256 THEN 'STALE_VENDOR'
       WHEN persistent_mapping_rejection_fingerprint(
-               d.vendor_id,'persistent-mapping:'||d.supplier_identity_key_sha256
+               d.vendor_id,'persistent-mapping:'||d.supplier_identity_key_sha256,
+               NULL
            ) IS DISTINCT FROM e.expected_rejection_memory_sha256
         THEN 'STALE_REJECTION_MEMORY'
       WHEN NOT is_procurement_eligible_variant(h.variant_id) THEN 'INELIGIBLE_VARIANT'
@@ -1626,6 +1754,12 @@ ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=now();
   helpers. Application payload builders must generate the same JSONB object and
   compare the database-returned hash; they must not hash language-specific JSON
   serialization.
+- Human previews and confirmations are domain-separated database hashes. A
+  mapping preview binds every requested/expected fact and, for an existing
+  link, its offer ID; a created offer binds the precomputable contract rather
+  than its database-generated ID. A selection preview binds its exact mapping,
+  offer, prior head, validity, and fingerprints. Each confirmation then binds
+  that preview to the verified principal, role, action, and idempotency key.
 - `ABSENT` and `EXPLICIT_NULL` both require a SQL null value but remain distinct
   in their typed state columns and canonical JSON. `VALUE` requires a value.
   Source payload, owner clarifications, relationships, component membership,
@@ -1673,8 +1807,9 @@ only after the authority/config changes are approved:
 1. Start `SERIALIZABLE`; for the first release accept only a server-verified
    human principal. Set transaction-local authorization context. Policy origin
    is modeled but the database stub always refuses it.
-2. Resolve identical idempotent replay before mutation; same key/different
-   payload fails. Lock the decision scope, operational-offer key, batch,
+2. Build the exact database `HUMAN_MAPPING_PREVIEW_V1` hash, collect a distinct
+   owner confirmation, and resolve identical idempotent replay before mutation;
+   same key/different payload fails. Lock the decision scope, operational-offer key, batch,
    candidate, catalog Variant, vendor, rejection memory, and relevant offers.
 3. Recompute every expected hash. An approval with altered/missing evidence,
    blockers, a simulation, wrong Variant/vendor, or active rejection fails.
@@ -1685,11 +1820,20 @@ only after the authority/config changes are approved:
    single offer. If
    any historical approval already links that key, require its exact offer and
    contract. Otherwise either link an exact existing offer or insert one
-   inactive offer. Supplier-code reuse with a different contract always creates
-   an inactive row; never update or deactivate the old row.
+   inactive offer. A created row maps exact candidate values into
+   `variant_id`, `vendor_id`, `supplier_sku`, the derived package type,
+   `size_text`, `raw_pack`, both unit conversions, and all three assortment
+   fields; sets `source_file/source_page` to the candidate occurrence,
+   `confidence='VERIFIED'`, `active=false`, and unconfigured validity/replacement
+   fields to null; and creates no price. Any prior
+   offer reference disqualifies `CREATED_INACTIVE`. Supplier-code reuse with a
+   different contract always creates an inactive row; never update or
+   deactivate the old row.
 5. For rejection, insert a `mapping_rejections` row using source key
    `persistent-mapping:<supplier_identity_key_sha256>` and link it. For defer,
-   create neither offer nor rejection.
+   create neither offer nor rejection. The insert guard excludes that one new
+   `result_rejection_id` when recomputing the expected pre-decision rejection
+   fingerprint, then separately verifies the linked row's exact active scope.
 6. Insert the append-only decision last. A late trigger failure rolls back an
    inserted offer/rejection. Commit. Do not touch aliases, prices, heads,
    recommendations, Shopify, POs, artifacts, or the sealed package.
@@ -1697,7 +1841,8 @@ only after the authority/config changes are approved:
 ### `record_routine_offer_selection(request, principal)`
 
 1. Start a new `SERIALIZABLE` transaction and require a new idempotency key,
-   preview hash, confirmation hash, and the exact prior event/version. The same
+   database-built `HUMAN_ROUTINE_SELECTION_PREVIEW_V1` hash, separate
+   confirmation hash, and the exact prior event/version. The same
    owner may act again, but the mapping confirmation is not reusable.
 2. Set the server-derived named-human authorization context; lock the Variant
    advisory key and current head.
@@ -1856,7 +2001,7 @@ simulation in test output.
 | Invariant/case | Boundary | Later executable test and required result |
 |---|---|---|
 | Exact predecessor only | Migration/PG | `test_upgrade_requires_exact_013_marker_set_and_contracts`: 012-only, unknown intervening marker, missing index/trigger, or altered contract refuses with no new object |
-| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker and a second apply is unchanged |
+| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker; after valid authority rows are seeded, a second apply preserves every row/hash |
 | Historical upgrade | Migration/PG | `test_exact_013_upgrade_preserves_all_legacy_bytes_and_counts`: build through actual 013 files, seed legacy rows, snapshot table digests and recommendation output, then apply; new authority tables are empty |
 | Failed migration/late validation | Migration/PG | `test_migration_failure_and_late_validation_roll_back_every_object`: precondition failure and an injected failure after the final assertion both leave the predecessor byte/count snapshot and schema unchanged |
 | Late domain validation | Mapping + selection/PG | `test_late_decision_or_head_validation_rolls_back_the_whole_transaction`: a failure after inserting an offer/rejection or event but before commit leaves none of those rows and no head change |
