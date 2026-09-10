@@ -67,6 +67,9 @@ A1_EMBEDDED_DESCRIPTOR_SHA256 = "d1cfa1aa014b3172333052391f2a8abb61b9359f707690d
 A1_SOURCE_DESCRIPTOR_SHA256 = "3b9a06941aadb6dc37cbd6a352dad2b0132000ca7332a8629bb0c62672cf17c1"
 A1_EXTERNAL_DESCRIPTOR_SHA256 = "3038ca6309769ff86233e5704c83d4757ca272579b14367d771ec8b415995c13"
 A1_CONTROLS_SHA256 = "ed07561ac1c60da75093f06ad8f20ae943ddf1057dae091c597057727287a934"
+A1_PDF_PAGE_RANGE_BASIS = (
+    "RANGE_CHECKED_AGAINST_PINNED_DECLARATION_NOT_INDEPENDENTLY_PARSED"
+)
 
 _ROOT_FIELDS = frozenset(
     {
@@ -977,6 +980,7 @@ def _verify_external_pdfs(
                 "bytes": row["bytes"],
                 "sha256": row["sha256"],
                 "physical_pages": row["physical_pages"],
+                "page_range_basis": A1_PDF_PAGE_RANGE_BASIS,
             }
         return status, tuple(sorted(unavailable))
     with _DirectorySource(Path(root_path), limits) as evidence:
@@ -997,6 +1001,7 @@ def _verify_external_pdfs(
                 "bytes": size,
                 "sha256": digest,
                 "physical_pages": row["physical_pages"],
+                "page_range_basis": A1_PDF_PAGE_RANGE_BASIS,
             }
     return status, tuple(sorted(unavailable))
 
@@ -2164,7 +2169,11 @@ def _validate_v5_sidecars(tables: Mapping[str, PackageTable]) -> dict[str, Any]:
         if set(row) != set(_V5_PROFILE_FIELDS) or row.get("schema_authority") != _V5_PROFILE_AUTHORITY:
             raise ReviewPackageError("INVALID_FIELD_PROFILE", "V5 field-profile contract differs", row=row_number)
     _validate_v5_field_profiles(raw_tables, profiles.rows)
-    relationship_controls = _validate_v5_relationships_and_authority(by_logical, None)
+    relationship_controls = _validate_v5_relationships_and_authority(
+        by_logical,
+        None,
+        enforce_exact_control_totals=True,
+    )
     duplicate_surfaces = _validate_duplicate_v5_surfaces(tables, by_logical)
     return {
         "v5_sidecar_tables": len(by_logical),
@@ -5117,8 +5126,8 @@ def read_real_v5_a1_package(
         snapshot_id=A1_PACKAGE_ID,
         status="REVIEW_ONLY_VALIDATED",
         label=A1_REVIEW_LABEL,
-        file_count=len(source.names) + total_entries - len(source.names),
-        verified_file_count=len(source.names) + total_entries - len(source.names),
+        file_count=total_entries,
+        verified_file_count=total_entries,
         manifest_sha256=A1_ROOT_SHA256,
         tables=tables,
         cohorts={

@@ -16,6 +16,28 @@ from .supplier_review_package import REVIEW_LABEL, ReviewPackage, _canonical_jso
 
 REVIEW_PREVIEW_LABEL = "REVIEW PREVIEW — NOT APPROVED"
 _A1_PACKAGE_KIND = "V5_DAYTIME_A1_COMPLETE_SNAPSHOT"
+_A1_LEDGER_TABLE_COUNTS: Mapping[str, int] = {
+    "owner_decisions": 20,
+    "owner_decision_display_scopes": 20,
+    "requests__prior_owner_answers_do_not_reask": 20,
+    "requests__retained_owner_questions_policy_check": 3,
+    "source_review_overlays": 25,
+    "complete_combos": 460,
+    "combo_components": 1_822,
+    "combo_validation": 460,
+    "fixed_combo_component_relationships_v5": 249,
+    "remaining_combo_component_relationships_v5": 19,
+    "remaining_combo_total_reviews_v5": 7,
+    "remaining_supplier_family_reviews_v5": 24,
+}
+_A1_LEDGER_DOCUMENT_KEYS = (
+    "owner_decision_ledger",
+    "owner_decision_display_scopes",
+    "prior_owner_answers_do_not_reask",
+    "retained_owner_questions_policy_check",
+    "source_review_overlays",
+    "combo_review_ledger",
+)
 
 
 BLOCKED_DISPOSITIONS = frozenset(
@@ -2104,6 +2126,46 @@ def compare_review_packages(previous: ReviewPackage, current: ReviewPackage) -> 
     return result
 
 
+def _required_a1_ledger_rows(
+    package: ReviewPackage,
+    table_name: str,
+) -> list[dict[str, Any]]:
+    """Return an exact materialized A1 ledger table or fail closed."""
+
+    expected_count = _A1_LEDGER_TABLE_COUNTS.get(table_name)
+    if expected_count is None:
+        raise SupplierReviewError(
+            f"unknown required A1 ledger table {table_name!r}"
+        )
+    table = package.tables.get(table_name)
+    if table is None:
+        raise SupplierReviewError(f"required A1 ledger table is missing: {table_name}")
+    if table_name in package.table_loaders:
+        raise SupplierReviewError(
+            f"required A1 ledger table is not materialized: {table_name}"
+        )
+    if (
+        table.name != table_name
+        or table.declared_row_count != expected_count
+        or len(table.rows) != expected_count
+    ):
+        raise SupplierReviewError(
+            f"required A1 ledger table count or identity differs: {table_name}"
+        )
+    digest = hashlib.sha256()
+    for row in table.rows:
+        digest.update(_canonical_json(dict(row)))
+        digest.update(b"\n")
+    if (
+        not isinstance(table.canonical_jsonl_sha256, str)
+        or digest.hexdigest() != table.canonical_jsonl_sha256
+    ):
+        raise SupplierReviewError(
+            f"required A1 ledger table digest differs: {table_name}"
+        )
+    return [dict(row) for row in table.rows]
+
+
 def report_document(
     package: ReviewPackage,
     *,
@@ -2162,6 +2224,14 @@ def report_document(
             retain_raw_records=not is_v5,
             include_flat_occurrences=not is_v5,
         )
+    a1_ledger_rows = (
+        {
+            table_name: _required_a1_ledger_rows(package, table_name)
+            for table_name in _A1_LEDGER_TABLE_COUNTS
+        }
+        if package.package_kind == _A1_PACKAGE_KIND
+        else {}
+    )
     document = {
         "label": package.label,
         "status": package.status,
@@ -2193,48 +2263,34 @@ def report_document(
                 else "OMITTED_UNBOUND_OUTPUT_LAYOUT"
             ),
         }
-        document["owner_decision_ledger"] = [
-            dict(row) for row in package.table("owner_decisions")
+        document["owner_decision_ledger"] = a1_ledger_rows["owner_decisions"]
+        document["owner_decision_display_scopes"] = a1_ledger_rows[
+            "owner_decision_display_scopes"
         ]
-        document["owner_decision_display_scopes"] = [
-            dict(row) for row in package.table("owner_decision_display_scopes")
+        document["prior_owner_answers_do_not_reask"] = a1_ledger_rows[
+            "requests__prior_owner_answers_do_not_reask"
         ]
-        document["prior_owner_answers_do_not_reask"] = [
-            dict(row)
-            for row in package.table("requests__prior_owner_answers_do_not_reask")
+        document["retained_owner_questions_policy_check"] = a1_ledger_rows[
+            "requests__retained_owner_questions_policy_check"
         ]
-        document["retained_owner_questions_policy_check"] = [
-            dict(row)
-            for row in package.table(
-                "requests__retained_owner_questions_policy_check"
-            )
-        ]
-        document["source_review_overlays"] = [
-            dict(row) for row in package.table("source_review_overlays")
+        document["source_review_overlays"] = a1_ledger_rows[
+            "source_review_overlays"
         ]
         document["combo_review_ledger"] = {
-            "complete_combo_totals": [
-                dict(row) for row in package.table("complete_combos")
+            "complete_combo_totals": a1_ledger_rows["complete_combos"],
+            "source_components": a1_ledger_rows["combo_components"],
+            "combo_validation": a1_ledger_rows["combo_validation"],
+            "fixed_component_relationships": a1_ledger_rows[
+                "fixed_combo_component_relationships_v5"
             ],
-            "source_components": [
-                dict(row) for row in package.table("combo_components")
+            "remaining_component_diagnostics": a1_ledger_rows[
+                "remaining_combo_component_relationships_v5"
             ],
-            "combo_validation": [
-                dict(row) for row in package.table("combo_validation")
+            "remaining_combo_total_reviews": a1_ledger_rows[
+                "remaining_combo_total_reviews_v5"
             ],
-            "fixed_component_relationships": [
-                dict(row)
-                for row in package.table("fixed_combo_component_relationships_v5")
-            ],
-            "remaining_component_diagnostics": [
-                dict(row)
-                for row in package.table("remaining_combo_component_relationships_v5")
-            ],
-            "remaining_combo_total_reviews": [
-                dict(row) for row in package.table("remaining_combo_total_reviews_v5")
-            ],
-            "remaining_supplier_family_reviews": [
-                dict(row) for row in package.table("remaining_supplier_family_reviews_v5")
+            "remaining_supplier_family_reviews": a1_ledger_rows[
+                "remaining_supplier_family_reviews_v5"
             ],
         }
         metadata = package.metadata
@@ -2254,6 +2310,15 @@ def report_document(
                 "authority",
             )
             if isinstance(metadata.get(key), Mapping)
+        }
+        document["real_package_acceptance"]["ledger_projection"] = {
+            table_name: {
+                "row_count": len(rows),
+                "canonical_jsonl_sha256": package.tables[
+                    table_name
+                ].canonical_jsonl_sha256,
+            }
+            for table_name, rows in a1_ledger_rows.items()
         }
     return document
 
@@ -2322,6 +2387,10 @@ def _a1_catalog_browser(
         '<input id="catalog-search" type="search" autocomplete="off" '
         'placeholder="Variant ID, product, supplier code…"> '
         '<span id="catalog-count" role="status" aria-live="polite"></span>'
+        '<span class="catalog-pagination">'
+        '<button id="catalog-previous" type="button">Previous</button> '
+        '<button id="catalog-next" type="button">Next</button>'
+        '</span>'
         '<div class="catalog-layout"><nav id="catalog-results" '
         'aria-label="Catalog search results"></nav>'
         '<article id="catalog-detail" tabindex="-1">Enter a search or open a review.</article></div>'
@@ -2341,7 +2410,11 @@ def _a1_catalog_browser(
   const results = document.getElementById("catalog-results");
   const detail = document.getElementById("catalog-detail");
   const count = document.getElementById("catalog-count");
+  const previous = document.getElementById("catalog-previous");
+  const next = document.getElementById("catalog-next");
   const globalLedgerRoot = document.getElementById("a1-global-ledgers");
+  const pageSize = 100;
+  let resultPage = 0;
   const make = (tag, text, className) => {
     const node = document.createElement(tag);
     if (text !== undefined && text !== null) node.textContent = String(text);
@@ -2455,9 +2528,17 @@ def _a1_catalog_browser(
   const refresh = () => {
     const query = search.value.trim().toLowerCase();
     const matches = batches.filter(batch => !query || String(batch.search_text || "").includes(query));
-    count.textContent = `${matches.length} matching Variants; showing ${Math.min(matches.length, 100)}`;
+    const pageCount = Math.ceil(matches.length / pageSize);
+    resultPage = pageCount ? Math.min(resultPage, pageCount - 1) : 0;
+    const start = resultPage * pageSize;
+    const end = Math.min(start + pageSize, matches.length);
+    count.textContent = matches.length
+      ? `${matches.length} matching Variants; showing ${start + 1}-${end}; page ${resultPage + 1}/${pageCount}`
+      : "0 matching Variants; showing 0; page 0/0";
+    previous.disabled = resultPage === 0;
+    next.disabled = pageCount === 0 || resultPage >= pageCount - 1;
     results.replaceChildren();
-    matches.slice(0, 100).forEach(batch => {
+    matches.slice(start, end).forEach(batch => {
       const catalog = batch.catalog_review || {};
       const button = make("button", `${batch.variant_id} — ${catalog.captured_product_title || "Untitled Variant"}`);
       button.type = "button";
@@ -2465,7 +2546,18 @@ def _a1_catalog_browser(
       results.append(button);
     });
   };
-  search.addEventListener("input", refresh);
+  search.addEventListener("input", () => {
+    resultPage = 0;
+    refresh();
+  });
+  previous.addEventListener("click", () => {
+    if (resultPage > 0) resultPage -= 1;
+    refresh();
+  });
+  next.addEventListener("click", () => {
+    resultPage += 1;
+    refresh();
+  });
   Object.entries(globalLedgers).forEach(([name, value]) => {
     appendJson(globalLedgerRoot, name.replaceAll("_", " "), value);
   });
@@ -2713,18 +2805,18 @@ def render_review_html(report: Mapping[str, Any], *, title: str = "Supplier mapp
             )
         )
     if is_a1:
-        ledger_keys = (
-            "owner_decision_ledger",
-            "owner_decision_display_scopes",
-            "prior_owner_answers_do_not_reask",
-            "retained_owner_questions_policy_check",
-            "source_review_overlays",
-            "combo_review_ledger",
-        )
+        missing_ledgers = [
+            key for key in _A1_LEDGER_DOCUMENT_KEYS if key not in report
+        ]
+        if missing_ledgers:
+            raise SupplierReviewError(
+                "A1 report is missing required review ledgers: "
+                + ", ".join(missing_ledgers)
+            )
         sections.append(
             _a1_catalog_browser(
                 review_batches,
-                {key: report[key] for key in ledger_keys if key in report},
+                {key: report[key] for key in _A1_LEDGER_DOCUMENT_KEYS},
             )
         )
     elif alternative_rows:

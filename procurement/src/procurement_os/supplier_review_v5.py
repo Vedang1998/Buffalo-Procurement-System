@@ -216,10 +216,6 @@ _V5_CONVERSION_AUTHORITY = (
 _V5_REASON_PRECEDENCE = (
     "V5 > V4.1 > V4 > V2; historical reasons retained, not current authority"
 )
-_V5_UNDECIDED_PREFERENCE = "UNDECIDED"
-_V5_NONPREFERRED_CONFIGURATION = (
-    "NOT_THE_OWNER_PREFERRED_24_INDIVIDUAL_CONFIGURATION; SEPARATE_REVIEW_REQUIRED"
-)
 _V5_TABLE_CATALOG_RAW_SHA256 = "2d291637e5f4e34ca23ec3d742712cccf102c718600f5ba40b6dfbf583e66fee"
 _V5_FIELD_PROFILES_RAW_SHA256 = "5748ee81f403a59c14f13e49ad31c310025af8765530fcde5b43c20a38dc031e"
 _V5_CHANGED_TABLE_HASHES_RAW_SHA256 = "af712200158c5a2b7198d74634bf5fa7ec6a399ff56a15b96219be77dae9ec59"
@@ -1763,10 +1759,43 @@ def _validate_alcohol_gift_components(row: Mapping[str, Any]) -> int:
     return len(components)
 
 
+def _validate_v5_deeper_control_totals(
+    *,
+    alcohol: tuple[int, Counter[int], int] | None = None,
+    fixed: tuple[int, Counter[str]] | None = None,
+) -> None:
+    """Require code-owned real-V5 counts before accepting deep distributions."""
+
+    if alcohol is not None:
+        row_count, component_counts, known_physical_totals = alcohol
+        if (
+            row_count != _V5_TABLE_ROWS["alcohol_gift_components_v5"]
+            or component_counts != Counter({2: 7, 3: 1})
+            or known_physical_totals != 4
+        ):
+            raise ReviewPackageError(
+                "CONTROL_TOTAL_MISMATCH", "alcohol gift component controls differ"
+            )
+    if fixed is not None:
+        relationship_count, provisional_units = fixed
+        if (
+            relationship_count
+            != _V5_TABLE_ROWS["fixed_combo_component_relationships_v5"]
+            or provisional_units
+            != Counter({"quantity_preserved": 245, "reviewed_null": 4})
+        ):
+            raise ReviewPackageError(
+                "CONTROL_TOTAL_MISMATCH",
+                "fixed combo provisional conversion controls differ",
+            )
+
+
 def _validate_v5_gift_chains(
     relationship_gifts: Mapping[str, Mapping[str, Any]],
     gift_rows: Sequence[Mapping[str, Any]],
     alcohol_rows: Sequence[Mapping[str, Any]],
+    *,
+    enforce_exact_control_totals: bool,
 ) -> None:
     """Bind gift sidecar IDs and alcohol-component reviews to exact occurrences."""
 
@@ -1936,12 +1965,9 @@ def _validate_v5_gift_chains(
             "JOIN_MISMATCH",
             "alcohol specialist rows do not exactly cover challenged gifts",
         )
-    if len(alcohol_rows) == 8 and (
-        component_counts != Counter({2: 7, 3: 1})
-        or known_physical_totals != 4
-    ):
-        raise ReviewPackageError(
-            "CONTROL_TOTAL_MISMATCH", "alcohol gift component controls differ"
+    if enforce_exact_control_totals:
+        _validate_v5_deeper_control_totals(
+            alcohol=(len(alcohol_rows), component_counts, known_physical_totals)
         )
 
 
@@ -2274,6 +2300,8 @@ def _validate_fixed_combo_provisional_units(row: Mapping[str, Any]) -> str:
 def _validate_v5_relationships_and_authority(
     tables: Mapping[str, PackageTable],
     patches: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+    *,
+    enforce_exact_control_totals: bool,
 ) -> dict[str, Any]:
     for table_name, table in tables.items():
         if table_name.startswith("v5_patch_") or table_name in {"v5_table_catalog", "v5_field_profiles"}:
@@ -2416,7 +2444,12 @@ def _validate_v5_relationships_and_authority(
 
     gift_rows = tables["conditional_gift_relationships_v5"].rows
     alcohol_gift_rows = tables["alcohol_gift_components_v5"].rows
-    _validate_v5_gift_chains(relationship_gifts, gift_rows, alcohol_gift_rows)
+    _validate_v5_gift_chains(
+        relationship_gifts,
+        gift_rows,
+        alcohol_gift_rows,
+        enforce_exact_control_totals=enforce_exact_control_totals,
+    )
 
     fixed_relationship_ids: set[str] = set()
     fixed_component_ids: set[str] = set()
@@ -2457,11 +2490,9 @@ def _validate_v5_relationships_and_authority(
         ] += 1
         fixed_relationship_ids.add(relationship_id)
         fixed_component_ids.add(component_id)
-    if len(fixed_relationship_ids) == 249 and fixed_provisional_units != Counter(
-        {"quantity_preserved": 245, "reviewed_null": 4}
-    ):
-        raise ReviewPackageError(
-            "CONTROL_TOTAL_MISMATCH", "fixed combo provisional conversion controls differ"
+    if enforce_exact_control_totals:
+        _validate_v5_deeper_control_totals(
+            fixed=(len(fixed_relationship_ids), fixed_provisional_units)
         )
 
     registry_rows = tables["source_evidence_registry_v5"].rows
@@ -2995,7 +3026,11 @@ def read_v5_review_delta(
         if prior_source is not None:
             prior_source.close()
 
-    relationships = _validate_v5_relationships_and_authority(tables, patches)
+    relationships = _validate_v5_relationships_and_authority(
+        tables,
+        patches,
+        enforce_exact_control_totals=True,
+    )
     unavailable: list[str] = [*source_unavailable, *external_unavailable]
     mechanical_replay = False
     if prior_delta_path is None:

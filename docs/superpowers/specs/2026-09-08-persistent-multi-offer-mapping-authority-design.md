@@ -274,11 +274,12 @@ bounds, authenticated principal, reason, timestamp, idempotency key, and payload
 hash.
 
 Add `supplier_offer_selection_heads`, one row per Variant and scope, pointing to
-the latest event. This is the only mutable projection. A deferred trigger permits
-a head change only with its same-transaction append-only event and expected
-prior-head value. The selected offer must be a current human- or policy-approved
-regular offer for that Variant, preserve its reviewed contract, and have no
-active rejection or unresolved applicability conflict.
+the latest event. This is the only mutable projection within the routine-offer
+selection subsystem. A deferred trigger permits a head change only with its
+same-transaction append-only event and expected prior-head value. The selected
+offer must be a current human- or policy-approved regular offer for that
+Variant, preserve its reviewed contract, and have no active rejection or
+unresolved applicability conflict.
 
 The same owner may approve and select, but must complete separate mapping and
 selection previews and confirmations. A mapping decision never advances the
@@ -337,6 +338,29 @@ The later migration should add:
 7. Explicit expiry, withdrawal, contradiction, changed material terms, or a
    failed policy evaluation blocks only the affected price scope and causes the
    relevant PRICE_COVERAGE result to fail closed.
+
+### Design-only migration of existing CURRENT rows
+
+Existing CURRENT rows do not automatically acquire schedule or carry-forward
+authority. A later migration must:
+
+1. inventory every CURRENT row and reconcile its exact batch, source, vendor,
+   offer/tier, effective bounds, and existing approval provenance;
+2. propose deterministic price-scope membership without changing any source or
+   verification timestamp, and fail ambiguous, mixed-provenance, or incomplete
+   groups for owner review;
+3. require the owner to approve each supplier/book schedule, validity basis,
+   and scope definition as configuration authority;
+4. append an explicit `ADOPT_EXISTING_BASELINE` authority event for each
+   accepted scope, identifying the pre-migration rows and evidence fingerprint
+   without claiming new supplier verification;
+5. seed the corresponding authority head from that event in the same guarded
+   transaction;
+6. shadow-reconcile pre/post row counts, values, scope membership, fingerprints,
+   PRICE_COVERAGE, and finalized-run economics; and
+7. retain the old CURRENT/FUTURE path until a separate reviewed cutover proves
+   exact parity. Unresolved scopes remain on the old path and cannot be carried
+   forward under the new policy.
 
 ### Reconciliation with no reusable archive
 
@@ -399,22 +423,27 @@ does not reuse the owner's identity.
 
 ## Typed internal cost evidence
 
-Do not overload a generic `unit_cost`. Add an append-only cost-evidence ledger
-whose source kind is one of:
+Do not overload a generic `unit_cost`. Add an append-only cost-evidence ledger.
+Its source stage is exactly one of:
 
 - `QUOTED_PO_COST`;
-- `PER_SHOPIFY_SELLABLE_UNIT_COST`;
 - `RECEIVED_COST`;
 - `INVOICED_COST`;
 - `CALCULATED_COST`, only with an explicitly authorized method and complete
   input fingerprint;
 - `OWNER_ENTERED_PREVIEW`.
 
-Every row records its unit basis, currency, source object, source timestamp,
-calculation method and inputs when applicable, and immutable fingerprint. No
-automatic average is introduced. PO save, receipt, invoice import, and price
-book import may append their own evidence only when separately implemented;
-none selects a Shopify value.
+Source stage is independent of unit basis. Every row separately records a
+code-owned unit basis such as `SUPPLIER_CASE`, `PHYSICAL_CONTAINER`,
+`SUPPLIER_RETAIL_PACK`, or `SHOPIFY_SELLABLE_UNIT`, plus the exact unit count,
+currency, source object, source timestamp, and immutable fingerprint. A derived
+per-Shopify-sellable-unit value links its source row and records the explicit
+conversion formula, inputs, rounding rule, and result; it does not disguise the
+source stage as a new source.
+
+No automatic average is introduced. PO save, receipt, invoice import, and
+price-book import may append their own evidence only when separately
+implemented; none selects a Shopify value.
 
 ## Shopify field-sync design
 
@@ -423,10 +452,15 @@ version is `2026-07`.
 
 ### Official operations and scopes
 
-- Preflight/readback queries retrieve the exact ProductVariant ID, Product ID,
-  `price`, and associated InventoryItem ID, `sku`, and `unitCost { amount
-  currencyCode }`. The future app installation needs only the corresponding
-  `read_products` and `read_inventory` access required by those reads.
+- Every preflight and post-write read uses the 2026-07
+  [`productVariant(id:)`](https://shopify.dev/docs/api/admin-graphql/2026-07/queries/productVariant)
+  query with the exact Variant GID and retrieves `id`, `product { id }`,
+  `price`, and `inventoryItem { id sku unitCost { amount currencyCode } }`.
+  Re-querying through the Variant after a cost or SKU write proves that the
+  observed InventoryItem is still associated with that exact Variant; an
+  InventoryItem-ID-only read is insufficient. The future app installation
+  needs only the corresponding `read_products` and `read_inventory` access
+  required by those reads.
 - Selling price uses
   [`productVariantsBulkUpdate`](https://shopify.dev/docs/api/admin-graphql/2026-07/mutations/productVariantsBulkUpdate)
   with `write_products`, one exact Product/Variant, `allowPartialUpdates:false`,
@@ -462,6 +496,16 @@ It binds:
 If an interface allows selecting multiple fields, the server creates one
 explicit confirmed request per selected field. Unselected fields do not appear
 as authorized requests, and every field has an independent outcome.
+
+Add append-only `shopify_field_sync_control_events` plus a narrowly constrained
+`shopify_field_sync_control_heads` row per `(Variant ID, field)`. A control event
+is `PAUSE`, `RESUME`, `MANUAL_LOCK`, or `MANUAL_UNLOCK` and records the named
+principal or service policy, exact prior head, reason, field/catalog
+fingerprints, idempotency key, and timestamp. A deferred constraint permits a
+head change only beside its event. Preflight checks the current head before it
+creates or executes a request. Thus a pre-existing manual SKU lock and a pause
+created by a partial failure also block later requests; they are not merely
+attributes copied into one request.
 
 ### Cost eligibility and execution
 
@@ -574,7 +618,14 @@ the exact predicate and evidence; it does not relabel old rows.
 ## Exact canonical, config, and implementation conflicts
 
 The following conflicts must be amended in a future authority change before
-runtime implementation. This design does not edit them.
+runtime implementation. This design does not edit them. The concrete current
+anchors are canonical specification sections 1 and 11
+(`procurement/docs/authority/01_CANONICAL_SYSTEM_SPEC_v2_1.md`, source lines
+22-24 and 895-932); the price, rollover, archive, fuzzy, and Shopify flags in
+`procurement/config/rules.toml` (source lines 4, 22, 26, 37-41, 99, and 103);
+the FUTURE-only/per-vendor/full-coverage staging constraints in
+`procurement/db/011_monday_price_book_staging.sql`; and the current shared-token
+and GET/write route seams in `procurement/src/procurement_os/api.py`.
 
 1. **Universal monthly lifecycle.** The canonical specification describes every
    source as next-month FUTURE followed by day-1 delete/promote. That conflicts
@@ -633,6 +684,8 @@ runtime implementation. This design does not edit them.
 | Selection absent/stale/conflicting | Selected view returns no usable row; recommendations remain blocked |
 | Missing monthly replacement with valid base | CURRENT bytes unchanged; append carry-forward event; source verification unchanged |
 | Missing seasonal replacement across month boundary | Base remains applicable until actual validity/policy boundary |
+| Irregular book has no replacement and is not yet review-due | Exact base may carry forward under its approved scope; source verification timestamp is unchanged |
+| Irregular book passes its configured review-due boundary | Scoped PRICE_COVERAGE blocks until an explicit policy evaluation or replacement; no calendar guess |
 | Expired, withdrawn, or contradicted base | Scoped PRICE_COVERAGE failure; no carry-forward |
 | Approved replacement | Atomic scope-only CURRENT replacement with pre/post totals and event/head reconciliation |
 | No-price-archive check | No reusable superseded operational projection; finalized-run snapshot remains exact |

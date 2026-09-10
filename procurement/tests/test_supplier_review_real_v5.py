@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 from decimal import Decimal
 import hashlib
@@ -15,7 +16,9 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from procurement_os.price_book import PRICE_BOOK_HEADERS
 from procurement_os.supplier_mapping_review import (
+    SupplierReviewError,
     _html_embedded_json,
+    _required_a1_ledger_rows,
     _reviewable_sidecar_record,
     _v5_review_family_summary,
     report_document,
@@ -33,6 +36,7 @@ from procurement_os.supplier_review_package import (
 )
 from procurement_os.supplier_review_v5 import (
     _validate_fixed_combo_provisional_units,
+    _validate_v5_deeper_control_totals,
     _validate_v5_gift_chains,
     _validate_v5_normalized_contract_row,
     _validate_v5_owner_preference_contract,
@@ -1798,7 +1802,9 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
                 "may_influence_normalized_price_projection": False,
             }
         ]
-        _validate_v5_gift_chains(links, gifts, alcohol)
+        _validate_v5_gift_chains(
+            links, gifts, alcohol, enforce_exact_control_totals=False
+        )
 
         swapped = deepcopy(gifts)
         swapped[0]["relationship_id"], swapped[1]["relationship_id"] = (
@@ -1806,22 +1812,33 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
             swapped[0]["relationship_id"],
         )
         with self.assertRaisesRegex(ReviewPackageError, "another occurrence"):
-            _validate_v5_gift_chains(links, swapped, alcohol)
+            _validate_v5_gift_chains(
+                links, swapped, alcohol, enforce_exact_control_totals=False
+            )
 
         authorized = deepcopy(gifts)
         authorized[0]["whole_offer_to_single_variant_allowed"] = True
         with self.assertRaisesRegex(ReviewPackageError, "cannot map"):
-            _validate_v5_gift_chains(links, authorized, alcohol)
+            _validate_v5_gift_chains(
+                links, authorized, alcohol, enforce_exact_control_totals=False
+            )
 
         detached = deepcopy(alcohol)
         detached[0]["challenge_review_id"] = "challenge-2"
         with self.assertRaisesRegex(ReviewPackageError, "does not bind"):
-            _validate_v5_gift_chains(links, gifts, detached)
+            _validate_v5_gift_chains(
+                links, gifts, detached, enforce_exact_control_totals=False
+            )
 
         drifted_components = deepcopy(alcohol)
         drifted_components[0]["components"][1]["quantity_per_gift_candidate"] = 3
         with self.assertRaisesRegex(ReviewPackageError, "arithmetic differs"):
-            _validate_v5_gift_chains(links, gifts, drifted_components)
+            _validate_v5_gift_chains(
+                links,
+                gifts,
+                drifted_components,
+                enforce_exact_control_totals=False,
+            )
         projected_gift = _reviewable_sidecar_record(
             "alcohol_gift_components_v5", alcohol[0]
         )
@@ -1844,6 +1861,29 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
         fixed_component["provisional_component_shopify_units"] = 3
         with self.assertRaisesRegex(ReviewPackageError, "conversion differs"):
             _validate_fixed_combo_provisional_units(fixed_component)
+
+    def test_deeper_control_totals_require_expected_counts_and_distributions(self):
+        _validate_v5_deeper_control_totals(
+            alcohol=(8, Counter({2: 7, 3: 1}), 4),
+            fixed=(249, Counter({"quantity_preserved": 245, "reviewed_null": 4})),
+        )
+        for alcohol in (
+            (7, Counter({2: 7}), 4),
+            (8, Counter({2: 8}), 4),
+            (8, Counter({2: 7, 3: 1}), 3),
+        ):
+            with self.subTest(alcohol=alcohol), self.assertRaisesRegex(
+                ReviewPackageError, "CONTROL_TOTAL_MISMATCH"
+            ):
+                _validate_v5_deeper_control_totals(alcohol=alcohol)
+        for fixed in (
+            (248, Counter({"quantity_preserved": 244, "reviewed_null": 4})),
+            (249, Counter({"quantity_preserved": 246, "reviewed_null": 3})),
+        ):
+            with self.subTest(fixed=fixed), self.assertRaisesRegex(
+                ReviewPackageError, "CONTROL_TOTAL_MISMATCH"
+            ):
+                _validate_v5_deeper_control_totals(fixed=fixed)
 
     def test_streamed_table_summary_is_truthful_and_tuple_access_fails_closed(self):
         table = _table("large", (), path="tables/large.jsonl", declared=2)
@@ -1905,6 +1945,70 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
         )
         self.assertEqual(report_document(generic)["label"], "FIXTURE REVIEW LABEL")
 
+    def test_a1_required_ledger_tables_fail_closed_on_name_count_and_digest(self):
+        rows = tuple(
+            {"owner_decision_id": f"owner-{index:02d}", "approved": False}
+            for index in range(20)
+        )
+        valid_table = _table("owner_decisions", rows, declared=20)
+
+        def package(
+            tables: dict[str, PackageTable],
+            *,
+            loaders: dict[str, object] | None = None,
+        ) -> ReviewPackage:
+            return ReviewPackage(
+                source="fixture",
+                package_kind=real.A1_PACKAGE_KIND,
+                snapshot_id="fixture",
+                status="REVIEW_ONLY_VALIDATED",
+                label=real.A1_REVIEW_LABEL,
+                file_count=0,
+                verified_file_count=0,
+                manifest_sha256="a" * 64,
+                tables=tables,
+                cohorts={},
+                issues=(),
+                unavailable_evidence=(),
+                table_loaders={} if loaders is None else loaders,
+            )
+
+        valid_package = package({"owner_decisions": valid_table})
+        self.assertEqual(
+            _required_a1_ledger_rows(valid_package, "owner_decisions"),
+            list(rows),
+        )
+        with self.assertRaisesRegex(SupplierReviewError, "unknown required"):
+            _required_a1_ledger_rows(valid_package, "owner_decision_typo")
+        with self.assertRaisesRegex(SupplierReviewError, "is missing"):
+            _required_a1_ledger_rows(package({}), "owner_decisions")
+        short_table = _table("owner_decisions", rows[:-1], declared=20)
+        with self.assertRaisesRegex(SupplierReviewError, "count or identity"):
+            _required_a1_ledger_rows(
+                package({"owner_decisions": short_table}), "owner_decisions"
+            )
+        drifted_table = PackageTable(
+            name=valid_table.name,
+            path=valid_table.path,
+            format=valid_table.format,
+            rows=valid_table.rows,
+            raw_sha256=valid_table.raw_sha256,
+            canonical_jsonl_sha256="f" * 64,
+            declared_row_count=valid_table.declared_row_count,
+        )
+        with self.assertRaisesRegex(SupplierReviewError, "digest differs"):
+            _required_a1_ledger_rows(
+                package({"owner_decisions": drifted_table}), "owner_decisions"
+            )
+        with self.assertRaisesRegex(SupplierReviewError, "not materialized"):
+            _required_a1_ledger_rows(
+                package(
+                    {"owner_decisions": valid_table},
+                    loaders={"owner_decisions": lambda: iter(rows)},
+                ),
+                "owner_decisions",
+            )
+
     def test_a1_html_is_inert_searchable_and_allows_only_bound_local_pdf_links(self):
         hostile = '</script><script src="https://evil.example/x.js">alert(1)</script>'
         batch = {
@@ -1938,6 +2042,19 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
                 }
             ],
         }
+        for index, href in enumerate(
+            (
+                "javascript:globalThis.__hrefExecuted=true",
+                "../../escape.pdf#page=1",
+                "../original_sources/../escape.pdf#page=1",
+                "../original_sources/%2E%2E%2Fescape.pdf#page=1",
+            ),
+            start=2,
+        ):
+            hostile_offer = deepcopy(batch["offers"][0])
+            hostile_offer["source_occurrence_id"] = f"offer-{index}"
+            hostile_offer["source"]["local_pdf_href"] = href
+            batch["offers"].append(hostile_offer)
         report = {
             "label": real.A1_REVIEW_LABEL,
             "status": "REVIEW_ONLY_VALIDATED",
@@ -1945,15 +2062,32 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
             "offer_family": {"summary": {}, "invariants": {}},
             "review_batches": [batch],
             "operational_effects": {},
+            "owner_decision_ledger": [],
+            "owner_decision_display_scopes": [],
+            "prior_owner_answers_do_not_reask": [],
+            "retained_owner_questions_policy_check": [],
+            "source_review_overlays": [],
+            "combo_review_ledger": {},
         }
+        incomplete = deepcopy(report)
+        del incomplete["owner_decision_ledger"]
+        with self.assertRaisesRegex(SupplierReviewError, "missing required"):
+            render_review_html(incomplete)
         rendered = render_review_html(report)
         self.assertIn("connect-src 'none'", rendered)
         self.assertIn("Full catalog search and evidence drill-down", rendered)
         self.assertIn("textContent", rendered)
         self.assertIn("decodeURIComponent", rendered)
         self.assertIn("encodeURIComponent(filename)", rendered)
+        self.assertIn('id="catalog-previous"', rendered)
+        self.assertIn('id="catalog-next"', rendered)
+        self.assertIn("matches.slice(start, end)", rendered)
+        self.assertIn("resultPage = 0", rendered)
         self.assertNotIn("innerHTML", rendered)
         self.assertIn("../original_sources/Fixture%20Book.pdf#page=2", rendered)
+        self.assertIn("javascript:globalThis.__hrefExecuted=true", rendered)
+        self.assertNotIn('href="javascript:', rendered)
+        self.assertNotIn('href="../../escape.pdf', rendered)
         self.assertNotIn(hostile, rendered)
         self.assertNotIn('<script src="https://evil.example', rendered)
         self.assertNotIn('href="https://evil.example', rendered)
@@ -1989,6 +2123,28 @@ class SupplierReviewRealV5Tests(unittest.TestCase):
                     external_evidence_root=evidence,
                 )
             )
+
+    def test_pdf_page_bounds_are_labelled_as_pinned_not_independently_parsed(self):
+        payload = b"fixture bytes intentionally not parsed as a PDF"
+        contracts = {
+            "fixture.pdf": {
+                "bytes": len(payload),
+                "sha256": _sha(payload),
+                "physical_pages": 7,
+            }
+        }
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "fixture.pdf").write_bytes(payload)
+            status, unavailable = real._verify_external_pdfs(
+                root, contracts, ReviewLimits()
+            )
+        self.assertEqual(unavailable, ())
+        self.assertEqual(status["fixture.pdf"]["physical_pages"], 7)
+        self.assertEqual(
+            status["fixture.pdf"]["page_range_basis"],
+            real.A1_PDF_PAGE_RANGE_BASIS,
+        )
 
 
 if __name__ == "__main__":
