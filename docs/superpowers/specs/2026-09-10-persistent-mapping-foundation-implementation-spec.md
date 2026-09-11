@@ -276,6 +276,67 @@ function arguments, request data, nor `procurement.*` GUCs can supply a
 fallback pair. A configuration change requires a separately reviewed release
 transition; it is not mutable runtime authority.
 
+The configuration schema and byte contract are exact:
+
+- the top-level object has exactly `contract`, `family`, `release`,
+  `target_schema`, and `allowed_pairs`;
+- `contract` is exactly
+  `BUFFALO_PERSISTENT_MAPPING_MAINTENANCE_IDENTITY_V1`; the next three strings
+  exactly equal the release manifest record;
+- `allowed_pairs` is an array of objects having exactly the two string keys
+  `session_user` and `current_user`; values are nonblank exact PostgreSQL role
+  names as returned by those keywords, with no case folding, wildcard, alias,
+  or independent role allowlist;
+- pair objects are unique and sorted by
+  `(session_user,current_user)`; and
+- canonical JSON is Python
+  `json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True,
+  separators=(",", ":"))`. The full configuration file is those UTF-8 bytes
+  plus one final LF. Its SHA-256 is
+  `maintenance_identity_config_sha256`. The embedded pair text is the same
+  canonical encoding of the `allowed_pairs` array alone, with no LF; its
+  SHA-256 is `maintenance_identity_pairs_sha256`.
+
+The runner parses objects into the typed pair record below and compares that
+record to the separately read database pair. The SQL embeds the exact canonical
+array text, casts each element to JSONB, and compares it with an exact JSONB
+object. Tuple arrays, extra/missing keys, alternate encodings, and residual
+design placeholders refuse before a mapping release can run.
+
+This fixed **synthetic test vector** makes the byte contract independently
+reproducible; its role/schema names are fabricated test values, not proposed
+production configuration. The pair-array canonical bytes (no final LF) are:
+
+```text
+[{"current_user":"qa_mapping_owner","session_user":"qa_release_login"}]
+```
+
+Their SHA-256 is
+`2d08568ea5df7ef3ee383381ae2d952c197ac87f8d8fffd4c1af877ca05ef69c`.
+The full canonical configuration bytes are the following single line plus one
+final LF:
+
+```text
+{"allowed_pairs":[{"current_user":"qa_mapping_owner","session_user":"qa_release_login"}],"contract":"BUFFALO_PERSISTENT_MAPPING_MAINTENANCE_IDENTITY_V1","family":"persistent-mapping-foundation","release":"v1-shadow-only","target_schema":"qa_mapping_test"}
+```
+
+Their SHA-256, including that LF, is
+`ab773e859feee527bba01c4ae3193fece3258bbe471d92595302531cbc270450`.
+Planned row 26 must build this value independently, prove both hashes, parse one
+`MaintenanceIdentityPair("qa_release_login", "qa_mapping_owner")`, render the
+exact SQL literals, and obtain the same runner and installed-assertion match.
+Changing shape, key, byte, pair order, digest, or either observed role must
+refuse.
+
+The publication gate must load that binding independently, require its full and
+pair digests to equal the corresponding `MappingRelease` fields, render the
+three SQL literals only from the parsed binding, reject every residual token,
+then re-render and byte-compare the proposed numbered file before calculating
+its migration SHA or any function-property hash. The static acceptance fixture
+extracts the rendered helper constants and proves exact equality with the
+binding and manifest fields. Thus a self-consistent but wrong SQL literal is
+not accepted merely because its internal digest matches.
+
 The catalog-property hash is calculated in Python from a canonical tuple of
 stable schema name, function name and identity arguments, result, `prokind`,
 language, volatility, strictness, security-definer/leakproof/parallel flags,
@@ -330,10 +391,16 @@ class MappingRelease:
 
 
 @dataclass(frozen=True)
+class MaintenanceIdentityPair:
+    session_user: str
+    current_user: str
+
+
+@dataclass(frozen=True)
 class MaintenanceIdentityBinding:
     config_sha256: str
     pairs_sha256: str
-    allowed_pairs: tuple[tuple[str, str], ...]
+    allowed_pairs: tuple[MaintenanceIdentityPair, ...]
 
 
 # The implementation commit publishes literal records here only after assigning
@@ -349,7 +416,7 @@ _MAPPING_FAMILY_LOCK_PREFIX = "buffalo:migration:persistent-mapping-foundation"
 
 
 def _validate_release_manifest(migration_order: list[str]) -> None:
-    """Require literal hashes, one schema/family/major, and exact file order."""
+    """Require literal hashes/config bindings and exact release/file order."""
     ...
 
 
@@ -523,8 +590,9 @@ def _load_approved_maintenance_identity(
     # manifest reference; the caller cannot supply or override that reference.
     # Require exact SHA-256 before parsing canonical UTF-8 JSON. Require one
     # matching family/version/target schema, an exact non-empty ordered array of
-    # two-element role-name pairs, no blanks/placeholders/wildcards/duplicates,
-    # and a canonical re-encoding identical to the reviewed bytes. Hash the
+    # exact-key {"session_user":...,"current_user":...} objects, no blanks,
+    # extra keys, placeholders, wildcards, aliases, or duplicates, and a
+    # canonical re-encoding identical to the reviewed bytes. Hash the
     # canonical pair-array JSON independently and require the manifest's exact
     # maintenance_identity_pairs_sha256 too; that same digest is embedded and
     # recomputed by the SQL helper. Never infer either member from
@@ -532,12 +600,26 @@ def _load_approved_maintenance_identity(
     ...
 
 
-def _observed_maintenance_pair(conn: Any) -> tuple[str, str]:
+def _observed_maintenance_pair(conn: Any) -> MaintenanceIdentityPair:
     """Read both catalog-authenticated invocation identities as one pair."""
     row = conn.execute("SELECT session_user::text,current_user::text").fetchone()
     if row is None or not row[0] or not row[1]:
         raise RuntimeError("maintenance invocation identity is unavailable")
-    return (str(row[0]), str(row[1]))
+    return MaintenanceIdentityPair(
+        session_user=str(row[0]), current_user=str(row[1])
+    )
+
+
+def _verify_maintenance_identity_transition(
+    conn: Any,
+    *,
+    prior: MaintenanceIdentityBinding,
+    next_: MaintenanceIdentityBinding,
+) -> None:
+    """Require a staged rotation and one invocation pair approved by both."""
+    shared = set(prior.allowed_pairs).intersection(next_.allowed_pairs)
+    if not shared or _observed_maintenance_pair(conn) not in shared:
+        raise RuntimeError("maintenance pair rotation lacks an approved overlap")
 
 
 def _verify_effective_role_topology(
@@ -746,6 +828,14 @@ def apply_schema_connection(
                 prior_maintenance_identity = _load_approved_maintenance_identity(
                     prior_release
                 )
+                maintenance_identity = _load_approved_maintenance_identity(
+                    release
+                )
+                _verify_maintenance_identity_transition(
+                    conn,
+                    prior=prior_maintenance_identity,
+                    next_=maintenance_identity,
+                )
                 _verify_pgcrypto_contract(
                     conn, prior_release, caller_path_oids=caller_path_oids
                 )
@@ -758,8 +848,10 @@ def apply_schema_connection(
                 )
                 _call_verified_assertion(conn, prior_release)
                 _set_local_anchor_search_path(conn, release)
-
-            maintenance_identity = _load_approved_maintenance_identity(release)
+            else:
+                maintenance_identity = _load_approved_maintenance_identity(
+                    release
+                )
             # Refuse an unapproved caller at the mapping-family boundary before
             # it can create an authority object. Legacy files through 013 may
             # already have committed under the runner's deliberately narrower
@@ -827,8 +919,15 @@ independently computed anchor hashes, and it compares PostgreSQL's own
 invokes that helper as its first trust-boundary operation. An argument, a meta
 row, a request field, `SET ROLE` by an unlisted originating session, or a
 custom GUC cannot alter either expected value. A later pair change requires a
-new reviewed config hash, SQL/function hashes, release manifest entry, and
-contract transition.
+staged release rotation. Every adjacent transition must have a non-empty pair
+intersection, and its invocation must use one exact pair present in both the
+installed and next binding. To replace a disjoint old set with a new set, one
+reviewed release first adds the new pair while retaining an old transition
+pair; after that release is installed, a second reviewed release may remove the
+old pair and is invoked through the new pair. Each release has new reviewed
+config/pair hashes, SQL/function hashes, manifest entry, and contract version.
+A one-step disjoint rotation refuses; no caller or superuser is silently
+grandfathered as a bridge.
 
 The exact target schema is a manifest literal and runner argument, resolved to
 one non-system, non-current-temp, non-other-temp OID with
@@ -3898,7 +3997,7 @@ simulation in test output.
 | 23 | Concurrent mapping idempotency | Mapping service/PG | `test_concurrent_mapping_same_key_replays_before_stale_head_and_conflicts_on_change`: identical requests serialize and both receive one result even though it advanced the head; changed request uses the same lock then conflicts; no second offer/rejection/decision |
 | 24 | Stale mapping preview/prior | Mapping/PG | `test_mapping_rejects_stale_preview_and_stale_or_forked_prior`: changed catalog/vendor/rejection/candidate or non-tip predecessor fails and is never auto-rebased/retried |
 | 25 | Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: false/absent flags deny before storage/DB; NULL or malformed authentication-context, preview, or confirmation hashes, forged/mismatched GUC, client actor, or shared token cannot insert; only exact enabled synthetic server context succeeds |
-| 26 | Effective owner/role topology and maintenance binding | Authorization + migration/PG | `test_role_topology_rejects_direct_transitive_inherit_set_and_mixed_owner_paths`: in subtests, one checksum-pinned approved `(session_user,current_user)` pair passes while an application runner invocation, application direct assertion, application-origin `SET ROLE`, direct/transitive INHERIT/SET/mixed owner paths, effective relation/column/function/schema privilege, missing or mismatched config/hash/pair, individually allowed roles recombined into an unapproved pair, forged arguments, and forged GUCs refuse at the mapping-family boundary; assert no mapping marker/authority/member change in every refusal while acknowledging legacy files may already have committed; post-install unsafe membership makes both runner verification and direct assertion fail; no membership is revoked |
+| 26 | Effective owner/role topology and maintenance binding | Authorization + migration/PG | `test_role_topology_rejects_direct_transitive_inherit_set_and_mixed_owner_paths`: independently reproduce the fixed synthetic config/pair byte vectors and hashes, and prove publication renders SQL literals exactly equal to the binding/manifest; one checksum-pinned approved `(session_user,current_user)` pair passes while tuple-shaped/altered config, application runner invocation, application direct assertion, application-origin `SET ROLE`, direct/transitive INHERIT/SET/mixed owner paths, effective relation/column/function/schema privilege, missing or mismatched config/hash/pair, individually allowed roles recombined into an unapproved pair, forged arguments, and forged GUCs refuse; staged add-then-remove rotation with an observed intersection succeeds while a one-step disjoint transition refuses; assert every refusal occurs at the mapping-family boundary with no mapping marker/authority/member change while acknowledging legacy files may already have committed; post-install unsafe membership makes both runner verification and direct assertion fail; no membership is revoked |
 | 27 | Policy fail closed | Authorization + mapping/PG | `test_policy_mapping_requires_published_policy_and_independent_evidence`: NULL/malformed policy publication or predicate-result hashes and the false publication stub reject every policy approval and all policy DEFER/REJECT shapes; no approved default/effect |
 | 28 | Approval lifecycle | Mapping/PG | `test_mapping_approval_creates_inactive_unpriced_unselected_offer`: decision/offer commit atomically; zero price/head/recommendation effects |
 | 29 | Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head; exact sequential replay and changed payload behave correctly |
@@ -3950,7 +4049,7 @@ implemented, or tested.
 | P1 independent replay trust anchors | Ordered literal runner manifest binds migration bytes, version, schema, both anchor definitions/properties and transitive helpers; trusted catalog inspection precedes invocation; observed markers can select only the highest exact manifest prefix; v2 adds a reviewed record | PG #3 and #4 | Design-remediated; unexecuted |
 | P1 explicit schema and safe resolution | Manifest target name is bound to a non-system/non-temp invocation OID; stable hashes exclude OIDs; safe identifiers and literal qualified SQL; fresh pgcrypto bootstrap is post-verified in the same file transaction; maintenance privileges, target/helper writability, controlled-path helper OIDs, signed function paths and explicit `pg_temp` last are checked; decoys never supply authority | PG #6, plus #2 catalog signature | Design-remediated; unexecuted |
 | P1 effective ownership/role membership | Independent and installed checks cover effective relation/column/function/schema privilege and direct/transitive INHERIT/SET/mixed owner paths; unsafe topology refuses without membership mutation; administrator boundary is explicit | PG #26 and #2 | Design-remediated; unexecuted |
-| NEW-1 P2 implicit maintenance caller | A separately approved release/deployment config and literal manifest bind the exact config/pair digests; runner and hash-pinned no-argument SQL helper verify the complete `(session_user,current_user)` pair before excluding either role; missing/mismatched bindings, application invocation/direct assertion, unapproved `SET ROLE`, arguments, metadata, and GUCs fail closed; actual names remain unassigned | PG #26 | Corrected in design; unexecuted |
+| NEW-1 P2 implicit maintenance caller | One exact canonical object schema, fixed synthetic byte/hash vector, publication equality gate, separately approved release/deployment config, and literal manifest bind the config and pair bytes; runner and hash-pinned no-argument SQL helper verify the complete `(session_user,current_user)` pair before excluding either role; missing/mismatched bindings, application invocation/direct assertion, unapproved `SET ROLE`, arguments, metadata, and GUCs fail closed; rotation requires an old/new overlap and two releases for disjoint replacement; actual names remain unassigned | PG #26 | Corrected in design; unexecuted |
 | P1 DEFER without invented identity | Candidate keys become conditionally nullable; DEFER operational targets/keys/package/fingerprints/results are null while immutable source states remain on the candidate; APPROVE remains strict; REJECT has a narrow exact minimum | PG #14, #15 and #20 | Design-remediated; unexecuted |
 | P1 concurrent idempotency and offer reuse | Authenticated payload-neutral session locks precede fresh snapshots; full request identity/post-lock replay, deterministic ordering, three-attempt/30-second budget, balanced cleanup and unknown-commit recovery; offer-key lock precedes lookup/create; changed disposition requires fresh confirmation | PG #12, #17, #22, #23, #32 and #33 | Design-remediated; unexecuted |
 | P2 correct test registration | Uses existing `test_*.py` auto-discovery; exact future floors are 39 PG and 3 PURE via `REQUIRED_MODULE_MINIMUMS`; global remains sum-derived | PURE P3 | Corrected in design; unexecuted |
