@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-10T11:17:51Z (UTC)
+**Updated:** 2026-09-11T05:19:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,127 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Overnight unblock and supplier-format regression preparation — COMPLETED / STOPPED AT HANDOFF
+
+- The one bounded window began at `2026-09-11T03:56:29Z`, ended at
+  `2026-09-11T05:19:00Z`, and had a hard deadline of
+  `2026-09-11T11:56:29Z` with
+  final reserve beginning `2026-09-11T10:41:29Z`. Work stopped early because
+  every eligible packet was completed or reduced to an exact external
+  dependency; there was no deadline overrun.
+- New reviewable outputs are: the frozen maintenance-identity correction;
+  an exact PR #23 failure-evidence dossier; a reproducible prospective
+  integration tree and handoff-conflict proposal; an executable fabricated
+  supplier-format conformance corpus with a presence-aware pure helper; and a
+  provider-neutral identity/evidence/supplier-configuration preview. Private
+  evidence is under
+  `.ai-auth/codex/evidence/overnight-20260911T035629Z/`; it remains host-local
+  and has no proven off-host backup/readback.
+
+| Packet | Terminal status | Exact boundary |
+| --- | --- | --- |
+| A — maintenance identity | `DONE AS STATIC DESIGN / EXECUTABLE PROOF UNRUN` | Frozen local/origin branch `codex/persistent-mapping-foundation-design` at `b0c8d3fec8ec57e57881e91615cc6f7c3cf75b4d`, tree `251643acdf6aa68c02241d198eb5ad96edba54c4` |
+| B — PR #23 CI | `BLOCKED_WITH_EXACT_DEPENDENCY` for root cause | Existing attempt-1 job log for run `34185466802`, job `101932809520`, must come from an authorized Actions reader |
+| C — integration rehearsal | `DONE AS REHEARSAL / NOT_MERGED / NOT_GITHUB_CI` | Hypothetical commit `d5ee31dd0728ba98141f2083075dca92dbb1189e`, tree `c9fc8959d5864ee67331d8c972e3671f4a92f8fd`; reconstructable from a verified small bundle |
+| D — source-format regressions | `DONE AS SYNTHETIC QA PREPARATION` | Code candidate `ff58fdfe6a66864c088eac8d13b97f2686ec92e2`, tree `21658016a03d03c706a43824ea4aa69a42817711`, exact parent `a056e111...` |
+| E — prerequisite previews | `DONE AS DRAFT / UNPUBLISHED / FAIL-CLOSED` | No provider, account, policy, role, schedule, or operational authority selected |
+
+- **Packet A:** the two-document-only delta is frozen and pushed. Its proposed
+  release config now pins an exact independently approved ordered
+  `(session_user,current_user)` pair set; missing/mismatched configuration,
+  caller substitution, forged arguments/GUCs, arbitrary role recombination,
+  application invocation, and forbidden direct/transitive role topology fail
+  closed at the mapping-family boundary. Planned row 26 includes those cases
+  without changing the still-unexecuted **39 PostgreSQL + 3 pure/static**
+  matrix. Proposed-Python AST, fixed-vector hashes, counts, formatting, and
+  bounded secret checks passed. Read-only helper review of exact remediation
+  `f5791627...` returned `PASS`; that is not represented as Claude's requested
+  independent confirmation, which remains pending on frozen `b0c8d3f...`.
+  No proposed persistent SQL or planned acceptance test was executed.
+- **Packet B:** current remote identities remain `origin/main=f308ac666...`,
+  PR source `ec71fe9c...`, and pull merge `f7bbb45a...`; source and pull merge
+  share tree `543be91a...`. Lock validation, locked installation, and startup
+  passed remotely. The suite step ended with exit `1` after 959 seconds—241
+  seconds before the workflow timeout—with one generic annotation, no artifact,
+  and no accessible traceback or final runner summary. Existing exact-tree
+  local evidence remains `599/599` in 787.161 seconds, but it is not GitHub CI.
+  Timeout and pre-suite bootstrap failure are contradicted; the precise
+  assertion/environment/fixture/resource cause is unknowable without the
+  existing job log. No behavioral patch or rerun is justified.
+- **Packet C:** scratch Git preserved ancestry by merging exact PR source
+  `ec71fe9c...` then frozen design/reader lineage `b0c8d3f...`, with merge base
+  `88bf800...`. Git reported exactly one conflict,
+  `docs/CODEX_HANDOFF.md`; the proposed resolution retains both histories and
+  changes no runtime, SQL, configuration, security, test, or runner semantics.
+  Migrations remain exactly schema plus `001`–`013`; no persistent-mapping
+  migration exists. Discovery is `689/689`, supplier-review focus passed
+  `90/90` in 2.312 seconds, and startup passed `10/10`. The single permitted
+  full suite was externally interrupted after clean observed results but before
+  any final count/exit; it is **not a pass**, and no second suite was run. The
+  3,539-byte prerequisite bundle SHA-256 is
+  `2716f895cae61caa059d7271c630ee6077914952ff7b0904c9f1fa59546107b1`;
+  `git bundle verify` passed.
+- **Packet D:** the isolated QA commit changes exactly the fabricated eight-line
+  JSONL corpus, a private-input-free pure test helper, a nine-method test module,
+  and the exact runner floor `9`; no `procurement/src`, migration, config,
+  lockfile, workflow, or production extractor changed. Cases retain literal
+  codes/suffixes/scope, occurrence versus offer identity, units/tiers,
+  continuation boundaries, threshold versus price changes, literal report
+  periods, the existing valid 27-field price contract, absent/null/zero,
+  arithmetic contradictions, mutually exclusive split-fee accounting,
+  regular/gift/special/combo separation, deal/base separation, rejection, and
+  clarification memory. Every public row is fabricated and declares zero
+  mapping, selection, price, Shopify, supplier-contact, and order effects.
+  Reviewer-discovered SF-05 contract invalidity and SF-06 fee double-counting
+  were corrected; bounded final review returned `PASS` with no P0/P1/P2.
+  Focused tests passed `9/9`, startup `10/10`, and the authoritative safe
+  wrapper passed **686 discovered / 686 executed / 686 passes** in 663.595
+  seconds with every abnormal counter zero on Python 3.13.11/PostgreSQL 16.9.
+  The extractor remains `NOT_IMPLEMENTED_NOT_TESTED`, and a genuine later
+  edition remains `NOT_PROVEN`.
+- **Packet E:** the draft recommends provider-neutral OIDC Authorization Code
+  with PKCE S256 at FastAPI, opaque issuer-scoped principals, deny-by-default
+  server-owned action/object capabilities, and separate application,
+  maintenance, policy-service, and Shopify credential identities. Official
+  OIDC/OAuth and current Replit access documentation were checked. The
+  least-privilege matrix separately covers cost view, evidence download,
+  intake, mapping, routine selection, price approval, cost/retail/SKU sync,
+  reversal, order approval, and order release; no wildcard admin bypass is
+  proposed. The exact three draft linkage classes are independent raw/catalog
+  GTIN, exact current Shopify SKU plus distributor-product identity, and prior
+  human-approved external-crosswalk fingerprint. They remain unpublished and
+  policy approval therefore fails closed.
+- Supplier configuration remains a preview only. Available evidence shows one
+  September-labeled source set, not recurrence or complete validity. Empire and
+  Southern base/change reports remain separate; Latitude, Monsieur Touton,
+  NY Wine & Spirits, Try-It, Winebow, and Wright each remain one-observation
+  evidence; genuine Skurnik is absent. Try-It's historical delivery statement
+  is not price cadence. Templeton remains exactly two item-scoped `NOT FOUND`
+  records with no mapping, price, order, vendor-wide, or historical-sales
+  authority.
+- Four pending inputs remain tied narrowly: private IdP/account-role assignment
+  blocks private route exposure and real human actions; owner publication of
+  the three evidence classes blocks only policy-approved mapping; unattended
+  SKU authority blocks only a later unattended executor; supplier cadence,
+  validity, and scope blocks price scheduling/carry-forward/overlays. Separately,
+  an approved maintenance-pair configuration blocks real migration
+  publication/application/replay, not static design or disposable testing.
+- Ten original supplier PDFs and their hashes are locally present. Original S1
+  archive SHA-256 `461eda8e...38ff`, clarification/profile A1 archive SHA-256
+  `ac4f02d1...0293`, genuine Skurnik, and a genuine later edition remain
+  missing or `NOT_PROVEN_LOCAL`; no V5 artifact is substituted. The precise
+  future transfer is the original bytes followed by hash verification.
+- `procurement/docs/PHASE_STATUS.md` is unchanged because no program phase or
+  release milestone changed. Persistent-foundation implementation/SQL,
+  operational DB and Shopify access, roles/permissions, approvals, activation,
+  supplier contact, orders, deployment, main/PR mutation, merge, and CI retry
+  were all zero/not performed.
+- **Single highest-priority next authorization:** authorize a repository
+  administrator or Actions reader to transfer the existing PR #23 attempt-1
+  job log byte-for-byte with a retained hash. Diagnose its first traceback and
+  final runner/service evidence before authorizing any CI rerun, behavioral
+  patch, foundation integration, or dependent persistent-mapping implementation.
 
 ### NEW-1 / NEW-2 / NEW-3 test-only closure — COMPLETE / STOPPED AT HANDOFF
 
