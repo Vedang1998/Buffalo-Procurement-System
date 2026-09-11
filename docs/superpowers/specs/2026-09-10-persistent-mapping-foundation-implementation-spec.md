@@ -2,7 +2,8 @@
 
 Status: **REMEDIATED PROPOSAL / DESIGN ONLY / NOT AUTHORIZED FOR IMPLEMENTATION OR MIGRATION EXECUTION**
 
-Prepared: 2026-09-10; seven-finding documentation remediation: 2026-09-11
+Prepared: 2026-09-10; seven-finding remediation and maintenance-identity
+correction: 2026-09-11
 
 Preserved parent: `codex/supplier-mapping-review-policy-followup` at
 `a056e111e2f21b96a9452be9a559e10f03805a6f`, tree
@@ -26,6 +27,13 @@ design defects. It specifies proposed controls and future tests; it does not
 claim that the SQL, runner amendment, role topology, or concurrency behavior
 has been executed or accepted. Section 9 maps every accepted finding to its
 correction and planned proof.
+
+The subsequent NEW-1 correction closes the remaining mechanical
+maintenance-identity gap in the proposal: the invoking account is no longer an
+implicit trusted default. Both runner and installed assertion require one exact
+session/effective-role pair bound to independently approved, checksum-pinned
+release/deployment configuration. This remains static design work; no role was
+selected, configured, granted, or exercised.
 
 ## 1. Exact integration dependency and target
 
@@ -249,7 +257,24 @@ record binds all of the following:
 - the same hashes for every non-`pg_catalog` helper reachable by either anchor,
   including the mapping hash wrappers; and
 - the allowed `pgcrypto` extension name/version, exact member-function
-  signatures, and independently reviewed helper-schema binding.
+  signatures, and independently reviewed helper-schema binding; and
+- one server-owned maintenance-identity configuration reference, its exact
+  SHA-256, and the SHA-256 plus canonical ordered set of allowed
+  `(session_user,current_user)` pairs derived from those reviewed bytes.
+
+The maintenance-identity configuration is a separately approved release or
+deployment input, not a request parameter. Its canonical document identifies
+the contract family, release, target schema, and a non-empty, duplicate-free
+array of exact PostgreSQL role-name pairs. Actual production names remain
+unassigned in this proposal. Before publication, the selected configuration's
+literal reference and SHA-256 are committed in the release manifest and its
+canonical pair array and SHA-256 are embedded into the numbered SQL as reviewed
+whole-token substitutions. Missing, malformed, placeholder, empty, hash-
+mismatched, wrong-release, or wrong-schema configuration refuses. Neither the
+invoking account, environment-selected alternate content, database metadata,
+function arguments, request data, nor `procurement.*` GUCs can supply a
+fallback pair. A configuration change requires a separately reviewed release
+transition; it is not mutable runtime authority.
 
 The catalog-property hash is calculated in Python from a canonical tuple of
 stable schema name, function name and identity arguments, result, `prokind`,
@@ -299,6 +324,16 @@ class MappingRelease:
     compute_anchor: TrustedFunction
     helper_anchors: tuple[TrustedFunction, ...]
     pgcrypto_contract: tuple[str, str, tuple[str, ...]]
+    maintenance_identity_config_ref: str
+    maintenance_identity_config_sha256: str
+    maintenance_identity_pairs_sha256: str
+
+
+@dataclass(frozen=True)
+class MaintenanceIdentityBinding:
+    config_sha256: str
+    pairs_sha256: str
+    allowed_pairs: tuple[tuple[str, str], ...]
 
 
 # The implementation commit publishes literal records here only after assigning
@@ -480,13 +515,54 @@ def _verify_release_anchors(
     ...
 
 
+def _load_approved_maintenance_identity(
+    release: MappingRelease,
+) -> MaintenanceIdentityBinding:
+    """Load only the literal manifest-referenced, checksum-pinned config."""
+    # Read the server-owned release/deployment configuration at the literal
+    # manifest reference; the caller cannot supply or override that reference.
+    # Require exact SHA-256 before parsing canonical UTF-8 JSON. Require one
+    # matching family/version/target schema, an exact non-empty ordered array of
+    # two-element role-name pairs, no blanks/placeholders/wildcards/duplicates,
+    # and a canonical re-encoding identical to the reviewed bytes. Hash the
+    # canonical pair-array JSON independently and require the manifest's exact
+    # maintenance_identity_pairs_sha256 too; that same digest is embedded and
+    # recomputed by the SQL helper. Never infer either member from
+    # session_user/current_user and never consult meta/GUCs.
+    ...
+
+
+def _observed_maintenance_pair(conn: Any) -> tuple[str, str]:
+    """Read both catalog-authenticated invocation identities as one pair."""
+    row = conn.execute("SELECT session_user::text,current_user::text").fetchone()
+    if row is None or not row[0] or not row[1]:
+        raise RuntimeError("maintenance invocation identity is unavailable")
+    return (str(row[0]), str(row[1]))
+
+
 def _verify_effective_role_topology(
-    conn: Any, *, target_schema_oid: int
+    conn: Any,
+    *,
+    target_schema_oid: int,
+    maintenance_identity: MaintenanceIdentityBinding,
 ) -> None:
     """Traverse SET-then-INHERIT paths and effective ACLs; never revoke."""
-    # current_user/session_user are the explicitly invoked maintenance boundary;
-    # superusers are trusted administrators. Every other LOGIN is untrusted.
-    # From each login, recursively find roles reachable through only set_option
+    # First require the observed (session_user,current_user) tuple to equal one
+    # complete pair from the independently checksum-pinned configuration. No
+    # role is exempt merely because it invoked this function. Individually
+    # accepted role names cannot be recombined; an application-origin SET ROLE
+    # therefore remains untrusted unless that exact pair was separately
+    # approved. Only after the pair matches may its exact two role OIDs be
+    # excluded from the traversal below. Superusers remain trusted database
+    # administrators outside the ordinary ACL threat model, but even a
+    # superuser invocation is not a configured maintenance invocation unless
+    # its exact pair matches. This does not claim to constrain a malicious
+    # trusted administrator.
+    observed = _observed_maintenance_pair(conn)
+    if observed not in maintenance_identity.allowed_pairs:
+        raise RuntimeError("maintenance session/effective-role pair is not approved")
+    # Every other non-superuser LOGIN remains untrusted. From each login,
+    # recursively find roles reachable through only set_option
     # edges. From every such assumed role, recursively follow inherit_option
     # edges; reject if any effective role owns a protected object. This covers
     # pure SET, pure INHERIT, and SET-then-INHERIT combinations. Also query
@@ -646,13 +722,18 @@ def apply_schema_connection(
             marker_value = f"sha256:{release.migration_sha256}"
             if release in installed:
                 current = installed[-1]
+                maintenance_identity = _load_approved_maintenance_identity(
+                    current
+                )
                 _verify_pgcrypto_contract(
                     conn, current, caller_path_oids=caller_path_oids
                 )
                 _set_local_anchor_search_path(conn, current)
                 _verify_release_anchors(conn, current, schema_oid)
                 _verify_effective_role_topology(
-                    conn, target_schema_oid=schema_oid
+                    conn,
+                    target_schema_oid=schema_oid,
+                    maintenance_identity=maintenance_identity,
                 )
                 _call_verified_assertion(conn, current)
                 continue
@@ -662,22 +743,41 @@ def apply_schema_connection(
                 raise RuntimeError("first observed mapping release is not v1")
             if installed:
                 prior_release = installed[-1]
+                prior_maintenance_identity = _load_approved_maintenance_identity(
+                    prior_release
+                )
                 _verify_pgcrypto_contract(
                     conn, prior_release, caller_path_oids=caller_path_oids
                 )
                 _set_local_anchor_search_path(conn, prior_release)
                 _verify_release_anchors(conn, prior_release, schema_oid)
                 _verify_effective_role_topology(
-                    conn, target_schema_oid=schema_oid
+                    conn,
+                    target_schema_oid=schema_oid,
+                    maintenance_identity=prior_maintenance_identity,
                 )
                 _call_verified_assertion(conn, prior_release)
                 _set_local_anchor_search_path(conn, release)
 
+            maintenance_identity = _load_approved_maintenance_identity(release)
+            # Refuse an unapproved caller at the mapping-family boundary before
+            # it can create an authority object. Legacy files through 013 may
+            # already have committed under the runner's deliberately narrower
+            # mapping-family serialization claim.
+            _verify_effective_role_topology(
+                conn,
+                target_schema_oid=schema_oid,
+                maintenance_identity=maintenance_identity,
+            )
             conn.execute(raw_sql.decode("utf-8"))
             # The SQL has created/replaced anchors but has not called them or
             # published its signature/marker. Verify independent identities first.
             _verify_release_anchors(conn, release, schema_oid)
-            _verify_effective_role_topology(conn, target_schema_oid=schema_oid)
+            _verify_effective_role_topology(
+                conn,
+                target_schema_oid=schema_oid,
+                maintenance_identity=maintenance_identity,
+            )
             actual_catalog = conn.execute(
                 sql.SQL("SELECT {}.compute_persistent_mapping_catalog_sha256()")
                 .format(sql.Identifier(target_schema))
@@ -714,6 +814,21 @@ same commit as the new migration; v1 is not pinned forever and cannot overwrite
 v2. A no-op assertion, compute function returning the stored signature,
 coordinated replacement of both, or same-named helper substitute differs from
 the manifest before either anchor is invoked.
+
+Maintenance identity is verified independently on both sides of the boundary.
+The runner loads only the manifest-referenced configuration bytes, verifies
+their hash and canonical contract, and compares the observed
+`(session_user,current_user)` tuple with one complete allowed tuple before it
+exempts either role or executes mapping-family SQL. The installed no-argument
+topology helper contains the same canonical tuple array and configuration hash
+as reviewed literals. Its `prosrc` and properties are among the manifest's
+independently computed anchor hashes, and it compares PostgreSQL's own
+`session_user` and `current_user` before any caller exclusion. The assertion
+invokes that helper as its first trust-boundary operation. An argument, a meta
+row, a request field, `SET ROLE` by an unlisted originating session, or a
+custom GUC cannot alter either expected value. A later pair change requires a
+new reviewed config hash, SQL/function hashes, release manifest entry, and
+contract transition.
 
 The exact target schema is a manifest literal and runner argument, resolved to
 one non-system, non-current-temp, non-other-temp OID with
@@ -781,10 +896,14 @@ intentionally outside the automatically discovered migration directory.
 -- The design-only tokens "__BUFFALO_TARGET_SCHEMA__" / its
 -- '__BUFFALO_TARGET_SCHEMA_TEXT__' literal and
 -- "__BUFFALO_PGCRYPTO_SCHEMA__" / its
--- '__BUFFALO_PGCRYPTO_SCHEMA_TEXT__' literal MUST be replaced as whole tokens
+-- '__BUFFALO_PGCRYPTO_SCHEMA_TEXT__' literal, plus the unquoted
+-- __BUFFALO_MAINTENANCE_IDENTITY_CONFIG_SHA256_LITERAL__ and
+-- __BUFFALO_MAINTENANCE_PAIRS_SHA256_LITERAL__ and
+-- __BUFFALO_MAINTENANCE_PAIRS_JSON_LITERAL__, MUST be replaced as whole tokens
 -- with psycopg.sql.Identifier / psycopg.sql.Literal respectively before the
--- numbered file and checksum manifest are reviewed. Runtime rewriting and
--- residual tokens in a published migration are forbidden.
+-- numbered file, embedded maintenance pair contract, function-property hashes,
+-- and checksum manifest are reviewed. Runtime rewriting and residual tokens in
+-- a published migration are forbidden.
 
 SET LOCAL search_path = pg_catalog,
     "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp;
@@ -2815,9 +2934,52 @@ SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_S
 AS $role_topology$
 DECLARE
     target_schema CONSTANT TEXT := '__BUFFALO_TARGET_SCHEMA_TEXT__';
+    maintenance_identity_config_sha256 CONSTANT TEXT :=
+        __BUFFALO_MAINTENANCE_IDENTITY_CONFIG_SHA256_LITERAL__;
+    maintenance_pairs_sha256 CONSTANT TEXT :=
+        __BUFFALO_MAINTENANCE_PAIRS_SHA256_LITERAL__;
+    maintenance_pairs_canonical_json CONSTANT TEXT :=
+        __BUFFALO_MAINTENANCE_PAIRS_JSON_LITERAL__;
+    approved_maintenance_pairs JSONB;
     target_schema_oid OID;
+    observed_pair JSONB;
+    approved_invocation_oids OID[];
     unsafe_path JSONB;
 BEGIN
+    approved_maintenance_pairs := maintenance_pairs_canonical_json::jsonb;
+    IF maintenance_identity_config_sha256 !~ '^[0-9a-f]{64}$'
+       OR maintenance_pairs_sha256 !~ '^[0-9a-f]{64}$'
+       OR pg_catalog.jsonb_typeof(approved_maintenance_pairs)<>'array'
+       OR pg_catalog.jsonb_array_length(approved_maintenance_pairs)=0
+       OR pg_catalog.encode(
+            "__BUFFALO_PGCRYPTO_SCHEMA__".digest(
+                pg_catalog.convert_to(maintenance_pairs_canonical_json,'UTF8'),
+                'sha256'
+            ),
+            'hex'
+          ) IS DISTINCT FROM maintenance_pairs_sha256 THEN
+        RAISE EXCEPTION 'approved maintenance identity binding is absent or malformed';
+    END IF;
+    observed_pair := pg_catalog.jsonb_build_object(
+        'session_user',session_user::text,
+        'current_user',current_user::text
+    );
+    IF NOT EXISTS (
+        SELECT 1
+          FROM pg_catalog.jsonb_array_elements(approved_maintenance_pairs)
+               AS item(pair)
+         WHERE pair=observed_pair
+    ) THEN
+        RAISE EXCEPTION 'maintenance session/effective-role pair is not approved';
+    END IF;
+    SELECT pg_catalog.array_agg(r.oid ORDER BY r.oid)
+      INTO approved_invocation_oids
+      FROM pg_catalog.pg_roles r
+     WHERE r.rolname=session_user OR r.rolname=current_user;
+    IF approved_invocation_oids IS NULL THEN
+        RAISE EXCEPTION 'approved maintenance roles are absent';
+    END IF;
+
     SELECT n.oid INTO target_schema_oid
       FROM pg_catalog.pg_namespace n WHERE n.nspname=target_schema;
     IF target_schema_oid IS NULL
@@ -2848,8 +3010,7 @@ BEGIN
     ), untrusted_logins AS (
         SELECT r.oid,r.rolname FROM pg_catalog.pg_roles r
          WHERE r.rolcanlogin AND NOT r.rolsuper
-           AND r.oid<>pg_catalog.to_regrole(current_user)::oid
-           AND r.oid<>pg_catalog.to_regrole(session_user)::oid
+           AND NOT (r.oid=ANY(approved_invocation_oids))
     ), set_reachable(login_oid,login_name,assumed_oid,set_path) AS (
         SELECT u.oid,u.rolname,u.oid,ARRAY[u.oid]::oid[]
           FROM untrusted_logins u
@@ -2887,8 +3048,7 @@ BEGIN
     WITH RECURSIVE untrusted_logins AS (
         SELECT r.oid,r.rolname FROM pg_catalog.pg_roles r
          WHERE r.rolcanlogin AND NOT r.rolsuper
-           AND r.oid<>pg_catalog.to_regrole(current_user)::oid
-           AND r.oid<>pg_catalog.to_regrole(session_user)::oid
+           AND NOT (r.oid=ANY(approved_invocation_oids))
     ), set_reachable(login_oid,login_name,assumed_oid,set_path) AS (
         SELECT u.oid,u.rolname,u.oid,ARRAY[u.oid]::oid[]
           FROM untrusted_logins u
@@ -2962,6 +3122,11 @@ DECLARE
     installed_contract TEXT;
     installed_catalog_sha256 TEXT;
 BEGIN
+    -- This is the first executable trust-boundary check. The no-argument
+    -- assertion reads the embedded, function-hash-pinned pair contract; it
+    -- cannot accept a caller, argument, meta value, request field, or GUC as
+    -- maintenance identity.
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_assert_safe_role_topology();
     SELECT value INTO installed_contract
       FROM "__BUFFALO_TARGET_SCHEMA__".meta WHERE key='persistent_mapping_foundation_contract';
     SELECT value INTO installed_catalog_sha256
@@ -2996,7 +3161,6 @@ BEGIN
     IF "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_policy_is_published(NULL,NULL,NULL,NULL) THEN
         RAISE EXCEPTION 'absent mapping policy must fail closed';
     END IF;
-    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_assert_safe_role_topology();
     IF EXISTS (
         SELECT 1
           FROM pg_class c
@@ -3269,9 +3433,11 @@ $revoke_unconfigured_named_principals$;
   versioned, and must not expose raw GUC setting or direct table mutation to a
   browser/client principal. Effective direct/transitive `INHERIT` and `SET
   ROLE` owner paths and effective privileges are independently refused; role
-  memberships are reported, not modified. Superusers/trusted maintenance are
-  the explicit administrative boundary, not subjects supposedly constrained by
-  these ACLs.
+  memberships are reported, not modified. Only an exact pair from the
+  independently checksum-pinned maintenance configuration is excluded after
+  both identities match; the invoking account is not an implicit exemption.
+  Superusers remain the explicit trusted-administrator boundary, not subjects
+  supposedly constrained against malicious action by these ACLs.
 - Existing `variants`, `vendors`, `supplier_offers`, `supplier_aliases`,
   `mapping_rejections`, `prices`, and artifact storage remain the only
   canonical contracts for their facts. This schema stores an opaque durable
@@ -3532,15 +3698,24 @@ remain internal service capabilities; the first migration grants no new role or
 client privilege. The opaque GUC checks are defense in depth for the service
 boundary, not a substitute for the unresolved private IdP/named-role setup.
 
-For v1 migration and replay, `current_user` and `session_user` are the explicitly
-invoked trusted maintenance principals; they must not also be browser/client
-connection roles. Superusers are acknowledged trusted administrators outside
-the ordinary ACL threat model: PostgreSQL object ACLs cannot constrain a
-malicious database administrator. Every other non-superuser `LOGIN` role is
-untrusted until a separately reviewed release classifies and grants a narrow
-server role. The runner and installed assertion recursively enumerate every
-role reachable from each login through all-`set_option` paths, then every role
-inherited through all-`inherit_option` paths from each possible assumed role.
+For v1 migration and replay, maintenance is one exact
+`(session_user,current_user)` pair selected from a non-empty canonical pair set
+whose server-owned release/deployment configuration bytes are independently
+approved and checksum-pinned in both the runner release manifest and installed
+function source. The observed caller is never the default. Both roles are
+checked as one tuple before either can be excluded; two names appearing in
+different approved tuples cannot be recombined through `SET ROLE`. Missing
+configuration, a hash/contract mismatch, an application runner invocation, an
+application-origin owner-role assumption, or a direct assertion call from any
+unlisted pair refuses at the mapping-family boundary without a mapping marker,
+authority row, or role-membership change. Earlier legacy migrations may already
+have committed because the accepted runner lock and rollback claim begins only
+at that boundary.
+
+The runner and installed assertion recursively enumerate every role reachable
+from every other non-superuser login through all-`set_option` paths, then every
+role inherited through all-`inherit_option` paths from each possible assumed
+role.
 This detects direct/transitive SET, direct/transitive INHERIT, and
 SET-then-INHERIT combinations; `pg_has_role` is corroboration, not the sole
 mixed-path test. They also evaluate effective schema
@@ -3550,6 +3725,13 @@ migration never edits cluster role memberships. See PostgreSQL 16
 [role membership](https://www.postgresql.org/docs/16/role-membership.html),
 [`pg_auth_members`](https://www.postgresql.org/docs/16/catalog-pg-auth-members.html),
 and [privilege inquiry functions](https://www.postgresql.org/docs/16/functions-info.html).
+
+Superusers remain trusted administrators outside this ordinary ACL threat
+model: PostgreSQL object ACLs and this design do not constrain a malicious
+trusted database administrator. The runner still requires a configured exact
+pair for its normal migration entry; that operational precondition must not be
+misrepresented as protection against an administrator who can replace code,
+catalog state, or configuration.
 
 Consequently, a client-set actor string or forged `procurement.*` custom GUC
 cannot confer authority: the client lacks effective table/function privilege
@@ -3562,6 +3744,15 @@ that fail-closed topology check is distinct from choosing the private IdP.
 The unresolved IdP/role choice blocks route exposure and real writes; it does
 not block schema construction, pure domain tests, or disposable-PostgreSQL
 tests with explicitly labeled synthetic principals.
+
+Ordinary application startup must not implicitly run this mapping release as
+maintenance. Before later integration, deployment must provide the separately
+approved configuration bytes and invoke the mapping runner on their exact
+maintenance session/effective-role pair. Absence blocks the mapping-family
+migration; it is not permission to infer the application connection, loosen
+the assertion, add `SECURITY DEFINER`, grant an application role, or make a
+startup/credential change. No such deployment configuration is selected or
+authorized by this specification.
 
 Policy approval additionally requires a real owner-published immutable policy,
 published independent-linkage classes, a service principal, exact policy
@@ -3707,7 +3898,7 @@ simulation in test output.
 | 23 | Concurrent mapping idempotency | Mapping service/PG | `test_concurrent_mapping_same_key_replays_before_stale_head_and_conflicts_on_change`: identical requests serialize and both receive one result even though it advanced the head; changed request uses the same lock then conflicts; no second offer/rejection/decision |
 | 24 | Stale mapping preview/prior | Mapping/PG | `test_mapping_rejects_stale_preview_and_stale_or_forked_prior`: changed catalog/vendor/rejection/candidate or non-tip predecessor fails and is never auto-rebased/retried |
 | 25 | Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: false/absent flags deny before storage/DB; NULL or malformed authentication-context, preview, or confirmation hashes, forged/mismatched GUC, client actor, or shared token cannot insert; only exact enabled synthetic server context succeeds |
-| 26 | Effective owner/role topology | Authorization + migration/PG | `test_role_topology_rejects_direct_transitive_inherit_set_and_mixed_owner_paths`: synthetic direct/transitive INHERIT, SET ROLE, mixed path, effective relation/column/function/schema privilege, and forged GUC cases refuse; invoked maintenance principal is permitted; post-install unsafe membership makes assertion fail; no membership is revoked |
+| 26 | Effective owner/role topology and maintenance binding | Authorization + migration/PG | `test_role_topology_rejects_direct_transitive_inherit_set_and_mixed_owner_paths`: in subtests, one checksum-pinned approved `(session_user,current_user)` pair passes while an application runner invocation, application direct assertion, application-origin `SET ROLE`, direct/transitive INHERIT/SET/mixed owner paths, effective relation/column/function/schema privilege, missing or mismatched config/hash/pair, individually allowed roles recombined into an unapproved pair, forged arguments, and forged GUCs refuse at the mapping-family boundary; assert no mapping marker/authority/member change in every refusal while acknowledging legacy files may already have committed; post-install unsafe membership makes both runner verification and direct assertion fail; no membership is revoked |
 | 27 | Policy fail closed | Authorization + mapping/PG | `test_policy_mapping_requires_published_policy_and_independent_evidence`: NULL/malformed policy publication or predicate-result hashes and the false publication stub reject every policy approval and all policy DEFER/REJECT shapes; no approved default/effect |
 | 28 | Approval lifecycle | Mapping/PG | `test_mapping_approval_creates_inactive_unpriced_unselected_offer`: decision/offer commit atomically; zero price/head/recommendation effects |
 | 29 | Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head; exact sequential replay and changed payload behave correctly |
@@ -3748,7 +3939,7 @@ the fixture is exercising the authoritative-format branch of the contract; the
 test report must still label the package, principal, and result as synthetic and
 must not describe them as a real owner approval or private-package replay.
 
-## 9. Seven-finding remediation closure matrix
+## 9. Seven-finding remediation plus NEW-1 closure matrix
 
 Every disposition below means **specified in this design and awaiting
 independent static re-review plus later executable proof**. None means migrated,
@@ -3759,6 +3950,7 @@ implemented, or tested.
 | P1 independent replay trust anchors | Ordered literal runner manifest binds migration bytes, version, schema, both anchor definitions/properties and transitive helpers; trusted catalog inspection precedes invocation; observed markers can select only the highest exact manifest prefix; v2 adds a reviewed record | PG #3 and #4 | Design-remediated; unexecuted |
 | P1 explicit schema and safe resolution | Manifest target name is bound to a non-system/non-temp invocation OID; stable hashes exclude OIDs; safe identifiers and literal qualified SQL; fresh pgcrypto bootstrap is post-verified in the same file transaction; maintenance privileges, target/helper writability, controlled-path helper OIDs, signed function paths and explicit `pg_temp` last are checked; decoys never supply authority | PG #6, plus #2 catalog signature | Design-remediated; unexecuted |
 | P1 effective ownership/role membership | Independent and installed checks cover effective relation/column/function/schema privilege and direct/transitive INHERIT/SET/mixed owner paths; unsafe topology refuses without membership mutation; administrator boundary is explicit | PG #26 and #2 | Design-remediated; unexecuted |
+| NEW-1 P2 implicit maintenance caller | A separately approved release/deployment config and literal manifest bind the exact config/pair digests; runner and hash-pinned no-argument SQL helper verify the complete `(session_user,current_user)` pair before excluding either role; missing/mismatched bindings, application invocation/direct assertion, unapproved `SET ROLE`, arguments, metadata, and GUCs fail closed; actual names remain unassigned | PG #26 | Corrected in design; unexecuted |
 | P1 DEFER without invented identity | Candidate keys become conditionally nullable; DEFER operational targets/keys/package/fingerprints/results are null while immutable source states remain on the candidate; APPROVE remains strict; REJECT has a narrow exact minimum | PG #14, #15 and #20 | Design-remediated; unexecuted |
 | P1 concurrent idempotency and offer reuse | Authenticated payload-neutral session locks precede fresh snapshots; full request identity/post-lock replay, deterministic ordering, three-attempt/30-second budget, balanced cleanup and unknown-commit recovery; offer-key lock precedes lookup/create; changed disposition requires fresh confirmation | PG #12, #17, #22, #23, #32 and #33 | Design-remediated; unexecuted |
 | P2 correct test registration | Uses existing `test_*.py` auto-discovery; exact future floors are 39 PG and 3 PURE via `REQUIRED_MODULE_MINIMUMS`; global remains sum-derived | PURE P3 | Corrected in design; unexecuted |
@@ -3777,6 +3969,7 @@ not schema shortcuts here.
 
 | Unresolved detail | Does not block | Actually blocks |
 |---|---|---|
+| Independently approved database-maintenance session/effective-role configuration | Static schema/service design and labeled synthetic disposable-PG tests | Publishing the release manifest/SQL literals and applying or replaying the mapping-family migration on any real target |
 | Private IdP and named-role assignments | DDL, immutable model, pure and disposable-PG tests | Private route exposure, real intake, human mapping/selection writes |
 | Owner-published independent initial-linkage evidence classes | Human-only schema and review UI planning | Policy publication/evaluator and every `POLICY_APPROVED` event |
 | Whether a later service policy may execute eligible SKU requests unattended | Entire mapping foundation, price work, owner-confirmed first SKU release | Only a future unattended Shopify SKU executor |
@@ -3796,8 +3989,9 @@ the recommended next change is only:
    capability flag false;
 2. implement and test the narrow checksum-pinned `apply_schema.py` replay
    boundary, then assign the next migration number after rechecking the exact
-   chain and implement the five tables, functions/triggers, empty shadow views,
-   and no-backfill contract above;
+   chain; before publishing or applying it, bind an independently approved
+   exact maintenance pair/configuration; implement the five tables,
+   functions/triggers, empty shadow views, and no-backfill contract above;
 3. implement internal intake/mapping/selection domain services behind no public
    route, with policy hard-disabled;
 4. add and register the two planned test modules at exact initial floors 39 and
