@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-11T01:29:10Z (UTC)
+**Updated:** 2026-09-11T04:18:38Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,125 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Overnight Packet A maintenance-identity correction — COMPLETE AS DESIGN / STATIC REVIEW PASS / FROZEN AT CLOSEOUT
+
+- The expanded overnight window began at `2026-09-11T03:56:29Z`; its hard
+  eight-hour deadline is `2026-09-11T11:56:29Z`, with the final 75 minutes
+  reserved from `2026-09-11T10:41:29Z`. The design branch was reverified clean
+  and synchronized at exact parent
+  `faad4bb2c327485c5409be89a8c592cb8201efd3`, tree
+  `5defb293425e05bc82acbf38b88e561d569abbf0`, before the correction. No
+  unexpected work was discarded.
+- The maintenance-identity specification commits are initial correction
+  `b49850b3a28f6810f19d333e9967039bd29443ed` followed by review remediation
+  `f5791627feedfefe2becddffebc70e2a25ffa719`. The resulting tree is
+  `af31285d372ad50c88dbb3d1d03b30831be14b3c` and the specification blob is
+  `31ae73d0940de7caca7f60cf204db161bfe22f58`. Those commits change only
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  This closeout changes only `docs/CODEX_HANDOFF.md`; the final Packet A delta
+  from `faad4bb...` is therefore exactly the two authorized documents. Once
+  this closeout is committed and pushed, that branch tip is the frozen NEW-1
+  confirmation target and later packets must not move it.
+- **NEW-1 implicit caller trust — corrected in design, unexecuted.** The
+  proposed release manifest now pins a server-owned maintenance-identity
+  configuration reference, its full-document SHA-256, and the SHA-256 of its
+  canonical non-empty ordered exact `(session_user,current_user)` pair set.
+  The configuration is a separately approved release/deployment input. Actual
+  production role names remain unassigned; missing, placeholder, malformed,
+  wrong-release/schema, empty, or hash-mismatched input refuses and the caller
+  is never substituted as a default.
+- The config shape is now mechanical rather than implied: one exact-key JSON
+  object with an exact array of
+  `{session_user,current_user}` objects, sorted exact role names, specified
+  UTF-8 canonical separators/key ordering, and one final LF for the full file.
+  A fabricated test vector fixes independently reproducible config and pair
+  hashes. Publication must prove the parsed config, manifest fields, and exact
+  rendered SQL literals agree before migration/function hashes are accepted;
+  tuple-shaped or merely self-consistent wrong literals refuse.
+- The proposed runner loads only that literal manifest reference and verifies
+  PostgreSQL's complete observed pair before either role is exempted or any
+  persistent-mapping-family SQL runs. An unapproved application invocation or
+  application-origin `SET ROLE` stops at that boundary. The same check runs
+  before proposed authority DDL and again before signature publication. The
+  accepted scope remains narrow: schema-through-013 legacy files may already
+  have committed before this mapping-family refusal; no mapping marker,
+  authority row, or role membership may change.
+- The proposed installed topology helper embeds the same canonical pair
+  contract/config digest as reviewed SQL literals, recomputes the pair digest,
+  and reads PostgreSQL's own `session_user` and `current_user`. Its complete
+  source/properties remain independently hash-pinned by the runner. The
+  no-argument installed assertion invokes it as its first trust-boundary
+  operation. A caller argument, request actor, mutable `meta` row, custom GUC,
+  direct health-check call, or arbitrary combination of individually known
+  roles cannot alter the expected pair.
+- Maintenance-pair rotation is explicitly staged. Adjacent releases require a
+  non-empty old/new pair intersection and the invoker must be in it. Replacing
+  disjoint sets requires one release that adds a new pair while retaining an
+  old transition pair, then a second release that removes the old pair. A
+  one-step disjoint change refuses; no caller or administrator is silently
+  grandfathered as a bridge.
+- Real maintenance continues to scan every other non-superuser login's
+  direct/transitive `SET ROLE`, `INHERIT`, mixed owner paths, and effective
+  schema/relation/column/function privileges. No `SECURITY DEFINER`, grant,
+  membership change, application permission, startup credential, or actual
+  identity configuration is proposed. Superusers remain trusted database
+  administrators outside the ordinary ACL threat model; this check is not
+  claimed to defeat a malicious administrator. Ordinary application startup
+  cannot implicitly act as maintenance. A later approved integration must bind
+  and invoke the separate approved maintenance session or the mapping migration
+  remains blocked.
+- Planned PostgreSQL row 26 now covers an approved exact pair, application
+  runner and direct-assertion calls, application-origin role assumption,
+  direct/transitive owner paths, missing/mismatched binding, recombined roles,
+  and forged arguments/GUCs, including zero mapping marker/authority/member
+  effects. It remains one method, so the unexecuted matrix stays exactly **39
+  PostgreSQL + 3 pure/static methods**, 42 unique names, with planned floors
+  39 and 3 and a sum-derived global floor.
+- Static writer checks passed: the one proposed-Python block parses with
+  `ast` (529 lines); both fixed vector hashes reproduce; the matrix is exactly
+  39+3 with 42 unique test names; the
+  proposed SQL still contains exactly five tables, four views, and 35 functions
+  with 35 pinned search paths; dollar tags balance; `git diff --check` and the
+  bounded added-line secret-pattern scan pass. The proposed SQL was not parsed
+  by PostgreSQL, executed, or accepted against a database. No full suite was
+  run for this documentation-only delta.
+- Runtime and operational authority remain byte-identical to the parent:
+  `procurement/src=01b78c126549a576d3e182925a976e239a3ac84b`,
+  `procurement/db=5033259c8a99d49a5900dc2db224dbf30484cf1e`,
+  `procurement/config=ecc9a177de316fa987f51c3079b8a8da25e3650e`,
+  `procurement/tests=93d1701d6e232802d45241911f74aa2bc6c53ef5`, and
+  `procurement/tools=a66ee05ca5ae08a18a8707afba82b807e7046a49`.
+  Canonical authority, CURRENT, Master Plan, rules, and phase-status bytes are
+  also unchanged. SQL/migration execution, operational DB access, Shopify,
+  role/permission changes, approvals, activation, PR/CI mutation, integration,
+  deployment, supplier contact, and orders remain zero/not performed.
+- Narrow reviewer `/root/packet_a_static_review` initially returned **REQUEST
+  CHANGES** on
+  `b49850b...`: runner tuples and SQL objects lacked one normative
+  serialization, and a disjoint pair rotation had no possible one-release
+  invoker. Both findings are corrected in `f579162...`; bounded static recheck
+  returned **PASS** on exact `f579162...` and combined `faad4bb..f579162`
+  with no remaining P0/P1/P2. The reviewer independently reproduced both
+  fixed hashes, parsed the 529-line Python block, and confirmed 39+3. This is
+  static design approval only, not SQL parsing/execution, PostgreSQL acceptance,
+  integration approval, or deployment approval.
+- Short independent-confirmation prompt: review only the final two-document
+  delta from `faad4bb...` on
+  `codex/persistent-mapping-foundation-design`; verify exact independently
+  configured session/effective-role pair binding in runner and direct assertion,
+  row 26, unchanged 39+3 count, and zero caller/GUC/meta default; treat all SQL
+  and tests as unexecuted and do not reopen Claude's seven closed findings.
+
+Overnight continuation ledger at this checkpoint:
+
+| Packet | Status | Durable boundary |
+|---|---|---|
+| A — maintenance identity | `DONE AS STATIC DESIGN / EXECUTABLE PROOF UNRUN` | Frozen at this closeout; do not move the branch afterward |
+| B — PR #23 CI | `DIAGNOSTIC DOSSIER COMPLETE / ROOT CAUSE BLOCKED` | Existing attempt-1 log from an authorized Actions reader is the exact missing evidence; no rerun or patch is justified yet |
+| C — integration rehearsal | `NOT STARTED` | Private scratch only after A freezes |
+| D — source-format regressions | `READ-ONLY INVENTORY COMPLETE / QA WRITES NOT STARTED` | Isolated `codex/supplier-format-regression-prep` must start from exact `a056e111...` |
+| E — prerequisite previews | `NOT STARTED` | Static/current-source recommendations and private inventory only |
 
 ### Persistent mapping construction remediation — COMPLETE AS DESIGN / IMPLEMENTATION STILL UNAUTHORIZED / STOPPED
 
