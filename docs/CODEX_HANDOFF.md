@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-10T15:33:44Z (UTC)
+**Updated:** 2026-09-11T01:29:10Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,154 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### First persistent mapping foundation — CONSTRUCTION PACKAGE COMPLETE / DESIGN ONLY / STOPPED
+### Persistent mapping construction remediation — COMPLETE AS DESIGN / IMPLEMENTATION STILL UNAUTHORIZED / STOPPED
+
+- The owner accepted Claude's independent **REQUEST CHANGES** verdict on the
+  initial construction specification and authorized one documentation-only
+  remediation. Work began from a clean, synchronized local/upstream/live
+  `codex/persistent-mapping-foundation-design` at exact
+  `13bbb48d4b3f1d529f9b794e11188d53ad11155c`, tree
+  `1d01359456c70a57be133b73f66f11c6b54198f1`. That checkpoint remains the
+  direct ancestor; no amend, reset, rebase, force-push, merge, cherry-pick, PR,
+  or CI action was performed.
+- The identifiable specification-remediation commit is
+  `69a99a74106dad6da3637e623e2e81eb9e4672bd`, tree
+  `c1bab73a2c6a7053ed3e3b7f98b3a60620d3888d`, with specification blob
+  `fd0ec4b92f039964fe19115dbb65722a3b05136e`. It changes only
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  The closeout commit containing this entry adds only `docs/CODEX_HANDOFF.md`;
+  therefore final scope from `13bbb48...` is exactly those two authorized
+  documents.
+- **P1 independent replay trust anchors — design-remediated, unexecuted.** An
+  ordered literal runner manifest binds each reviewed release, migration bytes,
+  PostgreSQL major, stable schema name, both validator/calculator definitions
+  and properties, and every non-catalog helper. Runtime schema OIDs bind catalog
+  reads during one invocation but are not portable hash inputs. Trusted catalog
+  inspection precedes either anchor invocation; database metadata cannot choose
+  an older version. Exact manifest prefixes permit a reviewed v2 transition
+  without v1 SQL overwriting it, while missing/unknown/coordinated tampering
+  refuses.
+- **P1 explicit schema and safe resolution — design-remediated, unexecuted.**
+  The proposal binds one explicit non-system/non-temporary target schema by
+  safely quoted name and invocation OID, qualifies authority/marker/anchor
+  references, and gives every owned function a signed path with explicit
+  `pg_temp` last. Legacy unqualified DDL uses a separate target-first path.
+  Only `schema_postgres.sql` may install genuinely absent pgcrypto; installation
+  and post-verification share its transaction. Preinstalled and fresh paths
+  refuse target/helper decoys, wrong extension membership, untrusted effective
+  `CREATE`, unusable targets, wrong controlled resolution, or a non-16 server
+  before a marker commits.
+- **P1 effective ownership and role membership — design-remediated,
+  unexecuted.** The generic boundary treats the explicitly invoked maintenance
+  principal and superusers as trusted administration and every other
+  non-superuser LOGIN as untrusted. Direct/transitive `SET ROLE`, `INHERIT`, and
+  mixed paths plus effective schema/relation/column/function privileges are
+  checked. Unsafe topology refuses and is reported; the migration neither
+  invents production role names nor changes memberships. Custom
+  `procurement.*` settings alone are never identity.
+- **P1 DEFER without invented identity — design-remediated, unexecuted.**
+  Candidate operational keys are conditionally nullable. DEFER preserves the
+  immutable batch/candidate, actual ABSENT/EXPLICIT_NULL/VALUE evidence, reason,
+  and verified human provenance while storing null operational targets, keys,
+  package, mutable fingerprints, and results. APPROVE remains fully strict;
+  REJECT requires the separately defined exact Variant/vendor/supplier scope.
+  DEFER has no offer, rejection, approval, selection, price, Shopify, or order
+  effect.
+- **P1 concurrent idempotency and offer reuse — design-remediated,
+  unexecuted.** Intake, mapping, and selection authenticate before replay
+  disclosure, acquire a payload-neutral operation/scope/key session lock on a
+  dedicated backend before a fresh `SERIALIZABLE` snapshot, recheck the complete
+  request, and use deterministic business-lock order. Known-abort automatic
+  retries are limited to proven `40001` or `40P01` cases. Separately, an unknown
+  COMMIT outcome may start a new attempt only after a new authenticated,
+  idempotency-locked lookup proves the original backend gone and key absent;
+  otherwise it returns `COMMIT_OUTCOME_UNKNOWN`. Both paths share three total
+  attempts, a five-second lock wait, and a 30-second operation limit, with
+  explicit cleanup. The service locks the operational offer key
+  before lookup/create; a changed create-to-link result requires a fresh preview,
+  new confirmation, and new key. Every historical approval permanently binds
+  key to offer even when effectiveness later changes.
+- **P2 test registration — corrected in design, unexecuted.** There is no
+  proposed `TEST_MODULES`. The expanded matrix contains exactly **39 planned
+  disposable-PostgreSQL methods plus three planned pure/static methods**, 42
+  unique names. Planned floors are
+  `test_persistent_mapping_foundation_postgres.py: 39` and
+  `test_persistent_mapping_foundation_contract.py: 3` through
+  `REQUIRED_MODULE_MINIMUMS`; discovery remains `test_*.py` and the global
+  floor remains sum-derived.
+- **P2 migration-lock scope — corrected in design, unexecuted.** Runner and SQL
+  use one version-independent, schema-scoped mapping-family transaction-lock
+  key. The claim begins only at the mapping family: concurrent invocations may
+  already have re-executed and committed legacy schema-through-013 files. It is
+  not whole-run serialization or whole-chain rollback.
+- The matrix retains every prior acceptance requirement and adds substantive
+  trust-anchor, hostile-schema/helper, recursive-role, unresolved-DEFER,
+  concurrent intake/mapping/selection, confirmation-sensitive offer reuse,
+  inverse different-key/same-offer concurrency, retry exhaustion, lock cleanup,
+  and unknown-COMMIT cases without changing the five-table/four-view slice.
+  Fresh validation uses the actual chain; upgrade validation uses an exact 013
+  predecessor that does not already contain the proposed objects.
+- Static writer checks passed: `git diff --check`; one proposed-Python block
+  parsed by `ast` (423 lines); exact matrix accounting `39 + 3` with 42 unique
+  test IDs; proposed SQL structural accounting of five tables, four views, and
+  35 functions with 35 pinned search paths; balanced dollar tags; exact
+  one-file pre-closeout scope; and bounded added-line secret-pattern scanning.
+  The proposed SQL was not parsed by a PostgreSQL parser, applied, or executed.
+  No full suite was run for documentation-only changes.
+- Read-only reviewer `/root/service_acceptance_audit` returned **PASS** with no
+  P0/P1/P2 on exact spec blob `fd0ec4b...` for action-specific provenance,
+  DEFER/REJECT semantics, permanent identity versus effective authority,
+  idempotency/reconfirmation, inverse-key concurrency, and the 39+3 matrix.
+  Read-only reviewer `/root/sql_runner_audit` returned **PASS** with no P0/P1/P2
+  on that same blob for anchor ordering, fresh/preinstalled pgcrypto, controlled
+  legacy resolution, stable manifest hashes, OID/temp binding, PostgreSQL-major
+  validation, and the shared schema-scoped lock. Both reviews were static; no
+  SQL, migration, database test, private evidence, or Shopify action was run.
+  These are Codex's bounded remediation checks, not Claude's required final
+  independent re-review.
+- The proposed canonical, Master Plan, and `rules.toml` amendments remain text
+  inside the specification only. All operational capability flags remain
+  proposed false. Exact object proof from `13bbb48...` to the specification
+  commit keeps `procurement/src` at `01b78c126549a576d3e182925a976e239a3ac84b`,
+  `procurement/db` at `5033259c8a99d49a5900dc2db224dbf30484cf1e`,
+  `procurement/config` at `ecc9a177de316fa987f51c3079b8a8da25e3650e`,
+  `procurement/tests` at `93d1701d6e232802d45241911f74aa2bc6c53ef5`,
+  and `procurement/tools` at `a66ee05ca5ae08a18a8707afba82b807e7046a49`.
+  Canonical spec, CURRENT, Master Plan, rules, and phase-status blobs are also
+  byte-identical. No migration number or executable byte was added.
+- Dependency and integration status is unchanged: first establish an approved,
+  green Monday foundation on then-current main; then integrate and validate the
+  offline bridge, V5 reader, A1 adapter, and policy/follow-up/test closure in
+  their reviewed order; then layer this design history. Only after that exact
+  integrated predecessor is reverified may a newly authorized implementation
+  branch assign the next migration number. This branch is neither a standalone
+  main-ready patch nor integration/deployment approval.
+- The four pending inputs retain narrow blockers: private IdP/named-role
+  assignments block private route exposure and real human writes;
+  owner-published independent-linkage evidence classes block policy approval;
+  unattended SKU policy blocks only a later unattended Shopify executor; and
+  supplier/book cadence-validity-scope blocks later carry-forward, replacement,
+  and deal-overlay pricing. None blocks this schema design or future labeled
+  disposable tests. The six answered owner questions and Shopify cost
+  destination were not reopened.
+- **Exact next permissible step:** Claude independently re-reviews only these
+  seven remediations and their interactions against `69a99a7...`. If that
+  review accepts the design and the dependency sequence later yields an
+  approved integrated target, request a new authorization limited to the
+  proposed canonical/config amendments, checksum-pinned runner boundary, exact
+  next-numbered migration, internal no-public-route services, and registered
+  39+3 acceptance tests. Independent backend/data review and owner acceptance
+  remain required afterward. No implementation, SQL/migration execution,
+  operational DB/private access, role change, Shopify action, real approval,
+  activation, PR/CI mutation, integration, deployment, supplier contact, or
+  order action is authorized now.
+
+### Initial persistent mapping construction package — SUPERSEDED BY ACCEPTED REQUEST CHANGES
+
+The section below is retained as historical evidence for the initial package
+at `0bfcf48...` / `13bbb48...`. Claude's later REQUEST CHANGES verdict supersedes
+its construction-ready status; the remediation section above is the current
+state and still awaits Claude's bounded independent re-review.
 
 - This documentation task began from a clean, synchronized preserved branch
   `codex/supplier-mapping-review-policy-followup` at exact
