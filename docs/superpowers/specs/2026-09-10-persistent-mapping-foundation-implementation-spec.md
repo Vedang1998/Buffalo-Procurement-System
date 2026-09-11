@@ -1,8 +1,8 @@
 # First Persistent Mapping Foundation — Construction-Ready Implementation Specification
 
-Status: **PROPOSED / DESIGN ONLY / NOT AUTHORIZED FOR MIGRATION EXECUTION**
+Status: **REMEDIATED PROPOSAL / DESIGN ONLY / NOT AUTHORIZED FOR IMPLEMENTATION OR MIGRATION EXECUTION**
 
-Prepared: 2026-09-10
+Prepared: 2026-09-10; seven-finding documentation remediation: 2026-09-11
 
 Preserved parent: `codex/supplier-mapping-review-policy-followup` at
 `a056e111e2f21b96a9452be9a559e10f03805a6f`, tree
@@ -20,6 +20,12 @@ No SQL below is in `procurement/db`, no migration number is assigned, and no
 runtime/configuration/authority byte is changed by this design branch. The
 sealed V5 package remains immutable `REVIEW ONLY / NOT_APPROVED /
 NOT_IMPORT_READY` evidence.
+
+The 2026-09-11 remediation accepts five P1 findings and two P2 corrections as
+design defects. It specifies proposed controls and future tests; it does not
+claim that the SQL, runner amendment, role topology, or concurrency behavior
+has been executed or accepted. Section 9 maps every accepted finding to its
+correction and planned proof.
 
 ## 1. Exact integration dependency and target
 
@@ -127,16 +133,25 @@ PR mutation, or CI retry is part of this task.
    separate confirmation even when the same authenticated owner made the
    mapping decision.
 
-`operational_offer_key_sha256` is calculated over the canonical vendor, exact
-supplier-code state/bytes, Variant, offer class, package/size/pack/conversion,
-assortment, qualifier, and component identity. The raw distributor-product
-identity remains separate mapping evidence. The key deliberately excludes page,
-occurrence ordinal, price, tier, and deal terms, so several tier rows can share
-one operational offer. The application takes a
-transaction advisory lock on this key and reuses an exact-contract offer
-already linked by an effective approval. It refuses a second offer ID for the
-same key. Different regular/gift/special/alternate/component/combo identities
-produce different keys and remain separately queryable.
+`operational_offer_key_sha256` is calculated only when the candidate has the
+minimum complete operational identity: canonical vendor and Variant, a
+nonblank distributor product ID, known non-`UNKNOWN` offer class, a nonblank
+package type, and every state/value pair needed by the operational contract.
+It covers exact supplier-code state/bytes, package/size/pack/conversion,
+assortment, qualifier, and component identity. A candidate that lacks those
+facts has SQL null for this derived key; intake never invents an operational
+identity merely to make a hash. The raw distributor-product identity remains
+separate mapping evidence. The key excludes page, occurrence ordinal, price,
+tier, and deal terms, so several tier rows can share one operational offer.
+The service takes a session advisory lock on a nonnull key before offer lookup
+or creation; the insert trigger retains a transaction-lock backstop. Any
+historical `APPROVE_MAPPING` permanently binds that exact operational key to
+its offer for identity reuse, even when a later DEFER or REJECT means the
+approval is no longer effective authority. Reuse still requires a current
+`LINKED_EXISTING` disposition and explicit confirmation of that exact offer;
+effectiveness governs authority views, not historical identity. The database
+refuses a second offer ID for the same key. Different regular, gift, special,
+alternate, component, and combo identities remain separate.
 
 A supplier code reused for a different product or contract never rewrites the
 old offer. Human review may create a new **inactive** historical offer while
@@ -152,8 +167,8 @@ from migration 011 remain in force. The new mapping protection is additive.
 |---|---|---|
 | Intake | Immutable batch and candidates, including explicit nulls and absent fields | Approval, offer creation, selection, price, Shopify or order authority |
 | `APPROVE_MAPPING` | Link an exact existing offer, or create one inactive exact-contract `supplier_offers` row in the same transaction | Offer activation, price creation/verification, routine selection, recommendation use |
-| `REJECT_MAPPING` | Link a new active `mapping_rejections` row with exact negative evidence | Deleting a candidate or alternative |
-| `DEFER` | Append reason/evidence only | Approval by default |
+| `REJECT_MAPPING` | For a candidate with an exact Variant/vendor and stable supplier identity, link a new active `mapping_rejections` row with exact negative evidence | A broad rejection when the target is unresolved; deleting a candidate or alternative |
+| `DEFER` | Append the immutable batch/candidate reference, preserved source evidence and null states, reason, and authenticated human provenance; all unresolved operational/result fields remain SQL null | Inventing Variant/vendor/code/package/fingerprints/keys; offer, rejection, approval, selection, price, Shopify, or order effects |
 | `SELECT` | Advance the Variant-wide head to an effective approved regular offer after a second preview and confirmation | Changing `supplier_offers.active`, creating prices, or changing recommendations |
 | `CLEAR` | Advance the head to an explicit reviewed null | Deleting selection history or deactivating an offer |
 
@@ -217,109 +232,540 @@ creates; it would make this file reject or overwrite a later, intentional
 `v2` contract transition before the later migration could run. Opt-in,
 content-addressed replay fixes that without changing legacy migration behavior.
 
-Add the two exact header lines shown below to this migration and to every later
-persistent-mapping contract-transition migration. Amend
-`procurement/tools/apply_schema.py` as follows, preserving the existing
-transaction around the marker read, validation or execution, and marker write:
+The future runner must contain a literal, reviewed
+`PERSISTENT_MAPPING_RELEASE_MANIFEST`; it is not loaded from `meta`, generated
+from the installed functions, or supplied by the caller. Each ordered release
+record binds all of the following:
+
+- contract family and exact version;
+- required PostgreSQL major version (`16` for this contract);
+- exact target-schema name and the expected schema-identity policy;
+- transition migration name, its position in `MIGRATION_ORDER`, its SHA-256,
+  and the immediately preceding reviewed release (or exact integrated-013
+  predecessor for the first release);
+- exact identities and independent catalog-property hashes for
+  `assert_persistent_mapping_foundation_contract()` and
+  `compute_persistent_mapping_catalog_sha256()`;
+- the same hashes for every non-`pg_catalog` helper reachable by either anchor,
+  including the mapping hash wrappers; and
+- the allowed `pgcrypto` extension name/version, exact member-function
+  signatures, and independently reviewed helper-schema binding.
+
+The catalog-property hash is calculated in Python from a canonical tuple of
+stable schema name, function name and identity arguments, result, `prokind`,
+language, volatility, strictness, security-definer/leakproof/parallel flags,
+symbolic owner classification, `proconfig`, `prosrc`, and `probin`. A database
+schema OID is deliberately excluded because it cannot be derived from reviewed
+source and varies across installations; the runner resolves that OID once and
+uses it only to bind all catalog reads during one invocation. The hash is
+populated from the reviewed migration source at publication and committed
+beside the migration and runner change. It is never copied from
+`pg_get_functiondef`, a mutable stored catalog signature, or either installed
+anchor during acceptance.
+Trusted queries use explicitly `pg_catalog`-qualified catalog objects and
+functions. The extension helper must be the exact `pg_proc` member of the
+reviewed `pgcrypto` `pg_extension` through `pg_depend`; a same-named helper is
+not accepted.
+
+The following AST-valid pseudocode fixes the future runner boundary. Helper
+implementations omitted from the excerpt have the contracts stated immediately
+below; none may consult an installed validator to obtain an expected value.
 
 ```python
+from dataclasses import dataclass
 import hashlib
+from pathlib import Path
+from typing import Any
+
+from psycopg import sql
+
+
+@dataclass(frozen=True)
+class TrustedFunction:
+    identity: str
+    catalog_property_sha256: str
+
+
+@dataclass(frozen=True)
+class MappingRelease:
+    family: str
+    version: str
+    postgres_major: int
+    target_schema: str
+    migration_name: str
+    migration_sha256: str
+    predecessor_release: str | None
+    assert_anchor: TrustedFunction
+    compute_anchor: TrustedFunction
+    helper_anchors: tuple[TrustedFunction, ...]
+    pgcrypto_contract: tuple[str, str, tuple[str, ...]]
+
+
+# The implementation commit publishes literal records here only after assigning
+# the migration number on the approved integrated chain. Empty, placeholder,
+# duplicate, unordered, or runtime-supplied records are a startup error.
+PERSISTENT_MAPPING_RELEASE_MANIFEST: tuple[MappingRelease, ...]
 
 _CHECKSUM_SKIP_HEADER = (
-    b"-- buffalo-migration-replay: checksum-skip-v1\n"
-    b"-- buffalo-contract-validator: persistent-mapping-foundation\n"
+    b"-- buffalo-migration-replay: checksum-skip-v2\n"
+    b"-- buffalo-contract-family: persistent-mapping-foundation\n"
 )
-_CHECKSUM_LOCK_KEY = (
-    "buffalo:checksum-pinned:persistent-mapping-foundation"
-)
+_MAPPING_FAMILY_LOCK_PREFIX = "buffalo:migration:persistent-mapping-foundation"
 
 
-def _checksum_validator(name: str, raw_sql: bytes) -> str | None:
-    is_mapping_contract = (
-        len(name) > 4
-        and name[:3].isdigit()
-        and name[3] == "_"
-        and name[4:].startswith("persistent_mapping_")
-        and name.endswith(".sql")
-    )
-    if is_mapping_contract:
-        if not raw_sql.startswith(_CHECKSUM_SKIP_HEADER):
-            raise RuntimeError(
-                f"persistent-mapping migration lacks checksum header: {name}"
-            )
-        return "SELECT assert_persistent_mapping_foundation_contract()"
-    if raw_sql.startswith(_CHECKSUM_SKIP_HEADER):
-        raise RuntimeError(
-            f"checksum-skip header is not allowed for migration {name}"
+def _validate_release_manifest(migration_order: list[str]) -> None:
+    """Require literal hashes, one schema/family/major, and exact file order."""
+    ...
+
+
+def _mapping_release_for_file(name: str, raw_sql: bytes) -> MappingRelease | None:
+    releases = {item.migration_name: item
+                for item in PERSISTENT_MAPPING_RELEASE_MANIFEST}
+    release = releases.get(name)
+    has_header = raw_sql.startswith(_CHECKSUM_SKIP_HEADER)
+    if release is None:
+        if has_header or "persistent_mapping_" in name:
+            raise RuntimeError(f"unmanifested mapping migration: {name}")
+        return None
+    if not has_header:
+        raise RuntimeError(f"mapping migration lacks exact replay header: {name}")
+    actual = hashlib.sha256(raw_sql).hexdigest()
+    if actual != release.migration_sha256:
+        raise RuntimeError(f"reviewed mapping migration bytes differ: {name}")
+    return release
+
+
+def _bind_target_schema(
+    conn: Any,
+    requested: str,
+    release: MappingRelease,
+    *,
+    expected_oid: int | None = None,
+) -> int:
+    """Resolve one non-temporary schema by literal manifest name; return its OID."""
+    if requested != release.target_schema:
+        raise RuntimeError("requested target schema is not the reviewed release schema")
+    if requested.startswith("pg_") or requested == "information_schema":
+        raise RuntimeError("a system or temporary namespace cannot be the target")
+    row = conn.execute(
+        "SELECT n.oid, n.nspname, "
+        "n.oid=pg_catalog.pg_my_temp_schema(), "
+        "pg_catalog.pg_is_other_temp_schema(n.oid), "
+        "n.nspname ~ '^pg_(toast_)?temp_[0-9]+$', "
+        "pg_catalog.has_schema_privilege(current_user,n.oid,'USAGE'), "
+        "pg_catalog.has_schema_privilege(current_user,n.oid,'CREATE') "
+        "FROM pg_catalog.pg_namespace AS n WHERE n.nspname=%s",
+        (requested,),
+    ).fetchone()
+    if row is None or row[1] != requested or any(row[2:5]):
+        raise RuntimeError("reviewed target schema is absent or temporary")
+    if not row[5] or not row[6]:
+        raise RuntimeError("maintenance principal lacks target USAGE or CREATE")
+    actual_oid = int(row[0])
+    if expected_oid is not None and actual_oid != expected_oid:
+        raise RuntimeError("target schema OID changed during runner invocation")
+    return actual_oid
+
+
+def _set_local_anchor_search_path(conn: Any, release: MappingRelease) -> None:
+    """Use only independently bound schemas for mapping-family validation."""
+    pgcrypto_schema = release.pgcrypto_contract[1]
+    conn.execute(
+        sql.SQL("SET LOCAL search_path = pg_catalog, {}, {}, pg_temp").format(
+            sql.Identifier(release.target_schema),
+            sql.Identifier(pgcrypto_schema),
         )
-    return None
+    )
 
 
-def apply_schema_connection(conn: Any, db_dir: Path) -> list[str]:
-    """Apply every uninstalled file transactionally on a scoped connection."""
-    applied = []
+def _set_local_legacy_search_path(
+    conn: Any, release: MappingRelease, *, include_pgcrypto: bool
+) -> None:
+    """Keep legacy unqualified CREATE targets in the reviewed target schema."""
+    # pg_catalog is intentionally omitted: PostgreSQL searches it implicitly
+    # before explicit entries, while unqualified CREATE still targets the first
+    # explicit valid schema. pg_temp is explicit and therefore cannot jump first.
+    parts = [sql.Identifier(release.target_schema)]
+    if (include_pgcrypto
+            and release.pgcrypto_contract[1] != release.target_schema):
+        parts.append(sql.Identifier(release.pgcrypto_contract[1]))
+    parts.append(sql.SQL("pg_temp"))
+    conn.execute(
+        sql.SQL("SET LOCAL search_path = {}").format(sql.SQL(", ").join(parts))
+    )
+
+
+def _reject_pgcrypto_decoys_before_install(
+    conn: Any,
+    release: MappingRelease,
+    *,
+    caller_path_oids: tuple[int, ...],
+) -> None:
+    """Permit only a genuinely absent extension before schema_postgres installs it."""
+    # Using explicit pg_catalog reads, require no pgcrypto extension, no
+    # digest(bytea,text) lookalike in any schema, a non-temporary reviewed
+    # destination schema equal to the target schema (the legacy CREATE
+    # EXTENSION has no WITH SCHEMA clause), and no CREATE privilege there for
+    # an untrusted role. Also reject an earlier caller-search-path schema
+    # containing a same-name function. Nothing is resolved through the ambient
+    # search_path.
+    ...
+
+
+def _pgcrypto_is_installed(conn: Any) -> bool:
+    """Use pg_extension directly; do not resolve an extension member by name."""
+    ...
+
+
+def _verify_pgcrypto_contract(
+    conn: Any,
+    release: MappingRelease,
+    *,
+    caller_path_oids: tuple[int, ...],
+) -> None:
+    """Resolve exact extension/member signatures without ambient name lookup."""
+    # Require the reviewed extension/version in the reviewed non-temp schema;
+    # exact pg_depend extension membership and catalog properties for every
+    # listed member; no other same-signature substitute in any earlier caller
+    # search-path schema; no protected-signature object in the target unless
+    # target is the verified extension namespace and that exact object is an
+    # extension member; and no untrusted effective CREATE privilege on either
+    # target or helper schema. Bind by namespace OID for this invocation, not
+    # by a manifest OID. Unknown, duplicate, writable, or decoy state refuses.
+    ...
+
+
+def _verify_controlled_legacy_resolution(
+    conn: Any, release: MappingRelease
+) -> None:
+    """Prove the path just set will create in target and call only real helpers."""
+    # Require pg_catalog.current_schema() == the manifest target and compare
+    # each unqualified protected signature under this controlled path to the
+    # exact pg_depend-bound extension-member OID already verified above.
+    # A silently omitted target or a target/helper decoy therefore refuses
+    # before raw legacy SQL.
+    ...
+
+
+def _mapping_family_lock_key(target_schema: str) -> str:
+    """Use the same version-independent, schema-scoped key as every SQL release."""
+    return f"{_MAPPING_FAMILY_LOCK_PREFIX}:{target_schema}"
+
+
+def _capture_caller_search_path_oids(conn: Any) -> tuple[int, ...]:
+    """Capture the original effective path through qualified catalog queries."""
+    # Resolve pg_catalog.current_schemas(true) to exact namespace OIDs before
+    # any SET LOCAL. This is diagnostic input for decoy refusal only; it never
+    # selects an authority object or target schema.
+    ...
+
+
+def _verify_server_major(conn: Any, release: MappingRelease) -> None:
+    """Reject before catalog interpretation unless server_version_num is exact."""
+    version_num = int(conn.execute(
+        "SELECT pg_catalog.current_setting('server_version_num')"
+    ).fetchone()[0])
+    if version_num // 10000 != release.postgres_major:
+        raise RuntimeError("PostgreSQL major is not the reviewed manifest major")
+
+
+def _verify_release_anchors(
+    conn: Any, release: MappingRelease, target_schema_oid: int
+) -> None:
+    """Fail closed using only manifest values and trusted pg_catalog reads."""
+    # Query pg_proc/pg_namespace/pg_language/pg_depend/pg_extension directly;
+    # require one exact overload; hash the complete property tuple in Python;
+    # verify assert, compute, every enumerated helper, and pgcrypto membership.
+    # No installed mapping function is invoked by this helper.
+    ...
+
+
+def _verify_effective_role_topology(
+    conn: Any, *, target_schema_oid: int
+) -> None:
+    """Traverse SET-then-INHERIT paths and effective ACLs; never revoke."""
+    # current_user/session_user are the explicitly invoked maintenance boundary;
+    # superusers are trusted administrators. Every other LOGIN is untrusted.
+    # From each login, recursively find roles reachable through only set_option
+    # edges. From every such assumed role, recursively follow inherit_option
+    # edges; reject if any effective role owns a protected object. This covers
+    # pure SET, pure INHERIT, and SET-then-INHERIT combinations. Also query
+    # effective schema CREATE, relation, column, and function privileges. Print
+    # exact pg_auth_members paths. Custom GUC values are irrelevant.
+    ...
+
+
+def _observed_release_prefix(
+    conn: Any, target_schema: str
+) -> tuple[MappingRelease, ...]:
+    """Reject unknown, missing-middle, duplicate, legacy, or mismatched markers."""
+    # Compose the qualified meta identifier with sql.Identifier. Compare every
+    # observed mapping marker/checksum with the ordered in-code manifest. The
+    # result must be one exact prefix; database contract/version values do not
+    # choose which manifest record is acceptable.
+    ...
+
+
+def _call_verified_assertion(conn: Any, release: MappingRelease) -> None:
+    conn.execute(
+        sql.SQL("SELECT {}.assert_persistent_mapping_foundation_contract()")
+        .format(sql.Identifier(release.target_schema))
+    )
+
+
+def _publish_release_metadata(
+    conn: Any,
+    release: MappingRelease,
+    actual_catalog: str,
+    *,
+    target_schema: str,
+) -> None:
+    """Advance exactly the reviewed predecessor; called after anchor checks."""
+    if len(actual_catalog) != 64:
+        raise RuntimeError("verified compute anchor returned a malformed signature")
+    meta = sql.Identifier(target_schema)
+    rows = dict(conn.execute(
+        sql.SQL("SELECT key,value FROM {}.meta WHERE key=ANY(%s) FOR UPDATE")
+        .format(meta),
+        (["persistent_mapping_foundation_contract",
+          "persistent_mapping_foundation_catalog_sha256"],),
+    ).fetchall())
+    prior = rows.get("persistent_mapping_foundation_contract")
+    if prior != release.predecessor_release:
+        raise RuntimeError("contract metadata is not the reviewed predecessor")
+    if (prior is None) != (
+        "persistent_mapping_foundation_catalog_sha256" not in rows
+    ):
+        raise RuntimeError("contract and catalog metadata are not co-present")
+    for key, value in (
+        ("persistent_mapping_foundation_contract", release.version),
+        ("persistent_mapping_foundation_catalog_sha256", actual_catalog),
+    ):
+        conn.execute(
+            sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s) "
+                    "ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value, "
+                    "updated_at=pg_catalog.now()")
+            .format(meta),
+            (key, value),
+        )
+
+
+def apply_schema_connection(
+    conn: Any, db_dir: Path, *, target_schema: str
+) -> list[str]:
+    """Apply files; serialize only the persistent-mapping migration family."""
+    applied: list[str] = []
+    if not PERSISTENT_MAPPING_RELEASE_MANIFEST:
+        raise RuntimeError("reviewed mapping release manifest is absent")
+    _validate_release_manifest(MIGRATION_ORDER)
+    expected_release = PERSISTENT_MAPPING_RELEASE_MANIFEST[-1]
+    with conn.transaction():
+        _verify_server_major(conn, expected_release)
+        caller_path_oids = _capture_caller_search_path_oids(conn)
+        bound_schema_oid = _bind_target_schema(
+            conn, target_schema, expected_release
+        )
     for name in MIGRATION_ORDER:
         raw_sql = (db_dir / name).read_bytes()
-        sql = raw_sql.decode("utf-8")
-        validator = _checksum_validator(name, raw_sql)
-        marker_key = f"migration:{name}"
-        marker_value = f"sha256:{hashlib.sha256(raw_sql).hexdigest()}"
+        release = _mapping_release_for_file(name, raw_sql)
         with conn.transaction():
-            if validator is not None:
-                # Serialize marker observation, SQL execution/validation, and
-                # marker publication even when competing runners have
-                # different file bytes.
-                conn.execute(
-                    "SELECT pg_catalog.pg_advisory_xact_lock("
-                    "pg_catalog.hashtextextended(%s,0))",
-                    (_CHECKSUM_LOCK_KEY,),
-                )
-                row = conn.execute(
-                    "SELECT value FROM meta WHERE key=%s", (marker_key,)
-                ).fetchone()
-                stored_marker = None if row is None else row[0]
-                if stored_marker is not None and not stored_marker.startswith(
-                    "sha256:"
-                ):
-                    raise RuntimeError(
-                        f"checksum-pinned migration has a legacy marker: {name}"
-                    )
-                if stored_marker is not None:
-                    if stored_marker != marker_value:
-                        raise RuntimeError(
-                            f"checksum-pinned migration bytes differ: {name}"
-                        )
-                    conn.execute(validator)
-                    continue
-            conn.execute(sql)
-            conn.execute(
-                "INSERT INTO meta(key,value) VALUES (%s,%s)"
-                " ON CONFLICT(key) DO UPDATE"
-                " SET value=EXCLUDED.value, updated_at=now()",
-                (marker_key, marker_value if validator is not None else "applied"),
+            schema_oid = _bind_target_schema(
+                conn, target_schema, expected_release,
+                expected_oid=bound_schema_oid,
             )
-        applied.append(name)
+            if release is None:
+                # schema_postgres.sql is the sole reviewed bootstrap allowed to
+                # install an absent pgcrypto. Its DDL and the post-install
+                # verification share this file transaction, so verification
+                # failure rolls every bootstrap statement back before a marker.
+                if name == "schema_postgres.sql":
+                    pgcrypto_preexisted = _pgcrypto_is_installed(conn)
+                    if pgcrypto_preexisted:
+                        _verify_pgcrypto_contract(
+                            conn, expected_release,
+                            caller_path_oids=caller_path_oids,
+                        )
+                    else:
+                        _reject_pgcrypto_decoys_before_install(
+                            conn, expected_release,
+                            caller_path_oids=caller_path_oids,
+                        )
+                    _set_local_legacy_search_path(
+                        conn, expected_release,
+                        include_pgcrypto=pgcrypto_preexisted,
+                    )
+                    if pgcrypto_preexisted:
+                        _verify_controlled_legacy_resolution(
+                            conn, expected_release
+                        )
+                    conn.execute(raw_sql.decode("utf-8"))
+                    _verify_pgcrypto_contract(
+                        conn, expected_release,
+                        caller_path_oids=caller_path_oids,
+                    )
+                    _verify_controlled_legacy_resolution(
+                        conn, expected_release
+                    )
+                else:
+                    _verify_pgcrypto_contract(
+                        conn, expected_release,
+                        caller_path_oids=caller_path_oids,
+                    )
+                    _set_local_legacy_search_path(
+                        conn, expected_release, include_pgcrypto=True
+                    )
+                    _verify_controlled_legacy_resolution(
+                        conn, expected_release
+                    )
+                    conn.execute(raw_sql.decode("utf-8"))
+                conn.execute(
+                    sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,'applied') "
+                            "ON CONFLICT(key) DO UPDATE SET value='applied', "
+                            "updated_at=pg_catalog.now()")
+                    .format(sql.Identifier(target_schema)),
+                    (f"migration:{name}",),
+                )
+                applied.append(name)
+                continue
+
+            # This transaction lock begins only here: schema through 013 may
+            # already have executed and committed in this invocation.
+            conn.execute(
+                "SELECT pg_catalog.pg_advisory_xact_lock("
+                "pg_catalog.hashtextextended(%s,0))",
+                (_mapping_family_lock_key(target_schema),),
+            )
+            schema_oid = _bind_target_schema(
+                conn, target_schema, release, expected_oid=bound_schema_oid
+            )
+            _verify_pgcrypto_contract(
+                conn, release, caller_path_oids=caller_path_oids
+            )
+            _set_local_anchor_search_path(conn, release)
+            installed = _observed_release_prefix(conn, target_schema)
+            marker_value = f"sha256:{release.migration_sha256}"
+            if release in installed:
+                current = installed[-1]
+                _verify_pgcrypto_contract(
+                    conn, current, caller_path_oids=caller_path_oids
+                )
+                _set_local_anchor_search_path(conn, current)
+                _verify_release_anchors(conn, current, schema_oid)
+                _verify_effective_role_topology(
+                    conn, target_schema_oid=schema_oid
+                )
+                _call_verified_assertion(conn, current)
+                continue
+            if installed and release.predecessor_release != installed[-1].version:
+                raise RuntimeError("mapping release predecessor is not installed")
+            if not installed and release.predecessor_release is not None:
+                raise RuntimeError("first observed mapping release is not v1")
+            if installed:
+                prior_release = installed[-1]
+                _verify_pgcrypto_contract(
+                    conn, prior_release, caller_path_oids=caller_path_oids
+                )
+                _set_local_anchor_search_path(conn, prior_release)
+                _verify_release_anchors(conn, prior_release, schema_oid)
+                _verify_effective_role_topology(
+                    conn, target_schema_oid=schema_oid
+                )
+                _call_verified_assertion(conn, prior_release)
+                _set_local_anchor_search_path(conn, release)
+
+            conn.execute(raw_sql.decode("utf-8"))
+            # The SQL has created/replaced anchors but has not called them or
+            # published its signature/marker. Verify independent identities first.
+            _verify_release_anchors(conn, release, schema_oid)
+            _verify_effective_role_topology(conn, target_schema_oid=schema_oid)
+            actual_catalog = conn.execute(
+                sql.SQL("SELECT {}.compute_persistent_mapping_catalog_sha256()")
+                .format(sql.Identifier(target_schema))
+            ).fetchone()[0]
+            _publish_release_metadata(
+                conn, release, actual_catalog, target_schema=target_schema
+            )
+            _call_verified_assertion(conn, release)
+            conn.execute(
+                sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s) "
+                        "ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value, "
+                        "updated_at=pg_catalog.now()")
+                .format(sql.Identifier(target_schema)),
+                (f"migration:{name}", marker_value),
+            )
+            applied.append(name)
     return applied
 ```
 
-This is deliberately scoped: existing and non-persistent-mapping migrations
-without the exact header retain the current execute-and-mark behavior; every
-numbered `persistent_mapping_*.sql` file must opt in and fails before execution
-if either header is absent. Once a marker contains `sha256:`, changing any file
-byte also fails before SQL execution. An exact replay calls the stable, current
-contract assertion and skips the historical file; skipped files are not
-falsely returned as newly applied. A later version
-migration must preserve/replace that stable assertion, use the same two
-headers and an `NNN_persistent_mapping_*.sql` name, store its own checksum
-marker, and make its contract/signature transition atomically. The
-transaction-level family lock is acquired before the marker read and remains
-held through validation/execution and marker publication, so two first
-appliers cannot both observe absence or overwrite one another's checksum.
-Thus a full-chain replay validates the current version without letting a
-historical `v1` file recreate it. The implementation tests must cover initial
-apply, exact skip, changed-byte refusal, missing-header refusal, assertion
-failure, concurrent same/different-byte first applies, and replay after an
-intentional `v2` transition.
+`_observed_release_prefix` derives installed progress only from exact migration
+names/checksums that are present in the reviewed in-code manifest. The highest
+observed prefix entry is the only installed validator eligible to run. Mutable
+`persistent_mapping_foundation_contract` metadata is validated by that release;
+it cannot request an older acceptable anchor. The manifest's final entry in the
+current checkout is the expected current release: a missing suffix is applied
+in order, but an unknown version, unknown marker, missing middle marker,
+checksum mismatch, inconsistent contract row, or absent anchor refuses.
+
+On replay after a reviewed `v2`, the prefix ends at `v2`; when the loop visits
+the historical v1 file it verifies the v2 anchors and skips v1 SQL. The v2
+transition file later skips in the same way. Publishing v2 therefore requires a
+new literal manifest entry and new reviewed function/property hashes in the
+same commit as the new migration; v1 is not pinned forever and cannot overwrite
+v2. A no-op assertion, compute function returning the stored signature,
+coordinated replacement of both, or same-named helper substitute differs from
+the manifest before either anchor is invoked.
+
+The exact target schema is a manifest literal and runner argument, resolved to
+one non-system, non-current-temp, non-other-temp OID with
+`pg_catalog.pg_namespace`; the OID is invocation-local binding, never a
+portable manifest hash input. The final numbered SQL contains literal
+schema-qualified identifiers generated and reviewed before its checksum is
+published; runtime textual substitution is forbidden. Calls and marker access
+use `psycopg.sql.Identifier`, never caller interpolation. Every owned function
+has a catalog-signed `SET search_path` containing only `pg_catalog`, the exact
+target schema, the verified pgcrypto schema, and explicit `pg_temp` last, while
+authority relations and helpers remain schema-qualified. Explicitly listing
+`pg_temp` last prevents its normal implicit early placement, but qualification
+is still required and is the primary defense. See PostgreSQL 16
+[`search_path` behavior](https://www.postgresql.org/docs/16/runtime-config-client.html),
+[`pg_extension`](https://www.postgresql.org/docs/16/catalog-pg-extension.html),
+and [function information](https://www.postgresql.org/docs/16/functions-info.html).
+
+Legacy schema-through-013 files still contain unqualified DDL, so their
+separate compatibility path begins with the exact target schema, includes the
+independently verified pgcrypto schema when installed, and lists `pg_temp`
+last. It deliberately omits explicit `pg_catalog`: PostgreSQL searches the
+catalog implicitly before explicit entries while an unqualified `CREATE`
+continues to target the first explicit valid schema. Only
+`schema_postgres.sql` may bootstrap a genuinely absent pgcrypto extension. The
+runner first rejects same-signature decoys and untrusted effective `CREATE` on
+the target and reviewed helper destination, requires maintenance-principal
+`USAGE` and `CREATE`, proves `current_schema()` is the target, and compares
+every protected unqualified helper resolution with its exact extension-member
+OID. This includes a target schema that was absent from the caller's original
+path: a protected-signature target decoy is still forbidden. The runner
+executes that file transactionally and then
+verifies extension identity/version/schema, `pg_depend` membership, function
+properties, writable-schema exposure, and caller-path decoys before its marker
+or commit. An already installed extension is verified before any legacy SQL;
+every later file also verifies it first. Thus fresh installation is possible
+without accepting ambient helper resolution, and a failed post-bootstrap check
+rolls back the whole `schema_postgres.sql` file transaction. The runner also
+compares `server_version_num` with the manifest's exact PostgreSQL major before
+interpreting any release catalog contract.
+
+The family transaction lock is deliberately not an invocation lock. Concurrent
+runners may re-execute and commit legacy `schema_postgres.sql` through 013 before
+they serialize at the first mapping release. The loser may therefore have made
+the legacy runner's existing idempotent marker timestamp or DDL effects before
+its mapping checksum refusal. The claim is only that no competing runner can
+observe/publish mapping-family markers or execute mapping-family SQL out of
+order. It is neither whole-chain serialization nor whole-invocation rollback.
+The runner and every mapping SQL release use the same version-independent,
+schema-scoped lock text
+`buffalo:migration:persistent-mapping-foundation:<target-schema>`; the SQL lock
+is therefore a defense-in-depth acquisition of the already selected family
+boundary, not a different lock.
 
 ## 4. Exact proposed SQL
 
@@ -327,156 +773,49 @@ The following is the reviewable SQL proposed for the future migration. It is
 intentionally outside the automatically discovered migration directory.
 
 ```sql
--- buffalo-migration-replay: checksum-skip-v1
--- buffalo-contract-validator: persistent-mapping-foundation
+-- buffalo-migration-replay: checksum-skip-v2
+-- buffalo-contract-family: persistent-mapping-foundation
 -- PROPOSED_UNNUMBERED_persistent_mapping_foundation.sql
 -- Exact predecessor under the reviewed chain: 013_monday_p1_remediation.sql.
 -- apply_schema.py supplies the enclosing transaction and migration marker.
+-- The design-only tokens "__BUFFALO_TARGET_SCHEMA__" / its
+-- '__BUFFALO_TARGET_SCHEMA_TEXT__' literal and
+-- "__BUFFALO_PGCRYPTO_SCHEMA__" / its
+-- '__BUFFALO_PGCRYPTO_SCHEMA_TEXT__' literal MUST be replaced as whole tokens
+-- with psycopg.sql.Identifier / psycopg.sql.Literal respectively before the
+-- numbered file and checksum manifest are reviewed. Runtime rewriting and
+-- residual tokens in a published migration are forbidden.
 
-SELECT pg_advisory_xact_lock(
-    hashtextextended('buffalo:persistent-mapping-foundation:v1', 0)
+SET LOCAL search_path = pg_catalog,
+    "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp;
+
+SELECT pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+        'buffalo:migration:persistent-mapping-foundation:' ||
+        '__BUFFALO_TARGET_SCHEMA_TEXT__', 0
+    )
 );
 
 DO $bootstrap_preconditions$
-DECLARE resolved_digest REGPROCEDURE := to_regprocedure('digest(bytea,text)');
+DECLARE
+    pgcrypto_schema CONSTANT TEXT := '__BUFFALO_PGCRYPTO_SCHEMA_TEXT__';
+    resolved_digest REGPROCEDURE;
 BEGIN
+    resolved_digest := pg_catalog.to_regprocedure(pg_catalog.format(
+        '%I.digest(bytea,text)',pgcrypto_schema
+    ));
     IF resolved_digest IS NULL OR NOT EXISTS (
         SELECT 1
-          FROM pg_depend d
-          JOIN pg_extension e ON e.oid=d.refobjid
-         WHERE d.classid='pg_proc'::regclass
+          FROM pg_catalog.pg_depend d
+          JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid
+         WHERE d.classid='pg_catalog.pg_proc'::regclass
            AND d.objid=resolved_digest::oid
            AND d.deptype='e' AND e.extname='pgcrypto'
     ) THEN
-        RAISE EXCEPTION 'the resolved digest(bytea,text) must belong to pgcrypto';
+        RAISE EXCEPTION 'the resolved pgcrypto digest(bytea,text) member is absent';
     END IF;
 END
 $bootstrap_preconditions$;
-
--- Installed same-contract catalog validator. The checksum-pinned runner calls
--- the assertion that uses this function whenever it skips the historical file.
-CREATE OR REPLACE FUNCTION compute_persistent_mapping_catalog_sha256()
-RETURNS TEXT
-LANGUAGE sql STABLE
-AS $catalog_signature$
-WITH target_relations AS (
-    SELECT c.oid,c.relname,c.relkind,c.relpersistence,c.relrowsecurity,
-           c.relforcerowsecurity,c.relreplident,c.relowner,c.relacl
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid=c.relnamespace
-     WHERE n.nspname=current_schema()
-       AND c.relname IN (
-           'supplier_mapping_review_batches',
-           'supplier_mapping_review_candidates',
-           'supplier_mapping_decisions',
-           'supplier_offer_selection_events',
-           'supplier_offer_selection_heads',
-           'v_effective_supplier_mapping_decisions',
-           'v_supplier_offer_selection_diagnostics',
-           'v_selected_standard_supplier_offers',
-           'v_supplier_offer_selection_shadow'
-       )
-), catalog_items AS (
-    SELECT 'relation:'||r.relname AS item_key,
-           jsonb_build_object(
-               'kind','relation','name',r.relname,'relkind',r.relkind,
-               'persistence',r.relpersistence,'row_security',r.relrowsecurity,
-               'force_row_security',r.relforcerowsecurity,
-               'replica_identity',r.relreplident,
-               'owner',pg_get_userbyid(r.relowner),
-               'acl',COALESCE(r.relacl::text,'')
-           ) AS item
-      FROM target_relations r
-    UNION ALL
-    SELECT 'column:'||r.relname||':'||lpad(a.attnum::text,4,'0'),
-           jsonb_build_object(
-               'kind','column','relation',r.relname,'position',a.attnum,
-               'name',a.attname,'type',format_type(a.atttypid,a.atttypmod),
-               'not_null',a.attnotnull,'identity',a.attidentity,
-               'generated',a.attgenerated,'storage',a.attstorage,
-               'compression',a.attcompression,
-               'collation',CASE WHEN a.attcollation=0 THEN NULL
-                                ELSE a.attcollation::regcollation::text END,
-               'default',pg_get_expr(d.adbin,d.adrelid,false),
-               'acl',COALESCE(a.attacl::text,'')
-           )
-      FROM target_relations r
-      JOIN pg_attribute a ON a.attrelid=r.oid
-      LEFT JOIN pg_attrdef d ON d.adrelid=r.oid AND d.adnum=a.attnum
-     WHERE a.attnum>0 AND NOT a.attisdropped
-    UNION ALL
-    SELECT 'constraint:'||r.relname||':'||k.conname,
-           jsonb_build_object(
-               'kind','constraint','relation',r.relname,'name',k.conname,
-               'type',k.contype,'deferrable',k.condeferrable,
-               'initially_deferred',k.condeferred,'validated',k.convalidated,
-               'definition',pg_get_constraintdef(k.oid,true)
-           )
-      FROM target_relations r
-      JOIN pg_constraint k ON k.conrelid=r.oid
-    UNION ALL
-    SELECT 'index:'||r.relname||':'||c.relname,
-           jsonb_build_object(
-               'kind','index','relation',r.relname,'name',c.relname,
-               'unique',i.indisunique,'primary',i.indisprimary,
-               'exclusion',i.indisexclusion,'immediate',i.indimmediate,
-               'nulls_not_distinct',i.indnullsnotdistinct,
-               'valid',i.indisvalid,'ready',i.indisready,'live',i.indislive,
-               'definition',pg_get_indexdef(i.indexrelid)
-           )
-      FROM target_relations r
-      JOIN pg_index i ON i.indrelid=r.oid
-      JOIN pg_class c ON c.oid=i.indexrelid
-    UNION ALL
-    SELECT 'trigger:'||c.relname||':'||t.tgname,
-           jsonb_build_object(
-               'kind','trigger','relation',c.relname,'name',t.tgname,
-               'enabled',t.tgenabled,'internal',t.tgisinternal,
-               'definition',pg_get_triggerdef(t.oid,true)
-           )
-      FROM pg_trigger t
-      JOIN pg_class c ON c.oid=t.tgrelid
-      JOIN pg_namespace n ON n.oid=c.relnamespace
-     WHERE n.nspname=current_schema() AND NOT t.tgisinternal
-       AND (
-           t.tgrelid IN (SELECT oid FROM target_relations)
-           OR t.tgname IN (
-               'trg_protect_persistently_mapped_offer_contract',
-               'trg_protect_unactivated_mapped_offer_price',
-               'trg_protect_persistent_mapping_rejection_contract'
-           )
-       )
-    UNION ALL
-    SELECT 'function:'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')',
-           jsonb_build_object(
-               'kind','function','name',p.proname,
-               'arguments',pg_get_function_identity_arguments(p.oid),
-               'result',pg_get_function_result(p.oid),'prokind',p.prokind,
-               'language',l.lanname,'volatility',p.provolatile,
-               'strict',p.proisstrict,'security_definer',p.prosecdef,
-               'leakproof',p.proleakproof,'parallel',p.proparallel,
-               'config',COALESCE(p.proconfig::text,''),
-               'owner',pg_get_userbyid(p.proowner),
-               'acl',COALESCE(p.proacl::text,''),'source',p.prosrc
-           )
-      FROM pg_proc p
-      JOIN pg_namespace n ON n.oid=p.pronamespace
-      JOIN pg_language l ON l.oid=p.prolang
-     WHERE n.nspname=current_schema() AND p.proname ~
-       '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
-    UNION ALL
-    SELECT 'view:'||r.relname,
-           jsonb_build_object(
-               'kind','view','name',r.relname,
-               'definition',pg_get_viewdef(r.oid,true)
-           )
-      FROM target_relations r WHERE r.relkind='v'
-)
-SELECT encode(digest(convert_to(
-           COALESCE(jsonb_agg(item ORDER BY item_key)::text,'[]'),'UTF8'
-       ),'sha256'),'hex')
-  FROM catalog_items
-$catalog_signature$;
 
 DO $migration_preconditions$
 DECLARE
@@ -499,131 +838,84 @@ DECLARE
     ];
     installed_contract TEXT;
     installed_catalog_sha256 TEXT;
-    initial_install BOOLEAN;
-    installed_migration_marker TEXT;
-    installed_migration_number INTEGER;
-    installed_migration_marker_count INTEGER;
-    target_schema TEXT;
+    target_schema CONSTANT TEXT := '__BUFFALO_TARGET_SCHEMA_TEXT__';
+    target_schema_oid OID;
 BEGIN
-    target_schema := current_schema();
-    IF target_schema IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'meta')) IS NULL THEN
+    SELECT n.oid INTO target_schema_oid
+      FROM pg_catalog.pg_namespace n WHERE n.nspname=target_schema;
+    IF target_schema_oid IS NULL
+       OR target_schema_oid=pg_catalog.pg_my_temp_schema()
+       OR pg_catalog.pg_is_other_temp_schema(target_schema_oid)
+       OR target_schema ~ '^pg_(toast_)?temp_[0-9]+$'
+       OR pg_catalog.to_regclass(
+              pg_catalog.format('%I.%I',target_schema,'meta')
+          ) IS NULL THEN
         RAISE EXCEPTION 'persistent mapping migration requires an explicit target schema';
     END IF;
     SELECT value INTO installed_contract
-      FROM meta WHERE key='persistent_mapping_foundation_contract';
+      FROM "__BUFFALO_TARGET_SCHEMA__".meta WHERE key='persistent_mapping_foundation_contract';
+    SELECT value INTO installed_catalog_sha256
+      FROM "__BUFFALO_TARGET_SCHEMA__".meta
+     WHERE key='persistent_mapping_foundation_catalog_sha256';
     SELECT array_agg(key ORDER BY key) INTO actual_markers
-      FROM meta WHERE key LIKE 'migration:%';
+      FROM "__BUFFALO_TARGET_SCHEMA__".meta WHERE key LIKE 'migration:%';
 
-    initial_install := installed_contract IS NULL;
-    PERFORM set_config(
+    -- The manifest-aware runner must skip an installed release. This v1 body
+    -- is an initial transition only and may not attest to or repair itself.
+    IF installed_contract IS NOT NULL OR installed_catalog_sha256 IS NOT NULL THEN
+        RAISE EXCEPTION
+            'v1 mapping SQL cannot execute over installed contract metadata';
+    END IF;
+    PERFORM pg_catalog.set_config(
         'procurement.persistent_mapping_foundation_initial_install',
-        CASE WHEN initial_install THEN 'true' ELSE 'false' END,
-        true
+        'true',true
     );
 
-    IF initial_install THEN
-        IF actual_markers IS DISTINCT FROM expected_markers THEN
-            RAISE EXCEPTION
-                'persistent mapping foundation requires exact predecessor 013; markers=%',
-                actual_markers;
-        END IF;
-        IF (SELECT value FROM meta WHERE key='monday_price_book_contract')
-               IS DISTINCT FROM 'v2-future-only'
-           OR (SELECT value FROM meta WHERE key='monday_p1_remediation_contract')
-               IS DISTINCT FROM 'v1' THEN
-            RAISE EXCEPTION 'required Monday predecessor contracts differ';
-        END IF;
-        IF to_regclass(format('%I.%I',target_schema,'supplier_mapping_review_batches')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'supplier_mapping_review_candidates')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'supplier_mapping_decisions')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'supplier_offer_selection_events')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'supplier_offer_selection_heads')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'v_effective_supplier_mapping_decisions')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'v_supplier_offer_selection_diagnostics')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'v_selected_standard_supplier_offers')) IS NOT NULL
-           OR to_regclass(format('%I.%I',target_schema,'v_supplier_offer_selection_shadow')) IS NOT NULL
-           OR EXISTS (
-                SELECT 1 FROM meta
-                 WHERE key='persistent_mapping_foundation_catalog_sha256'
-              )
-           OR EXISTS (
-                SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                 WHERE n.nspname=target_schema AND p.proname ~
-                   '^(persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
-              )
-           OR EXISTS (
-                SELECT 1
-                  FROM pg_trigger t
-                  JOIN pg_class c ON c.oid=t.tgrelid
-                  JOIN pg_namespace n ON n.oid=c.relnamespace
-                 WHERE n.nspname=target_schema AND t.tgname IN (
-                     'trg_protect_persistently_mapped_offer_contract',
-                     'trg_protect_unactivated_mapped_offer_price',
-                     'trg_protect_persistent_mapping_rejection_contract'
-                 )
-              ) THEN
-            RAISE EXCEPTION 'partial persistent mapping objects exist without contract marker';
-        END IF;
-    ELSIF installed_contract IS DISTINCT FROM 'v1-shadow-only' THEN
-        RAISE EXCEPTION 'persistent mapping foundation contract version differs: %',
-            installed_contract;
-    ELSIF to_regclass(format('%I.%I',target_schema,'supplier_mapping_review_batches')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'supplier_mapping_review_candidates')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'supplier_mapping_decisions')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'supplier_offer_selection_events')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'supplier_offer_selection_heads')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'v_effective_supplier_mapping_decisions')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'v_supplier_offer_selection_diagnostics')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'v_selected_standard_supplier_offers')) IS NULL
-       OR to_regclass(format('%I.%I',target_schema,'v_supplier_offer_selection_shadow')) IS NULL THEN
-        RAISE EXCEPTION 'installed persistent mapping contract is structurally incomplete';
+    IF actual_markers IS DISTINCT FROM expected_markers THEN
+        RAISE EXCEPTION
+            'persistent mapping foundation requires exact predecessor 013; markers=%',
+            actual_markers;
     END IF;
-
-    IF NOT initial_install THEN
-        SELECT value INTO installed_catalog_sha256
-          FROM meta WHERE key='persistent_mapping_foundation_catalog_sha256';
-        SELECT min(marker),count(*)
-          INTO installed_migration_marker,installed_migration_marker_count
-          FROM unnest(actual_markers) AS migration_markers(marker)
-         WHERE marker ~
-               '^migration:[0-9]{3}_persistent_mapping_foundation[.]sql$';
-        IF installed_migration_marker_count=1 THEN
-            installed_migration_number := substring(
-                installed_migration_marker FROM '^migration:([0-9]{3})_'
-            )::integer;
-        END IF;
-        IF actual_markers IS NULL
-           OR EXISTS (
-                SELECT 1
-                  FROM unnest(expected_markers) AS expected(expected_marker)
-                 WHERE NOT expected_marker=ANY(actual_markers)
-              )
-           OR installed_migration_marker_count<>1
-           OR EXISTS (
-                SELECT 1
-                  FROM unnest(actual_markers) AS actual(actual_marker)
-                 WHERE NOT actual_marker=ANY(expected_markers)
-                   AND (
-                       actual_marker !~ '^migration:[0-9]{3}_.+[.]sql$'
-                       OR (
-                           actual_marker<>installed_migration_marker
-                           AND substring(
-                               actual_marker FROM '^migration:([0-9]{3})_'
-                           )::integer<=installed_migration_number
-                       )
-                   )
-              ) THEN
-            RAISE EXCEPTION
-                'installed persistent mapping contract has an unexpected migration chain: %',
-                actual_markers;
-        END IF;
-        IF installed_catalog_sha256 !~ '^[0-9a-f]{64}$'
-           OR compute_persistent_mapping_catalog_sha256()
-                IS DISTINCT FROM installed_catalog_sha256 THEN
-            RAISE EXCEPTION
-                'installed persistent mapping catalog signature is absent or differs';
-        END IF;
+    IF (SELECT value FROM "__BUFFALO_TARGET_SCHEMA__".meta
+         WHERE key='monday_price_book_contract') IS DISTINCT FROM 'v2-future-only'
+       OR (SELECT value FROM "__BUFFALO_TARGET_SCHEMA__".meta
+            WHERE key='monday_p1_remediation_contract') IS DISTINCT FROM 'v1' THEN
+        RAISE EXCEPTION 'required Monday predecessor contracts differ';
+    END IF;
+    IF pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'supplier_mapping_review_batches')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'supplier_mapping_review_candidates')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'supplier_mapping_decisions')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'supplier_offer_selection_events')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'supplier_offer_selection_heads')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'v_effective_supplier_mapping_decisions')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'v_supplier_offer_selection_diagnostics')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'v_selected_standard_supplier_offers')) IS NOT NULL
+       OR pg_catalog.to_regclass(pg_catalog.format(
+           '%I.%I',target_schema,'v_supplier_offer_selection_shadow')) IS NOT NULL
+       OR EXISTS (
+            SELECT 1 FROM pg_catalog.pg_proc p
+            JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+             WHERE n.oid=target_schema_oid AND p.proname ~
+               '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+          )
+       OR EXISTS (
+            SELECT 1 FROM pg_catalog.pg_trigger t
+            JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
+             WHERE c.relnamespace=target_schema_oid AND t.tgname IN (
+                 'trg_protect_persistently_mapped_offer_contract',
+                 'trg_protect_unactivated_mapped_offer_price',
+                 'trg_protect_persistent_mapping_rejection_contract'
+             )
+          ) THEN
+        RAISE EXCEPTION 'partial persistent mapping objects exist before v1 marker';
     END IF;
 
     IF to_regclass(format('%I.%I',target_schema,'variants')) IS NULL
@@ -703,7 +995,7 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'referenced/priced offer or vendor protection trigger is absent';
     END IF;
-    IF (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
+    IF (SELECT encode("__BUFFALO_PGCRYPTO_SCHEMA__".digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
           FROM pg_proc p
          WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'prevent_referenced_offer_identity_change'))
            AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')
@@ -711,7 +1003,7 @@ BEGIN
            AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
            AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
            IS DISTINCT FROM '0c8caf40ba425c3dbf847862195f3caf131ec1221bd4e0739e3cd5ffd81219aa'
-       OR (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
+       OR (SELECT encode("__BUFFALO_PGCRYPTO_SCHEMA__".digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
              FROM pg_proc p
             WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'protect_promoted_offer_contract'))
               AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')
@@ -719,7 +1011,7 @@ BEGIN
               AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
               AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
            IS DISTINCT FROM '1799ba81c390728e069c2a73b7814f9e2be9596b8e082dbadfe9288c556318d6'
-       OR (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
+       OR (SELECT encode("__BUFFALO_PGCRYPTO_SCHEMA__".digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
              FROM pg_proc p
             WHERE p.oid=to_regprocedure(format('%I.%I()',target_schema,'protect_priced_vendor_contract'))
               AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='plpgsql')
@@ -727,7 +1019,7 @@ BEGIN
               AND p.provolatile='v' AND NOT p.proisstrict AND NOT p.prosecdef
               AND NOT p.proleakproof AND p.proparallel='u' AND p.proconfig IS NULL)
            IS DISTINCT FROM 'b2fd1ffccc54710d44d06050c884d2d31d6af5c6d3d409c70a43f23102f85589'
-       OR (SELECT encode(digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
+       OR (SELECT encode("__BUFFALO_PGCRYPTO_SCHEMA__".digest(convert_to(p.prosrc,'UTF8'),'sha256'),'hex')
              FROM pg_proc p
             WHERE p.oid=to_regprocedure(format('%I.%I(text)',target_schema,'is_procurement_eligible_variant'))
               AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='sql')
@@ -740,19 +1032,160 @@ BEGIN
 END
 $migration_preconditions$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_text_sha256(value TEXT)
+-- Installed catalog calculator. It is not trusted to attest to itself: the
+-- runner verifies its manifest-bound source/properties/helpers before calling
+-- it, and independently verifies the assertion before replay validation.
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".compute_persistent_mapping_catalog_sha256()
+RETURNS TEXT
+LANGUAGE sql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
+AS $catalog_signature$
+WITH target_namespace AS (
+    SELECT n.oid,n.nspname,n.nspowner,n.nspacl
+      FROM pg_catalog.pg_namespace n
+     WHERE n.nspname='__BUFFALO_TARGET_SCHEMA_TEXT__'
+), target_relations AS (
+    SELECT c.oid,c.relname,c.relkind,c.relpersistence,c.relrowsecurity,
+           c.relforcerowsecurity,c.relreplident,c.relowner,c.relacl
+      FROM pg_class c
+      JOIN target_namespace n ON n.oid=c.relnamespace
+     WHERE TRUE
+       AND c.relname IN (
+           'supplier_mapping_review_batches',
+           'supplier_mapping_review_candidates',
+           'supplier_mapping_decisions',
+           'supplier_offer_selection_events',
+           'supplier_offer_selection_heads',
+           'v_effective_supplier_mapping_decisions',
+           'v_supplier_offer_selection_diagnostics',
+           'v_selected_standard_supplier_offers',
+           'v_supplier_offer_selection_shadow'
+       )
+), catalog_items AS (
+    SELECT 'schema:'||n.nspname AS item_key,
+           jsonb_build_object(
+               'kind','schema','name',n.nspname,
+               'owner',pg_get_userbyid(n.nspowner),
+               'acl',COALESCE(n.nspacl::text,'')
+           ) AS item
+      FROM target_namespace n
+    UNION ALL
+    SELECT 'relation:'||r.relname AS item_key,
+           jsonb_build_object(
+               'kind','relation','name',r.relname,'relkind',r.relkind,
+               'persistence',r.relpersistence,'row_security',r.relrowsecurity,
+               'force_row_security',r.relforcerowsecurity,
+               'replica_identity',r.relreplident,
+               'owner',pg_get_userbyid(r.relowner),
+               'acl',COALESCE(r.relacl::text,'')
+           ) AS item
+      FROM target_relations r
+    UNION ALL
+    SELECT 'column:'||r.relname||':'||lpad(a.attnum::text,4,'0'),
+           jsonb_build_object(
+               'kind','column','relation',r.relname,'position',a.attnum,
+               'name',a.attname,'type',format_type(a.atttypid,a.atttypmod),
+               'not_null',a.attnotnull,'identity',a.attidentity,
+               'generated',a.attgenerated,'storage',a.attstorage,
+               'compression',a.attcompression,
+               'collation',CASE WHEN a.attcollation=0 THEN NULL
+                                ELSE a.attcollation::regcollation::text END,
+               'default',pg_get_expr(d.adbin,d.adrelid,false),
+               'acl',COALESCE(a.attacl::text,'')
+           )
+      FROM target_relations r
+      JOIN pg_attribute a ON a.attrelid=r.oid
+      LEFT JOIN pg_attrdef d ON d.adrelid=r.oid AND d.adnum=a.attnum
+     WHERE a.attnum>0 AND NOT a.attisdropped
+    UNION ALL
+    SELECT 'constraint:'||r.relname||':'||k.conname,
+           jsonb_build_object(
+               'kind','constraint','relation',r.relname,'name',k.conname,
+               'type',k.contype,'deferrable',k.condeferrable,
+               'initially_deferred',k.condeferred,'validated',k.convalidated,
+               'definition',pg_get_constraintdef(k.oid,true)
+           )
+      FROM target_relations r
+      JOIN pg_constraint k ON k.conrelid=r.oid
+    UNION ALL
+    SELECT 'index:'||r.relname||':'||c.relname,
+           jsonb_build_object(
+               'kind','index','relation',r.relname,'name',c.relname,
+               'unique',i.indisunique,'primary',i.indisprimary,
+               'exclusion',i.indisexclusion,'immediate',i.indimmediate,
+               'nulls_not_distinct',i.indnullsnotdistinct,
+               'valid',i.indisvalid,'ready',i.indisready,'live',i.indislive,
+               'definition',pg_get_indexdef(i.indexrelid)
+           )
+      FROM target_relations r
+      JOIN pg_index i ON i.indrelid=r.oid
+      JOIN pg_class c ON c.oid=i.indexrelid
+    UNION ALL
+    SELECT 'trigger:'||c.relname||':'||t.tgname,
+           jsonb_build_object(
+               'kind','trigger','relation',c.relname,'name',t.tgname,
+               'enabled',t.tgenabled,'internal',t.tgisinternal,
+               'definition',pg_get_triggerdef(t.oid,true)
+           )
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid=t.tgrelid
+      JOIN pg_namespace n ON n.oid=c.relnamespace
+     WHERE n.nspname='__BUFFALO_TARGET_SCHEMA_TEXT__' AND NOT t.tgisinternal
+       AND (
+           t.tgrelid IN (SELECT oid FROM target_relations)
+           OR t.tgname IN (
+               'trg_protect_persistently_mapped_offer_contract',
+               'trg_protect_unactivated_mapped_offer_price',
+               'trg_protect_persistent_mapping_rejection_contract'
+           )
+       )
+    UNION ALL
+    SELECT 'function:'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')',
+           jsonb_build_object(
+               'kind','function','name',p.proname,
+               'arguments',pg_get_function_identity_arguments(p.oid),
+               'result',pg_get_function_result(p.oid),'prokind',p.prokind,
+               'language',l.lanname,'volatility',p.provolatile,
+               'strict',p.proisstrict,'security_definer',p.prosecdef,
+               'leakproof',p.proleakproof,'parallel',p.proparallel,
+               'config',COALESCE(p.proconfig::text,''),
+               'owner',pg_get_userbyid(p.proowner),
+               'acl',COALESCE(p.proacl::text,''),'source',p.prosrc
+           )
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid=p.pronamespace
+      JOIN pg_language l ON l.oid=p.prolang
+     WHERE n.nspname='__BUFFALO_TARGET_SCHEMA_TEXT__' AND p.proname ~
+       '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+    UNION ALL
+    SELECT 'view:'||r.relname,
+           jsonb_build_object(
+               'kind','view','name',r.relname,
+               'definition',pg_get_viewdef(r.oid,true)
+           )
+      FROM target_relations r WHERE r.relkind='v'
+)
+SELECT encode("__BUFFALO_PGCRYPTO_SCHEMA__".digest(convert_to(
+           COALESCE(jsonb_agg(item ORDER BY item_key)::text,'[]'),'UTF8'
+       ),'sha256'),'hex')
+  FROM catalog_items
+$catalog_signature$;
+
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_text_sha256(value TEXT)
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-AS $$ SELECT encode(digest(convert_to(value, 'UTF8'), 'sha256'), 'hex') $$;
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
+AS $$ SELECT encode("__BUFFALO_PGCRYPTO_SCHEMA__".digest(convert_to(value, 'UTF8'), 'sha256'), 'hex') $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_json_sha256(value JSONB)
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(value JSONB)
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-AS $$ SELECT persistent_mapping_text_sha256(value::text) $$;
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
+AS $$ SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_text_sha256(value::text) $$;
 
-CREATE TABLE IF NOT EXISTS supplier_mapping_review_batches (
+CREATE TABLE IF NOT EXISTS "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches (
     review_batch_id UUID PRIMARY KEY,
-    intake_idempotency_key UUID NOT NULL UNIQUE,
+    intake_idempotency_key UUID NOT NULL,
     source_package_kind TEXT NOT NULL CHECK (source_package_kind='SEALED_V5_REVIEW_PACKAGE'),
     source_package_id TEXT NOT NULL CHECK (btrim(source_package_id)<>''),
     source_revision TEXT NOT NULL CHECK (btrim(source_revision)<>''),
@@ -782,20 +1215,22 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_review_batches (
     canonical_payload JSONB NOT NULL CHECK (jsonb_typeof(canonical_payload)='object'),
     payload_sha256 TEXT NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-    created_txid BIGINT NOT NULL DEFAULT txid_current()
+    created_txid BIGINT NOT NULL DEFAULT txid_current(),
+    CONSTRAINT uq_mapping_review_batches_idempotency
+        UNIQUE (intake_idempotency_key)
 );
 
-CREATE TABLE IF NOT EXISTS supplier_mapping_review_candidates (
+CREATE TABLE IF NOT EXISTS "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates (
     review_batch_id UUID NOT NULL
-        REFERENCES supplier_mapping_review_batches(review_batch_id) ON DELETE RESTRICT,
+        REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches(review_batch_id) ON DELETE RESTRICT,
     candidate_id UUID NOT NULL,
     occurrence_index INTEGER NOT NULL CHECK (occurrence_index>=1),
     occurrence_key TEXT NOT NULL CHECK (btrim(occurrence_key)<>''),
     printed_occurrence_sha256 TEXT NOT NULL
         CHECK (printed_occurrence_sha256 ~ '^[0-9a-f]{64}$'),
-    supplier_identity_key_sha256 TEXT NOT NULL
+    supplier_identity_key_sha256 TEXT
         CHECK (supplier_identity_key_sha256 ~ '^[0-9a-f]{64}$'),
-    operational_offer_key_sha256 TEXT NOT NULL
+    operational_offer_key_sha256 TEXT
         CHECK (operational_offer_key_sha256 ~ '^[0-9a-f]{64}$'),
     decision_scope_sha256 TEXT NOT NULL
         CHECK (decision_scope_sha256 ~ '^[0-9a-f]{64}$'),
@@ -885,13 +1320,18 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_review_candidates (
     CHECK (qualifying_units_value IS NULL OR qualifying_units_value>0)
 );
 
-CREATE OR REPLACE FUNCTION persistent_mapping_candidate_supplier_identity_key(
-    c supplier_mapping_review_candidates
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_supplier_identity_key(
+    c "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT CASE
+      WHEN c.proposed_vendor_id IS NULL
+        OR c.distributor_product_id_state<>'VALUE'
+        OR btrim(c.distributor_product_id_value)='' THEN NULL
+      ELSE "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'contract_version','SUPPLIER_IDENTITY_V1',
         'proposed_vendor_id',c.proposed_vendor_id,
         'source_vendor_identity',c.source_vendor_identity,
@@ -899,16 +1339,29 @@ AS $$
         'distributor_product_id_value',c.distributor_product_id_value,
         'supplier_code_state',c.supplier_code_state,
         'supplier_code_value',c.supplier_code_value
-    ))
+      ))
+    END
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_candidate_operational_offer_key(
-    c supplier_mapping_review_candidates
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_operational_offer_key(
+    c "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT CASE
+      WHEN "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_supplier_identity_key(c) IS NULL
+        OR c.proposed_variant_id IS NULL
+        OR c.offer_class='UNKNOWN'
+        OR c.package_type_state<>'VALUE'
+        OR btrim(c.package_type_value)=''
+        OR (c.supplier_code_state='VALUE' AND (
+             btrim(c.supplier_code_value)=''
+             OR c.supplier_code_value<>btrim(c.supplier_code_value)
+           ))
+        OR c.assortment_scope_state<>'VALUE' THEN NULL
+      ELSE "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'contract_version','OPERATIONAL_OFFER_V1',
         'proposed_vendor_id',c.proposed_vendor_id,
         'supplier_code_state',c.supplier_code_state,
@@ -935,27 +1388,30 @@ AS $$
         'assortable_value',c.assortable_value,
         'identity_qualifiers',c.identity_qualifiers,
         'component_relationships',c.component_relationships
-    ))
+      ))
+    END
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_candidate_decision_scope(
-    c supplier_mapping_review_candidates
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_decision_scope(
+    c "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'contract_version','CANDIDATE_DECISION_SCOPE_V1',
         'review_batch_id',c.review_batch_id,
         'candidate_id',c.candidate_id
     ))
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_candidate_reviewed_facts(
-    c supplier_mapping_review_candidates
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_reviewed_facts(
+    c "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
 )
 RETURNS JSONB
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
     SELECT jsonb_build_object(
         'package_type_state',c.package_type_state,
@@ -981,13 +1437,14 @@ AS $$
     )
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_candidate_evidence_set_sha256(
-    c supplier_mapping_review_candidates
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_evidence_set_sha256(
+    c "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'contract_version','INDEPENDENT_LINKAGE_EVIDENCE_V1',
         'printed_source_sha256',c.source_file_sha256,
         'evidence',c.independent_linkage_evidence
@@ -995,46 +1452,49 @@ AS $$
 $$;
 
 CREATE INDEX IF NOT EXISTS idx_mapping_candidates_offer_key
-    ON supplier_mapping_review_candidates(operational_offer_key_sha256);
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(operational_offer_key_sha256);
 CREATE INDEX IF NOT EXISTS idx_mapping_candidates_supplier_identity
-    ON supplier_mapping_review_candidates(supplier_identity_key_sha256);
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(supplier_identity_key_sha256);
 CREATE INDEX IF NOT EXISTS idx_mapping_candidates_proposed_identity
-    ON supplier_mapping_review_candidates(proposed_vendor_id,proposed_variant_id);
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(proposed_vendor_id,proposed_variant_id);
 CREATE INDEX IF NOT EXISTS idx_mapping_candidates_supplier_code
-    ON supplier_mapping_review_candidates(proposed_vendor_id,supplier_code_value)
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(proposed_vendor_id,supplier_code_value)
     WHERE supplier_code_state='VALUE';
 
-CREATE OR REPLACE FUNCTION persistent_mapping_catalog_fingerprint(wanted_variant_id TEXT)
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_catalog_fingerprint(wanted_variant_id TEXT)
 RETURNS TEXT
 LANGUAGE sql STABLE STRICT
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'variant_id',v.variant_id,'shopify_gid',v.shopify_gid,
         'product_id',v.product_id,'product_gid',v.product_gid,
         'sku',v.sku,'barcode',v.barcode,'active',v.active,
         'identity_scope',v.identity_scope,'catalog_state',v.catalog_state,
         'source_snapshot',v.source_snapshot,'last_synced_at',v.last_synced_at
-    )) FROM variants v WHERE v.variant_id=wanted_variant_id
+    )) FROM "__BUFFALO_TARGET_SCHEMA__".variants v WHERE v.variant_id=wanted_variant_id
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_vendor_fingerprint(wanted_vendor_id UUID)
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_vendor_fingerprint(wanted_vendor_id UUID)
 RETURNS TEXT
 LANGUAGE sql STABLE STRICT
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'vendor_id',v.vendor_id,'vendor_name',v.vendor_name,'active',v.active,
         'order_day',v.order_day,'order_cycle_days',v.order_cycle_days,
         'lead_time_days',v.lead_time_days,'updated_at',v.updated_at
-    )) FROM vendors v WHERE v.vendor_id=wanted_vendor_id
+    )) FROM "__BUFFALO_TARGET_SCHEMA__".vendors v WHERE v.vendor_id=wanted_vendor_id
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_rejection_fingerprint(
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_fingerprint(
     wanted_vendor_id UUID, wanted_source_key TEXT, excluded_rejection_id BIGINT
 )
 RETURNS TEXT
 LANGUAGE sql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(COALESCE(jsonb_agg(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(COALESCE(jsonb_agg(
         jsonb_build_object(
             'rejection_id',r.rejection_id,'mapping_type',r.mapping_type,
             'source_key',r.source_key,'variant_id',r.rejected_variant_id,
@@ -1043,33 +1503,35 @@ AS $$
             'rejected_at',r.rejected_at
         ) ORDER BY r.rejection_id
     ),'[]'::jsonb))
-     FROM mapping_rejections r
+     FROM "__BUFFALO_TARGET_SCHEMA__".mapping_rejections r
      WHERE r.active AND r.mapping_type='SUPPLIER_OFFER'
        AND r.vendor_id IS NOT DISTINCT FROM wanted_vendor_id
        AND r.source_key=wanted_source_key
        AND (excluded_rejection_id IS NULL OR r.rejection_id<>excluded_rejection_id)
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_rejection_contract_fingerprint(
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_contract_fingerprint(
     wanted_rejection_id BIGINT
 )
 RETURNS TEXT
 LANGUAGE sql STABLE STRICT
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'contract_version','PERSISTENT_MAPPING_REJECTION_V1',
         'mapping_type',r.mapping_type,'source_key',r.source_key,
         'rejected_variant_id',r.rejected_variant_id,'vendor_id',r.vendor_id,
         'source_text',r.source_text,'evidence_json',r.evidence_json,
         'rejected_by',r.rejected_by,'active',r.active
-    )) FROM mapping_rejections r WHERE r.rejection_id=wanted_rejection_id
+    )) FROM "__BUFFALO_TARGET_SCHEMA__".mapping_rejections r WHERE r.rejection_id=wanted_rejection_id
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_offer_fingerprint(wanted_offer_id BIGINT)
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_fingerprint(wanted_offer_id BIGINT)
 RETURNS TEXT
 LANGUAGE sql STABLE STRICT
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'contract_version','SUPPLIER_OFFER_CONTRACT_V1',
         'variant_id',o.variant_id,'vendor_id',o.vendor_id,
         'supplier_sku',o.supplier_sku,'package_type',o.package_type,
@@ -1081,29 +1543,30 @@ AS $$
         'replaces_offer_id',o.replaces_offer_id,
         'source_file',o.source_file,'source_page',o.source_page,
         'confidence',o.confidence,'active',o.active
-    )) FROM supplier_offers o WHERE o.offer_id=wanted_offer_id
+    )) FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offers o WHERE o.offer_id=wanted_offer_id
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_offer_has_prior_references(
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_has_prior_references(
     wanted_offer_id BIGINT
 )
 RETURNS BOOLEAN
 LANGUAGE sql STABLE STRICT
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
     SELECT
-        EXISTS (SELECT 1 FROM prices WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM purchase_order_lines WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM procurement_recommendations WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM run_price_snapshots WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM combo_components WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM exceptions WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM price_book_staging_rows WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM price_book_validation_issues WHERE offer_id=wanted_offer_id)
-        OR EXISTS (SELECT 1 FROM supplier_offers
+        EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".prices WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".purchase_order_lines WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".procurement_recommendations WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".run_price_snapshots WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".combo_components WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".exceptions WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".price_book_staging_rows WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".price_book_validation_issues WHERE offer_id=wanted_offer_id)
+        OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offers
                     WHERE replaces_offer_id=wanted_offer_id)
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_require_human_context(
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_human_context(
     expected_principal_ref TEXT,
     expected_role_ref TEXT,
     expected_authn_context_sha256 TEXT,
@@ -1111,9 +1574,15 @@ CREATE OR REPLACE FUNCTION persistent_mapping_require_human_context(
 )
 RETURNS VOID
 LANGUAGE plpgsql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 BEGIN
-    IF current_setting('procurement.principal_kind',true) IS DISTINCT FROM 'HUMAN'
+    IF expected_principal_ref IS NULL OR btrim(expected_principal_ref)=''
+       OR expected_role_ref IS NULL OR btrim(expected_role_ref)=''
+       OR expected_authn_context_sha256 IS NULL
+       OR expected_authn_context_sha256 !~ '^[0-9a-f]{64}$'
+       OR expected_action IS NULL OR btrim(expected_action)=''
+       OR current_setting('procurement.principal_kind',true) IS DISTINCT FROM 'HUMAN'
        OR current_setting('procurement.principal_ref',true)
             IS DISTINCT FROM expected_principal_ref
        OR current_setting('procurement.authorized_role_ref',true)
@@ -1127,11 +1596,12 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_require_enabled_capability(
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_enabled_capability(
     expected_capability TEXT
 )
 RETURNS VOID
 LANGUAGE plpgsql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 BEGIN
     IF expected_capability NOT IN (
@@ -1147,7 +1617,7 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION supplier_mapping_policy_is_published(
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_policy_is_published(
     policy_ref TEXT,
     policy_version TEXT,
     publication_sha256 TEXT,
@@ -1155,20 +1625,23 @@ CREATE OR REPLACE FUNCTION supplier_mapping_policy_is_published(
 )
 RETURNS BOOLEAN
 LANGUAGE sql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$ SELECT FALSE $$;
 
-CREATE OR REPLACE FUNCTION reject_persistent_mapping_mutation()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".reject_persistent_mapping_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 BEGIN
     RAISE EXCEPTION '% is append-only; % is forbidden',TG_TABLE_NAME,TG_OP;
 END
 $$;
 
-CREATE OR REPLACE FUNCTION validate_mapping_review_batch_insert()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_mapping_review_batch_insert()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE expected_payload JSONB;
 BEGIN
@@ -1178,10 +1651,10 @@ BEGIN
     IF NEW.created_txid<>txid_current() THEN
         RAISE EXCEPTION 'review batch transaction identity differs';
     END IF;
-    PERFORM persistent_mapping_require_enabled_capability(
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_enabled_capability(
         'review_intake_writes_enabled'
     );
-    PERFORM persistent_mapping_require_human_context(
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_human_context(
         NEW.creator_principal_ref,NEW.creator_role_ref,
         NEW.creator_authn_context_sha256,'MAPPING_REVIEW_INTAKE'
     );
@@ -1191,32 +1664,33 @@ BEGIN
     ];
     IF NEW.canonical_payload IS DISTINCT FROM expected_payload
        OR NEW.payload_sha256 IS DISTINCT FROM
-            persistent_mapping_json_sha256(expected_payload) THEN
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(expected_payload) THEN
         RAISE EXCEPTION 'review batch canonical payload or fingerprint differs';
     END IF;
     RETURN NEW;
 END
 $$;
 
-CREATE OR REPLACE FUNCTION validate_mapping_review_candidate_insert()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_mapping_review_candidate_insert()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE parent_txid BIGINT; expected_payload JSONB;
 BEGIN
     SELECT created_txid INTO parent_txid
-      FROM supplier_mapping_review_batches
+      FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches
      WHERE review_batch_id=NEW.review_batch_id FOR SHARE;
     IF parent_txid IS DISTINCT FROM txid_current()
        OR NEW.created_txid<>txid_current() THEN
         RAISE EXCEPTION 'batch and candidates must be created in one transaction';
     END IF;
     IF NEW.supplier_identity_key_sha256 IS DISTINCT FROM
-            persistent_mapping_candidate_supplier_identity_key(NEW)
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_supplier_identity_key(NEW)
        OR NEW.operational_offer_key_sha256 IS DISTINCT FROM
-            persistent_mapping_candidate_operational_offer_key(NEW)
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_operational_offer_key(NEW)
        OR NEW.decision_scope_sha256 IS DISTINCT FROM
-            persistent_mapping_candidate_decision_scope(NEW) THEN
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_decision_scope(NEW) THEN
         RAISE EXCEPTION 'candidate identity, offer, or decision-scope key differs';
     END IF;
     expected_payload := to_jsonb(NEW)-ARRAY[
@@ -1224,23 +1698,24 @@ BEGIN
     ];
     IF NEW.canonical_payload IS DISTINCT FROM expected_payload
        OR NEW.candidate_sha256 IS DISTINCT FROM
-            persistent_mapping_json_sha256(expected_payload) THEN
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(expected_payload) THEN
         RAISE EXCEPTION 'candidate canonical payload or fingerprint differs';
     END IF;
     RETURN NEW;
 END
 $$;
 
-CREATE OR REPLACE FUNCTION validate_mapping_review_candidate_set()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_mapping_review_candidate_set()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE actual_count BIGINT; actual_sha256 TEXT;
 BEGIN
-    SELECT count(*),persistent_mapping_text_sha256(COALESCE(
+    SELECT count(*),"__BUFFALO_TARGET_SCHEMA__".persistent_mapping_text_sha256(COALESCE(
         string_agg(candidate_sha256||E'\n','' ORDER BY occurrence_index,candidate_id),''
     )) INTO actual_count,actual_sha256
-      FROM supplier_mapping_review_candidates
+      FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
      WHERE review_batch_id=NEW.review_batch_id;
     IF actual_count<>NEW.candidate_count
        OR actual_sha256 IS DISTINCT FROM NEW.candidate_set_sha256 THEN
@@ -1251,47 +1726,48 @@ END
 $$;
 
 DROP TRIGGER IF EXISTS trg_validate_mapping_review_batch_insert
-    ON supplier_mapping_review_batches;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches;
 CREATE TRIGGER trg_validate_mapping_review_batch_insert
-BEFORE INSERT ON supplier_mapping_review_batches
-FOR EACH ROW EXECUTE FUNCTION validate_mapping_review_batch_insert();
+BEFORE INSERT ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_mapping_review_batch_insert();
 DROP TRIGGER IF EXISTS trg_validate_mapping_review_candidate_insert
-    ON supplier_mapping_review_candidates;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates;
 CREATE TRIGGER trg_validate_mapping_review_candidate_insert
-BEFORE INSERT ON supplier_mapping_review_candidates
-FOR EACH ROW EXECUTE FUNCTION validate_mapping_review_candidate_insert();
+BEFORE INSERT ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_mapping_review_candidate_insert();
 DROP TRIGGER IF EXISTS trg_validate_mapping_review_candidate_set
-    ON supplier_mapping_review_batches;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches;
 CREATE CONSTRAINT TRIGGER trg_validate_mapping_review_candidate_set
-AFTER INSERT ON supplier_mapping_review_batches DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW EXECUTE FUNCTION validate_mapping_review_candidate_set();
+AFTER INSERT ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_mapping_review_candidate_set();
 
 DROP TRIGGER IF EXISTS trg_immutable_mapping_review_batches
-    ON supplier_mapping_review_batches;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches;
 CREATE TRIGGER trg_immutable_mapping_review_batches
-BEFORE UPDATE OR DELETE ON supplier_mapping_review_batches
-FOR EACH ROW EXECUTE FUNCTION reject_persistent_mapping_mutation();
+BEFORE UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".reject_persistent_mapping_mutation();
 DROP TRIGGER IF EXISTS trg_immutable_mapping_review_candidates
-    ON supplier_mapping_review_candidates;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates;
 CREATE TRIGGER trg_immutable_mapping_review_candidates
-BEFORE UPDATE OR DELETE ON supplier_mapping_review_candidates
-FOR EACH ROW EXECUTE FUNCTION reject_persistent_mapping_mutation();
+BEFORE UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".reject_persistent_mapping_mutation();
 
-CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
+CREATE TABLE IF NOT EXISTS "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions (
     mapping_decision_id UUID PRIMARY KEY,
-    decision_idempotency_key UUID NOT NULL UNIQUE,
+    decision_idempotency_key UUID NOT NULL,
+    request_sha256 TEXT NOT NULL CHECK (request_sha256 ~ '^[0-9a-f]{64}$'),
     review_batch_id UUID NOT NULL,
     candidate_id UUID NOT NULL,
     decision_scope_sha256 TEXT NOT NULL CHECK (decision_scope_sha256 ~ '^[0-9a-f]{64}$'),
-    supplier_identity_key_sha256 TEXT NOT NULL
+    supplier_identity_key_sha256 TEXT
         CHECK (supplier_identity_key_sha256 ~ '^[0-9a-f]{64}$'),
-    operational_offer_key_sha256 TEXT NOT NULL
+    operational_offer_key_sha256 TEXT
         CHECK (operational_offer_key_sha256 ~ '^[0-9a-f]{64}$'),
     action TEXT NOT NULL CHECK (action IN ('APPROVE_MAPPING','REJECT_MAPPING','DEFER')),
     decision_origin TEXT NOT NULL CHECK (decision_origin IN ('HUMAN','POLICY')),
     authority_kind TEXT CHECK (authority_kind IN ('HUMAN_APPROVED','POLICY_APPROVED')),
-    variant_id TEXT NOT NULL REFERENCES variants(variant_id) ON DELETE RESTRICT,
-    vendor_id UUID NOT NULL REFERENCES vendors(vendor_id) ON DELETE RESTRICT,
+    variant_id TEXT REFERENCES "__BUFFALO_TARGET_SCHEMA__".variants(variant_id) ON DELETE RESTRICT,
+    vendor_id UUID REFERENCES "__BUFFALO_TARGET_SCHEMA__".vendors(vendor_id) ON DELETE RESTRICT,
     printed_occurrence_sha256 TEXT NOT NULL
         CHECK (printed_occurrence_sha256 ~ '^[0-9a-f]{64}$'),
     distributor_product_id_state TEXT NOT NULL
@@ -1302,7 +1778,9 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
     supplier_code_value TEXT,
     offer_class TEXT NOT NULL CHECK (offer_class IN
         ('REGULAR','GIFT','SPECIAL','ALTERNATE','COMPONENT','COMBO','UNKNOWN')),
-    supplier_offer_package_type TEXT NOT NULL CHECK (btrim(supplier_offer_package_type)<>''),
+    result_offer_package_type TEXT CHECK (
+        result_offer_package_type IS NULL OR btrim(result_offer_package_type)<>''
+    ),
     size_state TEXT NOT NULL CHECK (size_state IN ('ABSENT','EXPLICIT_NULL','VALUE')),
     size_value TEXT,
     raw_pack_state TEXT NOT NULL CHECK (raw_pack_state IN ('ABSENT','EXPLICIT_NULL','VALUE')),
@@ -1330,11 +1808,11 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
         CHECK (expected_batch_payload_sha256 ~ '^[0-9a-f]{64}$'),
     expected_candidate_sha256 TEXT NOT NULL
         CHECK (expected_candidate_sha256 ~ '^[0-9a-f]{64}$'),
-    expected_catalog_sha256 TEXT NOT NULL
+    expected_catalog_sha256 TEXT
         CHECK (expected_catalog_sha256 ~ '^[0-9a-f]{64}$'),
-    expected_vendor_sha256 TEXT NOT NULL
+    expected_vendor_sha256 TEXT
         CHECK (expected_vendor_sha256 ~ '^[0-9a-f]{64}$'),
-    expected_rejection_memory_sha256 TEXT NOT NULL
+    expected_rejection_memory_sha256 TEXT
         CHECK (expected_rejection_memory_sha256 ~ '^[0-9a-f]{64}$'),
     evidence_set_sha256 TEXT NOT NULL CHECK (evidence_set_sha256 ~ '^[0-9a-f]{64}$'),
     human_principal_ref TEXT,
@@ -1349,20 +1827,22 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
     policy_predicate_version TEXT,
     policy_predicate_result_sha256 TEXT,
     reason TEXT NOT NULL CHECK (btrim(reason)<>''),
-    result_offer_id BIGINT REFERENCES supplier_offers(offer_id) ON DELETE RESTRICT,
+    result_offer_id BIGINT REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_offers(offer_id) ON DELETE RESTRICT,
     offer_link_kind TEXT CHECK (offer_link_kind IN ('CREATED_INACTIVE','LINKED_EXISTING')),
     result_offer_contract_sha256 TEXT,
-    result_rejection_id BIGINT REFERENCES mapping_rejections(rejection_id) ON DELETE RESTRICT,
+    result_rejection_id BIGINT REFERENCES "__BUFFALO_TARGET_SCHEMA__".mapping_rejections(rejection_id) ON DELETE RESTRICT,
     result_rejection_contract_sha256 TEXT,
     supersedes_mapping_decision_id UUID
-        REFERENCES supplier_mapping_decisions(mapping_decision_id) ON DELETE RESTRICT,
+        REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(mapping_decision_id) ON DELETE RESTRICT,
     canonical_payload JSONB NOT NULL CHECK (jsonb_typeof(canonical_payload)='object'),
     payload_sha256 TEXT NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
     decided_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     decided_txid BIGINT NOT NULL DEFAULT txid_current(),
     FOREIGN KEY (review_batch_id,candidate_id)
-        REFERENCES supplier_mapping_review_candidates(review_batch_id,candidate_id)
+        REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(review_batch_id,candidate_id)
         ON DELETE RESTRICT,
+    CONSTRAINT uq_supplier_mapping_decisions_idempotency
+        UNIQUE (decision_idempotency_key),
     UNIQUE (mapping_decision_id,result_offer_id),
     CHECK ((distributor_product_id_state='VALUE')=
            (distributor_product_id_value IS NOT NULL)),
@@ -1378,20 +1858,53 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
     CHECK ((assortable_state='VALUE')=(assortable_value IS NOT NULL)),
     CHECK (shopify_units_value IS NULL OR shopify_units_value>0),
     CHECK (qualifying_units_value IS NULL OR qualifying_units_value>0),
+    CHECK (human_authn_context_sha256 IS NULL OR
+           human_authn_context_sha256 ~ '^[0-9a-f]{64}$'),
+    CHECK (preview_sha256 IS NULL OR preview_sha256 ~ '^[0-9a-f]{64}$'),
+    CHECK (confirmation_sha256 IS NULL OR confirmation_sha256 ~ '^[0-9a-f]{64}$'),
+    CHECK (policy_publication_sha256 IS NULL OR
+           policy_publication_sha256 ~ '^[0-9a-f]{64}$'),
+    CHECK (policy_predicate_result_sha256 IS NULL OR
+           policy_predicate_result_sha256 ~ '^[0-9a-f]{64}$'),
+    CHECK (result_offer_contract_sha256 IS NULL OR
+           result_offer_contract_sha256 ~ '^[0-9a-f]{64}$'),
+    CHECK (result_rejection_contract_sha256 IS NULL OR
+           result_rejection_contract_sha256 ~ '^[0-9a-f]{64}$'),
     CHECK (
         (action='APPROVE_MAPPING'
-         AND authority_kind IS NOT NULL AND result_offer_id IS NOT NULL
+         AND authority_kind IS NOT NULL
+         AND variant_id IS NOT NULL AND vendor_id IS NOT NULL
+         AND supplier_identity_key_sha256 IS NOT NULL
+         AND operational_offer_key_sha256 IS NOT NULL
+         AND result_offer_package_type IS NOT NULL
+         AND expected_catalog_sha256 IS NOT NULL
+         AND expected_vendor_sha256 IS NOT NULL
+         AND expected_rejection_memory_sha256 IS NOT NULL
+         AND result_offer_id IS NOT NULL
          AND offer_link_kind IS NOT NULL
-         AND result_offer_contract_sha256 ~ '^[0-9a-f]{64}$'
+         AND result_offer_contract_sha256 IS NOT NULL
          AND result_rejection_id IS NULL
          AND result_rejection_contract_sha256 IS NULL)
         OR
         (action='REJECT_MAPPING' AND authority_kind IS NULL
+         AND variant_id IS NOT NULL AND vendor_id IS NOT NULL
+         AND supplier_identity_key_sha256 IS NOT NULL
+         AND result_offer_package_type IS NULL
+         AND expected_catalog_sha256 IS NOT NULL
+         AND expected_vendor_sha256 IS NOT NULL
+         AND expected_rejection_memory_sha256 IS NOT NULL
          AND result_offer_id IS NULL AND offer_link_kind IS NULL
          AND result_offer_contract_sha256 IS NULL AND result_rejection_id IS NOT NULL
-         AND result_rejection_contract_sha256 ~ '^[0-9a-f]{64}$')
+         AND result_rejection_contract_sha256 IS NOT NULL)
         OR
         (action='DEFER' AND authority_kind IS NULL
+         AND variant_id IS NULL AND vendor_id IS NULL
+         AND supplier_identity_key_sha256 IS NULL
+         AND operational_offer_key_sha256 IS NULL
+         AND result_offer_package_type IS NULL
+         AND expected_catalog_sha256 IS NULL
+         AND expected_vendor_sha256 IS NULL
+         AND expected_rejection_memory_sha256 IS NULL
          AND result_offer_id IS NULL AND offer_link_kind IS NULL
          AND result_offer_contract_sha256 IS NULL AND result_rejection_id IS NULL
          AND result_rejection_contract_sha256 IS NULL)
@@ -1400,36 +1913,38 @@ CREATE TABLE IF NOT EXISTS supplier_mapping_decisions (
         (decision_origin='HUMAN'
          AND human_principal_ref IS NOT NULL AND btrim(human_principal_ref)<>''
          AND human_role_ref IS NOT NULL AND btrim(human_role_ref)<>''
-         AND human_authn_context_sha256 ~ '^[0-9a-f]{64}$'
-         AND preview_sha256 ~ '^[0-9a-f]{64}$'
-         AND confirmation_sha256 ~ '^[0-9a-f]{64}$'
+         AND human_authn_context_sha256 IS NOT NULL
+         AND preview_sha256 IS NOT NULL
+         AND confirmation_sha256 IS NOT NULL
          AND service_principal_ref IS NULL AND policy_ref IS NULL
          AND policy_version IS NULL AND policy_publication_sha256 IS NULL
          AND policy_predicate_version IS NULL AND policy_predicate_result_sha256 IS NULL
          AND (authority_kind IS NULL OR authority_kind='HUMAN_APPROVED'))
         OR
-        (decision_origin='POLICY' AND authority_kind='POLICY_APPROVED'
+        (decision_origin='POLICY' AND action='APPROVE_MAPPING'
+         AND authority_kind='POLICY_APPROVED'
          AND human_principal_ref IS NULL AND human_role_ref IS NULL
          AND human_authn_context_sha256 IS NULL
          AND preview_sha256 IS NULL AND confirmation_sha256 IS NULL
          AND service_principal_ref IS NOT NULL AND btrim(service_principal_ref)<>''
          AND policy_ref IS NOT NULL AND btrim(policy_ref)<>''
          AND policy_version IS NOT NULL AND btrim(policy_version)<>''
-         AND policy_publication_sha256 ~ '^[0-9a-f]{64}$'
+         AND policy_publication_sha256 IS NOT NULL
          AND policy_predicate_version IS NOT NULL AND btrim(policy_predicate_version)<>''
-         AND policy_predicate_result_sha256 ~ '^[0-9a-f]{64}$')
+         AND policy_predicate_result_sha256 IS NOT NULL)
     )
 );
 
-CREATE OR REPLACE FUNCTION persistent_mapping_decision_preview_sha256(
-    d supplier_mapping_decisions
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_decision_preview_sha256(
+    d "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(
         (to_jsonb(d)-ARRAY[
-            'mapping_decision_id','canonical_payload','payload_sha256',
+            'mapping_decision_id','request_sha256','canonical_payload','payload_sha256',
             'decided_at','decided_txid','human_principal_ref','human_role_ref',
             'human_authn_context_sha256','preview_sha256','confirmation_sha256',
             'service_principal_ref','policy_ref','policy_version',
@@ -1445,13 +1960,14 @@ AS $$
     )
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_decision_confirmation_sha256(
-    d supplier_mapping_decisions
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_decision_confirmation_sha256(
+    d "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'confirmation_contract_version','HUMAN_MAPPING_CONFIRMATION_V1',
         'preview_sha256',d.preview_sha256,
         'principal_ref',d.human_principal_ref,
@@ -1461,38 +1977,61 @@ AS $$
     ))
 $$;
 
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_decision_request_sha256(
+    d "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
+)
+RETURNS TEXT
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
+AS $$
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(
+        (to_jsonb(d)-ARRAY[
+            'mapping_decision_id','request_sha256','canonical_payload',
+            'payload_sha256','decided_at','decided_txid',
+            'result_offer_id','result_rejection_id'
+        ]) || jsonb_build_object(
+            'request_contract_version','PERSISTENT_MAPPING_DECISION_REQUEST_V1',
+            'confirmed_existing_offer_id',CASE
+                WHEN d.offer_link_kind='LINKED_EXISTING' THEN d.result_offer_id
+                ELSE NULL
+            END
+        )
+    )
+$$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mapping_decision_root_per_scope
-    ON supplier_mapping_decisions(decision_scope_sha256)
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(decision_scope_sha256)
     WHERE supersedes_mapping_decision_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_mapping_decision_successor
-    ON supplier_mapping_decisions(supersedes_mapping_decision_id)
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(supersedes_mapping_decision_id)
     WHERE supersedes_mapping_decision_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_mapping_decisions_candidate
-    ON supplier_mapping_decisions(review_batch_id,candidate_id,decided_at);
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(review_batch_id,candidate_id,decided_at);
 CREATE INDEX IF NOT EXISTS idx_mapping_decisions_offer_key
-    ON supplier_mapping_decisions(operational_offer_key_sha256,decided_at);
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(operational_offer_key_sha256,decided_at);
 CREATE INDEX IF NOT EXISTS idx_mapping_decisions_supplier_identity
-    ON supplier_mapping_decisions(supplier_identity_key_sha256,decided_at);
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(supplier_identity_key_sha256,decided_at);
 CREATE INDEX IF NOT EXISTS idx_mapping_decisions_result_offer
-    ON supplier_mapping_decisions(result_offer_id)
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(result_offer_id)
     WHERE result_offer_id IS NOT NULL;
 
-CREATE OR REPLACE FUNCTION validate_supplier_mapping_decision_insert()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_mapping_decision_insert()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE
-    b supplier_mapping_review_batches%ROWTYPE;
-    c supplier_mapping_review_candidates%ROWTYPE;
-    o supplier_offers%ROWTYPE;
-    prior supplier_mapping_decisions%ROWTYPE;
+    b "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches%ROWTYPE;
+    c "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates%ROWTYPE;
+    o "__BUFFALO_TARGET_SCHEMA__".supplier_offers%ROWTYPE;
+    prior "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions%ROWTYPE;
     expected_payload JSONB;
     rejection_source_key TEXT;
 BEGIN
     IF current_setting('transaction_isolation')<>'serializable' THEN
         RAISE EXCEPTION 'mapping decisions require SERIALIZABLE isolation';
     END IF;
-    PERFORM persistent_mapping_require_enabled_capability(
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_enabled_capability(
         CASE NEW.decision_origin
           WHEN 'HUMAN' THEN 'human_mapping_writes_enabled'
           ELSE 'policy_mapping_writes_enabled'
@@ -1504,40 +2043,25 @@ BEGIN
     PERFORM pg_advisory_xact_lock(
         hashtextextended('supplier-mapping:'||NEW.decision_scope_sha256,0)
     );
-    PERFORM pg_advisory_xact_lock(
-        hashtextextended('supplier-offer-key:'||NEW.operational_offer_key_sha256,0)
-    );
+    IF NEW.operational_offer_key_sha256 IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(
+            hashtextextended('supplier-offer-key:'||NEW.operational_offer_key_sha256,0)
+        );
+    END IF;
 
-    SELECT * INTO b FROM supplier_mapping_review_batches
+    SELECT * INTO b FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches
      WHERE review_batch_id=NEW.review_batch_id FOR SHARE;
-    SELECT * INTO c FROM supplier_mapping_review_candidates
+    SELECT * INTO c FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
      WHERE review_batch_id=NEW.review_batch_id AND candidate_id=NEW.candidate_id
      FOR SHARE;
-    PERFORM 1 FROM variants WHERE variant_id=NEW.variant_id FOR SHARE;
-    PERFORM 1 FROM vendors WHERE vendor_id=NEW.vendor_id FOR SHARE;
-    IF NOT FOUND OR b.review_batch_id IS NULL OR c.candidate_id IS NULL THEN
-        RAISE EXCEPTION 'decision batch, candidate, Variant, or vendor is absent';
+    IF b.review_batch_id IS NULL OR c.candidate_id IS NULL THEN
+        RAISE EXCEPTION 'decision batch or candidate is absent';
     END IF;
 
     IF NEW.expected_batch_payload_sha256 IS DISTINCT FROM b.payload_sha256
        OR NEW.expected_candidate_sha256 IS DISTINCT FROM c.candidate_sha256
-       OR NEW.expected_catalog_sha256 IS DISTINCT FROM
-            persistent_mapping_catalog_fingerprint(NEW.variant_id)
-       OR NEW.expected_vendor_sha256 IS DISTINCT FROM
-            persistent_mapping_vendor_fingerprint(NEW.vendor_id)
-       OR NEW.expected_rejection_memory_sha256 IS DISTINCT FROM
-            persistent_mapping_rejection_fingerprint(
-                NEW.vendor_id,
-                'persistent-mapping:'||NEW.supplier_identity_key_sha256,
-                CASE WHEN NEW.action='REJECT_MAPPING'
-                     THEN NEW.result_rejection_id ELSE NULL END
-            )
        OR NEW.decision_scope_sha256 IS DISTINCT FROM c.decision_scope_sha256
-       OR NEW.supplier_identity_key_sha256 IS DISTINCT FROM c.supplier_identity_key_sha256
-       OR NEW.operational_offer_key_sha256 IS DISTINCT FROM c.operational_offer_key_sha256
        OR NEW.printed_occurrence_sha256 IS DISTINCT FROM c.printed_occurrence_sha256
-       OR NEW.variant_id IS DISTINCT FROM c.proposed_variant_id
-       OR NEW.vendor_id IS DISTINCT FROM c.proposed_vendor_id
        OR NEW.distributor_product_id_state IS DISTINCT FROM c.distributor_product_id_state
        OR NEW.distributor_product_id_value IS DISTINCT FROM c.distributor_product_id_value
        OR NEW.supplier_code_state IS DISTINCT FROM c.supplier_code_state
@@ -1558,52 +2082,86 @@ BEGIN
        OR NEW.assortable_state IS DISTINCT FROM c.assortable_state
        OR NEW.assortable_value IS DISTINCT FROM c.assortable_value
        OR NEW.reviewed_facts IS DISTINCT FROM
-            persistent_mapping_candidate_reviewed_facts(c)
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_reviewed_facts(c)
        OR NEW.evidence_set_sha256 IS DISTINCT FROM
-            persistent_mapping_candidate_evidence_set_sha256(c)
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_candidate_evidence_set_sha256(c)
        OR NEW.component_relationships IS DISTINCT FROM c.component_relationships
        OR NEW.owner_clarifications IS DISTINCT FROM c.owner_clarifications
        OR NEW.historical_capture_scope IS DISTINCT FROM c.historical_capture_scope THEN
         RAISE EXCEPTION 'mapping preview is stale or candidate identity differs';
     END IF;
+    IF NEW.action='DEFER' THEN
+        IF NEW.variant_id IS NOT NULL OR NEW.vendor_id IS NOT NULL
+           OR NEW.supplier_identity_key_sha256 IS NOT NULL
+           OR NEW.operational_offer_key_sha256 IS NOT NULL THEN
+            RAISE EXCEPTION 'defer cannot invent an operational identity';
+        END IF;
+    ELSIF NEW.variant_id IS DISTINCT FROM c.proposed_variant_id
+       OR NEW.vendor_id IS DISTINCT FROM c.proposed_vendor_id
+       OR NEW.supplier_identity_key_sha256 IS DISTINCT FROM
+            c.supplier_identity_key_sha256
+       OR NEW.operational_offer_key_sha256 IS DISTINCT FROM
+            c.operational_offer_key_sha256 THEN
+        RAISE EXCEPTION 'mapping action target differs from candidate';
+    END IF;
 
     IF NEW.supersedes_mapping_decision_id IS NOT NULL THEN
-        SELECT * INTO prior FROM supplier_mapping_decisions
+        SELECT * INTO prior FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
          WHERE mapping_decision_id=NEW.supersedes_mapping_decision_id FOR UPDATE;
         IF prior.mapping_decision_id IS NULL
            OR prior.decision_scope_sha256<>NEW.decision_scope_sha256
-           OR EXISTS (SELECT 1 FROM supplier_mapping_decisions d
+           OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
                        WHERE d.supersedes_mapping_decision_id=prior.mapping_decision_id) THEN
             RAISE EXCEPTION 'stale or wrong-scope prior mapping decision';
         END IF;
     END IF;
 
     IF NEW.decision_origin='HUMAN' THEN
-        PERFORM persistent_mapping_require_human_context(
+        PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_human_context(
             NEW.human_principal_ref,NEW.human_role_ref,
             NEW.human_authn_context_sha256,'SUPPLIER_MAPPING_DECIDE'
         );
         IF NEW.preview_sha256 IS DISTINCT FROM
-                persistent_mapping_decision_preview_sha256(NEW)
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_decision_preview_sha256(NEW)
            OR NEW.confirmation_sha256 IS DISTINCT FROM
-                persistent_mapping_decision_confirmation_sha256(NEW) THEN
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_decision_confirmation_sha256(NEW) THEN
             RAISE EXCEPTION 'mapping preview or separate confirmation is not bound';
         END IF;
     ELSIF NEW.offer_class<>'REGULAR'
-       OR NEW.supplier_offer_package_type<>'STANDARD'
+       OR NEW.result_offer_package_type<>'STANDARD'
        OR NEW.supplier_code_state<>'VALUE'
        OR btrim(NEW.supplier_code_value)=''
        OR NEW.supplier_code_value<>btrim(NEW.supplier_code_value) THEN
         RAISE EXCEPTION 'policy mapping is limited to an exact regular standard offer';
-    ELSIF NOT supplier_mapping_policy_is_published(
+    ELSIF NOT "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_policy_is_published(
         NEW.policy_ref,NEW.policy_version,NEW.policy_publication_sha256,
         NEW.evidence_set_sha256
     ) THEN
         RAISE EXCEPTION 'no published mapping policy authorizes this decision';
     END IF;
 
-    rejection_source_key := 'persistent-mapping:'||NEW.supplier_identity_key_sha256;
+    rejection_source_key := CASE
+        WHEN NEW.supplier_identity_key_sha256 IS NULL THEN NULL
+        ELSE 'persistent-mapping:'||NEW.supplier_identity_key_sha256
+    END;
     IF NEW.action='APPROVE_MAPPING' THEN
+        PERFORM 1 FROM "__BUFFALO_TARGET_SCHEMA__".variants WHERE variant_id=NEW.variant_id FOR SHARE;
+        IF NOT FOUND OR NOT EXISTS (
+            SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".vendors v
+             WHERE v.vendor_id=NEW.vendor_id AND v.active FOR SHARE
+        ) THEN
+            RAISE EXCEPTION 'mapping approval requires an active canonical Variant and vendor';
+        END IF;
+        IF NEW.expected_catalog_sha256 IS DISTINCT FROM
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_catalog_fingerprint(NEW.variant_id)
+           OR NEW.expected_vendor_sha256 IS DISTINCT FROM
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_vendor_fingerprint(NEW.vendor_id)
+           OR NEW.expected_rejection_memory_sha256 IS DISTINCT FROM
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_fingerprint(
+                    NEW.vendor_id,rejection_source_key,NULL
+                ) THEN
+            RAISE EXCEPTION 'mapping approval catalog, vendor, or rejection preview is stale';
+        END IF;
         IF b.structural_state<>'READY' OR b.source_evidence_state<>'READY'
            OR b.semantic_state<>'READY' OR b.source_is_simulation
            OR jsonb_array_length(c.blockers)<>0 THEN
@@ -1633,7 +2191,7 @@ BEGIN
               ))
            OR NEW.offer_class='UNKNOWN'
            OR NEW.assortment_scope_state<>'VALUE'
-           OR NEW.supplier_offer_package_type IS DISTINCT FROM CASE NEW.offer_class
+           OR NEW.result_offer_package_type IS DISTINCT FROM CASE NEW.offer_class
                 WHEN 'REGULAR' THEN 'STANDARD'
                 WHEN 'GIFT' THEN 'GIFT'
                 WHEN 'SPECIAL' THEN 'SPECIAL'
@@ -1643,15 +2201,11 @@ BEGIN
               END THEN
             RAISE EXCEPTION 'approval lacks a supported exact operational offer identity';
         END IF;
-        IF NOT is_procurement_eligible_variant(NEW.variant_id)
-           OR NOT EXISTS (
-                SELECT 1 FROM vendors v
-                 WHERE v.vendor_id=NEW.vendor_id AND v.active
-              ) THEN
+        IF NOT "__BUFFALO_TARGET_SCHEMA__".is_procurement_eligible_variant(NEW.variant_id) THEN
             RAISE EXCEPTION 'mapping approval requires an active canonical Variant and vendor';
         END IF;
         IF EXISTS (
-            SELECT 1 FROM mapping_rejections r
+            SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".mapping_rejections r
              WHERE r.active AND r.mapping_type='SUPPLIER_OFFER'
                AND r.vendor_id=NEW.vendor_id
                AND r.rejected_variant_id=NEW.variant_id
@@ -1662,12 +2216,12 @@ BEGIN
         PERFORM pg_advisory_xact_lock(
             hashtextextended('supplier-offer-id:'||NEW.result_offer_id,0)
         );
-        SELECT * INTO o FROM supplier_offers
+        SELECT * INTO o FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offers
          WHERE offer_id=NEW.result_offer_id FOR SHARE;
         IF o.offer_id IS NULL
            OR o.variant_id<>NEW.variant_id OR o.vendor_id<>NEW.vendor_id
            OR o.supplier_sku IS DISTINCT FROM NEW.supplier_code_value
-           OR o.package_type<>NEW.supplier_offer_package_type
+           OR o.package_type<>NEW.result_offer_package_type
            OR o.size_text IS DISTINCT FROM NEW.size_value
            OR o.raw_pack IS DISTINCT FROM NEW.raw_pack_value
            OR o.shopify_units_per_case IS DISTINCT FROM NEW.shopify_units_value
@@ -1676,7 +2230,7 @@ BEGIN
            OR o.assortment_group IS DISTINCT FROM NEW.assortment_group_value
            OR o.assortable IS DISTINCT FROM NEW.assortable_value
            OR o.confidence<>'VERIFIED'
-           OR persistent_mapping_offer_fingerprint(o.offer_id)
+           OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_fingerprint(o.offer_id)
                 IS DISTINCT FROM NEW.result_offer_contract_sha256 THEN
             RAISE EXCEPTION 'resulting supplier offer contract differs';
         END IF;
@@ -1686,12 +2240,12 @@ BEGIN
             OR o.source_page IS DISTINCT FROM c.source_page_start
             OR o.valid_from IS NOT NULL OR o.valid_to IS NOT NULL
             OR o.replaces_offer_id IS NOT NULL
-            OR persistent_mapping_offer_has_prior_references(o.offer_id)
+            OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_has_prior_references(o.offer_id)
         ) THEN
             RAISE EXCEPTION 'mapping-created supplier offer must be inactive and unreferenced';
         END IF;
         IF EXISTS (
-            SELECT 1 FROM supplier_mapping_decisions d
+            SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
              WHERE d.action='APPROVE_MAPPING'
                AND d.operational_offer_key_sha256=NEW.operational_offer_key_sha256
                AND d.result_offer_id<>NEW.result_offer_id
@@ -1699,7 +2253,7 @@ BEGIN
             RAISE EXCEPTION 'equivalent printed occurrences must share one operational offer';
         END IF;
         IF EXISTS (
-            SELECT 1 FROM supplier_mapping_decisions d
+            SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
              WHERE d.action='APPROVE_MAPPING'
                AND d.result_offer_id=NEW.result_offer_id
                AND d.operational_offer_key_sha256<>NEW.operational_offer_key_sha256
@@ -1707,8 +2261,26 @@ BEGIN
             RAISE EXCEPTION 'one operational offer cannot represent different material identities';
         END IF;
     ELSIF NEW.action='REJECT_MAPPING' THEN
+        PERFORM 1 FROM "__BUFFALO_TARGET_SCHEMA__".variants WHERE variant_id=NEW.variant_id FOR SHARE;
+        IF NOT FOUND OR NOT EXISTS (
+            SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".vendors v WHERE v.vendor_id=NEW.vendor_id FOR SHARE
+        ) OR NEW.distributor_product_id_state<>'VALUE'
+          OR btrim(NEW.distributor_product_id_value)=''
+          OR rejection_source_key IS NULL THEN
+            RAISE EXCEPTION 'targeted rejection requires exact Variant, vendor, and supplier identity';
+        END IF;
+        IF NEW.expected_catalog_sha256 IS DISTINCT FROM
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_catalog_fingerprint(NEW.variant_id)
+           OR NEW.expected_vendor_sha256 IS DISTINCT FROM
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_vendor_fingerprint(NEW.vendor_id)
+           OR NEW.expected_rejection_memory_sha256 IS DISTINCT FROM
+                "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_fingerprint(
+                    NEW.vendor_id,rejection_source_key,NEW.result_rejection_id
+                ) THEN
+            RAISE EXCEPTION 'mapping rejection target or evidence preview is stale';
+        END IF;
         IF NOT EXISTS (
-            SELECT 1 FROM mapping_rejections r
+            SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".mapping_rejections r
              WHERE r.rejection_id=NEW.result_rejection_id AND r.active
                AND r.mapping_type='SUPPLIER_OFFER'
                AND r.vendor_id=NEW.vendor_id
@@ -1717,7 +2289,7 @@ BEGIN
                AND r.rejected_by IS NOT DISTINCT FROM COALESCE(
                     NEW.human_principal_ref,NEW.service_principal_ref
                )
-               AND persistent_mapping_rejection_contract_fingerprint(r.rejection_id)
+               AND "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_contract_fingerprint(r.rejection_id)
                     IS NOT DISTINCT FROM NEW.result_rejection_contract_sha256
         ) THEN
             RAISE EXCEPTION 'mapping rejection result differs from decision scope';
@@ -1728,33 +2300,36 @@ BEGIN
         'mapping_decision_id','decision_idempotency_key','canonical_payload',
         'payload_sha256','decided_at','decided_txid'
     ];
-    IF NEW.canonical_payload IS DISTINCT FROM expected_payload
+    IF NEW.request_sha256 IS DISTINCT FROM
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_decision_request_sha256(NEW)
+       OR NEW.canonical_payload IS DISTINCT FROM expected_payload
        OR NEW.payload_sha256 IS DISTINCT FROM
-            persistent_mapping_json_sha256(expected_payload) THEN
-        RAISE EXCEPTION 'mapping decision canonical payload or fingerprint differs';
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(expected_payload) THEN
+        RAISE EXCEPTION 'mapping decision request, canonical payload, or fingerprint differs';
     END IF;
     RETURN NEW;
 END
 $$;
 
 DROP TRIGGER IF EXISTS trg_validate_supplier_mapping_decision_insert
-    ON supplier_mapping_decisions;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions;
 CREATE TRIGGER trg_validate_supplier_mapping_decision_insert
-BEFORE INSERT ON supplier_mapping_decisions
-FOR EACH ROW EXECUTE FUNCTION validate_supplier_mapping_decision_insert();
+BEFORE INSERT ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_mapping_decision_insert();
 DROP TRIGGER IF EXISTS trg_immutable_supplier_mapping_decisions
-    ON supplier_mapping_decisions;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions;
 CREATE TRIGGER trg_immutable_supplier_mapping_decisions
-BEFORE UPDATE OR DELETE ON supplier_mapping_decisions
-FOR EACH ROW EXECUTE FUNCTION reject_persistent_mapping_mutation();
+BEFORE UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".reject_persistent_mapping_mutation();
 
-CREATE OR REPLACE FUNCTION protect_persistent_mapping_rejection_contract()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".protect_persistent_mapping_rejection_contract()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 BEGIN
     IF EXISTS (
-        SELECT 1 FROM supplier_mapping_decisions d
+        SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
          WHERE d.action='REJECT_MAPPING'
            AND d.result_rejection_id=OLD.rejection_id
     ) THEN
@@ -1766,22 +2341,22 @@ END
 $$;
 
 DROP TRIGGER IF EXISTS trg_protect_persistent_mapping_rejection_contract
-    ON mapping_rejections;
+    ON "__BUFFALO_TARGET_SCHEMA__".mapping_rejections;
 CREATE TRIGGER trg_protect_persistent_mapping_rejection_contract
-BEFORE UPDATE OR DELETE ON mapping_rejections
-FOR EACH ROW EXECUTE FUNCTION protect_persistent_mapping_rejection_contract();
+BEFORE UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".mapping_rejections
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".protect_persistent_mapping_rejection_contract();
 
-CREATE TABLE IF NOT EXISTS supplier_offer_selection_events (
+CREATE TABLE IF NOT EXISTS "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events (
     selection_event_id UUID PRIMARY KEY,
-    selection_idempotency_key UUID NOT NULL UNIQUE,
-    variant_id TEXT NOT NULL REFERENCES variants(variant_id) ON DELETE RESTRICT,
+    selection_idempotency_key UUID NOT NULL,
+    variant_id TEXT NOT NULL REFERENCES "__BUFFALO_TARGET_SCHEMA__".variants(variant_id) ON DELETE RESTRICT,
     selection_scope TEXT NOT NULL DEFAULT 'ROUTINE_PROCUREMENT_STANDARD'
         CHECK (selection_scope='ROUTINE_PROCUREMENT_STANDARD'),
     action TEXT NOT NULL CHECK (action IN ('SELECT','CLEAR')),
-    selected_offer_id BIGINT REFERENCES supplier_offers(offer_id) ON DELETE RESTRICT,
+    selected_offer_id BIGINT REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_offers(offer_id) ON DELETE RESTRICT,
     mapping_decision_id UUID,
     expected_prior_event_id UUID
-        REFERENCES supplier_offer_selection_events(selection_event_id) ON DELETE RESTRICT,
+        REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events(selection_event_id) ON DELETE RESTRICT,
     expected_prior_head_version BIGINT NOT NULL CHECK (expected_prior_head_version>=0),
     expected_mapping_decision_sha256 TEXT,
     expected_offer_contract_sha256 TEXT,
@@ -1802,8 +2377,10 @@ CREATE TABLE IF NOT EXISTS supplier_offer_selection_events (
     selected_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     selected_txid BIGINT NOT NULL DEFAULT txid_current(),
     FOREIGN KEY (mapping_decision_id,selected_offer_id)
-        REFERENCES supplier_mapping_decisions(mapping_decision_id,result_offer_id)
+        REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(mapping_decision_id,result_offer_id)
         ON DELETE RESTRICT,
+    CONSTRAINT uq_supplier_offer_selection_events_idempotency
+        UNIQUE (selection_idempotency_key),
     CHECK (effective_through IS NULL OR effective_through>=effective_from),
     CHECK (
         (action='SELECT' AND selected_offer_id IS NOT NULL
@@ -1822,12 +2399,12 @@ CREATE TABLE IF NOT EXISTS supplier_offer_selection_events (
     )
 );
 
-CREATE TABLE IF NOT EXISTS supplier_offer_selection_heads (
-    variant_id TEXT NOT NULL REFERENCES variants(variant_id) ON DELETE RESTRICT,
+CREATE TABLE IF NOT EXISTS "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads (
+    variant_id TEXT NOT NULL REFERENCES "__BUFFALO_TARGET_SCHEMA__".variants(variant_id) ON DELETE RESTRICT,
     selection_scope TEXT NOT NULL DEFAULT 'ROUTINE_PROCUREMENT_STANDARD'
         CHECK (selection_scope='ROUTINE_PROCUREMENT_STANDARD'),
     selection_event_id UUID NOT NULL UNIQUE
-        REFERENCES supplier_offer_selection_events(selection_event_id) ON DELETE RESTRICT,
+        REFERENCES "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events(selection_event_id) ON DELETE RESTRICT,
     head_version BIGINT NOT NULL CHECK (head_version>=1),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     updated_txid BIGINT NOT NULL DEFAULT txid_current(),
@@ -1835,19 +2412,20 @@ CREATE TABLE IF NOT EXISTS supplier_offer_selection_heads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_offer_selection_events_offer
-    ON supplier_offer_selection_events(selected_offer_id)
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events(selected_offer_id)
     WHERE selected_offer_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_offer_selection_events_mapping
-    ON supplier_offer_selection_events(mapping_decision_id)
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events(mapping_decision_id)
     WHERE mapping_decision_id IS NOT NULL;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_selection_preview_sha256(
-    e supplier_offer_selection_events
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_selection_preview_sha256(
+    e "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(
         (to_jsonb(e)-ARRAY[
             'selection_event_id','canonical_payload','payload_sha256',
             'selected_at','selected_txid','human_principal_ref','human_role_ref',
@@ -1858,13 +2436,14 @@ AS $$
     )
 $$;
 
-CREATE OR REPLACE FUNCTION persistent_mapping_selection_confirmation_sha256(
-    e supplier_offer_selection_events
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_selection_confirmation_sha256(
+    e "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events
 )
 RETURNS TEXT
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-    SELECT persistent_mapping_json_sha256(jsonb_build_object(
+    SELECT "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(jsonb_build_object(
         'confirmation_contract_version','HUMAN_ROUTINE_SELECTION_CONFIRMATION_V1',
         'preview_sha256',e.preview_sha256,
         'principal_ref',e.human_principal_ref,
@@ -1874,40 +2453,41 @@ AS $$
     ))
 $$;
 
-CREATE OR REPLACE FUNCTION validate_supplier_offer_selection_event_insert()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_offer_selection_event_insert()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE
-    current_head supplier_offer_selection_heads%ROWTYPE;
-    mapping supplier_mapping_decisions%ROWTYPE;
-    offer supplier_offers%ROWTYPE;
-    candidate supplier_mapping_review_candidates%ROWTYPE;
+    current_head "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads%ROWTYPE;
+    mapping "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions%ROWTYPE;
+    offer "__BUFFALO_TARGET_SCHEMA__".supplier_offers%ROWTYPE;
+    candidate "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates%ROWTYPE;
     expected_payload JSONB;
 BEGIN
     IF current_setting('transaction_isolation')<>'serializable' THEN
         RAISE EXCEPTION 'routine selection requires SERIALIZABLE isolation';
     END IF;
-    PERFORM persistent_mapping_require_enabled_capability(
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_enabled_capability(
         'routine_selection_writes_enabled'
     );
     IF NEW.selected_txid<>txid_current() THEN
         RAISE EXCEPTION 'selection event transaction identity differs';
     END IF;
-    PERFORM persistent_mapping_require_human_context(
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_require_human_context(
         NEW.human_principal_ref,NEW.human_role_ref,
         NEW.human_authn_context_sha256,'ROUTINE_OFFER_SELECT'
     );
     IF NEW.preview_sha256 IS DISTINCT FROM
-            persistent_mapping_selection_preview_sha256(NEW)
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_selection_preview_sha256(NEW)
        OR NEW.confirmation_sha256 IS DISTINCT FROM
-            persistent_mapping_selection_confirmation_sha256(NEW) THEN
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_selection_confirmation_sha256(NEW) THEN
         RAISE EXCEPTION 'selection preview or separate confirmation is not bound';
     END IF;
     PERFORM pg_advisory_xact_lock(
         hashtextextended('routine-offer-selection:'||NEW.variant_id,0)
     );
-    SELECT * INTO current_head FROM supplier_offer_selection_heads
+    SELECT * INTO current_head FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads
      WHERE variant_id=NEW.variant_id AND selection_scope=NEW.selection_scope
      FOR UPDATE;
     IF current_head.selection_event_id IS NULL THEN
@@ -1920,16 +2500,16 @@ BEGIN
         RAISE EXCEPTION 'stale prior selection head';
     END IF;
     IF NEW.expected_catalog_sha256 IS DISTINCT FROM
-        persistent_mapping_catalog_fingerprint(NEW.variant_id) THEN
+        "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_catalog_fingerprint(NEW.variant_id) THEN
         RAISE EXCEPTION 'selection catalog preview is stale';
     END IF;
 
     IF NEW.action='SELECT' THEN
-        SELECT * INTO mapping FROM supplier_mapping_decisions
+        SELECT * INTO mapping FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions
          WHERE mapping_decision_id=NEW.mapping_decision_id FOR SHARE;
-        SELECT * INTO offer FROM supplier_offers
+        SELECT * INTO offer FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offers
          WHERE offer_id=NEW.selected_offer_id FOR SHARE;
-        SELECT * INTO candidate FROM supplier_mapping_review_candidates
+        SELECT * INTO candidate FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates
          WHERE candidate_id=mapping.candidate_id FOR SHARE;
         IF mapping.mapping_decision_id IS NULL OR mapping.action<>'APPROVE_MAPPING'
            OR mapping.variant_id<>NEW.variant_id
@@ -1938,38 +2518,38 @@ BEGIN
                 NEW.preview_sha256=mapping.preview_sha256
                 OR NEW.confirmation_sha256=mapping.confirmation_sha256
               ))
-           OR EXISTS (SELECT 1 FROM supplier_mapping_decisions successor
+           OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions successor
                        WHERE successor.supersedes_mapping_decision_id=mapping.mapping_decision_id)
            OR candidate.offer_class<>'REGULAR'
-           OR mapping.supplier_offer_package_type<>'STANDARD'
+           OR mapping.result_offer_package_type<>'STANDARD'
            OR mapping.supplier_code_state<>'VALUE'
            OR offer.offer_id IS NULL OR offer.variant_id<>NEW.variant_id
            OR offer.package_type<>'STANDARD'
-           OR persistent_mapping_json_sha256(mapping.canonical_payload)
+           OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(mapping.canonical_payload)
                 IS DISTINCT FROM NEW.expected_mapping_decision_sha256
-           OR persistent_mapping_offer_fingerprint(offer.offer_id)
+           OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_fingerprint(offer.offer_id)
                 IS DISTINCT FROM NEW.expected_offer_contract_sha256
-           OR persistent_mapping_vendor_fingerprint(mapping.vendor_id)
+           OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_vendor_fingerprint(mapping.vendor_id)
                 IS DISTINCT FROM NEW.expected_vendor_sha256
-           OR persistent_mapping_rejection_fingerprint(
+           OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_fingerprint(
                 mapping.vendor_id,
                 'persistent-mapping:'||mapping.supplier_identity_key_sha256,
                 NULL
               ) IS DISTINCT FROM NEW.expected_rejection_memory_sha256
-           OR NOT is_procurement_eligible_variant(NEW.variant_id)
-           OR NOT EXISTS (SELECT 1 FROM vendors v
+           OR NOT "__BUFFALO_TARGET_SCHEMA__".is_procurement_eligible_variant(NEW.variant_id)
+           OR NOT EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".vendors v
                            WHERE v.vendor_id=mapping.vendor_id AND v.active)
            OR (offer.valid_from IS NOT NULL AND offer.valid_from>NEW.effective_from)
            OR (offer.valid_to IS NOT NULL AND offer.valid_to<NEW.effective_from)
            OR EXISTS (
-                SELECT 1 FROM mapping_rejections r
+                SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".mapping_rejections r
                  WHERE r.active AND r.mapping_type='SUPPLIER_OFFER'
                    AND r.vendor_id=mapping.vendor_id
                    AND r.rejected_variant_id=NEW.variant_id
                    AND r.source_key='persistent-mapping:'||mapping.supplier_identity_key_sha256
               )
            OR EXISTS (
-                SELECT 1 FROM supplier_offers reused
+                SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offers reused
                  WHERE reused.vendor_id=mapping.vendor_id
                    AND reused.supplier_sku=mapping.supplier_code_value
                    AND reused.offer_id<>offer.offer_id
@@ -1979,11 +2559,11 @@ BEGIN
         END IF;
         IF NOT offer.active AND (
             NOT EXISTS (
-                SELECT 1 FROM supplier_mapping_decisions origin
+                SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions origin
                  WHERE origin.result_offer_id=offer.offer_id
                    AND origin.offer_link_kind='CREATED_INACTIVE'
             )
-            OR persistent_mapping_offer_has_prior_references(offer.offer_id)
+            OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_has_prior_references(offer.offer_id)
         ) THEN
             RAISE EXCEPTION 'inactive selection is not a fresh unpriced mapping result';
         END IF;
@@ -1995,18 +2575,19 @@ BEGIN
     ];
     IF NEW.canonical_payload IS DISTINCT FROM expected_payload
        OR NEW.payload_sha256 IS DISTINCT FROM
-            persistent_mapping_json_sha256(expected_payload) THEN
+            "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(expected_payload) THEN
         RAISE EXCEPTION 'selection canonical payload or fingerprint differs';
     END IF;
     RETURN NEW;
 END
 $$;
 
-CREATE OR REPLACE FUNCTION validate_supplier_offer_selection_head_change()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_offer_selection_head_change()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
-DECLARE event supplier_offer_selection_events%ROWTYPE;
+DECLARE event "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events%ROWTYPE;
 BEGIN
     IF TG_OP='DELETE' THEN
         RAISE EXCEPTION 'routine selection head cannot be deleted';
@@ -2014,7 +2595,7 @@ BEGIN
     IF NEW.updated_txid<>txid_current() THEN
         RAISE EXCEPTION 'selection head transaction identity differs';
     END IF;
-    SELECT * INTO event FROM supplier_offer_selection_events
+    SELECT * INTO event FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events
      WHERE selection_event_id=NEW.selection_event_id;
     IF event.selection_event_id IS NULL OR event.selected_txid<>txid_current()
        OR event.variant_id<>NEW.variant_id
@@ -2036,13 +2617,14 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION validate_supplier_offer_selection_event_committed()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_offer_selection_event_committed()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM supplier_offer_selection_heads h
+        SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads h
          WHERE h.variant_id=NEW.variant_id
            AND h.selection_scope=NEW.selection_scope
            AND h.selection_event_id=NEW.selection_event_id
@@ -2055,33 +2637,34 @@ END
 $$;
 
 DROP TRIGGER IF EXISTS trg_validate_offer_selection_event_insert
-    ON supplier_offer_selection_events;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events;
 CREATE TRIGGER trg_validate_offer_selection_event_insert
-BEFORE INSERT ON supplier_offer_selection_events
-FOR EACH ROW EXECUTE FUNCTION validate_supplier_offer_selection_event_insert();
+BEFORE INSERT ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_offer_selection_event_insert();
 DROP TRIGGER IF EXISTS trg_immutable_offer_selection_events
-    ON supplier_offer_selection_events;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events;
 CREATE TRIGGER trg_immutable_offer_selection_events
-BEFORE UPDATE OR DELETE ON supplier_offer_selection_events
-FOR EACH ROW EXECUTE FUNCTION reject_persistent_mapping_mutation();
+BEFORE UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".reject_persistent_mapping_mutation();
 DROP TRIGGER IF EXISTS trg_validate_offer_selection_head_change
-    ON supplier_offer_selection_heads;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads;
 CREATE TRIGGER trg_validate_offer_selection_head_change
-BEFORE INSERT OR UPDATE OR DELETE ON supplier_offer_selection_heads
-FOR EACH ROW EXECUTE FUNCTION validate_supplier_offer_selection_head_change();
+BEFORE INSERT OR UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_offer_selection_head_change();
 DROP TRIGGER IF EXISTS trg_validate_offer_selection_event_committed
-    ON supplier_offer_selection_events;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events;
 CREATE CONSTRAINT TRIGGER trg_validate_offer_selection_event_committed
-AFTER INSERT ON supplier_offer_selection_events DEFERRABLE INITIALLY DEFERRED
-FOR EACH ROW EXECUTE FUNCTION validate_supplier_offer_selection_event_committed();
+AFTER INSERT ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".validate_supplier_offer_selection_event_committed();
 
-CREATE OR REPLACE FUNCTION protect_persistently_mapped_offer_contract()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".protect_persistently_mapped_offer_contract()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 BEGIN
     IF EXISTS (
-        SELECT 1 FROM supplier_mapping_decisions d
+        SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
          WHERE d.action='APPROVE_MAPPING' AND d.result_offer_id=OLD.offer_id
     ) AND (
         TG_OP='DELETE'
@@ -2106,17 +2689,18 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION protect_unactivated_mapped_offer_price()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".protect_unactivated_mapped_offer_price()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE checked_offer_id BIGINT;
 BEGIN
     checked_offer_id := CASE WHEN TG_OP='DELETE' THEN OLD.offer_id ELSE NEW.offer_id END;
     IF EXISTS (
         SELECT 1
-          FROM supplier_mapping_decisions d
-          JOIN supplier_offers o ON o.offer_id=d.result_offer_id
+          FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
+          JOIN "__BUFFALO_TARGET_SCHEMA__".supplier_offers o ON o.offer_id=d.result_offer_id
          WHERE d.action='APPROVE_MAPPING'
            AND d.offer_link_kind='CREATED_INACTIVE'
            AND d.result_offer_id=checked_offer_id
@@ -2130,24 +2714,24 @@ END
 $$;
 
 DROP TRIGGER IF EXISTS trg_protect_persistently_mapped_offer_contract
-    ON supplier_offers;
+    ON "__BUFFALO_TARGET_SCHEMA__".supplier_offers;
 CREATE TRIGGER trg_protect_persistently_mapped_offer_contract
-BEFORE UPDATE OR DELETE ON supplier_offers
-FOR EACH ROW EXECUTE FUNCTION protect_persistently_mapped_offer_contract();
-DROP TRIGGER IF EXISTS trg_protect_unactivated_mapped_offer_price ON prices;
+BEFORE UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".supplier_offers
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".protect_persistently_mapped_offer_contract();
+DROP TRIGGER IF EXISTS trg_protect_unactivated_mapped_offer_price ON "__BUFFALO_TARGET_SCHEMA__".prices;
 CREATE TRIGGER trg_protect_unactivated_mapped_offer_price
-BEFORE INSERT OR UPDATE OR DELETE ON prices
-FOR EACH ROW EXECUTE FUNCTION protect_unactivated_mapped_offer_price();
+BEFORE INSERT OR UPDATE OR DELETE ON "__BUFFALO_TARGET_SCHEMA__".prices
+FOR EACH ROW EXECUTE FUNCTION "__BUFFALO_TARGET_SCHEMA__".protect_unactivated_mapped_offer_price();
 
-CREATE OR REPLACE VIEW v_effective_supplier_mapping_decisions AS
+CREATE OR REPLACE VIEW "__BUFFALO_TARGET_SCHEMA__".v_effective_supplier_mapping_decisions AS
 SELECT d.*
-  FROM supplier_mapping_decisions d
+  FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions d
  WHERE NOT EXISTS (
-    SELECT 1 FROM supplier_mapping_decisions successor
+    SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions successor
      WHERE successor.supersedes_mapping_decision_id=d.mapping_decision_id
  );
 
-CREATE OR REPLACE VIEW v_supplier_offer_selection_diagnostics AS
+CREATE OR REPLACE VIEW "__BUFFALO_TARGET_SCHEMA__".v_supplier_offer_selection_diagnostics AS
 SELECT
     h.variant_id,h.selection_scope,h.selection_event_id,h.head_version,
     e.action,e.selected_offer_id,e.mapping_decision_id,
@@ -2155,24 +2739,24 @@ SELECT
     CASE
       WHEN e.action='CLEAR' THEN 'EXPLICITLY_CLEARED'
       WHEN d.mapping_decision_id IS NULL THEN 'STALE_MAPPING_DECISION'
-      WHEN persistent_mapping_json_sha256(d.canonical_payload)
+      WHEN "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_json_sha256(d.canonical_payload)
            IS DISTINCT FROM e.expected_mapping_decision_sha256
         THEN 'STALE_MAPPING_DECISION'
-      WHEN o.offer_id IS NULL OR persistent_mapping_offer_fingerprint(o.offer_id)
+      WHEN o.offer_id IS NULL OR "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_offer_fingerprint(o.offer_id)
            IS DISTINCT FROM e.expected_offer_contract_sha256 THEN 'STALE_OFFER_CONTRACT'
-      WHEN persistent_mapping_catalog_fingerprint(h.variant_id)
+      WHEN "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_catalog_fingerprint(h.variant_id)
            IS DISTINCT FROM e.expected_catalog_sha256 THEN 'STALE_CATALOG'
-      WHEN persistent_mapping_vendor_fingerprint(d.vendor_id)
+      WHEN "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_vendor_fingerprint(d.vendor_id)
            IS DISTINCT FROM e.expected_vendor_sha256 THEN 'STALE_VENDOR'
-      WHEN persistent_mapping_rejection_fingerprint(
+      WHEN "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_rejection_fingerprint(
                d.vendor_id,'persistent-mapping:'||d.supplier_identity_key_sha256,
                NULL
            ) IS DISTINCT FROM e.expected_rejection_memory_sha256
         THEN 'STALE_REJECTION_MEMORY'
-      WHEN NOT is_procurement_eligible_variant(h.variant_id) THEN 'INELIGIBLE_VARIANT'
+      WHEN NOT "__BUFFALO_TARGET_SCHEMA__".is_procurement_eligible_variant(h.variant_id) THEN 'INELIGIBLE_VARIANT'
       WHEN NOT v.active THEN 'INACTIVE_VENDOR'
       WHEN EXISTS (
-        SELECT 1 FROM mapping_rejections r
+        SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".mapping_rejections r
          WHERE r.active AND r.mapping_type='SUPPLIER_OFFER'
            AND r.vendor_id=d.vendor_id AND r.rejected_variant_id=d.variant_id
            AND r.source_key='persistent-mapping:'||d.supplier_identity_key_sha256
@@ -2185,25 +2769,25 @@ SELECT
       ELSE 'SELECTED_INACTIVE_AWAITING_SEPARATE_ACTIVATION'
     END AS selection_state,
     FALSE AS recommendation_cutover_enabled
-  FROM supplier_offer_selection_heads h
-  JOIN supplier_offer_selection_events e
+  FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads h
+  JOIN "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events e
     ON e.selection_event_id=h.selection_event_id
-  LEFT JOIN v_effective_supplier_mapping_decisions d
+  LEFT JOIN "__BUFFALO_TARGET_SCHEMA__".v_effective_supplier_mapping_decisions d
     ON d.mapping_decision_id=e.mapping_decision_id AND d.action='APPROVE_MAPPING'
-  LEFT JOIN supplier_offers o ON o.offer_id=e.selected_offer_id
-  LEFT JOIN vendors v ON v.vendor_id=o.vendor_id;
+  LEFT JOIN "__BUFFALO_TARGET_SCHEMA__".supplier_offers o ON o.offer_id=e.selected_offer_id
+  LEFT JOIN "__BUFFALO_TARGET_SCHEMA__".vendors v ON v.vendor_id=o.vendor_id;
 
-CREATE OR REPLACE VIEW v_selected_standard_supplier_offers AS
+CREATE OR REPLACE VIEW "__BUFFALO_TARGET_SCHEMA__".v_selected_standard_supplier_offers AS
 SELECT *
-  FROM v_supplier_offer_selection_diagnostics
+  FROM "__BUFFALO_TARGET_SCHEMA__".v_supplier_offer_selection_diagnostics
  WHERE selection_state IN
     ('SELECTED_ACTIVE','SELECTED_INACTIVE_AWAITING_SEPARATE_ACTIVATION');
 
-CREATE OR REPLACE VIEW v_supplier_offer_selection_shadow AS
+CREATE OR REPLACE VIEW "__BUFFALO_TARGET_SCHEMA__".v_supplier_offer_selection_shadow AS
 WITH legacy AS (
     SELECT o.variant_id,count(*) AS active_standard_count,
            min(o.offer_id) AS only_active_standard_offer_id
-      FROM supplier_offers o
+      FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offers o
      WHERE o.active AND o.package_type='STANDARD'
      GROUP BY o.variant_id
 )
@@ -2221,22 +2805,167 @@ SELECT d.*,
          WHEN l.active_standard_count>1 THEN 'LEGACY_HAS_MULTIPLE_ACTIVE_STANDARD'
          ELSE 'DIFFERENT_ACTIVE_STANDARD'
        END AS shadow_comparison
-  FROM v_supplier_offer_selection_diagnostics d
+  FROM "__BUFFALO_TARGET_SCHEMA__".v_supplier_offer_selection_diagnostics d
   LEFT JOIN legacy l ON l.variant_id=d.variant_id;
 
-CREATE OR REPLACE FUNCTION assert_persistent_mapping_foundation_contract()
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_assert_safe_role_topology()
 RETURNS VOID
 LANGUAGE plpgsql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
+AS $role_topology$
+DECLARE
+    target_schema CONSTANT TEXT := '__BUFFALO_TARGET_SCHEMA_TEXT__';
+    target_schema_oid OID;
+    unsafe_path JSONB;
+BEGIN
+    SELECT n.oid INTO target_schema_oid
+      FROM pg_catalog.pg_namespace n WHERE n.nspname=target_schema;
+    IF target_schema_oid IS NULL
+       OR target_schema_oid=pg_catalog.pg_my_temp_schema()
+       OR pg_catalog.pg_is_other_temp_schema(target_schema_oid)
+       OR target_schema ~ '^pg_(toast_)?temp_[0-9]+$' THEN
+        RAISE EXCEPTION 'trusted target schema identity is absent or temporary';
+    END IF;
+
+    WITH RECURSIVE protected_owners(owner_oid) AS (
+        SELECT n.nspowner FROM pg_catalog.pg_namespace n
+         WHERE n.oid=target_schema_oid
+        UNION
+        SELECT c.relowner FROM pg_catalog.pg_class c
+         WHERE c.relnamespace=target_schema_oid AND c.relname IN (
+             'supplier_mapping_review_batches','supplier_mapping_review_candidates',
+             'supplier_mapping_decisions','supplier_offer_selection_events',
+             'supplier_offer_selection_heads','v_effective_supplier_mapping_decisions',
+             'v_supplier_offer_selection_diagnostics',
+             'v_selected_standard_supplier_offers',
+             'v_supplier_offer_selection_shadow','variants','vendors',
+             'supplier_offers','mapping_rejections','prices'
+         )
+        UNION
+        SELECT p.proowner FROM pg_catalog.pg_proc p
+         WHERE p.pronamespace=target_schema_oid AND p.proname ~
+           '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+    ), untrusted_logins AS (
+        SELECT r.oid,r.rolname FROM pg_catalog.pg_roles r
+         WHERE r.rolcanlogin AND NOT r.rolsuper
+           AND r.oid<>pg_catalog.to_regrole(current_user)::oid
+           AND r.oid<>pg_catalog.to_regrole(session_user)::oid
+    ), set_reachable(login_oid,login_name,assumed_oid,set_path) AS (
+        SELECT u.oid,u.rolname,u.oid,ARRAY[u.oid]::oid[]
+          FROM untrusted_logins u
+        UNION ALL
+        SELECT s.login_oid,s.login_name,m.roleid,s.set_path||m.roleid
+          FROM set_reachable s
+          JOIN pg_catalog.pg_auth_members m ON m.member=s.assumed_oid
+         WHERE m.set_option AND NOT m.roleid=ANY(s.set_path)
+    ), effective_after_set(
+        login_oid,login_name,assumed_oid,effective_oid,set_path,inherit_path
+    ) AS (
+        SELECT s.login_oid,s.login_name,s.assumed_oid,s.assumed_oid,
+               s.set_path,ARRAY[s.assumed_oid]::oid[]
+          FROM set_reachable s
+        UNION ALL
+        SELECT e.login_oid,e.login_name,e.assumed_oid,m.roleid,
+               e.set_path,e.inherit_path||m.roleid
+          FROM effective_after_set e
+          JOIN pg_catalog.pg_auth_members m ON m.member=e.effective_oid
+         WHERE m.inherit_option AND NOT m.roleid=ANY(e.inherit_path)
+    )
+    SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+               'login',e.login_name,
+               'assumed_role',pg_catalog.pg_get_userbyid(e.assumed_oid),
+               'owner',pg_catalog.pg_get_userbyid(o.owner_oid),
+               'set_path',e.set_path,'inherit_path',e.inherit_path
+           ) ORDER BY e.login_name,e.assumed_oid,o.owner_oid)
+      INTO unsafe_path
+      FROM effective_after_set e JOIN protected_owners o
+        ON o.owner_oid=e.effective_oid;
+    IF unsafe_path IS NOT NULL THEN
+        RAISE EXCEPTION 'untrusted login has effective owner-role path: %',unsafe_path;
+    END IF;
+
+    WITH RECURSIVE untrusted_logins AS (
+        SELECT r.oid,r.rolname FROM pg_catalog.pg_roles r
+         WHERE r.rolcanlogin AND NOT r.rolsuper
+           AND r.oid<>pg_catalog.to_regrole(current_user)::oid
+           AND r.oid<>pg_catalog.to_regrole(session_user)::oid
+    ), set_reachable(login_oid,login_name,assumed_oid,set_path) AS (
+        SELECT u.oid,u.rolname,u.oid,ARRAY[u.oid]::oid[]
+          FROM untrusted_logins u
+        UNION ALL
+        SELECT s.login_oid,s.login_name,m.roleid,s.set_path||m.roleid
+          FROM set_reachable s
+          JOIN pg_catalog.pg_auth_members m ON m.member=s.assumed_oid
+         WHERE m.set_option AND NOT m.roleid=ANY(s.set_path)
+    ), effective_principals(
+        login_oid,login_name,effective_oid,set_path,inherit_path
+    ) AS (
+        SELECT s.login_oid,s.login_name,s.assumed_oid,
+               s.set_path,ARRAY[s.assumed_oid]::oid[]
+          FROM set_reachable s
+        UNION ALL
+        SELECT e.login_oid,e.login_name,m.roleid,
+               e.set_path,e.inherit_path||m.roleid
+          FROM effective_principals e
+          JOIN pg_catalog.pg_auth_members m ON m.member=e.effective_oid
+         WHERE m.inherit_option AND NOT m.roleid=ANY(e.inherit_path)
+    ), protected_relations AS (
+        SELECT c.oid,c.relname FROM pg_catalog.pg_class c
+         WHERE c.relnamespace=target_schema_oid AND c.relname IN (
+             'supplier_mapping_review_batches','supplier_mapping_review_candidates',
+             'supplier_mapping_decisions','supplier_offer_selection_events',
+             'supplier_offer_selection_heads','v_effective_supplier_mapping_decisions',
+             'v_supplier_offer_selection_diagnostics',
+             'v_selected_standard_supplier_offers',
+             'v_supplier_offer_selection_shadow'
+         )
+    ), protected_functions AS (
+        SELECT p.oid,p.oid::regprocedure::text AS identity
+          FROM pg_catalog.pg_proc p
+         WHERE p.pronamespace=target_schema_oid AND p.proname ~
+           '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
+    ), unsafe AS (
+        SELECT e.login_name AS rolname,'schema CREATE'::text AS privilege
+          FROM effective_principals e
+         WHERE pg_catalog.has_schema_privilege(
+                   e.effective_oid,target_schema_oid,'CREATE')
+        UNION ALL
+        SELECT e.login_name,'relation '||r.relname
+          FROM effective_principals e CROSS JOIN protected_relations r
+         WHERE pg_catalog.has_table_privilege(e.effective_oid,r.oid,
+                   'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+            OR pg_catalog.has_any_column_privilege(e.effective_oid,r.oid,
+                   'SELECT,INSERT,UPDATE,REFERENCES')
+        UNION ALL
+        SELECT e.login_name,'function '||f.identity
+          FROM effective_principals e CROSS JOIN protected_functions f
+         WHERE pg_catalog.has_function_privilege(
+                   e.effective_oid,f.oid,'EXECUTE')
+    )
+    SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+               'login',rolname,'effective_privilege',privilege
+           ) ORDER BY rolname,privilege)
+      INTO unsafe_path FROM unsafe;
+    IF unsafe_path IS NOT NULL THEN
+        RAISE EXCEPTION 'untrusted login has effective mapping privilege: %',unsafe_path;
+    END IF;
+END
+$role_topology$;
+
+CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".assert_persistent_mapping_foundation_contract()
+RETURNS VOID
+LANGUAGE plpgsql STABLE
+SET search_path = pg_catalog, "__BUFFALO_TARGET_SCHEMA__", "__BUFFALO_PGCRYPTO_SCHEMA__", pg_temp
 AS $$
 DECLARE
-    target_schema TEXT := current_schema();
+    target_schema CONSTANT TEXT := '__BUFFALO_TARGET_SCHEMA_TEXT__';
     installed_contract TEXT;
     installed_catalog_sha256 TEXT;
 BEGIN
     SELECT value INTO installed_contract
-      FROM meta WHERE key='persistent_mapping_foundation_contract';
+      FROM "__BUFFALO_TARGET_SCHEMA__".meta WHERE key='persistent_mapping_foundation_contract';
     SELECT value INTO installed_catalog_sha256
-      FROM meta WHERE key='persistent_mapping_foundation_catalog_sha256';
+      FROM "__BUFFALO_TARGET_SCHEMA__".meta WHERE key='persistent_mapping_foundation_catalog_sha256';
     IF installed_contract IS DISTINCT FROM 'v1-shadow-only' THEN
         RAISE EXCEPTION 'persistent mapping foundation contract version differs: %',
             installed_contract;
@@ -2256,17 +2985,18 @@ BEGIN
     IF current_setting(
            'procurement.persistent_mapping_foundation_initial_install',true
        )='true' AND (
-       EXISTS (SELECT 1 FROM supplier_mapping_review_batches)
-       OR EXISTS (SELECT 1 FROM supplier_mapping_review_candidates)
-       OR EXISTS (SELECT 1 FROM supplier_mapping_decisions)
-       OR EXISTS (SELECT 1 FROM supplier_offer_selection_events)
-       OR EXISTS (SELECT 1 FROM supplier_offer_selection_heads)
+       EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches)
+       OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates)
+       OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions)
+       OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events)
+       OR EXISTS (SELECT 1 FROM "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads)
     ) THEN
         RAISE EXCEPTION 'migration must not adopt or synthesize mapping authority';
     END IF;
-    IF supplier_mapping_policy_is_published(NULL,NULL,NULL,NULL) THEN
+    IF "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_policy_is_published(NULL,NULL,NULL,NULL) THEN
         RAISE EXCEPTION 'absent mapping policy must fail closed';
     END IF;
+    PERFORM "__BUFFALO_TARGET_SCHEMA__".persistent_mapping_assert_safe_role_topology();
     IF EXISTS (
         SELECT 1
           FROM pg_class c
@@ -2318,7 +3048,7 @@ BEGIN
     END IF;
     IF installed_catalog_sha256 IS NULL
        OR installed_catalog_sha256 !~ '^[0-9a-f]{64}$'
-       OR compute_persistent_mapping_catalog_sha256()
+       OR "__BUFFALO_TARGET_SCHEMA__".compute_persistent_mapping_catalog_sha256()
             IS DISTINCT FROM installed_catalog_sha256 THEN
         RAISE EXCEPTION 'persistent mapping catalog signature differs';
     END IF;
@@ -2326,25 +3056,27 @@ END
 $$;
 
 REVOKE ALL ON TABLE
-    supplier_mapping_review_batches,
-    supplier_mapping_review_candidates,
-    supplier_mapping_decisions,
-    supplier_offer_selection_events,
-    supplier_offer_selection_heads,
-    v_effective_supplier_mapping_decisions,
-    v_supplier_offer_selection_diagnostics,
-    v_selected_standard_supplier_offers,
-    v_supplier_offer_selection_shadow
+    "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_batches,
+    "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates,
+    "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions,
+    "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events,
+    "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads,
+    "__BUFFALO_TARGET_SCHEMA__".v_effective_supplier_mapping_decisions,
+    "__BUFFALO_TARGET_SCHEMA__".v_supplier_offer_selection_diagnostics,
+    "__BUFFALO_TARGET_SCHEMA__".v_selected_standard_supplier_offers,
+    "__BUFFALO_TARGET_SCHEMA__".v_supplier_offer_selection_shadow
 FROM PUBLIC;
 
 DO $revoke_public_function_execution$
-DECLARE owned_function REGPROCEDURE;
+DECLARE
+    target_schema CONSTANT TEXT := '__BUFFALO_TARGET_SCHEMA_TEXT__';
+    owned_function REGPROCEDURE;
 BEGIN
     FOR owned_function IN
         SELECT p.oid::regprocedure
           FROM pg_proc p
           JOIN pg_namespace n ON n.oid=p.pronamespace
-         WHERE n.nspname=current_schema() AND p.proname ~
+         WHERE n.nspname=target_schema AND p.proname ~
            '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
     LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC',owned_function);
@@ -2358,6 +3090,7 @@ $revoke_public_function_execution$;
 -- require their own approved contract-version transition.
 DO $revoke_unconfigured_named_principals$
 DECLARE
+    target_schema CONSTANT TEXT := '__BUFFALO_TARGET_SCHEMA_TEXT__';
     relation_grant RECORD;
     column_grant RECORD;
     function_grant RECORD;
@@ -2368,7 +3101,7 @@ BEGIN
           FROM pg_class c
           JOIN pg_namespace n ON n.oid=c.relnamespace
           CROSS JOIN LATERAL aclexplode(c.relacl) privilege
-         WHERE n.nspname=current_schema()
+         WHERE n.nspname=target_schema
            AND c.relname IN (
                'supplier_mapping_review_batches',
                'supplier_mapping_review_candidates',
@@ -2385,7 +3118,7 @@ BEGIN
     LOOP
         EXECUTE format(
             'REVOKE ALL PRIVILEGES ON TABLE %I.%I FROM %I',
-            current_schema(),relation_grant.relname,
+            target_schema,relation_grant.relname,
             relation_grant.grantee_name
         );
     END LOOP;
@@ -2399,7 +3132,7 @@ BEGIN
           JOIN pg_namespace n ON n.oid=c.relnamespace
           JOIN pg_attribute a ON a.attrelid=c.oid
           CROSS JOIN LATERAL aclexplode(a.attacl) privilege
-         WHERE n.nspname=current_schema()
+         WHERE n.nspname=target_schema
            AND c.relname IN (
                'supplier_mapping_review_batches',
                'supplier_mapping_review_candidates',
@@ -2420,7 +3153,7 @@ BEGIN
                 'ON TABLE %I.%I FROM PUBLIC',
                 column_grant.attname,column_grant.attname,
                 column_grant.attname,column_grant.attname,
-                current_schema(),column_grant.relname
+                target_schema,column_grant.relname
             );
         ELSE
             EXECUTE format(
@@ -2428,7 +3161,7 @@ BEGIN
                 'ON TABLE %I.%I FROM %I',
                 column_grant.attname,column_grant.attname,
                 column_grant.attname,column_grant.attname,
-                current_schema(),column_grant.relname,column_grant.grantee_name
+                target_schema,column_grant.relname,column_grant.grantee_name
             );
         END IF;
     END LOOP;
@@ -2439,7 +3172,7 @@ BEGIN
           FROM pg_proc p
           JOIN pg_namespace n ON n.oid=p.pronamespace
           CROSS JOIN LATERAL aclexplode(p.proacl) privilege
-         WHERE n.nspname=current_schema() AND p.proname ~
+         WHERE n.nspname=target_schema AND p.proname ~
            '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|supplier_mapping_policy_is_published$|reject_persistent_mapping_|validate_mapping_review_|validate_supplier_(mapping|offer_selection)|protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|assert_persistent_mapping_)'
            AND privilege.grantee<>0
            AND privilege.grantee<>p.proowner
@@ -2452,34 +3185,13 @@ BEGIN
 END
 $revoke_unconfigured_named_principals$;
 
-INSERT INTO meta(key,value)
-VALUES ('persistent_mapping_foundation_contract','v1-shadow-only')
-ON CONFLICT(key) DO NOTHING;
-
-DO $catalog_commit$
-DECLARE
-    actual_catalog_sha256 TEXT := compute_persistent_mapping_catalog_sha256();
-    installed_catalog_sha256 TEXT;
-BEGIN
-    SELECT value INTO installed_catalog_sha256
-      FROM meta WHERE key='persistent_mapping_foundation_catalog_sha256';
-    IF current_setting(
-           'procurement.persistent_mapping_foundation_initial_install',true
-       )='true' THEN
-        IF installed_catalog_sha256 IS NOT NULL THEN
-            RAISE EXCEPTION 'catalog signature unexpectedly predates initial install';
-        END IF;
-        INSERT INTO meta(key,value)
-        VALUES ('persistent_mapping_foundation_catalog_sha256',actual_catalog_sha256);
-    ELSIF actual_catalog_sha256 IS DISTINCT FROM installed_catalog_sha256 THEN
-        RAISE EXCEPTION 'reapplied persistent mapping catalog signature differs';
-    END IF;
-END
-$catalog_commit$;
-
--- Final validation runs only after both exact metadata rows exist. It is the
--- stable assertion invoked by checksum-skipped full-chain replay.
-SELECT assert_persistent_mapping_foundation_contract();
+-- Deliberately do not invoke either trust-anchor function and do not publish
+-- contract/signature/migration metadata in this SQL body. Still inside this
+-- file transaction, the manifest-aware runner independently verifies the new
+-- assert/compute/helper definitions, invokes the verified compute function,
+-- inserts the exact v1 contract and catalog signature, invokes the verified
+-- assertion, and only then publishes this migration's checksum marker. Any
+-- failure rolls back this file's objects and all four metadata effects.
 ```
 
 ### SQL review notes that control implementation
@@ -2498,6 +3210,13 @@ SELECT assert_persistent_mapping_foundation_contract();
   in their typed state columns and canonical JSON. `VALUE` requires a value.
   Source payload, owner clarifications, relationships, component membership,
   source locator/pages, and historical capture scope remain immutable.
+- Candidate supplier-identity and operational-offer keys are nullable derived
+  facts: their versioned functions return SQL null until their stated minimum
+  identity exists. A DEFER decision deliberately stores no operational target,
+  key, result package, or mutable catalog/vendor/rejection fingerprint; its
+  exact candidate foreign key and expected immutable batch/candidate hashes
+  preserve the unresolved evidence. APPROVE remains fully strict, while REJECT
+  requires the narrower exact target/supplier scope stated above.
 - Candidate Variant/vendor references are deliberately untrusted text/UUID.
   Only a decision uses foreign keys, and the insert guard requires the reviewed
   values to equal a fresh candidate plus fresh catalog/vendor fingerprints.
@@ -2527,15 +3246,16 @@ SELECT assert_persistent_mapping_foundation_contract();
   exact component relationships on the decision; policy approval remains
   limited to one deterministic regular `STANDARD` occurrence, and only a
   regular `STANDARD` offer may become the routine head.
-- The installed catalog-hash function and stored signature make checksum-skip
-  validation fail closed on any changed/missing/extra owned column, constraint,
-  index, function, trigger, view, owner, relation/function ACL, or per-column
-  ACL. The stable assertion requires both the exact contract-version row and a
-  valid matching catalog-signature row; deletion of either fails. The runner
-  never re-executes a checksum-pinned historical file. Any later migration that
-  intentionally changes an owned object must preserve/replace the stable
-  assertion and make an explicit, checksum-pinned contract-version/signature
-  transition; an unrelated later migration leaves the signature unchanged.
+- The independently reviewed runner manifest verifies the assertion, catalog
+  compute function, and all security-relevant helper identities/properties
+  before either anchor is invoked. Only then can the verified compute result be
+  compared with the co-present stored signature. This combination fails closed
+  on changed/missing/extra owned columns, constraints, indexes, functions,
+  triggers, views, owners, relation/function/column ACLs, or unsafe effective
+  role topology. Deleting either metadata row fails. A later transition adds a
+  new ordered manifest record and atomically advances version/signature; replay
+  chooses the highest exact installed manifest prefix and never runs historical
+  SQL over it.
 - The exact predecessor check pins the referenced-offer trigger's nine-column
   `UPDATE OF` attachment as well as its function, events, timing, row scope,
   enablement, predicate, and function bytes. A weakened column list is not an
@@ -2547,7 +3267,11 @@ SELECT assert_persistent_mapping_foundation_contract();
   application-role grant belongs in this slice until the private named-role
   configuration is supplied; that later grant must be least-privilege,
   versioned, and must not expose raw GUC setting or direct table mutation to a
-  browser/client principal.
+  browser/client principal. Effective direct/transitive `INHERIT` and `SET
+  ROLE` owner paths and effective privileges are independently refused; role
+  memberships are reported, not modified. Superusers/trusted maintenance are
+  the explicit administrative boundary, not subjects supposedly constrained by
+  these ACLs.
 - Existing `variants`, `vendors`, `supplier_offers`, `supplier_aliases`,
   `mapping_rejections`, `prices`, and artifact storage remain the only
   canonical contracts for their facts. This schema stores an opaque durable
@@ -2559,20 +3283,96 @@ SELECT assert_persistent_mapping_foundation_contract();
 No public route is part of this slice. Implement these internal domain methods
 only after the authority/config changes are approved:
 
+### Shared authenticated session-lock and retry protocol
+
+All three write methods use this protocol; a method may not invent a narrower
+variant. Fixed first-release limits are `SESSION_LOCK_WAIT_SECONDS=5`,
+`TOTAL_OPERATION_SECONDS=30`, and `MAX_TRANSACTION_ATTEMPTS=3`, where three
+includes the initial attempt. A later limit change is server configuration, not
+request data.
+
+1. Authenticate the principal, authorize the exact operation, and check the
+   server-loaded capability before acquiring a database connection. This is
+   also required before returning an idempotent result: possession of a UUID
+   never authorizes replay disclosure.
+2. Canonicalize and freeze the complete request. Intake and selection use their
+   stored `payload_sha256`; a mapping decision uses
+   `PERSISTENT_MAPPING_DECISION_REQUEST_V1`/`request_sha256`, which includes the
+   idempotency key, action, actual candidate/source fields, expected state,
+   provenance, preview and confirmation, result disposition and precomputable
+   result contracts. It excludes generated decision/time/transaction IDs, a
+   generated rejection ID, and a generated `CREATED_INACTIVE` offer ID; it
+   retains the exact `LINKED_EXISTING` offer ID. The final decision
+   `payload_sha256` additionally covers the committed generated results.
+3. Borrow a dedicated or demonstrably session-affine backend connection with
+   no open or driver-implicit transaction. Do authenticated, read-only preflight
+   in autocommit only where an immutable stored candidate is needed to derive
+   contention keys. Verify that candidate again inside every business attempt.
+4. Acquire each session advisory lock once, track it locally, and use
+   `pg_try_advisory_lock` against a monotonic five-second deadline. The first
+   lock is
+   `persistent-mapping:<operation>:idempotency:<idempotency_uuid>`; it never
+   contains the payload hash, so conflicting use of one key must contend.
+   Then acquire domain locks in this global order: mapping decision scope,
+   nonnull operational-offer key, selection Variant. Within a domain, sort the
+   canonical lock strings bytewise. Advisory-hash collision only adds safe
+   serialization; it cannot merge identities.
+5. Only after all session locks have been obtained, start a **fresh**
+   `SERIALIZABLE` transaction. Set the explicit trusted schema/search path and
+   transaction-local principal, action, authentication, and capability values.
+   Re-read the idempotency key first. Same key and same complete request hash
+   returns the already committed original before stale-head/evidence checks;
+   different hash raises `IDEMPOTENCY_CONFLICT` with no mutation. Then re-read
+   all candidate/head/evidence state and acquire row locks in the documented
+   method order.
+6. On SQLSTATE `40001` or `40P01`, fully roll back, verify that the connection is
+   usable, and begin a new `SERIALIZABLE` transaction with a new snapshot while
+   retaining the already balanced session locks. Never retry inside an aborted
+   transaction. Stale preview/evidence/head, changed payload, authorization,
+   validation, foreign-key, and unrelated uniqueness failures are final. A
+   violation of one of the three named idempotency constraints is rolled back
+   and resolved by one fresh post-lock lookup: matching payload returns the
+   original, differing payload conflicts, and an absent row raises
+   `IDEMPOTENCY_PROTOCOL_VIOLATION`; it is not blindly retried. At attempt three
+   or the 30-second operation deadline, return
+   `CONCURRENT_TRANSACTION_RETRY_EXHAUSTED` after rollback and with no partial
+   row.
+7. In `finally`, roll back any open transaction, unlock exactly once in reverse
+   order, and require each `pg_advisory_unlock` to return true. Cancellation,
+   timeout, or an exception follows the same path. If connection state or lock
+   ownership is uncertain, close/discard the backend instead of returning it to
+   a pool; a dedicated connection may additionally call
+   `pg_advisory_unlock_all` before close. Session locks are never held while
+   waiting for a human confirmation.
+
+A lost response during `COMMIT` is not reported as rollback. Recovery obtains a
+new dedicated connection, re-authenticates, reacquires the same payload-neutral
+idempotency lock, and reads the key before any new effect. A matching row is the
+committed original; a differing row conflicts. If the terminated original
+backend is known gone and the key is absent, a new attempt is permitted only
+within the same three-attempt/30-second budget. If the outcome cannot be made
+definitive, return `COMMIT_OUTCOME_UNKNOWN` and perform no blind replay or
+external action. PostgreSQL fixes a serializable snapshot at the transaction's
+first snapshot-taking command; waiting on a transaction lock is not treated as
+refreshing it. Full-transaction retry is therefore mandatory. See PostgreSQL
+16 [transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html),
+[`SET TRANSACTION`](https://www.postgresql.org/docs/16/sql-set-transaction.html),
+and [advisory-lock functions](https://www.postgresql.org/docs/16/functions-admin.html).
+
 ### `intake_supplier_mapping_review(request, principal)`
 
 1. Before storage or database access, require the server-loaded
-   `persistent_mapping.review_intake_writes_enabled` flag to be exactly true.
-   Start `SERIALIZABLE`; set the four identity/authorization GUCs from a
-   server-verified named-human principal and authorized intake role, plus
-   transaction-local `procurement.enabled_capability` exactly
-   `review_intake_writes_enabled`. A false or absent flag never sets the GUC.
+   `persistent_mapping.review_intake_writes_enabled` flag to be exactly true and
+   apply the shared protocol with operation `review-intake`. A false or absent
+   flag never opens storage/DB access or sets a GUC.
 2. Re-run the supported V5 reader without changing the sealed package. Verify
    the artifact/root/seal/relationship/batch/payload hashes, readiness states,
    zero-authority flags, page bounds, prerequisites, and candidate-set digest.
-3. Look up `intake_idempotency_key`. If present and `payload_sha256` is exactly
-   equal, return the existing IDs; if different, raise `IDEMPOTENCY_CONFLICT`.
-4. Insert one batch and all candidates in that same transaction. Commit-time
+3. After the payload-neutral idempotency session lock and fresh snapshot, look
+   up `intake_idempotency_key` and apply the common exact-replay rule.
+4. Insert one batch and all candidates in that same transaction. Nullable
+   supplier/offer keys are database-derived only when minimum identity exists;
+   null keys do not block intake or fabricate authority. Commit-time
    count/digest validation makes a short or altered set roll back completely.
 5. Return evidence IDs only. Do not call mapping, pricing, recommendation,
    Shopify, supplier, order, or file-mutating services.
@@ -2581,24 +3381,34 @@ only after the authority/config changes are approved:
 
 1. Before storage or database access, require the matching server-loaded flag:
    `human_mapping_writes_enabled` for a human origin or
-   `policy_mapping_writes_enabled` for a policy origin. Start `SERIALIZABLE`;
-   for the first release accept only a server-verified human principal. Set
+   `policy_mapping_writes_enabled` for a policy origin. Apply the shared
+   protocol with operation `mapping-decision`; for the first release accept
+   only a server-verified human principal. Set
    transaction-local authorization context and `procurement.enabled_capability`
    to the one exact enabled flag name. Policy origin is modeled, but its flag
    remains false and the database publication stub always refuses it.
-2. Build the exact database `HUMAN_MAPPING_PREVIEW_V1` hash, collect a distinct
-   owner confirmation, and resolve identical idempotent replay before mutation;
-   same key/different payload fails. Lock the decision scope, operational-offer key, batch,
-   candidate, catalog Variant, vendor, rejection memory, and relevant offers.
-3. Recompute every expected hash. An approval with altered/missing evidence,
+2. Before calling this method, build the exact database
+   `HUMAN_MAPPING_PREVIEW_V1` hash and collect a distinct owner confirmation.
+   The confirmed request fixes whether the result is `CREATED_INACTIVE` or
+   `LINKED_EXISTING`; the latter also fixes the exact offer ID. After immutable
+   candidate preflight, session-lock idempotency, decision scope, and any
+   nonnull operational key in that order. Start the fresh snapshot, perform the
+   post-lock exact-replay check, then lock batch/candidate, Variant/vendor,
+   rejection rows, and numeric offer IDs in ascending order. The service-side
+   operational-key session lock is held **before** any offer lookup or insert;
+   trigger locks are defense in depth only.
+3. Recompute every action-applicable expected hash. An approval with altered/missing evidence,
    blockers, a simulation, wrong Variant/vendor, or active rejection fails.
-4. For approval, compute the supplier-identity, operational-offer, and
+4. For `APPROVE_MAPPING`, require nonnull Variant, vendor, supplier identity,
+   operational key, supported package/class and all catalog/vendor/rejection
+   fingerprints. Compute the supplier-identity, operational-offer, and
    candidate-decision keys in PostgreSQL from their versioned field sets. The
    decision scope is one exact candidate, so repeated printed occurrences may
    each retain a decision while their shared operational key still requires a
    single offer. If
    any historical approval already links that key, require its exact offer and
-   contract. Otherwise either link an exact existing offer or insert one
+   contract, even if that decision was later superseded and is no longer in the
+   effective-authority view. Otherwise either link an exact existing offer or insert one
    inactive offer. A created row maps exact candidate values into
    `variant_id`, `vendor_id`, `supplier_sku`, the derived package type,
    `size_text`, `raw_pack`, both unit conversions, and all three assortment
@@ -2611,14 +3421,27 @@ only after the authority/config changes are approved:
    remain on the decision and may yield `package_type='COMBO'`; policy approval
    is constrained to `REGULAR`/`STANDARD`, and no nonregular class can become
    the routine head.
-5. For rejection, insert a `mapping_rejections` row using source key
+5. For `REJECT_MAPPING`, require an existing exact candidate Variant/vendor, a
+   nonblank source distributor-product ID, a nonnull stable supplier-identity
+   key, and current catalog/vendor/rejection fingerprints. Only then insert a
+   `mapping_rejections` row using source key
    `persistent-mapping:<supplier_identity_key_sha256>`, with the verified
    principal as `rejected_by`, and link its preconfirmed substantive contract
-   hash. For defer, create neither offer nor rejection. The insert guard
-   excludes that one new `result_rejection_id` when recomputing the expected
-   pre-decision rejection fingerprint, then separately verifies the linked
-   row's exact active Variant/vendor/source scope, actor, evidence, and hash.
-6. Insert the append-only decision last. A late trigger failure rolls back an
+   hash. If that exact target cannot be supported, rejection refuses and the
+   only disposition is `DEFER`; it never creates a broad negative record. The
+   rejection preflight excludes only that transaction's one new
+   `result_rejection_id` when recomputing the expected pre-decision rejection
+   fingerprint, then separately verifies the linked row's exact active
+   Variant/vendor/source scope, actor, evidence, and hash.
+6. For `DEFER`, copy only batch/candidate identity, immutable candidate/source
+   evidence, reason, authenticated human provenance, and confirmation. Store
+   SQL null for decision Variant/vendor, supplier/operational keys,
+   `result_offer_package_type`, result IDs/contracts, and catalog/vendor/
+   rejection fingerprints. The candidate continues to preserve every
+   `ABSENT`, `EXPLICIT_NULL`, and `VALUE` state and any partial proposed target.
+   DEFER creates no offer, rejection, authority kind, selection, or other
+   operational effect.
+7. Insert the append-only decision last. A late trigger failure rolls back an
    inserted offer/rejection. Commit. Do not touch aliases, prices, heads,
    recommendations, Shopify, POs, artifacts, or the sealed package.
 
@@ -2626,16 +3449,15 @@ only after the authority/config changes are approved:
 
 1. Before storage or database access, require the server-loaded
    `persistent_mapping.routine_selection_writes_enabled` flag to be exactly
-   true. Start a new `SERIALIZABLE` transaction, set transaction-local
-   `procurement.enabled_capability` exactly `routine_selection_writes_enabled`,
-   and require an idempotency key, database-built
+   true and apply the shared protocol with operation `routine-selection`.
+   Require an idempotency key, database-built
    `HUMAN_ROUTINE_SELECTION_PREVIEW_V1` hash, separate confirmation hash, and
    the exact prior event/version. The same owner may act again, but the mapping
-   confirmation is not reusable. Before mutation, return the existing event for
-   the same key and exact payload hash; refuse the same key with a different
-   payload without changing the head.
-2. Set the server-derived named-human authorization context; lock the Variant
-   advisory key and current head.
+   confirmation is not reusable. Session-lock idempotency and then Variant;
+   after the fresh snapshot, return the same-key/same-payload event before
+   stale-head checks or refuse changed payload without changing the head.
+2. Set the server-derived named-human authorization context and lock the current
+   head after the session locks.
 3. Recompute catalog, vendor, offer, mapping, and rejection fingerprints. A
    `SELECT` requires the current effective approval, `REGULAR`/`STANDARD`, exact
    supplier code, eligible Variant/vendor, valid dates, and no rejection. An
@@ -2643,15 +3465,15 @@ only after the authority/config changes are approved:
 4. Insert the event, then advance the head using one conditional statement:
 
    ```sql
-   INSERT INTO supplier_offer_selection_heads(
+   INSERT INTO "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_heads AS current_head(
        variant_id,selection_scope,selection_event_id,head_version,updated_txid
    ) VALUES ($variant_id,'ROUTINE_PROCUREMENT_STANDARD',$event_id,1,txid_current())
    ON CONFLICT (variant_id,selection_scope) DO UPDATE
       SET selection_event_id=EXCLUDED.selection_event_id,
-          head_version=supplier_offer_selection_heads.head_version+1,
+          head_version=current_head.head_version+1,
           updated_at=clock_timestamp(),updated_txid=txid_current()
-    WHERE supplier_offer_selection_heads.selection_event_id=$expected_prior_event_id
-      AND supplier_offer_selection_heads.head_version=$expected_prior_head_version
+    WHERE current_head.selection_event_id=$expected_prior_event_id
+      AND current_head.head_version=$expected_prior_head_version
    RETURNING head_version;
    ```
 
@@ -2660,6 +3482,21 @@ only after the authority/config changes are approved:
    head.
 5. Commit without updating `supplier_offers`, `prices`, recommendations,
    Shopify, POs, or orders.
+
+### Confirmation-sensitive equivalent-offer race
+
+Two distinct candidate requests that initially confirm `CREATED_INACTIVE` for
+the same operational key serialize on the service lock. The first may create
+and commit the one inactive offer and its decision. The waiting request then
+starts its fresh snapshot and observes that its confirmed create disposition is
+stale. It rolls back without an offer, rejection, or decision; releases every
+transaction/session lock; and returns `RECONFIRMATION_REQUIRED` with the facts
+needed to generate a new `LINKED_EXISTING` preview. Re-preview is not approval:
+the owner must give a new explicit confirmation and use a new idempotency key
+because the payload, result disposition, and bound offer identity changed.
+That new request may append the second candidate's distinct decision against
+the same offer. This is not described as two original concurrent approvals
+succeeding, and it is separate from same-key/same-payload replay.
 
 Read methods may query the two new views only after the server-loaded
 `selected_offer_shadow_reads_enabled` flag is exactly true. They must label the
@@ -2694,6 +3531,33 @@ The write-capable database connection and permission to set transaction context
 remain internal service capabilities; the first migration grants no new role or
 client privilege. The opaque GUC checks are defense in depth for the service
 boundary, not a substitute for the unresolved private IdP/named-role setup.
+
+For v1 migration and replay, `current_user` and `session_user` are the explicitly
+invoked trusted maintenance principals; they must not also be browser/client
+connection roles. Superusers are acknowledged trusted administrators outside
+the ordinary ACL threat model: PostgreSQL object ACLs cannot constrain a
+malicious database administrator. Every other non-superuser `LOGIN` role is
+untrusted until a separately reviewed release classifies and grants a narrow
+server role. The runner and installed assertion recursively enumerate every
+role reachable from each login through all-`set_option` paths, then every role
+inherited through all-`inherit_option` paths from each possible assumed role.
+This detects direct/transitive SET, direct/transitive INHERIT, and
+SET-then-INHERIT combinations; `pg_has_role` is corroboration, not the sole
+mixed-path test. They also evaluate effective schema
+`CREATE`, relation, column, and function privileges with the `has_*_privilege`
+functions. Unsafe or unclassified topology refuses and names the path; the
+migration never edits cluster role memberships. See PostgreSQL 16
+[role membership](https://www.postgresql.org/docs/16/role-membership.html),
+[`pg_auth_members`](https://www.postgresql.org/docs/16/catalog-pg-auth-members.html),
+and [privilege inquiry functions](https://www.postgresql.org/docs/16/functions-info.html).
+
+Consequently, a client-set actor string or forged `procurement.*` custom GUC
+cannot confer authority: the client lacks effective table/function privilege
+and cannot inherit or assume an owner. The later private route change must
+prove that its server principal remains non-owner and least-privilege before
+exposure. If the existing cluster already gives an application/client login an
+owner path, DDL refuses pending explicit database-administrator correction;
+that fail-closed topology check is distinct from choosing the private IdP.
 
 The unresolved IdP/role choice blocks route exposure and real writes; it does
 not block schema construction, pure domain tests, or disposable-PostgreSQL
@@ -2746,6 +3610,11 @@ actual implementation milestone is authorized and achieved.
 +an owner-published immutable policy/version, independently corroborated
 +deterministic evidence, and exact fingerprints. Missing policy fails closed.
 +Fuzzy similarity is supporting evidence only and can never authorize mapping.
++DEFER may preserve a completely or partially unresolved candidate using only
++its immutable source evidence, reason, and authenticated human provenance;
++it fabricates no operational identity or fingerprint and has no operational
++effect. REJECT_MAPPING requires an exact supported Variant/vendor/supplier
++target and never creates broad negative authority from unresolved evidence.
 +
 +An approved mapping may create an inactive supplier offer. It never activates
 +that offer, verifies or activates price, selects a routine offer, writes
@@ -2811,54 +3680,62 @@ documentation task. `PG` means a disposable PostgreSQL database; `PURE` means
 no database/network. Synthetic principals and packages must be labeled
 simulation in test output.
 
-| Invariant/case | Boundary | Later executable test and required result |
-|---|---|---|
-| Exact predecessor only | Migration/PG | `test_upgrade_requires_exact_013_marker_set_and_contracts`: 012-only, unknown intervening marker, missing index/trigger, wrong referenced-offer `UPDATE OF` list, or altered contract refuses with no new object |
-| Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: full true chain plus proposed migration installs exact objects/marker/signature; a fixture with named-role default table/function privileges leaves that role with no grant before the signature is stored; after valid authority rows are seeded, a second apply preserves every row/hash; dropped/altered constraint, index, function, trigger, view, owner, relation ACL, function ACL, or column ACL makes replay validation refuse and roll back, including an explicit per-column grant to a synthetic role |
-| Version-aware full-chain replay | Runner + migration/PG | `test_checksum_pinned_replay_preserves_later_contract_versions`: first apply stores the exact file SHA-256; exact replay skips SQL and calls the current assertion; changed bytes, removed headers, a legacy marker, deleted contract/signature metadata, or failed assertion refuses; after a synthetic `v2` transition with its own checksum marker, full-chain replay preserves every `v2` object/version/signature and executes neither historical mapping file |
-| Concurrent first migration apply | Runner + migration/PG | `test_concurrent_checksum_pinned_first_apply_serializes_before_marker_read`: two transactions with the same migration name but different bytes contend on the family advisory lock; only the first executes and publishes its checksum, while the second re-reads that checksum and refuses without SQL or marker overwrite; identical bytes make the second validate/skip |
-| Historical upgrade | Migration/PG | `test_exact_013_upgrade_preserves_all_legacy_bytes_and_counts`: build through actual 013 files, seed legacy rows, snapshot table digests and recommendation output, then apply; new authority tables are empty |
-| Failed migration/late validation | Migration/PG | `test_migration_failure_and_late_validation_roll_back_every_object`: precondition failure and an injected failure after the final assertion both leave the predecessor byte/count snapshot and schema unchanged |
-| Late domain validation | Mapping + selection/PG | `test_late_decision_or_head_validation_rolls_back_the_whole_transaction`: a failure after inserting an offer/rejection or event but before commit leaves none of those rows and no head change |
-| Valid intake, zero authority effects | Intake/PG | `test_valid_intake_adds_only_immutable_batch_and_candidates`: exact counts; a direct READ COMMITTED insert is denied while the service's explicit SERIALIZABLE transaction succeeds; zero decisions, heads, events, prices, offer changes, Shopify calls, POs, orders, supplier effects |
-| Intake idempotency | Intake service/PG | `test_intake_exact_replay_returns_existing_and_payload_change_conflicts`: same key/hash returns IDs; same key/different payload changes nothing |
-| Altered/missing evidence | Reader + intake/PG | `test_intake_rejects_missing_or_altered_source_hash_page_and_prerequisite`: each changed artifact/root/seal/table/page-bound input rolls back fully |
-| Explicit null versus absent | Intake + DB/PG | `test_candidate_preserves_explicit_null_and_absent_states`: states and canonical hashes differ, values remain SQL null, replay is stable |
-| Printed repeats/tiers | Intake + mapping/PG | `test_repeated_occurrences_and_tiers_share_one_operational_offer`: candidates remain distinct while equal operational keys link one offer ID |
-| Offer class separation | Mapping/PG | `test_regular_gift_special_alternate_component_and_combo_do_not_collapse`: distinct keys/offers; component relationships remain exact; only regular can be selected |
-| Supplier-code reuse | Mapping + offer/PG | `test_reused_supplier_code_preserves_old_offer_and_creates_inactive_history`: no old-row update; active uniqueness stays valid; same offer under a different material operational key refuses; policy path refuses |
-| Wrong Variant/vendor | Mapping/PG | `test_mapping_refuses_wrong_variant_or_vendor_and_stale_fingerprints`: FK-valid but candidate-inconsistent references fail with no offer/decision |
-| Append-only intake/decisions/events | DB/PG | `test_authority_history_rejects_update_delete_and_cascade`: each UPDATE/DELETE, including a linked rejection's evidence/actor/active state, fails and every row remains |
-| Exact decision replay | Mapping service/PG | `test_mapping_exact_replay_and_same_key_different_payload`: exact replay returns existing; changed payload has no partial offer/rejection |
-| Stale mapping preview/prior | Mapping/PG | `test_mapping_rejects_stale_preview_and_stale_or_forked_prior`: changed catalog/vendor/rejection/candidate or non-tip predecessor fails |
-| Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: every false/absent intake, human-map, policy-map, selection, and shadow-read flag denies before storage/DB access; forged/mismatched GUC, client actor, shared token, or a named role inherited through default privileges cannot insert; only matching enabled test configuration plus verified synthetic context can |
-| Policy fail closed | Authorization + mapping/PG | `test_policy_mapping_requires_published_policy_and_independent_evidence`: false stub rejects every policy event and creates no approved default |
-| Approval lifecycle | Mapping/PG | `test_mapping_approval_creates_inactive_unpriced_unselected_offer`: decision/offer commit atomically; zero price/head/recommendation effects |
-| Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head; exact selection replay returns its event and same-key/different-payload changes nothing |
-| Explicit reviewed null | Selection/PG | `test_clear_appends_event_and_preserves_prior_selection`: CLEAR is a head event, not deletion or offer deactivation |
-| Stale selection preview/head | Selection/PG | `test_selection_rejects_stale_offer_catalog_vendor_rejection_and_prior_head`: each mismatch rolls back event/head |
-| Concurrent selection | Selection/PG | `test_concurrent_selection_attempts_commit_one_complete_winner`: two SERIALIZABLE transactions from one prior head produce one event/head; loser leaves no partial event |
-| Inactive selection lifecycle | Selection + views/PG | `test_inactive_selected_offer_remains_inactive_unpriced_and_shadow_labelled`: head may select only fresh mapped inactive offer; no active/price mutation; exact state label |
-| Active legacy selection | Selection + views/PG | `test_existing_active_offer_selection_does_not_mutate_offer_or_price`: exact active row may be selected; table digests outside authority objects stay fixed |
-| Rejection memory | Mapping + selection/PG | `test_active_rejection_and_conflicting_evidence_block_approval_and_selection`: exact Variant rejection persists and blocks approval/selection; rejection of Variant A stales the shared-identity preview but does not veto a freshly confirmed Variant B; conflicting source never silently reactivates |
-| Mapped/priced/reference protections | Offer/PG | `test_mapped_priced_and_referenced_offer_contracts_cannot_be_rewritten`: new and existing migration 010/011 guards all remain effective |
-| V5 non-adoption | Migration + intake/PG | `test_unapproved_v5_package_is_never_backfilled_or_relabelled`: migration creates zero rows; intake preserves fixed NOT_APPROVED/NOT_IMPORT_READY flags |
-| Legacy recommendations | Recommendation shadow/PG | `test_legacy_recommendations_are_identical_until_cutover`: before/after outputs and blocker semantics are exact; `_load_context` does not query new views |
-| Zero external/operational effects | Service boundary/PURE | `test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator`: dependency injection sentinels record zero calls for intake/map/select/error/replay paths |
-| Authority/config diff | Static/PURE | `test_mapping_authority_and_disabled_flags_match_approved_contract`: exact mirrored canonical/Master Plan text and false flags; CURRENT authority priority and price/Shopify/carry-forward flags unchanged |
-| Registration floor | Test runner/PURE | `test_persistent_mapping_modules_are_registered_at_exact_discovery_floors`: removal of one planned module/method trips its module floor and the sum-derived global floor |
+| # | Invariant/case | Boundary | Later executable test and substantive required result |
+|---:|---|---|---|
+| 1 | Exact predecessor only | Migration/PG | `test_upgrade_requires_exact_013_marker_set_and_contracts`: 012-only, unknown intervening marker, missing index/trigger, wrong referenced-offer `UPDATE OF` list, or altered contract refuses with no new object |
+| 2 | Fresh schema | Migration/PG | `test_fresh_schema_applies_foundation_once_and_reapplies_idempotently`: with pgcrypto genuinely absent, the actual chain lets only schema_postgres install it and verifies exact extension/member/helper-schema trust before that file commits; installs exactly five tables/four views plus signed functions/triggers; direct/default relation, function, and column grants are absent; seeded rows/hashes survive exact replay; catalog tamper refuses |
+| 3 | Version-aware full-chain replay | Runner + migration/PG | `test_checksum_pinned_replay_preserves_later_contract_versions`: reviewed v1 applies; reviewed v2 adds an ordered manifest entry and transition marker; replay selects the highest exact installed prefix and executes neither historical SQL file; missing-middle, unknown, legacy, or inconsistent metadata refuses |
+| 4 | Independent replay trust anchors | Runner + migration/PG | `test_replay_independently_rejects_anchor_and_helper_tampering`: no-op assertion, compute returning stored hash, coordinated replacement, altered properties/search path, missing anchor/helper, unknown version, or same-named non-extension digest refuses before either anchor call, marker write, or authority mutation |
+| 5 | Concurrent first mapping apply | Runner + migration/PG | `test_mapping_family_lock_serializes_marker_without_claiming_whole_run_atomicity`: two real runner invocations may each commit legacy schema-through-013 reapplications before the barrier; at the mapping lock only one different-byte candidate executes/publishes and the loser refuses without mapping SQL/marker overwrite; identical bytes validate/skip |
+| 6 | Hostile schema/temp resolution | Runner + migration/PG | `test_explicit_schema_binding_defeats_hostile_search_path_temp_and_helper_decoys`: earlier hostile schema, decoy meta/validators, temporary authority tables, caller path changes, non-16 server fixture, unusable target, and same-named helper substitutes cannot alter resolution or cause false replay; a target absent from the caller path but containing a protected-signature decoy or granting untrusted CREATE also refuses; controlled legacy resolution must select the target and exact extension-member OIDs before effects |
+| 7 | Historical upgrade | Migration/PG | `test_exact_013_upgrade_preserves_all_legacy_bytes_and_counts`: build through the actual 013 files, not consolidated schema; seed legacy rows and snapshot table digests/recommendations; apply leaves new authority tables empty |
+| 8 | Failed migration/late validation | Migration/PG | `test_migration_failure_and_late_validation_roll_back_every_object`: precondition failure and injected post-DDL/pre-marker failure leave predecessor bytes/counts and mapping metadata unchanged |
+| 9 | Late domain validation | Mapping + selection/PG | `test_late_decision_or_head_validation_rolls_back_the_whole_transaction`: failure after offer/rejection/event insertion leaves no such row and no head change |
+| 10 | Valid intake, zero authority effects | Intake/PG | `test_valid_intake_adds_only_immutable_batch_and_candidates`: exact counts; READ COMMITTED direct insert denied; service SERIALIZABLE succeeds; zero decisions/heads/events/prices/offer changes/external effects |
+| 11 | Intake idempotency | Intake service/PG | `test_intake_exact_replay_returns_existing_and_payload_change_conflicts`: sequential same key/hash returns original IDs even after later state; changed complete request produces no row |
+| 12 | Concurrent intake idempotency | Intake service/PG | `test_concurrent_intake_same_key_serializes_exact_replay_and_conflict`: two barriered connections with same key/same payload return one committed batch/candidate set; changed payload contends on the same lock then conflicts; no duplicate/partial candidates |
+| 13 | Altered/missing evidence | Reader + intake/PG | `test_intake_rejects_missing_or_altered_source_hash_page_and_prerequisite`: each changed artifact/root/seal/table/page-bound input rolls back fully |
+| 14 | Explicit null versus absent | Intake + DB/PG | `test_candidate_preserves_explicit_null_and_absent_states`: states/hashes differ, values remain SQL null, nullable derived keys appear only when minimum identity exists, and replay is stable |
+| 15 | Unresolved DEFER | Mapping/PG | `test_defer_accepts_completely_unresolved_and_partially_known_candidates`: ABSENT/EXPLICIT_NULL/VALUE subcases append human-confirmed DEFER with null operational target/keys/package/fingerprints/results; candidate evidence remains exact; no offer/rejection; DEFER never appears as offer authority and superseding an approval removes it from effective authority without erasing its historical key/offer binding; APPROVE and unsupported REJECT refuse |
+| 16 | Printed repeats/tiers | Intake + mapping/PG | `test_repeated_occurrences_and_tiers_share_one_operational_offer`: candidates and decisions remain distinct while equal operational keys link one offer ID |
+| 17 | Concurrent equivalent-offer race | Mapping service/PG | `test_concurrent_equivalent_create_requires_reconfirmation_then_reuses_one_offer`: first create commits one inactive offer/decision; stale-confirmation loser leaves no orphan and returns reconfirmation required; after new LINKED_EXISTING preview, new confirmation, and new idempotency key, second candidate decision commits to the same offer; a superseded historical approval still forces that same key/offer identity on later reuse |
+| 18 | Offer class separation | Mapping/PG | `test_regular_gift_special_alternate_component_and_combo_do_not_collapse`: distinct keys/offers; exact component relationships; only regular can select; two barriered different-key LINKED_EXISTING approvals aimed at one offer (keys differ only in a decision-preserved material qualifier) yield exactly one commit and one fresh-snapshot serialization refusal, with no partial losing decision |
+| 19 | Supplier-code reuse | Mapping + offer/PG | `test_reused_supplier_code_preserves_old_offer_and_creates_inactive_history`: no old-row update; active uniqueness valid; materially different key cannot reuse offer; policy path refuses |
+| 20 | Wrong Variant/vendor | Mapping/PG | `test_mapping_refuses_wrong_variant_or_vendor_and_stale_fingerprints`: FK-valid candidate mismatch and nonexistent proposed targets fail approval/rejection with no operational result while DEFER remains available |
+| 21 | Append-only intake/decisions/events | DB/PG | `test_authority_history_rejects_update_delete_and_cascade`: every UPDATE/DELETE, including linked rejection evidence/actor/active state, fails and rows remain |
+| 22 | Exact decision replay | Mapping service/PG | `test_mapping_exact_replay_and_same_key_different_payload`: request hash ignores generated create/rejection IDs but binds complete confirmed intent; exact replay returns original; changed payload has no partial effect |
+| 23 | Concurrent mapping idempotency | Mapping service/PG | `test_concurrent_mapping_same_key_replays_before_stale_head_and_conflicts_on_change`: identical requests serialize and both receive one result even though it advanced the head; changed request uses the same lock then conflicts; no second offer/rejection/decision |
+| 24 | Stale mapping preview/prior | Mapping/PG | `test_mapping_rejects_stale_preview_and_stale_or_forked_prior`: changed catalog/vendor/rejection/candidate or non-tip predecessor fails and is never auto-rebased/retried |
+| 25 | Human identity/capability | Authorization + mapping/PG | `test_mapping_requires_server_named_human_context`: false/absent flags deny before storage/DB; NULL or malformed authentication-context, preview, or confirmation hashes, forged/mismatched GUC, client actor, or shared token cannot insert; only exact enabled synthetic server context succeeds |
+| 26 | Effective owner/role topology | Authorization + migration/PG | `test_role_topology_rejects_direct_transitive_inherit_set_and_mixed_owner_paths`: synthetic direct/transitive INHERIT, SET ROLE, mixed path, effective relation/column/function/schema privilege, and forged GUC cases refuse; invoked maintenance principal is permitted; post-install unsafe membership makes assertion fail; no membership is revoked |
+| 27 | Policy fail closed | Authorization + mapping/PG | `test_policy_mapping_requires_published_policy_and_independent_evidence`: NULL/malformed policy publication or predicate-result hashes and the false publication stub reject every policy approval and all policy DEFER/REJECT shapes; no approved default/effect |
+| 28 | Approval lifecycle | Mapping/PG | `test_mapping_approval_creates_inactive_unpriced_unselected_offer`: decision/offer commit atomically; zero price/head/recommendation effects |
+| 29 | Distinct selection | Selection/PG | `test_valid_mapping_then_separate_selection_requires_second_confirmation`: mapping confirmation/idempotency cannot be reused; selection advances only its head; exact sequential replay and changed payload behave correctly |
+| 30 | Explicit reviewed null | Selection/PG | `test_clear_appends_event_and_preserves_prior_selection`: CLEAR is a head event, not deletion or deactivation |
+| 31 | Stale selection preview/head | Selection/PG | `test_selection_rejects_stale_offer_catalog_vendor_rejection_and_prior_head`: each mismatch rolls back event/head and is not automatically retried |
+| 32 | Concurrent selection/idempotency | Selection service/PG | `test_concurrent_selection_replay_and_same_prior_head_have_exact_outcomes`: same key/payload returns one committed event even after its head advance; same key/different payload conflicts; different keys from one prior head yield one complete winner and one stale loser with no partial event |
+| 33 | Retry, timeout, cleanup, unknown commit | Service + PG | `test_session_lock_retry_budget_cleanup_and_unknown_commit_recovery`: injected 40001/40P01 use at most three total fresh snapshots; exhaustion/cancel/timeout leaves no partial state and balanced locks; uncertain cleanup discards connection; lost COMMIT response resolves by authenticated locked lookup or returns COMMIT_OUTCOME_UNKNOWN without blind effects |
+| 34 | Inactive selection lifecycle | Selection + views/PG | `test_inactive_selected_offer_remains_inactive_unpriced_and_shadow_labelled`: head may select only fresh mapped inactive offer; no active/price mutation; exact state label |
+| 35 | Active legacy selection | Selection + views/PG | `test_existing_active_offer_selection_does_not_mutate_offer_or_price`: exact active row may select; nonauthority digests fixed |
+| 36 | Rejection memory | Mapping + selection/PG | `test_active_rejection_and_conflicting_evidence_block_approval_and_selection`: exact Variant rejection persists/blocks; Variant A evidence stales shared-identity preview without broadly vetoing freshly confirmed Variant B; source conflict never reactivates |
+| 37 | Mapped/priced/reference protections | Offer/PG | `test_mapped_priced_and_referenced_offer_contracts_cannot_be_rewritten`: new and migration 010/011 guards remain effective |
+| 38 | V5 non-adoption | Migration + intake/PG | `test_unapproved_v5_package_is_never_backfilled_or_relabelled`: migration creates zero rows; intake preserves NOT_APPROVED/NOT_IMPORT_READY |
+| 39 | Legacy recommendations | Recommendation shadow/PG | `test_legacy_recommendations_are_identical_until_cutover`: before/after outputs/blockers exact; `_load_context` never queries new views |
+| P1 | Zero external/operational effects | Service boundary/PURE | `test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator`: dependency sentinels record zero calls for success/error/replay/retry/unknown-outcome paths |
+| P2 | Authority/config diff | Static/PURE | `test_mapping_authority_and_disabled_flags_match_approved_contract`: exact mirrored authority text and false flags; CURRENT priority and price/Shopify/carry-forward flags unchanged |
+| P3 | Registration floor | Test runner/PURE | `test_persistent_mapping_modules_are_registered_at_exact_discovery_floors`: exact discovery is 39/3; removing one method trips its module floor and sum-derived global floor |
 
-This matrix deliberately names 31 PostgreSQL test methods and three pure/static
-methods. Planned files and initial module floors are
-`procurement/tests/test_persistent_mapping_foundation_postgres.py` at 31 and
-`procurement/tests/test_persistent_mapping_foundation_contract.py` at 3. The
-registration-floor test lives in the latter and imports the runner seams. At
-the implementation checkpoint, add both modules to `TEST_MODULES` and
-`REQUIRED_MODULE_MINIMUMS`; if implementation adds any method, raise that
-module's floor to its actual discovered count, never below the counts above,
-and keep
-`GLOBAL_MINIMUM_TESTS=sum(REQUIRED_MODULE_MINIMUMS.values())`. Do not guess a
-replacement count or lower another floor to absorb the new tests.
+This matrix names exactly **39 PostgreSQL methods and three pure/static
+methods**. Planned files and exact initial module floors are
+`procurement/tests/test_persistent_mapping_foundation_postgres.py: 39` and
+`procurement/tests/test_persistent_mapping_foundation_contract.py: 3` in
+`REQUIRED_MODULE_MINIMUMS`. The runner already discovers `test_*.py`; no
+separate module registry exists or is proposed. The registration-floor test
+lives in the pure module and uses existing runner seams. If implementation adds
+a method, its module floor rises to the actual discovered count; no other floor
+may fall. `GLOBAL_MINIMUM_TESTS` remains exactly
+`sum(REQUIRED_MODULE_MINIMUMS.values())`, so these two new modules add 42 to the
+then-integrated sum rather than hard-coding today's unrelated global count.
 
 Fresh-schema validation must run the actual complete file chain. Upgrade-path
 validation must stop at the exact intended predecessor and then apply the new
@@ -2871,7 +3748,23 @@ the fixture is exercising the authoritative-format branch of the contract; the
 test report must still label the package, principal, and result as synthetic and
 must not describe them as a real owner approval or private-package replay.
 
-## 9. Retained owner requirements and unresolved dependencies
+## 9. Seven-finding remediation closure matrix
+
+Every disposition below means **specified in this design and awaiting
+independent static re-review plus later executable proof**. None means migrated,
+implemented, or tested.
+
+| Accepted finding | Design correction | Planned proof | Disposition |
+|---|---|---|---|
+| P1 independent replay trust anchors | Ordered literal runner manifest binds migration bytes, version, schema, both anchor definitions/properties and transitive helpers; trusted catalog inspection precedes invocation; observed markers can select only the highest exact manifest prefix; v2 adds a reviewed record | PG #3 and #4 | Design-remediated; unexecuted |
+| P1 explicit schema and safe resolution | Manifest target name is bound to a non-system/non-temp invocation OID; stable hashes exclude OIDs; safe identifiers and literal qualified SQL; fresh pgcrypto bootstrap is post-verified in the same file transaction; maintenance privileges, target/helper writability, controlled-path helper OIDs, signed function paths and explicit `pg_temp` last are checked; decoys never supply authority | PG #6, plus #2 catalog signature | Design-remediated; unexecuted |
+| P1 effective ownership/role membership | Independent and installed checks cover effective relation/column/function/schema privilege and direct/transitive INHERIT/SET/mixed owner paths; unsafe topology refuses without membership mutation; administrator boundary is explicit | PG #26 and #2 | Design-remediated; unexecuted |
+| P1 DEFER without invented identity | Candidate keys become conditionally nullable; DEFER operational targets/keys/package/fingerprints/results are null while immutable source states remain on the candidate; APPROVE remains strict; REJECT has a narrow exact minimum | PG #14, #15 and #20 | Design-remediated; unexecuted |
+| P1 concurrent idempotency and offer reuse | Authenticated payload-neutral session locks precede fresh snapshots; full request identity/post-lock replay, deterministic ordering, three-attempt/30-second budget, balanced cleanup and unknown-commit recovery; offer-key lock precedes lookup/create; changed disposition requires fresh confirmation | PG #12, #17, #22, #23, #32 and #33 | Design-remediated; unexecuted |
+| P2 correct test registration | Uses existing `test_*.py` auto-discovery; exact future floors are 39 PG and 3 PURE via `REQUIRED_MODULE_MINIMUMS`; global remains sum-derived | PURE P3 | Corrected in design; unexecuted |
+| P2 accurate migration-lock scope | Retains mapping-family transaction lock only; explicitly allows earlier schema-through-013 commits and disclaims invocation serialization/atomicity | PG #5 | Corrected in design; unexecuted |
+
+## 10. Retained owner requirements and unresolved dependencies
 
 The first slice retains one Variant-wide primary regular selection without
 deleting alternatives; separate mapping and selection confirmations by the
@@ -2894,7 +3787,7 @@ destination are not reopened. Nothing here grants permissions, selects an IdP,
 publishes evidence policy, invents supplier schedules, enables unattended
 execution, or approves a real mapping.
 
-## 10. Exact next implementation boundary
+## 11. Exact next implementation boundary
 
 After the dependency sequence is integrated and owner authorization is given,
 the recommended next change is only:
@@ -2907,8 +3800,9 @@ the recommended next change is only:
    and no-backfill contract above;
 3. implement internal intake/mapping/selection domain services behind no public
    route, with policy hard-disabled;
-4. add and register the two planned test modules; prove fresh and exact-013
-   upgrades, rollback, idempotency, concurrency, immutability, and zero effects;
+4. add and register the two planned test modules at exact initial floors 39 and
+   3; prove fresh and exact-013 upgrades, rollback, idempotency, concurrency,
+   immutability, and zero effects;
 5. obtain independent backend/data review and stop for owner acceptance.
 
 Explicitly excluded are identity-provider selection/configuration, public or
