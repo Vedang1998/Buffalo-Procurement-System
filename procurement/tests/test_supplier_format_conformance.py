@@ -235,7 +235,7 @@ class SupplierFormatConformanceTests(unittest.TestCase):
 
         module = "test_supplier_format_conformance.py"
         self.assertEqual(runner.REQUIRED_MODULE_MINIMUMS[module], 9)
-        self.assertEqual(runner.GLOBAL_MINIMUM_TESTS, 701)
+        self.assertEqual(runner.GLOBAL_MINIMUM_TESTS, 723)
         self.assertEqual(
             runner._module_minimum_errors(Counter({module: 8}), {module: 9}),
             [f"{module} discovered 8 tests; required minimum is 9"],
