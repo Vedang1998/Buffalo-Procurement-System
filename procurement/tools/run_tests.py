@@ -54,7 +54,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_strategic.py": 13,
     "test_supplier_mapping_review.py": 30,
     "test_supplier_format_conformance.py": 9,
-    "test_supplier_pdf_extraction.py": 22,
+    "test_supplier_pdf_extraction.py": 30,
     "test_supplier_review_package.py": 15,
     "test_supplier_review_real_v5.py": 29,
     "test_supplier_review_v5.py": 16,

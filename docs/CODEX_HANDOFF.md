@@ -10,6 +10,92 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-09-12 reviewed integration decision and Wright B-1/B-2 correction — FOUNDATION MERGE BLOCKED / WRIGHT CANDIDATE IN PROGRESS
+
+- The owner activated the bounded scope in
+  `Buffalo_Review_Decision_and_Codex_Next_Steps.zip`. Before action, the four
+  payload members matched the supplied byte counts and SHA-256 values:
+  `START_HERE.md` 958 bytes / `c0edbb6c27cce5f614b113176b4b5633d11795a9345e2b7b977bac1b693e9946`;
+  `CODEX_NEXT_STEPS.md` 17,996 bytes /
+  `80e96deda1ab7bc812d85e96e1a68511e1625ac465d79fbd6b30f0dec1fdd906`;
+  `INDEPENDENT_REVIEW_2026-09-12.md` 17,168 bytes /
+  `26098bd4381bda528ac5b01dc06ef45eb9e5dcd533fabbcaaabde38417a63456`;
+  and `HOSTED_CI_DECODED_LOG_VERIFICATION.md` 4,350 bytes /
+  `9f790401549b1790b3928bfc7a15af025d70a37d4cbb6ca11fc1592a38ad3b26`.
+  The documents were treated as evidence/instructions only; the owner's
+  message supplied the stated conditional authority.
+- **Foundation / PR #23 — mandatory STOP before write:** GitHub readback
+  matched open draft PR #23, exact base
+  `f308ac666a2377f540e528bc873463daecc20cf8`, source
+  `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`, reviewed tree
+  `b181c02d1d0ffbabc2142c7cf91d146e00f272f4`, synthetic merge checkout
+  `66ec83c92b5bf5eae461f4a9bcacca5ef62dfe05`, required strict
+  `procurement-tests` success, and the active main ruleset. The repository's
+  sole Actions workflow has read-only contents permission and only runs
+  startup plus the scrubbed disposable-loopback PostgreSQL suite; it has no
+  deploy/publish/operational migration step.
+- External deployment isolation could not be established. The exact main and
+  PR trees contain `.replit` `[postMerge] path="scripts/post-merge.sh"`; that
+  script runs `pnpm --filter db push`, which resolves to `drizzle-kit push`
+  against `DATABASE_URL`. Authenticated readback proves the repository-linked
+  Replit app `3ffc2cc4-b7c3-478b-999d-8214873cceae` has live deployment
+  `abcc03bd-9cd4-47fa-8f3e-9b198156c4f9`, while a sibling app is unpublished,
+  but the available settings interface does not expose GitHub auto-sync,
+  post-merge-hook, auto-publish, scheduled-deployment, webhook, or source-branch
+  configuration. Replit's snapshot/re-publish documentation and historical
+  unchanged deployment ID are useful negative evidence, not authenticated
+  proof of current external settings. The exact missing prerequisite is
+  authenticated settings evidence that a main push cannot sync either app,
+  invoke the checked-in post-merge hook, publish/re-publish, schedule a
+  deployment, or trigger another hosting webhook. Per the owner contract, PR
+  #23 was not marked ready, commented for merge, merged, or otherwise changed.
+- **Reader/QA — ineligible:** Packet 2 depends on an exact green post-merge main
+  checkpoint. Because Packet 1 stopped before merge, no
+  `codex/reader-qa-integration-pr` branch, draft PR, or new 701-test CI run was
+  created. Reviewed I0 history remains preserved and unmerged; Wright and the
+  maintenance design were not bundled into it.
+- **Wright — isolated correction candidate:** branch
+  `codex/wright-description-scope-remediation` was created exactly from frozen
+  head `78c862b6d64eab7a27ab0ada8eef0c881af18032`, tree
+  `e6ac89966509bc182250833dc8961aa6727b246d`. The original prototype branch,
+  implementation `e2bc8e18...`, public fixtures, private gold, and first 5/6
+  held-out outcome remain unchanged. Before correction, a readable
+  `Gold Medal 2025 San Francisco Competition` line between the real title and
+  pack reproduced B-1: the frozen parser emitted the award as the positive
+  description, returned `scoped_notes: []`, and quarantined the genuine title.
+  Canonical old reproduction SHA-256 is
+  `6c4270b699f0c2c2b5f5597364450eebdaa28bbb1165191c5cef30ad6a4ba1a6`.
+- The candidate explicitly versions review/coverage/manifest output as V2
+  while retaining source grammar `WRIGHT_V1`. It removes nearest-line title
+  selection, quarantines ambiguous/displaced description blocks, makes
+  scoped-note `ABSENT`/`VALUE`/`UNRESOLVED` state and reason explicit, retains
+  raw/normalized/coordinate/hash evidence and partial pack/code/tier facts,
+  elevates positional and recognized non-price commercial/damaged uncertainty,
+  mirrors occurrence/block/page refs in extraction and coverage, strengthens
+  claim-once/ref identities, and rejects stale output shapes or old/new drift.
+  Eight new substantive methods raise the module floor from 22 to 30 and leave
+  the global floor sum-derived. Source-free focused results so far are 30/30,
+  retained supplier-format conformance 9/9, and runner safety 24/24. Full-suite,
+  private regression/development evaluation, exact commit, and independent
+  read-only review are still pending at this checkpoint.
+- The accessible morning ZIP is 22,841 bytes and matches expected outer
+  SHA-256 `24f7bb0ccaccffd5d7c6b74216e34e95aa00becfe51a1c6e88b722927352ebe3`.
+  Its contained `morning-handoff/SHA256SUMS` matches reported SHA-256
+  `99ed7b49d8b0bfbe832a792d9b714d7177fb4fba00aae1f4d968dfda8be5d8cd`;
+  all six declared paths and all five member hashes were read and matched.
+  No archive-supplied script was executed.
+- **Maintenance NEW-1 — independently approved design only:** the uploaded
+  review records PASS for exact design `b0c8d3fec8ec57e57881e91615cc6f7c3cf75b4d`,
+  tree `251643acdf6aa68c02241d198eb5ad96edba54c4`. No proposed persistent-mapping
+  SQL was executed or implemented. Exact predecessor migration, integrated
+  target, principal-pair/permission, identity, policy, and supplier
+  configuration requirements remain separate pending gates.
+- One writer performed repository changes. Deployment, operational database
+  access, Shopify access, mapping/price activation, role or credential change,
+  supplier communication, and order actions are all zero. No CI retry or
+  force-push occurred. `procurement/docs/PHASE_STATUS.md` remains unchanged
+  because no phase/release milestone changed.
+
 ### Overnight integration acceptance and offline Wright prototype — BOUNDED WORK COMPLETE / NOT MERGED OR DEPLOYED
 
 - Contract `BUFFALO-OVERNIGHT-PR23-INTEGRATION-EXTRACTION-01` began at

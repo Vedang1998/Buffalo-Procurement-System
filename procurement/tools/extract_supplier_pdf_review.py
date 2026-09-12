@@ -29,7 +29,9 @@ import unicodedata
 from typing import Any, Mapping, Sequence
 
 
-FORMAT = "BUFFALO_SUPPLIER_PDF_REVIEW_V1"
+FORMAT = "BUFFALO_SUPPLIER_PDF_REVIEW_V2"
+COVERAGE_FORMAT = "BUFFALO_SUPPLIER_PDF_COVERAGE_V2"
+MANIFEST_FORMAT = "BUFFALO_SUPPLIER_PDF_REVIEW_SHA256_V2"
 SUPPORTED_FORMAT = "WRIGHT_V1"
 LABEL = "REVIEW_ONLY / NOT_APPROVED / NOT_IMPORT_READY"
 SOURCE_KIND = "LOCAL_PDF_BYTES"
@@ -600,6 +602,17 @@ _UNSUPPORTED_SCOPE = re.compile(
     r"\b(?:gift|combo|specials?|assorted|components?)\b",
     re.IGNORECASE,
 )
+_POTENTIAL_COMMERCIAL_SCOPE = re.compile(
+    r"\b(?:"
+    r"allocat(?:e|ed|es|ion|ions)?|"
+    r"territor(?:y|ies)|states?|channels?|"
+    r"minimum(?:\s+order)?|min(?:imum)?\.?\s*order|"
+    r"availability|available|while\s+supplies\s+last|"
+    r"split(?:\s+case)?|handling|"
+    r"assort(?:ed|ment|ments|ing)?|does\s+not\s+assort"
+    r")\b",
+    re.IGNORECASE,
+)
 _PACK_LIKE = re.compile(r"\b(?:pack|cans?|bottles?|boxes?)\b.*-", re.IGNORECASE)
 _TIER_LIKE = re.compile(r"\bCases?\s*:|\bPer\s+(?:Bottle|Can|Box|Pack)\s*:", re.IGNORECASE)
 _UNSAFE_MARKUP = re.compile(r"[<>]")
@@ -607,6 +620,52 @@ _UNSAFE_MARKUP = re.compile(r"[<>]")
 
 def _normalized(text: str) -> str:
     return " ".join(unicodedata.normalize("NFC", text).split())
+
+
+def _has_damaged_text(text: str) -> bool:
+    """Recognize damaged native text without assigning it a semantic meaning."""
+
+    return any(
+        character == "\ufffd"
+        or character in {"\u25a1", "\u25a0", "\u25fb", "\u25fc"}
+        or unicodedata.category(character) in {"Co", "Cs"}
+        for character in text
+    )
+
+
+def _line_evidence(line: Mapping[str, object]) -> dict[str, object]:
+    """Return source-linked evidence without dropping raw text or coordinates."""
+
+    raw = str(line["text"])
+    payload = {
+        "source_line_id": str(line["line_id"]),
+        "raw": raw,
+        "normalized": _normalized(raw),
+        "column": line["column"],
+        "bbox": dict(line["bbox"]),
+    }
+    return {
+        **payload,
+        "evidence_sha256": _sha256(_canonical_bytes(payload)),
+    }
+
+
+def _scope_diagnostic(text: str) -> tuple[str, str]:
+    """Classify uncertainty for diagnostics only; classification never clears it."""
+
+    if _has_damaged_text(text):
+        return "DAMAGED_SCOPE_TEXT_UNRESOLVED", "DAMAGED_NATIVE_TEXT"
+    if _POTENTIAL_COMMERCIAL_SCOPE.search(text):
+        return "POTENTIAL_COMMERCIAL_SCOPE_UNRESOLVED", "COMMERCIAL_SCOPE_LANGUAGE"
+    if _UNSUPPORTED_SCOPE.search(text):
+        return "UNSUPPORTED_CLASS_OR_COMPONENT_EVIDENCE", "UNSUPPORTED_LAYOUT_LANGUAGE"
+    if _UNSAFE_MARKUP.search(text):
+        return "UNSAFE_MARKUP_LIKE_SOURCE_TEXT", "UNSAFE_MARKUP"
+    if "$" in text or _TIER_LIKE.search(text):
+        return "UNASSIGNED_PRICE_LIKE_LINE", "PRICE_OR_TIER_LANGUAGE"
+    if _PACK_LIKE.search(text):
+        return "UNSUPPORTED_OR_MALFORMED_PACK_LINE", "PACK_LIKE_LANGUAGE"
+    return "UNCLASSIFIED_SOURCE_LINE", "UNKNOWN_SCOPE_LANGUAGE"
 
 
 def _top(line: Mapping[str, object]) -> Decimal:
@@ -722,23 +781,79 @@ def _nearby_scope_lines(
 
 def _description_and_notes(
     cluster: Sequence[Mapping[str, object]],
-) -> tuple[Mapping[str, object], tuple[Mapping[str, object], ...]]:
-    """Choose the nearest product line, retaining a narrow variety-list note."""
+) -> tuple[Mapping[str, object] | None, dict[str, object], str | None]:
+    """Resolve only an exact supported description/note shape.
 
-    description = cluster[-1]
-    notes: tuple[Mapping[str, object], ...] = ()
-    if len(cluster) >= 2:
-        prior_text = _normalized(str(cluster[-2]["text"]))
-        nearest_text = _normalized(str(cluster[-1]["text"]))
-        if "variety pack" in prior_text.lower() and (
-            "," in nearest_text or " and " in nearest_text.lower()
+    Position, keywords, and confidence never choose between competing lines.
+    Any other multi-line cluster remains source evidence and is quarantined.
+    """
+
+    candidates = [_line_evidence(line) for line in cluster]
+    if len(cluster) == 1:
+        raw = str(cluster[0]["text"])
+        normalized = _normalized(raw)
+        if _has_damaged_text(raw) or _POTENTIAL_COMMERCIAL_SCOPE.search(normalized):
+            reason = "DESCRIPTION_OR_SCOPED_NOTE_UNRESOLVED"
+            return (
+                None,
+                {
+                    "state": "UNRESOLVED",
+                    "reason": reason,
+                    "candidate_line_ids": [str(cluster[0]["line_id"])],
+                    "candidates": candidates,
+                },
+                reason,
+            )
+        return (
+            cluster[0],
+            {
+                "state": "ABSENT",
+                "reason": "NO_SCOPED_NOTE_VALUE_ESTABLISHED_BY_SUPPORTED_GRAMMAR",
+            },
+            None,
+        )
+    if len(cluster) == 2:
+        description_text = _normalized(str(cluster[0]["text"]))
+        note_text = _normalized(str(cluster[1]["text"]))
+        if (
+            "variety pack" in description_text.lower()
+            and ("," in note_text or " and " in note_text.lower())
+            and not _has_damaged_text(str(cluster[0]["text"]))
+            and not _has_damaged_text(str(cluster[1]["text"]))
+            and not _POTENTIAL_COMMERCIAL_SCOPE.search(note_text)
         ):
-            description = cluster[-2]
-            notes = (cluster[-1],)
-    return description, notes
+            return (
+                cluster[0],
+                {
+                    "state": "VALUE",
+                    "reason": "SUPPORTED_VARIETY_LIST_GRAMMAR",
+                    "items": [_line_evidence(cluster[1])],
+                },
+                None,
+            )
+    reason = "DESCRIPTION_CANDIDATES_AMBIGUOUS_OR_DISPLACED"
+    return (
+        None,
+        {
+            "state": "UNRESOLVED",
+            "reason": reason,
+            "candidate_line_ids": [str(line["line_id"]) for line in cluster],
+            "candidates": candidates,
+        },
+        reason,
+    )
 
 
-def _tier_lines(pack: Mapping[str, object], lines: Sequence[Mapping[str, object]]) -> tuple[Mapping[str, object], ...]:
+def _tier_scope(
+    pack: Mapping[str, object],
+    lines: Sequence[Mapping[str, object]],
+) -> tuple[
+    tuple[Mapping[str, object], ...],
+    Mapping[str, object] | None,
+    tuple[Mapping[str, object], ...],
+]:
+    """Return contiguous tiers, a positional barrier, and partial later tiers."""
+
     ordered = _ordered_column_lines(pack, lines)
     try:
         pack_index = next(
@@ -750,23 +865,50 @@ def _tier_lines(pack: Mapping[str, object], lines: Sequence[Mapping[str, object]
     following = ordered[pack_index + 1 :]
     tiers: list[Mapping[str, object]] = []
     previous_bottom = _bottom(pack)
-    for line in following:
+    barrier: Mapping[str, object] | None = None
+    barrier_index: int | None = None
+    for index, line in enumerate(following):
         gap = _top(line) - previous_bottom
         text = _normalized(str(line["text"]))
-        if line["column"] == "PAGE_WIDE":
-            break
         match = _TIER.fullmatch(text)
-        if match and gap <= Decimal("24"):
+        if line["column"] != "PAGE_WIDE" and match and gap <= Decimal("24"):
             tiers.append(line)
             previous_bottom = _bottom(line)
             if len(tiers) > MAX_TIERS:
                 raise ExtractionError("TIER_LIMIT", "a source block exceeded the tier limit")
             continue
-        # Any intervening source line is a hard stop.  Do not scan through an
-        # unrelated description, heading, pack, or damaged tier to find a
-        # later price line.
+        if (
+            gap <= Decimal("24")
+            and not _is_boundary_text(text)
+            and _pack_match(text) is None
+        ):
+            barrier = line
+            barrier_index = index
         break
-    return tuple(tiers)
+
+    partial_later_tiers: list[Mapping[str, object]] = []
+    if not tiers and barrier is not None and barrier_index is not None:
+        previous_bottom = _bottom(barrier)
+        for line in following[barrier_index + 1 :]:
+            gap = _top(line) - previous_bottom
+            text = _normalized(str(line["text"]))
+            if (
+                line["column"] == "PAGE_WIDE"
+                or gap > Decimal("24")
+                or _TIER.fullmatch(text) is None
+            ):
+                break
+            partial_later_tiers.append(line)
+            previous_bottom = _bottom(line)
+            if len(partial_later_tiers) > MAX_TIERS:
+                raise ExtractionError("TIER_LIMIT", "a source block exceeded the tier limit")
+    return tuple(tiers), barrier, tuple(partial_later_tiers)
+
+
+def _tier_lines(pack: Mapping[str, object], lines: Sequence[Mapping[str, object]]) -> tuple[Mapping[str, object], ...]:
+    """Compatibility helper for the supported contiguous tier subset."""
+
+    return _tier_scope(pack, lines)[0]
 
 
 def _source_term_identifier(source_sha256: str, page: int, line_id: str) -> str:
@@ -973,19 +1115,84 @@ def _occurrence_identifier(source_sha256: str, page: int, line_ids: Sequence[str
     return f"WRT-OCC-{_sha256(_canonical_bytes(payload))[:32]}"
 
 
+def _candidate_block_identifier(
+    source_sha256: str,
+    page: int,
+    line_ids: Sequence[str],
+    reason: str,
+) -> str:
+    payload = {
+        "format": FORMAT,
+        "kind": "UNRESOLVED_OCCURRENCE_BLOCK",
+        "line_ids": list(line_ids),
+        "physical_page": page,
+        "reason": reason,
+        "source_sha256": source_sha256,
+    }
+    return f"WRT-CANDIDATE-{_sha256(_canonical_bytes(payload))[:32]}"
+
+
+def _package_record(kind: str, groups: Mapping[str, str], pack_text: str) -> dict[str, object]:
+    if kind == "REGULAR":
+        return {
+            "size": _value(groups["size"], groups["size"]),
+            "case_pack": _value(groups["case_pack"], int(groups["case_pack"])),
+            "qualifier": (
+                _value(groups["qualifier"], groups["qualifier"])
+                if "qualifier" in groups
+                else _absent("NO_QUALIFIER_PRINTED")
+            ),
+            "outer_count": _absent("NOT_A_RETAIL_MULTIPACK_GRAMMAR"),
+            "inner_pack_count": _absent("NOT_A_RETAIL_MULTIPACK_GRAMMAR"),
+            "container": _absent("NOT_A_RETAIL_MULTIPACK_GRAMMAR"),
+        }
+    return {
+        "size": _value(groups["size"], groups["size"]),
+        "case_pack": _absent("NO_SHOPIFY_OR_OPERATIONAL_CASE_COUNT_INFERENCE"),
+        "qualifier": _absent("NO_OPERATIONAL_QUALIFIER_INFERENCE"),
+        "outer_count": _value(groups["outer"], int(groups["outer"])),
+        "inner_pack_count": _value(groups["inner"], int(groups["inner"])),
+        "container": (
+            _value(groups["container"], groups["container"])
+            if "container" in groups
+            else _absent("NO_CONTAINER_WORD_PRINTED_IN_SUPPORTED_SIZE_FIRST_GRAMMAR")
+        ),
+        "multipack_semantics": {
+            "state": "UNRESOLVED",
+            "raw": pack_text,
+            "reason": "PRINTED_COUNTS_RETAINED_WITHOUT_SHOPIFY_UNIT_INFERENCE",
+        },
+    }
+
+
+def _tier_records(
+    tier_lines: Sequence[Mapping[str, object]],
+    source_sha256: str,
+    page: int,
+    kind: str,
+    groups: Mapping[str, str],
+) -> list[dict[str, object]]:
+    records = [_tier_record(line, source_sha256, page) for line in tier_lines]
+    for tier in records:
+        tier["arithmetic_diagnostic"] = _arithmetic_diagnostic(kind, groups, tier)
+    return records
+
+
 def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str) -> tuple[dict[str, object], dict[str, object]]:
-    """Recognize two explicit Wright block grammars and partition every line."""
+    """Recognize two Wright grammars while surfacing every scope uncertainty."""
 
     occurrences: list[dict[str, object]] = []
     all_quarantines: list[dict[str, object]] = []
     all_page_terms: list[dict[str, object]] = []
     page_outputs: list[dict[str, object]] = []
     for page in pages:
+        page_number = int(page["physical_page"])
         footer = _wright_footer(page, source_sha256)
         lines = list(page["lines"])
+        lines_by_id = {str(line["line_id"]): line for line in lines}
         assignments: dict[str, str] = {}
         quarantines: list[dict[str, object]] = []
-        page_occurrence_ids: list[str] = []
+        page_occurrences: list[dict[str, object]] = []
         for line_id in footer["source_line_ids"]:
             assignments[str(line_id)] = "BOILERPLATE"
         for line in lines:
@@ -1012,61 +1219,207 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
             anchor: Mapping[str, object] | None,
             text: str,
             conflicts: Sequence[str] = (),
-        ) -> None:
+            scope_level: str = "COLUMN",
+            uncertainty_class: str = "UNKNOWN_SCOPE_LANGUAGE",
+        ) -> dict[str, object]:
             scoped = unique_lines(candidates)
-            claimable = [
-                candidate for candidate in scoped
+            claimable = tuple(
+                candidate
+                for candidate in scoped
                 if str(candidate["line_id"]) not in assignments
-            ]
+            )
             for candidate in claimable:
                 assignments[str(candidate["line_id"])] = "EXPLICIT_QUARANTINE"
             anchor_id = (
                 str(anchor["line_id"])
                 if anchor is not None
-                else f"PAGE-{page['physical_page']}"
+                else f"PAGE-{page_number}"
             )
-            quarantines.append(
-                {
-                    "quarantine_id": (
-                        f"WRT-Q-{_sha256(_canonical_bytes([source_sha256, anchor_id, reason]))[:24]}"
-                    ),
-                    "physical_page": page["physical_page"],
-                    "column": anchor["column"] if anchor is not None else "PAGE",
+            line_ids = [str(line["line_id"]) for line in claimable]
+            conflict_ids = list(dict.fromkeys(conflicts))
+            identity = {
+                "anchor": anchor_id,
+                "conflicts": conflict_ids,
+                "format": FORMAT,
+                "line_ids": line_ids,
+                "physical_page": page_number,
+                "reason": reason,
+                "scope_level": scope_level,
+                "source_sha256": source_sha256,
+            }
+            record: dict[str, object] = {
+                "quarantine_id": f"WRT-Q-{_sha256(_canonical_bytes(identity))[:24]}",
+                "physical_page": page_number,
+                "column": anchor["column"] if anchor is not None else "PAGE",
+                "scope_level": scope_level,
+                "uncertainty_class": uncertainty_class,
+                "reason": reason,
+                "source_line_ids": line_ids,
+                "source_evidence": [_line_evidence(line) for line in claimable],
+                "conflicting_line_ids": conflict_ids,
+                "text": text,
+            }
+            quarantines.append(record)
+            return record
+
+        protected_description_ids: set[str] = set()
+        for candidate_pack in lines:
+            candidate_text = _normalized(str(candidate_pack["text"]))
+            if _pack_match(candidate_text) is not None or _MISSING_CODE_PACK.search(candidate_text):
+                protected_description_ids.update(
+                    str(line["line_id"])
+                    for line in _description_cluster(candidate_pack, lines)
+                )
+
+        def add_candidate_block(
+            reason: str,
+            source_lines: Sequence[Mapping[str, object]],
+            *,
+            pack: Mapping[str, object],
+            description_line: Mapping[str, object] | None,
+            scoped_notes: Mapping[str, object],
+            printed_code: Mapping[str, object],
+            package: Mapping[str, object] | None,
+            tier_records: Sequence[Mapping[str, object]],
+            uncertainty_class: str,
+        ) -> None:
+            scoped = unique_lines(source_lines)
+            record = add_quarantine(
+                reason,
+                scoped,
+                anchor=pack,
+                text=str(pack["text"]),
+                scope_level="OCCURRENCE_BLOCK",
+                uncertainty_class=uncertainty_class,
+            )
+            candidate_id = _candidate_block_identifier(
+                source_sha256,
+                page_number,
+                [str(line["line_id"]) for line in scoped],
+                reason,
+            )
+            description: dict[str, object]
+            if description_line is None:
+                description = {
+                    "state": "UNRESOLVED",
                     "reason": reason,
-                    "source_line_ids": [str(line["line_id"]) for line in claimable],
-                    "conflicting_line_ids": list(dict.fromkeys(conflicts)),
-                    "text": text,
+                    "candidate_line_ids": [
+                        str(line["line_id"])
+                        for line in scoped
+                        if line is not pack and _pack_match(_normalized(str(line["text"]))) is None
+                        and _TIER.fullmatch(_normalized(str(line["text"]))) is None
+                    ],
+                    "candidates": [
+                        _line_evidence(line)
+                        for line in scoped
+                        if line is not pack and _pack_match(_normalized(str(line["text"]))) is None
+                        and _TIER.fullmatch(_normalized(str(line["text"]))) is None
+                    ],
+                }
+            else:
+                description = _value(
+                    str(description_line["text"]),
+                    _normalized(str(description_line["text"])),
+                )
+            record.update(
+                {
+                    "candidate_block_id": candidate_id,
+                    "identity_class": "UNRESOLVED_SOURCE_BLOCK_NOT_SUPPORTED_OCCURRENCE",
+                    "evidence_status": "PARTIAL_REVIEW_REQUIRED",
+                    "description": description,
+                    "scoped_notes": dict(scoped_notes),
+                    "evidence_fields": {
+                        "printed_code": dict(printed_code),
+                        "package": dict(package) if package is not None else _absent(
+                            "PACKAGE_GRAMMAR_NOT_ESTABLISHED"
+                        ),
+                        "pack_line": _value(
+                            str(pack["text"]),
+                            _normalized(str(pack["text"])),
+                        ),
+                        "tiers": [dict(tier) for tier in tier_records],
+                    },
                 }
             )
+            record["unresolved_evidence_refs"] = [
+                {
+                    "quarantine_id": record["quarantine_id"],
+                    "scope_level": record["scope_level"],
+                    "reason": record["reason"],
+                    "source_line_ids": record["source_line_ids"],
+                }
+            ]
 
         for pack in lines:
+            pack_line_id = str(pack["line_id"])
+            if pack_line_id in assignments:
+                continue
             pack_text = _normalized(str(pack["text"]))
             matched = _pack_match(pack_text)
             if matched is None:
                 if _MISSING_CODE_PACK.search(pack_text):
                     cluster = _description_cluster(pack, lines)
-                    tiers = _tier_lines(pack, lines)
-                    add_quarantine(
-                        "MISSING_PRINTED_CODE",
-                        (*cluster, pack, *tiers),
-                        anchor=pack,
-                        text=str(pack["text"]),
+                    tiers, barrier, later_tiers = _tier_scope(pack, lines)
+                    scoped_barrier = (
+                        (barrier,)
+                        if not tiers
+                        and barrier is not None
+                        and barrier["column"] == pack["column"]
+                        and str(barrier["line_id"]) not in protected_description_ids
+                        else ()
                     )
-                    quarantines[-1]["evidence_fields"] = {
-                        "printed_code": _blank(""),
-                        "pack_line": _value(str(pack["text"]), pack_text),
-                    }
+                    add_candidate_block(
+                        "MISSING_PRINTED_CODE",
+                        (*cluster, pack, *tiers, *scoped_barrier, *later_tiers),
+                        pack=pack,
+                        description_line=None,
+                        scoped_notes={
+                            "state": "UNRESOLVED",
+                            "reason": "DESCRIPTION_AND_NOTES_NOT_RESOLVED_FOR_CODELESS_BLOCK",
+                            "candidate_line_ids": [str(line["line_id"]) for line in cluster],
+                            "candidates": [_line_evidence(line) for line in cluster],
+                        },
+                        printed_code=_blank(""),
+                        package=None,
+                        tier_records=(),
+                        uncertainty_class="IDENTITY_SCOPE_UNRESOLVED",
+                    )
                 continue
+
             kind, match = matched
+            groups = {
+                key: value
+                for key, value in match.groupdict().items()
+                if value is not None
+            }
+            package = _package_record(kind, groups, pack_text)
             description_cluster = _description_cluster(pack, lines)
-            tiers = _tier_lines(pack, lines)
-            reason = None
+            tiers, barrier, later_tiers = _tier_scope(pack, lines)
+            description_line: Mapping[str, object] | None = None
+            scoped_notes: dict[str, object] = {
+                "state": "UNRESOLVED",
+                "reason": "DESCRIPTION_SCOPE_UNRESOLVED",
+                "candidate_line_ids": [],
+                "candidates": [],
+            }
+            reason: str | None = None
+            uncertainty_class = "IDENTITY_SCOPE_UNRESOLVED"
             if not description_cluster:
                 reason = "DESCRIPTION_SCOPE_UNRESOLVED"
-            elif not tiers:
-                reason = "PRICE_LADDER_MISSING_OR_NONCONTIGUOUS"
-            if description_cluster:
-                description_line, note_lines = _description_and_notes(description_cluster)
+            else:
+                description_line, scoped_notes, description_reason = _description_and_notes(
+                    description_cluster
+                )
+                if description_reason is not None:
+                    reason = description_reason
+                    diagnostic_classes = [
+                        _scope_diagnostic(_normalized(str(line["text"])))[1]
+                        for line in description_cluster
+                    ]
+                    if "DAMAGED_NATIVE_TEXT" in diagnostic_classes:
+                        uncertainty_class = "DAMAGED_NATIVE_TEXT"
+                    elif "COMMERCIAL_SCOPE_LANGUAGE" in diagnostic_classes:
+                        uncertainty_class = "COMMERCIAL_SCOPE_LANGUAGE"
                 scope_lines = unique_lines(
                     (*_nearby_scope_lines(pack, lines), *description_cluster, pack)
                 )
@@ -1075,27 +1428,51 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                 )
                 if _UNSAFE_MARKUP.search(scope_text):
                     reason = "UNSAFE_MARKUP_LIKE_SOURCE_TEXT"
+                    uncertainty_class = "UNSAFE_MARKUP"
                 elif _UNSUPPORTED_SCOPE.search(scope_text):
                     reason = "UNSUPPORTED_CLASS_OR_COMPONENT_LAYOUT"
-            else:
-                description_line, note_lines = None, ()
+                    uncertainty_class = "UNSUPPORTED_LAYOUT_LANGUAGE"
+            if not tiers and reason is None:
+                if barrier is not None:
+                    reason = "INTERVENING_SCOPE_LINE_BEFORE_PRICE_LADDER"
+                    uncertainty_class = (
+                        _scope_diagnostic(_normalized(str(barrier["text"])))[1]
+                    )
+                else:
+                    reason = "PRICE_LADDER_MISSING_OR_NONCONTIGUOUS"
+                    uncertainty_class = "PRICE_LADDER_UNRESOLVED"
+
             if reason is not None:
-                source_lines = unique_lines(
-                    (*description_cluster, pack, *tiers)
+                scoped_barrier = (
+                    (barrier,)
+                    if not tiers
+                    and barrier is not None
+                    and barrier["column"] == pack["column"]
+                    else ()
                 )
-                add_quarantine(
+                partial_tier_lines = tiers if tiers else later_tiers
+                partial_tiers = _tier_records(
+                    partial_tier_lines,
+                    source_sha256,
+                    page_number,
+                    kind,
+                    groups,
+                )
+                add_candidate_block(
                     reason,
-                    source_lines,
-                    anchor=pack,
-                    text=str(pack["text"]),
+                    (*description_cluster, pack, *tiers, *scoped_barrier, *later_tiers),
+                    pack=pack,
+                    description_line=description_line,
+                    scoped_notes=scoped_notes,
+                    printed_code=_value(groups["code"], groups["code"]),
+                    package=package,
+                    tier_records=partial_tiers,
+                    uncertainty_class=uncertainty_class,
                 )
                 continue
 
-            group_values = {key: value for key, value in match.groupdict().items() if value is not None}
             assert description_line is not None
-            source_lines = unique_lines(
-                (description_line, *note_lines, pack, *tiers)
-            )
+            source_lines = unique_lines((*description_cluster, pack, *tiers))
             conflicts = [
                 str(line["line_id"])
                 for line in source_lines
@@ -1108,74 +1485,81 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                     anchor=pack,
                     text=str(pack["text"]),
                     conflicts=conflicts,
+                    scope_level="OCCURRENCE_BLOCK",
+                    uncertainty_class="OVERLAPPING_SCOPE",
                 )
                 continue
-            tier_records = [
-                _tier_record(line, source_sha256, int(page["physical_page"]))
-                for line in tiers
-            ]
-            for tier in tier_records:
-                tier["arithmetic_diagnostic"] = _arithmetic_diagnostic(kind, group_values, tier)
+
+            tier_records = _tier_records(tiers, source_sha256, page_number, kind, groups)
             occurrence_id = _occurrence_identifier(
                 source_sha256,
-                int(page["physical_page"]),
+                page_number,
                 [str(line["line_id"]) for line in source_lines],
             )
             for source_line in source_lines:
                 assignments[str(source_line["line_id"])] = "SUPPORTED_OCCURRENCE"
+
+            adjacent_refs: list[dict[str, object]] = []
+            pre_scope = [
+                line
+                for line in _nearby_scope_lines(pack, lines)
+                if str(line["line_id"]) not in assignments
+                and (
+                    _has_damaged_text(str(line["text"]))
+                    or _POTENTIAL_COMMERCIAL_SCOPE.search(_normalized(str(line["text"])))
+                )
+            ]
+            adjacent_candidates: list[Mapping[str, object]] = list(pre_scope)
+            if (
+                barrier is not None
+                and barrier["column"] == pack["column"]
+                and str(barrier["line_id"]) not in protected_description_ids
+                and str(barrier["line_id"]) not in assignments
+            ):
+                adjacent_candidates.append(barrier)
+            for candidate in unique_lines(adjacent_candidates):
+                diagnostic_reason, diagnostic_class = _scope_diagnostic(
+                    _normalized(str(candidate["text"]))
+                )
+                record = add_quarantine(
+                    diagnostic_reason,
+                    (candidate,),
+                    anchor=candidate,
+                    text=str(candidate["text"]),
+                    scope_level="OCCURRENCE_ADJACENT",
+                    uncertainty_class=diagnostic_class,
+                )
+                adjacent_refs.append(
+                    {
+                        "quarantine_id": record["quarantine_id"],
+                        "scope_level": record["scope_level"],
+                        "reason": record["reason"],
+                        "source_line_ids": record["source_line_ids"],
+                    }
+                )
+
             description_raw = str(description_line["text"])
-            description = _normalized(description_raw)
-            package: dict[str, object]
-            if kind == "REGULAR":
-                package = {
-                    "size": _value(group_values["size"], group_values["size"]),
-                    "case_pack": _value(group_values["case_pack"], int(group_values["case_pack"])),
-                    "qualifier": (
-                        _value(group_values["qualifier"], group_values["qualifier"])
-                        if "qualifier" in group_values
-                        else _absent("NO_QUALIFIER_PRINTED")
-                    ),
-                    "outer_count": _absent("NOT_A_RETAIL_MULTIPACK_GRAMMAR"),
-                    "inner_pack_count": _absent("NOT_A_RETAIL_MULTIPACK_GRAMMAR"),
-                    "container": _absent("NOT_A_RETAIL_MULTIPACK_GRAMMAR"),
-                }
-            else:
-                package = {
-                    "size": _value(group_values["size"], group_values["size"]),
-                    "case_pack": _absent("NO_SHOPIFY_OR_OPERATIONAL_CASE_COUNT_INFERENCE"),
-                    "qualifier": _absent("NO_OPERATIONAL_QUALIFIER_INFERENCE"),
-                    "outer_count": _value(group_values["outer"], int(group_values["outer"])),
-                    "inner_pack_count": _value(group_values["inner"], int(group_values["inner"])),
-                    "container": (
-                        _value(group_values["container"], group_values["container"])
-                        if "container" in group_values
-                        else _absent("NO_CONTAINER_WORD_PRINTED_IN_SUPPORTED_SIZE_FIRST_GRAMMAR")
-                    ),
-                    "multipack_semantics": {
-                        "state": "UNRESOLVED",
-                        "raw": pack_text,
-                        "reason": "PRINTED_COUNTS_RETAINED_WITHOUT_SHOPIFY_UNIT_INFERENCE",
-                    },
-                }
             occurrence = {
                 "source_occurrence_id": occurrence_id,
                 "identity_class": "PRINTED_SOURCE_OCCURRENCE_NOT_OPERATIONAL_OFFER",
+                "evidence_status": (
+                    "PARTIAL_REVIEW_REQUIRED"
+                    if adjacent_refs
+                    else "SUPPORTED_SOURCE_EVIDENCE_NOT_OPERATIONAL_AUTHORITY"
+                ),
                 "source_offer_class": kind,
                 "supplier_format": SUPPORTED_FORMAT,
                 "document_id": f"sha256:{source_sha256}",
-                "physical_page": page["physical_page"],
+                "physical_page": page_number,
                 "printed_page": footer["printed_page"],
                 "column_context": pack["column"],
                 "section_context": {
                     "state": "UNRESOLVED_NATIVE_TEXT",
                     "reason": "PAGE_LINES_RETAINED; NO_OCR_OR_HEADING_INFERENCE",
                 },
-                "description": _value(description_raw, description),
-                "scoped_notes": [
-                    _value(str(line["text"]), _normalized(str(line["text"])))
-                    for line in note_lines
-                ],
-                "printed_code": _value(group_values["code"], group_values["code"]),
+                "description": _value(description_raw, _normalized(description_raw)),
+                "scoped_notes": scoped_notes,
+                "printed_code": _value(groups["code"], groups["code"]),
                 "package": package,
                 "pack_line": _value(str(pack["text"]), pack_text),
                 "tiers": tier_records,
@@ -1186,54 +1570,92 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                     "CANONICAL_VARIANT_AND_APPROVAL_REQUIREMENTS_NOT_ESTABLISHED"
                 ),
                 "source_line_ids": [str(line["line_id"]) for line in source_lines],
+                "adjacent_unresolved_line_ids": [
+                    line_id
+                    for ref in adjacent_refs
+                    for line_id in ref["source_line_ids"]
+                ],
+                "unresolved_evidence_refs": adjacent_refs,
             }
             occurrences.append(occurrence)
-            page_occurrence_ids.append(occurrence_id)
+            page_occurrences.append(occurrence)
             if len(occurrences) > MAX_OCCURRENCES:
-                raise ExtractionError("OCCURRENCE_LIMIT", "parsed occurrence count exceeded the bounded limit")
+                raise ExtractionError(
+                    "OCCURRENCE_LIMIT",
+                    "parsed occurrence count exceeded the bounded limit",
+                )
 
         for line in lines:
             line_id = str(line["line_id"])
-            text = _normalized(str(line["text"]))
             if line_id in assignments:
                 continue
-            if "$" in text or _TIER_LIKE.search(text):
-                reason = "UNASSIGNED_PRICE_LIKE_LINE"
-            elif _PACK_LIKE.search(text):
-                reason = "UNSUPPORTED_OR_MALFORMED_PACK_LINE"
-            elif _UNSUPPORTED_SCOPE.search(text):
-                reason = "UNSUPPORTED_CLASS_OR_COMPONENT_EVIDENCE"
-            elif _UNSAFE_MARKUP.search(text):
-                reason = "UNSAFE_MARKUP_LIKE_SOURCE_TEXT"
-            else:
-                reason = "UNCLASSIFIED_SOURCE_LINE"
+            text = _normalized(str(line["text"]))
+            reason, uncertainty_class = _scope_diagnostic(text)
             add_quarantine(
                 reason,
                 (line,),
                 anchor=line,
                 text=str(line["text"]),
+                scope_level="PAGE" if line["column"] == "PAGE_WIDE" else "COLUMN",
+                uncertainty_class=uncertainty_class,
             )
 
-        if not page_occurrence_ids:
+        if not page_occurrences:
             add_quarantine(
                 "NO_SUPPORTED_NATIVE_PRICE_BLOCK_ON_SELECTED_PAGE",
                 (),
                 anchor=None,
                 text="",
+                scope_level="PAGE",
+                uncertainty_class="NO_SUPPORTED_BLOCK",
             )
 
+        expected_line_ids = [str(line["line_id"]) for line in lines]
+        if set(assignments) != set(expected_line_ids) or len(assignments) != len(expected_line_ids):
+            raise ExtractionError(
+                "COVERAGE_PARTITION_INVALID",
+                "every extracted source line must have exactly one coverage claim",
+            )
         assignment_rows = [
             {"line_id": line["line_id"], "category": assignments[str(line["line_id"])]}
             for line in lines
         ]
-        unassigned_price_like = [
+        unresolved_scope_line_ids = [
             row["line_id"]
             for row in assignment_rows
             if row["category"] == "EXPLICIT_QUARANTINE"
-            and any(
-                candidate["line_id"] == row["line_id"] and "$" in str(candidate["text"])
-                for candidate in lines
-            )
+        ]
+        unassigned_price_like = [
+            line_id
+            for line_id in unresolved_scope_line_ids
+            if "$" in _normalized(str(lines_by_id[str(line_id)]["text"]))
+            or _TIER_LIKE.search(_normalized(str(lines_by_id[str(line_id)]["text"])))
+        ]
+        scope_refs = [
+            {
+                "quarantine_id": item["quarantine_id"],
+                "scope_level": item["scope_level"],
+                "uncertainty_class": item["uncertainty_class"],
+                "reason": item["reason"],
+                "source_line_ids": item["source_line_ids"],
+                **(
+                    {"candidate_block_id": item["candidate_block_id"]}
+                    if "candidate_block_id" in item
+                    else {}
+                ),
+            }
+            for item in quarantines
+        ]
+        occurrence_refs = [
+            {
+                "source_occurrence_id": occurrence["source_occurrence_id"],
+                "evidence_status": occurrence["evidence_status"],
+                "unresolved_evidence_refs": occurrence["unresolved_evidence_refs"],
+            }
+            for occurrence in page_occurrences
+        ]
+        broader_refs = [
+            ref for ref in scope_refs if ref["scope_level"] in {"COLUMN", "PAGE"}
         ]
         page_outputs.append(
             {
@@ -1244,15 +1666,21 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                 "page_terms": [footer["term"]],
                 "coverage_status": (
                     "UNVERIFIED_NO_SUPPORTED_BLOCK"
-                    if not page_occurrence_ids
+                    if not page_occurrences
                     else "PARTIAL_REVIEW_REQUIRED"
                     if quarantines
                     else "SUPPORTED_LINES_PARTITIONED_NOT_APPROVED"
                 ),
                 "coverage_partition": assignment_rows,
-                "supported_occurrence_ids": page_occurrence_ids,
+                "supported_occurrence_ids": [
+                    occurrence["source_occurrence_id"] for occurrence in page_occurrences
+                ],
                 "quarantines": quarantines,
                 "unresolved_price_like_line_ids": unassigned_price_like,
+                "unresolved_scope_line_ids": unresolved_scope_line_ids,
+                "unresolved_scope_refs": scope_refs,
+                "occurrence_unresolved_refs": occurrence_refs,
+                "broader_scope_unresolved_refs": broader_refs,
             }
         )
         all_quarantines.extend(quarantines)
@@ -1271,8 +1699,28 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
     term_ids = [str(term["source_term_id"]) for term in all_page_terms]
     if len(term_ids) != len(set(term_ids)):
         raise ExtractionError("TERM_ID_COLLISION", "source term IDs are not unique")
+    quarantine_ids = [str(item["quarantine_id"]) for item in all_quarantines]
+    if len(quarantine_ids) != len(set(quarantine_ids)):
+        raise ExtractionError("QUARANTINE_ID_COLLISION", "quarantine IDs are not unique")
+
+    coverage_pages = [
+        {
+            "physical_page": page["physical_page"],
+            "printed_page": page["printed_page"],
+            "coverage_status": page["coverage_status"],
+            "supported_occurrence_ids": page["supported_occurrence_ids"],
+            "quarantine_ids": [item["quarantine_id"] for item in page["quarantines"]],
+            "coverage_partition": page["coverage_partition"],
+            "unresolved_price_like_line_ids": page["unresolved_price_like_line_ids"],
+            "unresolved_scope_line_ids": page["unresolved_scope_line_ids"],
+            "unresolved_scope_refs": page["unresolved_scope_refs"],
+            "occurrence_unresolved_refs": page["occurrence_unresolved_refs"],
+            "broader_scope_unresolved_refs": page["broader_scope_unresolved_refs"],
+        }
+        for page in page_outputs
+    ]
     coverage = {
-        "format": "BUFFALO_SUPPLIER_PDF_COVERAGE_V1",
+        "format": COVERAGE_FORMAT,
         "label": LABEL,
         "supplier_format": SUPPORTED_FORMAT,
         "selected_pages": [page["physical_page"] for page in page_outputs],
@@ -1282,21 +1730,13 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
         "unresolved_price_like_line_count": sum(
             len(page["unresolved_price_like_line_ids"]) for page in page_outputs
         ),
-        "pages": [
-            {
-                "physical_page": page["physical_page"],
-                "printed_page": page["printed_page"],
-                "coverage_status": page["coverage_status"],
-                "supported_occurrence_ids": page["supported_occurrence_ids"],
-                "quarantine_ids": [item["quarantine_id"] for item in page["quarantines"]],
-                "coverage_partition": page["coverage_partition"],
-                "unresolved_price_like_line_ids": page["unresolved_price_like_line_ids"],
-            }
-            for page in page_outputs
-        ],
+        "unresolved_scope_line_count": sum(
+            len(page["unresolved_scope_line_ids"]) for page in page_outputs
+        ),
+        "pages": coverage_pages,
         "coverage_statement": (
-            "EVERY_EXTRACTED_LINE_PARTITIONED; UNVERIFIED_OR_QUARANTINED "
-            "CONTENT IS NEVER AN ALL-CLEAR"
+            "EVERY_EXTRACTED_LINE_PARTITIONED; UNVERIFIED_OR QUARANTINED "
+            "IDENTITY, NOTE, OR COMMERCIAL SCOPE IS NEVER AN ALL-CLEAR"
         ),
     }
     extraction = {
@@ -1306,13 +1746,24 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
         "supplier_format": SUPPORTED_FORMAT,
         "source_kind": SOURCE_KIND,
         "authority_effects": dict(ZERO_AUTHORITY_EFFECTS),
-        "supported_layouts": ["WRIGHT_REGULAR_BOTTLE_LADDER_V1", "WRIGHT_RETAIL_MULTIPACK_LADDER_V1"],
-        "unsupported_layouts": ["GIFT", "SPECIAL", "ASSORTED", "FIXED_COMBO", "COMPONENT_ALLOCATION", "CODELESS_OR_AMBIGUOUS_BLOCK"],
+        "supported_layouts": [
+            "WRIGHT_REGULAR_BOTTLE_LADDER_V1",
+            "WRIGHT_RETAIL_MULTIPACK_LADDER_V1",
+        ],
+        "unsupported_layouts": [
+            "GIFT",
+            "SPECIAL",
+            "ASSORTED",
+            "FIXED_COMBO",
+            "COMPONENT_ALLOCATION",
+            "CODELESS_OR_AMBIGUOUS_BLOCK",
+        ],
         "rounding_policy": "PRESERVE_PRINTED_NO_TOLERANCE_NO_SUBSTITUTION",
         "field_state_contract": {
-            "ABSENT": "FIELD_NOT_VISIBLE_OR_NOT_REPRESENTABLE_IN_SUPPORTED_GRAMMAR",
+            "ABSENT": "VALUE_NOT_ESTABLISHED_BY_THE_SUPPORTED_SOURCE_GRAMMAR",
             "EXPLICIT_NULL": "SERIALIZABLE_ONLY_WHEN_LITERAL_NULL_IS_PRESENT; NEVER_INFERRED",
             "BLANK": "VISIBLE_FIELD_POSITION_WITH_NO_VALUE",
+            "UNRESOLVED": "SOURCE_EVIDENCE_EXISTS_BUT_POSITIVE_VALUE_OR_SCOPE_IS_NOT_ESTABLISHED",
             "VALUE": "SOURCE_VALUE_WITH_EXACT_RAW_AND_SEPARATE_NORMALIZED_OR_TYPED_VALUE",
         },
         "source_occurrences": occurrences,
@@ -1431,12 +1882,37 @@ def extract_document(
 
 
 def _bundle_bytes(extraction: Mapping[str, object], coverage: Mapping[str, object]) -> dict[str, bytes]:
+    if extraction.get("format") != FORMAT or coverage.get("format") != COVERAGE_FORMAT:
+        raise ExtractionError(
+            "OUTPUT_FORMAT_MISMATCH",
+            "extraction and coverage must use the current explicit V2 output contract",
+        )
+    if (
+        extraction.get("supplier_format") != SUPPORTED_FORMAT
+        or coverage.get("supplier_format") != SUPPORTED_FORMAT
+    ):
+        raise ExtractionError(
+            "OUTPUT_FORMAT_MISMATCH",
+            "output members do not declare the supported Wright source grammar",
+        )
+    field_states = extraction.get("field_state_contract")
+    if not isinstance(field_states, Mapping) or set(field_states) != {
+        "ABSENT",
+        "BLANK",
+        "EXPLICIT_NULL",
+        "UNRESOLVED",
+        "VALUE",
+    }:
+        raise ExtractionError(
+            "OUTPUT_FORMAT_MISMATCH",
+            "extraction does not declare the complete V2 field-state contract",
+        )
     extraction_bytes = _canonical_bytes(extraction)
     coverage_bytes = _canonical_bytes(coverage)
     if len(extraction_bytes) > MAX_CANONICAL_BYTES or len(coverage_bytes) > MAX_CANONICAL_BYTES:
         raise ExtractionError("CANONICAL_OUTPUT_LIMIT", "canonical output exceeded the bounded byte limit")
     manifest = {
-        "format": "BUFFALO_SUPPLIER_PDF_REVIEW_SHA256_V1",
+        "format": MANIFEST_FORMAT,
         "label": LABEL,
         "self_excluded": True,
         "files": [

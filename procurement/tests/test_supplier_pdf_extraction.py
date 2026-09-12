@@ -173,6 +173,12 @@ class SupplierPdfExtractionTests(unittest.TestCase):
         pages = extractor.parse_poppler_tsv(raw, digest, (1, 2))
         return extractor.parse_wright_pages(pages, digest)
 
+    def _parse_pages(self, pages, *, marker="fabricated-scope-case"):
+        digest = hashlib.sha256(marker.encode("utf-8")).hexdigest()
+        selected = tuple(int(page["physical_page"]) for page in pages)
+        parsed = extractor.parse_poppler_tsv(_tsv_for_pages(pages), digest, selected)
+        return extractor.parse_wright_pages(parsed, digest)
+
     def test_fabricated_end_to_end_retains_regular_retail_tiers_and_coverage(self):
         extraction, coverage = self._extract()
         expected = self.fixture["expected"]
@@ -212,6 +218,472 @@ class SupplierPdfExtractionTests(unittest.TestCase):
                 len({row["line_id"] for row in page["coverage_partition"]}),
                 len(page["coverage_partition"]),
             )
+
+        self.assertEqual(extraction["format"], extractor.FORMAT)
+        self.assertEqual(coverage["format"], extractor.COVERAGE_FORMAT)
+        self.assertEqual(
+            {row["scoped_notes"]["state"] for row in extraction["source_occurrences"]},
+            {"ABSENT"},
+        )
+        self.assertTrue(
+            all(
+                row["evidence_status"]
+                == "SUPPORTED_SOURCE_EVIDENCE_NOT_OPERATIONAL_AUTHORITY"
+                for row in extraction["source_occurrences"]
+            )
+        )
+
+    def test_clean_award_line_displaces_no_title_and_quarantines_the_candidate_block(self):
+        page = json.loads(json.dumps(self.fixture["pages"][0]))
+        award_text = "Gold Medal 2025 San Francisco Competition"
+        page["lines"].insert(
+            2,
+            {
+                "text": award_text,
+                "left": "54.00",
+                "top": "78.00",
+                "width": "190.00",
+                "height": "4.00",
+            },
+        )
+        extraction, coverage = self._parse_pages([page], marker="clean-award-displacement")
+
+        self.assertFalse(
+            any(
+                row["printed_code"]["value"] == "0012-A"
+                for row in extraction["source_occurrences"]
+            )
+        )
+        block = next(
+            row
+            for row in extraction["quarantines"]
+            if row["reason"] == "DESCRIPTION_CANDIDATES_AMBIGUOUS_OR_DISPLACED"
+            and row.get("evidence_fields", {}).get("printed_code", {}).get("value")
+            == "0012-A"
+        )
+        self.assertEqual(block["scope_level"], "OCCURRENCE_BLOCK")
+        self.assertEqual(block["evidence_status"], "PARTIAL_REVIEW_REQUIRED")
+        self.assertTrue(str(block["candidate_block_id"]).startswith("WRT-CANDIDATE-"))
+        self.assertEqual(block["description"]["state"], "UNRESOLVED")
+        self.assertEqual(block["scoped_notes"]["state"], "UNRESOLVED")
+        self.assertEqual(len(block["evidence_fields"]["tiers"]), 2)
+        candidate_raw = {row["raw"] for row in block["description"]["candidates"]}
+        self.assertEqual(candidate_raw, {"Fabricated Citrus Reserve", award_text})
+        self.assertTrue(
+            all(
+                row["evidence_sha256"]
+                and row["bbox"]
+                and row["source_line_id"] in block["source_line_ids"]
+                for row in block["description"]["candidates"]
+            )
+        )
+        categories = {
+            row["line_id"]: row["category"]
+            for row in extraction["pages"][0]["coverage_partition"]
+        }
+        for candidate in block["description"]["candidates"]:
+            self.assertEqual(categories[candidate["source_line_id"]], "EXPLICIT_QUARANTINE")
+        extraction_ref = next(
+            ref
+            for ref in extraction["pages"][0]["unresolved_scope_refs"]
+            if ref.get("candidate_block_id") == block["candidate_block_id"]
+        )
+        coverage_ref = next(
+            ref
+            for ref in coverage["pages"][0]["unresolved_scope_refs"]
+            if ref.get("candidate_block_id") == block["candidate_block_id"]
+        )
+        self.assertEqual(extraction_ref, coverage_ref)
+        self.assertNotIn(award_text, [row["description"].get("value") for row in extraction["source_occurrences"]])
+
+    def test_multiple_descriptions_fail_closed_but_single_description_control_is_supported(self):
+        control, _ = self._parse_pages(
+            [json.loads(json.dumps(self.fixture["pages"][0]))],
+            marker="single-description-control",
+        )
+        regular = next(
+            row for row in control["source_occurrences"]
+            if row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(regular["description"]["value"], "Fabricated Citrus Reserve")
+        self.assertEqual(regular["scoped_notes"]["state"], "ABSENT")
+        self.assertEqual(
+            regular["scoped_notes"]["reason"],
+            "NO_SCOPED_NOTE_VALUE_ESTABLISHED_BY_SUPPORTED_GRAMMAR",
+        )
+        self.assertNotIn("items", regular["scoped_notes"])
+
+        ambiguous_page = json.loads(json.dumps(self.fixture["pages"][0]))
+        ambiguous_page["lines"].insert(
+            2,
+            {
+                "text": "Fabricated Citrus Reserve Select",
+                "left": "54.00",
+                "top": "78.00",
+                "width": "180.00",
+                "height": "4.00",
+            },
+        )
+        ambiguous, _ = self._parse_pages(
+            [ambiguous_page], marker="two-description-candidates"
+        )
+        block = next(
+            row for row in ambiguous["quarantines"]
+            if row["reason"] == "DESCRIPTION_CANDIDATES_AMBIGUOUS_OR_DISPLACED"
+        )
+        self.assertEqual(len(block["description"]["candidate_line_ids"]), 2)
+        self.assertNotIn("0012-A", [row["printed_code"]["value"] for row in ambiguous["source_occurrences"]])
+
+    def test_scoped_note_states_distinguish_absent_recovered_and_unresolved(self):
+        plain, _ = self._parse_pages(
+            [json.loads(json.dumps(self.fixture["pages"][0]))], marker="notes-absent"
+        )
+        plain_note = next(
+            row["scoped_notes"] for row in plain["source_occurrences"]
+            if row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(plain_note["state"], "ABSENT")
+
+        variety_page = json.loads(json.dumps(self.fixture["pages"][0]))
+        variety_page["lines"][1]["text"] = "Fabricated Citrus Variety Pack"
+        variety_page["lines"].insert(
+            2,
+            {
+                "text": "Orange, Lime and Berry",
+                "left": "54.00",
+                "top": "78.00",
+                "width": "155.00",
+                "height": "4.00",
+            },
+        )
+        recovered, _ = self._parse_pages([variety_page], marker="notes-recovered")
+        recovered_note = next(
+            row["scoped_notes"] for row in recovered["source_occurrences"]
+            if row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(recovered_note["state"], "VALUE")
+        self.assertEqual(recovered_note["reason"], "SUPPORTED_VARIETY_LIST_GRAMMAR")
+        self.assertEqual(recovered_note["items"][0]["raw"], "Orange, Lime and Berry")
+        self.assertRegex(recovered_note["items"][0]["evidence_sha256"], r"^[0-9a-f]{64}$")
+
+        damaged_page = json.loads(json.dumps(self.fixture["pages"][0]))
+        damaged_page["lines"].insert(
+            2,
+            {
+                "text": "Gold \ufffd Medal",
+                "left": "54.00",
+                "top": "78.00",
+                "width": "120.00",
+                "height": "4.00",
+            },
+        )
+        unresolved, _ = self._parse_pages([damaged_page], marker="notes-damaged")
+        unresolved_note = next(
+            row["scoped_notes"] for row in unresolved["quarantines"]
+            if row["reason"] == "DESCRIPTION_CANDIDATES_AMBIGUOUS_OR_DISPLACED"
+        )
+        self.assertEqual(unresolved_note["state"], "UNRESOLVED")
+        self.assertNotIn("EXPLICIT_NULL", {plain_note["state"], recovered_note["state"], unresolved_note["state"]})
+
+    def test_harmless_looking_and_damaged_interveners_remain_partial_raw_evidence(self):
+        for ordinal, intervening in enumerate(("Featured Selection", "Fragment \ue123 \ufffd")):
+            with self.subTest(intervening=intervening):
+                page = json.loads(json.dumps(self.fixture["pages"][0]))
+                page["lines"].insert(
+                    3,
+                    {
+                        "text": intervening,
+                        "left": "54.00",
+                        "top": "97.00",
+                        "width": "135.00",
+                        "height": "0.50",
+                    },
+                )
+                extraction, _ = self._parse_pages(
+                    [page], marker=f"intervening-{ordinal}"
+                )
+                block = next(
+                    row for row in extraction["quarantines"]
+                    if row["reason"] == "INTERVENING_SCOPE_LINE_BEFORE_PRICE_LADDER"
+                )
+                self.assertEqual(block["evidence_status"], "PARTIAL_REVIEW_REQUIRED")
+                self.assertEqual(block["evidence_fields"]["printed_code"]["value"], "0012-A")
+                self.assertEqual(len(block["evidence_fields"]["tiers"]), 2)
+                self.assertIn(intervening, {row["raw"] for row in block["source_evidence"]})
+                self.assertNotIn(
+                    next(
+                        row["source_line_id"]
+                        for row in block["source_evidence"]
+                        if row["raw"] == intervening
+                    ),
+                    extraction["pages"][0]["footer_source_line_ids"],
+                )
+                self.assertFalse(
+                    any(
+                        row["printed_code"]["value"] == "0012-A"
+                        for row in extraction["source_occurrences"]
+                    )
+                )
+
+    def test_nonprice_commercial_scope_language_is_elevated_at_each_position(self):
+        cases = (
+            ("Allocation required", "BEFORE_PACK"),
+            ("NY territory only", "BETWEEN_PACK_AND_LADDER"),
+            ("Wholesale channel only", "AFTER_LADDER"),
+            ("Minimum order 5 cases", "BEFORE_PACK"),
+            ("Available while supplies last", "BETWEEN_PACK_AND_LADDER"),
+            ("Split case restrictions apply", "AFTER_LADDER"),
+            ("Handling conditions apply", "BEFORE_PACK"),
+            ("Does not assort", "AFTER_LADDER"),
+        )
+        for ordinal, (restriction, position) in enumerate(cases):
+            with self.subTest(restriction=restriction, position=position):
+                page = json.loads(json.dumps(self.fixture["pages"][0]))
+                if position == "BEFORE_PACK":
+                    index, top, height = 2, "78.00", "4.00"
+                elif position == "BETWEEN_PACK_AND_LADDER":
+                    index, top, height = 3, "97.00", "0.50"
+                else:
+                    index, top, height = 5, "121.00", "6.00"
+                page["lines"].insert(
+                    index,
+                    {
+                        "text": restriction,
+                        "left": "54.00",
+                        "top": top,
+                        "width": "175.00",
+                        "height": height,
+                    },
+                )
+                extraction, coverage = self._parse_pages(
+                    [page], marker=f"commercial-{ordinal}-{position}"
+                )
+                restriction_quarantine = next(
+                    row for row in extraction["quarantines"]
+                    if restriction in {item["raw"] for item in row["source_evidence"]}
+                )
+                self.assertEqual(
+                    restriction_quarantine["uncertainty_class"],
+                    "COMMERCIAL_SCOPE_LANGUAGE",
+                )
+                self.assertNotIn("$", restriction)
+                self.assertFalse(extractor._TIER_LIKE.search(restriction))
+                self.assertIn(
+                    restriction_quarantine["quarantine_id"],
+                    {
+                        ref["quarantine_id"]
+                        for ref in coverage["pages"][0]["unresolved_scope_refs"]
+                    },
+                )
+                if position == "AFTER_LADDER":
+                    regular = next(
+                        row for row in extraction["source_occurrences"]
+                        if row["printed_code"]["value"] == "0012-A"
+                    )
+                    self.assertEqual(regular["evidence_status"], "PARTIAL_REVIEW_REQUIRED")
+                    self.assertIn(
+                        restriction_quarantine["source_line_ids"][0],
+                        regular["adjacent_unresolved_line_ids"],
+                    )
+
+    def test_scope_boundaries_do_not_guess_across_columns_pages_or_neighboring_products(self):
+        other_column = json.loads(json.dumps(self.fixture["pages"][0]))
+        other_column["lines"].insert(
+            5,
+            {
+                "text": "Territory limited",
+                "left": "390.00",
+                "top": "121.00",
+                "width": "130.00",
+                "height": "6.00",
+            },
+        )
+        extracted, _ = self._parse_pages([other_column], marker="other-column-scope")
+        regular = next(
+            row for row in extracted["source_occurrences"]
+            if row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(regular["adjacent_unresolved_line_ids"], [])
+        territory = next(
+            row for row in extracted["quarantines"] if row["text"] == "Territory limited"
+        )
+        self.assertEqual(territory["scope_level"], "COLUMN")
+
+        page_wide = json.loads(json.dumps(self.fixture["pages"][0]))
+        page_wide["lines"].insert(
+            3,
+            {
+                "text": "Allocation pending",
+                "left": "100.00",
+                "top": "97.00",
+                "width": "412.00",
+                "height": "0.50",
+            },
+        )
+        page_wide_result, _ = self._parse_pages(
+            [page_wide], marker="page-wide-scope"
+        )
+        allocation = next(
+            row for row in page_wide_result["quarantines"]
+            if row["text"] == "Allocation pending"
+        )
+        self.assertEqual(allocation["scope_level"], "PAGE")
+        self.assertFalse(
+            any(
+                row["printed_code"]["value"] == "0012-A"
+                for row in page_wide_result["source_occurrences"]
+            )
+        )
+
+        neighbor = json.loads(json.dumps(self.fixture["pages"][0]))
+        neighbor["lines"].insert(
+            5,
+            {
+                "text": "Fabricated Neighbor",
+                "left": "54.00",
+                "top": "122.00",
+                "width": "135.00",
+                "height": "6.00",
+            },
+        )
+        neighbor["lines"].insert(
+            6,
+            {
+                "text": "750mL 6 Pack - NBR-2",
+                "left": "54.00",
+                "top": "130.00",
+                "width": "145.00",
+                "height": "6.00",
+            },
+        )
+        neighbor["lines"].insert(
+            7,
+            {
+                "text": "1 Case: $66.00 \u00b7 Per Bottle: $11.00",
+                "left": "54.00",
+                "top": "138.00",
+                "width": "200.00",
+                "height": "6.00",
+            },
+        )
+        neighboring, _ = self._parse_pages([neighbor], marker="neighbor-product")
+        by_code = {
+            row["printed_code"]["value"]: row
+            for row in neighboring["source_occurrences"]
+        }
+        self.assertIn("0012-A", by_code)
+        self.assertIn("NBR-2", by_code)
+        self.assertNotIn(
+            "Fabricated Neighbor",
+            json.dumps(by_code["0012-A"], ensure_ascii=False),
+        )
+
+        first = json.loads(json.dumps(self.fixture["pages"][0]))
+        second = json.loads(json.dumps(self.fixture["pages"][1]))
+        second["lines"].insert(
+            0,
+            {
+                "text": "Minimum order applies",
+                "left": "54.00",
+                "top": "20.00",
+                "width": "140.00",
+                "height": "8.00",
+            },
+        )
+        cross_page, _ = self._parse_pages([first, second], marker="cross-page-scope")
+        page_one_regular = next(
+            row for row in cross_page["source_occurrences"]
+            if row["physical_page"] == 1 and row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(page_one_regular["adjacent_unresolved_line_ids"], [])
+
+    def test_extraction_and_coverage_mirror_refs_with_claim_once_integrity(self):
+        page = json.loads(json.dumps(self.fixture["pages"][0]))
+        page["lines"].insert(
+            5,
+            {
+                "text": "Handling restrictions apply",
+                "left": "54.00",
+                "top": "121.00",
+                "width": "165.00",
+                "height": "6.00",
+            },
+        )
+        extraction, coverage = self._parse_pages([page], marker="mirror-integrity")
+        extraction_page = extraction["pages"][0]
+        coverage_page = coverage["pages"][0]
+        for key in (
+            "unresolved_scope_line_ids",
+            "unresolved_scope_refs",
+            "occurrence_unresolved_refs",
+            "broader_scope_unresolved_refs",
+        ):
+            self.assertEqual(extraction_page[key], coverage_page[key])
+        line_ids = [row["line_id"] for row in extraction_page["lines"]]
+        claims = [row["line_id"] for row in extraction_page["coverage_partition"]]
+        self.assertEqual(claims, line_ids)
+        self.assertEqual(len(claims), len(set(claims)))
+        quarantine_ids = [row["quarantine_id"] for row in extraction["quarantines"]]
+        self.assertEqual(len(quarantine_ids), len(set(quarantine_ids)))
+        self.assertTrue(
+            all(
+                ref["quarantine_id"] in quarantine_ids
+                for ref in extraction_page["unresolved_scope_refs"]
+            )
+        )
+        supported_claims = {
+            line_id
+            for row in extraction["source_occurrences"]
+            for line_id in row["source_line_ids"]
+        }
+        quarantine_claims = {
+            line_id
+            for row in extraction["quarantines"]
+            for line_id in row["source_line_ids"]
+        }
+        self.assertTrue(supported_claims.isdisjoint(quarantine_claims))
+
+    def test_v2_publication_rejects_stale_shapes_and_preserves_old_output(self):
+        extraction, coverage = self._extract()
+        output = self.root / "v2-output"
+        first = extractor.write_bundle(output, extraction, coverage)
+        before = {
+            path.name: (path.read_bytes(), path.stat().st_mtime_ns, stat.S_IMODE(path.stat().st_mode))
+            for path in output.iterdir()
+        }
+        second = extractor.write_bundle(output, extraction, coverage)
+        after = {
+            path.name: (path.read_bytes(), path.stat().st_mtime_ns, stat.S_IMODE(path.stat().st_mode))
+            for path in output.iterdir()
+        }
+        self.assertFalse(first["idempotent_replay"])
+        self.assertTrue(second["idempotent_replay"])
+        self.assertEqual(before, after)
+        manifest = json.loads((output / "SHA256SUMS.json").read_bytes())
+        self.assertEqual(manifest["format"], extractor.MANIFEST_FORMAT)
+
+        stale_extraction = json.loads(json.dumps(extraction))
+        stale_extraction["format"] = "BUFFALO_SUPPLIER_PDF_REVIEW_V1"
+        with self.assertRaisesRegex(extractor.ExtractionError, "OUTPUT_FORMAT_MISMATCH"):
+            extractor.write_bundle(self.root / "stale-shape", stale_extraction, coverage)
+
+        old_output = self.root / "old-v1-output"
+        old_output.mkdir(mode=0o700)
+        for name in extractor._OUTPUT_FILES:
+            path = old_output / name
+            path.write_bytes(b'{"format":"V1"}\n')
+            path.chmod(0o600)
+        old_before = {
+            path.name: (path.read_bytes(), path.stat().st_mtime_ns)
+            for path in old_output.iterdir()
+        }
+        with self.assertRaisesRegex(extractor.ExtractionError, "OUTPUT_DRIFT"):
+            extractor.write_bundle(old_output, extraction, coverage)
+        old_after = {
+            path.name: (path.read_bytes(), path.stat().st_mtime_ns)
+            for path in old_output.iterdir()
+        }
+        self.assertEqual(old_before, old_after)
 
     def test_missing_code_is_quarantined_without_fabricating_identity(self):
         extraction, _ = self._parsed_fixture()
@@ -906,9 +1378,8 @@ class SupplierPdfExtractionTests(unittest.TestCase):
 
     def test_new_module_floor_is_registered_and_global_floor_remains_sum_derived(self):
         module = "test_supplier_pdf_extraction.py"
-        self.assertEqual(runner.REQUIRED_MODULE_MINIMUMS[module], 22)
+        self.assertEqual(runner.REQUIRED_MODULE_MINIMUMS[module], 30)
         self.assertEqual(runner.GLOBAL_MINIMUM_TESTS, sum(runner.REQUIRED_MODULE_MINIMUMS.values()))
-        self.assertEqual(runner.GLOBAL_MINIMUM_TESTS, 723)
         self.assertEqual(runner.REQUIRED_MODULE_MINIMUMS["test_supplier_format_conformance.py"], 9)
 
 
