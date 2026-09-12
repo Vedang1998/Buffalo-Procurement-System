@@ -29,6 +29,15 @@ CORE_TABLES = [
     "sales_backfill_chunks", "sales_backfill_pages", "sales_backfill_run_facts",
     "shopify_sales_daily_raw", "historical_sales_review_decisions",
     "seed_import_records",
+    "inventory_snapshot_runs", "inventory_snapshot_run_rows",
+    "vendor_operating_rules", "vendor_rule_revisions",
+    "runs", "purchase_orders", "purchase_order_lines",
+    "po_reconciliation_events", "po_operational_events",
+    "price_book_batches", "price_book_staging_rows",
+    "price_book_validation_issues", "price_book_promotion_events",
+    "price_book_disposition_events", "legacy_price_seed_events",
+    "monday_run_artifacts", "monday_packet_build_events",
+    "monday_run_blocker_exclusions", "monday_material_edit_confirmations",
 ]
 
 SHOPIFY_ENV_VARS = ["SHOPIFY_SHOP", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"]

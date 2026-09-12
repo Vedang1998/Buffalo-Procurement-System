@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-import importlib.util
 import inspect
 import json
 import os
 from pathlib import Path
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 from urllib.parse import urljoin
@@ -17,18 +15,12 @@ import uuid
 from fastapi.testclient import TestClient
 
 from procurement_os import api, health
+from postgres_test_support import (
+    validated_test_connection as _validated_phase5_test_database_connection,
+)
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
-RUNNER_PATH = Path(__file__).resolve().parents[1] / "tools" / "run_tests.py"
-RUNNER_SPEC = importlib.util.spec_from_file_location(
-    "phase5_test_database_runner_contract", RUNNER_PATH
-)
-assert RUNNER_SPEC is not None and RUNNER_SPEC.loader is not None
-test_runner = importlib.util.module_from_spec(RUNNER_SPEC)
-sys.modules[RUNNER_SPEC.name] = test_runner
-RUNNER_SPEC.loader.exec_module(test_runner)
-
 MIGRATIONS = (
     "schema_postgres.sql",
     "001_v1_3_catalog_sales.sql",
@@ -40,41 +32,12 @@ MIGRATIONS = (
     "007_phase4_terminal_disposition.sql",
 )
 
-
-def _validated_phase5_test_database_connection():
-    """Connect only after the authoritative test runner validates TEST_DATABASE_URL."""
-    target = test_runner._validated_test_database_target()
-    test_runner._clear_libpq_environment()
-
-    import psycopg
-
-    connection = psycopg.connect(target.url, connect_timeout=5)
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """SELECT current_database(), current_setting('server_version'),
-                          current_setting('server_version_num')::integer"""
-            )
-            row = cursor.fetchone()
-        if row is None:
-            raise ValueError("PostgreSQL identity query returned no row")
-        database_info = test_runner._validate_database_facts(
-            target,
-            database=row[0],
-            server_version=row[1],
-            server_version_num=row[2],
-        )
-    except BaseException:
-        connection.close()
-        raise
-    return connection, target, database_info
-
-
 NAV_LABELS = (
     "System Readiness",
     "Catalog Reconciliation",
     "Historical Sales Reconciliation",
     "Data/Sync Runs",
+    "Monday Procurement",
 )
 
 
@@ -287,7 +250,7 @@ class Phase5RenderingTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, lowered)
 
-    def test_all_four_surfaces_render_the_same_navigation(self):
+    def test_all_operational_surfaces_render_the_same_navigation(self):
         pages = [
             api._admin_status_html(health_report(), nav_root="../"),
             api._data_sync_runs_html(run_status_report(), nav_root=""),
@@ -307,11 +270,12 @@ class Phase5RenderingTests(unittest.TestCase):
 
     def test_shared_navigation_itself_is_get_only_and_non_actionable(self):
         nav = api._operational_nav("../", current="Historical Sales Reconciliation")
-        self.assertEqual(nav.count("<a "), 4)
+        self.assertEqual(nav.count("<a "), 5)
         self.assertIn("../admin/status", nav)
         self.assertIn("../reconciliation", nav)
         self.assertIn("../historical-sales/review", nav)
         self.assertIn("../data-sync-runs", nav)
+        self.assertIn("../monday-runs", nav)
         self.assertEqual(
             urljoin(
                 "https://example.test/procurement/historical-sales/review",
@@ -471,7 +435,9 @@ class Phase5TestDatabaseSafetyTests(unittest.TestCase):
         return connection
 
     def test_connected_database_mismatch_fails_before_fixture_ddl(self):
-        connection = self._identity_connection(("heliumdb", "16.10", 160010))
+        connection = self._identity_connection(
+            ("heliumdb", "16.10", 160010, "127.0.0.1")
+        )
         with patch.dict(
             os.environ, {"TEST_DATABASE_URL": self.SAFE_TEST_URL}, clear=True
         ), patch("psycopg.connect", return_value=connection) as connect:
@@ -482,7 +448,9 @@ class Phase5TestDatabaseSafetyTests(unittest.TestCase):
         connection.close.assert_called_once_with()
 
     def test_wrong_postgresql_major_fails_before_fixture_ddl(self):
-        connection = self._identity_connection(("procurement_test", "17.5", 170005))
+        connection = self._identity_connection(
+            ("procurement_test", "17.5", 170005, "127.0.0.1")
+        )
         with patch.dict(
             os.environ, {"TEST_DATABASE_URL": self.SAFE_TEST_URL}, clear=True
         ), patch("psycopg.connect", return_value=connection) as connect:

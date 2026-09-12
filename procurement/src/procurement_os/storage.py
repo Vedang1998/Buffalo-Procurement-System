@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
+import tempfile
 
 
 class StorageAdapter(ABC):
@@ -37,7 +38,8 @@ class LocalFilesystemStorage(StorageAdapter):
 
     def __init__(self, root: str | Path):
         self._root = Path(root)
-        self._root.mkdir(parents=True, exist_ok=True)
+        # Construction and every read path are side-effect free. The write
+        # boundary creates only the parent directories needed for that object.
 
     def _path(self, key: str) -> Path:
         if Path(key).is_absolute():
@@ -51,7 +53,23 @@ class LocalFilesystemStorage(StorageAdapter):
     def put_bytes(self, key: str, data: bytes) -> None:
         p = self._path(key)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(data)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{p.name}.", suffix=".tmp", dir=p.parent
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, p)
+            directory_descriptor = os.open(p.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_descriptor)
+            finally:
+                os.close(directory_descriptor)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     def get_bytes(self, key: str) -> bytes:
         return self._path(key).read_bytes()

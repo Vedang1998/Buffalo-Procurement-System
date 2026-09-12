@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-06T17:01:01Z (UTC)
+**Updated:** 2026-09-12T01:44:18Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,222 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### PR #23 server-side-loopback CI remediation — TESTED / REVIEW PASS / FRESH GITHUB CI PENDING
+
+- The owner-supplied diagnostic kit was verified before use. The outer ZIP is
+  138,223 bytes with SHA-256
+  `1bde7414c04244243047ecbbec74abf2d96042b7c238640c45aa335e4d31b2f8`;
+  all seven payload members listed in `SHA256SUMS.json` match. Its original
+  unmodified Actions-log
+  archive is 120,003 bytes with SHA-256
+  `e0e083a4881c0ab56192c1d7628b23eb7de676a199526b55cb2d231580d94a56`;
+  the raw main log has SHA-256
+  `20a1baafc9e4fb2ed819c6c96521f86b2e57a1de27e06f5f619139e5e0eb3cf2`.
+  The archive remains outside Git.
+- Original Actions run `34185466802`, attempt 1, job `101932809520`, checked
+  out `f7bbb45a31953eccd4ec5016269057e9e2c003d3`. That merge checkout and exact PR
+  source `ec71fe9c5a6f13832a8cad65b065be9747010486` share tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. The complete log proves
+  **599 discovered / 599 executed / 562 passed / 11 failures / 26 errors** in
+  958.285 seconds, with every other abnormal counter zero. All 37 abnormalities
+  were in `MondayWorkflowPostgresTests` and repeatedly surfaced
+  `CURRENT_SALES_COVERAGE_UNPROVEN`; startup passed **10/10** and the Phase 4
+  corrective module's 70 entries all passed. This was not a timeout.
+- Work was isolated on `codex/pr23-ci-loopback-remediation`, created at exact
+  PR source `ec71fe9c`. The reviewed implementation commit is
+  `07ba389fd6ea956890bcbea2e53b5bc8036a8788`, tree
+  `c4e428901099d784e2fc4be446142b569e2b43db`, with that source as its sole
+  parent. It changes exactly seven CI/test-harness files: the Procurement CI
+  workflow, deterministic test runner, shared PostgreSQL test support, Monday
+  workflow tests, two existing database-safety mock fixtures, and runner
+  self-tests.
+- Real disposable reproduction used the workflow's exact digest-pinned
+  PostgreSQL 16.14 image. Through the old default bridge and published
+  loopback client port, PostgreSQL measured `inet_client_addr=172.17.0.1` and
+  `inet_server_addr=172.17.0.2`; server-side loopback was false. The full Monday
+  module then reproduced the original distribution exactly: **54 executed / 17
+  passed / 11 failures / 26 errors**. Four representative synthetic-path tests
+  failed while the canonical-sales control passed. This is local measured
+  topology evidence, not a claim that the supplied original Actions log
+  recorded `inet_server_addr()`.
+- With the same image on owned Linux host networking and PostgreSQL explicitly
+  bound to `127.0.0.1`, both client and server addresses measured
+  `127.0.0.1`. The same representative set passed **5/5**, including the
+  canonical-sales control, and the complete Monday module passed **54/54**.
+  The workflow now creates that loopback-only disposable topology at a generated
+  port with a generated credential that is not logged and tmpfs data, validates URL,
+  database name, PostgreSQL major, and server address before suite work, and
+  removes only the captured owned container ID while preserving the original
+  test exit status. The timeout remains 20 minutes.
+- Generic test-database validation now reports
+  `client_url_loopback=verified` separately from `server_address`; it does not
+  reject bridged databases globally. The Monday PostgreSQL class alone opts
+  into the unchanged runtime server-side-loopback contract before any fixture
+  DDL. A negative real bridge check collapsed the former cascade to one
+  class-level error with 51 PostgreSQL Monday tests unexecuted and the measured
+  server address reported; the three pure Monday tests are outside that class.
+  The runtime synthetic authority check itself is unchanged.
+- Three substantive runner tests were added: generic server-address recording
+  without global rejection, exact Monday acceptance of `127.0.0.1`/`::1` plus
+  bridge rejection, and static workflow ownership/topology checks. No existing
+  test method, skip policy, timeout, assertion, or floor was removed or
+  weakened. `test_test_runner.py` rises from 21 to **24** and the sum-derived
+  global floor rises from 599 to **602**; Monday remains **54**.
+- Candidate validation passed: runner self-tests **24/24**; focused affected
+  cases **5/5**; Monday **54/54**; pinned-uv startup hardening **10/10**; and
+  one full run through the workflow's final-step topology completed in 751.199
+  seconds at **602 discovered / 602 executed / 602 passed**, with failures,
+  errors, skips, expected failures, and unexpected successes all zero. An
+  earlier material-candidate run exposed four stale three-column database mock
+  rows (**598 passed / 4 errors**); only those mock rows were extended with the
+  newly queried address, their fail-before-DDL assertions then passed **4/4**,
+  and only the later 602/602 run is accepted. YAML parsing, Python compilation,
+  `uv 0.12.3` lock validation, `git diff --check`, added credential-marker
+  review, and owned-container cleanup also passed.
+- Local execution used host `uv 0.9.24` for the short workflow setup/preflight
+  snippets; the authoritative suite wrapper detected that mismatch and ran the
+  suite through `uvx`-provided **uv 0.12.3**, and startup/lock validation was
+  separately repeated with explicit uv 0.12.3. The hosted workflow installs uv
+  0.12.3 before these snippets, but only fresh Actions execution can prove that
+  hosted path. Local evidence is not reported as fresh GitHub CI.
+- Two independent static reviewers returned **PASS** with no P0/P1/P2 findings
+  on exact implementation commit `07ba389f`. They independently confirmed the
+  owned cleanup/credential boundary, targeted rather than global preflight,
+  exact test floors, preserved canonical controls in the corrected topology,
+  and byte-identical protected scope. Static review is not execution evidence.
+- Product runtime (`procurement/src`), schema and migrations
+  (`procurement/db`), canonical authority, Master Plan, `rules.toml`, supplier
+  readers, `scripts/procurement-tests`, `uv.lock`, and `pyproject.toml` are
+  byte-identical to `ec71fe9c`. Production database connections/writes,
+  Shopify calls/writes, mapping or price approvals, persistent-foundation SQL,
+  supplier actions, and PO/order actions were all **0**. No existing PR branch,
+  PR metadata, Actions run, merge target, deployment, or operational state was
+  changed.
+- **Exact next authorization boundary:** stop at this tested remediation
+  handoff. A separately authorized integration must preserve PR #23 history,
+  apply the reviewed child without pushing directly to the preserved source by
+  accident, and then obtain fresh exact-head GitHub CI. Until that CI is
+  reviewed, this is a **TESTED CI REMEDIATION — NOT INTEGRATION OR DEPLOYMENT
+  APPROVAL**. No PR change/retry, merge, deployment, production connection,
+  Shopify action, supplier communication, or PO/order action is authorized.
+
+### Emergency Monday offline draft-PR/CI checkpoint — NOT PRODUCTION READY
+
+- Independent review originally returned REQUEST CHANGES on implementation commit
+  `4b342cf67ec1d488a2f84433042a468609624d84`, tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. The branch entered remediation at
+  documentation head `3aed22dd09f951b27f30e04517fd3fd104f99dcd`, tree
+  `8574d92621d8f265deba5f740d49f94ab84920c9`.
+- Exact reviewed and tested source candidate:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`, on
+  `codex/emergency-monday-procurement-mvp`. The material P1 implementation commit
+  within that candidate is
+  `dda6b0986710f032f05f50273527af160cacde5c`, tree
+  `6fc845669afa056854b9306d3cf05074fa57afe3`. That exact reviewed source
+  candidate inherited the pre-authorized emergency history from `1920a16`
+  before the ordinary Packet A integration of exact `main`
+  `f308ac666a2377f540e528bc873463daecc20cf8` into this draft-PR branch.
+- P1-1 is fail-closed with one full requested-variant manifest/fingerprint
+  across prepare/replay/preview/confirm/build. Original blocked-input exceptions
+  remain immutable; an append-only, exact-fingerprint RUN_ONLY
+  `ACKNOWLEDGE_AND_EXCLUDE` action records actor/timestamp/reason and never
+  changes global facts or creates eligibility. REJECT remains separate.
+- P1-2 uses the expressly authorized simpler fallback: one active RUNNING
+  Monday Procurement run per business date, backed by service precheck,
+  PostgreSQL uniqueness, and DRAFT/RUNNING lifecycle triggers. A failed
+  pre-build run releases the date; a built DRAFT keeps it. Supersession was not
+  implemented and DRAFT remains excluded from trusted incoming.
+- P1-4 restores vendor scope: incomplete vendors keep VENDOR FAIL/blocking
+  evidence while mixed global coverage is WARN/nonblocking. A genuine global
+  PASS is accepted, but WARN cannot replace missing vendor evidence. Migration
+  013 repairs legacy persisted summary state without inventing vendor PASS.
+- P1-5 uses one temporary owner-reviewable policy in `rules.toml`: strict-above
+  `2.0x` frozen raw baseline units or strict-above `30.0` resulting days of
+  supply is MATERIAL. Exactly-at values remain NORMAL; positive edits from zero
+  baseline/forecast are MATERIAL; no quantity is capped. Material edits require
+  a separate append-only confirmation bound to the exact run, recommendation,
+  input/preview fingerprints, and quantities. Actor, database timestamp, and
+  reason are audited; immutable evidence records the policy, inventory/days,
+  and incremental/final cash. Python and SQL independently enforce the same
+  rounded classification.
+- P1-3 remains an explicit owner decision. No positive loose-fee meaning was
+  guessed. Any required positive-fee loose quantity becomes
+  `LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED`; Python/SQL/upgrade guards reject it.
+  Case-only orders and confirmed zero-fee loose orders may continue when all
+  other facts pass.
+- The emergency service remains `INTERNAL_DRAFT_ONLY`. Seven Monday route/method
+  pairs cover list, prepare, detail, blocker exclusion, review, DRAFT build, and
+  artifact download; none provides FINAL, release, import, Shopify, supplier
+  transmission, or production mutation. Review-token equality authorizes the
+  operation but does not authenticate the caller or entered actor; verified
+  private caller authentication remains a production prerequisite.
+- Exact implementation validation provisioned/destroyed loopback PostgreSQL
+  16.9 `procurement_test`: Monday `54/54`; readiness `21/21`; vendor rules
+  `16/16`; PO ledger compatibility `35/35`; affected surface `218/218`; full
+  authoritative suite discovered/executed/passed `587/587` in 842.923 seconds.
+  Failures, errors, skips, expected failures, and unexpected successes were all
+  `0`, and all 33 registered module floors passed. Startup hardening passed
+  `10/10`; compilation, pinned `uv 0.12.3` lock, shell syntax, diff, secret,
+  generated/binary, and forbidden-runtime-call scans passed.
+- Hard-coded independent boundaries prove `5/6/7` units from baseline 3 are
+  NORMAL/NORMAL/MATERIAL at `1.6667x/2.0000x/2.3333x` and `$50/$60/$70` final
+  cash; `29.99/30.00/30.01` days are NORMAL/NORMAL/MATERIAL; raw `30.004`
+  rounds to `30.00` consistently; and a `1000x` edit is MATERIAL at
+  `$30,000.00` final / `$29,970.00` incremental cash.
+- Claude independently re-reviewed the completed candidate and returned
+  **APPROVE WITH NONBLOCKING FINDINGS**. Its independent validation passed the
+  full suite `587/587` and startup hardening `10/10`; failures, errors, skips,
+  expected failures, and unexpected successes were all `0`. ChatGPT accepts
+  this as code-review evidence, not as merge, production, or policy approval.
+- The preserved nonblocking findings are: **N-1**, the database guard contains
+  the exact exclusion `run_id` check but the Python-side defense-in-depth check
+  is absent; **N-2**, material confirmation is a distinct action and not a
+  second-person requirement; **N-3**, days-of-supply classification uses the
+  canonical rounded value; **N-4**, material-policy changes invalidate in-flight
+  runs; **N-5**, a targeted positive CASE-minimum arithmetic assertion remains
+  to be added; and **N-6**, confidential Monday GET/list/detail/download
+  surfaces still need verified caller protection.
+- Codex separately completed the authorized local started-server/browser
+  acceptance on the exact source candidate using synthetic data, loopback
+  PostgreSQL 16 `_test` resources, Uvicorn, and Chromium. All `48/48` browser
+  assertions and `144/144` database/download/ZIP assertions passed. The one
+  DRAFT and one line reconcile `$20.02` merchandise plus `$5.00` fee to
+  `$25.02`; two artifacts and one packet event were preserved; the packet has
+  12 entries with a valid internal manifest; replay was idempotent; and the
+  server, browser, listeners, and disposable database were stopped.
+- That evidence remains host-local and outside Git at
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`.
+  `SHA256SUMS_TEST_DATA.txt` contains 53 records covering every other retained
+  file and has SHA-256
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`;
+  `ACCEPTANCE_REPORT_TEST_DATA.md` has SHA-256
+  `b4bad03c7f885221e0594c7163a74cecb2bf2e598e654e7589813cb845fe7887`.
+  Off-host backup is not proven. The deleted pre-remediation `/tmp` sample is
+  not current evidence.
+- Owner decisions remain required for the temporary `2.0x`/`30.0 days` policy,
+  positive loose-fee application semantics, and any future supersession design.
+  Real current sales, same-day inventory, open orders, vendor facts,
+  mappings/packs, and CURRENT prices remain unproven. This week's orders are
+  explicitly out of scope and are being handled separately by the owner.
+- Deferred P2 items remain explicit: trusted-write-role artifact semantics,
+  human-interpreted blackout/special-rule text, synthetic `_test` sales fixture
+  authority, native Shopify CSV, App Storage/private access/auth,
+  Nix/runtime/dependencies, backup/restore, real migrations, production/private
+  browser and shadow-mode acceptance, and disabled strategic forward buying.
+  The accepted local started-server/browser exercise closes only that offline
+  acceptance gap.
+- This remediation changes no formal phase completion. Published-production
+  Phase 4 remains OPEN and formal Phase 6 remains owner-authorized but PAUSED.
+  Production database connections/writes: `0 / 0`; Shopify calls/writes:
+  `0 / 0`; FINAL/release/transmission/real-money actions: `0`.
+- **Exact next authorization boundary:** keep PR #23 draft, obtain the existing
+  configured CI on the history-preserving integration if it passes local
+  integration validation, then stop for ChatGPT PR/CI review. This is an
+  **OFFLINE DRAFT-ONLY FOUNDATION — NOT PRODUCTION READY**. No merge,
+  deployment, republish, production connection, Shopify action, supplier
+  communication, or PO release is authorized.
 
 ### G9 read-only published-production preflight mode — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
 
@@ -71,10 +287,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   actions: **0**. Published-production Phase 4 remains **OPEN** and Phase 6
   remains **OWNER AUTHORIZED but PAUSED**. The separate paused
   `codex/emergency-monday-procurement-mvp` workstream remains untouched by G9.
-- **Exact next action:** ChatGPT implementation review plus independent
-  adversarial review of this exact branch head before PR authorization. No PR,
-  merge, deployment, production connection, correction execution, Shopify
-  access, or PO action is authorized by this checkpoint.
+- **Historical G9 boundary:** this section records the main-side G9 checkpoint
+  merged into the draft-PR branch. It does not authorize G10 invocation,
+  deployment, production connection, correction execution, Shopify access, or
+  any PO action.
 
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 

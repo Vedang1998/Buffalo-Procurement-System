@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import date
 import os
+from uuid import UUID
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from .catalog import (
@@ -13,14 +14,116 @@ from .catalog import (
 )
 from .config import load_rules
 from .economics import qualifying_quantity, target_cost
+from .draft_po import DraftPoError, get_vendor_drafts
+from .emergency_packet import (
+    EmergencyPacketError,
+    list_monday_artifacts,
+    read_monday_artifact,
+)
 from .health import data_sync_run_status, full_health
+from .inventory import inventory_business_date, latest_inventory_snapshot_status
 from .matching import MatchCandidate, score_candidate
-from .pricing import rollover
+from .monday_run import (
+    build_after_review,
+    prepare as prepare_monday_run,
+    preview_after_review,
+)
+from .price_book import (
+    MAX_PRICE_BOOK_BYTES,
+    PriceBookError,
+    get_price_book_batch,
+    list_price_book_batches,
+    normalized_price_book_template,
+    promote_price_book_batch,
+    read_raw_price_book,
+    reject_price_book_batch,
+    stage_and_validate_price_book,
+)
+from .po_csv import PoCsvError
 from .readiness import po_readiness
+from .procurement_review import (
+    ProcurementReviewError,
+    acknowledge_and_exclude_blocked_item,
+    confirm_material_recommendation_edit,
+    list_review_queue,
+    preview_recommendation_review,
+    record_recommendation_review,
+)
+from .recommendations import (
+    MondayRecommendationError,
+    get_monday_run,
+    list_monday_runs,
+)
+from .storage import get_storage
+from .vendor_rules import evaluate_vendor_rules, update_vendor_rules
 from . import catalog as catalog_service
 from . import sales as sales_service
 
+MAX_PRICE_BOOK_REQUEST_BYTES = MAX_PRICE_BOOK_BYTES + 65_536
+
+
+class _BoundedPriceBookUploadMiddleware:
+    """Bound the multipart request before Starlette parses or spools it."""
+
+    def __init__(self, app, *, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope.get("type") != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") != "/price-books/import"
+        ):
+            await self.app(scope, receive, send)
+            return
+        headers = {key.lower(): value for key, value in scope.get("headers", ())}
+        raw_length = headers.get(b"content-length")
+        if raw_length is not None:
+            try:
+                declared_length = int(raw_length)
+            except ValueError:
+                declared_length = self.max_bytes + 1
+            if declared_length < 0 or declared_length > self.max_bytes:
+                await Response("Price-book request is too large", status_code=413)(
+                    scope, receive, send
+                )
+                return
+        body = bytearray()
+        disconnected = False
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                disconnected = True
+                break
+            if message["type"] != "http.request":
+                continue
+            body.extend(message.get("body", b""))
+            if len(body) > self.max_bytes:
+                await Response("Price-book request is too large", status_code=413)(
+                    scope, receive, send
+                )
+                return
+            if not message.get("more_body", False):
+                break
+        delivered = False
+
+        async def replay_receive():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                if disconnected:
+                    return {"type": "http.disconnect"}
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
+
+
 app = FastAPI(title="Buffalo Procurement OS", version="1.3.0")
+app.add_middleware(
+    _BoundedPriceBookUploadMiddleware, max_bytes=MAX_PRICE_BOOK_REQUEST_BYTES
+)
 
 
 class TargetCostRequest(BaseModel):
@@ -76,6 +179,20 @@ def _require_review_token(supplied: str | None) -> None:
         raise HTTPException(status_code=403, detail="Invalid review token")
 
 
+def _require_price_book_review_token(supplied: str | None) -> None:
+    """FUTURE price activation has a distinct fail-closed authority."""
+    import hmac
+
+    expected = os.getenv("PRICE_BOOK_REVIEW_TOKEN")
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Price-book actions are disabled: PRICE_BOOK_REVIEW_TOKEN is not configured",
+        )
+    if not supplied or not hmac.compare_digest(str(supplied), expected):
+        raise HTTPException(status_code=403, detail="Invalid price-book review token")
+
+
 def _db_conn():
     db = os.getenv("DATABASE_URL")
     if not db:
@@ -106,6 +223,7 @@ _OPERATIONAL_NAV_ITEMS = (
     ("Catalog Reconciliation", "reconciliation"),
     ("Historical Sales Reconciliation", "historical-sales/review"),
     ("Data/Sync Runs", "data-sync-runs"),
+    ("Monday Procurement", "monday-runs"),
 )
 
 
@@ -113,6 +231,12 @@ def _html_escape(value) -> str:
     import html
 
     return html.escape(str(value), quote=True) if value not in (None, "") else "—"
+
+
+def _form_value(value) -> str:
+    import html
+
+    return html.escape(str(value), quote=True) if value not in (None, "") else ""
 
 
 def _operational_nav(nav_root: str, *, current: str) -> str:
@@ -334,6 +458,132 @@ def data_sync_runs_page():
     with _db_conn() as conn:
         data = data_sync_run_status(conn)
     return _data_sync_runs_html(data, nav_root="")
+
+
+@app.get("/inventory-snapshots/status")
+def inventory_snapshots_status(as_of: date | None = None):
+    """Read-only owned inventory snapshot evidence; never starts a capture."""
+    with _db_conn() as conn:
+        return latest_inventory_snapshot_status(
+            conn, as_of_date=as_of or inventory_business_date()
+        )
+
+
+def _vendor_rules_html(result: dict) -> str:
+    cards = []
+    for vendor in result["vendors"]:
+        rules = vendor.get("rules") or {}
+        version = int(rules.get("rules_version") or 0)
+        order_days = ", ".join(rules.get("order_days") or [])
+        delivery_days = ", ".join(rules.get("expected_delivery_days") or [])
+        minimum_type = rules.get("minimum_type") or ""
+        options = "".join(
+            f"<option value='{kind}'{' selected' if minimum_type == kind else ''}>{kind}</option>"
+            for kind in ("NONE", "CASE", "DOLLAR")
+        )
+        checked = " checked" if rules.get("loose_order_allowed") else ""
+        disabled = " disabled" if not vendor["active"] else ""
+        cards.append(
+            f"""<section class='vendor-card'><h2>{_html_escape(vendor['vendor_name'])}</h2>
+<p><b>{_html_escape(vendor['status'])}</b> — {_html_escape(vendor['message'])}</p>
+<form method='post' action='/vendor-rules/{_html_escape(vendor['vendor_id'])}'>
+<input type='hidden' name='expected_version' value='{version}'>
+<label>Order days (comma-separated)<input name='order_days' value='{_form_value(order_days)}' required{disabled}></label>
+<label>Order cutoff (local)<input name='order_cutoff_local' type='time' value='{_form_value(rules.get('order_cutoff_local'))}' required{disabled}></label>
+<label>IANA timezone<input name='timezone_name' value='{_form_value(rules.get('timezone_name'))}' required{disabled}></label>
+<label>Expected delivery days<input name='expected_delivery_days' value='{_form_value(delivery_days)}' required{disabled}></label>
+<label>Order cycle days<input name='order_cycle_days' type='number' min='1' value='{_form_value(rules.get('order_cycle_days'))}' required{disabled}></label>
+<label>Lead time days<input name='lead_time_days' type='number' min='0' value='{_form_value(rules.get('lead_time_days'))}' required{disabled}></label>
+<label>Lead-time variability days<input name='lead_time_variability_days' type='number' min='0' step='0.01' value='{_form_value(rules.get('lead_time_variability_days'))}' required{disabled}></label>
+<label>Reliability (0–1)<input name='reliability_pct' type='number' min='0' max='1' step='0.000001' value='{_form_value(rules.get('reliability_pct'))}' required{disabled}></label>
+<label>Minimum type<select name='minimum_type' required{disabled}><option value=''>Choose…</option>{options}</select></label>
+<label>Minimum value<input name='minimum_value' type='number' min='0' step='0.01' value='{_form_value(rules.get('minimum_value'))}'{disabled}></label>
+<label>Below-minimum fee<input name='below_minimum_fee' type='number' min='0' step='0.01' value='{_form_value(rules.get('below_minimum_fee'))}' required{disabled}></label>
+<label class='check'><input name='loose_order_allowed' type='checkbox'{checked}{disabled}> Loose/broken-case ordering allowed</label>
+<label>Loose-unit fee<input name='loose_unit_fee' type='number' min='0' step='0.01' value='{_form_value(rules.get('loose_unit_fee'))}'{disabled}></label>
+<label>Special rules<textarea name='special_rules'{disabled}>{_form_value(rules.get('special_rules'))}</textarea></label>
+<label>Holiday / blackout notes<textarea name='holiday_blackout_notes'{disabled}>{_form_value(rules.get('holiday_blackout_notes'))}</textarea></label>
+<label>Confirmation source<input name='confirmation_source' value='{_form_value(rules.get('confirmation_source'))}' required{disabled}></label>
+<label>Owner/operator<input name='actor' required{disabled}></label>
+<label>Change reason<input name='reason' required{disabled}></label>
+<label>Review token<input name='review_token' type='password' required{disabled}></label>
+<button type='submit'{disabled}>Save confirmed vendor rules</button></form></section>"""
+        )
+    return f"""<!doctype html><html><head><title>Vendor Rules</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+.summary,.vendor-card{{border:1px solid #d1d9e0;border-radius:8px;padding:14px;margin:14px 0}}
+form{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}}label{{display:flex;flex-direction:column;font-size:12px;gap:3px}}
+input,select,textarea,button{{font:inherit;padding:7px}}.check{{display:block}}button{{align-self:end}}</style></head><body>
+<p><a href='/admin/status'>System Readiness</a> · <a href='/data-sync-runs'>Data/Sync Runs</a></p>
+<h1>Vendor Operating Rules</h1><section class='summary'><b>{_html_escape(result['status'])}</b> — {_html_escape(result['message'])}</section>
+{''.join(cards) or '<p>No vendors are configured.</p>'}
+<p>Blank or unconfirmed material fields keep VENDOR_RULES failed. Vendor minimums never authorize filler.</p>
+</body></html>"""
+
+
+@app.get("/vendor-rules", response_class=HTMLResponse)
+def vendor_rules_page():
+    with _db_conn() as conn:
+        result = evaluate_vendor_rules(conn)
+    return _vendor_rules_html(result)
+
+
+@app.post("/vendor-rules/{vendor_id}", response_class=HTMLResponse)
+def vendor_rules_update_page(
+    vendor_id: str,
+    order_days: str = Form(...),
+    order_cutoff_local: str = Form(...),
+    timezone_name: str = Form(...),
+    expected_delivery_days: str = Form(...),
+    order_cycle_days: int = Form(...),
+    lead_time_days: int = Form(...),
+    lead_time_variability_days: str = Form(...),
+    reliability_pct: str = Form(...),
+    minimum_type: str = Form(...),
+    minimum_value: str = Form(""),
+    below_minimum_fee: str = Form(...),
+    loose_order_allowed: bool = Form(False),
+    loose_unit_fee: str = Form(""),
+    special_rules: str = Form(""),
+    holiday_blackout_notes: str = Form(""),
+    confirmation_source: str = Form(...),
+    actor: str = Form(...),
+    reason: str = Form(...),
+    expected_version: int = Form(...),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    rules = {
+        "order_days": order_days.split(","),
+        "order_cutoff_local": order_cutoff_local,
+        "timezone_name": timezone_name,
+        "expected_delivery_days": expected_delivery_days.split(","),
+        "order_cycle_days": order_cycle_days,
+        "lead_time_days": lead_time_days,
+        "lead_time_variability_days": lead_time_variability_days,
+        "reliability_pct": reliability_pct,
+        "minimum_type": minimum_type,
+        "minimum_value": minimum_value,
+        "below_minimum_fee": below_minimum_fee,
+        "loose_order_allowed": loose_order_allowed,
+        "loose_unit_fee": loose_unit_fee,
+        "special_rules": special_rules,
+        "holiday_blackout_notes": holiday_blackout_notes,
+        "confirmation_source": confirmation_source,
+    }
+    try:
+        with _db_conn() as conn:
+            update_vendor_rules(
+                conn,
+                vendor_id=vendor_id,
+                rules=rules,
+                actor=actor,
+                reason=reason,
+                expected_version=expected_version,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return "<meta http-equiv='refresh' content='0;url=/vendor-rules'><p>Vendor rules saved.</p>"
 
 
 @app.get("/rules")
@@ -1067,14 +1317,706 @@ def historical_sales_review_decide(
             f'<p>{html.escape(str(decision), quote=True)} recorded. Returning to the review queue…</p>')
 
 
+def _monday_runs_html(runs: list[dict]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td><a href='monday-runs/{_html_escape(run['run_id'])}'>{_html_escape(run['run_id'])}</a></td>"
+        f"<td>{_html_escape(run['business_date'])}</td>"
+        f"<td>{_html_escape(run['workflow_stage'])}</td>"
+        f"<td>{_html_escape(run['exception_count'])}</td>"
+        "</tr>"
+        for run in runs
+    ) or "<tr><td colspan='4'>No emergency Monday runs exist.</td></tr>"
+    return f"""<!doctype html><html><head><title>Monday Procurement Runs</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1120px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
+.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}form{{display:grid;gap:9px;max-width:700px}}input,button{{padding:7px}}</style></head><body>
+{_operational_nav('', current='Monday Procurement')}
+<p class='warning'>TEST DATA — NOT FOR ORDERING. Internal DRAFT review only. No release or Shopify action is available.</p>
+<h1>Monday Procurement Runs</h1>
+<form method='post' action='monday-runs/prepare'>
+<label>Business date <input type='date' name='business_date' value='{_form_value(inventory_business_date())}' required></label>
+<label>Idempotency key <input name='idempotency_key' required></label>
+<label>Canonical Shopify Variant IDs (comma separated) <input name='variant_ids' required></label>
+<label>Operator <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Prepare recommendations and stop for review</button></form>
+<h2>Frozen runs</h2><table><thead><tr><th>Run</th><th>Business date</th><th>Stage</th><th>Open blockers</th></tr></thead>
+<tbody>{rows}</tbody></table></body></html>"""
+
+
+def _monday_run_html(
+    run: dict, review: dict, drafts: dict, artifacts: list[dict]
+) -> str:
+    run_id = _html_escape(run["run_id"])
+    blocker_rows = []
+    for item in run["blockers"]:
+        if item.get("excluded"):
+            exclusion = item["exclusion"]
+            control = (
+                "<b>ACKNOWLEDGE_AND_EXCLUDE — RUN_ONLY</b><br>"
+                f"Actor {_html_escape(exclusion['actor'])}; reason "
+                f"{_html_escape(exclusion['reason'])}; at "
+                f"{_html_escape(exclusion['created_at'])}. Original blocker retained."
+            )
+        elif run["workflow_stage"] == "AWAITING_REVIEW":
+            control = f"""<form method='post' action='{run_id}/blockers/{item['exception_id']}/exclude'>
+<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
+<label>Exclusion reason <input name='reason' required></label>
+<label>Owner/reviewer <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Acknowledge and exclude from this run only</button></form>"""
+        else:
+            control = "Not excluded before review completion."
+        blocker_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(item['variant_id'])}</td>"
+            f"<td>{_html_escape(item['vendor_id'])}</td>"
+            f"<td>{_html_escape(item['message'])}</td>"
+            f"<td>{control}</td></tr>"
+        )
+    blockers = "".join(blocker_rows) or (
+        "<tr><td colspan='4'>No original run blockers.</td></tr>"
+    )
+    review_rows = []
+    for item in review["items"]:
+        frozen_terms = (item.get("metrics") or {}).get("frozen_vendor_terms") or {}
+        minimum_evidence = (
+            f"Vendor minimum: {_html_escape(frozen_terms.get('minimum_type'))} "
+            f"{_html_escape(frozen_terms.get('minimum_value'))}; below-minimum fee "
+            f"${_html_escape(frozen_terms.get('below_minimum_fee'))}."
+        )
+        if item["decision_id"] is not None:
+            decision = (
+                f"<b>{_html_escape(item['action'])}</b>: "
+                f"{_html_escape(item['approved_cases'])} case(s) + "
+                f"{_html_escape(item['approved_loose_units'])} loose; "
+                f"{_html_escape(item['approved_units'])} unit(s) "
+                f"@ ${_html_escape(item['approved_unit_cost'])}; "
+                f"merchandise ${_html_escape(item['approved_merchandise_total'])}; "
+                f"loose-order fee ${_html_escape(item['approved_loose_order_fee'])}; "
+                f"reviewed line total ${_html_escape(item['approved_line_total'])}; "
+                f"resulting inventory {_html_escape(item['resulting_inventory_units'])} unit(s), "
+                f"{_html_escape(item['resulting_days_supply'])} days supply "
+                f"({_html_escape(item['days_supply_status'])})"
+            )
+        else:
+            decision = f"""<form method='post' action='{run_id}/recommendations/{item['recommendation_id']}/review'>
+<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
+<label>Decision <select name='action'><option>ACCEPT</option><option>EDIT_QUANTITY</option><option>REJECT</option></select></label>
+<label>Cases <input type='number' min='0' step='1' name='approved_cases' value='{_form_value(item['recommended_cases'])}'></label>
+<label>Loose units <input type='number' min='0' step='1' name='approved_loose_units' value='{_form_value(item['recommended_loose_units'])}'></label>
+<label>Comment <input name='comment'></label><label>Reviewer <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Record immutable decision</button></form>"""
+        review_rows.append(
+            "<tr>"
+            f"<td>{_html_escape(item['variant_id'])}<br><small>{_html_escape(item['product_title'])} / {_html_escape(item['variant_title'])}</small></td>"
+            f"<td>{_html_escape(item['vendor_name'])}</td>"
+            f"<td>{_html_escape(item['recommended_cases'])} case(s) + {_html_escape(item['recommended_loose_units'])} loose<br>"
+            f"{_html_escape(item['recommended_units'])} unit(s) @ ${_html_escape(item['unit_cost'])}"
+            f"<br><small>{minimum_evidence}</small>"
+            f"<details><summary>Frozen calculation evidence</summary><pre>{_html_escape(item['metrics'])}</pre></details></td>"
+            f"<td>{decision}</td></tr>"
+        )
+    draft_sections = []
+    for draft in drafts["drafts"]:
+        line_rows = "".join(
+            "<tr>"
+            f"<td>{_html_escape(line['variant_id'])}</td><td>{_html_escape(line['supplier_sku'])}</td>"
+            f"<td>{_html_escape(line['cases'])}</td><td>{_html_escape(line['loose_units'])}</td>"
+            f"<td>{_html_escape(line['ordered_units'])}</td><td>${_html_escape(line['unit_cost'])}</td>"
+            f"<td>${_html_escape(line['merchandise_total'])}</td>"
+            f"<td>${_html_escape(line['loose_order_fee'])}</td>"
+            f"<td>${_html_escape(line['line_total'])}</td></tr>"
+            for line in draft["lines"]
+        )
+        draft_sections.append(
+            f"<h3>{_html_escape(draft['vendor_name'])} — DRAFT</h3>"
+            f"<p>PO {_html_escape(draft['po_id'])}; merchandise ${_html_escape(draft['merchandise_total'])}; "
+            f"loose-order fees ${_html_escape(draft['loose_order_fee_total'])}; "
+            f"below-minimum fee ${_html_escape(draft['below_minimum_fee'])}; "
+            f"total fees ${_html_escape(draft['delivery_fee'])}; total ${_html_escape(draft['po_total'])}; "
+            f"minimum shortfall {_html_escape(draft.get('minimum_shortfall'))}; "
+            f"disposition {_html_escape(draft.get('minimum_disposition'))}; confirmed by "
+            f"{_html_escape(draft.get('economics_confirmed_by'))}</p>"
+            "<table><thead><tr><th>Variant</th><th>Supplier SKU</th><th>Cases</th><th>Loose</th>"
+            "<th>Units</th><th>Unit cost</th><th>Merchandise</th><th>Loose fee</th>"
+            f"<th>Line total</th></tr></thead><tbody>{line_rows}</tbody></table>"
+        )
+    artifact_rows = "".join(
+        "<tr>"
+        f"<td>{_html_escape(item['artifact_type'])}</td><td>{_html_escape(item['vendor_id'])}</td>"
+        f"<td>{_html_escape(item['size_bytes'])}</td>"
+        f"<td><a href='{run_id}/artifacts/{item['artifact_id']}'>Download hash-checked artifact</a></td></tr>"
+        for item in artifacts
+    ) or "<tr><td colspan='4'>No artifacts built.</td></tr>"
+    build_form = ""
+    if run["workflow_stage"] in {"REVIEWED", "DRAFTS_BUILT", "PACKET_BUILT"}:
+        build_form = f"""<form method='post' action='{run_id}/build'>
+<label>Builder <input name='actor' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Build/replay internal DRAFTs and review packet</button></form>"""
+    return f"""<!doctype html><html><head><title>Monday Run {run_id}</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1240px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}
+table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;vertical-align:top;text-align:left}}form{{display:grid;gap:6px}}input,select,button{{padding:6px}}</style></head><body>
+{_operational_nav('../', current='Monday Procurement')}<p><a href='../monday-runs'>Back to Monday runs</a></p>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED. DRAFT output only.</p>
+<h1>Monday run {run_id}</h1><p>Stage: <b>{_html_escape(run['workflow_stage'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
+<h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Original reason</th><th>RUN_ONLY disposition</th></tr></thead><tbody>{blockers}</tbody></table>
+<h2>Human review</h2><table><thead><tr><th>Item</th><th>Vendor</th><th>Recommendation</th><th>Decision</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="4">No eligible recommendations.</td></tr>'}</tbody></table>
+{build_form}<h2>Vendor DRAFT POs</h2>{''.join(draft_sections) or '<p>No DRAFTs built.</p>'}
+<h2>Internal artifacts</h2><table><thead><tr><th>Type</th><th>Vendor</th><th>Bytes</th><th>Download</th></tr></thead><tbody>{artifact_rows}</tbody></table>
+    </body></html>"""
+
+
+def _monday_review_preview_html(
+    *,
+    run_id: UUID,
+    recommendation_id: int,
+    preview: dict,
+    actor: str,
+    comment: str,
+    material_edit_confirmation_id: int | None = None,
+) -> str:
+    metrics = preview.get("metrics") or {}
+    terms = metrics.get("frozen_vendor_terms") or {}
+    case_price = preview.get("approved_case_price")
+    case_price_text = (
+        f"${_html_escape(case_price)}"
+        if case_price is not None
+        else "not separately quoted"
+    )
+    materiality = preview.get("materiality") or {}
+    multiplier = materiality.get("baseline_multiplier")
+    multiplier_text = (
+        f"{_html_escape(multiplier)}x"
+        if multiplier is not None
+        else _html_escape(materiality.get("baseline_multiplier_status"))
+    )
+    material_confirmation = ""
+    if materiality.get("materiality_tier") == "MATERIAL":
+        if material_edit_confirmation_id is None:
+            material_confirmation = """<label>Distinct MATERIAL edit confirmation reason
+<input name='material_confirmation_reason' required></label>
+<button type='submit'>Record distinct MATERIAL-risk confirmation</button>"""
+        else:
+            material_confirmation = (
+                "<input type='hidden' name='material_edit_confirmation_id' "
+                f"value='{_form_value(material_edit_confirmation_id)}'>"
+                "<p><b>Distinct MATERIAL-risk confirmation recorded.</b> "
+                "The next action creates the immutable RUN_ONLY decision.</p>"
+                "<button type='submit'>Confirm immutable MATERIAL EDIT_QUANTITY decision</button>"
+            )
+    else:
+        material_confirmation = (
+            f"<button type='submit'>Confirm immutable {_html_escape(preview['action'])} decision</button>"
+        )
+    return f"""<!doctype html><html><head><title>Confirm edited recommendation</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}dl{{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px}}dt{{font-weight:700}}form{{display:grid;gap:9px}}input,button{{padding:7px}}</style></head><body>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. Review these exact calculations before creating an immutable RUN_ONLY decision.</p>
+<h1>Confirm recommendation economics</h1>
+<dl><dt>Cases</dt><dd>{_html_escape(preview['approved_cases'])}</dd>
+<dt>Loose units</dt><dd>{_html_escape(preview['approved_loose_units'])}</dd>
+<dt>Ordered units</dt><dd>{_html_escape(preview['approved_units'])}</dd>
+<dt>Frozen applicable unit cost</dt><dd>${_html_escape(preview['approved_unit_cost'])}</dd>
+<dt>Frozen applicable case price</dt><dd>{case_price_text}</dd>
+<dt>Merchandise total</dt><dd>${_html_escape(preview['approved_merchandise_total'])}</dd>
+<dt>Loose-order fee</dt><dd>${_html_escape(preview['approved_loose_order_fee'])}</dd>
+<dt>Recalculated line total</dt><dd>${_html_escape(preview['approved_line_total'])}</dd>
+<dt>Resulting inventory units</dt><dd>{_html_escape(preview['resulting_inventory_units'])}</dd>
+<dt>Resulting days of supply</dt><dd>{_html_escape(preview['resulting_days_supply'])} ({_html_escape(preview['days_supply_status'])})</dd>
+<dt>Edit materiality</dt><dd>{_html_escape(materiality.get('materiality_tier'))}: {_html_escape(materiality.get('materiality_reason_codes'))}</dd>
+<dt>Raw baseline units</dt><dd>{_html_escape(materiality.get('baseline_units'))}</dd>
+<dt>Original recommended units</dt><dd>{_html_escape(materiality.get('recommended_units'))}</dd>
+<dt>Edited / baseline multiplier</dt><dd>{multiplier_text}</dd>
+<dt>Original recommended line cash</dt><dd>${_html_escape(materiality.get('recommended_line_cash'))}</dd>
+<dt>Incremental line cash</dt><dd>${_html_escape(materiality.get('incremental_line_cash'))}</dd>
+<dt>Final line cash</dt><dd>${_html_escape(materiality.get('final_line_cash'))}</dd>
+<dt>Emergency thresholds</dt><dd>{_html_escape(materiality.get('policy'))}</dd>
+<dt>Vendor minimum</dt><dd>{_html_escape(terms.get('minimum_type'))} {_html_escape(terms.get('minimum_value'))}</dd>
+<dt>Below-minimum fee</dt><dd>${_html_escape(terms.get('below_minimum_fee'))}</dd></dl>
+<p>Vendor-level minimum and fee are rechecked across all accepted lines when DRAFTs are built.</p>
+<form method='post'>
+<input type='hidden' name='action' value='{_form_value(preview['action'])}'>
+<input type='hidden' name='actor' value='{_form_value(actor)}'>
+<input type='hidden' name='expected_input_fingerprint' value='{_form_value(preview['input_fingerprint'])}'>
+<input type='hidden' name='approved_cases' value='{_form_value(preview['approved_cases'])}'>
+<input type='hidden' name='approved_loose_units' value='{_form_value(preview['approved_loose_units'])}'>
+<input type='hidden' name='comment' value='{_form_value(comment)}'>
+<input type='hidden' name='review_preview_fingerprint' value='{_form_value(preview['preview_fingerprint'])}'>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+{material_confirmation}</form>
+<p><a href='../../../{_html_escape(run_id)}'>Cancel and return without recording a decision</a></p>
+</body></html>"""
+
+
+def _monday_draft_preview_html(*, run_id: UUID, preview: dict) -> str:
+    vendor_rows = "".join(
+        "<tr>"
+        f"<td>{_html_escape(item['vendor_id'])}</td>"
+        f"<td>${_html_escape(item['merchandise_total'])}</td>"
+        f"<td>{_html_escape(item['case_count'])}</td>"
+        f"<td>{_html_escape(item['minimum_type'])} {_html_escape(item['minimum_value'])}</td>"
+        f"<td>{_html_escape(item['minimum_shortfall'])}</td>"
+        f"<td>${_html_escape(item['loose_order_fee_total'])}</td>"
+        f"<td>${_html_escape(item['below_minimum_fee'])}</td>"
+        f"<td>${_html_escape(item['delivery_fee'])}</td>"
+        f"<td>${_html_escape(item['po_total'])}</td>"
+        "</tr>"
+        for item in preview["vendors"]
+    ) or "<tr><td colspan='9'>No positive reviewed quantities; the packet will record a no-order run.</td></tr>"
+    disposition_text = (
+        "PAY_FEE for every below-minimum vendor"
+        if preview["minimum_disposition"] == "PAY_FEE"
+        else "NOT_APPLICABLE — no vendor is below minimum"
+    )
+    return f"""<!doctype html><html><head><title>Confirm vendor DRAFT economics</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1040px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}form{{display:grid;gap:9px;max-width:700px}}input,button{{padding:7px}}</style></head><body>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. Confirm exact vendor totals and fee disposition before DRAFT persistence.</p>
+<h1>Confirm vendor DRAFT economics</h1>
+<table><thead><tr><th>Vendor ID</th><th>Merchandise</th><th>Cases</th><th>Minimum</th><th>Shortfall</th><th>Loose-order fees</th><th>Below-minimum fee</th><th>Total fees</th><th>DRAFT total</th></tr></thead><tbody>{vendor_rows}</tbody></table>
+<p><b>Minimum disposition:</b> {_html_escape(disposition_text)}. DELAY or ADD_LEGITIMATE_NEED requires cancelling and changing the reviewed run; the system never adds filler.</p>
+<form method='post'>
+<input type='hidden' name='actor' value='{_form_value(preview['actor'])}'>
+<input type='hidden' name='draft_preview_fingerprint' value='{_form_value(preview['preview_fingerprint'])}'>
+<input type='hidden' name='minimum_disposition' value='{_form_value(preview['minimum_disposition'])}'>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Confirm reviewed economics and build internal DRAFTs</button></form>
+<p><a href='../{_html_escape(run_id)}'>Cancel without building DRAFTs</a></p>
+</body></html>"""
+
+
+@app.get("/monday-runs")
+def monday_runs_page():
+    with _db_conn() as conn:
+        runs = list_monday_runs(conn)
+    return HTMLResponse(_monday_runs_html(runs), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/monday-runs/prepare")
+def monday_runs_prepare(
+    business_date: date = Form(...),
+    idempotency_key: str = Form(...),
+    variant_ids: str = Form(...),
+    actor: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    canonical_ids = tuple(value.strip() for value in variant_ids.split(",") if value.strip())
+    if not canonical_ids:
+        raise HTTPException(status_code=400, detail="At least one canonical Variant ID is required")
+    try:
+        with _db_conn() as conn:
+            result = prepare_monday_run(
+                conn,
+                business_date=business_date,
+                idempotency_key=idempotency_key,
+                variant_ids=canonical_ids,
+                actor=actor,
+            )
+    except MondayRecommendationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../monday-runs/{result['run_id']}",
+        status_code=303,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/monday-runs/{run_id}")
+def monday_run_detail(run_id: UUID):
+    try:
+        with _db_conn() as conn:
+            run = get_monday_run(conn, str(run_id))
+            review = list_review_queue(conn, str(run_id))
+            drafts = get_vendor_drafts(conn, str(run_id))
+            artifacts = list_monday_artifacts(conn, str(run_id))
+    except (MondayRecommendationError, ProcurementReviewError, DraftPoError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return HTMLResponse(
+        _monday_run_html(run, review, drafts, artifacts),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/monday-runs/{run_id}/blockers/{exception_id}/exclude")
+def monday_blocked_item_exclude(
+    run_id: UUID,
+    exception_id: int,
+    actor: str = Form(...),
+    reason: str = Form(...),
+    expected_input_fingerprint: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            acknowledge_and_exclude_blocked_item(
+                conn,run_id=str(run_id),exception_id=exception_id,actor=actor,
+                reason=reason,expected_input_fingerprint=expected_input_fingerprint,
+            )
+    except ProcurementReviewError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../../../{run_id}", status_code=303,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/monday-runs/{run_id}/recommendations/{recommendation_id}/review")
+def monday_recommendation_review(
+    run_id: UUID,
+    recommendation_id: int,
+    action: str = Form(...),
+    actor: str = Form(...),
+    expected_input_fingerprint: str = Form(...),
+    approved_cases: str | None = Form(None),
+    approved_loose_units: str | None = Form(None),
+    comment: str = Form(""),
+    review_preview_fingerprint: str | None = Form(None),
+    material_confirmation_reason: str = Form(""),
+    material_edit_confirmation_id: int | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            queue = list_review_queue(conn, str(run_id))
+            if recommendation_id not in {item["recommendation_id"] for item in queue["items"]}:
+                raise ProcurementReviewError("recommendation does not belong to this Monday run")
+            if (
+                action.strip().upper() in {"ACCEPT", "EDIT_QUANTITY"}
+                and not review_preview_fingerprint
+            ):
+                preview = preview_recommendation_review(
+                    conn,
+                    recommendation_id=recommendation_id,
+                    action=action,
+                    actor=actor,
+                    expected_input_fingerprint=expected_input_fingerprint,
+                    approved_cases=approved_cases,
+                    approved_loose_units=approved_loose_units,
+                    comment=comment,
+                )
+                return HTMLResponse(
+                    _monday_review_preview_html(
+                        run_id=run_id,
+                        recommendation_id=recommendation_id,
+                        preview=preview,
+                        actor=actor,
+                        comment=comment,
+                    ),
+                    headers={"Cache-Control": "no-store"},
+                )
+            if action.strip().upper() == "EDIT_QUANTITY" and review_preview_fingerprint:
+                preview = preview_recommendation_review(
+                    conn,recommendation_id=recommendation_id,action=action,actor=actor,
+                    expected_input_fingerprint=expected_input_fingerprint,
+                    approved_cases=approved_cases,
+                    approved_loose_units=approved_loose_units,comment=comment,
+                )
+                if preview["preview_fingerprint"] != review_preview_fingerprint:
+                    raise ProcurementReviewError(
+                        "edited economics changed after the displayed preview"
+                    )
+                if (
+                    preview["materiality"]["materiality_tier"] == "MATERIAL"
+                    and material_edit_confirmation_id is None
+                ):
+                    confirmation = confirm_material_recommendation_edit(
+                        conn,recommendation_id=recommendation_id,actor=actor,
+                        expected_input_fingerprint=expected_input_fingerprint,
+                        expected_review_preview_fingerprint=review_preview_fingerprint,
+                        approved_cases=approved_cases,
+                        approved_loose_units=approved_loose_units,comment=comment,
+                        confirmation_reason=material_confirmation_reason,
+                    )
+                    return HTMLResponse(
+                        _monday_review_preview_html(
+                            run_id=run_id,recommendation_id=recommendation_id,
+                            preview=preview,actor=actor,comment=comment,
+                            material_edit_confirmation_id=confirmation[
+                                "material_edit_confirmation_id"
+                            ],
+                        ),
+                        headers={"Cache-Control": "no-store"},
+                    )
+            record_recommendation_review(
+                conn,
+                recommendation_id=recommendation_id,
+                action=action,
+                actor=actor,
+                expected_input_fingerprint=expected_input_fingerprint,
+                approved_cases=approved_cases,
+                approved_loose_units=approved_loose_units,
+                comment=comment,
+                expected_review_preview_fingerprint=review_preview_fingerprint,
+                material_edit_confirmation_id=material_edit_confirmation_id,
+            )
+    except ProcurementReviewError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../../../{run_id}", status_code=303, headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.post("/monday-runs/{run_id}/build")
+def monday_run_build(
+    run_id: UUID,
+    actor: str = Form(...),
+    draft_preview_fingerprint: str | None = Form(None),
+    minimum_disposition: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            if not draft_preview_fingerprint:
+                preview = preview_after_review(conn, run_id=str(run_id), actor=actor)
+                if not preview.get("already_built"):
+                    return HTMLResponse(
+                        _monday_draft_preview_html(run_id=run_id, preview=preview),
+                        headers={"Cache-Control": "no-store"},
+                    )
+            build_after_review(
+                conn,
+                storage=get_storage(),
+                run_id=str(run_id),
+                actor=actor,
+                expected_preview_fingerprint=draft_preview_fingerprint,
+                minimum_disposition=minimum_disposition,
+            )
+    except (DraftPoError, EmergencyPacketError, PoCsvError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../{run_id}", status_code=303, headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/monday-runs/{run_id}/artifacts/{artifact_id}")
+def monday_run_artifact(run_id: UUID, artifact_id: int):
+    try:
+        with _db_conn() as conn:
+            artifact = read_monday_artifact(
+                conn, storage=get_storage(), run_id=str(run_id), artifact_id=artifact_id
+            )
+    except EmergencyPacketError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        artifact["data"],
+        media_type=artifact["content_type"],
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename={artifact['filename']}",
+        },
+    )
+
+
+def _price_book_list_html(batches: list[dict]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td><a href='price-books/{_html_escape(batch['price_book_batch_id'])}'>"
+        f"{_html_escape(batch['batch_ref'])}</a></td>"
+        f"<td>{_html_escape(batch['vendor_name'])}</td>"
+        f"<td>{_html_escape(batch['target_price_state'])}</td>"
+        f"<td>{_html_escape(batch['effective_from'])}</td>"
+        f"<td>{_html_escape(batch['operational_status'])}</td>"
+        f"<td>{_html_escape(batch['valid_row_count'])}/{_html_escape(batch['row_count'])}</td>"
+        f"<td>{_html_escape(batch['error_count'])}</td>"
+        "</tr>"
+        for batch in batches
+    ) or "<tr><td colspan='7'>No price-book batches have been staged.</td></tr>"
+    return f"""<!doctype html><html><head><title>Price Books</title></head><body>
+<h1>Price Book Import / Validation</h1>
+<p>Uploads may prepare FUTURE pricing only. CURRENT remains untouched until a separately guarded rollover.</p>
+<p><a href='price-books/template.csv'>Download strict normalized CSV template</a></p>
+<form method='post' action='price-books/import' enctype='multipart/form-data'>
+<label>Normalized CSV <input type='file' name='price_book_file' accept='.csv,text/csv' required></label><br>
+<label>Operator <input name='actor' required></label><br>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Stage and validate FUTURE</button>
+</form>
+<h2>Durable batches</h2>
+<table border='1' cellpadding='5'><thead><tr><th>Batch</th><th>Vendor</th><th>State</th>
+<th>Effective</th><th>Status</th><th>Valid rows</th><th>Errors</th></tr></thead>
+<tbody>{rows}</tbody></table>
+</body></html>"""
+
+
+def _price_book_detail_html(batch: dict) -> str:
+    issues = "".join(
+        "<tr>"
+        f"<td>{_html_escape(issue['source_row_number'])}</td>"
+        f"<td>{_html_escape(issue['severity'])}</td>"
+        f"<td>{_html_escape(issue['issue_code'])}</td>"
+        f"<td>{_html_escape(issue['message'])}</td>"
+        "</tr>"
+        for issue in batch["issues"]
+    ) or "<tr><td colspan='4'>No validation issues.</td></tr>"
+    batch_id = _html_escape(batch["price_book_batch_id"])
+    promotable = (
+        batch["status"] == "VALIDATED"
+        and batch["operational_status"] == "VALIDATED"
+    )
+    disabled = "" if promotable else " disabled aria-disabled='true'"
+    blocker = "" if promotable else (
+        f"<p><b>Promotion unavailable:</b> operational status is "
+        f"{_html_escape(batch['operational_status'])}.</p>"
+    )
+    warning_reason = (
+        "<label>Warning review reason <input name='warning_review_reason' required></label><br>"
+        if batch["warning_count"] else ""
+    )
+    reject_form = ""
+    if batch["status"] in {"INVALID", "VALIDATED"}:
+        reject_form = f"""<h2>Reject / discard typed staging</h2>
+<form method='post' action='../price-books/{batch_id}/reject'>
+<input type='hidden' name='expected_validation_fingerprint' value='{_form_value(batch['validation_fingerprint'])}'>
+<label>Operator <input name='actor' required></label><br>
+<label>Reason <input name='reason' required></label><br>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Reject and purge typed staging</button></form>"""
+    return f"""<!doctype html><html><head><title>Price Book {_html_escape(batch['batch_ref'])}</title></head><body>
+<p><a href='../price-books'>Back to Price Books</a></p>
+<h1>{_html_escape(batch['batch_ref'])}</h1>
+<dl><dt>Vendor</dt><dd>{_html_escape(batch['vendor_name'])}</dd>
+<dt>Target</dt><dd>{_html_escape(batch['target_price_state'])}</dd>
+  <dt>Status</dt><dd>{_html_escape(batch['operational_status'])}</dd>
+<dt>Rows</dt><dd>{_html_escape(batch['valid_row_count'])}/{_html_escape(batch['row_count'])}</dd>
+<dt>Coverage</dt><dd>{_html_escape(batch['covered_offer_count'])}/{_html_escape(batch['expected_offer_count'])}</dd>
+<dt>Validation fingerprint</dt><dd><code>{_html_escape(batch['validation_fingerprint'])}</code></dd></dl>
+<p><a href='../price-books/{batch_id}/raw.csv'>Download immutable raw evidence</a></p>
+<h2>Exceptions / diagnostics</h2>
+<table border='1' cellpadding='5'><thead><tr><th>Row</th><th>Severity</th><th>Code</th><th>Message</th></tr></thead>
+<tbody>{issues}</tbody></table>
+{blocker}
+<form method='post' action='../price-books/{batch_id}/promote'>
+<input type='hidden' name='expected_validation_fingerprint' value='{_form_value(batch['validation_fingerprint'])}'>
+<label>Operator <input name='actor' required></label><br>
+{warning_reason}
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'{disabled}>Promote VERIFIED FUTURE pricing</button>
+</form>{reject_form}
+</body></html>"""
+
+
+@app.get("/price-books/template.csv")
+def price_book_template():
+    return Response(
+        normalized_price_book_template(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=normalized-price-book-template.csv"},
+    )
+
+
+@app.get("/price-books", response_class=HTMLResponse)
+def price_books_page():
+    with _db_conn() as conn:
+        batches = list_price_book_batches(conn)
+    return _price_book_list_html(batches)
+
+
+@app.get("/price-books/{batch_id}", response_class=HTMLResponse)
+def price_book_detail(batch_id: UUID):
+    try:
+        with _db_conn() as conn:
+            batch = get_price_book_batch(conn, str(batch_id))
+    except PriceBookError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _price_book_detail_html(batch)
+
+
+@app.get("/price-books/{batch_id}/raw.csv")
+def price_book_raw(batch_id: UUID):
+    try:
+        with _db_conn() as conn:
+            data = read_raw_price_book(conn, get_storage(), batch_id=str(batch_id))
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return Response(
+        data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=price-book-{batch_id}.csv"},
+    )
+
+
+@app.post("/price-books/import")
+async def price_book_import(
+    price_book_file: UploadFile = File(...),
+    actor: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    data = await price_book_file.read(MAX_PRICE_BOOK_BYTES + 1)
+    if len(data) > MAX_PRICE_BOOK_BYTES:
+        raise HTTPException(status_code=413, detail="Price-book CSV is too large")
+    try:
+        with _db_conn() as conn:
+            result = stage_and_validate_price_book(
+                conn, get_storage(), csv_bytes=data, actor=actor
+            )
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"../price-books/{result['price_book_batch_id']}", status_code=303
+    )
+
+
+@app.post("/price-books/{batch_id}/promote")
+def price_book_promote(
+    batch_id: UUID,
+    expected_validation_fingerprint: str = Form(...),
+    actor: str = Form(...),
+    warning_review_reason: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            promote_price_book_batch(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                expected_validation_fingerprint=expected_validation_fingerprint,
+                actor=actor,
+                warning_review_reason=warning_review_reason,
+            )
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
+
+
+@app.post("/price-books/{batch_id}/reject")
+def price_book_reject(
+    batch_id: UUID,
+    expected_validation_fingerprint: str = Form(...),
+    actor: str = Form(...),
+    reason: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    try:
+        with _db_conn() as conn:
+            reject_price_book_batch(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                expected_validation_fingerprint=expected_validation_fingerprint,
+                actor=actor,
+                reason=reason,
+            )
+    except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
+
+
 @app.post("/pricing/rollover")
 def pricing_rollover(req: RolloverRequest):
-    db = os.getenv("DATABASE_URL")
-    if not db:
-        raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
-    import psycopg
-    try:
-        with psycopg.connect(db) as conn:
-            return rollover(conn, req.as_of)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    del req
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "Price rollover is disabled until an authenticated, audited "
+            "backup/completeness/rollover transaction is separately reviewed."
+        ),
+    )

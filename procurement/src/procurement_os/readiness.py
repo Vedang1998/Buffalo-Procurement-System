@@ -103,6 +103,24 @@ def readiness_gate_blockers(
             blockers.append({"type": "READINESS_GATE", "detail": gate})
 
     evidence_names = {str(gate["gate_name"]) for gate in applicable_rows}
+    has_vendor_rules_scope = any(
+        gate["gate_name"] == "VENDOR_RULES"
+        and gate["scope_type"] == "VENDOR"
+        and str(gate["scope_id"]) == str(vendor_id)
+        for gate in applicable_rows
+    )
+    has_complete_global_vendor_rules = any(
+        gate["gate_name"] == "VENDOR_RULES"
+        and gate["scope_type"] == "GLOBAL"
+        and gate["status"] == "PASS"
+        for gate in applicable_rows
+    )
+    if (
+        vendor_id is not None
+        and not has_vendor_rules_scope
+        and not has_complete_global_vendor_rules
+    ):
+        evidence_names.discard("VENDOR_RULES")
     for gate_name in sorted(required_names - evidence_names):
         blockers.append(
             {

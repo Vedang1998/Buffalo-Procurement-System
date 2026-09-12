@@ -148,6 +148,30 @@ class ReadinessScopeTests(unittest.TestCase):
         self.assertEqual(blockers[0]["type"], "MISSING_APPLICABLE_GATE")
         self.assertEqual(blockers[0]["detail"]["gate_name"], "VENDOR_RULES")
 
+    def test_global_vendor_summary_cannot_replace_required_vendor_evidence(self):
+        gates = foundation_passes() + [
+            gate("VENDOR_RULES", "WARN", blocks_po=False)
+        ]
+        blockers = readiness_gate_blockers(
+            gates,
+            vendor_id="A",
+            applicable_gate_names={"VENDOR_RULES"},
+        )
+        self.assertEqual(len(blockers), 1)
+        self.assertEqual(blockers[0]["type"], "MISSING_APPLICABLE_GATE")
+        self.assertEqual(blockers[0]["detail"]["gate_name"], "VENDOR_RULES")
+
+    def test_complete_global_vendor_rules_is_valid_required_evidence(self):
+        gates = foundation_passes() + [gate("VENDOR_RULES", "PASS")]
+        self.assertEqual(
+            readiness_gate_blockers(
+                gates,
+                vendor_id="A",
+                applicable_gate_names={"VENDOR_RULES"},
+            ),
+            [],
+        )
+
     def test_unknown_readiness_scope_type_raises_before_result(self):
         gates = foundation_passes() + [
             gate("PRICE_COVERAGE", "FAIL", scope_type="FUTURE_SCOPE", scope_id="A")
