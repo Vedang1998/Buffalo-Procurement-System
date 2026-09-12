@@ -334,6 +334,48 @@ class SupplierPdfExtractionTests(unittest.TestCase):
         self.assertEqual(len(block["description"]["candidate_line_ids"]), 2)
         self.assertNotIn("0012-A", [row["printed_code"]["value"] for row in ambiguous["source_occurrences"]])
 
+        for ordinal, (prior_top, intervening_top, intervening) in enumerate(
+            (
+                ("58.00", "81.00", "Gold Medal 2025 San Francisco Competition"),
+                ("58.00", "81.00", "On-premise only"),
+                ("45.00", "70.00", "Featured Selection"),
+            )
+        ):
+            with self.subTest(gapped_intervening=intervening):
+                gapped = json.loads(json.dumps(self.fixture["pages"][0]))
+                gapped["lines"][1]["top"] = prior_top
+                gapped["lines"].insert(
+                    2,
+                    {
+                        "text": intervening,
+                        "left": "54.00",
+                        "top": intervening_top,
+                        "width": "190.00",
+                        "height": "2.00",
+                    },
+                )
+                result, _ = self._parse_pages(
+                    [gapped], marker=f"gapped-intervening-{ordinal}"
+                )
+                self.assertNotIn(
+                    "0012-A",
+                    [row["printed_code"]["value"] for row in result["source_occurrences"]],
+                )
+                candidate = next(
+                    row for row in result["quarantines"]
+                    if row.get("evidence_fields", {}).get("printed_code", {}).get("value")
+                    == "0012-A"
+                )
+                self.assertEqual(candidate["description"]["state"], "UNRESOLVED")
+                self.assertIn(
+                    "Fabricated Citrus Reserve",
+                    {row["raw"] for row in candidate["description"]["candidates"]},
+                )
+                self.assertIn(
+                    intervening,
+                    {row["raw"] for row in candidate["description"]["candidates"]},
+                )
+
     def test_scoped_note_states_distinguish_absent_recovered_and_unresolved(self):
         plain, _ = self._parse_pages(
             [json.loads(json.dumps(self.fixture["pages"][0]))], marker="notes-absent"
@@ -425,6 +467,37 @@ class SupplierPdfExtractionTests(unittest.TestCase):
                     )
                 )
 
+        split_ladder = json.loads(json.dumps(self.fixture["pages"][0]))
+        split_ladder["lines"].insert(
+            4,
+            {
+                "text": "Allocation subject to approval",
+                "left": "54.00",
+                "top": "109.00",
+                "width": "165.00",
+                "height": "0.50",
+            },
+        )
+        extraction, _ = self._parse_pages(
+            [split_ladder], marker="split-ladder-scope"
+        )
+        block = next(
+            row for row in extraction["quarantines"]
+            if row["reason"] == "INTERVENING_SCOPE_LINE_WITHIN_PRICE_LADDER"
+        )
+        self.assertEqual(block["evidence_fields"]["printed_code"]["value"], "0012-A")
+        self.assertEqual(len(block["evidence_fields"]["tiers"]), 2)
+        self.assertIn(
+            "Allocation subject to approval",
+            {row["raw"] for row in block["source_evidence"]},
+        )
+        self.assertFalse(
+            any(
+                row["printed_code"]["value"] == "0012-A"
+                for row in extraction["source_occurrences"]
+            )
+        )
+
     def test_nonprice_commercial_scope_language_is_elevated_at_each_position(self):
         cases = (
             ("Allocation required", "BEFORE_PACK"),
@@ -445,6 +518,15 @@ class SupplierPdfExtractionTests(unittest.TestCase):
                     index, top, height = 3, "97.00", "0.50"
                 else:
                     index, top, height = 5, "121.00", "6.00"
+                    page["lines"] = [
+                        line for line in page["lines"]
+                        if str(line["text"])
+                        not in {
+                            "Fabricated Missing Code",
+                            "750mL 6 Pack -",
+                            "1 Case: $66.00 · Per Bottle: $11.00",
+                        }
+                    ]
                 page["lines"].insert(
                     index,
                     {
@@ -481,6 +563,7 @@ class SupplierPdfExtractionTests(unittest.TestCase):
                         if row["printed_code"]["value"] == "0012-A"
                     )
                     self.assertEqual(regular["evidence_status"], "PARTIAL_REVIEW_REQUIRED")
+                    self.assertEqual(regular["scoped_notes"]["state"], "UNRESOLVED")
                     self.assertIn(
                         restriction_quarantine["source_line_ids"][0],
                         regular["adjacent_unresolved_line_ids"],
@@ -535,6 +618,31 @@ class SupplierPdfExtractionTests(unittest.TestCase):
             )
         )
 
+        page_wide_before = json.loads(json.dumps(self.fixture["pages"][0]))
+        page_wide_before["lines"].insert(
+            1,
+            {
+                "text": "Allocation pending page-wide",
+                "left": "100.00",
+                "top": "55.00",
+                "width": "412.00",
+                "height": "6.00",
+            },
+        )
+        page_wide_before_result, _ = self._parse_pages(
+            [page_wide_before], marker="page-wide-before-block"
+        )
+        regular = next(
+            row for row in page_wide_before_result["source_occurrences"]
+            if row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(regular["adjacent_unresolved_line_ids"], [])
+        page_wide_ref = next(
+            ref for ref in page_wide_before_result["pages"][0]["broader_scope_unresolved_refs"]
+            if ref["reason"] == "POTENTIAL_COMMERCIAL_SCOPE_UNRESOLVED"
+        )
+        self.assertEqual(page_wide_ref["scope_level"], "PAGE")
+
         neighbor = json.loads(json.dumps(self.fixture["pages"][0]))
         neighbor["lines"].insert(
             5,
@@ -578,6 +686,46 @@ class SupplierPdfExtractionTests(unittest.TestCase):
             json.dumps(by_code["0012-A"], ensure_ascii=False),
         )
 
+        malformed_neighbor = json.loads(json.dumps(self.fixture["pages"][0]))
+        malformed_neighbor["lines"].insert(
+            5,
+            {
+                "text": "Fabricated Neighbor Product",
+                "left": "54.00",
+                "top": "121.00",
+                "width": "150.00",
+                "height": "6.00",
+            },
+        )
+        malformed_neighbor["lines"].insert(
+            6,
+            {
+                "text": "750mL Six Pack - NBR-2",
+                "left": "54.00",
+                "top": "129.00",
+                "width": "150.00",
+                "height": "6.00",
+            },
+        )
+        malformed_result, _ = self._parse_pages(
+            [malformed_neighbor], marker="malformed-neighbor-product"
+        )
+        regular = next(
+            row for row in malformed_result["source_occurrences"]
+            if row["printed_code"]["value"] == "0012-A"
+        )
+        self.assertEqual(regular["adjacent_unresolved_line_ids"], [])
+        neighbor_title = next(
+            row for row in malformed_result["quarantines"]
+            if row["text"] == "Fabricated Neighbor Product"
+        )
+        malformed_pack = next(
+            row for row in malformed_result["quarantines"]
+            if row["text"] == "750mL Six Pack - NBR-2"
+        )
+        self.assertEqual(neighbor_title["scope_level"], "COLUMN")
+        self.assertEqual(malformed_pack["scope_level"], "COLUMN")
+
         first = json.loads(json.dumps(self.fixture["pages"][0]))
         second = json.loads(json.dumps(self.fixture["pages"][1]))
         second["lines"].insert(
@@ -599,6 +747,15 @@ class SupplierPdfExtractionTests(unittest.TestCase):
 
     def test_extraction_and_coverage_mirror_refs_with_claim_once_integrity(self):
         page = json.loads(json.dumps(self.fixture["pages"][0]))
+        page["lines"] = [
+            line for line in page["lines"]
+            if str(line["text"])
+            not in {
+                "Fabricated Missing Code",
+                "750mL 6 Pack -",
+                "1 Case: $66.00 · Per Bottle: $11.00",
+            }
+        ]
         page["lines"].insert(
             5,
             {

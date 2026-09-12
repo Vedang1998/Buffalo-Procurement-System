@@ -606,6 +606,7 @@ _POTENTIAL_COMMERCIAL_SCOPE = re.compile(
     r"\b(?:"
     r"allocat(?:e|ed|es|ion|ions)?|"
     r"territor(?:y|ies)|states?|channels?|"
+    r"on[- ]premise|off[- ]premise|retail[- ]only|restaurant[- ]only|"
     r"minimum(?:\s+order)?|min(?:imum)?\.?\s*order|"
     r"availability|available|while\s+supplies\s+last|"
     r"split(?:\s+case)?|handling|"
@@ -744,7 +745,7 @@ def _description_cluster(pack: Mapping[str, object], lines: Sequence[Mapping[str
         line = ordered[cursor]
         text = _normalized(str(line["text"]))
         if (
-            _top(cluster[0]) - _top(line) > Decimal("22")
+            _top(cluster[0]) - _top(line) > Decimal("26")
             or line["column"] == "PAGE_WIDE"
             or _is_boundary_text(text)
             or _pack_match(text) is not None
@@ -887,7 +888,7 @@ def _tier_scope(
         break
 
     partial_later_tiers: list[Mapping[str, object]] = []
-    if not tiers and barrier is not None and barrier_index is not None:
+    if barrier is not None and barrier_index is not None:
         previous_bottom = _bottom(barrier)
         for line in following[barrier_index + 1 :]:
             gap = _top(line) - previous_bottom
@@ -1265,7 +1266,11 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
         protected_description_ids: set[str] = set()
         for candidate_pack in lines:
             candidate_text = _normalized(str(candidate_pack["text"]))
-            if _pack_match(candidate_text) is not None or _MISSING_CODE_PACK.search(candidate_text):
+            if (
+                _pack_match(candidate_text) is not None
+                or _MISSING_CODE_PACK.search(candidate_text)
+                or _PACK_LIKE.search(candidate_text)
+            ):
                 protected_description_ids.update(
                     str(line["line_id"])
                     for line in _description_cluster(candidate_pack, lines)
@@ -1321,13 +1326,32 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                     str(description_line["text"]),
                     _normalized(str(description_line["text"])),
                 )
+            block_notes = dict(scoped_notes)
+            if block_notes.get("state") == "ABSENT":
+                unresolved_note_lines = [
+                    line
+                    for line in scoped
+                    if line is not description_line
+                    and line is not pack
+                    and _TIER.fullmatch(_normalized(str(line["text"]))) is None
+                ]
+                block_notes = {
+                    "state": "UNRESOLVED",
+                    "reason": "BLOCK_SCOPE_UNRESOLVED; NOTE_ABSENCE_NOT_ESTABLISHED",
+                    "candidate_line_ids": [
+                        str(line["line_id"]) for line in unresolved_note_lines
+                    ],
+                    "candidates": [
+                        _line_evidence(line) for line in unresolved_note_lines
+                    ],
+                }
             record.update(
                 {
                     "candidate_block_id": candidate_id,
                     "identity_class": "UNRESOLVED_SOURCE_BLOCK_NOT_SUPPORTED_OCCURRENCE",
                     "evidence_status": "PARTIAL_REVIEW_REQUIRED",
                     "description": description,
-                    "scoped_notes": dict(scoped_notes),
+                    "scoped_notes": block_notes,
                     "evidence_fields": {
                         "printed_code": dict(printed_code),
                         "package": dict(package) if package is not None else _absent(
@@ -1362,7 +1386,7 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                     tiers, barrier, later_tiers = _tier_scope(pack, lines)
                     scoped_barrier = (
                         (barrier,)
-                        if not tiers
+                        if (not tiers or later_tiers)
                         and barrier is not None
                         and barrier["column"] == pack["column"]
                         and str(barrier["line_id"]) not in protected_description_ids
@@ -1441,16 +1465,22 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                 else:
                     reason = "PRICE_LADDER_MISSING_OR_NONCONTIGUOUS"
                     uncertainty_class = "PRICE_LADDER_UNRESOLVED"
+            elif tiers and later_tiers and reason is None:
+                reason = "INTERVENING_SCOPE_LINE_WITHIN_PRICE_LADDER"
+                assert barrier is not None
+                uncertainty_class = _scope_diagnostic(
+                    _normalized(str(barrier["text"]))
+                )[1]
 
             if reason is not None:
                 scoped_barrier = (
                     (barrier,)
-                    if not tiers
+                    if (not tiers or later_tiers)
                     and barrier is not None
                     and barrier["column"] == pack["column"]
                     else ()
                 )
-                partial_tier_lines = tiers if tiers else later_tiers
+                partial_tier_lines = (*tiers, *later_tiers)
                 partial_tiers = _tier_records(
                     partial_tier_lines,
                     source_sha256,
@@ -1504,6 +1534,7 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                 line
                 for line in _nearby_scope_lines(pack, lines)
                 if str(line["line_id"]) not in assignments
+                and line["column"] == pack["column"]
                 and (
                     _has_damaged_text(str(line["text"]))
                     or _POTENTIAL_COMMERCIAL_SCOPE.search(_normalized(str(line["text"])))
@@ -1537,6 +1568,22 @@ def parse_wright_pages(pages: Sequence[Mapping[str, object]], source_sha256: str
                         "source_line_ids": record["source_line_ids"],
                     }
                 )
+
+            if adjacent_refs and scoped_notes.get("state") == "ABSENT":
+                adjacent_line_ids = [
+                    line_id
+                    for ref in adjacent_refs
+                    for line_id in ref["source_line_ids"]
+                ]
+                scoped_notes = {
+                    "state": "UNRESOLVED",
+                    "reason": "ADJACENT_SCOPE_EVIDENCE_COULD_INCLUDE_NOTES_OR_RESTRICTIONS",
+                    "candidate_line_ids": adjacent_line_ids,
+                    "candidates": [
+                        _line_evidence(lines_by_id[str(line_id)])
+                        for line_id in adjacent_line_ids
+                    ],
+                }
 
             description_raw = str(description_line["text"])
             occurrence = {
