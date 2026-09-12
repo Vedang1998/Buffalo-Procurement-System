@@ -22,6 +22,7 @@ SYNTHETIC_SERVER_LOOPBACKS = frozenset({"127.0.0.1", "::1"})
 # checkpoint test cannot be concealed by growth in a different module.
 REQUIRED_MODULE_MINIMUMS = {
     "test_assortment.py": 4,
+    "test_automatic_merge_safety.py": 10,
     "test_catalog.py": 7,
     "test_catalog_readiness.py": 14,
     "test_catalog_reconciliation_phase3.py": 12,
