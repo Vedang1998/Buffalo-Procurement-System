@@ -373,7 +373,9 @@ class CorrectiveTestDatabaseSafetyTests(unittest.TestCase):
         return connection
 
     def test_connected_database_identity_mismatch_fails_before_fixture_ddl(self):
-        connection = self._identity_connection(("neondb", "16.15", 160015))
+        connection = self._identity_connection(
+            ("neondb", "16.15", 160015, "127.0.0.1")
+        )
         with patch.dict(
             os.environ, {"TEST_DATABASE_URL": SAFE_TEST_URL}, clear=True
         ), patch("psycopg.connect", return_value=connection):
@@ -383,7 +385,9 @@ class CorrectiveTestDatabaseSafetyTests(unittest.TestCase):
         connection.close.assert_called_once_with()
 
     def test_connected_wrong_major_fails_before_fixture_ddl(self):
-        connection = self._identity_connection(("procurement_test", "17.1", 170001))
+        connection = self._identity_connection(
+            ("procurement_test", "17.1", 170001, "127.0.0.1")
+        )
         with patch.dict(
             os.environ, {"TEST_DATABASE_URL": SAFE_TEST_URL}, clear=True
         ), patch("psycopg.connect", return_value=connection):

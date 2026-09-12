@@ -90,6 +90,11 @@ BUSINESS_DATE = date(2026, 9, 7)
 
 
 class MondayWorkflowPostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        connection, _, _ = validated_test_connection(require_monday_synthetic=True)
+        connection.close()
+
     def setUp(self) -> None:
         self.evaluation_at = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
         self.clock_patch = patch(

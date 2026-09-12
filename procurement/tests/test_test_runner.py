@@ -16,6 +16,12 @@ from unittest import mock
 
 RUNNER_PATH = Path(__file__).resolve().parents[1] / "tools" / "run_tests.py"
 WRAPPER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "procurement-tests"
+WORKFLOW_PATH = (
+    Path(__file__).resolve().parents[2]
+    / ".github"
+    / "workflows"
+    / "procurement-tests.yml"
+)
 SPEC = importlib.util.spec_from_file_location("procurement_test_runner", RUNNER_PATH)
 assert SPEC is not None and SPEC.loader is not None
 runner = importlib.util.module_from_spec(SPEC)
@@ -262,6 +268,41 @@ class TestConnectedDatabaseSafety(unittest.TestCase):
                 database="production",
                 server_version="16.14",
                 server_version_num=160014,
+                server_address="127.0.0.1",
+            )
+
+    def test_server_address_is_recorded_without_global_loopback_rejection(self):
+        info = runner._validate_database_facts(
+            self.target,
+            database="procurement_test",
+            server_version="16.14",
+            server_version_num=160014,
+            server_address="172.17.0.2",
+        )
+        self.assertEqual(info.server_address, "172.17.0.2")
+
+    def test_monday_synthetic_preflight_requires_server_side_loopback(self):
+        for server_address in ("127.0.0.1", "::1"):
+            with self.subTest(server_address=server_address):
+                runner._validate_monday_synthetic_database(
+                    runner.TestDatabaseInfo(
+                        database="procurement_test",
+                        server_version="16.14",
+                        server_major=16,
+                        server_address=server_address,
+                    )
+                )
+        with self.assertRaisesRegex(
+            ValueError,
+            "loopback client URL does not prove.*host\\(inet_server_addr\\(\\)\\)",
+        ):
+            runner._validate_monday_synthetic_database(
+                runner.TestDatabaseInfo(
+                    database="procurement_test",
+                    server_version="16.14",
+                    server_major=16,
+                    server_address="172.17.0.2",
+                )
             )
 
     def test_libpq_redirect_environment_is_scrubbed(self):
@@ -282,7 +323,29 @@ class TestConnectedDatabaseSafety(unittest.TestCase):
                 database="procurement_test",
                 server_version="17.5",
                 server_version_num=170005,
+                server_address="127.0.0.1",
             )
+
+    def test_ci_workflow_owns_loopback_only_host_network_postgresql(self):
+        source = WORKFLOW_PATH.read_text(encoding="utf-8")
+        image = (
+            "postgres:16@sha256:"
+            "95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b"
+        )
+        self.assertNotRegex(source, r"(?m)^\s+services:")
+        self.assertNotIn("5432:5432", source)
+        self.assertEqual(source.count(image), 1)
+        for required in (
+            "postgres_container_id=$(docker run",
+            "--network host",
+            "--tmpfs /var/lib/postgresql/data:rw",
+            "-c listen_addresses=127.0.0.1",
+            'docker rm --force "$postgres_container_id"',
+            "run_tests._clear_libpq_environment()",
+            "_validate_monday_synthetic_database(database_info)",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, source)
 
 
 if __name__ == "__main__":

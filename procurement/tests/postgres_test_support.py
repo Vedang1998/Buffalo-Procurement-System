@@ -24,7 +24,9 @@ sys.modules[RUNNER_SPEC.name] = runner_contract
 RUNNER_SPEC.loader.exec_module(runner_contract)
 
 
-def validated_test_connection() -> tuple[Any, Any, Any]:
+def validated_test_connection(
+    *, require_monday_synthetic: bool = False
+) -> tuple[Any, Any, Any]:
     """Return a connection only after the single repository safety contract passes."""
 
     target = runner_contract._validated_test_database_target()
@@ -37,7 +39,8 @@ def validated_test_connection() -> tuple[Any, Any, Any]:
         with connection.cursor() as cursor:
             cursor.execute(
                 """SELECT current_database(), current_setting('server_version'),
-                          current_setting('server_version_num')::integer"""
+                          current_setting('server_version_num')::integer,
+                          host(inet_server_addr())"""
             )
             row = cursor.fetchone()
         if row is None:
@@ -47,7 +50,10 @@ def validated_test_connection() -> tuple[Any, Any, Any]:
             database=row[0],
             server_version=row[1],
             server_version_num=row[2],
+            server_address=row[3],
         )
+        if require_monday_synthetic:
+            runner_contract._validate_monday_synthetic_database(database_info)
     except BaseException:
         connection.close()
         raise

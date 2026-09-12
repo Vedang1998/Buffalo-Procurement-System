@@ -15,25 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    services:
-      postgres:
-        # postgres:16, independently verified as PostgreSQL 16.14 on 2026-08-13.
-        image: postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
-        env:
-          POSTGRES_USER: procurement_test
-          POSTGRES_PASSWORD: procurement_test
-          POSTGRES_DB: procurement_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U procurement_test -d procurement_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    env:
-      TEST_DATABASE_URL: postgresql://procurement_test:procurement_test@127.0.0.1:5432/procurement_test
-
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,4 +37,91 @@ jobs:
         run: uv run --frozen python -m unittest discover -s scripts/tests -p 'test_replit_production_start.py' -v
 
       - name: Run complete deterministic Procurement OS suite
-        run: ./scripts/procurement-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          postgres_container_id=""
+          cleanup() {
+            cleanup_status=$?
+            trap - EXIT
+            if [[ -n "$postgres_container_id" ]]; then
+              if docker rm --force "$postgres_container_id" >/dev/null 2>&1; then
+                echo "CI test PostgreSQL cleanup: owned container removed"
+              else
+                echo "ERROR: failed to remove owned CI PostgreSQL container" >&2
+                if [[ "$cleanup_status" -eq 0 ]]; then
+                  cleanup_status=1
+                fi
+              fi
+            fi
+            exit "$cleanup_status"
+          }
+          trap cleanup EXIT
+
+          postgres_port=$(uv run --frozen python - <<'PY'
+          import socket
+
+          with socket.socket() as listener:
+              listener.bind(("127.0.0.1", 0))
+              print(listener.getsockname()[1])
+          PY
+          )
+          postgres_password=$(uv run --frozen python - <<'PY'
+          import secrets
+
+          print(secrets.token_hex(32))
+          PY
+          )
+
+          postgres_container_id=$(docker run --detach \
+            --network host \
+            --tmpfs /var/lib/postgresql/data:rw \
+            --env POSTGRES_USER=procurement_test \
+            --env POSTGRES_PASSWORD="$postgres_password" \
+            --env POSTGRES_DB=procurement_test \
+            postgres:16@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b \
+            -c listen_addresses=127.0.0.1 \
+            -c port="$postgres_port")
+          export TEST_DATABASE_URL="postgresql://procurement_test:${postgres_password}@127.0.0.1:${postgres_port}/procurement_test"
+
+          uv run --frozen python - <<'PY'
+          import os
+          from pathlib import Path
+          import sys
+          import time
+          from urllib.parse import urlparse
+
+          sys.path.insert(0, str(Path.cwd() / "procurement" / "tools"))
+          import run_tests
+
+          target = run_tests._validated_test_database_target()
+          run_tests._clear_libpq_environment()
+          database_info = None
+          last_error = None
+          for _ in range(60):
+              try:
+                  database_info = run_tests._validate_test_database(target)
+                  break
+              except ValueError as exc:
+                  last_error = type(exc.__cause__ or exc).__name__
+                  time.sleep(1)
+          if database_info is None:
+              raise SystemExit(
+                  "owned PostgreSQL did not become ready after 60 seconds "
+                  f"(last_error_type={last_error})"
+              )
+          run_tests._validate_monday_synthetic_database(database_info)
+          parsed = urlparse(target.url)
+          print(
+              "CI test PostgreSQL ready: "
+              f"client_host={parsed.hostname} client_port={parsed.port} "
+              f"database={database_info.database} "
+              f"postgresql={database_info.server_version} "
+              f"server_address={database_info.server_address} "
+              "monday_synthetic_ready=verified",
+              flush=True,
+          )
+          PY
+
+          ./scripts/procurement-tests
