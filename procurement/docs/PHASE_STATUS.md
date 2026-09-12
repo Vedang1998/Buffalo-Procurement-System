@@ -9,6 +9,49 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.
 
+## Offline supplier-mapping review tooling
+
+**REVIEW-ONLY CHECKPOINT — NOT A PHASE COMPLETION OR OPERATIONAL AUTHORITY**
+
+The Night 2 bridge remains immutable at branch
+`codex/supplier-mapping-review-bridge`, commit
+`2a7192ff16c86630f01300f493560ccee8d2685f`, tree
+`6a6bf1fcecfd13f8b51ec1267411572a8799d34c`; its reviewed implementation
+history and `623/623` result remain preserved.
+
+The isolated Daytime child branch `codex/supplier-mapping-v5-validation`
+extends that review-only tooling for the actual supplied V5 diagnostic layout
+and a code-owned synthetic portable transport. Its exact frozen
+implementation/test/review candidate is
+`bb0aaf3312742d59a1937d8538e729c7b3a5da99`, tree
+`016e33dea31ad0b91ed4ccee7daf5657b4c615de`. The actual V5 package verifies
+201/200 archive/manifest members and its structural schema, but remains
+`BASELINE_REQUIRED`, `SOURCE_EVIDENCE_REQUIRED`, `REVIEW_REQUIRED`,
+`NOT_APPROVED`, and not import-ready because the exact V4 baseline, original
+PDFs/source bundles, actual portable root, and unchanged source bytes are not
+available. The complete synthetic portable fixture is `STRUCTURED_REPLAY` but
+remains simulated, unapproved, and not import-ready.
+
+Strict completion remediation directly proves the supplied eight synthetic
+layout boundaries, all 12 simulated monthly cases, exact locator replay order,
+missing-sidecar and interruption failures, and reviewable gift/combo evidence.
+The report exposes simulation in JSON and HTML without granting authority.
+Final authoritative validation passed `648/648` across 36 registered modules,
+startup hardening passed `10/10`, and all abnormal counters were zero. A
+read-only same-model Codex adversarial review of the exact frozen candidate
+independently passed `61/61` and found no concrete P0/P1. It does not replace
+the Claude-specific review; Claude remains `REVIEW PENDING` because the
+existing OAuth session expired, with no workaround or paid API used; an exact
+frozen-candidate prompt is retained in host-local evidence. Historical
+checkpoint-cadence and design-timestamp proof limitations are explicitly
+disclosed in `docs/CODEX_HANDOFF.md`. The
+persistent multi-offer mapping-authority packet is design-only: no migration,
+UI, mapping/price approval, selected offer, writeback, or cutover was
+implemented. Nothing is activated or written to an operational database. This
+milestone does not change Phase 4, Phase 6, CURRENT/FUTURE pricing, readiness,
+mapping, or PO status. Exact next action is ChatGPT/owner review of the frozen
+V5 checkpoint and host-local evidence.
+
 ## Official implementation phases
 
 ### Phase 0 — Safe working repository / baseline
@@ -224,9 +267,9 @@ closeout is independently reviewed, executed, and verified.
 
 This emergency checkpoint does not close or renumber a canonical phase, reopen
 production permissions, or alter the Phase 4/Phase 6 statuses above.
-The only next authorized repository boundary is one documentation-only
-checkpoint and draft PR/configured CI, followed by ChatGPT PR/CI review. No
-merge or integration-conflict resolution is authorized.
+Its documentation-only checkpoint and draft PR/configured CI have occurred.
+PR #23 remains draft with unexplained non-green CI and awaits ChatGPT/owner
+review. No merge or integration-conflict resolution is authorized.
 
 ## Post-foundation ordered workstreams
 
