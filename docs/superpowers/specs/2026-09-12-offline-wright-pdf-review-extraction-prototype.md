@@ -201,6 +201,13 @@ The existing eight-case/nine-test supplier-format conformance corpus remains
 unchanged. It is complementary synthetic contract coverage, not evidence that
 this tool parsed a PDF.
 
+On the final code/test tree, the source-free extractor module passed `30/30`,
+supplier-format conformance passed `9/9`, and runner safety passed `24/24`.
+Startup passed `10/10`; the one complete authoritative run passed `731/731` in
+771.036 seconds with zero failures, errors, skips, expected failures, or
+unexpected successes against an owned loopback PostgreSQL 16.9 test instance.
+These results validate the bounded correction, not parser adoption.
+
 ## Private source-backed evaluation boundary
 
 The original Wright PDF is private and is not committed. Its source hash,
@@ -245,6 +252,31 @@ regression/development evidence, never a second blind held-out result; correct
 quarantine may be a safety PASS while expected field extraction remains
 incomplete. No gold row may be changed to turn quarantine into extraction or
 promote 5/6 to 6/6.
+
+The frozen V2 correction at `c8e77c135f592a9e44af96c0a3e0aa26b5942c45`
+was run against the same private bytes only as regression/development evidence.
+The old V1 outputs remain intact and the new V2 outputs were written to new
+private directories. On the six formerly held-out gold cases, the five
+previously matching cases remain supported with exact selected fields, tier
+facts, stable occurrence IDs, and `ABSENT` note values stated only as
+not-established by the grammar. `HOLD-01` is now an explicit
+`DESCRIPTION_CANDIDATES_AMBIGUOUS_OR_DISPLACED` candidate block: description
+and scoped notes are `UNRESOLVED`, while its independently parsed pack, code,
+and tier facts match the frozen gold as `PARTIAL_REVIEW_REQUIRED`. This is the
+intended safety correction and still is not a successful extraction of the two
+expected notes.
+
+On the twelve former training cases, six remain exact supported occurrences
+with stable IDs and six conservatively become ambiguous candidate blocks; all
+twelve retain matching selected pack/tier facts either as supported or
+explicitly partial evidence. This reduced positive-extraction coverage is an
+intentional fail-closed consequence and further confirms that the prototype is
+not adoption-ready. Exact replay of both V2 directories preserved bytes,
+mode-0600 members, and mtimes. Held-out V2 manifest SHA-256 is
+`31884e17aaff352893c67f2b2887aa15f6fdbfc55aa3fb90e8848bd411452784`;
+training V2 manifest SHA-256 is
+`69d43c6f5bdc98c7058a647ae73b795ffdaff6bd1e43f2f51e23b8f6a5776d12`.
+All authority-effect counters remain zero.
 
 ## Deferred adoption work
 

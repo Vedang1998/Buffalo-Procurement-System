@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-12T05:06:00Z (UTC)
+**Updated:** 2026-09-12T19:24:48Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### 2026-09-12 reviewed integration decision and Wright B-1/B-2 correction — FOUNDATION MERGE BLOCKED / WRIGHT CANDIDATE IN PROGRESS
+### 2026-09-12 reviewed integration decision and Wright B-1/B-2 correction — FOUNDATION MERGE BLOCKED / WRIGHT REVIEW PASS
 
 - The owner activated the bounded scope in
   `Buffalo_Review_Decision_and_Codex_Next_Steps.zip`. Before action, the four
@@ -54,7 +54,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `codex/reader-qa-integration-pr` branch, draft PR, or new 701-test CI run was
   created. Reviewed I0 history remains preserved and unmerged; Wright and the
   maintenance design were not bundled into it.
-- **Wright — isolated correction candidate:** branch
+- **Wright — isolated correction:** branch
   `codex/wright-description-scope-remediation` was created exactly from frozen
   head `78c862b6d64eab7a27ab0ada8eef0c881af18032`, tree
   `e6ac89966509bc182250833dc8961aa6727b246d`. The original prototype branch,
@@ -65,7 +65,9 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   description, returned `scoped_notes: []`, and quarantined the genuine title.
   Canonical old reproduction SHA-256 is
   `6c4270b699f0c2c2b5f5597364450eebdaa28bbb1165191c5cef30ad6a4ba1a6`.
-- The candidate explicitly versions review/coverage/manifest output as V2
+- Final code/test correction `c8e77c135f592a9e44af96c0a3e0aa26b5942c45`,
+  tree `eb9caad2eb7a2a39a88670b10fc8d610d503616b`, explicitly versions
+  review/coverage/manifest output as V2
   while retaining source grammar `WRIGHT_V1`. It removes nearest-line title
   selection, quarantines ambiguous/displaced description blocks, makes
   scoped-note `ABSENT`/`VALUE`/`UNRESOLVED` state and reason explicit, retains
@@ -74,10 +76,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   mirrors occurrence/block/page refs in extraction and coverage, strengthens
   claim-once/ref identities, and rejects stale output shapes or old/new drift.
   Eight new substantive methods raise the module floor from 22 to 30 and leave
-  the global floor sum-derived. Source-free focused results so far are 30/30,
-  retained supplier-format conformance 9/9, and runner safety 24/24. Full-suite,
-  private regression/development evaluation, exact commit, and independent
-  read-only review are still pending at this checkpoint.
+  the global floor sum-derived. Source-free focused results are 30/30, retained
+  supplier-format conformance 9/9, and runner safety 24/24 on Python 3.13.11.
+- A bounded same-model read-only reviewer found and the sole writer corrected
+  six edge cases: gapped award/title displacement, on-premise language, false
+  `ABSENT` notes beside unresolved evidence, a restriction splitting valid
+  tiers, page-wide evidence attached to one occurrence, and a malformed
+  neighboring product attached backward. The reviewer re-probed the final
+  two-file remediation diff `fc8de4b0a45e6f72cc8a374d34ef55092792a473680a4b64248f09cedacf8367`,
+  ran 30/30 plus 9/9, and returned PASS with no remaining P0/P1/P2. This is not
+  Claude approval or private/full-suite execution by that reviewer.
+- Private bytes and frozen gold were reused only as regression/development
+  evidence after correction freeze. Old V1 outputs remain intact; final V2
+  outputs are host-local under
+  `.ai-auth/codex/evidence/wright-b1-b2-remediation-20260912T185815Z/`.
+  On held-out pages 5/10/19, five previously matching gold cases remain exact
+  supported occurrences with stable IDs; `HOLD-01` is now an ambiguous
+  candidate block with description/notes `UNRESOLVED` and matching pack/code/tier
+  facts retained as partial evidence. This is a safety-regression PASS, not
+  extraction of its two notes and not a 6/6 relabel. V2 held-out output has 17
+  supported occurrences / 81 quarantines; manifest SHA-256 is
+  `31884e17aaff352893c67f2b2887aa15f6fdbfc55aa3fb90e8848bd411452784`.
+  On the former training cases, six remain exact supported occurrences and six
+  become conservative ambiguous candidate blocks; all 12 retain matching
+  selected pack/tier facts as supported or explicitly partial evidence. The
+  page output has 60 supported occurrences / 127 quarantines; manifest SHA-256
+  is `69d43c6f5bdc98c7058a647ae73b795ffdaff6bd1e43f2f51e23b8f6a5776d12`.
+  Exact replay of both V2 directories was idempotent with mode-0600 members;
+  every authority-effect counter is zero. This coverage reduction remains
+  review-only and demonstrates no whole-book/adoption acceptance.
+- Final machine validation on the exact code/test tree passed startup `10/10`
+  in 0.004 seconds and the one complete authoritative run `731/731` in
+  771.036 seconds. The complete summary was `discovered=731 executed=731
+  passes=731 failures=0 errors=0 skips=0 expected_failures=0
+  unexpected_successes=0` on Python 3.13.11 and owned PostgreSQL 16.9,
+  database `procurement_test`, with client loopback verified and server address
+  `127.0.0.1`. The owned temporary PostgreSQL directory and process were absent
+  after the wrapper exited. UTF-8/ASCII evidence logs are private mode 0600:
+  startup 2,041 bytes / SHA-256
+  `8cbc2321289aad482131291f1375331b42ef87afbd8e2b0aeabd20b734d71193`;
+  full suite 129,958 bytes / SHA-256
+  `4f09c7b7843e11662132d3f1889b52a21e3934e6b3a352869d365ed0ca81f353`.
 - The accessible morning ZIP is 22,841 bytes and matches expected outer
   SHA-256 `24f7bb0ccaccffd5d7c6b74216e34e95aa00becfe51a1c6e88b722927352ebe3`.
   Its contained `morning-handoff/SHA256SUMS` matches reported SHA-256
