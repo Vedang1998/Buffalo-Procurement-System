@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-12T01:44:18Z (UTC)
+**Updated:** 2026-09-12T22:50:43Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,108 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Automatic merge-hook safety remediation — LOCAL TESTED CANDIDATE / NOT INSTALLED OR PUSHED
+
+- The owner accepted the earlier deployment-isolation STOP and authorized one
+  narrow local remediation. The original request is 5,124 bytes / SHA-256
+  `bc9fc9b2ac933c70acc353c00cc1be6530b8f67693d3a9f4414c171484c05cfd`;
+  consolidated steering is 20,571 bytes / SHA-256
+  `3b6a79e21a4615b0a9088c6bfb0fd2ee7b6ad060e8e6d2e06cc72feabba65598`.
+- Work used a separate plain scratch clone on
+  `codex/merge-hook-safety-remediation`, created exactly from
+  `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`, tree
+  `b181c02d1d0ffbabc2142c7cf91d146e00f272f4`. The clone has independent Git
+  metadata, no remotes, `remote.pushDefault=disabled`, and an empty private
+  `core.hooksPath`. The connected checkout was not edited or switched.
+- Exact implementation commit
+  `9befc0d280896f3f57f4fa482923120ae1163c79`, tree
+  `7da5a685485a02054788918cf9f301fd18ea789f`, has the required base as its
+  sole parent. It changes only `.replit`, `scripts/post-merge.sh`,
+  `procurement/tests/test_automatic_merge_safety.py`, and the new exact module
+  floor in `procurement/tools/run_tests.py`; this handoff is the fifth and only
+  documentation path in the complete candidate.
+- `.replit` removes only the four-line top-level `[postMerge]` stanza and its
+  separator. The resulting valid TOML is 1,017 bytes / SHA-256
+  `651f3048271498471335f90dac914d6fb125a38a28f73d28dd5703a03f963814`;
+  all deployment build/postBuild, run workflows, agent, Nix, and comments are
+  byte-identical. The retained compatibility script is executable mode 0755,
+  SHA-256 `a24b2fe99208c420037a19d7bb0d17b434b7dcb846f20bb4eada339fc8fe5e1e`,
+  and contains only `/bin/sh`, literal `printf` of `Automatic post-merge
+  actions are disabled.`, and `exit 0`. It performs and claims no install,
+  migration, database, network, application, deployment, or forwarded action.
+- Ten new stdlib tests pin the exact TOML transformation, exact script bytes
+  and mode, absence of any repository workflow reference, and direct
+  invocation under constructed empty/synthetic environments. Missing, empty,
+  and synthetic `DATABASE_URL`, hostile extra arguments, `ENV`/`BASH_ENV`, and
+  repeated calls all return the same fixed output; fake package, database,
+  network, application, and deployment executables never run, and synthetic
+  secret-like values never appear. Focused result: **10/10 PASS** in 0.030
+  seconds. `test_automatic_merge_safety.py: 10` is registered while the global
+  floor remains `sum(REQUIRED_MODULE_MINIMUMS.values())`.
+- Startup validation passed **10/10** in 0.006 seconds. The one complete
+  authoritative suite discovered/executed/passed **612/612** in 764.184
+  seconds with failures, errors, skips, expected failures, and unexpected
+  successes all zero. It used Python 3.13.11, pinned uv 0.12.3 in offline mode,
+  and an owned PostgreSQL 16.10 `procurement_test` instance with client
+  loopback verified and server address `127.0.0.1`; its directory and process
+  were absent after cleanup. Two preserved pre-test setup attempts executed no
+  tests: one lacked an explicit Python locator and one found an offline wheel
+  absent from cache. The passing run used a private copy of the already
+  lock-matching environment and no network.
+- Evidence is mode 0600 under
+  `.ai-auth/codex/evidence/consolidated-merge-hook-wright-20260912T224620Z/packet-a/`.
+  Focused/startup/full log SHA-256 values are respectively
+  `6833eee6810c8dcfd3926bb11337966182ccd20c3e071cda86ed87897ba9ff8c`,
+  `67aa7963919dca08a76bd01fb733289c46d8c14503a4bbe7e4fe61a7b8301025`,
+  and `43a2bd858bd7d3add5475efa6f4cad4d3e084e7b728e650f3a6ec0588329d8fa`.
+- A bounded read-only challenger found no P0/P1/P2 source or test defect. The
+  host's ordinary ambient shell does contain credential variable names; no
+  value was read or printed. Clone creation, every material writer/test/freeze
+  command after that fact was surfaced, and each hook subprocess used explicit
+  `env -i` or a constructed environment. This is process isolation evidence,
+  not a claim that the ambient host environment is uncredentialed.
+- **Concrete receiver inventory:** the local proposed repository
+  neutralization is verified, but installation in either connected workspace
+  is **VERIFIED OFF**. Exact inspected connected-checkout files still contain
+  the old registration and mutating script; platform-loaded/cached state is
+  **NOT EXPOSED**. The sole GitHub Actions workflow is **VERIFIED ON** for PRs
+  to and pushes on main, while deployment/operational-database mutation from
+  that workflow is **VERIFIED OFF**. GitHub webhooks/installed-app settings are
+  **NOT EXPOSED**.
+- Original app `Buffalo Procurement System`, replId
+  `3ffc2cc4-b7c3-478b-999d-8214873cceae`, and live deployment
+  `abcc03bd-9cd4-47fa-8f3e-9b198156c4f9` are **VERIFIED ON**. Its installed
+  SHA/config, automatic GitHub sync, loaded/cached hook, automatic publication,
+  schedules/webhooks, and hook-context `DATABASE_URL` are **NOT EXPOSED**.
+  Historical authorized application paths prove operational database access
+  existed, not that this hook receives it. Sibling `Buffalo Procurement System
+  (1)`, replId `51491277-e96e-4466-9d9e-b9a6f23a79ea`, is a **VERIFIED ON**
+  possible receiver whose current deployment is **VERIFIED OFF**; its checkout,
+  sync/publication settings, cached config, and credentials are **NOT EXPOSED**.
+- No screenshot bytes were present in the supplied attachment directory. The
+  owner-described image is retained as testimony only: it shows the Wright
+  branch/upstream, a clean status, a 19-hour-old fetch, and Sync/Pull/Push plus
+  a closed settings menu. It does not identify an app/replId, exact SHA,
+  current synchronization, disabled automation/hook state, or deployment
+  source/revision, and it does not show PR #23 merged.
+- **Safe future installation, not executed:** first obtain administrator/UI
+  evidence placing both exact replIds in source-change quarantine, with
+  automatic GitHub sync/import and automatic publish/deploy-on-source-change
+  explicitly OFF. Without pull/merge/sync/restart/publish, inspect and preserve
+  each actual checkout; install and hash-verify the inert script first through
+  a non-Git path, then remove/hash/TOML-verify the installed `.replit` stanza.
+  If loaded/cached hook state cannot be read back without restart, retain the
+  quarantine and stop. Only then overlay the other three reviewed files. A
+  later repository push requires separate authorization, review, and fresh
+  exact-candidate CI; re-enabling sync, main merge, or publication remains a
+  separate boundary.
+- PR #23 remains on hold. This local candidate changes its reviewed tree and
+  cannot reuse its current review/CI checkpoint. No remote ref, PR, CI,
+  connected-app file, platform setting, deployment, operational database,
+  Shopify, mapping/price, maintenance SQL, supplier, or order action changed.
+  The consolidated task may proceed only to the separately isolated local
+  Wright structural remediation; this candidate itself stops before delivery.
 
 ### PR #23 server-side-loopback CI remediation — TESTED / REVIEW PASS / FRESH GITHUB CI PENDING
 
