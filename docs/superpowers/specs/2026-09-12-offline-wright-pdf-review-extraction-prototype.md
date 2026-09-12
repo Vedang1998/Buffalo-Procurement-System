@@ -163,10 +163,19 @@ selected pages also contain additional parser output and quarantines that have
 not been promoted to gold-verified facts; the coverage is deliberately partial
 and not an all-clear.
 
-The held-out pages must be run only once after the parser commit is frozen.
-Every first-run mismatch must remain reported. A held-out case used for later
-tuning permanently becomes development evidence and cannot be called held-out
-again.
+The parser was frozen at `e2bc8e18a5a4855552e02090ff4bb345e7cf117b`,
+tree `1ad45f20024d1529be2ec98f07fab384e5ff504a`, before the held-out
+pages were run. The single first-run evaluation matched five of six blocks.
+`HOLD-01` matched its page, occurrence, description, pack, code, tier,
+arithmetic, and trace fields but retained zero of two visually expected award
+notes. The PDF native-text layer exposed those custom-font notes only as
+fragmented damaged glyph strings across several line/column records. Those
+records remain quarantined; the parser did not guess or reconstruct them. The
+first-run mismatch is preserved and no held-out tuning or rerun occurred.
+
+The result is therefore `REAL_PDF_ACCEPTANCE_PARTIAL`, not a Wright-format or
+whole-book pass. If this held-out case is ever used for later tuning, it
+permanently becomes development evidence and cannot be called held-out again.
 
 ## Deferred adoption work
 

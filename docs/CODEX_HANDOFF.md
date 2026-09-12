@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-12T02:45:00Z (UTC)
+**Updated:** 2026-09-12T05:06:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,107 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Overnight integration acceptance and offline Wright prototype — BOUNDED WORK COMPLETE / NOT MERGED OR DEPLOYED
+
+- Contract `BUFFALO-OVERNIGHT-PR23-INTEGRATION-EXTRACTION-01` began at
+  `2026-09-12T02:17:44Z`. All eligible packets completed by
+  `2026-09-12T05:06:00Z`, before the `2026-09-12T09:02:44Z` validation reserve
+  and `2026-09-12T10:17:44Z` hard deadline. Evidence is retained host-locally
+  under `.ai-auth/codex/evidence/overnight-20260912T021744Z/`; no off-host
+  backup or readback is proven.
+- **Packet A — DONE:** PR #23 remained open, draft, unmerged, and based on
+  exact main `f308ac666a2377f540e528bc873463daecc20cf8`. Its source was advanced
+  once by ordinary fast-forward from `ec71fe9c...` to reviewed correction
+  `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`; main did not move. The sole
+  fresh Actions run `34667397483`, attempt `1`, job `103481989320`, reports
+  success for lock/install, startup, full suite, post steps, and cleanup.
+  Pull merge `66ec83c...` has ordered parents main then correction and tree
+  `b181c02d...`, identical to the correction tree. The raw hosted archive
+  remained access-controlled by HTTP 403, so its printed `602/602`, server
+  address, and cleanup lines were not independently retained; no retry was
+  requested.
+- **Packet B — DONE LOCALLY / PROSPECTIVE:** I0
+  `99d77b46555a3b1204dfda93907090e0f28dca26`, tree
+  `190722472a0e198200321bf063349dcce1f214f2`, has ordered parents exact PR
+  correction `48e0e2e...` then complete supplier reader/QA head `a49f4d1...`.
+  It preserves the full reader/follow-up history instead of cherry-picking
+  leaves. Conflict resolution retained both handoffs and the union of all
+  runner floors; the one integration-only supplier-format assertion changed
+  from branch population `686` to independently discovered population `701`.
+  Startup passed `10/10`, focus `123/123`, Monday `54/54`, discovery was
+  `701/701` across 38 modules, and the one full run passed `701/701` in
+  766.975 seconds with every abnormal counter zero. Documentation closeout
+  `5f86eee6...`, tree `28bd811b...`, was published only to new branch
+  `codex/overnight-integration-acceptance`. I0 is not main and has no
+  exact-head GitHub CI.
+- **Packet C — DONE, READ-ONLY/SYNTHETIC BOUNDARIES RETAINED:** the tracked
+  250-row Chromium audit passed `26/26`. Actual Uvicorn plus Chromium over
+  synthetic Monday data passed `48/48`; an independent artifact/database
+  verifier passed `144/144`. Exactly one DRAFT synthetic packet was created,
+  with zero incoming/final/import/release/Shopify/production effects. A fresh
+  linked real-A1 report traversed all 2,000 sealed-package Variants, 14,823
+  source occurrences, six ledgers, and real local PDF anchors; browser
+  acceptance passed `170/170` with zero HTTP requests, runtime exceptions,
+  console errors, or authority effects. Exact report replay preserved bytes
+  and nanosecond mtimes. The source package remains unapproved review evidence.
+- **Packet D — IMPLEMENTED AND TESTED / REAL PDF ACCEPTANCE PARTIAL:** isolated
+  branch `codex/offline-supplier-extraction-prototype` starts from locally green
+  I0 closeout `5f86eee6...`. Frozen implementation
+  `e2bc8e18a5a4855552e02090ff4bb345e7cf117b`, tree
+  `1ad45f20024d1529be2ec98f07fab384e5ff504a`, adds one stdlib-only developer
+  CLI, one explicitly fabricated source-free fixture, 22 substantive tests,
+  exact sum-derived runner floors, and one scoped specification. Product
+  runtime, migrations, config/authority, workflow/startup, dependency lock,
+  and project metadata are byte-identical to the parent.
+- The only parser format is `WRIGHT_V1`, limited to regular and nested
+  retail-multipack ladders on caller-selected pages. It produces deterministic
+  JSON review evidence with source occurrence/tier/term identities, exact field
+  states, explicit coverage/quarantine, diagnostics, zero authority effects,
+  and `REVIEW_ONLY / NOT_APPROVED / NOT_IMPORT_READY`. It emits no Variant or
+  operational-offer identity, 27-field price import, approval, Shopify action,
+  supplier action, purchasing action, or order.
+- Public extractor tests passed `22/22`; the unchanged supplier-format corpus
+  passed `9/9`; startup passed `10/10`. The single final suite used Python
+  3.13.11 and PostgreSQL 16.14 on an owned loopback-only container, discovered
+  and executed **723/723**, and passed **723/723** in 764.160 seconds. Failures,
+  errors, skips, expected failures, and unexpected successes were all zero;
+  the owned container was removed. Full-suite log SHA-256 is
+  `d14f7a97f9d5032d132a21250729f83c49512ed6bfaccf5f80ffe56661e14148`.
+- The private Wright original remained outside Git: 10,393,853 bytes, 28
+  pages, SHA-256
+  `80205b8475bbdd1ba8e2e876d48c1a35bec47fed086059f2ac8769b29431e0c4`.
+  Pre-frozen training gold passed `12/12` with exact field/trace/term and
+  arithmetic/coverage checks, and replay preserved bytes, modes, and mtimes.
+  After the parser commit was frozen, the held-out pages were consumed once.
+  Five of six blocks matched. `HOLD-01` matched its occurrence, description,
+  pack, code, tiers, arithmetic, and trace but could not recover two award-note
+  rows whose native text layer contains fragmented custom-font glyphs. Those
+  rows were quarantined, not guessed. No held-out tuning or rerun occurred, so
+  the result is exactly `REAL_PDF_ACCEPTANCE_PARTIAL`, not a format/whole-book
+  pass. No eligible independent second-format original was proven locally.
+- Two bounded same-model read-only reviewers returned **PASS** with no
+  P0/P1/P2 on the frozen Packet D implementation after remediation. This is
+  static review, not independent execution, Claude approval, production-parser
+  acceptance, or operational approval.
+- **Packet E — EXACT MAINTENANCE REVIEW STILL PENDING:** frozen maintenance
+  design `b0c8d3fec8ec57e57881e91615cc6f7c3cf75b4d`, tree
+  `251643acdf6aa68c02241d198eb5ad96edba54c4`, was not changed or merged. No
+  exact NEW-1 independent confirmation was found; the older PASS targeting
+  `f5791627...` does not approve `b0c8d3f...`. Persistent implementation still
+  requires that review, a separately approved integrated target, reverification
+  of exact predecessor migration `013`, and the approved maintenance
+  principal-pair/permission configuration. The four outstanding configuration
+  inputs retain their narrow blockers; none was invented or broadened here.
+- `procurement/docs/PHASE_STATUS.md` is unchanged because no phase or release
+  milestone changed. Main merge, deployment, persistent-foundation SQL,
+  operational database access, Shopify access, mapping/price approval,
+  activation, permissions, supplier contact, and orders were all zero.
+- **Recommended next authorization:** authorize a bounded review and
+  integration decision for exact I0 history plus the isolated extraction
+  branch, followed—if accepted—by a new integration PR and fresh exact-head
+  GitHub CI. Do not merge or deploy automatically. Keep the maintenance NEW-1
+  review and any later persistent-mapping implementation as separate gates.
 
 ### Overnight PR #23 CI and prospective reader/QA integration — HOSTED GREEN / LOCAL GREEN / NOT MERGED
 
