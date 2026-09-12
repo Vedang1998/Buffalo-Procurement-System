@@ -268,8 +268,12 @@ closeout is independently reviewed, executed, and verified.
 This emergency checkpoint does not close or renumber a canonical phase, reopen
 production permissions, or alter the Phase 4/Phase 6 statuses above.
 Its documentation-only checkpoint and draft PR/configured CI have occurred.
-PR #23 remains draft with unexplained non-green CI and awaits ChatGPT/owner
-review. No merge or integration-conflict resolution is authorized.
+PR #23's original non-green CI is now explained by the server-side-loopback
+topology mismatch; its reviewed correction is included in the prospective
+combined candidate, and one fresh exact-correction-head hosted run completed
+successfully. PR #23 remains draft and unmerged, the hosted raw log was not
+publicly retrievable, and no phase completion, main merge, deployment, or
+operational authority follows from that result.
 
 ## Post-foundation ordered workstreams
 

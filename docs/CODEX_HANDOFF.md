@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-12T02:24:41Z (UTC)
+**Updated:** 2026-09-12T02:45:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,59 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Overnight PR #23 CI and prospective reader/QA integration — HOSTED GREEN / LOCAL GREEN / NOT MERGED
+
+- Under contract `BUFFALO-OVERNIGHT-PR23-INTEGRATION-EXTRACTION-01`, PR #23's
+  source was advanced once by ordinary fast-forward from exact `ec71fe9c` to
+  the reviewed correction `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`.
+  Exact `main` remained `f308ac666a2377f540e528bc873463daecc20cf8`;
+  the PR remains draft and unmerged.
+- The sole fresh pull-request run is `34667397483`, attempt `1`, job
+  `103481989320`. GitHub reports the run, job, lock/install, startup, complete
+  Procurement suite, post steps, and job completion all `success` at source
+  head `48e0e2e`. The corresponding live pull merge ref is
+  `66ec83c92b5bf5eae461f4a9bcacca5ef62dfe05`, with ordered parents exact main
+  then exact source and tree `b181c02d1d0ffbabc2142c7cf91d146e00f272f4`,
+  identical to the reviewed source tree.
+- The hosted run-log archive is not public: its endpoint returned HTTP 403 and
+  the public job page requires sign-in. Therefore the raw hosted log and its
+  printed `602/602` summary were not independently retained. The exact tree's
+  reviewed/static population is 602 and its fail-closed runner cannot return
+  success with a skip or abnormal result; this is stronger than a badge-only
+  observation but retains the raw-log limitation. No rerun was requested.
+- A push-disabled private scratch clone produced prospective merge I0
+  `99d77b46555a3b1204dfda93907090e0f28dca26`, tree
+  `190722472a0e198200321bf063349dcce1f214f2`, with ordered parents exact
+  correction `48e0e2e...` then full supplier-reader/QA head `a49f4d1...`.
+  The latter includes the complete reviewed reader/follow-up ancestry through
+  `a056e111...`; no intermediate commits were separately cherry-picked.
+- The only textual conflicts were `docs/CODEX_HANDOFF.md` and
+  `procurement/tools/run_tests.py`. Resolution retained both handoff histories,
+  all server-address safety logic, all prior module floors, the five supplier
+  module floors `30/9/15/29/16`, Monday `54`, Phase 4 corrective `70`, runner
+  `24`, and the sum-derived global floor. One integration-only QA assertion was
+  mechanically changed from its branch population `686` to the independently
+  discovered union `701`; no test was removed or weakened.
+- Exact I0 validation used Python 3.13.11, pinned `uv 0.12.3`, and the exact
+  digest-pinned PostgreSQL 16 image on owned host networking. Startup passed
+  `10/10`; runner plus supplier focus passed `123/123`; Monday passed `54/54`;
+  static discovery registered exactly `38/38` modules at `701/701`; and the
+  single authoritative full run passed **701 discovered / 701 executed / 701
+  passed** in 766.975 seconds. Failures, errors, skips, expected failures, and
+  unexpected successes were all zero. Client and server addresses were
+  `127.0.0.1`, `monday_synthetic_ready` was verified before fixture DDL, and
+  the owned PostgreSQL container was removed successfully.
+- Bounded independent static review returned mechanical/code **PASS** with no
+  P0/P1 finding. Its sole P2 requested this exact current entry and a formatting
+  correction, now applied in this later documentation-only handoff.
+- I0 is a **PROSPECTIVE / NOT_MAIN / NOT_GITHUB_CI combined candidate**. It is
+  not a release, persistent-mapping implementation, approval, or operational
+  authority. The next in-scope action is local started-server/Chromium
+  acceptance on this exact combined code, followed separately by the bounded
+  offline Wright extraction prototype. No main merge, deployment, PR creation,
+  additional Actions run, production/Shopify connection, mapping or price
+  approval, supplier action, CURRENT activation, or order is authorized.
 
 ### PR #23 server-side-loopback CI remediation — TESTED / REVIEW PASS / FRESH GITHUB CI PENDING
 
@@ -108,6 +161,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   reviewed, this is a **TESTED CI REMEDIATION — NOT INTEGRATION OR DEPLOYMENT
   APPROVAL**. No PR change/retry, merge, deployment, production connection,
   Shopify action, supplier communication, or PO/order action is authorized.
+
 ### Overnight unblock and supplier-format regression preparation — COMPLETED / STOPPED AT HANDOFF
 
 - The one bounded window began at `2026-09-11T03:56:29Z`, ended at
