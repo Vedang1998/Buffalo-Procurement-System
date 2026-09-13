@@ -392,6 +392,56 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         retirement_verified.assert_called_once_with(
             initialized, schema=candidate.SCHEMA, require_marker=True
         )
+        legacy_catalog_sha = next(
+            value
+            for value in candidate.RETIREMENT_CATALOG_METADATA_SHA256
+            if value != candidate.RETIREMENT_CATALOG_SHA256
+        )
+        legacy_metadata = _FactsConnection(
+            initialized=True,
+            metadata_overrides={
+                "monday_forecast_v2_retirement_catalog_sha256": legacy_catalog_sha
+            },
+        )
+        with (
+            mock.patch.object(
+                candidate.psycopg,
+                "connect",
+                return_value=nullcontext(legacy_metadata),
+            ),
+            mock.patch.object(
+                candidate,
+                "verify_monday_forecast_v2_retirement_contract",
+                return_value=candidate.RETIREMENT_CATALOG_SHA256,
+            ) as legacy_verified,
+        ):
+            candidate._database_facts(DATABASE_URL, require_initialized=True)
+        legacy_verified.assert_called_once_with(
+            legacy_metadata, schema=candidate.SCHEMA, require_marker=True
+        )
+        unsupported_metadata = _FactsConnection(
+            initialized=True,
+            metadata_overrides={
+                "monday_forecast_v2_retirement_catalog_sha256": "f" * 64
+            },
+        )
+        with (
+            mock.patch.object(
+                candidate.psycopg,
+                "connect",
+                return_value=nullcontext(unsupported_metadata),
+            ),
+            mock.patch.object(
+                candidate,
+                "verify_monday_forecast_v2_retirement_contract",
+            ) as unsupported_verifier,
+            self.assertRaisesRegex(
+                candidate.CandidateBoundaryError,
+                "demo database contract metadata differs",
+            ),
+        ):
+            candidate._database_facts(DATABASE_URL, require_initialized=True)
+        unsupported_verifier.assert_not_called()
         for key, value in (
             ("synthetic_owner_demo_business_date", "not-a-date"),
             ("synthetic_owner_demo_sales_backfill_id", "not-a-uuid"),

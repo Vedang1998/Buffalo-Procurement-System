@@ -34,7 +34,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_local_access.py": 12,
     "test_local_purchasing_candidate.py": 14,
     "test_matching.py": 3,
-    "test_monday_forecast_retirement_postgres.py": 8,
+    "test_monday_forecast_retirement_postgres.py": 9,
     "test_monday_workflow.py": 59,
     "test_phase4_historical_sales.py": 33,
     "test_phase4_identity_manifest.py": 16,

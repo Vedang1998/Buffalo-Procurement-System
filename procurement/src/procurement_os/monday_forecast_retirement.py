@@ -22,7 +22,16 @@ RETIRED_METHOD_VERSION = "EMERGENCY_TRANSPARENT_V1"
 CURRENT_METHOD_VERSION = "EMERGENCY_TRANSPARENT_V2"
 TARGET_SCHEMA = "qa_mapping_test"
 MIGRATION_SHA256 = "e3f69e23cf6fce0760add5ec6a329426444dd44b681e338aded9d833e89ba56b"
-CATALOG_SHA256 = "0d151f70f6eec2965428e0bec64ab573962a8aad344b14a9d44332edff284cd9"
+CATALOG_SHA256 = "2fafe14a6dd9394fbebb471f84b768f77bd9e2675cd8e3746576a8a9d3099e7d"
+# Metadata written by the pre-canonical f2bdd169 catalog projection remains a
+# recognized provenance value.  It never substitutes for recomputing and
+# matching the current stable catalog digest below.
+LEGACY_CATALOG_SHA256 = (
+    "0d151f70f6eec2965428e0bec64ab573962a8aad344b14a9d44332edff284cd9"
+)
+ACCEPTED_CATALOG_METADATA_SHA256 = frozenset(
+    {CATALOG_SHA256, LEGACY_CATALOG_SHA256}
+)
 
 _FUNCTION_IDENTITIES = (
     ("assert_monday_forecast_v2_retirement_contract", ""),
@@ -107,6 +116,31 @@ def _normalize_catalog_text(value: Any, schema: str) -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_normalize_catalog_text(item, schema) for item in value)
     return str(value)
+
+
+def _normalize_function_config(value: Any) -> Any:
+    """Canonicalize the two pg_dump spellings of the reviewed search path."""
+
+    if value is None:
+        return "<NULL>"
+    reviewed_spellings = {
+        'search_path="qa_mapping_test",pg_catalog',
+        "search_path=qa_mapping_test, pg_catalog",
+    }
+    return tuple(
+        "search_path=qa_mapping_test,pg_catalog"
+        if str(setting) in reviewed_spellings
+        else str(setting)
+        for setting in value
+    )
+
+
+def _normalize_trigger_qual(value: Any) -> str:
+    """Remove parser offsets while retaining the complete trigger predicate tree."""
+
+    if value is None:
+        return "<NULL>"
+    return re.sub(r":location -?\d+", ":location <NORMALIZED>", str(value))
 
 
 def retirement_catalog_projection(conn: Any, schema: str) -> dict[str, Any]:
@@ -197,7 +231,7 @@ def retirement_catalog_projection(conn: Any, schema: str) -> dict[str, Any]:
                   p.proparallel,pg_catalog.pg_get_userbyid(p.proowner),
                   p.proretset,p.pronargs,p.pronargdefaults,p.procost,p.prorows,
                   COALESCE(pg_catalog.pg_get_expr(p.proargdefaults,0),'<NULL>'),
-                  COALESCE(p.proconfig::text,'<NULL>'),p.prosrc,
+                  p.proconfig,p.prosrc,
                   COALESCE(p.probin,'<NULL>'),COALESCE(p.proacl::text,'<NULL>')
              FROM pg_catalog.pg_proc p
              JOIN pg_catalog.pg_language l ON l.oid=p.prolang
@@ -240,13 +274,19 @@ def retirement_catalog_projection(conn: Any, schema: str) -> dict[str, Any]:
         "relations": relations,
         "triggers": triggers,
     }
-    return {
-        key: [
-            [_normalize_catalog_text(value, schema) for value in row]
-            for row in rows
-        ]
-        for key, rows in projection.items()
-    }
+    normalized: dict[str, list[list[Any]]] = {}
+    for key, rows in projection.items():
+        normalized[key] = []
+        for row in rows:
+            values = list(row)
+            if key == "functions":
+                values[17] = _normalize_function_config(values[17])
+            elif key == "triggers":
+                values[9] = _normalize_trigger_qual(values[9])
+            normalized[key].append(
+                [_normalize_catalog_text(value, schema) for value in values]
+            )
+    return normalized
 
 
 def compute_retirement_catalog_sha256(conn: Any, schema: str) -> str:
@@ -287,7 +327,10 @@ def _verify_monday_forecast_v2_retirement_contract(
         raise MondayForecastRetirementContractError(
             "retirement contract metadata differs"
         )
-    if metadata.get("monday_forecast_v2_retirement_catalog_sha256") != CATALOG_SHA256:
+    if (
+        metadata.get("monday_forecast_v2_retirement_catalog_sha256")
+        not in ACCEPTED_CATALOG_METADATA_SHA256
+    ):
         raise MondayForecastRetirementContractError(
             "retirement catalog metadata differs"
         )

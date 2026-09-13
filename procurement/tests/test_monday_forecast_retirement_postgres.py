@@ -23,10 +23,12 @@ from procurement_os.emergency_packet import list_monday_artifacts, read_monday_a
 from procurement_os.monday_controls import load_material_edit_policy
 from procurement_os.monday_forecast_retirement import (
     CATALOG_SHA256,
+    LEGACY_CATALOG_SHA256,
     MIGRATION_NAME,
     MIGRATION_SHA256,
     MondayForecastRetirementContractError,
     compute_retirement_catalog_sha256,
+    retirement_catalog_projection,
     verify_monday_forecast_v2_retirement_contract,
 )
 from procurement_os.monday_run import build_after_review
@@ -340,6 +342,126 @@ class MondayForecastRetirementPostgresTests(unittest.TestCase):
             apply_schema._verify_or_apply_post_mapping_release(
                 self.conn, DB_DIR, unmanifested
             )
+
+    def test_catalog_digest_survives_semantic_dump_restore_renderings(self):
+        assert self.conn is not None
+        function_signatures = (
+            "assert_monday_forecast_v2_retirement_contract()",
+            "assert_monday_stale_forecast_retirement_commit()",
+            "guard_monday_forecast_v1_child_evidence()",
+            "guard_monday_forecast_v1_run()",
+            "monday_stale_forecast_retirement_confirmation_sha256(uuid,text,text,text,text)",
+            "protect_monday_stale_forecast_retirement_audit()",
+            "validate_monday_stale_forecast_retirement()",
+        )
+        with self.conn.transaction():
+            source_projection = retirement_catalog_projection(self.conn, SCHEMA)
+            source_digest = compute_retirement_catalog_sha256(self.conn, SCHEMA)
+            before_config = self.conn.execute(
+                """SELECT p.proconfig::text
+                     FROM pg_catalog.pg_proc p
+                    WHERE p.oid=
+                          'assert_monday_forecast_v2_retirement_contract()'::regprocedure"""
+            ).fetchone()[0]
+            trigger_definition, before_qual = self.conn.execute(
+                """SELECT pg_catalog.pg_get_triggerdef(t.oid,true),t.tgqual::text
+                     FROM pg_catalog.pg_trigger t
+                    WHERE t.tgname=
+                          'trg_assert_monday_stale_forecast_retirement_audit_commit'"""
+            ).fetchone()
+            for signature in function_signatures:
+                self.conn.execute(
+                    f"ALTER FUNCTION {signature} "
+                    "SET search_path TO qa_mapping_test, pg_catalog"
+                )
+            self.conn.execute(
+                """DROP TRIGGER
+                       trg_assert_monday_stale_forecast_retirement_audit_commit
+                     ON change_log"""
+            )
+            self.conn.execute(trigger_definition)
+            self.conn.execute(
+                """UPDATE meta SET value=%s
+                     WHERE key='monday_forecast_v2_retirement_catalog_sha256'""",
+                (LEGACY_CATALOG_SHA256,),
+            )
+            after_config = self.conn.execute(
+                """SELECT p.proconfig::text
+                     FROM pg_catalog.pg_proc p
+                    WHERE p.oid=
+                          'assert_monday_forecast_v2_retirement_contract()'::regprocedure"""
+            ).fetchone()[0]
+            after_definition, after_qual = self.conn.execute(
+                """SELECT pg_catalog.pg_get_triggerdef(t.oid,true),t.tgqual::text
+                     FROM pg_catalog.pg_trigger t
+                    WHERE t.tgname=
+                          'trg_assert_monday_stale_forecast_retirement_audit_commit'"""
+            ).fetchone()
+            self.assertNotEqual(before_config, after_config)
+            self.assertEqual(trigger_definition, after_definition)
+            self.assertNotEqual(before_qual, after_qual)
+            self.assertEqual(
+                retirement_catalog_projection(self.conn, SCHEMA), source_projection
+            )
+            self.assertEqual(source_digest, CATALOG_SHA256)
+            self.assertEqual(
+                compute_retirement_catalog_sha256(self.conn, SCHEMA), CATALOG_SHA256
+            )
+            self.assertEqual(
+                verify_monday_forecast_v2_retirement_contract(self.conn),
+                CATALOG_SHA256,
+            )
+            self.conn.execute(
+                """UPDATE meta SET value=%s
+                     WHERE key='monday_forecast_v2_retirement_catalog_sha256'""",
+                ("f" * 64,),
+            )
+            with self.assertRaisesRegex(
+                MondayForecastRetirementContractError,
+                "retirement catalog metadata differs",
+            ):
+                verify_monday_forecast_v2_retirement_contract(self.conn)
+            self.conn.execute(
+                """UPDATE meta SET value=%s
+                     WHERE key='monday_forecast_v2_retirement_catalog_sha256'""",
+                (LEGACY_CATALOG_SHA256,),
+            )
+            self.conn.execute(
+                """ALTER FUNCTION assert_monday_forecast_v2_retirement_contract()
+                     SET search_path TO pg_catalog, qa_mapping_test"""
+            )
+            self.assertNotEqual(
+                compute_retirement_catalog_sha256(self.conn, SCHEMA), CATALOG_SHA256
+            )
+            with self.assertRaisesRegex(
+                MondayForecastRetirementContractError,
+                "retirement installed catalog differs",
+            ):
+                verify_monday_forecast_v2_retirement_contract(self.conn)
+            self.conn.execute(
+                """ALTER FUNCTION assert_monday_forecast_v2_retirement_contract()
+                     SET search_path TO qa_mapping_test, pg_catalog"""
+            )
+            tampered_definition = trigger_definition.replace(
+                " = 'BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1'::text",
+                " <> 'BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1'::text",
+                1,
+            )
+            self.assertNotEqual(tampered_definition, trigger_definition)
+            self.conn.execute(
+                """DROP TRIGGER
+                       trg_assert_monday_stale_forecast_retirement_audit_commit
+                     ON change_log"""
+            )
+            self.conn.execute(tampered_definition)
+            self.assertNotEqual(
+                compute_retirement_catalog_sha256(self.conn, SCHEMA), CATALOG_SHA256
+            )
+            with self.assertRaisesRegex(
+                MondayForecastRetirementContractError,
+                "retirement installed catalog differs",
+            ):
+                verify_monday_forecast_v2_retirement_contract(self.conn)
 
     def test_changed_015_source_refuses_before_any_schema_effect(self):
         assert self.conn is not None

@@ -39,6 +39,7 @@ if str(_PROCUREMENT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_PROCUREMENT_ROOT / "src"))
 
 from procurement_os.monday_forecast_retirement import (
+    ACCEPTED_CATALOG_METADATA_SHA256 as RETIREMENT_CATALOG_METADATA_SHA256,
     CATALOG_SHA256 as RETIREMENT_CATALOG_SHA256,
     CONTRACT_VERSION as RETIREMENT_CONTRACT_VERSION,
     MIGRATION_NAME as RETIREMENT_MIGRATION_NAME,
@@ -344,7 +345,7 @@ def _database_facts(
                 or metadata.get("monday_forecast_v2_retirement_contract")
                 != RETIREMENT_CONTRACT_VERSION
                 or metadata.get("monday_forecast_v2_retirement_catalog_sha256")
-                != RETIREMENT_CATALOG_SHA256
+                not in RETIREMENT_CATALOG_METADATA_SHA256
             ):
                 raise CandidateBoundaryError("demo database contract metadata differs")
             target = sql.Identifier(SCHEMA)
