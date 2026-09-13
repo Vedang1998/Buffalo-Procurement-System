@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-13T00:57:39Z (UTC)
+**Updated:** 2026-09-13T01:05:39Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -79,13 +79,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `env -i` or a constructed environment. This is process isolation evidence,
   not a claim that the ambient host environment is uncredentialed.
 - **Concrete receiver inventory:** the local proposed repository
-  neutralization is verified, but installation in either connected workspace
-  is **VERIFIED OFF**. Exact inspected connected-checkout files still contain
-  the old registration and mutating script; platform-loaded/cached state is
-  **NOT EXPOSED**. The sole GitHub Actions workflow is **VERIFIED ON** for PRs
-  to and pushes on main, while deployment/operational-database mutation from
-  that workflow is **VERIFIED OFF**. GitHub webhooks/installed-app settings are
-  **NOT EXPOSED**.
+  neutralization is verified, and installation in the one inspected connected
+  checkout is **VERIFIED OFF** because its exact files still contain the old
+  registration and mutating script. Whether that checkout is the loaded source
+  for either exact app, and each app's installed/platform-loaded/cached state,
+  are **NOT EXPOSED**. The sole GitHub Actions workflow is **VERIFIED ON** for
+  PRs to and pushes on main, while deployment/operational-database mutation
+  from that workflow is **VERIFIED OFF**. GitHub webhooks/installed-app settings
+  are **NOT EXPOSED**.
 - Original app `Buffalo Procurement System`, replId
   `3ffc2cc4-b7c3-478b-999d-8214873cceae`, and live deployment
   `abcc03bd-9cd4-47fa-8f3e-9b198156c4f9` are **VERIFIED ON**. Its installed
