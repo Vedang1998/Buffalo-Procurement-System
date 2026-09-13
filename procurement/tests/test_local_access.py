@@ -160,6 +160,41 @@ class LocalAccessTests(unittest.TestCase):
         self.assertIn("script-src 'self'", policy)
         self.assertIn("style-src 'self' 'unsafe-inline'", policy)
         self.assertNotIn("script-src 'self' 'unsafe-inline'", policy)
+        synthetic = mock.Mock(mode="SYNTHETIC_DEMO")
+        price_detail = {
+            "price_book_batch_id": "00000000-0000-4000-8000-000000000001",
+            "batch_ref": "synthetic-batch",
+            "vendor_name": "Synthetic Vendor",
+            "target_price_state": "FUTURE",
+            "operational_status": "INVALID",
+            "status": "INVALID",
+            "valid_row_count": 0,
+            "row_count": 1,
+            "covered_offer_count": 0,
+            "expected_offer_count": 1,
+            "validation_fingerprint": "a" * 64,
+            "warning_count": 0,
+            "issues": [],
+        }
+        with (
+            mock.patch.object(api, "runtime_config", return_value=synthetic),
+            mock.patch.object(
+                api,
+                "investigation_items",
+                return_value={"run": None, "missing": [], "new": []},
+            ),
+        ):
+            operational_pages = (
+                api._vendor_rules_html(
+                    {"status": "WARN", "message": "synthetic", "vendors": []}
+                ),
+                api._price_book_list_html([]),
+                api._price_book_detail_html(price_detail),
+                api.investigation_page(),
+            )
+        for page in operational_pages:
+            with self.subTest(page=page[:80]):
+                self.assertIn("TEST DATA — NOT FOR ORDERING", page)
 
 
 if __name__ == "__main__":

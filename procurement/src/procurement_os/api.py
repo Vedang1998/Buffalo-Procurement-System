@@ -635,7 +635,7 @@ def _vendor_rules_html(result: dict) -> str:
 .summary,.vendor-card{{border:1px solid #d1d9e0;border-radius:8px;padding:14px;margin:14px 0}}
 form{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}}label{{display:flex;flex-direction:column;font-size:12px;gap:3px}}
 input,select,textarea,button{{font:inherit;padding:7px}}.check{{display:block}}button{{align-self:end}}</style></head><body>
-<p><a href='/admin/status'>System Readiness</a> · <a href='/data-sync-runs'>Data/Sync Runs</a></p>
+{_operational_nav('/', current='Vendor Rules')}
 <h1>Vendor Operating Rules</h1><section class='summary'><b>{_html_escape(result['status'])}</b> — {_html_escape(result['message'])}</section>
 {''.join(cards) or '<p>No vendors are configured.</p>'}
 <p>Blank or unconfirmed material fields keep VENDOR_RULES failed. Vendor minimums never authorize filler.</p>
@@ -831,8 +831,12 @@ def _supplier_mapping_list_html(
 
 @app.get("/supplier-mapping/status")
 def supplier_mapping_status():
-    with _db_conn() as conn:
-        return mapping_status(conn)
+    try:
+        require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
+        with _db_conn() as conn:
+            return mapping_status(conn)
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/supplier-mapping", response_class=HTMLResponse)
@@ -840,6 +844,7 @@ def supplier_mapping_page(
     query: str = "", supplier: str = "", status: str = "", limit: int = 50, offset: int = 0
 ):
     try:
+        require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
         with _db_conn() as conn:
             result = list_mapping_candidates(
                 conn, query=query, supplier=supplier, status=status, limit=limit, offset=offset
@@ -1000,6 +1005,7 @@ def _supplier_mapping_detail_html(detail: dict) -> str:
 @app.get("/supplier-mapping/{candidate_id}", response_class=HTMLResponse)
 def supplier_mapping_detail(candidate_id: UUID):
     try:
+        require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
         with _db_conn() as conn:
             detail = get_mapping_candidate_detail(conn, candidate_id)
     except PersistentMappingError as exc:
@@ -1010,6 +1016,7 @@ def supplier_mapping_detail(candidate_id: UUID):
 @app.get("/supplier-mapping/{candidate_id}/source")
 def supplier_mapping_source(candidate_id: UUID):
     try:
+        require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
         with _db_conn() as conn:
             detail = get_mapping_candidate_detail(conn, candidate_id)
     except PersistentMappingError as exc:
@@ -1481,7 +1488,12 @@ def investigation_page():
     happen on /reconciliation and individually require the review token."""
     data = investigation_items()
     if not data["run"]:
-        return "<h1>Identity Investigation</h1><p>No completed catalog sync run yet.</p>"
+        return (
+            "<!doctype html><html><head><title>Identity Investigation</title></head><body>"
+            + _operational_nav("/", current="Catalog Reconciliation")
+            + "<h1>Identity Investigation</h1><p>No completed catalog sync run yet.</p>"
+            "</body></html>"
+        )
 
     def esc(v):
         import html
@@ -1566,6 +1578,7 @@ each selected identity receives its own permanent audit record. This never runs 
 table{{border-collapse:collapse;width:100%;margin:8px 0}}td,th{{border:1px solid #d1d9e0;padding:5px 8px;font-size:13px;text-align:left;vertical-align:top}}
 th{{background:#f6f8fa}}.warn{{color:#82071e}}.flag{{background:#fff8c5;color:#7d4e00;font-size:11px;padding:1px 5px;border-radius:4px;font-weight:700}}
 .cand{{border-left:3px solid #d1d9e0;margin:4px 0;padding:3px 8px;font-size:12px;background:#f6f8fa}}</style></head><body>
+{_operational_nav('/', current='Catalog Reconciliation')}
 <h1>Phase 3 Identity Investigation — run {esc(data['run'])}</h1>
 <p>Diagnostic evidence only. Nothing on this page makes decisions or writes to Shopify.
 Decisions are made individually on <a href='../reconciliation'>the review queue</a> and require the review token.</p>
@@ -1594,7 +1607,8 @@ def retire_batch(variant_ids: list[str] = Form([]), actor: str = Form(...),
         recompute_catalog_gate(conn)
     import html as _html
     rows = "".join(f"<li>{_html.escape(v)} — {_html.escape(r)}</li>" for v, r in results)
-    return (f"<h1>Batch retirement result</h1><ul>{rows}</ul>"
+    return (_operational_nav("/", current="Catalog Reconciliation")
+            + f"<h1>Batch retirement result</h1><ul>{rows}</ul>"
             "<p><a href='../../reconciliation/investigation'>Back to investigation</a> · "
             "<a href='../../reconciliation'>Review queue</a></p>")
 
@@ -2522,6 +2536,7 @@ def _price_book_list_html(batches: list[dict]) -> str:
         for batch in batches
     ) or "<tr><td colspan='7'>No price-book batches have been staged.</td></tr>"
     return f"""<!doctype html><html><head><title>Price Books</title></head><body>
+{_operational_nav('/', current='Price Books')}
 <h1>Price Book Import / Validation</h1>
 <p>Uploads may prepare FUTURE pricing only. CURRENT remains untouched until a separately guarded rollover.</p>
 <p><a href='price-books/template.csv'>Download strict normalized CSV template</a></p>
@@ -2572,6 +2587,7 @@ def _price_book_detail_html(batch: dict) -> str:
 <label>Price-book review token <input type='password' name='review_token' required></label><br>
 <button type='submit'>Reject and purge typed staging</button></form>"""
     return f"""<!doctype html><html><head><title>Price Book {_html_escape(batch['batch_ref'])}</title></head><body>
+{_operational_nav('/', current='Price Books')}
 <p><a href='../price-books'>Back to Price Books</a></p>
 <h1>{_html_escape(batch['batch_ref'])}</h1>
 <dl><dt>Vendor</dt><dd>{_html_escape(batch['vendor_name'])}</dd>

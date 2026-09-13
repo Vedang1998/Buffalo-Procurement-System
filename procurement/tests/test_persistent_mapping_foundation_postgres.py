@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import copy
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 import inspect
 import json
@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import shutil
 from tempfile import TemporaryDirectory
+from threading import Barrier
 from unittest import mock
 from urllib.parse import quote, urlparse
 from uuid import UUID, uuid4
@@ -23,6 +24,7 @@ from psycopg import sql
 
 import apply_schema
 from postgres_test_support import validated_test_connection
+from procurement_os import persistent_mapping as mapping_service
 from procurement_os import recommendations
 from procurement_os.persistent_mapping import (
     PersistentMappingError,
@@ -758,12 +760,61 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 )
 
     def test_mapping_family_lock_serializes_marker_without_claiming_whole_run_atomicity(self):
+        self._reset(include_mapping=False)
+        barrier = Barrier(2)
+
         def replay() -> bool:
+            barrier.wait(timeout=10)
             with psycopg.connect(self.mapping_url) as conn, conn.transaction():
                 return apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            self.assertEqual([future.result() for future in [pool.submit(replay), pool.submit(replay)]], [False, False])
+            results = [future.result() for future in (pool.submit(replay), pool.submit(replay))]
+        self.assertEqual(sorted(results), [False, True])
+        marker_key = f"migration:{apply_schema.MAPPING_MIGRATION_NAME}"
+        with psycopg.connect(self.mapping_url) as conn:
+            marker_before = conn.execute(
+                f"SELECT value FROM {SCHEMA}.meta WHERE key=%s", (marker_key,)
+            ).fetchone()[0]
+            authority_before = self._counts()
+
+        with TemporaryDirectory(prefix="mapping-different-bytes-") as temporary:
+            altered_dir = Path(temporary) / "db"
+            shutil.copytree(DB_DIR, altered_dir)
+            migration_path = altered_dir / apply_schema.MAPPING_MIGRATION_NAME
+            altered_bytes = migration_path.read_bytes() + b"-- different reviewed candidate\n"
+            migration_path.write_bytes(altered_bytes)
+            altered = replace(
+                apply_schema.MAPPING_RELEASE,
+                migration_sha256=hashlib.sha256(altered_bytes).hexdigest(),
+            )
+            trust = apply_schema.MAPPING_RELEASE_TRUST_MANIFEST[
+                (apply_schema.MAPPING_RELEASE.family, apply_schema.MAPPING_RELEASE.version)
+            ]
+            with (
+                mock.patch.object(
+                    apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", (altered,)
+                ),
+                mock.patch.object(
+                    apply_schema,
+                    "MAPPING_RELEASE_TRUST_MANIFEST",
+                    {(altered.family, altered.version): trust},
+                ),
+                psycopg.connect(self.mapping_url) as conn,
+                self.assertRaisesRegex(RuntimeError, "checksum differs"),
+            ):
+                with conn.transaction():
+                    apply_schema._verify_or_apply_mapping_release(
+                        conn, altered_dir, altered
+                    )
+        with psycopg.connect(self.mapping_url) as conn:
+            self.assertEqual(
+                conn.execute(
+                    f"SELECT value FROM {SCHEMA}.meta WHERE key=%s", (marker_key,)
+                ).fetchone()[0],
+                marker_before,
+            )
+        self.assertEqual(self._counts(), authority_before)
 
     def test_explicit_schema_binding_defeats_hostile_search_path_temp_and_helper_decoys(self):
         with psycopg.connect(self.mapping_url) as conn:
@@ -775,18 +826,100 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
 
     def test_exact_013_upgrade_preserves_all_legacy_bytes_and_counts(self):
         self._reset(include_mapping=False)
+        self._seed_catalog()
+        self._legacy_offer()
+
+        mapping_tables = {
+            "supplier_mapping_review_batches",
+            "supplier_mapping_review_candidates",
+            "supplier_mapping_decisions",
+            "supplier_offer_selection_events",
+            "supplier_offer_selection_heads",
+        }
+
+        def legacy_snapshot(conn: Any) -> dict[str, tuple[int, str]]:
+            names = [
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT c.relname FROM pg_catalog.pg_class c "
+                    "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                    "WHERE n.nspname=%s AND c.relkind IN ('r','p') "
+                    "ORDER BY c.relname",
+                    (SCHEMA,),
+                ).fetchall()
+                if str(row[0]) not in mapping_tables
+            ]
+            snapshot: dict[str, tuple[int, str]] = {}
+            for name in names:
+                predicate = (
+                    sql.SQL(
+                        " WHERE key<>'migration:014_persistent_mapping_foundation.sql' "
+                        "AND key NOT IN ('persistent_mapping_foundation_contract',"
+                        "'persistent_mapping_foundation_catalog_sha256')"
+                    )
+                    if name == "meta"
+                    else sql.SQL("")
+                )
+                row = conn.execute(
+                    sql.SQL(
+                        "SELECT count(*),pg_catalog.encode({}.digest("
+                        "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg("
+                        "row_value,E'\\n' ORDER BY row_value),''),'UTF8'),'sha256'),'hex') "
+                        "FROM (SELECT pg_catalog.to_jsonb(t)::text AS row_value "
+                        "FROM {}.{} AS t{}) AS rows"
+                    ).format(
+                        sql.Identifier(SCHEMA),
+                        sql.Identifier(SCHEMA),
+                        sql.Identifier(name),
+                        predicate,
+                    )
+                ).fetchone()
+                snapshot[name] = (int(row[0]), str(row[1]))
+            return snapshot
+
+        evaluation_at = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
         with psycopg.connect(self.mapping_url) as conn:
-            conn.execute(f"INSERT INTO {SCHEMA}.vendors(vendor_id,vendor_name) VALUES(%s,'preserved')", (VENDOR_ID,))
-            conn.commit()
-            before = conn.execute(f"SELECT count(*) FROM {SCHEMA}.vendors").fetchone()[0]
+            before = legacy_snapshot(conn)
+            recommendation_before = recommendations._load_context(
+                conn,
+                business_date=BUSINESS_DATE,
+                variant_id="1001",
+                evaluation_at=evaluation_at,
+            )
+            conn.rollback()
             with conn.transaction():
                 self.assertTrue(apply_schema._verify_or_apply_mapping_release(conn, DB_DIR))
-            self.assertEqual(conn.execute(f"SELECT count(*) FROM {SCHEMA}.vendors").fetchone()[0], before)
-            self.assertEqual(conn.execute(f"SELECT count(*) FROM {SCHEMA}.supplier_mapping_decisions").fetchone()[0], 0)
+            self.assertEqual(legacy_snapshot(conn), before)
+            self.assertEqual(
+                recommendations._canonical_json(
+                    recommendations._load_context(
+                        conn,
+                        business_date=BUSINESS_DATE,
+                        variant_id="1001",
+                        evaluation_at=evaluation_at,
+                    )
+                ),
+                recommendations._canonical_json(recommendation_before),
+            )
+            self.assertEqual(
+                conn.execute(
+                    f"SELECT (SELECT count(*) FROM {SCHEMA}.supplier_mapping_review_batches),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_mapping_review_candidates),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_mapping_decisions),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_offer_selection_events),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_offer_selection_heads)"
+                ).fetchone(),
+                (0, 0, 0, 0, 0),
+            )
 
     def test_migration_failure_and_late_validation_rolls_back_every_object(self):
         self._reset(include_mapping=False)
         with psycopg.connect(self.mapping_url) as conn:
+            conn.execute(
+                f"INSERT INTO {SCHEMA}.vendors(vendor_id,vendor_name) "
+                "VALUES(%s,'late-validation-preserved')",
+                (VENDOR_ID,),
+            )
             conn.execute(f"CREATE TABLE {SCHEMA}.collision_probe(id integer)")
             conn.execute(f"CREATE INDEX uq_mapping_decision_root_per_scope ON {SCHEMA}.collision_probe(id)")
             conn.commit()
@@ -794,14 +927,155 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 with conn.transaction():
                     conn.execute((DB_DIR / apply_schema.MAPPING_MIGRATION_NAME).read_text())
             self.assertIsNone(conn.execute(f"SELECT to_regclass('{SCHEMA}.supplier_mapping_review_batches')").fetchone()[0])
+            conn.execute(f"DROP TABLE {SCHEMA}.collision_probe")
+            conn.commit()
+            before_markers = dict(
+                conn.execute(f"SELECT key,value FROM {SCHEMA}.meta ORDER BY key").fetchall()
+            )
+            before_relations = tuple(
+                conn.execute(
+                    "SELECT c.relname,c.relkind FROM pg_catalog.pg_class c "
+                    "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                    "WHERE n.nspname=%s ORDER BY c.relname,c.relkind",
+                    (SCHEMA,),
+                ).fetchall()
+            )
+            with (
+                mock.patch.object(
+                    apply_schema,
+                    "_verify_installed_function_catalog",
+                    side_effect=RuntimeError("injected post-DDL validation failure"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "post-DDL"),
+            ):
+                with conn.transaction():
+                    apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
+            self.assertEqual(
+                dict(
+                    conn.execute(
+                        f"SELECT key,value FROM {SCHEMA}.meta ORDER BY key"
+                    ).fetchall()
+                ),
+                before_markers,
+            )
+            self.assertEqual(
+                tuple(
+                    conn.execute(
+                        "SELECT c.relname,c.relkind FROM pg_catalog.pg_class c "
+                        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                        "WHERE n.nspname=%s ORDER BY c.relname,c.relkind",
+                        (SCHEMA,),
+                    ).fetchall()
+                ),
+                before_relations,
+            )
+            self.assertEqual(
+                conn.execute(
+                    f"SELECT vendor_name FROM {SCHEMA}.vendors WHERE vendor_id=%s",
+                    (VENDOR_ID,),
+                ).fetchone()[0],
+                "late-validation-preserved",
+            )
 
     def test_late_decision_or_head_validation_rolls_back_the_whole_transaction(self):
+        create_candidate = self._intake(
+            self._packet(
+                1,
+                occurrence="late-offer",
+                package_id="late-offer-package",
+                candidate_changes={
+                    "supplier_code_value": "LATE-001",
+                    "distributor_product_id_value": "LATE-001",
+                },
+            )
+        )
         before = self._counts()
-        with self.assertRaises(RuntimeError):
-            with psycopg.connect(self.mapping_url) as conn, conn.transaction():
-                conn.execute(f"INSERT INTO {SCHEMA}.supplier_offers(variant_id,vendor_id,package_type,assortment_scope,active) VALUES('1001',%s,'STANDARD','PRODUCT',false)", (VENDOR_ID,))
-                raise RuntimeError("late synthetic refusal")
-        self.assertEqual(self._counts(), before)
+        with psycopg.connect(self.mapping_url) as conn:
+            offer_count = conn.execute(
+                f"SELECT count(*) FROM {SCHEMA}.supplier_offers"
+            ).fetchone()[0]
+            conn.execute(
+                f"CREATE FUNCTION {SCHEMA}.synthetic_late_decision_refusal() "
+                "RETURNS trigger LANGUAGE plpgsql AS "
+                "$$BEGIN RAISE EXCEPTION 'synthetic late decision refusal'; END$$"
+            )
+            conn.execute(
+                f"CREATE CONSTRAINT TRIGGER synthetic_late_decision_refusal "
+                f"AFTER INSERT ON {SCHEMA}.supplier_mapping_decisions "
+                "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "
+                f"{SCHEMA}.synthetic_late_decision_refusal()"
+            )
+        try:
+            with self.assertRaises(PersistentMappingError):
+                self._decide(
+                    create_candidate,
+                    action="APPROVE_MAPPING",
+                    reason="late offer refusal",
+                    link_kind="CREATED_INACTIVE",
+                )
+            self.assertEqual(self._counts(), before)
+            with psycopg.connect(self.mapping_url) as conn:
+                self.assertEqual(
+                    conn.execute(
+                        f"SELECT count(*) FROM {SCHEMA}.supplier_offers"
+                    ).fetchone()[0],
+                    offer_count,
+                )
+        finally:
+            with psycopg.connect(self.mapping_url) as conn:
+                conn.execute(
+                    f"DROP TRIGGER IF EXISTS synthetic_late_decision_refusal "
+                    f"ON {SCHEMA}.supplier_mapping_decisions"
+                )
+                conn.execute(
+                    f"DROP FUNCTION IF EXISTS {SCHEMA}.synthetic_late_decision_refusal()"
+                )
+
+        offer = self._legacy_offer(sku="LATE-HEAD")
+        head_candidate = self._intake(
+            self._packet(
+                1,
+                occurrence="late-head",
+                package_id="late-head-package",
+                candidate_changes={
+                    "supplier_code_value": "LATE-HEAD",
+                    "distributor_product_id_value": "LATE-HEAD",
+                },
+            )
+        )
+        decision = self._decide(
+            head_candidate,
+            action="APPROVE_MAPPING",
+            reason="late head setup",
+            offer_id=offer,
+            link_kind="LINKED_EXISTING",
+        )
+        before_head = self._counts()
+        with psycopg.connect(self.mapping_url) as conn:
+            conn.execute(
+                f"CREATE FUNCTION {SCHEMA}.synthetic_late_head_refusal() "
+                "RETURNS trigger LANGUAGE plpgsql AS "
+                "$$BEGIN RAISE EXCEPTION 'synthetic late head refusal'; END$$"
+            )
+            conn.execute(
+                f"CREATE CONSTRAINT TRIGGER synthetic_late_head_refusal "
+                f"AFTER INSERT ON {SCHEMA}.supplier_offer_selection_heads "
+                "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "
+                f"{SCHEMA}.synthetic_late_head_refusal()"
+            )
+        try:
+            with self.assertRaises(PersistentMappingError):
+                self._select(decision, reason="late head refusal")
+            self.assertEqual(self._counts(), before_head)
+        finally:
+            with psycopg.connect(self.mapping_url) as conn:
+                conn.execute(
+                    f"DROP TRIGGER IF EXISTS synthetic_late_head_refusal "
+                    f"ON {SCHEMA}.supplier_offer_selection_heads"
+                )
+                conn.execute(
+                    f"DROP FUNCTION IF EXISTS {SCHEMA}.synthetic_late_head_refusal()"
+                )
 
     def test_valid_intake_adds_only_immutable_batch_and_candidates(self):
         self._intake(self._packet(1))
@@ -810,11 +1084,20 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
     def test_intake_exact_replay_returns_existing_and_payload_change_conflicts(self):
         packet = self._packet(1)
         first = execute_supplier_mapping_intake(self.mapping_url, package=packet["package"], candidates=packet["candidates"], principal=self.principal, intake_idempotency_key=packet["intake_idempotency_key"])
+        self._decide(
+            UUID(first["candidate_ids"][0]),
+            action="DEFER",
+            reason="later review state must not change intake replay",
+        )
         second = execute_supplier_mapping_intake(self.mapping_url, package=packet["package"], candidates=packet["candidates"], principal=self.principal, intake_idempotency_key=packet["intake_idempotency_key"])
         self.assertTrue(second["replayed"])
         self.assertEqual(first["candidate_ids"], second["candidate_ids"])
-        changed = copy.deepcopy(packet)
-        changed["package"]["source_revision"] = "changed"
+        changed = self._packet(
+            1,
+            occurrence="changed-complete-request",
+            package_id="changed-complete-package",
+        )
+        changed["intake_idempotency_key"] = packet["intake_idempotency_key"]
         with self.assertRaises(PersistentMappingError):
             execute_supplier_mapping_intake(self.mapping_url, package=changed["package"], candidates=changed["candidates"], principal=self.principal, intake_idempotency_key=packet["intake_idempotency_key"])
         self.assertEqual(self._counts()[:2], (1, 1))
@@ -887,23 +1170,257 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
             )
             for candidate_id, create_key in zip(ids, create_keys, strict=True)
         ]
-        first_result = execute_mapping_decision(self.mapping_url, candidate_id=ids[0], action="APPROVE_MAPPING", reason="create shared", principal=self.principal, decision_idempotency_key=create_keys[0], expected_preview_sha256=previews[0]["preview_sha256"], offer_link_kind="CREATED_INACTIVE")
-        with self.assertRaisesRegex(PersistentMappingError, "equivalent offer"):
-            execute_mapping_decision(self.mapping_url, candidate_id=ids[1], action="APPROVE_MAPPING", reason="create shared", principal=self.principal, decision_idempotency_key=create_keys[1], expected_preview_sha256=previews[1]["preview_sha256"], offer_link_kind="CREATED_INACTIVE")
+        barrier = Barrier(2)
+
+        def create(index: int) -> tuple[str, dict | PersistentMappingError]:
+            barrier.wait(timeout=10)
+            try:
+                return (
+                    "committed",
+                    execute_mapping_decision(
+                        self.mapping_url,
+                        candidate_id=ids[index],
+                        action="APPROVE_MAPPING",
+                        reason="create shared",
+                        principal=self.principal,
+                        decision_idempotency_key=create_keys[index],
+                        expected_preview_sha256=previews[index]["preview_sha256"],
+                        offer_link_kind="CREATED_INACTIVE",
+                    ),
+                )
+            except PersistentMappingError as exc:
+                return ("refused", exc)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = [future.result() for future in (pool.submit(create, 0), pool.submit(create, 1))]
+        self.assertEqual([item[0] for item in outcomes].count("committed"), 1)
+        self.assertEqual([item[0] for item in outcomes].count("refused"), 1)
+        winner_index = next(index for index, item in enumerate(outcomes) if item[0] == "committed")
+        loser_index = 1 - winner_index
+        first_result = outcomes[winner_index][1]
+        assert isinstance(first_result, dict)
+        with psycopg.connect(self.mapping_url) as conn:
+            self.assertEqual(
+                conn.execute(
+                    f"SELECT count(*) FROM {SCHEMA}.supplier_offers "
+                    "WHERE supplier_sku='NEW-001'"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                conn.execute(
+                    f"SELECT count(*) FROM {SCHEMA}.supplier_mapping_decisions "
+                    "WHERE candidate_id=ANY(%s)",
+                    (ids,),
+                ).fetchone()[0],
+                1,
+            )
+
         # A fresh linked preview and separate key are required after the winner.
-        stale_key = uuid4()
-        stale = self._preview_decision(ids[1], action="APPROVE_MAPPING", reason="create shared", key=stale_key, offer_id=first_result["result_offer_id"], link_kind="LINKED_EXISTING")
-        linked = execute_mapping_decision(self.mapping_url, candidate_id=ids[1], action="APPROVE_MAPPING", reason="create shared", principal=self.principal, decision_idempotency_key=stale_key, expected_preview_sha256=stale["preview_sha256"], existing_offer_id=first_result["result_offer_id"], offer_link_kind="LINKED_EXISTING")
+        linked_key = uuid4()
+        linked_preview = self._preview_decision(
+            ids[loser_index],
+            action="APPROVE_MAPPING",
+            reason="create shared",
+            key=linked_key,
+            offer_id=first_result["result_offer_id"],
+            link_kind="LINKED_EXISTING",
+        )
+        linked = execute_mapping_decision(
+            self.mapping_url,
+            candidate_id=ids[loser_index],
+            action="APPROVE_MAPPING",
+            reason="create shared",
+            principal=self.principal,
+            decision_idempotency_key=linked_key,
+            expected_preview_sha256=linked_preview["preview_sha256"],
+            existing_offer_id=first_result["result_offer_id"],
+            offer_link_kind="LINKED_EXISTING",
+        )
         self.assertEqual(first_result["result_offer_id"], linked["result_offer_id"])
 
+        # Superseding the first approval never releases its historical
+        # operational-key/offer binding for a later occurrence.
+        self._decide(
+            ids[winner_index],
+            action="DEFER",
+            reason="supersede without erasing historical offer identity",
+        )
+        later_id = self._intake(
+            self._packet(
+                1,
+                occurrence="create-c",
+                package_id="create-later",
+                candidate_changes={
+                    "supplier_code_value": "NEW-001",
+                    "distributor_product_id_value": "NEW-001",
+                },
+            )
+        )
+        with self.assertRaisesRegex(PersistentMappingError, "equivalent offer"):
+            self._decide(
+                later_id,
+                action="APPROVE_MAPPING",
+                reason="historical binding refuses duplicate create",
+                link_kind="CREATED_INACTIVE",
+            )
+        historical_link = self._decide(
+            later_id,
+            action="APPROVE_MAPPING",
+            reason="historical binding reuses exact offer",
+            offer_id=first_result["result_offer_id"],
+            link_kind="LINKED_EXISTING",
+        )
+        self.assertEqual(
+            historical_link["result_offer_id"], first_result["result_offer_id"]
+        )
+
     def test_regular_gift_special_alternate_component_and_combo_do_not_collapse(self):
-        keys = set()
-        for index, offer_class in enumerate(("REGULAR", "GIFT", "SPECIAL", "ALTERNATE", "COMPONENT", "COMBO"), 1):
-            packet = self._packet(1, occurrence=f"class-{index}", package_id=f"class-package-{index}", candidate_changes={"offer_class": offer_class})
+        keys: set[str] = set()
+        offers: set[int] = set()
+        decisions: dict[str, dict] = {}
+        package_types = {
+            "REGULAR": "STANDARD",
+            "GIFT": "GIFT",
+            "SPECIAL": "SPECIAL",
+            "ALTERNATE": "ALTERNATE",
+            "COMPONENT": "COMPONENT",
+            "COMBO": "COMBO",
+        }
+        for index, offer_class in enumerate(package_types, 1):
+            code = f"CLASS-{index}"
+            relationships = (
+                [{"kind": "COMPONENT_OF", "group": f"GROUP-{index}"}]
+                if offer_class in {"COMPONENT", "COMBO"}
+                else []
+            )
+            packet = self._packet(
+                1,
+                occurrence=f"class-{index}",
+                package_id=f"class-package-{index}",
+                candidate_changes={
+                    "offer_class": offer_class,
+                    "occurrence_role": offer_class if offer_class != "REGULAR" else "PRIMARY",
+                    "package_type_value": package_types[offer_class],
+                    "supplier_code_value": code,
+                    "distributor_product_id_value": code,
+                    "component_relationships": relationships,
+                },
+            )
             candidate_id = self._intake(packet)
             with psycopg.connect(self.mapping_url) as conn:
-                keys.add(conn.execute(f"SELECT operational_offer_key_sha256 FROM {SCHEMA}.supplier_mapping_review_candidates WHERE candidate_id=%s", (candidate_id,)).fetchone()[0])
+                keys.add(
+                    conn.execute(
+                        f"SELECT operational_offer_key_sha256 FROM {SCHEMA}.supplier_mapping_review_candidates WHERE candidate_id=%s",
+                        (candidate_id,),
+                    ).fetchone()[0]
+                )
+            decision = self._decide(
+                candidate_id,
+                action="APPROVE_MAPPING",
+                reason=f"distinct {offer_class.lower()} offer",
+                link_kind="CREATED_INACTIVE",
+            )
+            decisions[offer_class] = decision
+            offers.add(int(decision["result_offer_id"]))
         self.assertEqual(len(keys), 6)
+        self.assertEqual(len(offers), 6)
+        with psycopg.connect(self.mapping_url) as conn:
+            rows = conn.execute(
+                f"SELECT package_type,active FROM {SCHEMA}.supplier_offers "
+                "WHERE offer_id=ANY(%s) ORDER BY package_type",
+                (list(offers),),
+            ).fetchall()
+        self.assertEqual({row[0] for row in rows}, set(package_types.values()))
+        self.assertTrue(all(row[1] is False for row in rows))
+        self._select(decisions["REGULAR"], reason="regular alone may select")
+        for offer_class in package_types.keys() - {"REGULAR"}:
+            with self.subTest(offer_class=offer_class), self.assertRaises(
+                PersistentMappingError
+            ):
+                self._select(decisions[offer_class], reason="nonregular must refuse")
+
+        shared_offer = self._legacy_offer(sku="SHARED-RACE")
+        first = self._packet(
+            1,
+            occurrence="different-key-a",
+            package_id="different-key-race",
+            candidate_changes={
+                "supplier_code_value": "SHARED-RACE",
+                "distributor_product_id_value": "SHARED-RACE",
+                "identity_qualifiers": {"material_qualifier": "A"},
+            },
+        )
+        second = copy.deepcopy(first["candidates"][0])
+        second["occurrence_key"] = "different-key-b"
+        second["source_row_key"] = "different-key-b"
+        second["identity_qualifiers"] = {"material_qualifier": "B"}
+        race = self._packet(
+            1,
+            occurrence="different-key-a",
+            package_id="different-key-race",
+            candidate_changes={
+                "supplier_code_value": "SHARED-RACE",
+                "distributor_product_id_value": "SHARED-RACE",
+                "identity_qualifiers": {"material_qualifier": "A"},
+            },
+            extra_candidates=[second],
+        )
+        intake = execute_supplier_mapping_intake(
+            self.mapping_url,
+            package=race["package"],
+            candidates=race["candidates"],
+            principal=self.principal,
+            intake_idempotency_key=race["intake_idempotency_key"],
+        )
+        race_ids = [UUID(value) for value in intake["candidate_ids"]]
+        race_keys = [uuid4(), uuid4()]
+        previews = [
+            self._preview_decision(
+                candidate_id,
+                action="APPROVE_MAPPING",
+                reason="different material key race",
+                key=key,
+                offer_id=shared_offer,
+                link_kind="LINKED_EXISTING",
+            )
+            for candidate_id, key in zip(race_ids, race_keys, strict=True)
+        ]
+        race_barrier = Barrier(2)
+
+        def approve(index: int):
+            race_barrier.wait(timeout=10)
+            return execute_mapping_decision(
+                self.mapping_url,
+                candidate_id=race_ids[index],
+                action="APPROVE_MAPPING",
+                reason="different material key race",
+                principal=self.principal,
+                decision_idempotency_key=race_keys[index],
+                expected_preview_sha256=previews[index]["preview_sha256"],
+                existing_offer_id=shared_offer,
+                offer_link_kind="LINKED_EXISTING",
+            )
+
+        outcomes: list[object] = []
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(approve, index) for index in range(2)]
+            for future in futures:
+                try:
+                    outcomes.append(future.result())
+                except PersistentMappingError as exc:
+                    outcomes.append(exc)
+        self.assertEqual(sum(isinstance(item, dict) for item in outcomes), 1)
+        self.assertEqual(sum(isinstance(item, PersistentMappingError) for item in outcomes), 1)
+        with psycopg.connect(self.mapping_url) as conn:
+            self.assertEqual(
+                conn.execute(
+                    f"SELECT count(*) FROM {SCHEMA}.supplier_mapping_decisions "
+                    "WHERE candidate_id=ANY(%s)",
+                    (race_ids,),
+                ).fetchone()[0],
+                1,
+            )
 
     def test_reused_supplier_code_preserves_old_offer_and_creates_inactive_history(self):
         old = self._legacy_offer(variant_id="2002", sku="REUSED", active=False)
@@ -980,7 +1497,7 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
             self.mapping_url + "&dbname=production",
             self.mapping_url.replace("127.0.0.1", "localhost"),
             self.mapping_url.replace("qa_release_login@", "runner@"),
-            self.mapping_url.replace("procurement_test", "production"),
+            self.mapping_url.replace(f"/{self.database}?", "/production?"),
         )
         for hostile_url in hostile_urls:
             with (
@@ -1449,21 +1966,104 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                         ).fetchone()[0]
                     )
         candidate_id = self._intake(self._packet(0))
+        offer = self._legacy_offer()
+        eligible_candidate = self._intake(
+            self._packet(
+                1,
+                occurrence="policy-eligible",
+                package_id="policy-eligible-package",
+            )
+        )
         before = self._counts()
-        for action in ("POLICY_APPROVE", "POLICY_DEFER", "POLICY_REJECT"):
-            with self.subTest(action=action), self.assertRaises(PersistentMappingError):
-                with psycopg.connect(self.mapping_url) as conn:
-                    conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                    preview_mapping_decision(
-                        conn,
-                        candidate_id=candidate_id,
-                        action=action,
-                        reason="fabricated policy-origin attempt",
-                        principal=self.principal,
-                        decision_idempotency_key=uuid4(),
+        for action, target in (
+            ("APPROVE_MAPPING", eligible_candidate),
+            ("DEFER", candidate_id),
+            ("REJECT_MAPPING", eligible_candidate),
+        ):
+            with self.subTest(action=action), psycopg.connect(self.mapping_url) as conn:
+                conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                conn.execute(
+                    "SELECT pg_catalog.set_config(%s,%s,true)",
+                    ("procurement.enabled_capability", "policy_mapping_writes_enabled"),
+                )
+                key = uuid4()
+                record = mapping_service._mapping_decision_record(
+                    conn,
+                    candidate_id=target,
+                    action=action,
+                    reason="fabricated policy-origin attempt",
+                    principal=self.principal,
+                    decision_idempotency_key=key,
+                    existing_offer_id=offer if action == "APPROVE_MAPPING" else None,
+                    offer_link_kind=(
+                        "LINKED_EXISTING" if action == "APPROVE_MAPPING" else None
+                    ),
+                )
+                if action == "REJECT_MAPPING":
+                    candidate, _batch = mapping_service._candidate_decision_facts(
+                        conn, target
                     )
+                    rejection_id = mapping_service._insert_mapping_rejection(
+                        conn,
+                        candidate=candidate,
+                        principal=self.principal,
+                        evidence_set_sha256=record["evidence_set_sha256"],
+                    )
+                    record["result_rejection_id"] = rejection_id
+                    record["result_rejection_contract_sha256"] = conn.execute(
+                        f"SELECT {SCHEMA}.persistent_mapping_rejection_contract_fingerprint(%s)",
+                        (rejection_id,),
+                    ).fetchone()[0]
+                record.update(
+                    {
+                        "decision_origin": "POLICY",
+                        "authority_kind": (
+                            "POLICY_APPROVED"
+                            if action == "APPROVE_MAPPING"
+                            else None
+                        ),
+                        "human_principal_ref": None,
+                        "human_role_ref": None,
+                        "human_authn_context_sha256": None,
+                        "preview_sha256": None,
+                        "confirmation_sha256": None,
+                        "service_principal_ref": "synthetic:policy-evaluator:01",
+                        "policy_ref": "unpublished-synthetic-policy",
+                        "policy_version": "v1",
+                        "policy_publication_sha256": "0" * 64,
+                        "policy_predicate_version": "v1",
+                        "policy_predicate_result_sha256": "1" * 64,
+                    }
+                )
+                record["request_sha256"] = mapping_service._composite_value(
+                    conn,
+                    table="supplier_mapping_decisions",
+                    function="persistent_mapping_decision_request_sha256",
+                    record=record,
+                )
+                payload, payload_sha = mapping_service._project_record(
+                    conn,
+                    table="supplier_mapping_decisions",
+                    record=record,
+                    omit=(
+                        "mapping_decision_id",
+                        "decision_idempotency_key",
+                        "canonical_payload",
+                        "payload_sha256",
+                        "decided_at",
+                        "decided_txid",
+                    ),
+                )
+                record["canonical_payload"] = payload
+                record["payload_sha256"] = payload_sha
+                with self.assertRaises(psycopg.Error):
+                    mapping_service._insert_record(
+                        conn,
+                        table="supplier_mapping_decisions",
+                        record=record,
+                    )
+                conn.rollback()
         self.assertEqual(self._counts(), before)
-        self.assertFalse("policy_mapping_writes_enabled" in {"human_mapping_writes_enabled"})
 
     def test_mapping_approval_creates_inactive_unpriced_unselected_offer(self):
         packet = self._packet(1, occurrence="create-only", package_id="create-only-package", candidate_changes={"supplier_code_value": "NEW-CREATE", "distributor_product_id_value": "NEW-CREATE"})
@@ -1545,6 +2145,8 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
         class Info:
             transaction_status = type("Status", (), {"name": "IDLE"})()
 
+        expected_database = self.database
+
         class FakeConnection:
             def __init__(self, *, commit_error=None, unlock=True):
                 self.commit_error = commit_error
@@ -1560,7 +2162,7 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 if "current_database" in rendered:
                     return Result(
                         (
-                            "procurement_test",
+                            expected_database,
                             "127.0.0.1/32",
                             160009,
                             "qa_release_login",
@@ -1982,9 +2584,75 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
         source = inspect.getsource(recommendations._load_context)
         self.assertNotIn("v_selected_standard_supplier_offers", source)
         self.assertNotIn("supplier_offer_selection_heads", source)
+        offer = self._legacy_offer()
+        evaluation_at = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
         with psycopg.connect(self.mapping_url) as conn:
             flags = conn.execute(f"SELECT current_setting('procurement.recommendation_cutover_enabled',true),current_setting('procurement.offer_activation_enabled',true)").fetchone()
+            before = recommendations._load_context(
+                conn,
+                business_date=BUSINESS_DATE,
+                variant_id="1001",
+                evaluation_at=evaluation_at,
+            )
+        with psycopg.connect(self.mapping_url) as conn:
+            run_before = recommendations.prepare_monday_run(
+                conn,
+                business_date=BUSINESS_DATE,
+                idempotency_key="mapping-shadow-does-not-cut-over",
+                variant_ids=["1001"],
+                actor="synthetic:matrix-owner:01",
+            )
         self.assertEqual(flags, (None, None))
+        self.assertEqual(run_before["recommendations"], [])
+        self.assertEqual(
+            [item["message"] for item in run_before["blockers"]],
+            ["CONFIRMED_VENDOR_RULES_REQUIRED"],
+        )
+        before_run_projection = {
+            key: value
+            for key, value in run_before.items()
+            if key != "idempotent_replay"
+        }
+        candidate_id = self._intake(self._packet(1))
+        decision = self._decide(
+            candidate_id,
+            action="APPROVE_MAPPING",
+            reason="shadow parity",
+            offer_id=offer,
+            link_kind="LINKED_EXISTING",
+        )
+        self._select(decision, reason="shadow parity selection")
+        with psycopg.connect(self.mapping_url) as conn:
+            after = recommendations._load_context(
+                conn,
+                business_date=BUSINESS_DATE,
+                variant_id="1001",
+                evaluation_at=evaluation_at,
+            )
+            self.assertTrue(
+                recommendations.monday_run_inputs_match(
+                    conn,
+                    run_before["run_id"],
+                    run_before["input_fingerprint"],
+                )
+            )
+            run_after = recommendations.get_monday_run(
+                conn, run_before["run_id"]
+            )
+        self.assertEqual(
+            recommendations._canonical_json(after),
+            recommendations._canonical_json(before),
+        )
+        self.assertEqual(before["blockers"], ["CONFIRMED_VENDOR_RULES_REQUIRED"])
+        self.assertEqual(
+            {
+                key: value
+                for key, value in run_after.items()
+                if key != "idempotent_replay"
+            },
+            before_run_projection,
+        )
+        self.assertEqual(run_after["input_fingerprint"], run_before["input_fingerprint"])
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -50,6 +51,31 @@ def _free_port() -> int:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         return int(listener.getsockname()[1])
+
+
+def _source_identity() -> dict[str, str]:
+    git = shutil.which("git")
+    if git is None:
+        raise BrowserAcceptanceError("git is unavailable for source identity binding")
+    environment = {"PATH": str(Path(git).parent), "LANG": "C.UTF-8"}
+
+    def read(*arguments: str) -> str:
+        return subprocess.run(
+            (git, *arguments),
+            cwd=REPO_ROOT,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+
+    if read("status", "--porcelain=v1"):
+        raise BrowserAcceptanceError("browser acceptance requires a clean source tree")
+    return {
+        "commit": read("rev-parse", "HEAD"),
+        "tree": read("rev-parse", "HEAD^{tree}"),
+    }
 
 
 def _wait_health(process: subprocess.Popen[bytes], port: int) -> None:
@@ -118,28 +144,63 @@ def _start_server(
         _wait_health(process, port)
     except BaseException:
         try:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=10)
+            _stop_server_tree(process, runtime_root, timeout=10)
         finally:
             log_handle.close()
         raise
     return process, log_handle
 
 
-def _stop_server(process: subprocess.Popen[bytes], log_handle: Any) -> None:
+def _candidate_child_pid(runtime_root: Path) -> int | None:
+    pid_path = runtime_root / "candidate.pid"
     try:
-        if process.poll() is None:
-            process.terminate()
+        raw = pid_path.read_text(encoding="ascii").strip()
+        pid = int(raw)
+    except (OSError, ValueError):
+        return None
+    return pid if pid > 1 else None
+
+
+def _signal_process_group(pid: int | None, signum: int) -> None:
+    if pid is None:
+        return
+    try:
+        os.killpg(pid, signum)
+    except ProcessLookupError:
+        pass
+
+
+def _stop_server_tree(
+    process: subprocess.Popen[bytes], runtime_root: Path, *, timeout: float
+) -> None:
+    child_pid = _candidate_child_pid(runtime_root)
+    _signal_process_group(child_pid, signal.SIGTERM)
+    if process.poll() is None:
+        _signal_process_group(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _signal_process_group(child_pid, signal.SIGKILL)
+        _signal_process_group(process.pid, signal.SIGKILL)
+        process.wait(timeout=10)
+    if child_pid is not None:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
             try:
-                process.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=10)
+                os.kill(child_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            _signal_process_group(child_pid, signal.SIGKILL)
+            raise BrowserAcceptanceError("local Uvicorn child survived launcher stop")
+
+
+def _stop_server(
+    process: subprocess.Popen[bytes], log_handle: Any, runtime_root: Path
+) -> None:
+    try:
+        _stop_server_tree(process, runtime_root, timeout=20)
     finally:
         log_handle.close()
     if process.returncode not in {0, -15}:
@@ -784,6 +845,7 @@ def _database_acceptance(
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    source_identity = _source_identity()
     os.umask(0o077)
     if args.evidence_root.exists():
         raise BrowserAcceptanceError("evidence root must be new")
@@ -853,7 +915,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     runtime_root=args.runtime_root,
                     state_path=state_path,
                 )
-                _stop_server(server, log_handle)
+                _stop_server(server, log_handle, args.runtime_root)
                 server = None
                 log_handle = None
                 server, log_handle = _start_server(
@@ -875,7 +937,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             finally:
                 try:
                     if server is not None and log_handle is not None:
-                        _stop_server(server, log_handle)
+                        _stop_server(server, log_handle, args.runtime_root)
                 finally:
                     if browser.poll() is None:
                         browser.terminate()
@@ -895,6 +957,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     result = {
         "format": "BUFFALO_LOCAL_PURCHASING_BROWSER_ACCEPTANCE_SUMMARY_V1",
         "safety_label": "TEST DATA — NOT FOR ORDERING",
+        "source_identity": source_identity,
         "database": _database_facts(args.database_url, require_initialized=True),
         "phase1": phase1,
         "phase2": phase2,

@@ -475,6 +475,22 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             candidate.serve(DATABASE_URL, runtime, 18765)
         self.assertTrue(leaking.terminated)
         self.assertFalse((runtime / candidate.PID_FILE).exists())
+        stubborn = mock.Mock()
+        stubborn.pid = 515151
+        stubborn.poll.return_value = None
+        stubborn.wait.side_effect = [
+            subprocess.TimeoutExpired(["uvicorn"], 1),
+            -9,
+        ]
+        with mock.patch.object(candidate.os, "killpg") as kill_group:
+            candidate._terminate_owned_process_group(stubborn, timeout=1)
+        self.assertEqual(
+            kill_group.call_args_list,
+            [
+                mock.call(stubborn.pid, candidate.signal.SIGTERM),
+                mock.call(stubborn.pid, candidate.signal.SIGKILL),
+            ],
+        )
 
     def test_backup_holds_lifecycle_reservation_and_refuses_any_active_marker(self):
         runtime = self._runtime()
@@ -558,7 +574,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             Path(command[command.index("--file") + 1]).write_bytes(b"dump")
             return subprocess.CompletedProcess(command, 0)
 
-        for mode in ("symlink", "database", "archive"):
+        for mode in ("symlink", "database", "archive", "storage"):
             with self.subTest(mode=mode):
                 runtime = self._runtime(f"runtime-{mode}")
                 artifact = runtime / "storage" / "artifact.txt"
@@ -575,6 +591,16 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                         return "0" * 64
                     return original_hash(Path(path))
 
+                original_validate = candidate._validate_storage_archive
+
+                def validate_archive(archive_path, expected):
+                    result = original_validate(archive_path, expected)
+                    if mode == "storage":
+                        late = runtime / "storage" / "late-artifact.txt"
+                        late.write_bytes(b"arrived during backup")
+                        late.chmod(0o600)
+                    return result
+
                 with (
                     mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
                     mock.patch.object(candidate, "_database_facts", return_value={"database": "buffalo_test_demo"}),
@@ -582,6 +608,11 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                     mock.patch.object(candidate, "_state_evidence", side_effect=states),
                     mock.patch.object(candidate.subprocess, "run", side_effect=dump),
                     mock.patch.object(candidate, "_sha256_file", side_effect=hash_file),
+                    mock.patch.object(
+                        candidate,
+                        "_validate_storage_archive",
+                        side_effect=validate_archive,
+                    ),
                     self.assertRaises(candidate.CandidateBoundaryError),
                 ):
                     candidate.backup(DATABASE_URL, runtime)

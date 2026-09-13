@@ -164,6 +164,17 @@ class PersistentMappingHttpTests(unittest.TestCase):
         self.assertIn("REJECT_MAPPING", response.text)
         self.assertEqual(listing.call_args.kwargs["offset"], 25)
         self.assertEqual(listing.call_args.kwargs["limit"], 25)
+        with (
+            mock.patch.dict(
+                "os.environ", {"BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "0"}
+            ),
+            mock.patch.object(
+                api, "_db_conn", side_effect=AssertionError("database reached")
+            ) as database,
+        ):
+            disabled = self.client.get("/supplier-mapping")
+        self.assertEqual(disabled.status_code, 400)
+        database.assert_not_called()
 
     def test_detail_preserves_three_state_evidence_and_shadow_only_banner(self):
         connection = _Connection()

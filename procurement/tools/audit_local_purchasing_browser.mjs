@@ -377,6 +377,19 @@ async function audit(client) {
     check(cookies[0].expires > Date.now() / 1000, "session cookie has a future bounded expiry", cookies[0].expires);
     check(!(await evaluate("document.cookie")).includes("buffalo_local_session"), "session token is unavailable to page script");
 
+    for (const [pathname, label] of [
+      ["/vendor-rules", "vendor-rule operator page"],
+      ["/price-books", "price-book operator page"],
+      ["/reconciliation/investigation", "identity-investigation page"],
+    ]) {
+      await navigate(`${BASE}${pathname}`);
+      check(
+        (await body()).includes("TEST DATA — NOT FOR ORDERING"),
+        `${label} retains the synthetic/internal-DRAFT boundary`,
+      );
+      check(latestResponse(pathname)?.status === 200, `${label} returns HTTP 200`);
+    }
+
     await navigate(`${BASE}/historical-sales/review`);
     check(
       latestResponse("/assets/historical-sales-catalog-picker.js")?.status === 200,

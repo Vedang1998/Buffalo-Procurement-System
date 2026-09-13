@@ -994,6 +994,7 @@ def list_mapping_candidates(
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
+    require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
     if limit < 1 or limit > 100 or offset < 0:
         raise PersistentMappingError("candidate page bounds are invalid")
     predicates = ["1=1"]
@@ -1923,7 +1924,11 @@ def execute_supplier_mapping_intake(
 
 
 def _mapping_domain_locks(
-    conn: Any, *, candidate_id: UUID, include_offer_key: bool
+    conn: Any,
+    *,
+    candidate_id: UUID,
+    include_offer_key: bool,
+    existing_offer_id: int | None,
 ) -> Sequence[tuple[int, str]]:
     row = conn.execute(
         sql.SQL(
@@ -1939,6 +1944,10 @@ def _mapping_domain_locks(
     ]
     if include_offer_key and row[1] is not None:
         locks.append((1, f"persistent-mapping:operational-offer-key:{row[1]}"))
+    if existing_offer_id is not None:
+        locks.append(
+            (2, f"persistent-mapping:existing-offer-id:{int(existing_offer_id)}")
+        )
     return locks
 
 
@@ -1998,6 +2007,12 @@ def execute_mapping_decision(
             conn,
             candidate_id=candidate_id,
             include_offer_key=normalized_action in {"APPROVE_MAPPING", "REJECT_MAPPING"},
+            existing_offer_id=(
+                existing_offer_id
+                if normalized_action == "APPROVE_MAPPING"
+                and str(offer_link_kind or "").strip().upper() == "LINKED_EXISTING"
+                else None
+            ),
         ),
         operation=operation,
         recovery_lookup=lambda conn: (
@@ -2121,6 +2136,7 @@ def execute_routine_offer_clear(
 
 
 def mapping_shadow(conn: Any, *, variant_id: str | None = None) -> list[dict[str, Any]]:
+    require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
     query = sql.SQL("SELECT * FROM {} ").format(
         _qualified("v_supplier_offer_selection_shadow")
     )
@@ -2136,6 +2152,7 @@ def mapping_shadow(conn: Any, *, variant_id: str | None = None) -> list[dict[str
 def mapping_status(conn: Any) -> dict[str, Any]:
     """Return bounded counts and explicit shadow-only state for the browser."""
 
+    require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
     row = conn.execute(
         sql.SQL(
             "SELECT "
@@ -2174,6 +2191,7 @@ def mapping_status(conn: Any) -> dict[str, Any]:
 def get_mapping_candidate_detail(conn: Any, candidate_id: UUID) -> dict[str, Any]:
     """Read one candidate with immutable evidence, history, offers, and shadow."""
 
+    require_synthetic_mapping_capability("selected_offer_shadow_reads_enabled")
     candidate, batch = _candidate_decision_facts(conn, candidate_id)
     with conn.cursor(row_factory=dict_row) as cursor:
         decisions = list(

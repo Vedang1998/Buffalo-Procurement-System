@@ -468,6 +468,31 @@ def _wait_for_health(process: subprocess.Popen[bytes], port: int) -> None:
     raise CandidateBoundaryError("local candidate did not become healthy")
 
 
+def _terminate_owned_process_group(
+    process: subprocess.Popen[bytes], *, timeout: float = 10
+) -> None:
+    """Terminate a child launched in its own session, including descendants."""
+
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        if process.poll() is None:
+            process.terminate()
+    try:
+        process.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        if process.poll() is None:
+            process.kill()
+    process.wait(timeout=timeout)
+
+
 def serve(database_url: str, runtime_root: Path, port: int) -> int:
     if port < 1024 or port > 65535:
         raise CandidateBoundaryError("local port must be between 1024 and 65535")
@@ -512,12 +537,7 @@ def _serve_locked(database_url: str, runtime_root: Path, port: int) -> int:
         except OSError:
             pass
         if child is not None and child.poll() is None:
-            child.terminate()
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait(timeout=10)
+            _terminate_owned_process_group(child)
         _release_reserved_pid_path(pid_file, reservation_identity)
         raise
     assert child is not None
@@ -543,12 +563,7 @@ def _serve_locked(database_url: str, runtime_root: Path, port: int) -> int:
         return return_code
     finally:
         if child.poll() is None:
-            child.terminate()
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait(timeout=10)
+            _terminate_owned_process_group(child)
         _release_reserved_pid_path(pid_file, reservation_identity)
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
@@ -560,6 +575,24 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _storage_inventory(storage: Path) -> list[dict[str, Any]]:
+    inventory: list[dict[str, Any]] = []
+    for path in sorted(storage.rglob("*")):
+        if path.is_symlink():
+            raise CandidateBoundaryError("storage contains a symlink")
+        if path.is_file():
+            relative = path.relative_to(storage)
+            stat_result = path.stat()
+            inventory.append(
+                {
+                    "path": relative.as_posix(),
+                    "sha256": _sha256_file(path),
+                    "bytes": stat_result.st_size,
+                }
+            )
+    return inventory
 
 
 def _postgres_tool(name: str) -> str:
@@ -738,23 +771,15 @@ def _backup_locked(database_url: str, runtime_root: Path) -> Path:
             timeout=120,
         )
         dump_path.chmod(0o600)
-        storage_files: list[dict[str, Any]] = []
+        storage_files = _storage_inventory(storage)
         with tarfile.open(archive_path, "w") as archive:
-            for path in sorted(storage.rglob("*")):
-                if path.is_symlink():
-                    raise CandidateBoundaryError("storage contains a symlink")
-                if path.is_file():
-                    relative = path.relative_to(storage)
-                    storage_files.append(
-                        {
-                            "path": relative.as_posix(),
-                            "sha256": _sha256_file(path),
-                            "bytes": path.stat().st_size,
-                        }
-                    )
-                    archive.add(path, arcname=relative.as_posix(), recursive=False)
+            for item in storage_files:
+                path = storage / item["path"]
+                archive.add(path, arcname=item["path"], recursive=False)
         archive_path.chmod(0o600)
         _validate_storage_archive(archive_path, storage_files)
+        if _storage_inventory(storage) != storage_files:
+            raise CandidateBoundaryError("storage changed during backup")
         state_after = _state_evidence(database_url)
         if state_after != state_before:
             raise CandidateBoundaryError("database changed during backup")
