@@ -345,6 +345,10 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         self.assertNotIn("buffalo:synthetic-demo-initialize", initializer_source)
 
     def test_database_preflight_requires_disabled_policy_source_hash_identity_and_catalog(self):
+        self.assertEqual(
+            candidate.MAPPING_CATALOG_SHA256,
+            "5a9fff00c1d62c2de89ca1dc27d4e264def12eb726ab249a9ab86a9fc529c72e",
+        )
         initialized = _FactsConnection(initialized=True)
         with mock.patch.object(candidate.psycopg, "connect", return_value=nullcontext(initialized)):
             facts = candidate._database_facts(DATABASE_URL, require_initialized=True)
