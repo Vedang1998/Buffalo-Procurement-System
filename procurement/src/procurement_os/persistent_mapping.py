@@ -18,7 +18,7 @@ import json
 import os
 import time
 from typing import Any, TypeVar
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 from uuid import UUID, uuid5, NAMESPACE_URL
 
 import psycopg
@@ -30,6 +30,13 @@ from psycopg.types.json import Jsonb
 SCHEMA = "qa_mapping_test"
 SELECTION_SCOPE = "ROUTINE_PROCUREMENT_STANDARD"
 _RETRYABLE_SQLSTATES = frozenset({"40001", "40P01"})
+_IDEMPOTENCY_CONSTRAINTS = frozenset(
+    {
+        "uq_mapping_review_batches_idempotency",
+        "uq_supplier_mapping_decisions_idempotency",
+        "uq_supplier_offer_selection_events_idempotency",
+    }
+)
 _T = TypeVar("_T")
 SESSION_LOCK_WAIT_SECONDS = 5.0
 TOTAL_OPERATION_SECONDS = 30.0
@@ -111,23 +118,72 @@ def authentication_context_sha256(*, principal_ref: str, role_ref: str, session_
     return hashlib.sha256(payload).hexdigest()
 
 
-def _validate_synthetic_database_url(database_url: str) -> None:
+_SYNTHETIC_DATABASE_OPTIONS = (
+    "-c role=qa_mapping_owner -c search_path=qa_mapping_test,pg_catalog"
+)
+
+
+def _validate_synthetic_database_url(database_url: str) -> str:
     parsed = urlparse(database_url)
     try:
         port = parsed.port
     except ValueError as exc:
         raise PersistentMappingError("synthetic mapping database port is malformed") from exc
     database = parsed.path.removeprefix("/")
+    try:
+        query = parse_qsl(
+            parsed.query,
+            keep_blank_values=True,
+            strict_parsing=True,
+            max_num_fields=1,
+        )
+    except ValueError as exc:
+        raise PersistentMappingError(
+            "synthetic mapping database query is malformed"
+        ) from exc
     if (
         parsed.scheme not in {"postgres", "postgresql"}
         or parsed.hostname not in {"127.0.0.1", "::1"}
         or port is None
+        or parsed.username != "qa_release_login"
         or not database.endswith(("_test", "_demo"))
+        or not database.replace("_", "").isalnum()
+        or "/" in database
         or parsed.password is not None
         or parsed.fragment
+        or parsed.params
+        or query != [("options", _SYNTHETIC_DATABASE_OPTIONS)]
     ):
         raise PersistentMappingError(
             "persistent mapping writes require an owned loopback *_test/*_demo database"
+        )
+    return database
+
+
+def _verify_connected_synthetic_database(conn: Any, expected_database: str) -> None:
+    row = conn.execute(
+        "SELECT pg_catalog.current_database(),"
+        "pg_catalog.inet_server_addr()::text,"
+        "pg_catalog.current_setting('server_version_num')::integer,"
+        "session_user::text,current_user::text"
+    ).fetchone()
+    if row is None:
+        raise PersistentMappingError("synthetic mapping database identity is absent")
+    try:
+        from ipaddress import ip_interface
+
+        loopback = ip_interface(str(row[1])).ip.is_loopback
+    except ValueError:
+        loopback = False
+    if (
+        str(row[0]) != expected_database
+        or not loopback
+        or int(row[2]) // 10000 != 16
+        or (str(row[3]), str(row[4]))
+        != ("qa_release_login", "qa_mapping_owner")
+    ):
+        raise PersistentMappingError(
+            "connected synthetic mapping database identity differs"
         )
 
 
@@ -169,6 +225,7 @@ def _execute_write(
     idempotency_key: UUID,
     domain_locks: Callable[[Any], Sequence[tuple[int, str]]],
     operation: Callable[[Any], _T],
+    recovery_lookup: Callable[[Any], _T | None] | None = None,
 ) -> _T:
     """Execute one authenticated write behind balanced session locks.
 
@@ -180,13 +237,13 @@ def _execute_write(
 
     require_synthetic_mapping_capability(capability)
     principal.validate()
-    _validate_synthetic_database_url(database_url)
+    expected_database = _validate_synthetic_database_url(database_url)
     started = time.monotonic()
     deadline = started + TOTAL_OPERATION_SECONDS
     frozen_domain_locks: tuple[str, ...] | None = None
     transaction_attempts = 0
     last_error: BaseException | None = None
-    recovering_unknown_commit = False
+    recovery_mode: str | None = None
     conn: Any | None = None
     acquired: list[str] = []
 
@@ -202,8 +259,12 @@ def _execute_write(
             if time.monotonic() >= deadline:
                 code = (
                     "COMMIT_OUTCOME_UNKNOWN"
-                    if recovering_unknown_commit
-                    else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
+                    if recovery_mode == "unknown_commit"
+                    else (
+                        "IDEMPOTENCY_PROTOCOL_VIOLATION"
+                        if recovery_mode == "unique_violation"
+                        else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
+                    )
                 )
                 raise PersistentMappingError(
                     "persistent mapping operation deadline expired", code=code
@@ -218,6 +279,7 @@ def _execute_write(
                     conn = psycopg.connect(
                         database_url, autocommit=True, connect_timeout=connect_timeout
                     )
+                    _verify_connected_synthetic_database(conn, expected_database)
                     if frozen_domain_locks is None:
                         resolved = sorted(
                             domain_locks(conn),
@@ -238,10 +300,15 @@ def _execute_write(
                         acquired.append(lock_name)
                 except BaseException as exc:
                     discard_connection()
-                    if recovering_unknown_commit:
+                    if recovery_mode == "unknown_commit":
                         raise PersistentMappingError(
                             "persistent mapping commit outcome is unknown; resubmit the same idempotency key",
                             code="COMMIT_OUTCOME_UNKNOWN",
+                        ) from exc
+                    if recovery_mode == "unique_violation":
+                        raise PersistentMappingError(
+                            "persistent mapping idempotency recovery was unavailable",
+                            code="IDEMPOTENCY_PROTOCOL_VIOLATION",
                         ) from exc
                     raise
 
@@ -252,8 +319,12 @@ def _execute_write(
                     "persistent mapping operation deadline expired",
                     code=(
                         "COMMIT_OUTCOME_UNKNOWN"
-                        if recovering_unknown_commit
-                        else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
+                        if recovery_mode == "unknown_commit"
+                        else (
+                            "IDEMPOTENCY_PROTOCOL_VIOLATION"
+                            if recovery_mode == "unique_violation"
+                            else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
+                        )
                     ),
                 )
             try:
@@ -271,29 +342,90 @@ def _execute_write(
                     "SELECT pg_catalog.set_config('lock_timeout',%s,true)",
                     (str(min(5000, remaining_ms)),),
                 )
-                result = operation(conn)
+                if recovery_mode is not None:
+                    active_recovery = recovery_mode
+                    if recovery_lookup is None:
+                        conn.rollback()
+                        discard_connection()
+                        raise PersistentMappingError(
+                            "persistent mapping idempotency recovery is unavailable",
+                            code=(
+                                "COMMIT_OUTCOME_UNKNOWN"
+                                if active_recovery == "unknown_commit"
+                                else "IDEMPOTENCY_PROTOCOL_VIOLATION"
+                            ),
+                        )
+                    recovered = recovery_lookup(conn)
+                    if recovered is not None:
+                        conn.rollback()
+                        return recovered
+                    if active_recovery == "unique_violation":
+                        conn.rollback()
+                        raise PersistentMappingError(
+                            "named idempotency constraint has no recoverable row",
+                            code="IDEMPOTENCY_PROTOCOL_VIOLATION",
+                        )
+                    else:
+                        # The prior backend is gone and these exact session
+                        # locks were reacquired.  An absent idempotency row now
+                        # proves the prior transaction did not commit, so one
+                        # ordinary attempt is safe.
+                        recovery_mode = None
+                        result = operation(conn)
+                else:
+                    result = operation(conn)
                 if time.monotonic() >= deadline:
                     conn.rollback()
                     raise PersistentMappingError(
                         "persistent mapping operation deadline expired",
                         code=(
                             "COMMIT_OUTCOME_UNKNOWN"
-                            if recovering_unknown_commit
+                            if recovery_mode == "unknown_commit"
                             else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
                         ),
                     )
-            except PersistentMappingError:
+            except PersistentMappingError as exc:
                 if conn is not None and not conn.closed:
                     conn.rollback()
+                if (
+                    recovery_mode == "unknown_commit"
+                    and exc.code not in {"IDEMPOTENCY_CONFLICT", "COMMIT_OUTCOME_UNKNOWN"}
+                ):
+                    discard_connection()
+                    raise PersistentMappingError(
+                        "persistent mapping commit outcome is unknown; resubmit the same idempotency key",
+                        code="COMMIT_OUTCOME_UNKNOWN",
+                    ) from exc
                 raise
             except psycopg.Error as exc:
                 last_error = exc
                 if conn is not None and not conn.closed:
                     conn.rollback()
+                if recovery_mode == "unknown_commit":
+                    discard_connection()
+                    raise PersistentMappingError(
+                        "persistent mapping commit outcome is unknown; resubmit the same idempotency key",
+                        code="COMMIT_OUTCOME_UNKNOWN",
+                    ) from exc
+                if recovery_mode == "unique_violation":
+                    discard_connection()
+                    raise PersistentMappingError(
+                        "persistent mapping idempotency recovery failed",
+                        code="IDEMPOTENCY_PROTOCOL_VIOLATION",
+                    ) from exc
                 if (
                     exc.sqlstate in _RETRYABLE_SQLSTATES
                     and transaction_attempts < MAX_TRANSACTION_ATTEMPTS
                 ):
+                    continue
+                constraint_name = getattr(getattr(exc, "diag", None), "constraint_name", None)
+                if (
+                    exc.sqlstate == "23505"
+                    and constraint_name in _IDEMPOTENCY_CONSTRAINTS
+                ):
+                    recovery_mode = "unique_violation"
+                    discard_connection()
+                    transaction_attempts -= 1
                     continue
                 raise PersistentMappingError(
                     "persistent mapping database operation refused",
@@ -321,6 +453,19 @@ def _execute_write(
                         "persistent mapping retry budget exhausted",
                         code="CONCURRENT_TRANSACTION_RETRY_EXHAUSTED",
                     ) from exc
+                constraint_name = getattr(
+                    getattr(exc, "diag", None), "constraint_name", None
+                )
+                if (
+                    exc.sqlstate == "23505"
+                    and constraint_name in _IDEMPOTENCY_CONSTRAINTS
+                ):
+                    if conn is not None and not conn.closed:
+                        conn.rollback()
+                    recovery_mode = "unique_violation"
+                    discard_connection()
+                    transaction_attempts -= 1
+                    continue
                 if not isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError)):
                     if conn is not None and not conn.closed:
                         conn.rollback()
@@ -332,7 +477,7 @@ def _execute_write(
                 # The next attempt must reauthenticate and reacquire the same
                 # payload-neutral locks before the operation's idempotency-first
                 # lookup can establish whether the commit landed.
-                recovering_unknown_commit = True
+                recovery_mode = "unknown_commit"
                 discard_connection()
                 if transaction_attempts >= MAX_TRANSACTION_ATTEMPTS:
                     raise PersistentMappingError(
@@ -349,8 +494,12 @@ def _execute_write(
             "persistent mapping retry budget exhausted",
             code=(
                 "COMMIT_OUTCOME_UNKNOWN"
-                if recovering_unknown_commit
-                else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
+                if recovery_mode == "unknown_commit"
+                else (
+                    "IDEMPOTENCY_PROTOCOL_VIOLATION"
+                    if recovery_mode == "unique_violation"
+                    else "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED"
+                )
             ),
         ) from last_error
     finally:
@@ -807,7 +956,10 @@ def intake_supplier_mapping_review(
         ).fetchone()
     if existing is not None:
         if existing["payload_sha256"] != batch["payload_sha256"]:
-            raise PersistentMappingError("intake idempotency key was used for different payload")
+            raise PersistentMappingError(
+                "intake idempotency key was used for different payload",
+                code="IDEMPOTENCY_CONFLICT",
+            )
         return {
             "review_batch_id": str(existing["review_batch_id"]),
             "candidate_ids": [
@@ -1355,7 +1507,10 @@ def record_mapping_decision(
             or existing["human_role_ref"] != principal.role_ref
             or existing["human_authn_context_sha256"] != principal.authn_context_sha256
         ):
-            raise PersistentMappingError("decision idempotency key was used for different intent")
+            raise PersistentMappingError(
+                "decision idempotency key was used for different intent",
+                code="IDEMPOTENCY_CONFLICT",
+            )
         return {**existing, "replayed": True}
     record = _mapping_decision_record(
         conn, candidate_id=candidate_id, action=action, reason=reason,
@@ -1602,7 +1757,10 @@ def record_routine_offer_selection(
             or existing["human_role_ref"] != principal.role_ref
             or existing["human_authn_context_sha256"] != principal.authn_context_sha256
         ):
-            raise PersistentMappingError("selection idempotency key was used for different intent")
+            raise PersistentMappingError(
+                "selection idempotency key was used for different intent",
+                code="IDEMPOTENCY_CONFLICT",
+            )
         return {**existing, "replayed": True}
     record = _selection_record(
         conn, mapping_decision_id=mapping_decision_id, principal=principal,
@@ -1683,7 +1841,10 @@ def record_routine_offer_clear(
             or existing["human_role_ref"] != principal.role_ref
             or existing["human_authn_context_sha256"] != principal.authn_context_sha256
         ):
-            raise PersistentMappingError("selection idempotency key was used for different intent")
+            raise PersistentMappingError(
+                "selection idempotency key was used for different intent",
+                code="IDEMPOTENCY_CONFLICT",
+            )
         return {**existing, "replayed": True}
     record = _selection_record(
         conn,
@@ -1731,6 +1892,15 @@ def execute_supplier_mapping_intake(
     _validate_supported_intake(
         package=frozen_package, candidates=frozen_candidates
     )
+    def operation(conn: Any) -> dict[str, Any]:
+        return intake_supplier_mapping_review(
+            conn,
+            package=frozen_package,
+            candidates=frozen_candidates,
+            principal=principal,
+            intake_idempotency_key=intake_idempotency_key,
+        )
+
     return _execute_write(
         database_url,
         operation_name="review-intake",
@@ -1738,12 +1908,16 @@ def execute_supplier_mapping_intake(
         principal=principal,
         idempotency_key=intake_idempotency_key,
         domain_locks=lambda _conn: (),
-        operation=lambda conn: intake_supplier_mapping_review(
-            conn,
-            package=frozen_package,
-            candidates=frozen_candidates,
-            principal=principal,
-            intake_idempotency_key=intake_idempotency_key,
+        operation=operation,
+        recovery_lookup=lambda conn: (
+            operation(conn)
+            if _idempotency_row_exists(
+                conn,
+                table="supplier_mapping_review_batches",
+                column="intake_idempotency_key",
+                value=intake_idempotency_key,
+            )
+            else None
         ),
     )
 
@@ -1768,6 +1942,26 @@ def _mapping_domain_locks(
     return locks
 
 
+def _idempotency_row_exists(
+    conn: Any, *, table: str, column: str, value: UUID
+) -> bool:
+    if (table, column) not in {
+        ("supplier_mapping_review_batches", "intake_idempotency_key"),
+        ("supplier_mapping_decisions", "decision_idempotency_key"),
+        ("supplier_offer_selection_events", "selection_idempotency_key"),
+    }:
+        raise PersistentMappingError("idempotency recovery target is unsupported")
+    return (
+        conn.execute(
+            sql.SQL("SELECT 1 FROM {} WHERE {}=%s").format(
+                _qualified(table), sql.Identifier(column)
+            ),
+            (value,),
+        ).fetchone()
+        is not None
+    )
+
+
 def execute_mapping_decision(
     database_url: str,
     *,
@@ -1781,6 +1975,19 @@ def execute_mapping_decision(
     offer_link_kind: str | None = None,
 ) -> dict[str, Any]:
     normalized_action = action.strip().upper()
+    def operation(conn: Any) -> dict[str, Any]:
+        return record_mapping_decision(
+            conn,
+            candidate_id=candidate_id,
+            action=normalized_action,
+            reason=reason,
+            principal=principal,
+            decision_idempotency_key=decision_idempotency_key,
+            expected_preview_sha256=expected_preview_sha256,
+            existing_offer_id=existing_offer_id,
+            offer_link_kind=offer_link_kind,
+        )
+
     return _execute_write(
         database_url,
         operation_name="mapping-decision",
@@ -1792,16 +1999,16 @@ def execute_mapping_decision(
             candidate_id=candidate_id,
             include_offer_key=normalized_action in {"APPROVE_MAPPING", "REJECT_MAPPING"},
         ),
-        operation=lambda conn: record_mapping_decision(
-            conn,
-            candidate_id=candidate_id,
-            action=normalized_action,
-            reason=reason,
-            principal=principal,
-            decision_idempotency_key=decision_idempotency_key,
-            expected_preview_sha256=expected_preview_sha256,
-            existing_offer_id=existing_offer_id,
-            offer_link_kind=offer_link_kind,
+        operation=operation,
+        recovery_lookup=lambda conn: (
+            operation(conn)
+            if _idempotency_row_exists(
+                conn,
+                table="supplier_mapping_decisions",
+                column="decision_idempotency_key",
+                value=decision_idempotency_key,
+            )
+            else None
         ),
     )
 
@@ -1835,6 +2042,17 @@ def execute_routine_offer_selection(
     effective_from: date,
     expected_preview_sha256: str,
 ) -> dict[str, Any]:
+    def operation(conn: Any) -> dict[str, Any]:
+        return record_routine_offer_selection(
+            conn,
+            mapping_decision_id=mapping_decision_id,
+            principal=principal,
+            selection_idempotency_key=selection_idempotency_key,
+            reason=reason,
+            effective_from=effective_from,
+            expected_preview_sha256=expected_preview_sha256,
+        )
+
     return _execute_write(
         database_url,
         operation_name="routine-selection",
@@ -1844,14 +2062,16 @@ def execute_routine_offer_selection(
         domain_locks=lambda conn: _selection_domain_locks(
             conn, mapping_decision_id=mapping_decision_id, variant_id=None
         ),
-        operation=lambda conn: record_routine_offer_selection(
-            conn,
-            mapping_decision_id=mapping_decision_id,
-            principal=principal,
-            selection_idempotency_key=selection_idempotency_key,
-            reason=reason,
-            effective_from=effective_from,
-            expected_preview_sha256=expected_preview_sha256,
+        operation=operation,
+        recovery_lookup=lambda conn: (
+            operation(conn)
+            if _idempotency_row_exists(
+                conn,
+                table="supplier_offer_selection_events",
+                column="selection_idempotency_key",
+                value=selection_idempotency_key,
+            )
+            else None
         ),
     )
 
@@ -1866,6 +2086,17 @@ def execute_routine_offer_clear(
     effective_from: date,
     expected_preview_sha256: str,
 ) -> dict[str, Any]:
+    def operation(conn: Any) -> dict[str, Any]:
+        return record_routine_offer_clear(
+            conn,
+            variant_id=variant_id,
+            principal=principal,
+            selection_idempotency_key=selection_idempotency_key,
+            reason=reason,
+            effective_from=effective_from,
+            expected_preview_sha256=expected_preview_sha256,
+        )
+
     return _execute_write(
         database_url,
         operation_name="routine-selection",
@@ -1875,14 +2106,16 @@ def execute_routine_offer_clear(
         domain_locks=lambda conn: _selection_domain_locks(
             conn, mapping_decision_id=None, variant_id=variant_id
         ),
-        operation=lambda conn: record_routine_offer_clear(
-            conn,
-            variant_id=variant_id,
-            principal=principal,
-            selection_idempotency_key=selection_idempotency_key,
-            reason=reason,
-            effective_from=effective_from,
-            expected_preview_sha256=expected_preview_sha256,
+        operation=operation,
+        recovery_lookup=lambda conn: (
+            operation(conn)
+            if _idempotency_row_exists(
+                conn,
+                table="supplier_offer_selection_events",
+                column="selection_idempotency_key",
+                value=selection_idempotency_key,
+            )
+            else None
         ),
     )
 

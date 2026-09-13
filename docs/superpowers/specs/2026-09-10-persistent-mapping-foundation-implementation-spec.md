@@ -634,8 +634,12 @@ def _verify_effective_role_topology(
     # role is exempt merely because it invoked this function. Individually
     # accepted role names cannot be recombined; an application-origin SET ROLE
     # therefore remains untrusted unless that exact pair was separately
-    # approved. Only after the pair matches may its exact two role OIDs be
-    # excluded from the traversal below. Superusers remain trusted database
+    # approved. Only after the observed pair matches may role OIDs from the
+    # complete, independently bound approved pair set be excluded from the
+    # traversal below. This permits an add-then-remove rotation release to
+    # carry both old and new invocation pairs without treating the idle new
+    # login as an attacker; the exact observed tuple check still rejects role
+    # recombination. Superusers remain trusted database
     # administrators outside the ordinary ACL threat model, but even a
     # superuser invocation is not a configured maintenance invocation unless
     # its exact pair matches. This does not claim to constrain a malicious
@@ -643,7 +647,7 @@ def _verify_effective_role_topology(
     observed = _observed_maintenance_pair(conn)
     if observed not in maintenance_identity.allowed_pairs:
         raise RuntimeError("maintenance session/effective-role pair is not approved")
-    # Every other non-superuser LOGIN remains untrusted. From each login,
+    # Every non-approved, non-superuser LOGIN remains untrusted. From each login,
     # recursively find roles reachable through only set_option
     # edges. From every such assumed role, recursively follow inherit_option
     # edges; reject if any effective role owns a protected object. This covers
@@ -3071,10 +3075,20 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'maintenance session/effective-role pair is not approved';
     END IF;
+    WITH approved_role_names(role_name) AS (
+        SELECT DISTINCT item.pair->>'session_user'
+          FROM pg_catalog.jsonb_array_elements(approved_maintenance_pairs)
+               AS item(pair)
+        UNION
+        SELECT DISTINCT item.pair->>'current_user'
+          FROM pg_catalog.jsonb_array_elements(approved_maintenance_pairs)
+               AS item(pair)
+    )
     SELECT pg_catalog.array_agg(r.oid ORDER BY r.oid)
       INTO approved_invocation_oids
-      FROM pg_catalog.pg_roles r
-     WHERE r.rolname=session_user OR r.rolname=current_user;
+      FROM approved_role_names approved
+      JOIN pg_catalog.pg_roles r ON r.rolname=approved.role_name
+    HAVING pg_catalog.count(*)=(SELECT pg_catalog.count(*) FROM approved_role_names);
     IF approved_invocation_oids IS NULL THEN
         RAISE EXCEPTION 'approved maintenance roles are absent';
     END IF;
@@ -3086,6 +3100,29 @@ BEGIN
        OR pg_catalog.pg_is_other_temp_schema(target_schema_oid)
        OR target_schema ~ '^pg_(toast_)?temp_[0-9]+$' THEN
         RAISE EXCEPTION 'trusted target schema identity is absent or temporary';
+    END IF;
+    IF EXISTS (
+        SELECT 1
+          FROM (VALUES (session_user::text,current_user::text))
+               AS observed(session_role,owner_role)
+          LEFT JOIN pg_catalog.pg_roles member
+            ON member.rolname=observed.session_role
+          LEFT JOIN pg_catalog.pg_roles owner
+            ON owner.rolname=observed.owner_role
+          LEFT JOIN pg_catalog.pg_auth_members membership
+            ON membership.member=member.oid AND membership.roleid=owner.oid
+         WHERE member.oid IS NULL
+            OR owner.oid IS NULL
+            OR member.rolcanlogin IS NOT TRUE
+            OR owner.rolcanlogin IS NOT FALSE
+            OR membership.inherit_option IS NOT FALSE
+            OR membership.set_option IS NOT TRUE
+            OR membership.admin_option IS NOT FALSE
+            OR pg_catalog.has_schema_privilege(
+                   member.oid,target_schema_oid,'CREATE'
+               ) IS NOT FALSE
+    ) THEN
+        RAISE EXCEPTION 'approved maintenance role topology differs';
     END IF;
 
     WITH RECURSIVE protected_owners(owner_oid) AS (

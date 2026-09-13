@@ -2082,10 +2082,20 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'maintenance session/effective-role pair is not approved';
     END IF;
+    WITH approved_role_names(role_name) AS (
+        SELECT DISTINCT item.pair->>'session_user'
+          FROM pg_catalog.jsonb_array_elements(approved_maintenance_pairs)
+               AS item(pair)
+        UNION
+        SELECT DISTINCT item.pair->>'current_user'
+          FROM pg_catalog.jsonb_array_elements(approved_maintenance_pairs)
+               AS item(pair)
+    )
     SELECT pg_catalog.array_agg(r.oid ORDER BY r.oid)
       INTO approved_invocation_oids
-      FROM pg_catalog.pg_roles r
-     WHERE r.rolname=session_user OR r.rolname=current_user;
+      FROM approved_role_names approved
+      JOIN pg_catalog.pg_roles r ON r.rolname=approved.role_name
+    HAVING pg_catalog.count(*)=(SELECT pg_catalog.count(*) FROM approved_role_names);
     IF approved_invocation_oids IS NULL THEN
         RAISE EXCEPTION 'approved maintenance roles are absent';
     END IF;
@@ -2097,6 +2107,29 @@ BEGIN
        OR pg_catalog.pg_is_other_temp_schema(target_schema_oid)
        OR target_schema ~ '^pg_(toast_)?temp_[0-9]+$' THEN
         RAISE EXCEPTION 'trusted target schema identity is absent or temporary';
+    END IF;
+    IF EXISTS (
+        SELECT 1
+          FROM (VALUES (session_user::text,current_user::text))
+               AS observed(session_role,owner_role)
+          LEFT JOIN pg_catalog.pg_roles member
+            ON member.rolname=observed.session_role
+          LEFT JOIN pg_catalog.pg_roles owner
+            ON owner.rolname=observed.owner_role
+          LEFT JOIN pg_catalog.pg_auth_members membership
+            ON membership.member=member.oid AND membership.roleid=owner.oid
+         WHERE member.oid IS NULL
+            OR owner.oid IS NULL
+            OR member.rolcanlogin IS NOT TRUE
+            OR owner.rolcanlogin IS NOT FALSE
+            OR membership.inherit_option IS NOT FALSE
+            OR membership.set_option IS NOT TRUE
+            OR membership.admin_option IS NOT FALSE
+            OR pg_catalog.has_schema_privilege(
+                   member.oid,target_schema_oid,'CREATE'
+               ) IS NOT FALSE
+    ) THEN
+        RAISE EXCEPTION 'approved maintenance role topology differs';
     END IF;
 
     WITH RECURSIVE protected_owners(owner_oid) AS (

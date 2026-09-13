@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-import hashlib
 import ipaddress
 import json
 from pathlib import Path
-from urllib.parse import urlparse
+import re
+from urllib.parse import parse_qs, urlparse
 
 import psycopg
 from psycopg import sql
@@ -20,6 +20,7 @@ from apply_schema import (
     _verify_or_apply_mapping_release,
     apply_verified_legacy_file,
 )
+from local_purchasing_candidate import acquire_database_lifecycle_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,16 +33,37 @@ DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 
 
 def _require_owned_target(conn: psycopg.Connection, database_url: str) -> None:
-    parsed = urlparse(database_url)
-    if parsed.hostname not in {"127.0.0.1", "::1"}:
+    try:
+        parsed = urlparse(database_url)
+        port = parsed.port
+        query = parse_qs(
+            parsed.query, strict_parsing=True, keep_blank_values=True
+        )
+    except ValueError as exc:
+        raise RuntimeError("synthetic demo database URL is malformed") from exc
+    database = parsed.path.removeprefix("/")
+    if (
+        parsed.scheme not in {"postgresql", "postgres"}
+        or parsed.hostname not in {"127.0.0.1", "::1"}
+        or port is None
+        or parsed.username != "qa_release_login"
+        or parsed.password is not None
+        or parsed.fragment
+        or parsed.params
+        or re.fullmatch(r"[a-z][a-z0-9_]*_demo", database) is None
+        or query != {"options": ["-c role=qa_mapping_owner"]}
+    ):
         raise RuntimeError("synthetic demo database must be loopback")
     row = conn.execute(
         "SELECT pg_catalog.current_database(),"
         "pg_catalog.current_setting('server_version_num')::integer,"
-        "pg_catalog.inet_server_addr()::text,session_user::text,current_user::text"
+        "pg_catalog.inet_server_addr()::text,session_user::text,current_user::text,"
+        "pg_catalog.pg_get_userbyid(d.datdba) "
+        "FROM pg_catalog.pg_database d "
+        "WHERE d.datname=pg_catalog.current_database()"
     ).fetchone()
     assert row is not None
-    if not str(row[0]).endswith("_demo") or int(row[1]) // 10000 != 16:
+    if str(row[0]) != database or int(row[1]) // 10000 != 16:
         raise RuntimeError("synthetic demo requires an owned PostgreSQL 16 *_demo database")
     try:
         server_address = ipaddress.ip_interface(str(row[2])).ip
@@ -49,17 +71,51 @@ def _require_owned_target(conn: psycopg.Connection, database_url: str) -> None:
         raise RuntimeError("synthetic demo PostgreSQL address is malformed") from exc
     if not server_address.is_loopback:
         raise RuntimeError("synthetic demo PostgreSQL server is not loopback")
-    if (str(row[3]), str(row[4])) != ("qa_release_login", "qa_mapping_owner"):
+    if (
+        (str(row[3]), str(row[4]), str(row[5]))
+        != ("qa_release_login", "qa_mapping_owner", "qa_mapping_owner")
+    ):
         raise RuntimeError("synthetic demo maintenance role pair differs")
-
-
-def _sales_digest(rows: list[tuple[object, ...]]) -> str:
-    encoded = json.dumps(
-        [[str(value) if value is not None else None for value in row] for row in rows],
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    acquire_database_lifecycle_lock(conn, str(row[0]))
+    user_schemas = tuple(
+        value[0]
+        for value in conn.execute(
+            "SELECT nspname FROM pg_catalog.pg_namespace "
+            "WHERE nspname <> 'public' AND nspname <> 'information_schema' "
+            "AND nspname !~ '^pg_' ORDER BY nspname"
+        ).fetchall()
+    )
+    extensions = tuple(
+        value[0]
+        for value in conn.execute(
+            "SELECT extname FROM pg_catalog.pg_extension ORDER BY extname"
+        ).fetchall()
+    )
+    public_objects = tuple(
+        int(value)
+        for value in conn.execute(
+            "SELECT "
+            "(SELECT count(*) FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE n.nspname='public'),"
+            "(SELECT count(*) FROM pg_catalog.pg_proc p "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+            "WHERE n.nspname='public'),"
+            "(SELECT count(*) FROM pg_catalog.pg_type t "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace "
+            "WHERE n.nspname='public')"
+        ).fetchone()
+    )
+    schema_exists = conn.execute(
+        "SELECT pg_catalog.to_regnamespace(%s) IS NOT NULL", (SCHEMA,)
+    ).fetchone()[0]
+    if public_objects != (0, 0, 0):
+        raise RuntimeError("synthetic demo public schema is not empty")
+    if schema_exists:
+        if user_schemas != (SCHEMA,) or extensions != ("pgcrypto", "plpgsql"):
+            raise RuntimeError("synthetic demo installed inventory differs")
+    elif user_schemas or extensions != ("plpgsql",):
+        raise RuntimeError("synthetic demo target is not empty")
 
 
 def _apply_legacy(conn: psycopg.Connection, name: str, *, schema_oid: int) -> None:
@@ -134,8 +190,20 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
 
 def _seed_evidence(conn: psycopg.Connection, business_date: date) -> None:
     from procurement_os.catalog import recompute_catalog_gate
+    from procurement_os.historical_sales import (
+        AUTHORITATIVE_START_DATE,
+        ControlTotals,
+        _chunk_rows,
+        _complete_chunk_control,
+        _mark_page_running,
+        _persist_page,
+        create_sales_backfill_run,
+        finalize_sales_backfill,
+        query_contract_hash,
+    )
     from procurement_os.inventory import capture_daily_inventory
     from procurement_os.po_ledger import recompute_open_po_reconciliation_gate
+    from procurement_os.sales import SalesSourceRow, load_identity_index
     from procurement_os.vendor_rules import recompute_vendor_rules_gates
 
     with conn.transaction():
@@ -157,16 +225,6 @@ def _seed_evidence(conn: psycopg.Connection, business_date: date) -> None:
                    'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
             (VARIANT_ID, business_date),
         )
-        for offset in range(84):
-            conn.execute(
-                """INSERT INTO sales_daily(sale_date,variant_id,units_sold,source)
-                   VALUES (%s,%s,%s,'SYNTHETIC_DEMO')""",
-                (
-                    business_date - timedelta(days=84 - offset),
-                    VARIANT_ID,
-                    Decimal("1") if offset < 70 else Decimal("2"),
-                ),
-            )
     capture = capture_daily_inventory(
         conn,
         business_date=business_date,
@@ -195,41 +253,79 @@ def _seed_evidence(conn: psycopg.Connection, business_date: date) -> None:
     ) + timedelta(hours=12)
     if recompute_open_po_reconciliation_gate(conn, as_of=evaluation_at)["status"] != "PASS":
         raise RuntimeError("synthetic open-PO reconciliation gate did not pass")
-    rows = conn.execute(
-        """SELECT sale_date,units_sold,net_sales,distinct_orders,source,run_id::text
-             FROM sales_daily WHERE variant_id=%s AND source='SYNTHETIC_DEMO'
-             ORDER BY sale_date,source""",
-        (VARIANT_ID,),
-    ).fetchall()
-    evidence = {
-        "coverage_contract": "OWNED_SYNTHETIC_DEMO_DAILY_VARIANT_COVERAGE_V1",
-        "source": "SYNTHETIC_DEMO",
-        "sales_rows": len(rows),
-        "variant_count": 1,
-        "history_start": str(business_date - timedelta(days=84)),
-        "history_end": str(business_date - timedelta(days=1)),
-        "variant_coverage": {
-            VARIANT_ID: {"row_count": len(rows), "sha256": _sales_digest(rows)}
-        },
-    }
+    # Exercise the production-intended durable raw-first sales pipeline.  The
+    # fabricated rows are inputs to its independent page/chunk/final controls;
+    # the initializer never writes a readiness PASS itself.
+    sales_rows = [
+        SalesSourceRow(
+            sale_date=business_date - timedelta(days=84 - offset),
+            source_variant_id=VARIANT_ID,
+            source_sku="SYN-1001",
+            source_product_title="Synthetic Citrus",
+            source_variant_title="750ML",
+            net_items_sold=(units := Decimal("1") if offset < 70 else Decimal("2")),
+            net_sales=units * Decimal("4.99"),
+        )
+        for offset in range(84)
+    ]
+    totals = ControlTotals(
+        net_items_sold=sum((row.net_items_sold for row in sales_rows), Decimal("0")),
+        net_sales=sum((row.net_sales or Decimal("0") for row in sales_rows), Decimal("0")),
+    )
+    run_id = create_sales_backfill_run(
+        conn,
+        start_date=AUTHORITATIVE_START_DATE,
+        end_date=business_date,
+        store_timezone="America/New_York",
+        chunk_days=10000,
+        page_size=1000,
+    )
+    chunk = _chunk_rows(conn, run_id)
+    if len(chunk) != 1:
+        raise RuntimeError("synthetic sales service did not create exactly one chunk")
+    page_id, prior_status = _mark_page_running(
+        conn,
+        chunk_id=str(chunk[0][0]),
+        page_index=0,
+        page_size=1000,
+        chunk_start=chunk[0][2],
+        chunk_end=chunk[0][3],
+        contract_hash=query_contract_hash(),
+    )
+    if prior_status != "RUNNING":
+        raise RuntimeError("synthetic sales service page did not enter RUNNING")
+    _persist_page(
+        conn,
+        run_id=run_id,
+        chunk_id=str(chunk[0][0]),
+        page_id=page_id,
+        rows=sales_rows,
+        identity=load_identity_index(conn),
+        terminal=True,
+    )
+    _complete_chunk_control(
+        conn,
+        run_id=run_id,
+        chunk_id=str(chunk[0][0]),
+        totals=totals,
+    )
+    sales_result = finalize_sales_backfill(
+        conn,
+        run_id=run_id,
+        independent_totals=totals,
+    )
+    if sales_result["status"] != "PASS":
+        raise RuntimeError("synthetic sales service did not pass its derived controls")
     with conn.transaction():
-        updated = conn.execute(
-            """UPDATE readiness_gates SET status='PASS',severity='CRITICAL',
-                   blocks_po=TRUE,message='Owned demo has exact synthetic sales coverage.',
-                   evidence_json=%s::jsonb,checked_at=pg_catalog.transaction_timestamp()
-               WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL' AND scope_id=''
-               RETURNING status""",
-            (json.dumps(evidence, sort_keys=True),),
-        ).fetchall()
-        if updated != [("PASS",)]:
-            raise RuntimeError("synthetic sales gate was not unique")
         conn.execute(
-            "INSERT INTO meta(key,value) VALUES (%s,%s),(%s,%s)",
+            "INSERT INTO meta(key,value) VALUES (%s,%s),(%s,%s),(%s,%s)",
             (
                 "synthetic_owner_demo_contract",
                 DEMO_CONTRACT,
                 "synthetic_owner_demo_business_date",
                 business_date.isoformat(),
+                "synthetic_owner_demo_sales_backfill_id",
+                str(run_id),
             ),
         )
 

@@ -352,7 +352,7 @@ def _operational_nav(nav_root: str, *, current: str) -> str:
         links.append(
             f"<a href='{nav_root}{path}'{current_attribute}>{label}</a>"
         )
-    return (
+    navigation = (
         "<nav aria-label='Phase 5 operations' "
         "style='display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px'>"
         + "".join(
@@ -361,6 +361,9 @@ def _operational_nav(nav_root: str, *, current: str) -> str:
             for link in links
         )
         + "</nav>"
+    )
+    return navigation + (
+        _mapping_banner() if runtime_config().mode == "SYNTHETIC_DEMO" else ""
     )
 
 
@@ -426,14 +429,26 @@ def _admin_status_html(h: dict, *, nav_root: str) -> str:
         for name, ok, note in rows
     )
 
-    enabled = bool(readiness.get("po_generation_enabled", False))
-    po_state = "ENABLED" if enabled else "DISABLED"
+    canonical_enabled = bool(readiness.get("po_generation_enabled", False))
+    synthetic_demo = runtime_config().mode == "SYNTHETIC_DEMO"
+    enabled = canonical_enabled and not synthetic_demo
+    po_state = (
+        "BLOCKED — SYNTHETIC DEMO / INTERNAL DRAFT ONLY"
+        if synthetic_demo
+        else ("ENABLED" if enabled else "DISABLED")
+    )
     po_class = "po-enabled" if enabled else "po-disabled"
     blockers = readiness.get("blockers") or []
     blocker_detail = (
         "<ul>" + "".join(_po_blocker_html(item) for item in blockers) + "</ul>"
         if blockers else "<p>No canonical PO readiness blockers.</p>"
     )
+    if synthetic_demo:
+        blocker_detail = (
+            "<p><b>TEST DATA — NOT FOR ORDERING.</b> Canonical gate facts below "
+            "do not authorize activation, release, Shopify import, or an order.</p>"
+            + blocker_detail
+        )
     disabled_control = (
         "<button type='button' disabled aria-disabled='true'>"
         "PO generation disabled</button>"
@@ -800,7 +815,7 @@ def _supplier_mapping_list_html(
     pagination = " · ".join(item for item in (previous, following) if item) or "End of results"
     return f"""<!doctype html><html><head><title>Supplier Mapping</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1180px;margin:2rem auto;padding:0 1rem;color:#1f2328}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}input,select,button{{padding:7px}}</style></head><body>
-{_operational_nav('/', current='Supplier Mapping')}{_mapping_banner()}
+{_operational_nav('/', current='Supplier Mapping')}
 <h1>Persistent supplier mapping review</h1>
 <p>Batches: {_html_escape(status_result['review_batch_count'])} · candidates: {_html_escape(status_result['candidate_count'])} · decisions: {_html_escape(status_result['decision_count'])} · selection heads: {_html_escape(status_result['selection_head_count'])} · exact legacy shadow matches: {_html_escape(status_result['shadow_match_count'])}</p>
 <form method='post' action='/supplier-mapping/intake'><button>Verify and intake the fixed synthetic review suite</button></form>
@@ -970,7 +985,7 @@ def _supplier_mapping_detail_html(detail: dict) -> str:
 <label>Reason <input name='reason' required></label><button>Preview explicit routine-selection CLEAR</button></form>"""
     return f"""<!doctype html><html><head><title>Mapping candidate</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1180px;margin:2rem auto;padding:0 1rem;color:#1f2328}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left;vertical-align:top}}form{{display:grid;gap:8px;max-width:760px;margin:12px 0}}input,select,button{{padding:7px}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f8fa;padding:10px}}</style></head><body>
-{_operational_nav('/', current='Supplier Mapping')}{_mapping_banner()}<p><a href='/supplier-mapping'>← Candidate list</a> · <a href='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/source'>Download bounded evidence metadata</a></p>
+{_operational_nav('/', current='Supplier Mapping')}<p><a href='/supplier-mapping'>← Candidate list</a> · <a href='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/source'>Download bounded evidence metadata</a></p>
 <h1>{_html_escape(candidate['occurrence_key'])}</h1>
 <p>Supplier {_html_escape(candidate['source_vendor_identity'])} · proposed Variant {_html_escape(candidate['proposed_variant_id'])} · class {_html_escape(candidate['offer_class'])}/{_html_escape(candidate['occurrence_role'])}</p>
 <h2>Sealed source status</h2><table><tr><th>Package</th><td>{_html_escape(batch['source_package_id'])} rev {_html_escape(batch['source_revision'])}</td></tr><tr><th>Readiness</th><td>{_html_escape(batch['structural_state'])} / {_html_escape(batch['source_evidence_state'])} / {_html_escape(batch['semantic_state'])}</td></tr><tr><th>Authority/import</th><td>{_html_escape(batch['source_authority_state'])} / {_html_escape(batch['source_import_state'])}</td></tr><tr><th>Fixture flag</th><td>source_is_simulation={_html_escape(batch['source_is_simulation'])}; a false value in this owned demo only exercises the authoritative-format contract branch and is not real approval.</td></tr><tr><th>File</th><td>{_html_escape(candidate['source_file_name'])} · SHA-256 {_html_escape(candidate['source_file_sha256'])} · pages {_html_escape(candidate['source_page_start'])}–{_html_escape(candidate['source_page_end'])}</td></tr></table>
@@ -978,7 +993,7 @@ def _supplier_mapping_detail_html(detail: dict) -> str:
 <h2>Existing offer comparison</h2><table><tr><th>ID</th><th>SKU</th><th>Package</th><th>Active</th><th>Confidence</th><th>Exact candidate contract</th></tr>{comparisons}</table>
 <h2>Append-only decision history</h2><ul>{decisions}</ul><h2>Active exact rejection memory</h2><ul>{rejections}</ul>
 <form method='post' action='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/decision'><input type='hidden' name='idempotency_key' value='{decision_key}'><label>Disposition <select name='action'>{disposition_options}</select></label><label>Approval result <select name='offer_link_kind'>{offer_result_options}</select></label><label>Exact existing offer (LINKED_EXISTING only)<select name='existing_offer_id'><option value=''>None</option>{exact_options}</select></label><label>Reason <input name='reason' required></label><button>Preview disposition</button></form>
-{selection_form}<h2>Routine-selection shadow</h2><ul>{shadow}</ul>
+{selection_form}<h2>Routine-selection shadow — SHADOW ONLY</h2><ul>{shadow}</ul>
 </body></html>"""
 
 
@@ -1735,6 +1750,15 @@ document.addEventListener("keydown", function (event) {
 """
 
 
+@app.get("/assets/historical-sales-catalog-picker.js")
+def historical_sales_catalog_picker_script():
+    return Response(
+        _HISTORICAL_SALES_CATALOG_PICKER_SCRIPT,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 def _historical_sales_review_html(items: list[dict]) -> str:
     """Render the deliberately small, server-side historical-sales review UI."""
     import html
@@ -1867,7 +1891,7 @@ header{{display:flex;justify-content:space-between;gap:16px;align-items:start}}.
 <p><b>{len(items)}</b> unresolved or ambiguous historical source identity group(s), ranked by materiality. Daily facts are grouped so each decision covers the complete historical source identity. Nothing on this page writes to Shopify.</p>
 <p class='muted'>Mapping and exclusion decisions are permanent, audited, and require a reviewer, reason, and review token. Leaving an item unresolved keeps SALES_BACKFILL failed.</p>
 {cards or '<p>No unresolved or ambiguous historical source identities require review.</p>'}
-<script>{_HISTORICAL_SALES_CATALOG_PICKER_SCRIPT}</script>
+<script src='../assets/historical-sales-catalog-picker.js'></script>
 </body></html>"""
 
 

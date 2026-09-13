@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import copy
 from dataclasses import replace
 from datetime import date
@@ -92,8 +93,166 @@ END
 $function$;
 '''
 TEST_V2_SQL_SHA256 = "39f99ea39ab7570518d6b5a3744da21026610fa1d428c5bb31db1a4740eac130"
-TEST_V2_FUNCTION_CATALOG_SHA256 = "a4e881e43ea1962ad38c1a710b63977920a325cb716b295306fe40894b869bb0"
+TEST_V2_FUNCTION_CATALOG_SHA256 = "e6df71df1878487b548b2a72e987db6f5a055e7bed1e297bb6c347a90d836c4a"
 TEST_V2_CONFIG_SHA256 = "28c0a279a3d203b8aad7c2ee159fe7a0eae41f0d7adce1342e8f4bef4a377d7f"
+
+ROTATION_LOGIN = "qa_release_login_next"
+ROTATION_STAGE_VERSION = "v2-test-maintenance-pair-stage"
+ROTATION_STAGE_NAME = "015_persistent_mapping_test_rotation_stage.sql"
+ROTATION_REMOVE_VERSION = "v3-test-maintenance-pair-remove"
+ROTATION_REMOVE_NAME = "016_persistent_mapping_test_rotation_remove.sql"
+ROTATION_DISJOINT_VERSION = "v2-test-maintenance-pair-disjoint"
+
+
+def _rotation_config(version: str, pairs: list[dict[str, str]]) -> bytes:
+    return apply_schema._canonical_json(
+        {
+            "allowed_pairs": pairs,
+            "contract": "BUFFALO_PERSISTENT_MAPPING_MAINTENANCE_IDENTITY_V1",
+            "family": apply_schema.MAPPING_RELEASE.family,
+            "release": version,
+            "target_schema": SCHEMA,
+        }
+    ) + b"\n"
+
+
+def _render_rotation_topology(
+    pairs: list[dict[str, str]], *, config_sha256: str
+) -> str:
+    source = (DB_DIR / apply_schema.MAPPING_MIGRATION_NAME).read_text(encoding="utf-8")
+    start_marker = (
+        f'CREATE OR REPLACE FUNCTION "{SCHEMA}".'
+        "persistent_mapping_assert_safe_role_topology()"
+    )
+    start = source.index(start_marker)
+    terminator = "$role_topology$;"
+    end = source.index(terminator, start) + len(terminator)
+    rendered = source[start:end]
+    base_config = (
+        DB_DIR.parent / apply_schema.MAPPING_RELEASE.maintenance_identity_config_ref
+    ).read_bytes()
+    base_value = json.loads(base_config)
+    base_pairs_json = apply_schema._canonical_json(base_value["allowed_pairs"]).decode()
+    next_pairs_json = apply_schema._canonical_json(pairs).decode()
+    replacements = (
+        (hashlib.sha256(base_config).hexdigest(), config_sha256),
+        (
+            apply_schema.MAPPING_RELEASE.maintenance_identity_pairs_sha256,
+            hashlib.sha256(apply_schema._canonical_json(pairs)).hexdigest(),
+        ),
+        (base_pairs_json, next_pairs_json),
+    )
+    for old, new in replacements:
+        if rendered.count(old) != 1:
+            raise AssertionError(f"rotation topology binding count differs for {old}")
+        rendered = rendered.replace(old, new)
+    return rendered
+
+
+def _rotation_release_sql(
+    *,
+    version: str,
+    migration_name: str,
+    predecessor: str,
+    pairs: list[dict[str, str]],
+    config_sha256: str,
+) -> bytes:
+    topology = _render_rotation_topology(pairs, config_sha256=config_sha256)
+    return f'''-- buffalo-migration-replay: checksum-skip-v2
+-- buffalo-contract-family: persistent-mapping-foundation
+-- TEST-ONLY maintenance-pair rotation fixture; never a production migration.
+DO $guard$
+DECLARE installed_contract text;
+BEGIN
+  SELECT value INTO installed_contract
+    FROM "{SCHEMA}".meta
+   WHERE key='persistent_mapping_foundation_contract';
+  IF installed_contract IS DISTINCT FROM '{predecessor}' THEN
+    RAISE EXCEPTION 'test rotation requires exact predecessor';
+  END IF;
+  IF EXISTS (
+      SELECT 1 FROM "{SCHEMA}".meta
+       WHERE key='migration:{migration_name}'
+  ) THEN
+    RAISE EXCEPTION 'test rotation body must not replay';
+  END IF;
+END
+$guard$;
+
+{topology}
+
+CREATE OR REPLACE FUNCTION "{SCHEMA}".assert_persistent_mapping_foundation_contract()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, "{SCHEMA}"
+AS $function$
+DECLARE
+  installed_contract text;
+  installed_catalog text;
+  computed_catalog text;
+BEGIN
+  PERFORM "{SCHEMA}".persistent_mapping_assert_safe_role_topology();
+  SELECT value INTO installed_contract FROM "{SCHEMA}".meta
+   WHERE key='persistent_mapping_foundation_contract';
+  SELECT value INTO installed_catalog FROM "{SCHEMA}".meta
+   WHERE key='persistent_mapping_foundation_catalog_sha256';
+  IF installed_contract IS DISTINCT FROM '{version}' THEN
+    RAISE EXCEPTION 'test rotation contract differs';
+  END IF;
+  computed_catalog := "{SCHEMA}".compute_persistent_mapping_catalog_sha256();
+  IF installed_catalog IS DISTINCT FROM computed_catalog THEN
+    RAISE EXCEPTION 'test rotation catalog differs';
+  END IF;
+END
+$function$;
+'''.encode()
+
+
+ROTATION_OLD_PAIR = {
+    "current_user": "qa_mapping_owner",
+    "session_user": "qa_release_login",
+}
+ROTATION_NEXT_PAIR = {
+    "current_user": "qa_mapping_owner",
+    "session_user": ROTATION_LOGIN,
+}
+ROTATION_STAGE_PAIRS = [ROTATION_OLD_PAIR, ROTATION_NEXT_PAIR]
+ROTATION_REMOVE_PAIRS = [ROTATION_NEXT_PAIR]
+ROTATION_STAGE_CONFIG = _rotation_config(ROTATION_STAGE_VERSION, ROTATION_STAGE_PAIRS)
+ROTATION_REMOVE_CONFIG = _rotation_config(ROTATION_REMOVE_VERSION, ROTATION_REMOVE_PAIRS)
+ROTATION_DISJOINT_CONFIG = _rotation_config(
+    ROTATION_DISJOINT_VERSION, ROTATION_REMOVE_PAIRS
+)
+ROTATION_STAGE_SQL = _rotation_release_sql(
+    version=ROTATION_STAGE_VERSION,
+    migration_name=ROTATION_STAGE_NAME,
+    predecessor=apply_schema.MAPPING_RELEASE.version,
+    pairs=ROTATION_STAGE_PAIRS,
+    config_sha256=hashlib.sha256(ROTATION_STAGE_CONFIG).hexdigest(),
+)
+ROTATION_REMOVE_SQL = _rotation_release_sql(
+    version=ROTATION_REMOVE_VERSION,
+    migration_name=ROTATION_REMOVE_NAME,
+    predecessor=ROTATION_STAGE_VERSION,
+    pairs=ROTATION_REMOVE_PAIRS,
+    config_sha256=hashlib.sha256(ROTATION_REMOVE_CONFIG).hexdigest(),
+)
+ROTATION_DISJOINT_SQL = _rotation_release_sql(
+    version=ROTATION_DISJOINT_VERSION,
+    migration_name=ROTATION_STAGE_NAME,
+    predecessor=apply_schema.MAPPING_RELEASE.version,
+    pairs=ROTATION_REMOVE_PAIRS,
+    config_sha256=hashlib.sha256(ROTATION_DISJOINT_CONFIG).hexdigest(),
+)
+ROTATION_STAGE_SQL_SHA256 = "183d27337730ca5fd99d3e1bc239d93f2c1f1902f98efa31ce543140a85de911"
+ROTATION_REMOVE_SQL_SHA256 = "2399f773b960995c08e5b953c2a03c8b27d904ad60b8124ce8f8434e1eec5255"
+ROTATION_DISJOINT_SQL_SHA256 = "df47084cbc5554402a05b85127c43462f7c5bb4c74df9d971a76342f3e60c21e"
+ROTATION_STAGE_CONFIG_SHA256 = "71c09ffcb4449f5bdf967af198824838009433410acbaa9272afb3c33bd679f5"
+ROTATION_REMOVE_CONFIG_SHA256 = "63d0cd4d7113094cde627230fa98adbe681c0eceacc0beae89334869fd31661c"
+ROTATION_DISJOINT_CONFIG_SHA256 = "b4bbbbd4cb2c3f007fe14ea90945a8870522e5169adcd65190fd64d46d6da7da"
+ROTATION_STAGE_FUNCTION_CATALOG_SHA256 = "5018c85d6cf9fa30e52ff90576f1444fc7c8ea3b63af3a7363b862b678e06551"
+ROTATION_REMOVE_FUNCTION_CATALOG_SHA256 = "92fbd2799ce8409ef581b8aa9fbb2fabd03cc1de1ed39eab6460e445c01c8ff5"
 
 
 class PersistentMappingFoundationPostgresTests(unittest.TestCase):
@@ -406,10 +565,34 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
     def test_upgrade_requires_exact_013_marker_set_and_contracts(self):
         self._reset(include_mapping=False)
         with psycopg.connect(self.mapping_url) as conn:
-            conn.execute(f"DELETE FROM {SCHEMA}.meta WHERE key='migration:013_monday_p1_remediation.sql'")
-            conn.commit()
-            with self.assertRaisesRegex(RuntimeError, "predecessor marker"):
-                with conn.transaction():
+            corruptions = (
+                f"DELETE FROM {SCHEMA}.meta WHERE key='migration:012_monday_review_draft_packet.sql'",
+                f"DELETE FROM {SCHEMA}.meta WHERE key='migration:013_monday_p1_remediation.sql'",
+                f"INSERT INTO {SCHEMA}.meta(key,value) VALUES('migration:012a_unknown.sql','applied')",
+                f"DROP INDEX {SCHEMA}.uq_active_vendor_supplier_sku",
+                f"DROP TRIGGER trg_prevent_referenced_offer_identity_change ON {SCHEMA}.supplier_offers",
+                f"DROP TRIGGER trg_prevent_referenced_offer_identity_change ON {SCHEMA}.supplier_offers; "
+                f"CREATE TRIGGER trg_prevent_referenced_offer_identity_change "
+                f"BEFORE UPDATE OF variant_id ON {SCHEMA}.supplier_offers FOR EACH ROW "
+                f"EXECUTE FUNCTION {SCHEMA}.prevent_referenced_offer_identity_change()",
+                f"CREATE OR REPLACE FUNCTION {SCHEMA}.prevent_referenced_offer_identity_change() "
+                "RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$",
+                f"UPDATE {SCHEMA}.meta SET value='altered' "
+                "WHERE key='monday_p1_remediation_contract'",
+            )
+            for statement in corruptions:
+                with self.subTest(statement=statement), self.assertRaises(
+                    (RuntimeError, psycopg.Error)
+                ):
+                    with conn.transaction(force_rollback=True):
+                        conn.execute(statement)
+                        apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
+            with conn.transaction():
+                with self.assertRaisesRegex(RuntimeError, "predecessor marker"):
+                    conn.execute(
+                        f"DELETE FROM {SCHEMA}.meta "
+                        "WHERE key='migration:013_monday_p1_remediation.sql'"
+                    )
                     apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
             self.assertIsNone(conn.execute(f"SELECT to_regclass('{SCHEMA}.supplier_mapping_decisions')").fetchone()[0])
 
@@ -533,14 +716,46 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                         conn.execute(statement)
                         with self.assertRaisesRegex(RuntimeError, message):
                             apply_schema._verify_or_apply_mapping_release(conn, db_dir, v2_release)
+                with self.subTest(message="historical visit verifies highest release"), conn.transaction(
+                    force_rollback=True
+                ):
+                    conn.execute(
+                        f"ALTER FUNCTION {SCHEMA}.assert_persistent_mapping_foundation_contract() IMMUTABLE"
+                    )
+                    with self.assertRaisesRegex(
+                        RuntimeError, "function properties differ"
+                    ):
+                        apply_schema._verify_or_apply_mapping_release(
+                            conn, db_dir, apply_schema.MAPPING_RELEASE
+                        )
 
     def test_replay_independently_rejects_anchor_and_helper_tampering(self):
         with psycopg.connect(self.mapping_url) as conn:
-            conn.execute(f"CREATE OR REPLACE FUNCTION {SCHEMA}.assert_persistent_mapping_foundation_contract() RETURNS void LANGUAGE plpgsql AS $$BEGIN RETURN; END$$")
-            conn.commit()
-            with self.assertRaisesRegex(RuntimeError, "function properties"):
-                with conn.transaction():
+            corruptions = (
+                f"CREATE OR REPLACE FUNCTION {SCHEMA}.assert_persistent_mapping_foundation_contract() "
+                "RETURNS void LANGUAGE plpgsql AS $$BEGIN RETURN; END$$",
+                f"CREATE OR REPLACE FUNCTION {SCHEMA}.compute_persistent_mapping_catalog_sha256() "
+                f"RETURNS text LANGUAGE sql AS $$SELECT value FROM {SCHEMA}.meta "
+                "WHERE key='persistent_mapping_foundation_catalog_sha256'$$",
+                f"ALTER FUNCTION {SCHEMA}.assert_persistent_mapping_foundation_contract() VOLATILE",
+                f"DROP FUNCTION {SCHEMA}.persistent_mapping_json_sha256(jsonb) CASCADE",
+                f"UPDATE {SCHEMA}.meta SET value='unknown-release' "
+                "WHERE key='persistent_mapping_foundation_contract'",
+                "CREATE SCHEMA hostile_digest AUTHORIZATION CURRENT_USER; "
+                "CREATE FUNCTION hostile_digest.digest(bytea,text) RETURNS bytea "
+                "LANGUAGE sql IMMUTABLE STRICT AS $$SELECT $1$$",
+            )
+            for statement in corruptions:
+                with self.subTest(statement=statement), self.assertRaises(
+                    (RuntimeError, psycopg.Error)
+                ):
+                    with conn.transaction(force_rollback=True):
+                        conn.execute(statement)
+                        apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
+            with conn.transaction():
+                self.assertFalse(
                     apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
+                )
 
     def test_mapping_family_lock_serializes_marker_without_claiming_whole_run_atomicity(self):
         def replay() -> bool:
@@ -760,19 +975,494 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "0"}):
             with self.assertRaises(PersistentMappingError):
                 execute_mapping_decision("postgresql://unreachable.invalid/never", candidate_id=candidate_id, action="DEFER", reason="disabled", principal=self.principal, decision_idempotency_key=uuid4(), expected_preview_sha256="0" * 64)
+        hostile_urls = (
+            self.mapping_url + "&hostaddr=192.0.2.10",
+            self.mapping_url + "&dbname=production",
+            self.mapping_url.replace("127.0.0.1", "localhost"),
+            self.mapping_url.replace("qa_release_login@", "runner@"),
+            self.mapping_url.replace("procurement_test", "production"),
+        )
+        for hostile_url in hostile_urls:
+            with (
+                self.subTest(hostile_url=hostile_url),
+                mock.patch.object(psycopg, "connect") as connect,
+                self.assertRaises(PersistentMappingError),
+            ):
+                execute_mapping_decision(
+                    hostile_url,
+                    candidate_id=candidate_id,
+                    action="DEFER",
+                    reason="pre-connect refusal",
+                    principal=self.principal,
+                    decision_idempotency_key=uuid4(),
+                    expected_preview_sha256="0" * 64,
+                )
+            connect.assert_not_called()
+
+        class IdentityResult:
+            def fetchone(self):
+                return (
+                    "different_test",
+                    "127.0.0.1/32",
+                    160009,
+                    "qa_release_login",
+                    "qa_mapping_owner",
+                )
+
+        class WrongIdentityConnection:
+            closed = False
+
+            def execute(self, _statement, _parameters=()):
+                return IdentityResult()
+
+            def close(self):
+                self.closed = True
+
+        wrong_identity = WrongIdentityConnection()
+        with (
+            mock.patch.object(psycopg, "connect", return_value=wrong_identity),
+            self.assertRaises(PersistentMappingError),
+        ):
+            execute_mapping_decision(
+                self.mapping_url,
+                candidate_id=candidate_id,
+                action="DEFER",
+                reason="connected identity refusal",
+                principal=self.principal,
+                decision_idempotency_key=uuid4(),
+                expected_preview_sha256="0" * 64,
+            )
+        self.assertTrue(wrong_identity.closed)
 
     def test_role_topology_rejects_direct_transitive_inherit_set_and_mixed_owner_paths(self):
+        config_path = (
+            DB_DIR.parent / apply_schema.MAPPING_RELEASE.maintenance_identity_config_ref
+        )
+        config_bytes = config_path.read_bytes()
+        config = json.loads(config_bytes)
+        pair_bytes = apply_schema._canonical_json(config["allowed_pairs"])
+        migration_source = (DB_DIR / apply_schema.MAPPING_MIGRATION_NAME).read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(
+            hashlib.sha256(config_bytes).hexdigest(),
+            apply_schema.MAPPING_RELEASE.maintenance_identity_config_sha256,
+        )
+        self.assertEqual(
+            hashlib.sha256(pair_bytes).hexdigest(),
+            apply_schema.MAPPING_RELEASE.maintenance_identity_pairs_sha256,
+        )
+        for literal in (
+            apply_schema.MAPPING_RELEASE.maintenance_identity_config_sha256,
+            apply_schema.MAPPING_RELEASE.maintenance_identity_pairs_sha256,
+            pair_bytes.decode(),
+        ):
+            self.assertIn(literal, migration_source)
+        spec_source = (
+            DB_DIR.parents[1]
+            / "docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md"
+        ).read_text(encoding="utf-8")
+        spec_start = spec_source.index(
+            'CREATE OR REPLACE FUNCTION "__BUFFALO_TARGET_SCHEMA__".'
+            "persistent_mapping_assert_safe_role_topology()"
+        )
+        terminator = "$role_topology$;"
+        spec_function = spec_source[
+            spec_start : spec_source.index(terminator, spec_start) + len(terminator)
+        ]
+        rendered_spec_function = (
+            spec_function.replace('"__BUFFALO_TARGET_SCHEMA__"', f'"{SCHEMA}"')
+            .replace("'__BUFFALO_TARGET_SCHEMA_TEXT__'", f"'{SCHEMA}'")
+            .replace('"__BUFFALO_PGCRYPTO_SCHEMA__"', f'"{SCHEMA}"')
+            .replace("'__BUFFALO_PGCRYPTO_SCHEMA_TEXT__'", f"'{SCHEMA}'")
+            .replace(
+                "__BUFFALO_MAINTENANCE_IDENTITY_CONFIG_SHA256_LITERAL__",
+                "'" + apply_schema.MAPPING_RELEASE.maintenance_identity_config_sha256 + "'",
+            )
+            .replace(
+                "__BUFFALO_MAINTENANCE_PAIRS_SHA256_LITERAL__",
+                "'" + apply_schema.MAPPING_RELEASE.maintenance_identity_pairs_sha256 + "'",
+            )
+            .replace(
+                "__BUFFALO_MAINTENANCE_PAIRS_JSON_LITERAL__",
+                "'" + pair_bytes.decode() + "'",
+            )
+        )
+        migration_start = migration_source.index(
+            f'CREATE OR REPLACE FUNCTION "{SCHEMA}".'
+            "persistent_mapping_assert_safe_role_topology()"
+        )
+        migration_function = migration_source[
+            migration_start : migration_source.index(terminator, migration_start)
+            + len(terminator)
+        ]
+        self.assertEqual(rendered_spec_function, migration_function)
+
+        def membership_rows() -> list[tuple]:
+            with self._admin_connection() as admin:
+                return admin.execute(
+                    "SELECT member.rolname,owner.rolname,m.inherit_option,"
+                    "m.set_option,m.admin_option FROM pg_catalog.pg_auth_members m "
+                    "JOIN pg_catalog.pg_roles member ON member.oid=m.member "
+                    "JOIN pg_catalog.pg_roles owner ON owner.oid=m.roleid "
+                    "WHERE owner.rolname='qa_mapping_owner' "
+                    "AND member.rolname IN ('qa_release_login',%s) "
+                    "ORDER BY member.rolname",
+                    (ROTATION_LOGIN,),
+                ).fetchall()
+
+        def cleanup_rotation_role() -> None:
+            with self._admin_connection() as admin:
+                if admin.execute(
+                    "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=%s)",
+                    (ROTATION_LOGIN,),
+                ).fetchone()[0]:
+                    admin.execute(
+                        sql.SQL("REVOKE qa_mapping_owner FROM {}").format(
+                            sql.Identifier(ROTATION_LOGIN)
+                        )
+                    )
+                    admin.execute(
+                        sql.SQL("DROP ROLE {}").format(sql.Identifier(ROTATION_LOGIN))
+                    )
+
+        self.addCleanup(cleanup_rotation_role)
+
+        baseline_membership = membership_rows()
         with self._admin_connection() as admin:
             admin.execute("REVOKE qa_mapping_owner FROM qa_release_login")
             admin.execute("GRANT qa_mapping_owner TO qa_release_login WITH INHERIT TRUE, SET TRUE, ADMIN FALSE")
+        unsafe_membership = membership_rows()
         with psycopg.connect(self.mapping_url) as conn:
             with self.assertRaisesRegex(RuntimeError, "role topology"):
                 with conn.transaction():
                     apply_schema._verify_or_apply_mapping_release(conn, DB_DIR)
+            with self.assertRaisesRegex(psycopg.Error, "approved maintenance role topology"):
+                conn.execute(
+                    f"SELECT {SCHEMA}.assert_persistent_mapping_foundation_contract()"
+                )
+        self.assertEqual(membership_rows(), unsafe_membership)
+        with self._admin_connection() as admin:
+            admin.execute("REVOKE qa_mapping_owner FROM qa_release_login")
+            admin.execute(
+                "GRANT qa_mapping_owner TO qa_release_login "
+                "WITH INHERIT FALSE, SET TRUE, ADMIN FALSE"
+            )
+            admin.execute(
+                sql.SQL(
+                    "CREATE ROLE {} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB "
+                    "NOCREATEROLE NOREPLICATION"
+                ).format(sql.Identifier(ROTATION_LOGIN))
+            )
+        self.assertEqual(membership_rows()[0], baseline_membership[0])
+        release_membership = membership_rows()
+
+        def release(
+            *,
+            version: str,
+            name: str,
+            source: bytes,
+            predecessor: str,
+            config_ref: str,
+            config_source: bytes,
+            pairs: list[dict[str, str]],
+        ) -> apply_schema.MappingRelease:
+            return replace(
+                apply_schema.MAPPING_RELEASE,
+                version=version,
+                migration_name=name,
+                migration_sha256=hashlib.sha256(source).hexdigest(),
+                predecessor_release=predecessor,
+                maintenance_identity_config_ref=config_ref,
+                maintenance_identity_config_sha256=hashlib.sha256(
+                    config_source
+                ).hexdigest(),
+                maintenance_identity_pairs_sha256=hashlib.sha256(
+                    apply_schema._canonical_json(pairs)
+                ).hexdigest(),
+            )
+
+        def trust(
+            candidate: apply_schema.MappingRelease, catalog_sha256: str
+        ) -> apply_schema.MappingReleaseTrust:
+            return apply_schema.MappingReleaseTrust(
+                family=candidate.family,
+                version=candidate.version,
+                function_identities=apply_schema.TRUSTED_FUNCTION_IDENTITIES,
+                function_catalog_sha256=catalog_sha256,
+                pgcrypto_digest_rows=apply_schema.TRUSTED_PGCRYPTO_DIGEST_ROWS,
+            )
+
+        def authority_snapshot(conn) -> tuple:
+            markers = tuple(
+                conn.execute(
+                    f"SELECT key,value FROM {SCHEMA}.meta "
+                    "WHERE key LIKE 'migration:%persistent_mapping%' "
+                    "OR key LIKE 'persistent_mapping_foundation_%' ORDER BY key"
+                ).fetchall()
+            )
+            counts = tuple(
+                conn.execute(
+                    f"SELECT (SELECT count(*) FROM {SCHEMA}.supplier_mapping_review_batches),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_mapping_review_candidates),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_mapping_decisions),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_offer_selection_events),"
+                    f"(SELECT count(*) FROM {SCHEMA}.supplier_offer_selection_heads)"
+                ).fetchone()
+            )
+            return markers, counts
+
+        for value, expected in (
+            (ROTATION_STAGE_SQL, ROTATION_STAGE_SQL_SHA256),
+            (ROTATION_REMOVE_SQL, ROTATION_REMOVE_SQL_SHA256),
+            (ROTATION_DISJOINT_SQL, ROTATION_DISJOINT_SQL_SHA256),
+            (ROTATION_STAGE_CONFIG, ROTATION_STAGE_CONFIG_SHA256),
+            (ROTATION_REMOVE_CONFIG, ROTATION_REMOVE_CONFIG_SHA256),
+            (ROTATION_DISJOINT_CONFIG, ROTATION_DISJOINT_CONFIG_SHA256),
+        ):
+            self.assertEqual(hashlib.sha256(value).hexdigest(), expected)
+
+        with TemporaryDirectory(prefix="buffalo-mapping-role-rotation-") as temporary:
+            root = Path(temporary)
+            db_dir = root / "db"
+            config_dir = root / "config"
+            db_dir.mkdir()
+            config_dir.mkdir()
+            for name in apply_schema.LEGACY_MIGRATION_SHA256:
+                shutil.copyfile(DB_DIR / name, db_dir / name)
+            shutil.copyfile(
+                DB_DIR / apply_schema.MAPPING_MIGRATION_NAME,
+                db_dir / apply_schema.MAPPING_MIGRATION_NAME,
+            )
+            shutil.copyfile(config_path, config_dir / "persistent_mapping.synthetic.json")
+
+            disjoint_ref = "config/rotation-disjoint.json"
+            (config_dir / "rotation-disjoint.json").write_bytes(
+                ROTATION_DISJOINT_CONFIG
+            )
+            (db_dir / ROTATION_STAGE_NAME).write_bytes(ROTATION_DISJOINT_SQL)
+            disjoint = release(
+                version=ROTATION_DISJOINT_VERSION,
+                name=ROTATION_STAGE_NAME,
+                source=ROTATION_DISJOINT_SQL,
+                predecessor=apply_schema.MAPPING_RELEASE.version,
+                config_ref=disjoint_ref,
+                config_source=ROTATION_DISJOINT_CONFIG,
+                pairs=ROTATION_REMOVE_PAIRS,
+            )
+            disjoint_trust = trust(
+                disjoint, ROTATION_REMOVE_FUNCTION_CATALOG_SHA256
+            )
+            base_release = replace(
+                apply_schema.MAPPING_RELEASE,
+                maintenance_identity_config_ref="config/persistent_mapping.synthetic.json",
+            )
+            manifest = (base_release, disjoint)
+            trust_manifest = {
+                (base_release.family, base_release.version):
+                    apply_schema.MAPPING_RELEASE_TRUST_MANIFEST[
+                        (apply_schema.MAPPING_RELEASE.family, apply_schema.MAPPING_RELEASE.version)
+                    ],
+                (disjoint.family, disjoint.version): disjoint_trust,
+            }
+            with psycopg.connect(self.mapping_url) as conn:
+                before = authority_snapshot(conn)
+                before_membership = membership_rows()
+                with (
+                    mock.patch.object(
+                        apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", manifest
+                    ),
+                    mock.patch.object(
+                        apply_schema, "MAPPING_RELEASE_TRUST_MANIFEST", trust_manifest
+                    ),
+                    mock.patch.object(
+                        apply_schema,
+                        "MIGRATION_ORDER",
+                        [*apply_schema.LEGACY_MIGRATION_SHA256, base_release.migration_name, disjoint.migration_name],
+                    ),
+                    self.assertRaisesRegex(RuntimeError, "no reviewed intersection"),
+                    conn.transaction(),
+                ):
+                    apply_schema._verify_or_apply_mapping_release(
+                        conn, db_dir, disjoint
+                    )
+                self.assertEqual(authority_snapshot(conn), before)
+                self.assertEqual(membership_rows(), before_membership)
+
+            stage_ref = "config/rotation-stage.json"
+            (config_dir / "rotation-stage.json").write_bytes(ROTATION_STAGE_CONFIG)
+            (db_dir / ROTATION_STAGE_NAME).write_bytes(ROTATION_STAGE_SQL)
+            stage = release(
+                version=ROTATION_STAGE_VERSION,
+                name=ROTATION_STAGE_NAME,
+                source=ROTATION_STAGE_SQL,
+                predecessor=base_release.version,
+                config_ref=stage_ref,
+                config_source=ROTATION_STAGE_CONFIG,
+                pairs=ROTATION_STAGE_PAIRS,
+            )
+            stage_trust = trust(stage, ROTATION_STAGE_FUNCTION_CATALOG_SHA256)
+            stage_manifest = (base_release, stage)
+            stage_trust_manifest = {
+                (base_release.family, base_release.version): trust_manifest[
+                    (base_release.family, base_release.version)
+                ],
+                (stage.family, stage.version): stage_trust,
+            }
+            stage_order = [
+                *apply_schema.LEGACY_MIGRATION_SHA256,
+                base_release.migration_name,
+                stage.migration_name,
+            ]
+            with (
+                mock.patch.object(
+                    apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", stage_manifest
+                ),
+                mock.patch.object(
+                    apply_schema, "MAPPING_RELEASE_TRUST_MANIFEST", stage_trust_manifest
+                ),
+                mock.patch.object(apply_schema, "MIGRATION_ORDER", stage_order),
+                psycopg.connect(self.mapping_url) as conn,
+            ):
+                with conn.transaction():
+                    self.assertTrue(
+                        apply_schema._verify_or_apply_mapping_release(conn, db_dir, stage)
+                    )
+                conn.execute(
+                    f"SELECT {SCHEMA}.assert_persistent_mapping_foundation_contract()"
+                )
+            self.assertEqual(membership_rows(), release_membership)
+
+            with self._admin_connection() as admin:
+                admin.execute(
+                    sql.SQL(
+                        "GRANT qa_mapping_owner TO {} "
+                        "WITH INHERIT FALSE, SET TRUE, ADMIN FALSE"
+                    ).format(sql.Identifier(ROTATION_LOGIN))
+                )
+
+            parsed = urlparse(self.mapping_url)
+            next_url = self.mapping_url.replace(
+                f"{parsed.username}@", f"{ROTATION_LOGIN}@", 1
+            )
+            with (
+                mock.patch.object(
+                    apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", stage_manifest
+                ),
+                mock.patch.object(
+                    apply_schema, "MAPPING_RELEASE_TRUST_MANIFEST", stage_trust_manifest
+                ),
+                mock.patch.object(apply_schema, "MIGRATION_ORDER", stage_order),
+                psycopg.connect(next_url) as conn,
+            ):
+                conn.execute(
+                    f"SELECT {SCHEMA}.assert_persistent_mapping_foundation_contract()"
+                )
+                with conn.transaction():
+                    self.assertFalse(
+                        apply_schema._verify_or_apply_mapping_release(conn, db_dir, stage)
+                    )
+
+            remove_ref = "config/rotation-remove.json"
+            (config_dir / "rotation-remove.json").write_bytes(ROTATION_REMOVE_CONFIG)
+            (db_dir / ROTATION_REMOVE_NAME).write_bytes(ROTATION_REMOVE_SQL)
+            remove = release(
+                version=ROTATION_REMOVE_VERSION,
+                name=ROTATION_REMOVE_NAME,
+                source=ROTATION_REMOVE_SQL,
+                predecessor=stage.version,
+                config_ref=remove_ref,
+                config_source=ROTATION_REMOVE_CONFIG,
+                pairs=ROTATION_REMOVE_PAIRS,
+            )
+            remove_trust = trust(remove, ROTATION_REMOVE_FUNCTION_CATALOG_SHA256)
+            remove_manifest = (base_release, stage, remove)
+            remove_trust_manifest = {
+                **stage_trust_manifest,
+                (remove.family, remove.version): remove_trust,
+            }
+            remove_order = [*stage_order, remove.migration_name]
+            with self._admin_connection() as admin:
+                admin.execute("REVOKE qa_mapping_owner FROM qa_release_login")
+            post_admin_rotation = membership_rows()
+            with (
+                mock.patch.object(
+                    apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", remove_manifest
+                ),
+                mock.patch.object(
+                    apply_schema, "MAPPING_RELEASE_TRUST_MANIFEST", remove_trust_manifest
+                ),
+                mock.patch.object(apply_schema, "MIGRATION_ORDER", remove_order),
+                psycopg.connect(next_url) as conn,
+            ):
+                with conn.transaction():
+                    self.assertTrue(
+                        apply_schema._verify_or_apply_mapping_release(conn, db_dir, remove)
+                    )
+                conn.execute(
+                    f"SELECT {SCHEMA}.assert_persistent_mapping_foundation_contract()"
+                )
+                with conn.transaction():
+                    self.assertFalse(
+                        apply_schema._verify_or_apply_mapping_release(conn, db_dir, remove)
+                    )
+            self.assertEqual(membership_rows(), post_admin_rotation)
+
+            with self._admin_connection() as admin:
+                admin.execute(
+                    "GRANT qa_mapping_owner TO qa_release_login "
+                    "WITH INHERIT FALSE, SET TRUE, ADMIN FALSE"
+                )
+            restored_old_membership = membership_rows()
+            with (
+                mock.patch.object(
+                    apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", remove_manifest
+                ),
+                mock.patch.object(
+                    apply_schema, "MAPPING_RELEASE_TRUST_MANIFEST", remove_trust_manifest
+                ),
+                mock.patch.object(apply_schema, "MIGRATION_ORDER", remove_order),
+                psycopg.connect(self.mapping_url) as conn,
+            ):
+                with self.assertRaisesRegex(psycopg.Error, "not approved"):
+                    conn.execute(
+                        f"SELECT {SCHEMA}.assert_persistent_mapping_foundation_contract()"
+                    )
+                conn.rollback()
+                with self.assertRaisesRegex(RuntimeError, "not approved"), conn.transaction():
+                    apply_schema._verify_or_apply_mapping_release(conn, db_dir, remove)
+            self.assertEqual(membership_rows(), restored_old_membership)
 
     def test_policy_mapping_requires_published_policy_and_independent_evidence(self):
         with psycopg.connect(self.mapping_url) as conn:
-            self.assertFalse(conn.execute(f"SELECT {SCHEMA}.supplier_mapping_policy_is_published('p','v',repeat('0',64),repeat('1',64))").fetchone()[0])
+            arguments = (
+                (None, None, None, None),
+                ("", "", "bad", "bad"),
+                ("policy", "v1", "0" * 64, "1" * 64),
+            )
+            for values in arguments:
+                with self.subTest(values=values):
+                    self.assertFalse(
+                        conn.execute(
+                            f"SELECT {SCHEMA}.supplier_mapping_policy_is_published(%s,%s,%s,%s)",
+                            values,
+                        ).fetchone()[0]
+                    )
+        candidate_id = self._intake(self._packet(0))
+        before = self._counts()
+        for action in ("POLICY_APPROVE", "POLICY_DEFER", "POLICY_REJECT"):
+            with self.subTest(action=action), self.assertRaises(PersistentMappingError):
+                with psycopg.connect(self.mapping_url) as conn:
+                    conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    preview_mapping_decision(
+                        conn,
+                        candidate_id=candidate_id,
+                        action=action,
+                        reason="fabricated policy-origin attempt",
+                        principal=self.principal,
+                        decision_idempotency_key=uuid4(),
+                    )
+        self.assertEqual(self._counts(), before)
         self.assertFalse("policy_mapping_writes_enabled" in {"human_mapping_writes_enabled"})
 
     def test_mapping_approval_creates_inactive_unpriced_unselected_offer(self):
@@ -850,7 +1540,7 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 self.value = value
 
             def fetchone(self):
-                return (self.value,)
+                return self.value if isinstance(self.value, tuple) else (self.value,)
 
         class Info:
             transaction_status = type("Status", (), {"name": "IDLE"})()
@@ -867,6 +1557,16 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
             def execute(self, statement, _parameters=()):
                 rendered = str(statement)
                 self.statements.append(rendered)
+                if "current_database" in rendered:
+                    return Result(
+                        (
+                            "procurement_test",
+                            "127.0.0.1/32",
+                            160009,
+                            "qa_release_login",
+                            "qa_mapping_owner",
+                        )
+                    )
                 if "pg_advisory_unlock" in rendered:
                     return Result(self.unlock)
                 return Result(True)
@@ -914,11 +1614,16 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
 
         uncertain = FakeConnection(commit_error=psycopg.OperationalError("lost response"))
         recovery = FakeConnection()
+        operation_calls_after_unknown = []
         recovery_calls = []
 
         def idempotent_recovery(_conn):
+            operation_calls_after_unknown.append(True)
+            return {"replayed": False}
+
+        def committed_lookup(_conn):
             recovery_calls.append(True)
-            return {"replayed": len(recovery_calls) > 1}
+            return {"replayed": True}
 
         with mock.patch.object(psycopg, "connect", side_effect=[uncertain, recovery]):
             recovered = __import__(
@@ -931,11 +1636,277 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 idempotency_key=uuid4(),
                 domain_locks=lambda _conn: ((0, "matrix-domain-lock"),),
                 operation=idempotent_recovery,
+                recovery_lookup=committed_lookup,
             )
         self.assertTrue(uncertain.closed)
         self.assertTrue(recovery.closed)
         self.assertEqual(recovered, {"replayed": True})
-        self.assertEqual(len(recovery_calls), 2)
+        self.assertEqual(len(operation_calls_after_unknown), 1)
+        self.assertEqual(len(recovery_calls), 1)
+
+        absent_first = FakeConnection(
+            commit_error=psycopg.OperationalError("lost response before commit")
+        )
+        absent_recovery = FakeConnection()
+        absent_operations = []
+        absent_lookups = []
+
+        def absent_operation(_conn):
+            absent_operations.append(True)
+            return {"replayed": False}
+
+        def absent_lookup(_conn):
+            absent_lookups.append(True)
+            return None
+
+        with mock.patch.object(
+            psycopg, "connect", side_effect=[absent_first, absent_recovery]
+        ):
+            absent_result = __import__(
+                "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+            )._execute_write(
+                self.mapping_url,
+                operation_name="matrix-unknown-absent",
+                capability="human_mapping_writes_enabled",
+                principal=self.principal,
+                idempotency_key=uuid4(),
+                domain_locks=lambda _conn: ((0, "matrix-domain-lock"),),
+                operation=absent_operation,
+                recovery_lookup=absent_lookup,
+            )
+        self.assertEqual(absent_result, {"replayed": False})
+        self.assertEqual(len(absent_operations), 2)
+        self.assertEqual(len(absent_lookups), 1)
+
+        class NamedIdempotencyViolation(psycopg.errors.UniqueViolation):
+            @property
+            def diag(self):
+                return type(
+                    "Diagnostic",
+                    (),
+                    {
+                        "constraint_name":
+                            "uq_supplier_mapping_decisions_idempotency"
+                    },
+                )()
+
+        for recovery_result, recovery_error_code in (
+            ({"replayed": True}, None),
+            ("CONFLICT", "IDEMPOTENCY_CONFLICT"),
+            (None, "IDEMPOTENCY_PROTOCOL_VIOLATION"),
+        ):
+            first = FakeConnection()
+            lookup_connection = FakeConnection()
+            unique_operations = []
+            unique_lookups = []
+
+            def collide(_conn):
+                unique_operations.append(True)
+                raise NamedIdempotencyViolation("fabricated named uniqueness race")
+
+            def lookup(_conn, recovery_result=recovery_result):
+                unique_lookups.append(True)
+                if recovery_result == "CONFLICT":
+                    raise PersistentMappingError(
+                        "different payload won the idempotency key",
+                        code="IDEMPOTENCY_CONFLICT",
+                    )
+                return recovery_result
+
+            context = (
+                self.assertRaises(PersistentMappingError)
+                if recovery_error_code is not None
+                else nullcontext()
+            )
+            with (
+                self.subTest(recovery_result=recovery_result),
+                mock.patch.object(
+                    psycopg, "connect", side_effect=[first, lookup_connection]
+                ),
+                context as unique_error,
+            ):
+                unique_result = __import__(
+                    "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+                )._execute_write(
+                    self.mapping_url,
+                    operation_name="matrix-named-unique",
+                    capability="human_mapping_writes_enabled",
+                    principal=self.principal,
+                    idempotency_key=uuid4(),
+                    domain_locks=lambda _conn: ((0, "matrix-domain-lock"),),
+                    operation=collide,
+                    recovery_lookup=lookup,
+                )
+            if recovery_error_code is None:
+                self.assertEqual(unique_result, recovery_result)
+            else:
+                self.assertEqual(unique_error.exception.code, recovery_error_code)
+            self.assertEqual(len(unique_operations), 1)
+            self.assertEqual(len(unique_lookups), 1)
+            self.assertTrue(first.closed)
+            self.assertTrue(lookup_connection.closed)
+
+        ambiguous_error_first = FakeConnection(
+            commit_error=psycopg.OperationalError("lost response")
+        )
+        ambiguous_error_recovery = FakeConnection()
+        with (
+            mock.patch.object(
+                psycopg,
+                "connect",
+                side_effect=[ambiguous_error_first, ambiguous_error_recovery],
+            ),
+            self.assertRaises(PersistentMappingError) as ambiguous_error,
+        ):
+            __import__(
+                "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+            )._execute_write(
+                self.mapping_url,
+                operation_name="matrix-unknown-lookup-error",
+                capability="human_mapping_writes_enabled",
+                principal=self.principal,
+                idempotency_key=uuid4(),
+                domain_locks=lambda _conn: (),
+                operation=lambda _conn: {"created": True},
+                recovery_lookup=lambda _conn: (_ for _ in ()).throw(
+                    psycopg.OperationalError("fabricated recovery read failure")
+                ),
+            )
+        self.assertEqual(ambiguous_error.exception.code, "COMMIT_OUTCOME_UNKNOWN")
+
+        for error_type in (
+            psycopg.errors.SerializationFailure,
+            psycopg.errors.DeadlockDetected,
+        ):
+            exhausted = FakeConnection()
+            exhausted_calls = []
+
+            def always_retry(_conn, error_type=error_type):
+                exhausted_calls.append(True)
+                raise error_type("fabricated retry exhaustion")
+
+            with (
+                self.subTest(error_type=error_type.__name__),
+                mock.patch.object(psycopg, "connect", return_value=exhausted),
+                self.assertRaises(PersistentMappingError) as retry_error,
+            ):
+                __import__(
+                    "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+                )._execute_write(
+                    self.mapping_url,
+                    operation_name="matrix-exhaustion",
+                    capability="human_mapping_writes_enabled",
+                    principal=self.principal,
+                    idempotency_key=uuid4(),
+                    domain_locks=lambda _conn: (),
+                    operation=always_retry,
+                )
+            self.assertEqual(
+                retry_error.exception.code,
+                "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED",
+            )
+            self.assertEqual(len(exhausted_calls), 3)
+            self.assertEqual(
+                sum("pg_advisory_unlock" in item for item in exhausted.statements),
+                1,
+            )
+
+        cancelled = FakeConnection()
+        cancel_calls = []
+
+        def cancel_operation(_conn):
+            cancel_calls.append(True)
+            raise KeyboardInterrupt("fabricated cancellation")
+
+        with (
+            mock.patch.object(psycopg, "connect", return_value=cancelled),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            __import__(
+                "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+            )._execute_write(
+                self.mapping_url,
+                operation_name="matrix-cancel",
+                capability="human_mapping_writes_enabled",
+                principal=self.principal,
+                idempotency_key=uuid4(),
+                domain_locks=lambda _conn: (),
+                operation=cancel_operation,
+            )
+        self.assertEqual(len(cancel_calls), 1)
+        self.assertTrue(cancelled.closed)
+
+        definitive = FakeConnection(
+            commit_error=psycopg.errors.CheckViolation("definitive refusal")
+        )
+        definitive_calls = []
+        with (
+            mock.patch.object(psycopg, "connect", return_value=definitive),
+            self.assertRaises(PersistentMappingError) as definitive_error,
+        ):
+            __import__(
+                "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+            )._execute_write(
+                self.mapping_url,
+                operation_name="matrix-definitive",
+                capability="human_mapping_writes_enabled",
+                principal=self.principal,
+                idempotency_key=uuid4(),
+                domain_locks=lambda _conn: (),
+                operation=lambda _conn: definitive_calls.append(True) or {"created": True},
+                recovery_lookup=lambda _conn: self.fail(
+                    "a definitive commit refusal must not enter recovery"
+                ),
+            )
+        self.assertEqual(definitive_error.exception.code, "DATABASE_VALIDATION_REFUSED")
+        self.assertEqual(len(definitive_calls), 1)
+
+        unresolved_first = FakeConnection(
+            commit_error=psycopg.OperationalError("lost response")
+        )
+        unresolved_recovery = FakeConnection()
+        unresolved_calls = []
+        with (
+            mock.patch.object(
+                psycopg, "connect", side_effect=[unresolved_first, unresolved_recovery]
+            ),
+            self.assertRaises(PersistentMappingError) as unknown_error,
+        ):
+            __import__(
+                "procurement_os.persistent_mapping", fromlist=["_execute_write"]
+            )._execute_write(
+                self.mapping_url,
+                operation_name="matrix-unknown-no-lookup",
+                capability="human_mapping_writes_enabled",
+                principal=self.principal,
+                idempotency_key=uuid4(),
+                domain_locks=lambda _conn: (),
+                operation=lambda _conn: unresolved_calls.append(True) or {"created": True},
+            )
+        self.assertEqual(unknown_error.exception.code, "COMMIT_OUTCOME_UNKNOWN")
+        self.assertEqual(len(unresolved_calls), 1)
+
+        import procurement_os.persistent_mapping as mapping_service
+
+        with (
+            mock.patch.object(mapping_service, "TOTAL_OPERATION_SECONDS", 0),
+            mock.patch.object(psycopg, "connect") as connect,
+            self.assertRaises(PersistentMappingError) as timeout_error,
+        ):
+            mapping_service._execute_write(
+                self.mapping_url,
+                operation_name="matrix-timeout",
+                capability="human_mapping_writes_enabled",
+                principal=self.principal,
+                idempotency_key=uuid4(),
+                domain_locks=lambda _conn: (),
+                operation=lambda _conn: self.fail("expired operation must not begin"),
+            )
+        self.assertEqual(
+            timeout_error.exception.code,
+            "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED",
+        )
+        connect.assert_not_called()
 
         cleanup_failure = FakeConnection(unlock=False)
         with (

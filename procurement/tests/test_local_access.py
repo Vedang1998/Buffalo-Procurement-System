@@ -155,7 +155,11 @@ class LocalAccessTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
-        self.assertIn("frame-ancestors 'none'", response.headers["content-security-policy"])
+        policy = response.headers["content-security-policy"]
+        self.assertIn("frame-ancestors 'none'", policy)
+        self.assertIn("script-src 'self'", policy)
+        self.assertIn("style-src 'self' 'unsafe-inline'", policy)
+        self.assertNotIn("script-src 'self' 'unsafe-inline'", policy)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ and are passed only to the supervised local process.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import ipaddress
@@ -38,10 +39,10 @@ SCHEMA = "qa_mapping_test"
 DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 MAPPING_CONTRACT = "v1-shadow-only"
 MAPPING_MIGRATION_MARKER = (
-    "sha256:bd3ea3d2017030cfb86e6d50497a22e9c3dab76207d5df7e5bcd0533de0b0bdd"
+    "sha256:80c5d6c0a0299edf8d04f9c5f684f9cea277494b894fa0feb0a387476bfa8c86"
 )
 MAPPING_CATALOG_SHA256 = (
-    "1ad2bf30bdc57ec128868c75a23acc2c5d27288d6846f3f862430733a4231a4d"
+    "98f6d3a622e66f69f57f61195a892b8cf3485f48c7dfd2fb606694c45a72699c"
 )
 PID_FILE = "candidate.pid"
 SECRET_FILES = {
@@ -86,10 +87,63 @@ _MAPPING_RELATIONS = (
     "v_selected_standard_supplier_offers",
     "v_supplier_offer_selection_shadow",
 )
+_DATABASE_LIFECYCLE_LOCK_PREFIX = "buffalo:local-purchasing-candidate:lifecycle:v1"
 
 
 class CandidateBoundaryError(RuntimeError):
     pass
+
+
+def acquire_database_lifecycle_lock(conn: Any, database: str) -> str:
+    """Acquire the cooperative lifecycle lock for one exact owned database."""
+
+    lock_name = f"{_DATABASE_LIFECYCLE_LOCK_PREFIX}:{database}"
+    locked = conn.execute(
+        "SELECT pg_catalog.pg_try_advisory_lock("
+        "pg_catalog.hashtextextended(%s,0))",
+        (lock_name,),
+    ).fetchone()[0]
+    if not locked:
+        raise CandidateBoundaryError(
+            "another local purchasing lifecycle operation is active for this database"
+        )
+    return lock_name
+
+
+@contextmanager
+def _database_lifecycle_guard(database_url: str, *, restore: bool = False):
+    """Hold a dedicated PostgreSQL session lock for one whole lifecycle action."""
+
+    database = _database_name(database_url, restore=restore)
+    with psycopg.connect(database_url, autocommit=True, connect_timeout=5) as conn:
+        row = conn.execute(
+            "SELECT pg_catalog.current_database(),"
+            "pg_catalog.current_setting('server_version_num')::integer,"
+            "pg_catalog.inet_server_addr()::text,session_user::text,current_user::text,"
+            "pg_catalog.pg_get_userbyid(d.datdba) "
+            "FROM pg_catalog.pg_database d "
+            "WHERE d.datname=pg_catalog.current_database()"
+        ).fetchone()
+        if row is None:
+            raise CandidateBoundaryError("database lifecycle identity is absent")
+        try:
+            server_address = ipaddress.ip_interface(str(row[2])).ip
+        except ValueError as exc:
+            raise CandidateBoundaryError(
+                "database lifecycle server address is malformed"
+            ) from exc
+        if (
+            str(row[0]) != database
+            or int(row[1]) // 10000 != 16
+            or not server_address.is_loopback
+            or (str(row[3]), str(row[4]), str(row[5]))
+            != ("qa_release_login", "qa_mapping_owner", "qa_mapping_owner")
+        ):
+            raise CandidateBoundaryError(
+                "database lifecycle identity is outside the owned demo contract"
+            )
+        acquire_database_lifecycle_lock(conn, database)
+        yield
 
 
 def _require_mode(path: Path, mode: int, *, directory: bool) -> None:
@@ -171,7 +225,10 @@ def _database_facts(
         row = conn.execute(
             "SELECT pg_catalog.current_database(),"
             "pg_catalog.current_setting('server_version_num')::integer,"
-            "pg_catalog.inet_server_addr()::text,session_user::text,current_user::text"
+            "pg_catalog.inet_server_addr()::text,session_user::text,current_user::text,"
+            "pg_catalog.pg_get_userbyid(d.datdba) "
+            "FROM pg_catalog.pg_database d "
+            "WHERE d.datname=pg_catalog.current_database()"
         ).fetchone()
         assert row is not None
         try:
@@ -184,6 +241,7 @@ def _database_facts(
             or not server_address.is_loopback
             or (str(row[3]), str(row[4]))
             != ("qa_release_login", "qa_mapping_owner")
+            or str(row[5]) != "qa_mapping_owner"
         ):
             raise CandidateBoundaryError("database identity is outside the owned demo contract")
         schema_oid = conn.execute(
@@ -270,6 +328,7 @@ def _database_facts(
             "server_address": str(server_address),
             "session_user": str(row[3]),
             "current_user": str(row[4]),
+            "database_owner": str(row[5]),
         }
 
 
@@ -412,6 +471,11 @@ def _wait_for_health(process: subprocess.Popen[bytes], port: int) -> None:
 def serve(database_url: str, runtime_root: Path, port: int) -> int:
     if port < 1024 or port > 65535:
         raise CandidateBoundaryError("local port must be between 1024 and 65535")
+    with _database_lifecycle_guard(database_url):
+        return _serve_locked(database_url, runtime_root, port)
+
+
+def _serve_locked(database_url: str, runtime_root: Path, port: int) -> int:
     _database_facts(database_url, require_initialized=True)
     storage, _, pid_file = _runtime_paths(runtime_root)
     reservation = _reserve_pid_file(pid_file)
@@ -535,6 +599,61 @@ def _state_evidence(database_url: str) -> dict[str, Any]:
                 "COALESCE((SELECT string_agg(sha256,'|' ORDER BY monday_run_artifact_id) FROM {}.monday_run_artifacts),'')"
             ).format(*(target for _ in range(12)))
         ).fetchone()
+        relation_names = [
+            str(item[0])
+            for item in conn.execute(
+                "SELECT c.relname FROM pg_catalog.pg_class c "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=%s AND c.relkind IN ('r','p') "
+                "ORDER BY c.relname",
+                (SCHEMA,),
+            ).fetchall()
+        ]
+        relation_inventory = []
+        for relation_name in relation_names:
+            payloads = [
+                str(item[0])
+                for item in conn.execute(
+                    sql.SQL(
+                        "SELECT pg_catalog.to_jsonb(t)::text FROM {}.{} t "
+                        "ORDER BY pg_catalog.to_jsonb(t)::text"
+                    ).format(
+                        sql.Identifier(SCHEMA), sql.Identifier(relation_name)
+                    )
+                ).fetchall()
+            ]
+            relation_inventory.append(
+                {
+                    "relation": relation_name,
+                    "row_count": len(payloads),
+                    "sha256": hashlib.sha256(
+                        "\n".join(payloads).encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
+        sequence_names = [
+            str(item[0])
+            for item in conn.execute(
+                "SELECT c.relname FROM pg_catalog.pg_class c "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname=%s AND c.relkind='S' ORDER BY c.relname",
+                (SCHEMA,),
+            ).fetchall()
+        ]
+        sequence_inventory = []
+        for sequence_name in sequence_names:
+            sequence_value = conn.execute(
+                sql.SQL("SELECT last_value,is_called FROM {}.{}").format(
+                    sql.Identifier(SCHEMA), sql.Identifier(sequence_name)
+                )
+            ).fetchone()
+            sequence_inventory.append(
+                {
+                    "sequence": sequence_name,
+                    "last_value": int(sequence_value[0]),
+                    "is_called": bool(sequence_value[1]),
+                }
+            )
     assert row is not None
     names = (
         "review_batches",
@@ -551,6 +670,8 @@ def _state_evidence(database_url: str) -> dict[str, Any]:
         "artifact_hashes",
     )
     evidence = dict(zip(names, row, strict=True))
+    evidence["relation_inventory"] = relation_inventory
+    evidence["sequence_inventory"] = sequence_inventory
     encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
     return {"facts": evidence, "sha256": hashlib.sha256(encoded).hexdigest()}
 
@@ -579,6 +700,11 @@ def _validate_storage_archive(
 
 
 def backup(database_url: str, runtime_root: Path) -> Path:
+    with _database_lifecycle_guard(database_url):
+        return _backup_locked(database_url, runtime_root)
+
+
+def _backup_locked(database_url: str, runtime_root: Path) -> Path:
     facts = _database_facts(database_url, require_initialized=True)
     storage, backups, pid_file = _runtime_paths(runtime_root)
     reservation = _reserve_pid_file(pid_file)
@@ -725,12 +851,20 @@ def _restore_preflight(
         ]
         or not isinstance(database_identity, dict)
         or set(database_identity)
-        != {"database", "postgres_major", "server_address", "session_user", "current_user"}
+        != {
+            "database",
+            "postgres_major",
+            "server_address",
+            "session_user",
+            "current_user",
+            "database_owner",
+        }
         or not isinstance(database_identity.get("database"), str)
         or re.fullmatch(r"[a-z][a-z0-9_]*_demo", database_identity["database"]) is None
         or database_identity.get("postgres_major") != 16
         or database_identity.get("session_user") != "qa_release_login"
         or database_identity.get("current_user") != "qa_mapping_owner"
+        or database_identity.get("database_owner") != "qa_mapping_owner"
     ):
         raise CandidateBoundaryError("backup provenance differs")
     try:
@@ -807,6 +941,8 @@ def _restore_preflight(
         "selection_payloads",
         "run_fingerprints",
         "artifact_hashes",
+        "relation_inventory",
+        "sequence_inventory",
     }
     if (
         not isinstance(state, dict)
@@ -827,12 +963,45 @@ def _restore_preflight(
         "purchase_orders",
         "artifacts",
     }
-    hash_keys = expected_fact_keys - count_keys
+    hash_keys = expected_fact_keys - count_keys - {
+        "relation_inventory",
+        "sequence_inventory",
+    }
     if any(
         not isinstance(state["facts"][key], int) or state["facts"][key] < 0
         for key in count_keys
     ) or any(not isinstance(state["facts"][key], str) for key in hash_keys):
         raise CandidateBoundaryError("backup state fact types differ")
+    relation_inventory = state["facts"]["relation_inventory"]
+    sequence_inventory = state["facts"]["sequence_inventory"]
+    if (
+        not isinstance(relation_inventory, list)
+        or not isinstance(sequence_inventory, list)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"relation", "row_count", "sha256"}
+            or not isinstance(item["relation"], str)
+            or re.fullmatch(r"[a-z][a-z0-9_]*", item["relation"]) is None
+            or not isinstance(item["row_count"], int)
+            or item["row_count"] < 0
+            or re.fullmatch(r"[0-9a-f]{64}", str(item["sha256"])) is None
+            for item in relation_inventory
+        )
+        or [item["relation"] for item in relation_inventory]
+        != sorted(item["relation"] for item in relation_inventory)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"sequence", "last_value", "is_called"}
+            or not isinstance(item["sequence"], str)
+            or re.fullmatch(r"[a-z][a-z0-9_]*", item["sequence"]) is None
+            or not isinstance(item["last_value"], int)
+            or type(item["is_called"]) is not bool
+            for item in sequence_inventory
+        )
+        or [item["sequence"] for item in sequence_inventory]
+        != sorted(item["sequence"] for item in sequence_inventory)
+    ):
+        raise CandidateBoundaryError("backup state inventory differs")
     state_bytes = json.dumps(
         state["facts"], sort_keys=True, separators=(",", ":")
     ).encode()
@@ -846,7 +1015,9 @@ def _clean_failed_restore(database_url: str) -> None:
     with psycopg.connect(database_url, autocommit=True, connect_timeout=5) as conn:
         row = conn.execute(
             "SELECT current_database()::text,current_setting('server_version_num')::integer,"
-            "inet_server_addr()::text,session_user::text,current_user::text"
+            "inet_server_addr()::text,session_user::text,current_user::text,"
+            "pg_catalog.pg_get_userbyid(d.datdba) FROM pg_catalog.pg_database d "
+            "WHERE d.datname=pg_catalog.current_database()"
         ).fetchone()
         assert row is not None
         if (
@@ -855,6 +1026,7 @@ def _clean_failed_restore(database_url: str) -> None:
             or not ipaddress.ip_interface(str(row[2])).ip.is_loopback
             or tuple(str(value) for value in row[3:5])
             != ("qa_release_login", "qa_mapping_owner")
+            or str(row[5]) != "qa_mapping_owner"
         ):
             raise CandidateBoundaryError("restore cleanup target differs")
         conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(SCHEMA)))
@@ -894,11 +1066,32 @@ def _normalize_restored_acl_representation(database_url: str) -> None:
         )
 
 
+def _remove_owned_restore_root(path: Path, identity: tuple[int, int]) -> None:
+    try:
+        current = path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if (
+        path.is_symlink()
+        or not stat.S_ISDIR(current.st_mode)
+        or (current.st_dev, current.st_ino) != identity
+    ):
+        raise CandidateBoundaryError("restore storage ownership changed during cleanup")
+    shutil.rmtree(path)
+
+
 def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[str, Any]:
+    with _database_lifecycle_guard(database_url, restore=True):
+        return _restore_locked(database_url, restore_root, manifest_path)
+
+
+def _restore_locked(
+    database_url: str, restore_root: Path, manifest_path: Path
+) -> dict[str, Any]:
     target_facts = _database_facts(
         database_url, require_initialized=False, restore=True
     )
-    if not restore_root.is_absolute() or restore_root.exists():
+    if not restore_root.is_absolute():
         raise CandidateBoundaryError("restore storage root must be a new absolute path")
     _require_mode(restore_root.parent, 0o700, directory=True)
     manifest, dump_path, archive_path, expected_files = _restore_preflight(manifest_path)
@@ -912,17 +1105,22 @@ def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[
         timeout=30,
     )
     _validate_restore_toc(listed.stdout)
-    temporary_root = restore_root.with_name(
-        f".{restore_root.name}.restore-{os.getpid()}-{int(time.time_ns())}"
-    )
     mutated_database = False
-    temporary_created = False
+    restore_created = False
+    restore_identity: tuple[int, int] | None = None
     try:
-        temporary_root.mkdir(mode=0o700)
-        temporary_created = True
+        try:
+            restore_root.mkdir(mode=0o700)
+        except FileExistsError as exc:
+            raise CandidateBoundaryError(
+                "restore storage root was claimed concurrently"
+            ) from exc
+        restore_created = True
+        restored_root_stat = restore_root.stat(follow_symlinks=False)
+        restore_identity = (restored_root_stat.st_dev, restored_root_stat.st_ino)
         with tarfile.open(archive_path, "r") as archive:
             for member in archive.getmembers():
-                target = temporary_root / member.name
+                target = restore_root / member.name
                 target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 source_file = archive.extractfile(member)
                 assert source_file is not None
@@ -933,11 +1131,11 @@ def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[
                     shutil.copyfileobj(source_file, output)
         actual_files = [
             {
-                "path": path.relative_to(temporary_root).as_posix(),
+                "path": path.relative_to(restore_root).as_posix(),
                 "sha256": _sha256_file(path),
                 "bytes": path.stat().st_size,
             }
-            for path in sorted(temporary_root.rglob("*"))
+            for path in sorted(restore_root.rglob("*"))
             if path.is_file()
         ]
         if actual_files != expected_files:
@@ -964,7 +1162,6 @@ def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[
         state = _state_evidence(database_url)
         if state != manifest["state"]:
             raise CandidateBoundaryError("restored database state evidence differs")
-        os.replace(temporary_root, restore_root)
         return {
             "restored": True,
             "database": restored_facts["database"],
@@ -972,9 +1169,12 @@ def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[
             "state": state,
         }
     except BaseException as exc:
-        if temporary_created:
-            shutil.rmtree(temporary_root, ignore_errors=True)
-        shutil.rmtree(restore_root, ignore_errors=True)
+        storage_cleanup_error: BaseException | None = None
+        if restore_created and restore_identity is not None:
+            try:
+                _remove_owned_restore_root(restore_root, restore_identity)
+            except BaseException as cleanup_exc:
+                storage_cleanup_error = cleanup_exc
         if mutated_database:
             try:
                 _clean_failed_restore(database_url)
@@ -982,6 +1182,10 @@ def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[
                 raise CandidateBoundaryError(
                     "restore failed and owned-target cleanup was incomplete"
                 ) from cleanup_exc
+        if storage_cleanup_error is not None:
+            raise CandidateBoundaryError(
+                "restore failed and owned-storage cleanup was incomplete"
+            ) from storage_cleanup_error
         raise exc
 
 

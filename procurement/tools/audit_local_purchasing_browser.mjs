@@ -248,7 +248,11 @@ async function audit(client) {
   const screenshot = async (name) => {
     const response = await client.send("Page.captureScreenshot", {
       format: "png",
-      captureBeyondViewport: true,
+      // Evidence screenshots are intentionally viewport-bounded.  A complete
+      // frozen run can be taller than Chromium's safe full-page bitmap limit;
+      // the companion saved HTML and structured result ledger retain the full
+      // page while this prevents an oversized CDP frame from aborting review.
+      captureBeyondViewport: false,
       fromSurface: true,
     });
     fs.writeFileSync(path.join(EVIDENCE, name), Buffer.from(response.data, "base64"), {mode: 0o600});
@@ -347,6 +351,12 @@ async function audit(client) {
     );
     await assertRedirect(mark, "POST", "/auth/login", "/", "login POST returns the exact HTTP 303 transition");
     check((await waitForResponse("/", "GET", mark))?.status === 200, "login redirect target returns HTTP 200");
+    text = await body();
+    check(
+      text.includes("TEST DATA — NOT FOR ORDERING") &&
+        text.includes("PO generation: BLOCKED — SYNTHETIC DEMO / INTERNAL DRAFT ONLY"),
+      "post-login readiness is visibly synthetic and operationally blocked",
+    );
   };
 
   if (phase === "phase1") {
@@ -366,6 +376,26 @@ async function audit(client) {
     check(cookies[0].secure === false, "loopback session cookie does not claim HTTPS transport", cookies[0].secure);
     check(cookies[0].expires > Date.now() / 1000, "session cookie has a future bounded expiry", cookies[0].expires);
     check(!(await evaluate("document.cookie")).includes("buffalo_local_session"), "session token is unavailable to page script");
+
+    await navigate(`${BASE}/historical-sales/review`);
+    check(
+      latestResponse("/assets/historical-sales-catalog-picker.js")?.status === 200,
+      "the CSP-compatible same-origin catalog picker script loads",
+      latestResponse("/assets/historical-sales-catalog-picker.js"),
+    );
+    await evaluate(`document.body.insertAdjacentHTML("beforeend", ` +
+      JSON.stringify(`<section class="historical-sales-review-card"><form data-historical-sales-map><input name="canonical_variant_id"></form><div class="catalog-picker"><input class="catalog-search-input" value="Synthetic"><button type="button" class="catalog-search-button">SEARCH</button><p class="catalog-search-status"></p><div class="catalog-search-results"></div></div></section>`) + `); true`);
+    await evaluate("document.querySelector('.catalog-search-button').click(); true");
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if ((await body()).includes("Local catalog result — Variant ID 1001")) break;
+      await sleep(25);
+    }
+    check((await body()).includes("Local catalog result — Variant ID 1001"), "catalog picker performs its real bounded same-origin fetch");
+    await evaluate("document.querySelector('.catalog-select-button').click(); true");
+    check(
+      (await evaluate("document.querySelector('input[name=canonical_variant_id]').value")) === "1001",
+      "catalog picker fills the exact card-local Variant ID without submitting",
+    );
 
     await navigate(`${BASE}/supplier-mapping`);
     let text = await body();

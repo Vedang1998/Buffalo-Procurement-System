@@ -71,7 +71,7 @@ MAPPING_RELEASE = MappingRelease(
     postgres_major=16,
     target_schema="qa_mapping_test",
     migration_name=MAPPING_MIGRATION_NAME,
-    migration_sha256="bd3ea3d2017030cfb86e6d50497a22e9c3dab76207d5df7e5bcd0533de0b0bdd",
+    migration_sha256="80c5d6c0a0299edf8d04f9c5f684f9cea277494b894fa0feb0a387476bfa8c86",
     predecessor_release=None,
     maintenance_identity_config_ref="config/persistent_mapping_maintenance.synthetic.json",
     maintenance_identity_config_sha256="ab773e859feee527bba01c4ae3193fece3258bbe471d92595302531cbc270450",
@@ -138,7 +138,7 @@ TRUSTED_FUNCTION_IDENTITIES = (
     ("validate_supplier_offer_selection_head_change", ""),
 )
 TRUSTED_FUNCTION_CATALOG_SHA256 = (
-    "4ba6ab2fc1202fd490d73b798cd29b75cf7abfdff4a990d4d23180cf0373ec3c"
+    "2d990fc5e4308600b09995b978653b83352dd63d34e43e8241c0b84ea8f9700b"
 )
 TRUSTED_PGCRYPTO_DIGEST_ROWS = (
     (
@@ -719,6 +719,17 @@ def _verify_or_apply_mapping_release(
     releases = PERSISTENT_MAPPING_RELEASE_MANIFEST
     release_index = releases.index(release)
     if release_index < len(installed) - 1:
+        installed_release = installed[-1]
+        allowed_pairs = _maintenance_binding(db_dir, installed_release)
+        schema_oid = _verify_server_and_identity(
+            conn, allowed_pairs=allowed_pairs, release=installed_release
+        )
+        _verify_installed_release(
+            conn,
+            release=installed_release,
+            schema_oid=schema_oid,
+            allowed_pairs=allowed_pairs,
+        )
         return False
     applying = release_index == len(installed)
     if release_index > len(installed):
@@ -814,14 +825,15 @@ def apply_schema_connection(
     if include_persistent_mapping and mapping_releases:
         _verify_source_inventory(db_dir)
         first_release = PERSISTENT_MAPPING_RELEASE_MANIFEST[0]
-        allowed_pairs = _maintenance_binding(db_dir, first_release)
         with conn.transaction():
             _capture_caller_search_path_oids(conn)
-            schema_oid = _verify_server_and_identity(
-                conn, allowed_pairs=allowed_pairs, release=first_release
-            )
             markers = _migration_markers(conn)
-            _validate_marker_prefix(markers, allow_empty=True)
+            installed = _validate_marker_prefix(markers, allow_empty=True)
+            identity_release = installed[-1] if installed else first_release
+            allowed_pairs = _maintenance_binding(db_dir, identity_release)
+            schema_oid = _verify_server_and_identity(
+                conn, allowed_pairs=allowed_pairs, release=identity_release
+            )
             installed_marker_keys = set(markers or {})
             if not installed_marker_keys:
                 _require_empty_unmarked_target(conn, schema_oid=schema_oid)

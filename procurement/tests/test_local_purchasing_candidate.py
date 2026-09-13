@@ -1,7 +1,7 @@
 """Fail-closed lifecycle and recovery tests for the local owner candidate."""
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import hashlib
 import json
 import os
@@ -45,6 +45,12 @@ def _state() -> dict:
         "selection_payloads": "b" * 64,
         "run_fingerprints": "c" * 64,
         "artifact_hashes": "d" * 64,
+        "relation_inventory": [
+            {"relation": "meta", "row_count": 3, "sha256": "e" * 64}
+        ],
+        "sequence_inventory": [
+            {"sequence": "offers_id_seq", "last_value": 1, "is_called": True}
+        ],
     }
     encoded = json.dumps(facts, sort_keys=True, separators=(",", ":")).encode()
     return {"facts": facts, "sha256": hashlib.sha256(encoded).hexdigest()}
@@ -76,6 +82,7 @@ class _FactsConnection:
                     160009,
                     "127.0.0.1",
                     "qa_release_login",
+                    "qa_mapping_owner",
                     "qa_mapping_owner",
                 )
             )
@@ -192,6 +199,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                 "server_address": "127.0.0.1",
                 "session_user": "qa_release_login",
                 "current_user": "qa_mapping_owner",
+                "database_owner": "qa_mapping_owner",
             },
             "database_dump": {
                 "path": "database.dump",
@@ -245,6 +253,97 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(candidate.CandidateBoundaryError):
                 candidate._database_name(value)
 
+    def test_database_lifecycle_lock_is_shared_exact_and_spans_every_operation(self):
+        class LifecycleConnection:
+            def __init__(self, locked: bool = True) -> None:
+                self.locked = locked
+                self.exited = False
+                self.lock_name = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.exited = True
+                return False
+
+            def execute(self, statement, parameters=()):
+                rendered = str(statement)
+                if "current_database" in rendered:
+                    return _Result(
+                        one=(
+                            "buffalo_test_demo",
+                            160009,
+                            "127.0.0.1/32",
+                            "qa_release_login",
+                            "qa_mapping_owner",
+                            "qa_mapping_owner",
+                        )
+                    )
+                if "pg_try_advisory_lock" in rendered:
+                    self.lock_name = parameters[0]
+                    return _Result(one=(self.locked,))
+                raise AssertionError(rendered)
+
+        connection = LifecycleConnection()
+        with mock.patch.object(candidate.psycopg, "connect", return_value=connection):
+            with candidate._database_lifecycle_guard(DATABASE_URL):
+                self.assertFalse(connection.exited)
+        self.assertTrue(connection.exited)
+        self.assertEqual(
+            connection.lock_name,
+            "buffalo:local-purchasing-candidate:lifecycle:v1:buffalo_test_demo",
+        )
+        refused = LifecycleConnection(locked=False)
+        with (
+            mock.patch.object(candidate.psycopg, "connect", return_value=refused),
+            self.assertRaises(candidate.CandidateBoundaryError),
+        ):
+            with candidate._database_lifecycle_guard(DATABASE_URL):
+                self.fail("a contended lifecycle lock must not enter the operation")
+        self.assertTrue(refused.exited)
+
+        events = []
+
+        @contextmanager
+        def guarded(_url, *, restore=False):
+            events.append(("enter", restore))
+            try:
+                yield
+            finally:
+                events.append(("exit", restore))
+
+        def body(label, value):
+            self.assertEqual(events[-1][0], "enter")
+            events.append((label, events[-1][1]))
+            return value
+
+        with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", side_effect=guarded),
+            mock.patch.object(candidate, "_serve_locked", side_effect=lambda *_: body("serve", 0)),
+            mock.patch.object(candidate, "_backup_locked", side_effect=lambda *_: body("backup", Path("manifest"))),
+            mock.patch.object(candidate, "_restore_locked", side_effect=lambda *_: body("restore", {"restored": True})),
+        ):
+            self.assertEqual(candidate.serve(DATABASE_URL, self.root, 18765), 0)
+            self.assertEqual(candidate.backup(DATABASE_URL, self.root), Path("manifest"))
+            self.assertTrue(candidate.restore(RESTORE_URL, self.root, self.root)["restored"])
+        self.assertEqual(
+            events,
+            [
+                ("enter", False), ("serve", False), ("exit", False),
+                ("enter", False), ("backup", False), ("exit", False),
+                ("enter", True), ("restore", True), ("exit", True),
+            ],
+        )
+        initializer_source = (
+            candidate.REPO_ROOT
+            / "procurement"
+            / "tools"
+            / "initialize_synthetic_demo.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("acquire_database_lifecycle_lock(conn, str(row[0]))", initializer_source)
+        self.assertNotIn("buffalo:synthetic-demo-initialize", initializer_source)
+
     def test_database_preflight_requires_disabled_policy_source_hash_identity_and_catalog(self):
         initialized = _FactsConnection(initialized=True)
         with mock.patch.object(candidate.psycopg, "connect", return_value=nullcontext(initialized)):
@@ -262,6 +361,18 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         ):
             candidate._database_facts(DATABASE_URL, require_initialized=True)
         connect.assert_not_called()
+        initializer_source = (
+            candidate.REPO_ROOT
+            / "procurement"
+            / "tools"
+            / "initialize_synthetic_demo.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotRegex(
+            initializer_source,
+            r"UPDATE\s+readiness_gates\s+SET\s+status\s*=\s*['\"]PASS",
+        )
+        self.assertNotIn("INSERT INTO sales_daily", initializer_source)
+        self.assertIn("finalize_sales_backfill", initializer_source)
 
     def test_runtime_tree_and_secret_files_require_owned_exact_modes_and_distinct_values(self):
         runtime = self._runtime()
@@ -338,6 +449,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         runtime = self._runtime()
         process = _Process()
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts"),
             mock.patch.object(candidate, "_child_environment", return_value={"SAFE": "1"}),
             mock.patch.object(candidate, "_wait_for_health"),
@@ -353,6 +465,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         leaking = _Process()
         leaking.running = True
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts"),
             mock.patch.object(candidate, "_child_environment", return_value={}),
             mock.patch.object(candidate.subprocess, "Popen", return_value=leaking),
@@ -369,6 +482,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         pid_file.write_text(str(os.getpid()), encoding="ascii")
         pid_file.chmod(0o600)
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts", return_value={}),
             self.assertRaises(candidate.CandidateBoundaryError),
         ):
@@ -387,6 +501,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts", return_value={"database": "buffalo_test_demo"}),
             mock.patch.object(candidate, "_postgres_tool", return_value="/fake/pg_dump"),
             mock.patch.object(candidate, "_state_evidence", side_effect=state),
@@ -408,6 +523,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0)
 
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(
                 candidate,
                 "_database_facts",
@@ -417,6 +533,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                     "server_address": "127.0.0.1",
                     "session_user": "qa_release_login",
                     "current_user": "qa_mapping_owner",
+                    "database_owner": "qa_mapping_owner",
                 },
             ),
             mock.patch.object(candidate, "_postgres_tool", return_value="/fake/pg_dump"),
@@ -459,6 +576,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                     return original_hash(Path(path))
 
                 with (
+                    mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
                     mock.patch.object(candidate, "_database_facts", return_value={"database": "buffalo_test_demo"}),
                     mock.patch.object(candidate, "_postgres_tool", return_value="/fake/pg_dump"),
                     mock.patch.object(candidate, "_state_evidence", side_effect=states),
@@ -473,6 +591,17 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
     def test_restore_preflight_rejects_contract_path_mode_hash_archive_and_state_tampering(self):
         valid = self._backup_fixture()
         candidate._restore_preflight(valid)
+        candidate._validate_restore_toc(VALID_RESTORE_TOC)
+        for invalid_toc in (
+            "2; 3079 2 EXTENSION - pgcrypto\n",
+            "7; 2615 1 SCHEMA - qa_mapping_test qa_mapping_owner\n",
+            VALID_RESTORE_TOC
+            + "4; 1259 4 TABLE unrelated_schema foreign_data qa_mapping_owner\n",
+        ):
+            with self.subTest(invalid_toc=invalid_toc), self.assertRaises(
+                candidate.CandidateBoundaryError
+            ):
+                candidate._validate_restore_toc(invalid_toc)
         original = json.loads(valid.read_text(encoding="utf-8"))
         mutations = (
             lambda value: value.update(contract="WRONG"),
@@ -505,6 +634,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             {"database": "buffalo_test_restore_demo"},
         ]
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts", side_effect=database_facts),
             mock.patch.object(candidate, "_postgres_tool", return_value="/fake/pg_restore"),
             mock.patch.object(candidate, "_state_evidence", return_value=_state()),
@@ -529,32 +659,31 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
     def test_restore_failure_removes_only_owned_staging_and_cleans_exact_database_scope(self):
         manifest = self._backup_fixture()
         restore_root = self.root / "restored"
-        staging = self.root / ".restored.restore-456-123"
-        staging.mkdir(mode=0o700)
-        sentinel = staging / "sentinel"
+        restore_root.mkdir(mode=0o700)
+        sentinel = restore_root / "sentinel"
         sentinel.write_text("preserve", encoding="utf-8")
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts", return_value={"database": "buffalo_test_restore_demo"}),
             mock.patch.object(candidate, "_postgres_tool", return_value="/fake/pg_restore"),
-            mock.patch.object(candidate.os, "getpid", return_value=456),
-            mock.patch.object(candidate.time, "time_ns", return_value=123),
             mock.patch.object(
                 candidate.subprocess,
                 "run",
                 return_value=subprocess.CompletedProcess([], 0, stdout=VALID_RESTORE_TOC),
             ),
             mock.patch.object(candidate, "_clean_failed_restore") as clean,
-            self.assertRaises(FileExistsError),
+            self.assertRaises(candidate.CandidateBoundaryError),
         ):
             candidate.restore(RESTORE_URL, restore_root, manifest)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
         clean.assert_not_called()
-        for path in sorted(staging.rglob("*"), reverse=True):
+        for path in sorted(restore_root.rglob("*"), reverse=True):
             if path.is_file():
                 path.unlink()
-        staging.rmdir()
+        restore_root.rmdir()
         failure = subprocess.CalledProcessError(1, ["pg_restore"])
         with (
+            mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts", return_value={"database": "buffalo_test_restore_demo"}),
             mock.patch.object(candidate, "_postgres_tool", return_value="/fake/pg_restore"),
             mock.patch.object(

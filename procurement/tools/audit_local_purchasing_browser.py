@@ -117,22 +117,31 @@ def _start_server(
     try:
         _wait_health(process, port)
     except BaseException:
-        process.terminate()
-        process.wait(timeout=10)
-        log_handle.close()
+        try:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=10)
+        finally:
+            log_handle.close()
         raise
     return process, log_handle
 
 
 def _stop_server(process: subprocess.Popen[bytes], log_handle: Any) -> None:
-    if process.poll() is None:
-        process.terminate()
-        try:
-            process.wait(timeout=20)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
-    log_handle.close()
+    try:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
+    finally:
+        log_handle.close()
     if process.returncode not in {0, -15}:
         raise BrowserAcceptanceError(
             f"local launcher exited unexpectedly ({process.returncode})"
@@ -864,14 +873,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     state_path=state_path,
                 )
             finally:
-                if server is not None and log_handle is not None:
-                    _stop_server(server, log_handle)
-                browser.terminate()
                 try:
-                    browser.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    browser.kill()
-                    browser.wait(timeout=10)
+                    if server is not None and log_handle is not None:
+                        _stop_server(server, log_handle)
+                finally:
+                    if browser.poll() is None:
+                        browser.terminate()
+                        try:
+                            browser.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            browser.kill()
+                            browser.wait(timeout=10)
 
     browser_state = json.loads(state_path.read_text(encoding="utf-8"))
     downloads_result = _validate_downloads(
@@ -898,6 +910,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     summary = args.evidence_root / "ACCEPTANCE_SUMMARY.json"
     summary.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary.chmod(0o600)
+    secret_values = [
+        (args.runtime_root / name).read_bytes().rstrip(b"\n")
+        for name in ("local-auth.secret", "review-token.secret", "price-token.secret")
+    ]
+    for evidence_file in sorted(args.evidence_root.rglob("*")):
+        if not evidence_file.is_file() or evidence_file.suffix.lower() in {
+            ".png",
+            ".jpg",
+            ".jpeg",
+        }:
+            continue
+        evidence_bytes = evidence_file.read_bytes()
+        if any(secret and secret in evidence_bytes for secret in secret_values):
+            raise BrowserAcceptanceError(
+                f"secret bytes appeared in evidence file {evidence_file.name}"
+            )
     return result
 
 

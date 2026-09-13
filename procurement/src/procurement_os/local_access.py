@@ -412,7 +412,12 @@ class LocalAccessMiddleware:
                         (b"pragma", b"no-cache"),
                         (b"x-content-type-options", b"nosniff"),
                         (b"referrer-policy", b"same-origin"),
-                        (b"content-security-policy", b"default-src 'self'; frame-ancestors 'none'; base-uri 'none'"),
+                        (
+                            b"content-security-policy",
+                            b"default-src 'self'; script-src 'self'; "
+                            b"style-src 'self' 'unsafe-inline'; object-src 'none'; "
+                            b"frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                        ),
                     )
                 )
                 message["headers"] = response_headers
@@ -436,7 +441,11 @@ class LocalAccessMiddleware:
                 "Pragma": "no-cache",
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "same-origin",
-                "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+                "Content-Security-Policy": (
+                    "default-src 'self'; script-src 'self'; "
+                    "style-src 'self' 'unsafe-inline'; object-src 'none'; "
+                    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+                ),
             },
         )
         await response({"type": "http"}, None, send)

@@ -32,7 +32,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_identity_investigation.py": 32,
     "test_inventory.py": 15,
     "test_local_access.py": 12,
-    "test_local_purchasing_candidate.py": 12,
+    "test_local_purchasing_candidate.py": 13,
     "test_matching.py": 3,
     "test_monday_workflow.py": 54,
     "test_phase4_historical_sales.py": 33,

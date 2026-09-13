@@ -147,30 +147,29 @@ def _authoritative_sales_rows(
         and evidence.get("history_start") == history_start.isoformat()
         and evidence.get("history_end") == history_end.isoformat()
     )
-    demo_marker = conn.execute(
-        "SELECT value FROM meta WHERE key='synthetic_owner_demo_contract'"
-    ).fetchone()
-    owned_demo_contract = (
+    demo_markers = dict(
+        conn.execute(
+            "SELECT key,value FROM meta WHERE key=ANY(%s)",
+            (
+                [
+                    "synthetic_owner_demo_contract",
+                    "synthetic_owner_demo_sales_backfill_id",
+                ],
+            ),
+        ).fetchall()
+    )
+    owned_demo_database = (
         str(database_name).endswith("_demo")
         and server_address in {"127.0.0.1", "::1"}
         and int(server_version_num) // 10000 == 16
         and os.getenv("BUFFALO_RUNTIME_MODE", "").strip().upper()
         == "SYNTHETIC_DEMO"
-        and demo_marker is not None
-        and demo_marker[0] == "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
-        and gate is not None
-        and gate[0] == "PASS"
-        and evidence.get("coverage_contract")
-        == "OWNED_SYNTHETIC_DEMO_DAILY_VARIANT_COVERAGE_V1"
-        and evidence.get("source") == "SYNTHETIC_DEMO"
-        and evidence.get("history_start") == history_start.isoformat()
-        and evidence.get("history_end") == history_end.isoformat()
+        and demo_markers.get("synthetic_owner_demo_contract")
+        == "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
     )
-    synthetic_contract = automated_test_contract or owned_demo_contract
+    synthetic_contract = automated_test_contract
     if automated_test_contract:
         source = "SYNTHETIC_TEST"
-    elif owned_demo_contract:
-        source = "SYNTHETIC_DEMO"
     else:
         try:
             canonical_run_id = UUID(str(evidence.get("sales_backfill_id")))
@@ -214,6 +213,12 @@ def _authoritative_sales_rows(
             "control_totals_reconciled": 21,
             "canonical_aggregate_rebuilt": 22,
         }
+        owned_demo_contract = (
+            owned_demo_database
+            and demo_markers.get("synthetic_owner_demo_sales_backfill_id")
+            == str(canonical_run_id)
+        )
+        expected_run_end = business_date if owned_demo_contract else history_end
         canonical_contract = (
             gate is not None
             and gate[0] == "PASS"
@@ -223,8 +228,8 @@ def _authoritative_sales_rows(
             and canonical_run[1] is not None
             and canonical_run[2] == canonical_start
             and canonical_start <= history_start
-            and canonical_run[3] == history_end
-            and evidence.get("end_date") == history_end.isoformat()
+            and canonical_run[3] == expected_run_end
+            and evidence.get("end_date") == expected_run_end.isoformat()
             and canonical_run[4] == "SHOPIFYQL_SALES"
             and canonical_run[5] == "SHOPIFYQL_SALES_V2"
             and canonical_run[6] == "America/New_York"
@@ -335,7 +340,11 @@ def _authoritative_sales_rows(
         "contract": (
             evidence["coverage_contract"]
             if synthetic_contract
-            else "CANONICAL_SHOPIFYQL_RUN_FACT_AGGREGATE_V1"
+            else (
+                "OWNED_SYNTHETIC_DEMO_CANONICAL_BACKFILL_V1"
+                if owned_demo_contract
+                else "CANONICAL_SHOPIFYQL_RUN_FACT_AGGREGATE_V1"
+            )
         ),
         "source": source,
         "history_start": history_start,
@@ -351,6 +360,8 @@ def _authoritative_sales_rows(
                 "source_facts": [list(row) for row in source_facts],
             }
         )
+        if owned_demo_contract:
+            authority["data_mode"] = "SYNTHETIC_DEMO"
     return list(rows), authority
 
 

@@ -188,8 +188,15 @@ class HistoricalSalesReviewRouteTests(unittest.TestCase):
         self.assertIn("Search local canonical catalog", page)
         self.assertIn("SEARCH LOCAL CATALOG", page)
         self.assertIn("Search results are evidence only", page)
-        self.assertIn("Select Variant ID", page)
-        self.assertIn("No local catalog results found.", page)
+        self.assertIn(
+            "<script src='../assets/historical-sales-catalog-picker.js'></script>",
+            page,
+        )
+        self.assertIn("Select Variant ID", api._HISTORICAL_SALES_CATALOG_PICKER_SCRIPT)
+        self.assertIn(
+            "No local catalog results found.",
+            api._HISTORICAL_SALES_CATALOG_PICKER_SCRIPT,
+        )
 
     def test_picker_selection_is_exact_card_local_and_never_submits_a_decision(self):
         second = {**review_item(), "source_key": "second-card", "historical_sku": "SECOND"}
@@ -320,14 +327,14 @@ class HistoricalSalesReviewDecisionTests(unittest.TestCase):
             "Owner confirmed non-merchandise historical line",
         )
 
-    def test_blank_human_evidence_is_rejected_before_database_access(self):
+    def test_direct_call_without_authenticated_server_actor_is_rejected_before_database_access(self):
         db = Mock()
         with patch.dict(os.environ, {"RECONCILIATION_REVIEW_TOKEN": "correct-token"}), patch.object(
             api, "_db_conn", db
         ):
             with self.assertRaises(HTTPException) as ctx:
                 self.call_decision(actor=" ")
-        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.status_code, 401)
         db.assert_not_called()
 
     def test_mapping_requires_explicit_canonical_variant_id(self):
