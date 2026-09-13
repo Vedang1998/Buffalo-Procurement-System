@@ -1059,6 +1059,13 @@ def supplier_mapping_source(candidate_id: UUID):
     except PersistentMappingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     evidence = {
+        "safety_label": "TEST DATA — NOT FOR ORDERING",
+        "data_mode": "SYNTHETIC_DEMO",
+        "source_disclosure": (
+            "A false source_is_simulation value in this owned demo exercises "
+            "only the fabricated authoritative-format contract branch; it is "
+            "not real supplier evidence or approval."
+        ),
         "contract": "BUFFALO_MAPPING_EVIDENCE_METADATA_ONLY_V1",
         "authority": "REVIEW_ONLY_NOT_SOURCE_BLOB",
         "candidate": detail["candidate"],

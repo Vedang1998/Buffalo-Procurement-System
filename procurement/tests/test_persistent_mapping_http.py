@@ -215,9 +215,24 @@ class PersistentMappingHttpTests(unittest.TestCase):
             f"attachment; filename=mapping-evidence-{CANDIDATE_ID}.json",
         )
         payload = response.json()
+        self.assertEqual(payload["safety_label"], "TEST DATA — NOT FOR ORDERING")
+        self.assertEqual(payload["data_mode"], "SYNTHETIC_DEMO")
+        self.assertIn("fabricated authoritative-format", payload["source_disclosure"])
+        self.assertIn("not real supplier evidence or approval", payload["source_disclosure"])
         self.assertEqual(payload["contract"], "BUFFALO_MAPPING_EVIDENCE_METADATA_ONLY_V1")
         self.assertEqual(payload["authority"], "REVIEW_ONLY_NOT_SOURCE_BLOB")
-        self.assertEqual(set(payload), {"contract", "authority", "candidate", "batch"})
+        self.assertEqual(
+            set(payload),
+            {
+                "safety_label",
+                "data_mode",
+                "source_disclosure",
+                "contract",
+                "authority",
+                "candidate",
+                "batch",
+            },
+        )
         self.assertNotIn("../../untrusted-source-name.txt", response.headers["content-disposition"])
 
     def test_fixed_synthetic_intake_uses_action_principal_and_exactly_two_packets(self):

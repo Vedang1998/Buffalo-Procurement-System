@@ -533,8 +533,22 @@ def _validate_downloads(
     metadata_by_occurrence: dict[str, dict[str, Any]] = {}
     for json_file in json_files:
         metadata = json.loads(json_file.read_text(encoding="utf-8"))
-        if set(metadata) != {"contract", "authority", "candidate", "batch"} or (
-            metadata.get("contract")
+        if set(metadata) != {
+            "safety_label",
+            "data_mode",
+            "source_disclosure",
+            "contract",
+            "authority",
+            "candidate",
+            "batch",
+        } or (
+            metadata.get("safety_label") != "TEST DATA — NOT FOR ORDERING"
+            or metadata.get("data_mode") != "SYNTHETIC_DEMO"
+            or "fabricated authoritative-format"
+            not in str(metadata.get("source_disclosure", ""))
+            or "not real supplier evidence or approval"
+            not in str(metadata.get("source_disclosure", ""))
+            or metadata.get("contract")
             != "BUFFALO_MAPPING_EVIDENCE_METADATA_ONLY_V1"
             or metadata.get("authority") != "REVIEW_ONLY_NOT_SOURCE_BLOB"
         ):
@@ -613,6 +627,7 @@ def _validate_downloads(
         "csv": {key: row[key] for key in expected},
         "zip_members": names,
         "mapping_evidence_contract": "BUFFALO_MAPPING_EVIDENCE_METADATA_ONLY_V1",
+        "mapping_evidence_safety_label": "TEST DATA — NOT FOR ORDERING",
         "packet_summary": summary,
         "artifact_files": [
             {"name": path.name, "sha256": _sha256(path)}
