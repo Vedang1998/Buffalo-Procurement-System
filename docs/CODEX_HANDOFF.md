@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-12T22:50:43Z (UTC)
+**Updated:** 2026-09-13T00:57:39Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -22,7 +22,15 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`, tree
   `b181c02d1d0ffbabc2142c7cf91d146e00f272f4`. The clone has independent Git
   metadata, no remotes, `remote.pushDefault=disabled`, and an empty private
-  `core.hooksPath`. The connected checkout was not edited or switched.
+  `core.hooksPath`. The connected checkout's files, HEAD `3a4704e...`, and tree
+  `1986bd8...` remained clean and unchanged. Final reconciliation nevertheless
+  found that its local branch label had been switched at
+  `2026-09-12T22:55:08Z` from
+  `codex/wright-description-scope-remediation` to
+  `codex/wright-structural-scope-remediation`; both local labels point to the
+  same commit. This Git-metadata switch was an isolation-process deviation. It
+  was not silently reversed and caused no file, commit, remote-ref, sync,
+  restart, or candidate-installation change.
 - Exact implementation commit
   `9befc0d280896f3f57f4fa482923120ae1163c79`, tree
   `7da5a685485a02054788918cf9f301fd18ea789f`, has the required base as its
