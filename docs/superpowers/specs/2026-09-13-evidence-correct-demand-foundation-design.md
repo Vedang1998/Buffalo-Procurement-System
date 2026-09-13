@@ -41,8 +41,8 @@ This design does **not** introduce or approve:
 - a forecasting lookback policy, FVA threshold, regime thresholds, model
   hyperparameters, XYZ cutoffs, service-level matrix, error quantile, GP-dollar
   history window, category hierarchy, analog rule, or event-lift rule;
-- a migration, readiness override, mapping/offer activation, price change,
-  strategic extra quantity, FINAL/release path, Shopify access, or real order;
+- a readiness override, mapping/offer activation, price change, strategic extra
+  quantity, FINAL/release path, Shopify access, or real order;
 - any write to an operational database or any change to the protected connected
   checkout.
 
@@ -143,22 +143,119 @@ single-active-business-date constraint. Run validation becomes version-aware:
   `FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED`, never a generic stale-input
   boolean and never a V1 recomputation using the prohibited inference.
 
-The slice therefore adds a narrow pre-build retirement service for a V1 run in
-`PREPARING`, `AWAITING_REVIEW`, or `REVIEWED`. Preview is read-only and binds the
-run ID, frozen fingerprint, V1 method, stage, zero-DRAFT/zero-artifact proof,
-server-derived actor, and a required reason into a confirmation hash. Confirm
-rechecks those facts under the existing Monday advisory lock and a row lock,
-updates only `status/workflow_stage` to `FAILED`, and writes one `change_log`
-record with `table_name = runs`, `row_key = run_id`, `action = UPDATE`, the
-exact before/after run state, actor, reason, and confirmation hash. It never
-deletes or edits the frozen inputs, forecasts, recommendations, reviews, or
-exceptions. Exact replay returns the same result;
-a changed reason, actor, fingerprint, stage, or confirmation conflicts. A run
-with any PO or artifact is ineligible. The authenticated browser action uses the
-existing order-approval capability and displays that retirement releases the
-date but does not supersede an immutable DRAFT. Its exact route is
+Migration 013 alone cannot enforce this boundary: it permits a direct unbuilt
+run transition to `FAILED`, its generic `change_log` is mutable and non-unique,
+and it does not reject new V1 review, exclusion, confirmation, or DRAFT rows.
+The lifecycle therefore requires the additive, checksum-pinned
+`015_monday_forecast_v2_retirement.sql` before V2 is startable.
+
+Migration 015 adds one append-only `monday_stale_forecast_retirements` row per
+run. The row binds the exact input fingerprint, retired V1 method, prior and
+target status/stage, zero PO/artifact counts, server actor, reason, exact full
+before/after run JSON, current transaction ID, timestamp, and a PostgreSQL-
+recomputed confirmation SHA-256 under contract
+`BUFFALO_STALE_FORECAST_RETIREMENT_CONFIRMATION_V1`. A run-transition trigger
+allows an internal-DRAFT V1 run only to package an already-built DRAFT or to
+move from an eligible unbuilt stage to `FAILED` when its exact retirement event
+exists in the same transaction. It rejects new V1 runs and every other V1
+transition with `FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED`.
+
+Additional insert guards reject V1 review decisions, run-only blocker
+exclusions, material-edit confirmations, purchase orders, and purchase-order
+lines, resolving the actual parent run rather than trusting a caller's declared
+run ID. V1 guards also reject INSERT/UPDATE/DELETE on
+`procurement_recommendations`, `forecast_results`, `inventory_snapshots`,
+`run_price_snapshots`, and `exceptions`, resolving the authoritative parent run
+for every operation. Thus a pre-015 `PREPARING` fixture cannot gain, lose, or
+rewrite analysis/evidence after installation. The only post-015 V1 child writes
+left open are the already-reviewed packet event/artifact inserts needed to
+package an existing `DRAFTS_BUILT` run. The retirement table is immutable.
+
+The V1 run guard compares full row projections. `DRAFTS_BUILT` to
+`PACKET_BUILT` may change `workflow_stage` only. An eligible unbuilt retirement
+may change `status` and `workflow_stage` only, and must match its exact same-
+transaction event. Every other V1 column delta—including timestamps, price
+months, exception count, notes, method/input fields, or completion data—is
+rejected. Historical V1 run rows and child evidence are therefore immutable at
+the database boundary rather than by service convention.
+
+Migration 015 adds `change_log.evidence_json JSONB NOT NULL DEFAULT '{}'` and
+uses the exact audit envelope:
+
+```json
+{
+  "contract": "BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1",
+  "retirement_run_id": "<run UUID>",
+  "reason": "<normalized reason>",
+  "confirmation_sha256": "<lowercase SHA-256>",
+  "transaction_id": "<decimal txid_current text>"
+}
+```
+
+For that tagged row, `table_name='runs'`, `row_key=run_id::text`,
+`action='UPDATE'`, `run_id` is exact, `before_json` and `after_json` are the full
+run rows, `actor` is exact, and `occurred_at` equals the retirement event time.
+A partial unique index on `run_id` for this exact contract permits one mirror
+per retirement. The audit trigger rejects UPDATE/DELETE when either OLD or NEW
+is tagged, rejects turning an existing row into or out of the tag, and validates
+tagged INSERT against the same-transaction event and final run. A deferred
+audit-side assertion checks audit-to-event/final-run integrity, while the event-
+side deferred assertion checks event-to-audit/final-run integrity. Audit-only,
+event-only, update-only, tag-removal, or missing-audit transactions fail
+atomically.
+
+The narrow pre-build retirement service previews a V1 run in `PREPARING`,
+`AWAITING_REVIEW`, or `REVIEWED` without writes. It binds the run ID, frozen
+fingerprint, V1 method, stage, zero-PO/zero-artifact proof, server-derived actor,
+and required reason into the database-compatible confirmation hash. Confirm
+uses one `SERIALIZABLE` transaction: acquire the existing Monday advisory lock,
+lock the run, resolve an exact stored replay first, revalidate the preview facts,
+insert the retirement event, update only `status/workflow_stage` to `FAILED`,
+and insert the exact audit. It never deletes or edits frozen inputs, forecasts,
+recommendations, reviews, exceptions, DRAFTs, or artifacts. A changed reason,
+actor, fingerprint, method, stage, or confirmation conflicts; any PO/artifact
+is ineligible.
+
+The authenticated browser action uses the existing order-approval capability
+and displays that retirement releases the date but cannot supersede an
+immutable DRAFT. Its route is
 `POST /monday-runs/{run_id}/retire-stale-forecast`; the first request renders the
 preview and the second must carry the exact confirmation hash.
+
+Migration 014's frozen predecessor contract recognizes exactly schema through
+013. Migration 015 is therefore a post-mapping application migration: the
+runner applies it only after successful 014 installation/verification and only
+when persistent mapping is explicitly included. It is not added to or used to
+rewrite the frozen legacy-prefix hashes. The runner gains a separate literal
+post-mapping checksum manifest, ordered-prefix marker checks, and rejection of a
+015-without-014 database.
+
+The source checksum and marker alone are not installed-contract proof. The
+post-mapping release manifest also pins one independently computed catalog hash
+covering every 015-owned table column/default/constraint, index, function
+identity/body/property, trigger definition/enabled state, and protected
+`change_log` column/constraint. Migration 015 supplies a direct assertion
+function that independently checks its required object/topology inventory and
+contract marker. Apply, installed replay, launcher/startup, and V2 preparation
+must verify the literal source release and installed catalog before trusting or
+invoking that assertion. A forged marker, removed/disabled/replaced trigger,
+changed function, missing constraint/index, or partial object set refuses before
+a V2 run or authority write. The apply transaction publishes the migration
+marker only after DDL, catalog verification, and direct assertion all pass.
+
+The synthetic initializer and launcher use the same ordered boundary. Existing
+schema-through-013 callers that do not opt into persistent mapping continue to
+stop before both 014 and 015; `prepare_monday_run` also refuses V2 explicitly
+unless verified 015 is installed, so invoking application code outside the
+launcher cannot silently rely on migration 013's weaker transitions.
+
+The fabricated stale-V1 browser fixture is created under the only permitted
+initialization order: apply schema through 013, apply and verify 014, seed the
+raw fabricated evidence plus exactly one `PREPARING` V1 fixture, apply and
+verify 015, then publish the synthetic-demo initialized marker last. No runtime
+V1 override exists. If 015 fails, the initialized marker is absent. Initializer
+replay/early-return verifies the exact 014 and 015 source markers, installed
+catalogs, assertions, and final demo marker before reporting success.
 
 ### Monday integration and persistence
 
@@ -194,11 +291,11 @@ existing baseline-need, ONE_BOTTLE, allocated exclusion, trusted-incoming,
 pack-rounding, price-tier, material-review, and DRAFT rules remain unchanged.
 Strategic extra stays zero.
 
-No migration is required because the existing immutable JSONB diagnostics and
-metrics fields can retain the complete evidence without weakening relational
-constraints. If implementation proves that a required fact cannot be preserved
-without a schema change, work stops for a separate migration design rather than
-silently compressing the evidence.
+No migration is required for the demand-evidence JSON itself because the
+existing immutable diagnostics and metrics fields retain the complete object.
+The separately justified migration 015 exists only for V1 retirement lifecycle
+and direct-write enforcement; it does not add forecast values, authority, or
+readiness state.
 
 ### Owner-visible and packet evidence
 
@@ -348,7 +445,14 @@ nonnegative emergency decision velocity remains a separately named field.
   preview/confirm releases the business date while preserving all old evidence.
 - V1 retirement refuses after any PO/artifact, rejects stale or changed
   confirmation facts, is concurrent-single-winner and exactly replayable, and
-  records the server principal in `change_log`.
+  records the server principal in one append-only retirement event and one
+  exact protected `change_log` mirror.
+- Direct V1 review, exclusion, confirmation, PO, line, stage, failure, event-
+  only, update-only, missing-audit, run-column, and analysis/evidence-child
+  writes reject at the database boundary; V2 writes remain unaffected.
+- Migration replay is checksum-pinned; 015 without 014, a marker gap, changed
+  migration bytes, or partial migration effects refuse with no authority
+  mutation.
 - Exact replay is idempotent, while changed evidence under the same key refuses
   with zero new run/recommendation/DRAFT effects.
 - ONE_BOTTLE, allocated exclusion, open-PO protection, case/loose conversion,

@@ -19,8 +19,9 @@
   readiness safeguard. Never force a readiness gate.
 - Keep the result explicitly `EMERGENCY_TRANSPARENT_V2`, non-FVA, unclassified,
   and without calculated empirical safety stock.
-- Stop for a separately reviewed migration design if the approved JSONB fields
-  cannot retain the exact contract without schema weakening.
+- The demand-evidence JSON needs no schema change. V1 retirement uses only the
+  separately reviewed additive migration 015 described in the design; do not
+  weaken or rewrite migrations 001–014.
 
 ## Task 0 — Reprove the implementation baseline
 
@@ -116,13 +117,49 @@ automatically.
 
 Files:
 
+- add `procurement/db/015_monday_forecast_v2_retirement.sql`;
+- modify `procurement/tools/apply_schema.py` and
+  `procurement/tools/initialize_synthetic_demo.py`;
+- modify `procurement/tools/local_purchasing_candidate.py`;
 - modify `procurement/src/procurement_os/recommendations.py`;
 - modify callers in `procurement/src/procurement_os/procurement_review.py` and
   `procurement/src/procurement_os/draft_po.py`;
 - modify `procurement/src/procurement_os/api.py`;
 - extend `procurement/tests/test_monday_workflow.py` and
-  `procurement/tests/test_local_access.py`.
+  `procurement/tests/test_local_access.py`;
+- extend migration, runner, initializer, launcher, and startup contract tests.
 
+- Add one append-only retirement event per run, database-compatible preview
+  hashing, exact before/after row projections, a protected unique `change_log`
+  mirror, and a deferred commit assertion.
+- Add `change_log.evidence_json` and use the exact
+  `BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1` envelope from the design. Index
+  one tagged row per run; validate and defer both event-to-audit and
+  audit-to-event/final-run directions; reject OLD/NEW tag mutation and
+  audit-only transactions.
+- Add database guards for V1 run transitions and new review, exclusion,
+  material-confirmation, purchase-order, and line writes. Preserve packaging
+  and replay of an already-built V1 DRAFT.
+- Compare full V1 run rows and allow only a workflow-stage-only packet transition
+  or a status+stage-only audited retirement. Block INSERT/UPDATE/DELETE against
+  V1 recommendations, forecasts, inventory snapshots, run-price snapshots, and
+  exceptions; leave only existing-DRAFT packet event/artifact insertion open.
+- Keep 014's predecessor inventory frozen. Add a distinct checksum-pinned
+  post-mapping application-migration manifest; apply 015 only after verified
+  014 and only on the explicit persistent-mapping path. Reject 015 without 014,
+  marker gaps, changed bytes, and partial/reordered state.
+- Pin an independent installed-catalog digest across every 015-owned relation,
+  column/default/constraint/index/function property and body, trigger definition
+  and enabled state. Add an independent SQL assertion; invoke catalog
+  verification before the assertion on apply/replay and from launcher/startup.
+  Prove missing, altered, disabled, or marker-only objects refuse.
+- Require `prepare_monday_run` to verify the installed 015 contract before any
+  V2 context read or write; schema-through-013 remains a supported legacy runner
+  output but cannot create V2 runs.
+- Initialize in the fixed order 001–013 -> verified 014 -> raw fabricated
+  evidence plus one exact `PREPARING` V1 fixture -> verified 015 -> demo marker
+  last. On early-return, verify both installed contracts and markers; never add
+  a runtime V1 insertion override.
 - Replace the global-version boolean check with a typed validation result.
 - Keep a compatibility boolean wrapper only where existing read-only callers
   require it; write paths must surface the exact retired-method state.
@@ -131,13 +168,15 @@ Files:
 - Implement read-only retirement preview and exact confirm for active unbuilt V1
   runs. Bind run/fingerprint/method/stage/no-PO/no-artifact/server actor/reason in
   the confirmation hash.
-- Under the Monday advisory lock plus row lock, revalidate and atomically mark
-  the run FAILED and append one exact `change_log` record. Make identical replay
-  stable and differing/stale/concurrent attempts fail closed.
+- Under the Monday advisory lock plus row lock, revalidate and atomically insert
+  the event, mark only status/stage FAILED, and append the exact audit. Make
+  identical replay stable and differing/stale/concurrent attempts fail closed.
 - Add the authenticated POST route and owner-visible form without accepting a
   client-supplied actor. Preserve Origin/CSRF/capability/body-before-I/O safety.
 - Prove no DRAFT-bearing run can retire and no direct or stale action releases
-  its date.
+  its date. Prove event-only/update-only/missing-audit transactions roll back,
+  retirement/audit rows are immutable, every other V1 run-column or child-
+  evidence mutation refuses, and V2 remains unaffected.
 
 Run the Monday and local-access modules plus all existing draft/packet tests.
 
