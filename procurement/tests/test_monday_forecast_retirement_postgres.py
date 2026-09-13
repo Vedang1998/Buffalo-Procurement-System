@@ -19,6 +19,7 @@ from psycopg import sql
 
 import apply_schema
 from postgres_test_support import validated_test_connection
+from procurement_os.emergency_packet import list_monday_artifacts, read_monday_artifact
 from procurement_os.monday_controls import load_material_edit_policy
 from procurement_os.monday_forecast_retirement import (
     CATALOG_SHA256,
@@ -28,11 +29,13 @@ from procurement_os.monday_forecast_retirement import (
     compute_retirement_catalog_sha256,
     verify_monday_forecast_v2_retirement_contract,
 )
+from procurement_os.monday_run import build_after_review
 from procurement_os.recommendations import (
     MondayRecommendationError,
     confirm_monday_stale_forecast_retirement,
     preview_monday_stale_forecast_retirement,
 )
+from procurement_os.storage import LocalFilesystemStorage
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
@@ -711,6 +714,254 @@ class MondayForecastRetirementPostgresTests(unittest.TestCase):
                 ).fetchone()[0],
                 change_id,
             )
+
+    def test_built_v1_packet_and_artifacts_remain_exactly_replayable(self):
+        assert self.conn is not None
+        self._reset_before_015()
+        vendor_id = UUID("00000000-0000-4000-8000-000000000088")
+        variant_id = "retirement-built-v1-variant"
+        actor = "synthetic:built-v1-reviewer:01"
+        review_evidence = {
+            "review": {
+                "approved_case_price": "1.0000",
+                "approved_merchandise_total": "1.00",
+                "approved_loose_order_fee": "0.00",
+                "resulting_inventory_units": "1.0000",
+                "resulting_days_supply": "1.00",
+                "days_supply_status": "SYNTHETIC",
+                "actor": actor,
+            }
+        }
+        recommendation_metrics = {
+            "frozen_vendor_name": "Synthetic built V1 vendor",
+            "frozen_offer_evidence": {"source": "fabricated-pre-015"},
+            "frozen_open_po_position": {"open_units": "0.0000"},
+        }
+        with self.conn.transaction():
+            self.conn.execute(
+                "INSERT INTO vendors(vendor_id,vendor_name,active) VALUES (%s,%s,TRUE)",
+                (vendor_id, "Synthetic built V1 vendor"),
+            )
+            self.conn.execute(
+                """INSERT INTO vendor_operating_rules(
+                           vendor_id,order_days,order_cutoff_local,timezone_name,
+                           expected_delivery_days,order_cycle_days,lead_time_days,
+                           lead_time_variability_days,reliability_pct,minimum_type,
+                           minimum_value,below_minimum_fee,loose_order_allowed,
+                           loose_unit_fee,confirmation_source,confirmed_by,rules_version)
+                    VALUES (%s,ARRAY['MONDAY'],'12:00','America/New_York',
+                            ARRAY['THURSDAY'],2,1,0,1,'NONE',NULL,0,FALSE,NULL,
+                            'fabricated-pre-015','synthetic:test-owner',1)""",
+                (vendor_id,),
+            )
+            self.conn.execute(
+                """INSERT INTO variants(
+                           variant_id,product_id,product_title,variant_title,active,
+                           catalog_state,identity_scope,sku)
+                    VALUES (%s,%s,%s,'750ML',TRUE,'LIVE','CURRENT',%s)""",
+                (
+                    variant_id,
+                    "retirement-built-v1-product",
+                    "Synthetic built V1 product",
+                    "SYN-BUILT-V1",
+                ),
+            )
+            offer_id = self.conn.execute(
+                """INSERT INTO supplier_offers(
+                           variant_id,vendor_id,supplier_sku,supplier_description,
+                           package_type,size_text,raw_pack,shopify_units_per_case,
+                           qualifying_units_per_case,assortment_scope,assortable,
+                           active,confidence,source_file,source_page)
+                    VALUES (%s,%s,'SYN-BUILT-V1','Synthetic built V1 offer',
+                            'STANDARD','750ML','1x750ML',1,1,'PRODUCT',FALSE,
+                            TRUE,'VERIFIED','fabricated-pre-015.csv',1)
+                    RETURNING offer_id""",
+                (variant_id, vendor_id),
+            ).fetchone()[0]
+            recommendation_id = self.conn.execute(
+                """INSERT INTO procurement_recommendations(
+                           run_id,variant_id,vendor_id,offer_id,baseline_units,
+                           recommended_cases,recommended_loose_units,
+                           recommended_unit_cost,reason_code,review_required,metrics,
+                           input_fingerprint,recommendation_status,strategic_extra_units,
+                           units_per_case,recommended_units,frozen_supplier_sku,
+                           frozen_qualifying_units_per_case,frozen_loose_order_allowed,
+                           frozen_loose_unit_fee,frozen_minimum_type,
+                           frozen_minimum_value,frozen_below_minimum_fee)
+                    VALUES (%s,%s,%s,%s,1,1,0,1,'SYNTHETIC_BUILT_V1',TRUE,%s,
+                            %s,'READY_FOR_REVIEW',0,1,1,'SYN-BUILT-V1',1,FALSE,
+                            0,'NONE',NULL,0)
+                    RETURNING recommendation_id""",
+                (
+                    self.v1_run_id,
+                    variant_id,
+                    vendor_id,
+                    offer_id,
+                    json.dumps(recommendation_metrics, sort_keys=True),
+                    self.v1_fingerprint,
+                ),
+            ).fetchone()[0]
+            self.conn.execute(
+                """INSERT INTO run_price_snapshots(
+                           run_id,offer_id,price_state,effective_month,level_type,
+                           case_price,unit_price,source_file,source_page)
+                    VALUES (%s,%s,'current',%s,'BASE',1,1,
+                            'fabricated-pre-015.csv',1)""",
+                (self.v1_run_id, offer_id, BUSINESS_DATE.replace(day=1)),
+            )
+            self.conn.execute(
+                "UPDATE runs SET workflow_stage='AWAITING_REVIEW' WHERE run_id=%s",
+                (self.v1_run_id,),
+            )
+            decision_id = self.conn.execute(
+                """INSERT INTO review_decisions(
+                           run_id,recommendation_id,decision_type,scope,action,
+                           comment,decided_by,input_fingerprint,decision_fingerprint,
+                           approved_cases,approved_loose_units,approved_units,
+                           approved_unit_cost,approved_line_total,evidence_json)
+                    VALUES (%s,%s,'PROCUREMENT_RECOMMENDATION','RUN_ONLY','ACCEPT',
+                            'Synthetic built V1 approval',%s,%s,%s,1,0,1,1,1,%s)
+                    RETURNING decision_id""",
+                (
+                    self.v1_run_id,
+                    recommendation_id,
+                    actor,
+                    self.v1_fingerprint,
+                    "a" * 64,
+                    json.dumps(review_evidence, sort_keys=True),
+                ),
+            ).fetchone()[0]
+            self.conn.execute(
+                "UPDATE runs SET workflow_stage='REVIEWED' WHERE run_id=%s",
+                (self.v1_run_id,),
+            )
+            build_evidence = {
+                "safety_label": "TEST DATA — NOT FOR ORDERING",
+                "line_count": 1,
+                "has_loose": False,
+                "minimum_disposition": "NOT_APPLICABLE",
+                "minimum_shortfall": "0",
+                "loose_order_fee_total": "0",
+                "below_minimum_fee": "0",
+                "draft_preview_fingerprint": "b" * 64,
+                "economics_confirmed_by": actor,
+                "readiness_by_variant": [],
+            }
+            po_id = self.conn.execute(
+                """INSERT INTO purchase_orders(
+                           run_id,vendor_id,po_status,merchandise_total,delivery_fee,
+                           po_total,below_vendor_minimum,notes,input_fingerprint,
+                           receipt_status,shopify_import_status,reconciliation_evidence)
+                    VALUES (%s,%s,'DRAFT',1,0,1,FALSE,
+                            'TEST DATA — NOT FOR ORDERING',%s,'UNKNOWN',
+                            'NOT_IMPORTED',%s)
+                    RETURNING po_id""",
+                (
+                    self.v1_run_id,
+                    vendor_id,
+                    self.v1_fingerprint,
+                    json.dumps(build_evidence, sort_keys=True),
+                ),
+            ).fetchone()[0]
+            self.conn.execute(
+                """INSERT INTO purchase_order_lines(
+                           po_id,variant_id,offer_id,recommendation_id,
+                           review_decision_id,supplier_sku,cases,loose_units,
+                           ordered_units,unit_cost,line_total,reason_code,comment,
+                           input_fingerprint,line_status,reconciliation_status)
+                    VALUES (%s,%s,%s,%s,%s,'SYN-BUILT-V1',1,0,1,1,1,
+                            'HUMAN_REVIEWED_BASELINE','TEST DATA — NOT FOR ORDERING',
+                            %s,'DRAFT','UNKNOWN')""",
+                (
+                    po_id,
+                    variant_id,
+                    offer_id,
+                    recommendation_id,
+                    decision_id,
+                    self.v1_fingerprint,
+                ),
+            )
+            self.conn.execute(
+                "UPDATE runs SET workflow_stage='DRAFTS_BUILT' WHERE run_id=%s",
+                (self.v1_run_id,),
+            )
+            before_run = self.conn.execute(
+                "SELECT to_jsonb(r) FROM runs r WHERE run_id=%s",
+                (self.v1_run_id,),
+            ).fetchone()[0]
+        with self.conn.transaction():
+            self.assertTrue(
+                apply_schema._verify_or_apply_post_mapping_release(
+                    self.conn, DB_DIR
+                )
+            )
+        with TemporaryDirectory() as storage_root:
+            storage = LocalFilesystemStorage(storage_root)
+            first = build_after_review(
+                self.conn,
+                storage=storage,
+                run_id=str(self.v1_run_id),
+                actor=actor,
+            )
+            first_rows = self.conn.execute(
+                """SELECT monday_run_artifact_id,artifact_type,sha256,payload
+                     FROM monday_run_artifacts WHERE run_id=%s
+                     ORDER BY monday_run_artifact_id""",
+                (self.v1_run_id,),
+            ).fetchall()
+            self.conn.commit()
+            second = build_after_review(
+                self.conn,
+                storage=storage,
+                run_id=str(self.v1_run_id),
+                actor=actor,
+            )
+            second_rows = self.conn.execute(
+                """SELECT monday_run_artifact_id,artifact_type,sha256,payload
+                     FROM monday_run_artifacts WHERE run_id=%s
+                     ORDER BY monday_run_artifact_id""",
+                (self.v1_run_id,),
+            ).fetchall()
+            listed = list_monday_artifacts(self.conn, str(self.v1_run_id))
+            self.assertEqual(first_rows, second_rows)
+            self.assertEqual(len(first_rows), 2)
+            self.assertEqual(len(listed), 2)
+            rows_by_id = {int(row[0]): row for row in first_rows}
+            for listed_item in listed:
+                row = rows_by_id[listed_item["artifact_id"]]
+                recovered = read_monday_artifact(
+                    self.conn,
+                    storage=storage,
+                    run_id=str(self.v1_run_id),
+                    artifact_id=listed_item["artifact_id"],
+                )
+                self.assertEqual(recovered["data"], bytes(row[3]))
+                self.assertEqual(recovered["sha256"], row[2])
+                self.assertEqual(hashlib.sha256(recovered["data"]).hexdigest(), row[2])
+        after_run = self.conn.execute(
+            "SELECT to_jsonb(r) FROM runs r WHERE run_id=%s",
+            (self.v1_run_id,),
+        ).fetchone()[0]
+        self.assertEqual(
+            {key for key in before_run if before_run[key] != after_run[key]},
+            {"workflow_stage"},
+        )
+        self.assertEqual(after_run["workflow_stage"], "PACKET_BUILT")
+        self.assertTrue(first["drafts"]["idempotent_replay"])
+        self.assertFalse(first["packet"]["idempotent_replay"])
+        self.assertTrue(second["drafts"]["idempotent_replay"])
+        self.assertTrue(second["packet"]["idempotent_replay"])
+        self.assertEqual((first["release_performed"], first["shopify_calls"]), (False, 0))
+        self.assertEqual((second["release_performed"], second["shopify_calls"]), (False, 0))
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT
+                         (SELECT count(*) FROM monday_packet_build_events WHERE run_id=%s),
+                         (SELECT count(*) FROM monday_stale_forecast_retirements WHERE run_id=%s)""",
+                (self.v1_run_id, self.v1_run_id),
+            ).fetchone(),
+            (1, 0),
+        )
 
     def test_direct_v1_writes_refuse_while_v2_remains_available(self):
         assert self.conn is not None
