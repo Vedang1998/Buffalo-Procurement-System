@@ -103,7 +103,7 @@ and
   SHA-256
   `cd29779baed8c0aa4f2b622c493e3b9e80003422e4e9527a64225e13a9a86ee8`.
 - Owner transport ZIP:
-  `/home/runner/workspace/Buffalo_Sunday_Purchasing_Candidate_20260913.zip`,
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Sunday_Purchasing_Candidate_20260913.zip`,
   exposed through the final Codex file link; verify its separately reported
   SHA-256 and the package's recursive `SHA256SUMS` before use.
 

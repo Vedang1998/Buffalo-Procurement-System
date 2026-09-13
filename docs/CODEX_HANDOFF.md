@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-13T10:35:43Z (UTC)
+**Updated:** 2026-09-13T10:47:31Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -103,7 +103,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   is `cd29779b...` under the private runtime backup
   directory. Transport copies and complete hashes are recorded in the
   owner-facing artifact index. The final transport is
-  `/home/runner/workspace/Buffalo_Sunday_Purchasing_Candidate_20260913.zip`,
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Sunday_Purchasing_Candidate_20260913.zip`,
   exposed through the final Codex file link.
 - The 39 named PostgreSQL mapping methods plus three pure methods all execute
   green, and independent review found no production source defect in the final
