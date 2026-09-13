@@ -312,7 +312,42 @@ def local_logout(request: Request):
 @app.get("/health/full")
 def health_full():
     """Component-level health: app, DB, schema, seed, Shopify creds, foundation gates."""
-    return full_health()
+    return _runtime_labeled_status(full_health())
+
+
+def _runtime_labeled_status(value: dict) -> dict:
+    """Separate canonical facts from operational authority in the local demo."""
+
+    if runtime_config().mode != "SYNTHETIC_DEMO":
+        return value
+    result = dict(value)
+    readiness = result.get("po_readiness")
+    if isinstance(readiness, dict):
+        canonical = dict(readiness)
+        operational = dict(canonical)
+        operational["canonical_po_generation_enabled"] = bool(
+            canonical.get("po_generation_enabled", False)
+        )
+        operational["po_generation_enabled"] = False
+        result["canonical_po_readiness"] = canonical
+        result["po_readiness"] = operational
+    elif "po_generation_enabled" in result:
+        result["canonical_po_generation_enabled"] = bool(
+            result.get("po_generation_enabled", False)
+        )
+        result["po_generation_enabled"] = False
+    result.update(
+        {
+            "runtime_mode": "SYNTHETIC_DEMO",
+            "safety_label": "TEST DATA — NOT FOR ORDERING",
+            "operational_authority": {
+                "production_release_authorized": False,
+                "shopify_actions_authorized": False,
+                "order_actions_authorized": False,
+            },
+        }
+    )
+    return result
 
 
 STATUS_BADGE = {
@@ -716,10 +751,12 @@ def rules():
 @app.get("/foundation/status")
 def foundation_status():
     if not os.getenv("DATABASE_URL"):
-        return {"database_configured": False, "po_generation_enabled": False, "reason": "DATABASE_URL is not configured"}
+        return _runtime_labeled_status(
+            {"database_configured": False, "po_generation_enabled": False, "reason": "DATABASE_URL is not configured"}
+        )
     with _db_conn() as conn:
         result = po_readiness(conn)
-    return {"database_configured": True, **result}
+    return _runtime_labeled_status({"database_configured": True, **result})
 
 
 _MAPPING_STATE_FIELDS = (

@@ -70,7 +70,7 @@ def _source_identity() -> dict[str, str]:
             timeout=10,
         ).stdout.strip()
 
-    if read("status", "--porcelain=v1"):
+    if read("status", "--porcelain=v1", "--untracked-files=all"):
         raise BrowserAcceptanceError("browser acceptance requires a clean source tree")
     return {
         "commit": read("rev-parse", "HEAD"),
@@ -170,6 +170,16 @@ def _signal_process_group(pid: int | None, signum: int) -> None:
         pass
 
 
+def _process_group_exists(pid: int | None) -> bool:
+    if pid is None:
+        return False
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 def _stop_server_tree(
     process: subprocess.Popen[bytes], runtime_root: Path, *, timeout: float
 ) -> None:
@@ -186,14 +196,20 @@ def _stop_server_tree(
     if child_pid is not None:
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            try:
-                os.kill(child_pid, 0)
-            except ProcessLookupError:
+            if not _process_group_exists(child_pid):
                 break
             time.sleep(0.05)
         else:
             _signal_process_group(child_pid, signal.SIGKILL)
-            raise BrowserAcceptanceError("local Uvicorn child survived launcher stop")
+            second_deadline = time.monotonic() + 10
+            while time.monotonic() < second_deadline:
+                if not _process_group_exists(child_pid):
+                    break
+                time.sleep(0.05)
+            else:
+                raise BrowserAcceptanceError(
+                    "local Uvicorn process group survived launcher stop"
+                )
 
 
 def _stop_server(
@@ -947,6 +963,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                             browser.kill()
                             browser.wait(timeout=10)
 
+    final_source_identity = _source_identity()
+    if final_source_identity != source_identity:
+        raise BrowserAcceptanceError(
+            "source identity changed during browser acceptance"
+        )
     browser_state = json.loads(state_path.read_text(encoding="utf-8"))
     downloads_result = _validate_downloads(
         downloads, args.runtime_root, browser_state
@@ -957,7 +978,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     result = {
         "format": "BUFFALO_LOCAL_PURCHASING_BROWSER_ACCEPTANCE_SUMMARY_V1",
         "safety_label": "TEST DATA — NOT FOR ORDERING",
-        "source_identity": source_identity,
+        "source_identity": final_source_identity,
+        "source_identity_reverified_at_completion": True,
         "database": _database_facts(args.database_url, require_initialized=True),
         "phase1": phase1,
         "phase2": phase2,

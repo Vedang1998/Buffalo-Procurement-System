@@ -482,13 +482,18 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             subprocess.TimeoutExpired(["uvicorn"], 1),
             -9,
         ]
-        with mock.patch.object(candidate.os, "killpg") as kill_group:
+        with mock.patch.object(
+            candidate.os,
+            "killpg",
+            side_effect=[None, None, ProcessLookupError],
+        ) as kill_group:
             candidate._terminate_owned_process_group(stubborn, timeout=1)
         self.assertEqual(
             kill_group.call_args_list,
             [
                 mock.call(stubborn.pid, candidate.signal.SIGTERM),
                 mock.call(stubborn.pid, candidate.signal.SIGKILL),
+                mock.call(stubborn.pid, 0),
             ],
         )
 

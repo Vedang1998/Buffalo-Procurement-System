@@ -196,6 +196,51 @@ class LocalAccessTests(unittest.TestCase):
             with self.subTest(page=page[:80]):
                 self.assertIn("TEST DATA — NOT FOR ORDERING", page)
 
+        canonical_readiness = {
+            "po_generation_enabled": True,
+            "gates": [],
+            "blockers": [],
+        }
+        connection = mock.MagicMock()
+        context = mock.MagicMock()
+        context.__enter__.return_value = connection
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+                    "DATABASE_URL": "postgresql://synthetic.invalid/not-opened",
+                },
+            ),
+            mock.patch.object(
+                api,
+                "full_health",
+                return_value={"po_readiness": canonical_readiness},
+            ),
+            mock.patch.object(api, "_db_conn", return_value=context),
+            mock.patch.object(
+                api, "po_readiness", return_value=canonical_readiness
+            ),
+        ):
+            synthetic_client = self._client()
+            self.assertEqual(self._login(synthetic_client).status_code, 303)
+            health_payload = synthetic_client.get("/health/full").json()
+            foundation_payload = synthetic_client.get("/foundation/status").json()
+        for payload in (health_payload, foundation_payload):
+            with self.subTest(payload=payload):
+                self.assertEqual(payload["runtime_mode"], "SYNTHETIC_DEMO")
+                self.assertEqual(
+                    payload["safety_label"], "TEST DATA — NOT FOR ORDERING"
+                )
+                self.assertFalse(payload["operational_authority"]["order_actions_authorized"])
+                self.assertFalse(payload["operational_authority"]["shopify_actions_authorized"])
+        self.assertTrue(
+            health_payload["canonical_po_readiness"]["po_generation_enabled"]
+        )
+        self.assertFalse(health_payload["po_readiness"]["po_generation_enabled"])
+        self.assertTrue(foundation_payload["canonical_po_generation_enabled"])
+        self.assertFalse(foundation_payload["po_generation_enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()

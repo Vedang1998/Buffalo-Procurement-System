@@ -482,15 +482,26 @@ def _terminate_owned_process_group(
             process.terminate()
     try:
         process.wait(timeout=timeout)
-        return
     except subprocess.TimeoutExpired:
-        pass
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            if process.poll() is None:
+                process.kill()
+        process.wait(timeout=timeout)
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        os.killpg(process.pid, 0)
     except ProcessLookupError:
-        if process.poll() is None:
-            process.kill()
-    process.wait(timeout=timeout)
+        return
+    os.killpg(process.pid, signal.SIGKILL)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    raise CandidateBoundaryError("owned child process group survived termination")
 
 
 def serve(database_url: str, runtime_root: Path, port: int) -> int:
