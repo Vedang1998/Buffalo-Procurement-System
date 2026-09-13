@@ -331,7 +331,7 @@ def _runtime_labeled_status(value: dict) -> dict:
         operational["po_generation_enabled"] = False
         result["canonical_po_readiness"] = canonical
         result["po_readiness"] = operational
-    elif "po_generation_enabled" in result:
+    if "po_generation_enabled" in result:
         result["canonical_po_generation_enabled"] = bool(
             result.get("po_generation_enabled", False)
         )

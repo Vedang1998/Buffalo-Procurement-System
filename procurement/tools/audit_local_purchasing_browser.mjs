@@ -395,6 +395,7 @@ async function audit(client) {
       check(
         status.body.runtime_mode === "SYNTHETIC_DEMO" &&
           status.body.safety_label === "TEST DATA — NOT FOR ORDERING" &&
+          status.body.po_generation_enabled === false &&
           status.body.operational_authority?.production_release_authorized === false &&
           status.body.operational_authority?.shopify_actions_authorized === false &&
           status.body.operational_authority?.order_actions_authorized === false,

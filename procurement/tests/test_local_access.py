@@ -215,7 +215,10 @@ class LocalAccessTests(unittest.TestCase):
             mock.patch.object(
                 api,
                 "full_health",
-                return_value={"po_readiness": canonical_readiness},
+                return_value={
+                    "po_generation_enabled": True,
+                    "po_readiness": canonical_readiness,
+                },
             ),
             mock.patch.object(api, "_db_conn", return_value=context),
             mock.patch.object(
@@ -237,6 +240,8 @@ class LocalAccessTests(unittest.TestCase):
         self.assertTrue(
             health_payload["canonical_po_readiness"]["po_generation_enabled"]
         )
+        self.assertTrue(health_payload["canonical_po_generation_enabled"])
+        self.assertFalse(health_payload["po_generation_enabled"])
         self.assertFalse(health_payload["po_readiness"]["po_generation_enabled"])
         self.assertTrue(foundation_payload["canonical_po_generation_enabled"])
         self.assertFalse(foundation_payload["po_generation_enabled"])
