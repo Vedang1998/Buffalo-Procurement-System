@@ -9,6 +9,37 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.
 
+## Sunday local purchasing candidate
+
+**BOUNDED SYNTHETIC END-TO-END PASS — FULL PRODUCT PARTIAL / PRODUCTION BLOCKED**
+
+The isolated branch `codex/sunday-purchasing-release-candidate` has a reviewed
+and locally tested code/test checkpoint at
+`802efc8147693d0de65d5636a0c1607364b5dd4f`, tree
+`843959cd3598eba12c6899bb1a003fad6a1e1003`. A real loopback Chromium
+workflow passed fabricated package intake, DEFER, exact existing-offer mapping,
+separate shadow selection, one mixed eligible/blocked Monday run, quantity edit,
+distinct MATERIAL confirmation, one-vendor internal DRAFT/download, replay and
+process restart. Export remains `INTERNAL_DRAFT_ONLY` and
+`SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
+attempted or proven. A real same-host PostgreSQL/storage backup restored the exact
+durable state into a new empty owned database. Startup passed 10/10, focused
+validation passed 77/77, and the final suite passed 788/788 with every abnormal
+counter zero.
+
+This checkpoint changes no official production phase. The mapping registry is
+shadow-only; activation, policy mapping and recommendation cutover are disabled.
+The full 39+3 clause matrix has only partial independent evidence despite all
+42 named tests being green. Private real sources and commercial inputs remain
+unapproved, the forecast/price-lifecycle/browser scenario portfolio is
+incomplete, and no deployment, Shopify call, PO release or real order is
+authorized. Current explicit states are `LOCAL_END_TO_END = PASS` for the
+bounded synthetic case, `COMMERCIAL_DATA_READINESS = NOT_APPROVED`,
+`PRODUCTION_RELEASE = BLOCKED`,
+`FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`, and `GOAL = INCOMPLETE`. See
+`docs/SUNDAY_PURCHASING_ACCEPTANCE.md` and the latest
+entry in `docs/CODEX_HANDOFF.md` for exact evidence and limitations.
+
 ## Offline supplier-mapping review tooling
 
 **REVIEW-ONLY CHECKPOINT — NOT A PHASE COMPLETION OR OPERATIONAL AUTHORITY**
@@ -43,14 +74,16 @@ independently passed `61/61` and found no concrete P0/P1. It does not replace
 the Claude-specific review; Claude remains `REVIEW PENDING` because the
 existing OAuth session expired, with no workaround or paid API used; an exact
 frozen-candidate prompt is retained in host-local evidence. Historical
-checkpoint-cadence and design-timestamp proof limitations are explicitly
-disclosed in `docs/CODEX_HANDOFF.md`. The
-persistent multi-offer mapping-authority packet is design-only: no migration,
-UI, mapping/price approval, selected offer, writeback, or cutover was
-implemented. Nothing is activated or written to an operational database. This
-milestone does not change Phase 4, Phase 6, CURRENT/FUTURE pricing, readiness,
-mapping, or PO status. Exact next action is ChatGPT/owner review of the frozen
-V5 checkpoint and host-local evidence.
+checkpoint-cadence and design-timestamp proof limitations are
+explicitly disclosed in `docs/CODEX_HANDOFF.md`. At that earlier Daytime
+checkpoint, the persistent multi-offer mapping-authority packet was design-only:
+no migration, UI, mapping/price approval, selected offer, writeback, or cutover
+had been implemented. That earlier milestone changed no Phase 4/6,
+CURRENT/FUTURE pricing, readiness, mapping, or PO status; its then-recorded next
+action was ChatGPT/owner review of the frozen V5 checkpoint and host-local
+evidence. The separate Sunday candidate above subsequently implemented
+provisional migration 014 only in owned isolated PostgreSQL and remains
+shadow-only; nothing was activated or written to an operational database.
 
 ## Official implementation phases
 

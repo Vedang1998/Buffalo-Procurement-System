@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-13T01:05:39Z (UTC)
+**Updated:** 2026-09-13T10:35:43Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,137 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Sunday local purchasing candidate — BOUNDED SYNTHETIC END-TO-END PASS / FULL GOAL INCOMPLETE
+
+- Under contract `BUFFALO-SATURDAY-PURCHASING-COMPLETION-2026-09-12`, work
+  preserved reader/QA I0 `5f86eee6...`, reviewed merge-hook safety
+  `9cbbf368...`, reviewed persistent-mapping design `b0c8d3fe...`, and the
+  separately packaged Wright correction `e0bd6ce6...`. Work was isolated from
+  base `f4f376442b8d019bd2418d74bb8766d0739c73f4` on branch
+  `codex/sunday-purchasing-release-candidate`, with no remotes, disabled hooks
+  and disabled default push. The protected connected checkout remained clean
+  at `3a4704e...` / tree `1986bd8...`.
+- Exact code/test candidate
+  `802efc8147693d0de65d5636a0c1607364b5dd4f`, tree
+  `843959cd3598eba12c6899bb1a003fad6a1e1003`, implements the reviewed
+  persistent-mapping foundation and its provisional migration 014, fabricated
+  package intake, append-only mapping/rejection/selection services, a
+  loopback-only named-session/CSRF boundary, server-paged mapping UI, the
+  existing Monday review/DRAFT flow, synthetic initialization, a supervised
+  launcher, real same-host backup/restore, and a two-phase Chromium auditor.
+  All mapping read/write flags remain server-enforced; activation, selected-
+  offer recommendation cutover and policy mapping remain disabled.
+  `802efc8...` descends from the previously tested `6ebe829...` checkpoint and
+  adds top-level `TEST DATA — NOT FOR ORDERING`, `SYNTHETIC_DEMO` and explicit
+  fabricated-authoritative-format disclosure to standalone mapping evidence;
+  it grants no new authority.
+- A stale launcher catalog binding was exposed by the first browser database
+  preflight: migration marker/contract were exact, but the pinned catalog
+  signature was an older `98f6...` value. It was corrected to the installed
+  and freshly recomputed `5a9fff00...` value, pinned by the existing unit
+  method, focused-tested, and independently re-reviewed. A second preflight
+  stopped before server/browser startup because the scrubbed PATH omitted the
+  installed Chromium/Node locations. Both failed roots are preserved as setup
+  evidence; neither performed an acceptance run.
+- The accepted real browser run is bound to exact commit/tree above and
+  reverified a clean all-files validation clone at completion. Phase one passed 126
+  assertions and phase two passed 23 assertions after a real application
+  process restart. It used only fabricated owner-demo data on PostgreSQL 16.9
+  at `127.0.0.1`; runtime/UI/API responses were conspicuously
+  `TEST DATA — NOT FOR ORDERING` and masked operational PO authority while
+  preserving canonical diagnostic facts separately.
+- Observed durable effects were exactly two review batches/candidates, a DEFER
+  and a LINKED_EXISTING APPROVE decision, one separate SELECT event/head with
+  shadow `MATCH`, one Monday run, one eligible recommendation, one still-OPEN
+  blocked variant with a RUN_ONLY exclusion, one MATERIAL edit confirmation,
+  and one internal DRAFT/line for Synthetic Southern. The DRAFT was two cases
+  / 12 units with merchandise and PO totals of `$20.02`. There were zero
+  non-DRAFT POs, zero persisted spoof-actor rows, zero Shopify calls and no
+  release action.
+- Downloaded artifact hashes were
+  `7924b9a999a6a70a295b6589764e6a2d28d1511c6ee43fe485461ede6af015ea`
+  for the internal CSV and
+  `68c53a5c05a01b317e4a30a935a083a13a4bbc655d2aba72e7e2d3ce3a49c00f`
+  for the 12-member review ZIP. Both were re-fetched and hash-verified after
+  restart. Two separate mapping-evidence JSON downloads remained metadata-only
+  and review-only, and each carries an explicit top-level synthetic safety
+  label and fabricated-source disclosure. Export remains
+  `INTERNAL_DRAFT_ONLY` with
+  `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
+  attempted or proven.
+- A real PostgreSQL custom-format dump and private storage archive were created
+  with sessions/secrets excluded, then restored into a new empty owned
+  `buffalo_802efc8_restore_demo` database. The complete relation and sequence
+  inventories, stored artifact bytes and durable state matched exact SHA-256
+  `80ffbb0786cb748e58167e4963f13b19764b1eda847068a0d331f7b3496e9fbb`
+  before backup and after restore. This is same-host recovery evidence, not an
+  off-host or host-replacement backup claim.
+- Cached `uv 0.12.3` validated the lock (`Resolved 22 packages`). The executed
+  Python 3.13.11 environment's five direct project dependencies match the lock.
+  Startup hardening passed **10/10**; the final focused set passed **77/77** in
+  67.188 seconds; and one authoritative run against owned loopback PostgreSQL
+  16.9 passed **788 discovered / 788 executed / 788 passed** in 827.302 seconds.
+  Failures, errors, skips, expected failures and unexpected successes were all
+  zero. Two preserved setup attempts ran zero tests: offline `uv run` lacked a
+  cached HTTPX wheel and isolated repository `.venv` lacked Psycopg. The
+  final lock-check setup also stopped before resolution because the scrubbed
+  PATH omitted Python 3.13. The accepted runs used the already-installed
+  dependency-matching interpreter under `env -i`; there was no network
+  fallback, CI run or automatic CI retry, and the accepted DB-reaching complete
+  suite ran once.
+- Complete-suite fixture teardown removed the shared owned-cluster synthetic
+  SET-role membership. Only the exact reviewed SET-only
+  `qa_release_login` to `qa_mapping_owner` edge was restored; a final read-only
+  connection re-proved session/effective role, database, loopback PG16 and the
+  unchanged `80ffbb07...` durable-state hash. No production role changed.
+- Accepted browser evidence is under
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-purchasing-browser-802efc8-final-20260913T102200Z`;
+  its summary SHA-256 is `f941ce3bb9bc0c35b608964eb62a9f06faaebc6954421da809084002c4836dd1`.
+  Accepted focused/startup/full logs are under
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-purchasing-validation-802efc8-20260913T102300Z`
+  with focused/startup/full SHA-256 values `48531a2b...`, `8cbc2321...` and
+  `722fc32e...`. Backup manifest SHA-256
+  is `cd29779b...` under the private runtime backup
+  directory. Transport copies and complete hashes are recorded in the
+  owner-facing artifact index. The final transport is
+  `/home/runner/workspace/Buffalo_Sunday_Purchasing_Candidate_20260913.zip`,
+  exposed through the final Codex file link.
+- The 39 named PostgreSQL mapping methods plus three pure methods all execute
+  green, and independent review found no production source defect in the final
+  mapping fixes. However, independent strict clause review accepts only
+  PostgreSQL rows 7, 11, 34 and 39 as full PASS; the other 35 PostgreSQL rows
+  and pure P1–P3 remain PARTIAL. Do not describe 42 green methods as execution
+  of every clause in the reviewed 39+3 matrix.
+- Browser scope was deliberately narrow: one regular vendor/offer/price, one
+  eligible and one blocked variant. Private V5/S1 inputs, corrupted package
+  cases, mapping breadth/concurrent browser actions, price-book/vendor-rule
+  mutations, CURRENT/FUTURE/carry/deal cases, full forecast portfolio,
+  one-bottle/receipt cases, BT/CS/assortment/combo and multi-vendor scenarios
+  were not all browser-run. The implementation still identifies its forecast
+  as `EMERGENCY_TRANSPARENT_V1`; model-selection/FVA and full ABC/XYZ/seasonal
+  strategy remain incomplete, strategic buying stays evidence-only, and
+  immutable same-day DRAFT supersession is not implemented.
+- Final status is therefore: `LOCAL_END_TO_END = PASS` for the bounded
+  synthetic vertical; `COMMERCIAL_DATA_READINESS = NOT_APPROVED`;
+  `PRODUCTION_RELEASE = BLOCKED`;
+  `FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`; and
+  `GOAL = INCOMPLETE`. No main/remote ref, PR, GitHub Actions run,
+  connected-app file, Replit setting, deployment, publication, operational DB, Shopify,
+  supplier, price activation, PO release or real order changed.
+- Exact next boundary: owner/external review of the frozen transport and matrix
+  gaps; then physically separate private-real source review and fresh real
+  catalog/sales/inventory/incoming/vendor/mapping/price evidence. Close forecast,
+  price lifecycle, supersession and missing browser scenarios before claiming
+  the full product. Remote integration, CI, receiver installation, deployment
+  and any Shopify/order action each require later explicit authorization.
+- Launchability is local-only. With the preserved/restored owned PostgreSQL 16
+  demo database running, use the exact `serve` command and private runtime root
+  recorded in `docs/SUNDAY_PURCHASING_ACCEPTANCE.md`, then browse on the same
+  host at `http://127.0.0.1:8765/`. The acceptance server was stopped; no
+  public preview or tunnel remains. The owned loopback PostgreSQL cluster was
+  stopped after final launchability readback; its private host-local data root
+  remains for the recorded restart command.
 
 ### Overnight PR #23 CI and prospective reader/QA integration — HOSTED GREEN / LOCAL GREEN / NOT MERGED
 
@@ -2912,35 +3043,36 @@ state and still awaits Claude's bounded independent re-review.
 - Pre-retirement Phase 3 had 1,979 exact active historical/current IDs, 20 genuinely new active variants, 46 deleted historical identities, and 4 inactive-as-expected identities.
 - Exact lookup plus deterministic continuity review found no credible current counterpart for all 46 deleted identities; human-authorized retirement was executed and audited before the successful post-retirement catalog sync.
 
-## Authorization boundary / next action
+## Historical / superseded authorization boundaries
 
-The correction lineage recorded that Phase 5 Foundation UI remains
-**COMPLETE**. Corrective published-production
-Phase 4 implementation, authority, review, merge, and CI gates are complete at
-`main` `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`, but production execution and
-independent post-action reconciliation remain outstanding. G9 read-only
-preflight-mode implementation is validated on
-`codex/phase4-production-preflight-mode` but has not been reviewed, merged, or
-run in the published Scheduled Deployment. No deployment or production
-connection is authorized yet. Phase 6 is owner-authorized but **PAUSED** on
-this prerequisite. The exact next action is ChatGPT implementation review and
-independent adversarial review of the G9 branch before PR authorization.
-Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
-generation/release, Shopify mutation, and other downstream implementation
-remain out of scope. The supplier-reader/QA lineage separately recorded that
-the immediate next action is ChatGPT/owner review of the frozen Daytime V5
-review-only checkpoint, its host-local evidence, the pending Claude-specific
-review, and the separate non-green PR #23 CI result. No V5 merge, PR, or
-operational action is authorized. Phase 5 Foundation UI remains **COMPLETE**.
-The phase-specific future boundary remains the ChatGPT-controlled final
-published-production Phase 4 release preflight: corrective implementation,
-authority, review, merge, and CI gates are complete at `main`
-`74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb`, but production execution and
-independent post-action reconciliation remain outstanding. No Scheduled
-Deployment or production connection is authorized yet. Phase 6 is
-owner-authorized but **PAUSED** on this prerequisite. Vendor Rules, inventory
+The controlling current boundary is the Sunday local purchasing candidate
+entry at the top of this handoff. The older boundaries below are retained only
+as historical provenance and grant no present authority.
+
+At the earlier `1920a16a6dc13a1b4357315f5049b938cbe7c0e2` snapshot,
+Phase 5 Foundation UI was recorded as **COMPLETE**, while published-production
+Phase 4 execution and independent post-action reconciliation remained
+outstanding. G9 read-only preflight-mode implementation was recorded as
+validated on `codex/phase4-production-preflight-mode` but unreviewed, unmerged
+and not run in the published Scheduled Deployment. No deployment or production
+connection was authorized; Phase 6 was paused on that prerequisite. The
+then-recorded next action was ChatGPT implementation review and independent
+adversarial review of G9 before PR authorization. Vendor Rules, inventory
 snapshots, price books, forecasting, procurement, PO generation/release,
-Shopify mutation, and other downstream implementation remain out of scope.
-These are retained historical boundaries; the current prospective integration
-status is recorded in the newest entry above and grants no merge or operational
+Shopify mutation and other downstream implementation were recorded as out of
+scope.
+
+The supplier-reader/QA lineage separately recorded an immediate owner review
+of its frozen Daytime V5 review-only checkpoint, host-local evidence, pending
+Claude-specific review and then-non-green PR #23 CI result. It granted no V5
+merge, PR or operational authority. At the later
+`74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb` snapshot, corrective Phase 4
+implementation/authority/review/merge/CI gates were recorded complete, while
+production execution and independent post-action reconciliation were still
+outstanding. Scheduled Deployment and production connection remained
+unauthorized; Phase 6 was paused, and the downstream areas remained out of
+scope.
+
+These are retained historical boundaries only. The controlling current
+boundary is the Sunday entry above and grants no merge or operational
 authority.
