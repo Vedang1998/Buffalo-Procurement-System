@@ -1,4 +1,3 @@
-#!/bin/bash
-set -e
-pnpm install --frozen-lockfile
-pnpm --filter db push
+#!/bin/sh
+printf '%s\n' 'Automatic post-merge actions are disabled.'
+exit 0
