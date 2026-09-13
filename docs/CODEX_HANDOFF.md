@@ -392,6 +392,429 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   job log byte-for-byte with a retained hash. Diagnose its first traceback and
   final runner/service evidence before authorizing any CI rerun, behavioral
   patch, foundation integration, or dependent persistent-mapping implementation.
+### Overnight Packet A maintenance-identity correction — COMPLETE AS DESIGN / STATIC REVIEW PASS / FROZEN AT CLOSEOUT
+
+- The expanded overnight window began at `2026-09-11T03:56:29Z`; its hard
+  eight-hour deadline is `2026-09-11T11:56:29Z`, with the final 75 minutes
+  reserved from `2026-09-11T10:41:29Z`. The design branch was reverified clean
+  and synchronized at exact parent
+  `faad4bb2c327485c5409be89a8c592cb8201efd3`, tree
+  `5defb293425e05bc82acbf38b88e561d569abbf0`, before the correction. No
+  unexpected work was discarded.
+- The maintenance-identity specification commits are initial correction
+  `b49850b3a28f6810f19d333e9967039bd29443ed` followed by review remediation
+  `f5791627feedfefe2becddffebc70e2a25ffa719`. The resulting tree is
+  `af31285d372ad50c88dbb3d1d03b30831be14b3c` and the specification blob is
+  `31ae73d0940de7caca7f60cf204db161bfe22f58`. Those commits change only
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  This closeout changes only `docs/CODEX_HANDOFF.md`; the final Packet A delta
+  from `faad4bb...` is therefore exactly the two authorized documents. Once
+  this closeout is committed and pushed, that branch tip is the frozen NEW-1
+  confirmation target and later packets must not move it.
+- **NEW-1 implicit caller trust — corrected in design, unexecuted.** The
+  proposed release manifest now pins a server-owned maintenance-identity
+  configuration reference, its full-document SHA-256, and the SHA-256 of its
+  canonical non-empty ordered exact `(session_user,current_user)` pair set.
+  The configuration is a separately approved release/deployment input. Actual
+  production role names remain unassigned; missing, placeholder, malformed,
+  wrong-release/schema, empty, or hash-mismatched input refuses and the caller
+  is never substituted as a default.
+- The config shape is now mechanical rather than implied: one exact-key JSON
+  object with an exact array of
+  `{session_user,current_user}` objects, sorted exact role names, specified
+  UTF-8 canonical separators/key ordering, and one final LF for the full file.
+  A fabricated test vector fixes independently reproducible config and pair
+  hashes. Publication must prove the parsed config, manifest fields, and exact
+  rendered SQL literals agree before migration/function hashes are accepted;
+  tuple-shaped or merely self-consistent wrong literals refuse.
+- The proposed runner loads only that literal manifest reference and verifies
+  PostgreSQL's complete observed pair before either role is exempted or any
+  persistent-mapping-family SQL runs. An unapproved application invocation or
+  application-origin `SET ROLE` stops at that boundary. The same check runs
+  before proposed authority DDL and again before signature publication. The
+  accepted scope remains narrow: schema-through-013 legacy files may already
+  have committed before this mapping-family refusal; no mapping marker,
+  authority row, or role membership may change.
+- The proposed installed topology helper embeds the same canonical pair
+  contract/config digest as reviewed SQL literals, recomputes the pair digest,
+  and reads PostgreSQL's own `session_user` and `current_user`. Its complete
+  source/properties remain independently hash-pinned by the runner. The
+  no-argument installed assertion invokes it as its first trust-boundary
+  operation. A caller argument, request actor, mutable `meta` row, custom GUC,
+  direct health-check call, or arbitrary combination of individually known
+  roles cannot alter the expected pair.
+- Maintenance-pair rotation is explicitly staged. Adjacent releases require a
+  non-empty old/new pair intersection and the invoker must be in it. Replacing
+  disjoint sets requires one release that adds a new pair while retaining an
+  old transition pair, then a second release that removes the old pair. A
+  one-step disjoint change refuses; no caller or administrator is silently
+  grandfathered as a bridge.
+- Real maintenance continues to scan every other non-superuser login's
+  direct/transitive `SET ROLE`, `INHERIT`, mixed owner paths, and effective
+  schema/relation/column/function privileges. No `SECURITY DEFINER`, grant,
+  membership change, application permission, startup credential, or actual
+  identity configuration is proposed. Superusers remain trusted database
+  administrators outside the ordinary ACL threat model; this check is not
+  claimed to defeat a malicious administrator. Ordinary application startup
+  cannot implicitly act as maintenance. A later approved integration must bind
+  and invoke the separate approved maintenance session or the mapping migration
+  remains blocked.
+- Planned PostgreSQL row 26 now covers an approved exact pair, application
+  runner and direct-assertion calls, application-origin role assumption,
+  direct/transitive owner paths, missing/mismatched binding, recombined roles,
+  and forged arguments/GUCs, including zero mapping marker/authority/member
+  effects. It remains one method, so the unexecuted matrix stays exactly **39
+  PostgreSQL + 3 pure/static methods**, 42 unique names, with planned floors
+  39 and 3 and a sum-derived global floor.
+- Static writer checks passed: the one proposed-Python block parses with
+  `ast` (529 lines); both fixed vector hashes reproduce; the matrix is exactly
+  39+3 with 42 unique test names; the
+  proposed SQL still contains exactly five tables, four views, and 35 functions
+  with 35 pinned search paths; dollar tags balance; `git diff --check` and the
+  bounded added-line secret-pattern scan pass. The proposed SQL was not parsed
+  by PostgreSQL, executed, or accepted against a database. No full suite was
+  run for this documentation-only delta.
+- Runtime and operational authority remain byte-identical to the parent:
+  `procurement/src=01b78c126549a576d3e182925a976e239a3ac84b`,
+  `procurement/db=5033259c8a99d49a5900dc2db224dbf30484cf1e`,
+  `procurement/config=ecc9a177de316fa987f51c3079b8a8da25e3650e`,
+  `procurement/tests=93d1701d6e232802d45241911f74aa2bc6c53ef5`, and
+  `procurement/tools=a66ee05ca5ae08a18a8707afba82b807e7046a49`.
+  Canonical authority, CURRENT, Master Plan, rules, and phase-status bytes are
+  also unchanged. SQL/migration execution, operational DB access, Shopify,
+  role/permission changes, approvals, activation, PR/CI mutation, integration,
+  deployment, supplier contact, and orders remain zero/not performed.
+- Narrow reviewer `/root/packet_a_static_review` initially returned **REQUEST
+  CHANGES** on
+  `b49850b...`: runner tuples and SQL objects lacked one normative
+  serialization, and a disjoint pair rotation had no possible one-release
+  invoker. Both findings are corrected in `f579162...`; bounded static recheck
+  returned **PASS** on exact `f579162...` and combined `faad4bb..f579162`
+  with no remaining P0/P1/P2. The reviewer independently reproduced both
+  fixed hashes, parsed the 529-line Python block, and confirmed 39+3. This is
+  static design approval only, not SQL parsing/execution, PostgreSQL acceptance,
+  integration approval, or deployment approval.
+- Short independent-confirmation prompt: review only the final two-document
+  delta from `faad4bb...` on
+  `codex/persistent-mapping-foundation-design`; verify exact independently
+  configured session/effective-role pair binding in runner and direct assertion,
+  row 26, unchanged 39+3 count, and zero caller/GUC/meta default; treat all SQL
+  and tests as unexecuted and do not reopen Claude's seven closed findings.
+
+Overnight continuation ledger at this checkpoint:
+
+| Packet | Status | Durable boundary |
+|---|---|---|
+| A — maintenance identity | `DONE AS STATIC DESIGN / EXECUTABLE PROOF UNRUN` | Frozen at this closeout; do not move the branch afterward |
+| B — PR #23 CI | `DIAGNOSTIC DOSSIER COMPLETE / ROOT CAUSE BLOCKED` | Existing attempt-1 log from an authorized Actions reader is the exact missing evidence; no rerun or patch is justified yet |
+| C — integration rehearsal | `NOT STARTED` | Private scratch only after A freezes |
+| D — source-format regressions | `READ-ONLY INVENTORY COMPLETE / QA WRITES NOT STARTED` | Isolated `codex/supplier-format-regression-prep` must start from exact `a056e111...` |
+| E — prerequisite previews | `NOT STARTED` | Static/current-source recommendations and private inventory only |
+
+### Persistent mapping construction remediation — COMPLETE AS DESIGN / IMPLEMENTATION STILL UNAUTHORIZED / STOPPED
+
+- The owner accepted Claude's independent **REQUEST CHANGES** verdict on the
+  initial construction specification and authorized one documentation-only
+  remediation. Work began from a clean, synchronized local/upstream/live
+  `codex/persistent-mapping-foundation-design` at exact
+  `13bbb48d4b3f1d529f9b794e11188d53ad11155c`, tree
+  `1d01359456c70a57be133b73f66f11c6b54198f1`. That checkpoint remains the
+  direct ancestor; no amend, reset, rebase, force-push, merge, cherry-pick, PR,
+  or CI action was performed.
+- The identifiable specification-remediation commit is
+  `69a99a74106dad6da3637e623e2e81eb9e4672bd`, tree
+  `c1bab73a2c6a7053ed3e3b7f98b3a60620d3888d`, with specification blob
+  `fd0ec4b92f039964fe19115dbb65722a3b05136e`. It changes only
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  The closeout commit containing this entry adds only `docs/CODEX_HANDOFF.md`;
+  therefore final scope from `13bbb48...` is exactly those two authorized
+  documents.
+- **P1 independent replay trust anchors — design-remediated, unexecuted.** An
+  ordered literal runner manifest binds each reviewed release, migration bytes,
+  PostgreSQL major, stable schema name, both validator/calculator definitions
+  and properties, and every non-catalog helper. Runtime schema OIDs bind catalog
+  reads during one invocation but are not portable hash inputs. Trusted catalog
+  inspection precedes either anchor invocation; database metadata cannot choose
+  an older version. Exact manifest prefixes permit a reviewed v2 transition
+  without v1 SQL overwriting it, while missing/unknown/coordinated tampering
+  refuses.
+- **P1 explicit schema and safe resolution — design-remediated, unexecuted.**
+  The proposal binds one explicit non-system/non-temporary target schema by
+  safely quoted name and invocation OID, qualifies authority/marker/anchor
+  references, and gives every owned function a signed path with explicit
+  `pg_temp` last. Legacy unqualified DDL uses a separate target-first path.
+  Only `schema_postgres.sql` may install genuinely absent pgcrypto; installation
+  and post-verification share its transaction. Preinstalled and fresh paths
+  refuse target/helper decoys, wrong extension membership, untrusted effective
+  `CREATE`, unusable targets, wrong controlled resolution, or a non-16 server
+  before a marker commits.
+- **P1 effective ownership and role membership — design-remediated,
+  unexecuted.** The generic boundary treats the explicitly invoked maintenance
+  principal and superusers as trusted administration and every other
+  non-superuser LOGIN as untrusted. Direct/transitive `SET ROLE`, `INHERIT`, and
+  mixed paths plus effective schema/relation/column/function privileges are
+  checked. Unsafe topology refuses and is reported; the migration neither
+  invents production role names nor changes memberships. Custom
+  `procurement.*` settings alone are never identity.
+- **P1 DEFER without invented identity — design-remediated, unexecuted.**
+  Candidate operational keys are conditionally nullable. DEFER preserves the
+  immutable batch/candidate, actual ABSENT/EXPLICIT_NULL/VALUE evidence, reason,
+  and verified human provenance while storing null operational targets, keys,
+  package, mutable fingerprints, and results. APPROVE remains fully strict;
+  REJECT requires the separately defined exact Variant/vendor/supplier scope.
+  DEFER has no offer, rejection, approval, selection, price, Shopify, or order
+  effect.
+- **P1 concurrent idempotency and offer reuse — design-remediated,
+  unexecuted.** Intake, mapping, and selection authenticate before replay
+  disclosure, acquire a payload-neutral operation/scope/key session lock on a
+  dedicated backend before a fresh `SERIALIZABLE` snapshot, recheck the complete
+  request, and use deterministic business-lock order. Known-abort automatic
+  retries are limited to proven `40001` or `40P01` cases. Separately, an unknown
+  COMMIT outcome may start a new attempt only after a new authenticated,
+  idempotency-locked lookup proves the original backend gone and key absent;
+  otherwise it returns `COMMIT_OUTCOME_UNKNOWN`. Both paths share three total
+  attempts, a five-second lock wait, and a 30-second operation limit, with
+  explicit cleanup. The service locks the operational offer key
+  before lookup/create; a changed create-to-link result requires a fresh preview,
+  new confirmation, and new key. Every historical approval permanently binds
+  key to offer even when effectiveness later changes.
+- **P2 test registration — corrected in design, unexecuted.** There is no
+  proposed `TEST_MODULES`. The expanded matrix contains exactly **39 planned
+  disposable-PostgreSQL methods plus three planned pure/static methods**, 42
+  unique names. Planned floors are
+  `test_persistent_mapping_foundation_postgres.py: 39` and
+  `test_persistent_mapping_foundation_contract.py: 3` through
+  `REQUIRED_MODULE_MINIMUMS`; discovery remains `test_*.py` and the global
+  floor remains sum-derived.
+- **P2 migration-lock scope — corrected in design, unexecuted.** Runner and SQL
+  use one version-independent, schema-scoped mapping-family transaction-lock
+  key. The claim begins only at the mapping family: concurrent invocations may
+  already have re-executed and committed legacy schema-through-013 files. It is
+  not whole-run serialization or whole-chain rollback.
+- The matrix retains every prior acceptance requirement and adds substantive
+  trust-anchor, hostile-schema/helper, recursive-role, unresolved-DEFER,
+  concurrent intake/mapping/selection, confirmation-sensitive offer reuse,
+  inverse different-key/same-offer concurrency, retry exhaustion, lock cleanup,
+  and unknown-COMMIT cases without changing the five-table/four-view slice.
+  Fresh validation uses the actual chain; upgrade validation uses an exact 013
+  predecessor that does not already contain the proposed objects.
+- Static writer checks passed: `git diff --check`; one proposed-Python block
+  parsed by `ast` (423 lines); exact matrix accounting `39 + 3` with 42 unique
+  test IDs; proposed SQL structural accounting of five tables, four views, and
+  35 functions with 35 pinned search paths; balanced dollar tags; exact
+  one-file pre-closeout scope; and bounded added-line secret-pattern scanning.
+  The proposed SQL was not parsed by a PostgreSQL parser, applied, or executed.
+  No full suite was run for documentation-only changes.
+- Read-only reviewer `/root/service_acceptance_audit` returned **PASS** with no
+  P0/P1/P2 on exact spec blob `fd0ec4b...` for action-specific provenance,
+  DEFER/REJECT semantics, permanent identity versus effective authority,
+  idempotency/reconfirmation, inverse-key concurrency, and the 39+3 matrix.
+  Read-only reviewer `/root/sql_runner_audit` returned **PASS** with no P0/P1/P2
+  on that same blob for anchor ordering, fresh/preinstalled pgcrypto, controlled
+  legacy resolution, stable manifest hashes, OID/temp binding, PostgreSQL-major
+  validation, and the shared schema-scoped lock. Both reviews were static; no
+  SQL, migration, database test, private evidence, or Shopify action was run.
+  These are Codex's bounded remediation checks, not Claude's required final
+  independent re-review.
+- The proposed canonical, Master Plan, and `rules.toml` amendments remain text
+  inside the specification only. All operational capability flags remain
+  proposed false. Exact object proof from `13bbb48...` to the specification
+  commit keeps `procurement/src` at `01b78c126549a576d3e182925a976e239a3ac84b`,
+  `procurement/db` at `5033259c8a99d49a5900dc2db224dbf30484cf1e`,
+  `procurement/config` at `ecc9a177de316fa987f51c3079b8a8da25e3650e`,
+  `procurement/tests` at `93d1701d6e232802d45241911f74aa2bc6c53ef5`,
+  and `procurement/tools` at `a66ee05ca5ae08a18a8707afba82b807e7046a49`.
+  Canonical spec, CURRENT, Master Plan, rules, and phase-status blobs are also
+  byte-identical. No migration number or executable byte was added.
+- Dependency and integration status is unchanged: first establish an approved,
+  green Monday foundation on then-current main; then integrate and validate the
+  offline bridge, V5 reader, A1 adapter, and policy/follow-up/test closure in
+  their reviewed order; then layer this design history. Only after that exact
+  integrated predecessor is reverified may a newly authorized implementation
+  branch assign the next migration number. This branch is neither a standalone
+  main-ready patch nor integration/deployment approval.
+- The four pending inputs retain narrow blockers: private IdP/named-role
+  assignments block private route exposure and real human writes;
+  owner-published independent-linkage evidence classes block policy approval;
+  unattended SKU policy blocks only a later unattended Shopify executor; and
+  supplier/book cadence-validity-scope blocks later carry-forward, replacement,
+  and deal-overlay pricing. None blocks this schema design or future labeled
+  disposable tests. The six answered owner questions and Shopify cost
+  destination were not reopened.
+- **Exact next permissible step:** Claude independently re-reviews only these
+  seven remediations and their interactions against `69a99a7...`. If that
+  review accepts the design and the dependency sequence later yields an
+  approved integrated target, request a new authorization limited to the
+  proposed canonical/config amendments, checksum-pinned runner boundary, exact
+  next-numbered migration, internal no-public-route services, and registered
+  39+3 acceptance tests. Independent backend/data review and owner acceptance
+  remain required afterward. No implementation, SQL/migration execution,
+  operational DB/private access, role change, Shopify action, real approval,
+  activation, PR/CI mutation, integration, deployment, supplier contact, or
+  order action is authorized now.
+
+### Initial persistent mapping construction package — SUPERSEDED BY ACCEPTED REQUEST CHANGES
+
+The section below is retained as historical evidence for the initial package
+at `0bfcf48...` / `13bbb48...`. Claude's later REQUEST CHANGES verdict supersedes
+its construction-ready status; the remediation section above is the current
+state and still awaits Claude's bounded independent re-review.
+
+- This documentation task began from a clean, synchronized preserved branch
+  `codex/supplier-mapping-review-policy-followup` at exact
+  `a056e111e2f21b96a9452be9a559e10f03805a6f`, tree
+  `22552b1460a360823b3f35558a995855af887596`. Local branch, upstream, and the
+  live remote ref were identical before isolation and remained identical at
+  closeout. Work is isolated on
+  `codex/persistent-mapping-foundation-design`; the independently reviewed
+  construction-specification commit is
+  `0bfcf48fbc3372b4975437536b8ab907bf11ec19`, tree
+  `a20744383869050d09bdfefb8d33e7ea52e2d403`, with specification blob
+  `d677e87d93420ea4b2e81f976260dec4121baa31`. The closeout commit containing
+  this entry adds only the handoff to that design-only history.
+- The package is
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  It preserves, rather than replaces, reviewed design blob
+  `362d37e9300a5ba7007bf5ca7308e09ad03d411d`. Its proposed SQL remains outside
+  `procurement/db`; no migration number, runtime/config toggle, authority byte,
+  schema object, role, route, or persistent record was created by this branch.
+- Read-only ref inspection found live `origin/main` at exact
+  `f308ac666a2377f540e528bc873463daecc20cf8`, tree
+  `0a8a2ea80721a97858c2120545d1e6b6f3805247`. The local branch named `main` is
+  divergent at `4bde08152cf958dc97686e01a4f27d83fdb4961f`, two local-only / 52
+  origin-only commits, and is not an integration target. The source lineage is
+  39 commits unique from merge base `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`;
+  this package is not a standalone cherry-pick onto current main.
+- PR #23 remains an open draft whose current integration candidate is
+  `ec71fe9c5a6f13832a8cad65b065be9747010486`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. Public metadata reports 14
+  commits, 65 files, `+20,781/-146`, `mergeable=true`, `rebaseable=false`, and
+  `mergeable_state=unstable`; its body is stale. Recorded CI run `34185466802`
+  passed startup but its full-suite job exited 1 after 959 seconds. The public
+  response does not expose the cause, authenticated `gh` metadata is
+  unavailable, and detailed logs were previously HTTP 403/admin-only; those
+  known failed access attempts were not repeated. Read-only merge-tree analysis
+  predicts a `docs/CODEX_HANDOFF.md` conflict; it is not per-commit or behavioral
+  compatibility proof.
+- **Recommended future integration order:** first turn the Monday foundation
+  into an approved, exact, green integrated baseline on then-current main;
+  next integrate and independently validate the offline bridge
+  `fa594b6..2a7192f`, V5 reader `48f5b35..6528bc6`, A1 adapter
+  `7e57301..9ef51a2`, then policy/follow-up/test closure
+  `db39429..a056e11`; next layer this design package; only then create a newly
+  authorized implementation branch. Preserve reviewed boundaries, resolve the
+  handoff deliberately, and re-prove floors/full CI on the integrated bytes.
+  No part of this sequence was executed here.
+- The intended migration predecessor is the exact integrated
+  `013_monday_p1_remediation.sql` chain, including
+  `monday_price_book_contract='v2-future-only'` and
+  `monday_p1_remediation_contract='v1'`, only if no intervening migration lands.
+  The future implementer must recheck that chain and assign the next number;
+  this package deliberately uses
+  `PROPOSED_UNNUMBERED_persistent_mapping_foundation.sql`.
+- The proposed first slice contains five authority tables: immutable review
+  batches, immutable review candidates, append-only mapping decisions,
+  append-only routine-selection events, and narrow current-selection heads. It
+  provides effective-decision, diagnostics, selected-offer, and shadow views,
+  exact keys/constraints/indexes/functions/triggers, no backfill, and one
+  transaction per migration or application operation. It reuses the existing
+  Variant, vendor, supplier-offer, rejection, price, artifact, and recommendation
+  contracts; it creates no parallel catalog or price engine.
+- Printed occurrences, operational offers, mapping decisions, and routine
+  selections remain separate. Repeated occurrences/tiers can share one exact
+  operational offer; material package/conversion/qualifier/component differences
+  cannot collapse; supplier-code reuse cannot rewrite an old identity. Existing
+  active vendor/code uniqueness and referenced/priced offer protections remain
+  mandatory. A mapping approval may create an inactive, unpriced offer, while a
+  second confirmation may select only an independently eligible mapped regular
+  offer. Neither action activates the offer, creates price, changes legacy
+  recommendations, or authorizes Shopify/procurement effects.
+- Publication of the migration additionally requires the specified narrow
+  `apply_schema.py` change: numbered persistent-mapping migrations carry exact
+  content-addressed headers, store their raw-file SHA-256, acquire a transaction
+  advisory family lock before reading the marker, and on exact replay validate
+  the current contract then skip historical SQL. Legacy/mismatched checksum
+  markers, missing contract/signature metadata, concurrent different-byte first
+  apply, or catalog drift fail closed. This prevents an old `v1` file from
+  overwriting a later checksum-pinned contract transition.
+- The migration proposal pins the exact predecessor index predicates, trigger
+  functions/bytes/events and nine-column `UPDATE OF` attachment, and required
+  eligibility function. Its installed logical catalog signature covers new
+  columns/types/defaults/**column ACLs**, constraints, indexes, triggers,
+  functions, views, owners, and relation/function ACLs. It revokes `PUBLIC`,
+  inherited named-role, and per-column privileges before signing; no application
+  role is invented or granted.
+- Service boundaries are internal only and require explicit `SERIALIZABLE`
+  transactions, a server-loaded true capability flag, a transaction-local
+  capability reference, and a verified principal/role/authentication-context
+  tuple. Mapping and selection use separate database-derived previews,
+  confirmations, idempotency keys, and append-only records even when performed
+  by the same owner. A shared token, client actor string, or custom GUC alone is
+  not identity. The policy function returns false until an actual immutable
+  owner-published policy and independently corroborated evidence classes exist.
+- Exact proposed authority text is mirrored for the canonical system spec and
+  Master Plan; the proposed `rules.toml` section leaves intake, human mapping,
+  policy mapping, selection, shadow reads, activation, and recommendation
+  cutover false. Those are proposals for the next authorized implementation,
+  not edits made now. `CURRENT_AUTHORITY.md` and `PHASE_STATUS.md` remain
+  unchanged.
+- The acceptance matrix names exactly **31 disposable-PostgreSQL tests and
+  three pure/static tests**, with planned module floors 31 and 3 and the global
+  floor remaining sum-derived. It covers fresh true-chain and exact historical
+  upgrade paths, immutable checksum replay and concurrent first apply,
+  idempotency/payload conflicts, evidence/null/occurrence/offer separation,
+  stale and concurrent decisions, rollback, rejection memory, V5 non-adoption,
+  unchanged legacy recommendations, and zero Shopify/price/order/supplier
+  effects. These are executable future criteria, **not executed results**.
+  Every named principal/package and future disposable-PostgreSQL result remains
+  a labeled simulation unless separately authorized evidence is actually run.
+- Read-only dependency auditor `/root/dependency_git_audit` established the
+  refs, provenance, PR/CI gaps, conflict risk, and integration sequence without
+  a repository or external-state mutation. Bounded static reviewer
+  `/root/closure_scope_audit` found and drove closure of fail-closed contract
+  gaps involving rejection scoping/immutability, combo reachability, operational
+  offer identity, confirmation/capability enforcement, predecessor signatures,
+  version-aware replay, transaction isolation, metadata deletion, concurrent
+  first apply, and relation/function/column ACLs. It returned **PASS** on exact
+  `0bfcf48...` with no remaining P0/P1/P2 finding. Neither reviewer executed the
+  SQL, tests, operational DB, private package, or Shopify. The scope reviewer
+  made no network call; the dependency auditor's bounded external reads were
+  one live-ref check and public PR metadata, with no authenticated/private
+  diagnostic retry or external-state mutation.
+- Documentation validation only: diff checking, balanced SQL/Python fences,
+  Python AST parsing of the proposed runner fragment, acceptance-row/floor
+  accounting (`31 + 3`), changed-file scope, and secret-pattern scanning passed.
+  No full suite was spent on documentation-only changes. The proposed SQL was
+  not applied or represented as parsed/executed acceptance evidence.
+- Base-to-reviewed-candidate object proof keeps `procurement/src` at tree
+  `01b78c126549a576d3e182925a976e239a3ac84b`, `procurement/db` at
+  `5033259c8a99d49a5900dc2db224dbf30484cf1e`, `procurement/config` at
+  `ecc9a177de316fa987f51c3079b8a8da25e3650e`, `procurement/tests` at
+  `93d1701d6e232802d45241911f74aa2bc6c53ef5`, and `procurement/tools` at
+  `a66ee05ca5ae08a18a8707afba82b807e7046a49`. The canonical spec, CURRENT,
+  Master Plan, rules, and phase-status blobs also remain exact. Final branch
+  scope versus `a056e11` is only the new construction specification plus this
+  handoff.
+- Four inputs remain unresolved only where they matter: private IdP/named roles
+  block private route exposure and real human writes; owner-published
+  independent-linkage evidence classes block policy approval; unattended SKU
+  policy blocks only a later unattended Shopify executor; supplier/book
+  cadence-validity-scope blocks later price carry-forward/replacement/deal
+  overlays. None blocks the schema, pure tests, or labeled disposable-PostgreSQL
+  construction. The six owner questions and Shopify cost destination remain
+  answered and were not re-asked.
+- Operational DB/private-package access, SQL/migration execution, runtime
+  implementation, real mapping/selection/price records, permission changes,
+  Shopify access, supplier contact, orders/POs, activation, deployment, PR
+  creation/change/retry, CI retry, merge/rebase/cherry-pick, and integration
+  actions in this task: `0`. **Exact next authorization boundary:** after the
+  dependency sequence produces an approved integrated target, authorize only
+  the first-slice canonical/config amendments, checksum-pinned runner boundary,
+  exact next-numbered migration, internal no-public-route domain services, and
+  the 31+3 registered acceptance tests; then require independent backend/data
+  review and stop for owner acceptance. All later identity configuration,
+  policy execution, pricing, activation, cutover, Shopify, and purchasing work
+  remains separately scoped.
 
 ### NEW-1 / NEW-2 / NEW-3 test-only closure — COMPLETE / STOPPED AT HANDOFF
 
