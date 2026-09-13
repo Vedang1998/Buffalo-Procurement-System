@@ -9,36 +9,51 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.
 
-## Sunday local purchasing candidate
+## Forecast-evidence correction descendant
 
-**BOUNDED SYNTHETIC END-TO-END PASS — FULL PRODUCT PARTIAL / PRODUCTION BLOCKED**
+**BOUNDED SYNTHETIC PASS — DEMAND EVIDENCE CORRECTED / FULL PRODUCT PARTIAL /
+PRODUCTION BLOCKED**
 
-The isolated branch `codex/sunday-purchasing-release-candidate` has a reviewed
-and locally tested code/test checkpoint at
-`802efc8147693d0de65d5636a0c1607364b5dd4f`, tree
-`843959cd3598eba12c6899bb1a003fad6a1e1003`. A real loopback Chromium
-workflow passed fabricated package intake, DEFER, exact existing-offer mapping,
-separate shadow selection, one mixed eligible/blocked Monday run, quantity edit,
-distinct MATERIAL confirmation, one-vendor internal DRAFT/download, replay and
-process restart. Export remains `INTERNAL_DRAFT_ONLY` and
-`SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
-attempted or proven. A real same-host PostgreSQL/storage backup restored the exact
-durable state into a new empty owned database. Startup passed 10/10, focused
-validation passed 77/77, and the final suite passed 788/788 with every abnormal
-counter zero.
+The isolated branch `codex/forecast-evidence-correction` has a reviewed and
+locally tested code/test checkpoint at
+`1729647f0ea46a147cd33fd6d8f33e8914cbcfac`, tree
+`315389603f3618cddfd95f748d131e3f6ba719b9`. It descends from the separately
+frozen Sunday package without changing that checkout.
 
-This checkpoint changes no official production phase. The mapping registry is
+The active emergency Monday path no longer infers a whole-day stockout or
+in-stock interval from one point-in-time inventory quantity or a sale. New
+`EMERGENCY_TRANSPARENT_V2` runs freeze exact 84-day sales authority, raw
+7/14/28 windows and point-in-time provenance while retaining every availability
+day as `UNKNOWN` until a separately reviewed full-day source exists. Regime,
+model, ABC/XYZ, in-stock velocity and safety stock remain uncalculated; no
+forecasting policy was invented.
+
+Additive migration 015 guards historical V1 analysis/input, review, exception
+and PO/line records and provides one exact, append-only pre-build retirement
+event/audit so the business date can be reprepared under V2. Its sole
+child-write exception is the exact append-only packet event/artifact insertion
+needed to package an already-built V1 DRAFT; it cannot retire or supersede that
+DRAFT. Real loopback Chromium passed 154 + 23 assertions across V1 retirement, V2
+prepare/review/internal-DRAFT/download/replay and application restart. A real
+same-host PostgreSQL/storage backup restored the complete state into a new
+empty database after a dump/restore catalog-rendering defect was found,
+remediated and independently reviewed. Startup passed 10/10, the affected set
+passed 185/185, and the final authoritative suite passed 809/809 with every
+abnormal counter zero.
+
+This checkpoint changes no official production phase. Mapping remains
 shadow-only; activation, policy mapping and recommendation cutover are disabled.
-The full 39+3 clause matrix has only partial independent evidence despite all
-42 named tests being green. Private real sources and commercial inputs remain
-unapproved, the forecast/price-lifecycle/browser scenario portfolio is
-incomplete, and no deployment, Shopify call, PO release or real order is
+The strict 39+3 matrix still has only partial clause evidence despite all 42
+named methods being green. Private-real and commercial inputs remain
+unapproved; full model selection/FVA, ABC/XYZ, empirical protection, price
+lifecycle, DRAFT supersession, strategic economics and browser breadth remain
+incomplete. No deployment, Shopify call, PO release or real order is
 authorized. Current explicit states are `LOCAL_END_TO_END = PASS` for the
-bounded synthetic case, `COMMERCIAL_DATA_READINESS = NOT_APPROVED`,
-`PRODUCTION_RELEASE = BLOCKED`,
-`FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`, and `GOAL = INCOMPLETE`. See
-`docs/SUNDAY_PURCHASING_ACCEPTANCE.md` and the latest
-entry in `docs/CODEX_HANDOFF.md` for exact evidence and limitations.
+bounded synthetic descendant, `DEMAND_EVIDENCE_CORRECTION = PASS`,
+`COMMERCIAL_DATA_READINESS = NOT_APPROVED`, `PRODUCTION_RELEASE = BLOCKED`,
+`FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`, and `GOAL = INCOMPLETE`.
+See `docs/SUNDAY_PURCHASING_ACCEPTANCE.md` and the latest entry in
+`docs/CODEX_HANDOFF.md` for exact evidence and limitations.
 
 ## Offline supplier-mapping review tooling
 
@@ -81,9 +96,10 @@ no migration, UI, mapping/price approval, selected offer, writeback, or cutover
 had been implemented. That earlier milestone changed no Phase 4/6,
 CURRENT/FUTURE pricing, readiness, mapping, or PO status; its then-recorded next
 action was ChatGPT/owner review of the frozen V5 checkpoint and host-local
-evidence. The separate Sunday candidate above subsequently implemented
-provisional migration 014 only in owned isolated PostgreSQL and remains
-shadow-only; nothing was activated or written to an operational database.
+evidence. The separately frozen prior Sunday parent subsequently implemented
+provisional migration 014 in owned isolated PostgreSQL; the current correction
+descendant adds guarded application migration 015. Mapping remains shadow-only,
+and nothing was activated or written to an operational database.
 
 ## Official implementation phases
 

@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-13T10:47:31Z (UTC)
+**Updated:** 2026-09-13T19:20:02Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,139 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Sunday local purchasing candidate — BOUNDED SYNTHETIC END-TO-END PASS / FULL GOAL INCOMPLETE
+### Forecast-evidence correction descendant — BOUNDED SYNTHETIC PASS / FULL GOAL INCOMPLETE
+
+- The controlling current checkpoint is exact code/test commit
+  `1729647f0ea46a147cd33fd6d8f33e8914cbcfac`, tree
+  `315389603f3618cddfd95f748d131e3f6ba719b9`, on isolated branch
+  `codex/forecast-evidence-correction`. It descends from the separately frozen
+  Sunday package at `64d8f74ef0d01b87fe96a4c1972faf2dcc702375`
+  without modifying that checkout or transport. The protected connected
+  checkout remains clean at `3a4704e...` / tree `1986bd8...`; no remote, main,
+  PR/CI, connected-app, deployment, operational-database or Shopify state
+  changed.
+- The correction removes the unsupported conversion of a point-in-time
+  inventory zero/positive quantity or positive sale into a whole-day
+  `STOCKOUT`/`IN_STOCK` fact. New emergency runs use
+  `EMERGENCY_TRANSPARENT_V2`; their 84-day calendar, normalized sales
+  authority, signed raw 7/14/28 windows, point-in-time snapshot groups and
+  `UNKNOWN` availability states are frozen before fingerprinting and persist
+  identically in the run manifest, forecast diagnostics, recommendation
+  metrics and packet JSON.
+- The slice does not invent forecasting policy. Demand regime, selected model,
+  ABC, XYZ, in-stock velocity and safety stock remain `NULL`; model selection
+  is `NOT_VALIDATED`, classification/safety stock are `NOT_CALCULATED`, and
+  stockout censoring is `EVIDENCE_UNAVAILABLE`. Full model backtests/FVA,
+  empirical service-level protection, event/analog policy and commercial
+  source authority remain incomplete.
+- Checksum-pinned post-mapping migration 015 provides the guarded V1-to-V2
+  lifecycle. Active unbuilt V1 runs are read-only and return
+  `FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED`; an authenticated preview
+  and exact confirmation can append one retirement event plus one protected
+  audit and change only run status/stage to `FAILED`. New/changed V1
+  analysis/input, review, exception and PO/line records are blocked at the
+  database boundary. The sole child-write exception is the exact append-only
+  packet event/artifact insertion needed to package an already-built V1 DRAFT;
+  that DRAFT otherwise remains immutable, downloadable and packet-replayable,
+  cannot use retirement, and has no same-day supersession path.
+- Real Chromium on the clean exact tree passed **154 phase-one + 23
+  post-restart assertions**. It retired fixed synthetic V1 run
+  `00000000-0000-4000-8000-000000000901`, prepared a V2 replacement, retained
+  two point-in-time rows while keeping all 84 days `UNKNOWN`, exercised the
+  existing mapping/selection and mixed eligible/blocked review flow, built one
+  internal DRAFT for `$20.02`, downloaded/re-fetched exact artifacts and
+  replayed after restart. There were zero non-DRAFT POs, Shopify calls,
+  releases or persisted spoof actors. Export remains `INTERNAL_DRAFT_ONLY` and
+  `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
+  attempted or proven.
+- Browser durable-state SHA-256 is
+  `4f4a641815e396ae812938d1336f6688ec703d5ebea9d993e87891a9ce6452a5`;
+  demand-evidence SHA-256 is
+  `58d25db7a6dcf1177be637e62a683bf4f5b8d9174ebf89b8b2a63fa1f0ab332c`;
+  internal CSV and review ZIP SHA-256 values are `82c4318d...` and
+  `e5224953...`.
+- Offline lock verification resolved 22 packages. Startup passed **10/10**;
+  the exact affected set passed **185/185** in 144.964 seconds; and one final
+  authoritative DB-reaching run passed **809 discovered / 809 executed / 809
+  passed** in 871.428 seconds on Python 3.13.11 and owned loopback PostgreSQL
+  16.9. All abnormal counters were zero; each accepted suite invocation ran
+  once, with no automatic retry.
+- A real backup from `buffalo_forecast_1729647_candidate_demo` restored into
+  new empty `buffalo_forecast_1729647_restore_demo`. The complete database
+  relation/sequence state matched exact `4f4a6418...`; restored storage bytes
+  independently matched the manifest entries and artifact hashes
+  `82c4318d...` / `e5224953...`. Manifest SHA-256 is `cafe2e7c...`; dump and
+  storage archive hashes are `74c6a7f6...` and `4da1dae9...`.
+- The first pre-final restore rehearsal correctly refused a catalog mismatch
+  caused by PostgreSQL's semantically equivalent dump/restore rendering of
+  function search paths and non-semantic trigger parse locations. No restored
+  state was accepted. Commit `1729647...` narrowly canonicalizes those two
+  reviewed representations while retaining and hashing complete semantic
+  definitions. It accepts only exact legacy/current metadata provenance and
+  still requires the live catalog to recompute to `2fafe14a...` before and
+  after its SQL assertion. Independent review found no P0-P2 issue; semantic
+  search-path and trigger-operator tamper cases refuse. A final read-only
+  source/restored preflight record is retained as
+  `retirement-catalog-preflight.json`, SHA-256
+  `3953c77e8226148191cea69684d0808c48e7da669f358ef4fa0b1bb98327d8ac`.
+- Three correction-specific setup attempts are preserved separately and are not
+  accepted workflow/test runs. Browser setup root
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-browser-f2bdd16-final-20260913T174400Z`
+  stopped before server/workflow startup because the launcher interpreter lacked
+  Psycopg; its `server.log` SHA-256 is
+  `203a64b3eade7c17af6b34bf363b863b559a52f7afd9acf78b8adc193520d78e`.
+  Pre-final validation root
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-validation-450b485-20260913T175921Z`
+  retains a wrong-directory startup discovery with zero tests (log SHA-256
+  `e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce`)
+  and an offline full-suite setup that stopped with zero tests because the
+  download cache was unavailable (log SHA-256
+  `cb01aa23224e1abf899cd8d117516e352c717a0b6976743d610ddb4b8aface0e`).
+- Exact evidence roots are
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-browser-1729647-final-20260913T185846Z`
+  (summary SHA-256 `dc044c16...`) and
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-validation-1729647-20260913T183822Z`
+  (startup/focused/full log SHA-256 values `6f1aee17...`, `d0075506...`,
+  `bd091a97...`). Recovery manifest is under
+  `/home/runner/workspace/.ai-auth/codex/sunday-forecast-1729647-runtime/backups/candidate-20260913T190000Z/manifest.json`.
+  The planned owner transport destination is
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Forecast_Evidence_Candidate_20260913.zip`
+  and is not yet assembled at this documentation checkpoint. Once assembled,
+  it must be checked against its separately reported SHA-256 plus enclosed
+  recursive `SHA256SUMS` before use.
+- Conservative mapping evidence remains unchanged: all 42 named methods are
+  green, but only PG rows 7, 11, 34 and 39 were previously accepted as full
+  strict clauses. Do not convert registration/execution into a full 39+3
+  acceptance claim.
+- Current states: `LOCAL_END_TO_END = PASS` for this bounded synthetic
+  descendant; `DEMAND_EVIDENCE_CORRECTION = PASS` for emergency V2;
+  `COMMERCIAL_DATA_READINESS = NOT_APPROVED`; `PRODUCTION_RELEASE = BLOCKED`;
+  `FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`; `GOAL = INCOMPLETE`.
+- The synthetic demo's canonical gate snapshot was `CATALOG_SYNC = PASS`,
+  `SALES_BACKFILL = PASS`, `INVENTORY_HISTORY = PASS`,
+  `OPEN_PO_RECONCILIATION = PASS`, global and one-vendor `VENDOR_RULES = PASS`,
+  `MAPPING_INTEGRITY = WARN`, and `PRICE_COVERAGE = WARN`. These are fabricated,
+  non-transferable demo facts; the operational projection remained
+  `PO generation = BLOCKED — SYNTHETIC DEMO / INTERNAL DRAFT ONLY` and grants
+  no commercial or production readiness.
+- Exact next boundary: after assembly, owner/external review of the frozen
+  transport, then
+  owner decisions for a provenance-bearing full-day availability source and
+  missing forecasting parameters. Private-real sources, model/FVA/protection,
+  scoped price lifecycle, DRAFT supersession, strategic economics and browser
+  breadth must close before any full-product claim. Remote integration, CI,
+  deployment and every Shopify/PO/order action require separate authority.
+- Same-host restart/launch commands and exact limitations are in
+  `docs/SUNDAY_PURCHASING_ACCEPTANCE.md`. The browser/Uvicorn processes were
+  stopped; no public preview or tunnel exists. Candidate secrets remain only
+  in the mode-0600 files under the private mode-0700 runtime root and are not
+  included in source, evidence prose or the planned transport.
+
+### Prior Sunday local purchasing candidate — FROZEN PARENT / SUPERSEDED AS CURRENT CHECKPOINT
+
+The section below is retained as historical evidence for the separately frozen
+`64d8f74...` parent package. The forecast-evidence correction entry above is the
+controlling current boundary.
 
 - Under contract `BUFFALO-SATURDAY-PURCHASING-COMPLETION-2026-09-12`, work
   preserved reader/QA I0 `5f86eee6...`, reviewed merge-hook safety
@@ -3045,8 +3177,8 @@ state and still awaits Claude's bounded independent re-review.
 
 ## Historical / superseded authorization boundaries
 
-The controlling current boundary is the Sunday local purchasing candidate
-entry at the top of this handoff. The older boundaries below are retained only
+The controlling current boundary is the forecast-evidence correction
+descendant entry at the top of this handoff. The older boundaries below are retained only
 as historical provenance and grant no present authority.
 
 At the earlier `1920a16a6dc13a1b4357315f5049b938cbe7c0e2` snapshot,
@@ -3074,5 +3206,5 @@ unauthorized; Phase 6 was paused, and the downstream areas remained out of
 scope.
 
 These are retained historical boundaries only. The controlling current
-boundary is the Sunday entry above and grants no merge or operational
-authority.
+boundary is the forecast-evidence correction descendant entry above and grants
+no merge or operational authority.
