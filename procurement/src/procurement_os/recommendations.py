@@ -12,7 +12,16 @@ from typing import Any, Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .forecasting import DemandObservation, METHOD_VERSION, forecast_demand
+from .forecasting import (
+    DailyNetSales,
+    METHOD_VERSION,
+    PointInTimeSnapshotRef,
+    ValidatedSalesCoverage,
+    build_demand_evidence,
+    canonical_evidence_sha256,
+    forecast_demand,
+    to_forecast_observations,
+)
 from .monday_controls import MondayControlError, load_material_edit_policy
 from .po_ledger import open_po_position
 from .replenishment import calculate_baseline_need
@@ -336,6 +345,15 @@ def _authoritative_sales_rows(
         ):
             raise MondayRecommendationError("CURRENT_SALES_COVERAGE_UNPROVEN")
 
+    normalized_daily_sales = tuple(
+        DailyNetSales(
+            business_date=row[0], net_units=Decimal(row[1]), source=str(row[4])
+        )
+        for row in rows
+    )
+    normalized_sales_sha256 = canonical_evidence_sha256(
+        [row.to_json_dict() for row in normalized_daily_sales]
+    )
     authority = {
         "contract": (
             evidence["coverage_contract"]
@@ -349,6 +367,8 @@ def _authoritative_sales_rows(
         "source": source,
         "history_start": history_start,
         "history_end": history_end,
+        "coverage_complete": True,
+        "sales_rows_sha256": normalized_sales_sha256,
         "gate_evidence": evidence,
     }
     if not synthetic_contract:
@@ -581,34 +601,73 @@ def _load_context(
     context["sales_rows"] = [list(row) for row in sales_rows]
     inventory_history_rows = conn.execute(
         """SELECT d.snapshot_date,d.location_gid,d.available_quantity,d.incoming_quantity,
-                  d.inventory_snapshot_run_id::text,r.source,r.source_hash,r.completed_at
+                  d.inventory_snapshot_run_id::text,d.source,r.source,r.source_hash,
+                  d.captured_at,r.completed_at,d.validation_status,
+                  rr.inventory_snapshot_run_id::text,rr.available_quantity,
+                  rr.incoming_quantity,rr.on_hand_quantity,rr.committed_quantity,
+                  rr.reserved_quantity,rr.damaged_quantity,rr.validation_status,
+                  rr.validation_message,d.on_hand_quantity,d.committed_quantity,
+                  d.reserved_quantity,d.damaged_quantity,d.validation_message,r.started_at
              FROM daily_inventory_snapshots d
              JOIN inventory_snapshot_runs r
                ON r.inventory_snapshot_run_id=d.inventory_snapshot_run_id
               AND r.status='COMPLETED' AND r.business_date=d.snapshot_date
+             LEFT JOIN inventory_snapshot_run_rows rr
+               ON rr.inventory_snapshot_run_id=d.inventory_snapshot_run_id
+              AND rr.variant_id=d.variant_id AND rr.location_gid=d.location_gid
             WHERE d.variant_id=%s AND d.snapshot_date BETWEEN %s AND %s
-              AND d.validation_status='VALID' AND d.available_quantity IS NOT NULL
             ORDER BY d.snapshot_date,d.location_gid,d.inventory_snapshot_run_id""",
         (str(variant_id), history_start, history_end),
     ).fetchall()
     context["historical_inventory_rows"] = [list(row) for row in inventory_history_rows]
-    inventory_history: dict[date, Decimal] = {}
-    for row in inventory_history_rows:
-        inventory_history[row[0]] = inventory_history.get(row[0], Decimal("0")) + Decimal(row[2])
-    sales_by_date = {row[0]: Decimal(row[1]) for row in sales_rows}
-    observations: list[DemandObservation] = []
-    for offset in range(84):
-        day = history_start + timedelta(days=offset)
-        units = sales_by_date.get(day, Decimal("0"))
-        available_on_day = inventory_history.get(day)
-        state = (
-            "IN_STOCK"
-            if units > 0 or (available_on_day is not None and available_on_day > 0)
-            else "STOCKOUT"
-            if available_on_day is not None
-            else "UNKNOWN"
+    daily_sales = tuple(
+        DailyNetSales(
+            business_date=row[0], net_units=Decimal(row[1]), source=str(row[4])
         )
-        observations.append(DemandObservation(day, units, state))
+        for row in sales_rows
+    )
+    if any(
+        row[5] != row[6]
+        or row[11] != row[4]
+        or (row[2],row[3],row[20],row[21],row[22],row[23],row[10],row[24])
+        != (row[12],row[13],row[14],row[15],row[16],row[17],row[18],row[19])
+        or row[8] != row[25]
+        for row in inventory_history_rows
+    ):
+        raise MondayRecommendationError("CURRENT_INVENTORY_HISTORY_EVIDENCE_INVALID")
+    snapshot_rows = tuple(
+        PointInTimeSnapshotRef(
+            snapshot_date=row[0],
+            location_gid=str(row[1]),
+            inventory_snapshot_run_id=str(row[4]),
+            source=str(row[5]),
+            source_hash=str(row[7]),
+            captured_at=row[8],
+            completed_at=row[9],
+            available_quantity=row[2],
+            incoming_quantity=row[3],
+            validation_status=str(row[10]),
+        )
+        for row in inventory_history_rows
+    )
+    try:
+        sales_coverage = ValidatedSalesCoverage.from_authority(
+            sales_authority, daily_sales
+        )
+        demand_evidence = build_demand_evidence(
+            history_start=history_start,
+            history_end=history_end,
+            sales_rows=daily_sales,
+            sales_coverage=sales_coverage,
+            snapshot_rows=snapshot_rows,
+        )
+    except (TypeError, ValueError) as exc:
+        raise MondayRecommendationError(
+            "CURRENT_DEMAND_EVIDENCE_INVALID"
+        ) from exc
+    demand_payload = demand_evidence.to_json_dict()
+    context["demand_evidence"] = demand_payload
+    observations = list(to_forecast_observations(demand_evidence))
     context["demand_observations"] = observations
 
     protection_days = int(vendor[2]) + int(vendor[3]) + int(
@@ -793,12 +852,25 @@ def prepare_monday_run(
                            safety_stock_units,protection_days,baseline_replenishment_units,
                            calendar_velocity,in_stock_velocity,confidence,diagnostics,
                            input_fingerprint,method_version,history_start,history_end,horizon_days)
-                    VALUES (%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s)""",
+                    VALUES (%s,%s,NULL,NULL,%s,NULL,%s,%s,%s,NULL,%s,%s::jsonb,
+                            %s,%s,%s,%s,%s)""",
                 (
-                    run_id,context["variant_id"],"EMERGENCY_TRANSPARENT",forecast.method_version,
-                    forecast.forecast_units,need.protection_days,need.raw_need_units,
-                    forecast.calendar_velocity,forecast.in_stock_velocity,forecast.confidence,
-                    json.dumps({"reason_codes": forecast.reason_codes, "outlier_capped_days": forecast.outlier_capped_days}),
+                    run_id,context["variant_id"],forecast.forecast_units,
+                    need.protection_days,need.raw_need_units,
+                    forecast.calendar_velocity,forecast.confidence,
+                    json.dumps(
+                        {
+                            "demand_evidence": context["demand_evidence"],
+                            "forecast_status": "EMERGENCY_BASELINE_ONLY",
+                            "model_selection_status": "NOT_VALIDATED",
+                            "classification_status": "NOT_CALCULATED",
+                            "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
+                            "safety_stock_status": "NOT_CALCULATED",
+                            "reason_codes": forecast.reason_codes,
+                            "outlier_capped_days": forecast.outlier_capped_days,
+                        },
+                        sort_keys=True,
+                    ),
                     input_fingerprint,forecast.method_version,forecast.history_start,forecast.history_end,
                     forecast.horizon_days,
                 ),
@@ -847,6 +919,19 @@ def prepare_monday_run(
                 "forecast_daily_velocity": forecast.forecast_daily_velocity,
                 "forecast_units": forecast.forecast_units,
                 "forecast_horizon_days": forecast.horizon_days,
+                "forecast_method_version": forecast.method_version,
+                "forecast_status": "EMERGENCY_BASELINE_ONLY",
+                "model_selection_status": "NOT_VALIDATED",
+                "classification_status": "NOT_CALCULATED",
+                "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
+                "safety_stock_status": "NOT_CALCULATED",
+                "demand_regime": None,
+                "selected_model": None,
+                "abc_class": None,
+                "xyz_class": None,
+                "in_stock_velocity": None,
+                "safety_stock_units": None,
+                "demand_evidence": context["demand_evidence"],
                 "forecast_reason_codes": forecast.reason_codes,
                 "need_reason_codes": need.reason_codes,
                 "strategic_status": strategic.status,

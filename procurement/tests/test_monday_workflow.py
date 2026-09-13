@@ -360,6 +360,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
     def test_prepare_freezes_two_pack_sizes_and_strategic_extra_zero(self):
         result=self._prepare()
         self.assertEqual(result["workflow_stage"],"AWAITING_REVIEW")
+        self.assertEqual(result["model_version"],"EMERGENCY_TRANSPARENT_V2")
         self.assertEqual(len(result["recommendations"]),2)
         self.assertEqual({item["variant_id"] for item in result["recommendations"]},{"1001","2002"})
         self.assertEqual(
@@ -368,6 +369,154 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.assertEqual(
             self.conn.execute("SELECT max(strategic_extra_units) FROM procurement_recommendations WHERE run_id=%s",(result["run_id"],)).fetchone()[0],0,
         )
+        manifest=json.loads(self.conn.execute(
+            "SELECT procurement_input_manifest FROM runs WHERE run_id=%s",
+            (result["run_id"],),
+        ).fetchone()[0])
+        contexts={item["variant_id"]:item for item in manifest["contexts"]}
+        forecast_rows=self.conn.execute(
+            """SELECT variant_id,demand_regime,selected_model,abc_class,xyz_class,
+                      safety_stock_units,in_stock_velocity,method_version,diagnostics
+                 FROM forecast_results WHERE run_id=%s ORDER BY variant_id""",
+            (result["run_id"],),
+        ).fetchall()
+        self.assertEqual(len(forecast_rows),2)
+        for row in forecast_rows:
+            with self.subTest(variant_id=row[0]):
+                self.assertEqual(row[1:7],(None,None,None,None,None,None))
+                self.assertEqual(row[7],"EMERGENCY_TRANSPARENT_V2")
+                demand_evidence=contexts[row[0]]["demand_evidence"]
+                self.assertEqual(row[8]["demand_evidence"],demand_evidence)
+                self.assertEqual(
+                    row[8]["stockout_censoring_status"],"EVIDENCE_UNAVAILABLE"
+                )
+                self.assertEqual(row[8]["safety_stock_status"],"NOT_CALCULATED")
+                recommendation=next(
+                    item for item in result["recommendations"]
+                    if item["variant_id"]==row[0]
+                )
+                self.assertEqual(
+                    recommendation["metrics"]["demand_evidence"],demand_evidence
+                )
+                self.assertEqual(
+                    recommendation["metrics"]["selected_model"],None
+                )
+                self.assertEqual(
+                    recommendation["metrics"]["safety_stock_units"],None
+                )
+                self.assertEqual(
+                    demand_evidence["availability_summary"][
+                        "proven_full_day_stockout_days"
+                    ],0,
+                )
+                self.assertTrue(
+                    all(day["inventory_state"]=="UNKNOWN"
+                        for day in demand_evidence["daily"])
+                )
+
+    def test_historical_multi_location_capture_is_unknown_and_exactly_traceable(self):
+        history_day=BUSINESS_DATE-timedelta(days=1)
+        captured=datetime(2026,9,6,12,tzinfo=timezone.utc)
+        capture=capture_daily_inventory(
+            self.conn,
+            business_date=history_day,
+            captured_at=captured,
+            source="SYNTHETIC_HISTORY",
+            rows=(
+                {"variant_id":self.variant_a,"location_gid":"location-a",
+                 "available_quantity":2,"incoming_quantity":1},
+                {"variant_id":self.variant_a,"location_gid":"location-b",
+                 "available_quantity":3,"incoming_quantity":2},
+                {"variant_id":self.variant_b,"location_gid":"location-a",
+                 "available_quantity":1,"incoming_quantity":0},
+            ),
+        )
+        result=self._prepare("coherent-history")
+        manifest=json.loads(self.conn.execute(
+            "SELECT procurement_input_manifest FROM runs WHERE run_id=%s",
+            (result["run_id"],),
+        ).fetchone()[0])
+        context=next(
+            item for item in manifest["contexts"]
+            if item["variant_id"]==self.variant_a
+        )
+        evidence=context["demand_evidence"]
+        day=next(item for item in evidence["daily"]
+                 if item["business_date"]==history_day.isoformat())
+        self.assertEqual(day["inventory_state"],"UNKNOWN")
+        self.assertEqual(day["state_basis"],"POINT_IN_TIME_SNAPSHOT_ONLY")
+        self.assertEqual([item["location_gid"] for item in day["snapshot_refs"]],
+                         ["location-a","location-b"])
+        group=next(item for item in evidence["snapshot_groups"]
+                   if item["snapshot_date"]==history_day.isoformat())
+        self.assertEqual(group["compatibility_status"],
+                         "COMPATIBLE_POINT_IN_TIME_EVIDENCE")
+        self.assertEqual(group["aggregate_available_quantity"],"5.0000")
+        self.assertEqual(group["aggregate_incoming_quantity"],"3.0000")
+        self.assertEqual(group["source_hash"],capture["source_hash"])
+        self.assertEqual(group["captured_at"],captured.isoformat())
+        self.assertEqual(group["completed_at"],captured.isoformat())
+
+    def test_incompatible_historical_captures_never_sum_and_change_replay(self):
+        history_day=BUSINESS_DATE-timedelta(days=1)
+        capture_daily_inventory(
+            self.conn,business_date=history_day,
+            captured_at=datetime(2026,9,6,12,tzinfo=timezone.utc),
+            source="SYNTHETIC_HISTORY_A",
+            rows=(
+                {"variant_id":self.variant_a,"location_gid":"location-a",
+                 "available_quantity":2,"incoming_quantity":0},
+                {"variant_id":self.variant_b,"location_gid":"location-a",
+                 "available_quantity":2,"incoming_quantity":0},
+            ),
+        )
+        capture_daily_inventory(
+            self.conn,business_date=history_day,
+            captured_at=datetime(2026,9,6,13,tzinfo=timezone.utc),
+            source="SYNTHETIC_HISTORY_B",
+            rows=(
+                {"variant_id":self.variant_a,"location_gid":"location-b",
+                 "available_quantity":4,"incoming_quantity":0},
+                {"variant_id":self.variant_b,"location_gid":"location-b",
+                 "available_quantity":4,"incoming_quantity":0},
+            ),
+        )
+        result=self._prepare("incompatible-history")
+        manifest=json.loads(self.conn.execute(
+            "SELECT procurement_input_manifest FROM runs WHERE run_id=%s",
+            (result["run_id"],),
+        ).fetchone()[0])
+        context=next(item for item in manifest["contexts"]
+                     if item["variant_id"]==self.variant_a)
+        evidence=context["demand_evidence"]
+        day=next(item for item in evidence["daily"]
+                 if item["business_date"]==history_day.isoformat())
+        self.assertEqual(day["state_basis"],
+                         "INCOMPATIBLE_POINT_IN_TIME_EVIDENCE")
+        groups=[item for item in evidence["snapshot_groups"]
+                if item["snapshot_date"]==history_day.isoformat()]
+        self.assertEqual(len(groups),2)
+        self.assertTrue(all(item["aggregate_available_quantity"] is None
+                            for item in groups))
+        self.assertTrue(all(item["aggregate_incoming_quantity"] is None
+                            for item in groups))
+        self.assertIn("INCOMPATIBLE_POINT_IN_TIME_EVIDENCE",
+                      evidence["reason_codes"])
+        self.conn.commit()
+        capture_daily_inventory(
+            self.conn,business_date=history_day,
+            captured_at=datetime(2026,9,6,14,tzinfo=timezone.utc),
+            source="SYNTHETIC_HISTORY_C",
+            rows=(
+                {"variant_id":self.variant_a,"location_gid":"location-c",
+                 "available_quantity":6,"incoming_quantity":0},
+                {"variant_id":self.variant_b,"location_gid":"location-c",
+                 "available_quantity":6,"incoming_quantity":0},
+            ),
+        )
+        with self.assertRaisesRegex(MondayRecommendationError,
+                                    "different frozen inputs"):
+            self._prepare("incompatible-history")
 
     def test_prepare_replay_is_read_only_and_changed_source_conflicts(self):
         first=self._prepare()
@@ -1208,7 +1357,56 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         with self.assertRaisesRegex(MondayRecommendationError,"different frozen inputs"):
             self._prepare("raw-series-fingerprint")
 
-    def test_ad_hoc_daily_inventory_cannot_override_completed_capture_evidence(self):
+    def test_daily_inventory_heads_must_match_immutable_capture_evidence(self):
+        history_day=BUSINESS_DATE-timedelta(days=1)
+        capture_daily_inventory(
+            self.conn,business_date=history_day,
+            captured_at=datetime(2026,9,6,12,tzinfo=timezone.utc),
+            source="SYNTHETIC_HISTORY_TAMPER_PROBE",
+            rows=(
+                {"variant_id":self.variant_a,"location_gid":"historical-a",
+                 "available_quantity":2,"incoming_quantity":1},
+                {"variant_id":self.variant_b,"location_gid":"historical-a",
+                 "available_quantity":2,"incoming_quantity":1},
+            ),
+        )
+        self.conn.execute(
+            """UPDATE daily_inventory_snapshots
+                  SET available_quantity=999,captured_at=captured_at+interval '1 minute'
+                WHERE snapshot_date=%s AND variant_id=%s AND location_gid='historical-a'""",
+            (history_day,self.variant_a),
+        )
+        self.conn.commit()
+        with self.assertRaisesRegex(
+            MondayRecommendationError,"CURRENT_INVENTORY_HISTORY_EVIDENCE_INVALID"
+        ):
+            self._prepare("tampered-historical-inventory")
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT count(*) FROM runs WHERE idempotency_key=%s",
+                ("tampered-historical-inventory",),
+            ).fetchone()[0],0,
+        )
+        self.conn.execute(
+            """UPDATE daily_inventory_snapshots d
+                  SET available_quantity=rr.available_quantity,
+                      incoming_quantity=rr.incoming_quantity,
+                      on_hand_quantity=rr.on_hand_quantity,
+                      committed_quantity=rr.committed_quantity,
+                      reserved_quantity=rr.reserved_quantity,
+                      damaged_quantity=rr.damaged_quantity,
+                      validation_status=rr.validation_status,
+                      validation_message=rr.validation_message,
+                      captured_at=r.started_at,
+                      source=r.source
+                 FROM inventory_snapshot_run_rows rr, inventory_snapshot_runs r
+                WHERE d.inventory_snapshot_run_id=rr.inventory_snapshot_run_id
+                  AND d.variant_id=rr.variant_id AND d.location_gid=rr.location_gid
+                  AND r.inventory_snapshot_run_id=rr.inventory_snapshot_run_id
+                  AND d.snapshot_date=%s AND d.variant_id=%s
+                  AND d.location_gid='historical-a'""",
+            (history_day,self.variant_a),
+        )
         self.conn.execute(
             """UPDATE daily_inventory_snapshots SET available_quantity=999,incoming_quantity=999,
                       inventory_snapshot_run_id=NULL,source='UNOWNED_AD_HOC'

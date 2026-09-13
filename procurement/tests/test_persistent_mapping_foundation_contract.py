@@ -20,7 +20,7 @@ SERVICE = PROCUREMENT / "src" / "procurement_os" / "persistent_mapping.py"
 MIGRATION = PROCUREMENT / "db" / "014_persistent_mapping_foundation.sql"
 RULES = PROCUREMENT / "config" / "rules.toml"
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 788
+EXPECTED_GLOBAL_TEST_POPULATION = 796
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):
