@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
+import json
 import os
-from uuid import UUID
+from urllib.parse import urlencode
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -22,6 +25,15 @@ from .emergency_packet import (
 )
 from .health import data_sync_run_status, full_health
 from .inventory import inventory_business_date, latest_inventory_snapshot_status
+from .local_access import (
+    LocalAccessMiddleware,
+    SESSION_COOKIE,
+    action_principal,
+    authenticated_audit_actor,
+    create_local_session,
+    destroy_local_session,
+    runtime_config,
+)
 from .matching import MatchCandidate, score_candidate
 from .monday_run import (
     build_after_review,
@@ -40,6 +52,20 @@ from .price_book import (
     stage_and_validate_price_book,
 )
 from .po_csv import PoCsvError
+from .persistent_mapping import (
+    PersistentMappingError,
+    execute_mapping_decision,
+    execute_routine_offer_clear,
+    execute_routine_offer_selection,
+    execute_supplier_mapping_intake,
+    get_mapping_candidate_detail,
+    list_mapping_candidates,
+    mapping_status,
+    preview_mapping_decision,
+    preview_routine_offer_clear,
+    preview_routine_offer_selection,
+    require_synthetic_mapping_capability,
+)
 from .readiness import po_readiness
 from .procurement_review import (
     ProcurementReviewError,
@@ -55,6 +81,10 @@ from .recommendations import (
     list_monday_runs,
 )
 from .storage import get_storage
+from .synthetic_mapping_packet import (
+    SyntheticPacketError,
+    load_synthetic_mapping_packets,
+)
 from .vendor_rules import evaluate_vendor_rules, update_vendor_rules
 from . import catalog as catalog_service
 from . import sales as sales_service
@@ -120,10 +150,17 @@ class _BoundedPriceBookUploadMiddleware:
         await self.app(scope, replay_receive, send)
 
 
-app = FastAPI(title="Buffalo Procurement OS", version="1.3.0")
+app = FastAPI(
+    title="Buffalo Procurement OS",
+    version="1.3.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 app.add_middleware(
     _BoundedPriceBookUploadMiddleware, max_bytes=MAX_PRICE_BOOK_REQUEST_BYTES
 )
+app.add_middleware(LocalAccessMiddleware)
 
 
 class TargetCostRequest(BaseModel):
@@ -194,16 +231,82 @@ def _require_price_book_review_token(supplied: str | None) -> None:
 
 
 def _db_conn():
-    db = os.getenv("DATABASE_URL")
-    if not db:
-        raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
+    db = _database_url()
     import psycopg
     return psycopg.connect(db)
 
 
+def _database_url() -> str:
+    db = os.getenv("DATABASE_URL")
+    if not db:
+        raise HTTPException(status_code=503, detail="DATABASE_URL is not configured")
+    return db
+
+
+def _server_audit_actor(client_value: str = "") -> str:
+    """Use the authenticated named session, never a browser actor field."""
+
+    try:
+        return authenticated_audit_actor(client_value)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail="Authenticated principal is absent") from exc
+
+
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "buffalo-procurement-os", "version": "1.3.0"}
+    return {
+        "ok": True,
+        "service": "buffalo-procurement-os",
+        "version": "1.3.0",
+        "process_id": os.getpid(),
+    }
+
+
+@app.get("/auth/login", response_class=HTMLResponse)
+def local_login_page():
+    config = runtime_config()
+    available = config.mode != "UNCONFIGURED"
+    form = (
+        "<form method='post'><label>Local access secret "
+        "<input type='password' name='secret' autocomplete='current-password' required>"
+        "</label><button type='submit'>Sign in</button></form>"
+        if available
+        else "<p>Local authentication is unavailable until an explicit nonproduction mode is configured.</p>"
+    )
+    return HTMLResponse(
+        "<!doctype html><html><head><title>Buffalo local sign in</title></head>"
+        "<body><h1>Buffalo Procurement OS — local sign in</h1>"
+        f"<p>Mode: {_html_escape(config.mode)}</p>{form}</body></html>",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/auth/login")
+def local_login(secret: str = Form(...)):
+    try:
+        token, _ = create_local_session(secret)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Local sign-in failed") from exc
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=8 * 60 * 60,
+        httponly=True,
+        samesite="strict",
+        path="/",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/auth/logout")
+def local_logout(request: Request):
+    destroy_local_session(request.cookies.get(SESSION_COOKIE))
+    response = RedirectResponse(url="/auth/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/health/full")
@@ -220,6 +323,9 @@ STATUS_BADGE = {
 
 _OPERATIONAL_NAV_ITEMS = (
     ("System Readiness", "admin/status"),
+    ("Supplier Mapping", "supplier-mapping"),
+    ("Vendor Rules", "vendor-rules"),
+    ("Price Books", "price-books"),
     ("Catalog Reconciliation", "reconciliation"),
     ("Historical Sales Reconciliation", "historical-sales/review"),
     ("Data/Sync Runs", "data-sync-runs"),
@@ -553,6 +659,7 @@ def vendor_rules_update_page(
     review_token: str = Form(...),
 ):
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     rules = {
         "order_days": order_days.split(","),
         "order_cutoff_local": order_cutoff_local,
@@ -598,6 +705,502 @@ def foundation_status():
     with _db_conn() as conn:
         result = po_readiness(conn)
     return {"database_configured": True, **result}
+
+
+_MAPPING_STATE_FIELDS = (
+    "distributor_product_id",
+    "supplier_code",
+    "package_type",
+    "size",
+    "raw_pack",
+    "physical_units",
+    "retail_pack_units",
+    "shopify_units",
+    "qualifying_units",
+    "assortment_scope",
+    "assortment_group",
+    "assortable",
+)
+
+
+def _mapping_state(candidate: dict, field: str) -> str:
+    state = candidate.get(f"{field}_state") or "ABSENT"
+    if state == "VALUE":
+        return f"VALUE: {_html_escape(candidate.get(f'{field}_value'))}"
+    return _html_escape(state)
+
+
+def _mapping_banner() -> str:
+    config = runtime_config()
+    return (
+        "<div style='border:2px solid #b42318;background:#ffebe9;padding:12px;"
+        "font-weight:700;margin:12px 0'>TEST DATA — NOT FOR ORDERING · "
+        f"{_html_escape(config.mode)} · SHADOW ONLY · no offer activation, price "
+        "authority, recommendation cutover, Shopify write, PO release, or order.</div>"
+    )
+
+
+_TRANSIENT_MAPPING_ERROR_CODES = frozenset(
+    {
+        "SESSION_LOCK_TIMEOUT",
+        "SESSION_LOCK_CLEANUP_FAILED",
+        "CONCURRENT_TRANSACTION_RETRY_EXHAUSTED",
+        "COMMIT_OUTCOME_UNKNOWN",
+    }
+)
+
+
+def _mapping_error_status(error: PersistentMappingError) -> int:
+    return 503 if error.code in _TRANSIENT_MAPPING_ERROR_CODES else 409
+
+
+def _supplier_mapping_list_html(
+    result: dict,
+    status_result: dict,
+    *,
+    query: str,
+    supplier: str,
+    status: str,
+    limit: int,
+    offset: int,
+) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td><a href='/supplier-mapping/{_html_escape(item['candidate_id'])}'>"
+        f"{_html_escape(item['occurrence_key'])}</a></td>"
+        f"<td>{_html_escape(item['source_vendor_identity'])}</td>"
+        f"<td>{_html_escape(item['proposed_variant_id'])}</td>"
+        f"<td>{_mapping_state(item, 'supplier_code')}</td>"
+        f"<td>{_html_escape(item['offer_class'])}</td>"
+        f"<td>{_html_escape(item.get('decision_action') or 'PENDING')}</td>"
+        "</tr>"
+        for item in result["items"]
+    ) or "<tr><td colspan='6'>No candidates match this page.</td></tr>"
+    def page_url(page_offset: int) -> str:
+        return "/supplier-mapping?" + urlencode(
+            {
+                "query": query,
+                "supplier": supplier,
+                "status": status,
+                "limit": limit,
+                "offset": page_offset,
+            }
+        )
+
+    previous = (
+        f"<a rel='prev' href='{_form_value(page_url(max(0, offset - limit)))}'>← Previous</a>"
+        if offset > 0
+        else ""
+    )
+    following = (
+        f"<a rel='next' href='{_form_value(page_url(offset + limit))}'>Next →</a>"
+        if offset + len(result["items"]) < result["total"]
+        else ""
+    )
+    pagination = " · ".join(item for item in (previous, following) if item) or "End of results"
+    return f"""<!doctype html><html><head><title>Supplier Mapping</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1180px;margin:2rem auto;padding:0 1rem;color:#1f2328}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}input,select,button{{padding:7px}}</style></head><body>
+{_operational_nav('/', current='Supplier Mapping')}{_mapping_banner()}
+<h1>Persistent supplier mapping review</h1>
+<p>Batches: {_html_escape(status_result['review_batch_count'])} · candidates: {_html_escape(status_result['candidate_count'])} · decisions: {_html_escape(status_result['decision_count'])} · selection heads: {_html_escape(status_result['selection_head_count'])} · exact legacy shadow matches: {_html_escape(status_result['shadow_match_count'])}</p>
+<form method='post' action='/supplier-mapping/intake'><button>Verify and intake the fixed synthetic review suite</button></form>
+<form method='get'><label>Search <input name='query' value='{_form_value(query)}'></label>
+<label>Supplier <input name='supplier' value='{_form_value(supplier)}'></label>
+<label>Status <select name='status'><option value=''>All</option><option value='PENDING'{' selected' if status == 'PENDING' else ''}>Pending</option><option value='DECIDED'{' selected' if status == 'DECIDED' else ''}>Decided</option><option value='DEFER'{' selected' if status == 'DEFER' else ''}>Deferred</option><option value='APPROVE_MAPPING'{' selected' if status == 'APPROVE_MAPPING' else ''}>Approved mapping</option><option value='REJECT_MAPPING'{' selected' if status == 'REJECT_MAPPING' else ''}>Rejected mapping</option></select></label>
+<label>Page size <select name='limit'>{''.join(f"<option value='{size}'{' selected' if limit == size else ''}>{size}</option>" for size in (10, 25, 50, 100))}</select></label><input type='hidden' name='offset' value='0'><button>Filter</button></form>
+<p>Showing {_html_escape(len(result['items']))} of {_html_escape(result['total'])}; results are server-paged. {pagination}</p>
+<table><thead><tr><th>Occurrence</th><th>Supplier</th><th>Variant ID</th><th>Supplier code state</th><th>Class</th><th>Disposition</th></tr></thead><tbody>{rows}</tbody></table>
+<form method='post' action='/auth/logout' style='margin-top:24px'><button>Sign out</button></form>
+</body></html>"""
+
+
+@app.get("/supplier-mapping/status")
+def supplier_mapping_status():
+    with _db_conn() as conn:
+        return mapping_status(conn)
+
+
+@app.get("/supplier-mapping", response_class=HTMLResponse)
+def supplier_mapping_page(
+    query: str = "", supplier: str = "", status: str = "", limit: int = 50, offset: int = 0
+):
+    try:
+        with _db_conn() as conn:
+            result = list_mapping_candidates(
+                conn, query=query, supplier=supplier, status=status, limit=limit, offset=offset
+            )
+            status_result = mapping_status(conn)
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return HTMLResponse(
+        _supplier_mapping_list_html(
+            result,
+            status_result,
+            query=query,
+            supplier=supplier,
+            status=status,
+            limit=limit,
+            offset=offset,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/supplier-mapping/intake")
+def supplier_mapping_intake(request: Request):
+    principal = action_principal(request, "procurement.review.intake")
+    try:
+        require_synthetic_mapping_capability("review_intake_writes_enabled")
+        packets = load_synthetic_mapping_packets()
+        database_url = _database_url()
+        results = [
+            execute_supplier_mapping_intake(
+                database_url,
+                package=packet["package"],
+                candidates=packet["candidates"],
+                principal=principal,
+                intake_idempotency_key=packet["intake_idempotency_key"],
+            )
+            for packet in packets
+        ]
+        if len(results) != 2:
+            raise PersistentMappingError("synthetic intake scenario count differs")
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=_mapping_error_status(exc), detail=str(exc)) from exc
+    except SyntheticPacketError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url="/supplier-mapping", status_code=303)
+
+
+def _supplier_mapping_detail_html(detail: dict) -> str:
+    candidate = detail["candidate"]
+    batch = detail["batch"]
+    states = "".join(
+        f"<tr><th>{_html_escape(field)}</th><td>{_mapping_state(candidate, field)}</td></tr>"
+        for field in _MAPPING_STATE_FIELDS
+    )
+    comparisons = "".join(
+        "<tr>"
+        f"<td>{_html_escape(item['offer']['offer_id'])}</td>"
+        f"<td>{_html_escape(item['offer']['supplier_sku'])}</td>"
+        f"<td>{_html_escape(item['offer']['package_type'])}</td>"
+        f"<td>{_html_escape(item['offer']['active'])}</td>"
+        f"<td>{_html_escape(item['offer']['confidence'])}</td>"
+        f"<td>{'EXACT' if item['exact_contract_match'] else 'DIFFERS'}</td></tr>"
+        for item in detail["offer_comparisons"]
+    ) or "<tr><td colspan='6'>No candidate Variant/vendor offers.</td></tr>"
+    approval_eligible = bool(
+        candidate.get("proposed_variant_id")
+        and candidate.get("proposed_vendor_id")
+        and candidate.get("supplier_identity_key_sha256")
+        and candidate.get("operational_offer_key_sha256")
+        and candidate.get("offer_class") in {
+            "REGULAR", "GIFT", "SPECIAL", "ALTERNATE", "COMPONENT", "COMBO"
+        }
+        and candidate.get("assortment_scope_state") == "VALUE"
+        and not candidate.get("blockers")
+        and batch.get("structural_state") == "READY"
+        and batch.get("source_evidence_state") == "READY"
+        and batch.get("semantic_state") == "READY"
+        and batch.get("source_is_simulation") is False
+    )
+    exact_options = "".join(
+        f"<option value='{_form_value(item['offer']['offer_id'])}'>Offer {_html_escape(item['offer']['offer_id'])} — {_html_escape(item['offer']['supplier_sku'])}</option>"
+        for item in detail["offer_comparisons"]
+        if approval_eligible and item["exact_contract_match"]
+    )
+    can_create_inactive = approval_eligible
+    can_reject = bool(
+        candidate.get("proposed_variant_id")
+        and candidate.get("proposed_vendor_id")
+        and candidate.get("supplier_identity_key_sha256")
+        and candidate.get("distributor_product_id_state") == "VALUE"
+        and str(candidate.get("distributor_product_id_value") or "").strip()
+    )
+    disposition_options = "".join(
+        (
+            "<option value='DEFER'>DEFER — no operational effect</option>",
+            "<option value='REJECT_MAPPING'>REJECT_MAPPING — append exact rejection memory</option>"
+            if can_reject
+            else "",
+            "<option value='APPROVE_MAPPING'>APPROVE_MAPPING — exact offer result</option>"
+            if exact_options or can_create_inactive
+            else "",
+        )
+    )
+    offer_result_options = "<option value=''>Not applicable</option>"
+    if exact_options:
+        offer_result_options += "<option value='LINKED_EXISTING'>LINKED_EXISTING</option>"
+    if can_create_inactive:
+        offer_result_options += (
+            "<option value='CREATED_INACTIVE'>CREATED_INACTIVE — unpriced, unselected, inactive</option>"
+        )
+    decisions = "".join(
+        f"<li>{_html_escape(item['decided_at'])}: <b>{_html_escape(item['action'])}</b> — {_html_escape(item['reason'])} (principal {_html_escape(item['human_principal_ref'])})</li>"
+        for item in detail["decisions"]
+    ) or "<li>No decision yet.</li>"
+    rejections = "".join(
+        "<li>"
+        f"{_html_escape(item.get('rejected_at'))}: Variant {_html_escape(item.get('rejected_variant_id'))} / "
+        f"vendor {_html_escape(item.get('vendor_id'))} / source {_html_escape(item.get('source_text'))} "
+        f"(principal {_html_escape(item.get('rejected_by'))})"
+        "</li>"
+        for item in detail.get("rejections", [])
+    ) or "<li>No active exact rejection memory.</li>"
+    shadow = "".join(
+        f"<li>Variant {_html_escape(item['variant_id'])}: {_html_escape(item['selection_state'])}; legacy comparison <b>{_html_escape(item['shadow_comparison'])}</b></li>"
+        for item in detail["shadow"]
+    ) or "<li>No routine selection head.</li>"
+    decision_key = uuid4()
+    selection_form = ""
+    effective = detail["effective_decision"]
+    if effective and effective.get("action") == "APPROVE_MAPPING":
+        selection_key = uuid4()
+        selection_form = f"""<h2>Separate routine selection</h2><form method='post' action='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/selection'>
+<input type='hidden' name='idempotency_key' value='{selection_key}'>
+<input type='hidden' name='selection_action' value='SELECT'>
+<label>Effective from <input type='date' name='effective_from' value='{date.today().isoformat()}' required></label>
+<label>Reason <input name='reason' required></label><button>Preview separate selection</button></form>"""
+    if detail["shadow"] and detail["shadow"][0].get("selection_state") != "EXPLICITLY_CLEARED":
+        clear_key = uuid4()
+        selection_form += f"""<form method='post' action='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/selection'>
+<input type='hidden' name='idempotency_key' value='{clear_key}'>
+<input type='hidden' name='selection_action' value='CLEAR'>
+<label>Clear effective from <input type='date' name='effective_from' value='{date.today().isoformat()}' required></label>
+<label>Reason <input name='reason' required></label><button>Preview explicit routine-selection CLEAR</button></form>"""
+    return f"""<!doctype html><html><head><title>Mapping candidate</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:1180px;margin:2rem auto;padding:0 1rem;color:#1f2328}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left;vertical-align:top}}form{{display:grid;gap:8px;max-width:760px;margin:12px 0}}input,select,button{{padding:7px}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f8fa;padding:10px}}</style></head><body>
+{_operational_nav('/', current='Supplier Mapping')}{_mapping_banner()}<p><a href='/supplier-mapping'>← Candidate list</a> · <a href='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/source'>Download bounded evidence metadata</a></p>
+<h1>{_html_escape(candidate['occurrence_key'])}</h1>
+<p>Supplier {_html_escape(candidate['source_vendor_identity'])} · proposed Variant {_html_escape(candidate['proposed_variant_id'])} · class {_html_escape(candidate['offer_class'])}/{_html_escape(candidate['occurrence_role'])}</p>
+<h2>Sealed source status</h2><table><tr><th>Package</th><td>{_html_escape(batch['source_package_id'])} rev {_html_escape(batch['source_revision'])}</td></tr><tr><th>Readiness</th><td>{_html_escape(batch['structural_state'])} / {_html_escape(batch['source_evidence_state'])} / {_html_escape(batch['semantic_state'])}</td></tr><tr><th>Authority/import</th><td>{_html_escape(batch['source_authority_state'])} / {_html_escape(batch['source_import_state'])}</td></tr><tr><th>Fixture flag</th><td>source_is_simulation={_html_escape(batch['source_is_simulation'])}; a false value in this owned demo only exercises the authoritative-format contract branch and is not real approval.</td></tr><tr><th>File</th><td>{_html_escape(candidate['source_file_name'])} · SHA-256 {_html_escape(candidate['source_file_sha256'])} · pages {_html_escape(candidate['source_page_start'])}–{_html_escape(candidate['source_page_end'])}</td></tr></table>
+<h2>Typed candidate evidence</h2><table>{states}</table><p>Blockers:</p><pre>{_html_escape(json.dumps(candidate['blockers'], sort_keys=True, default=str))}</pre><p>Independent linkage evidence:</p><pre>{_html_escape(json.dumps(candidate['independent_linkage_evidence'], sort_keys=True, default=str))}</pre>
+<h2>Existing offer comparison</h2><table><tr><th>ID</th><th>SKU</th><th>Package</th><th>Active</th><th>Confidence</th><th>Exact candidate contract</th></tr>{comparisons}</table>
+<h2>Append-only decision history</h2><ul>{decisions}</ul><h2>Active exact rejection memory</h2><ul>{rejections}</ul>
+<form method='post' action='/supplier-mapping/{_html_escape(candidate['candidate_id'])}/decision'><input type='hidden' name='idempotency_key' value='{decision_key}'><label>Disposition <select name='action'>{disposition_options}</select></label><label>Approval result <select name='offer_link_kind'>{offer_result_options}</select></label><label>Exact existing offer (LINKED_EXISTING only)<select name='existing_offer_id'><option value=''>None</option>{exact_options}</select></label><label>Reason <input name='reason' required></label><button>Preview disposition</button></form>
+{selection_form}<h2>Routine-selection shadow</h2><ul>{shadow}</ul>
+</body></html>"""
+
+
+@app.get("/supplier-mapping/{candidate_id}", response_class=HTMLResponse)
+def supplier_mapping_detail(candidate_id: UUID):
+    try:
+        with _db_conn() as conn:
+            detail = get_mapping_candidate_detail(conn, candidate_id)
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return HTMLResponse(_supplier_mapping_detail_html(detail), headers={"Cache-Control": "no-store"})
+
+
+@app.get("/supplier-mapping/{candidate_id}/source")
+def supplier_mapping_source(candidate_id: UUID):
+    try:
+        with _db_conn() as conn:
+            detail = get_mapping_candidate_detail(conn, candidate_id)
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    evidence = {
+        "contract": "BUFFALO_MAPPING_EVIDENCE_METADATA_ONLY_V1",
+        "authority": "REVIEW_ONLY_NOT_SOURCE_BLOB",
+        "candidate": detail["candidate"],
+        "batch": detail["batch"],
+    }
+    data = json.dumps(evidence, sort_keys=True, indent=2, default=str).encode("utf-8") + b"\n"
+    return Response(
+        data,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename=mapping-evidence-{candidate_id}.json",
+        },
+    )
+
+
+def _mapping_confirmation_html(
+    *, candidate_id: UUID, kind: str, values: dict[str, str], preview_sha256: str
+) -> str:
+    hidden = "".join(
+        f"<input type='hidden' name='{_form_value(key)}' value='{_form_value(value)}'>"
+        for key, value in values.items()
+    )
+    visible = "".join(
+        f"<dt><b>{_html_escape(key.replace('_', ' ').title())}</b></dt>"
+        f"<dd>{_html_escape(value) if value else 'not provided'}</dd>"
+        for key, value in values.items()
+    )
+    return f"""<!doctype html><html><head><title>Confirm {kind}</title></head><body>
+{_mapping_banner()}<h1>Confirm {kind}</h1><p>This is a separate exact confirmation. No mapping or selection has been written by the preview.</p>
+<p>Candidate: <code>{_html_escape(candidate_id)}</code></p><dl>{visible}</dl>
+<p>Preview SHA-256: <code>{_html_escape(preview_sha256)}</code></p>
+<form method='post'>{hidden}<input type='hidden' name='expected_preview_sha256' value='{_form_value(preview_sha256)}'><input type='hidden' name='confirm' value='CONFIRM'><button>CONFIRM exact {kind}</button></form>
+<p><a href='/supplier-mapping/{candidate_id}'>Cancel without writing</a></p></body></html>"""
+
+
+@app.post("/supplier-mapping/{candidate_id}/decision", response_class=HTMLResponse)
+def supplier_mapping_decision(
+    request: Request,
+    candidate_id: UUID,
+    action: str = Form(...),
+    reason: str = Form(...),
+    idempotency_key: UUID = Form(...),
+    existing_offer_id: int | None = Form(None),
+    offer_link_kind: str | None = Form(None),
+    expected_preview_sha256: str | None = Form(None),
+    confirm: str | None = Form(None),
+):
+    principal = action_principal(request, "procurement.mapping.approve")
+    try:
+        require_synthetic_mapping_capability("human_mapping_writes_enabled")
+        with _db_conn() as conn:
+            conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            detail = get_mapping_candidate_detail(conn, candidate_id)
+            normalized_action = action.strip().upper()
+            normalized_link_kind = (offer_link_kind or "").strip().upper() or None
+            if normalized_action == "APPROVE_MAPPING" and normalized_link_kind == "LINKED_EXISTING":
+                exact_ids = {
+                    int(item["offer"]["offer_id"])
+                    for item in detail["offer_comparisons"]
+                    if item["exact_contract_match"]
+                }
+                if existing_offer_id not in exact_ids:
+                    raise PersistentMappingError("approval requires an exact compared existing offer")
+            elif normalized_action == "APPROVE_MAPPING" and normalized_link_kind == "CREATED_INACTIVE":
+                if existing_offer_id is not None:
+                    raise PersistentMappingError("created-inactive approval cannot name an offer")
+            elif normalized_action == "APPROVE_MAPPING":
+                raise PersistentMappingError("approval result disposition is required")
+            preview = preview_mapping_decision(
+                conn,
+                candidate_id=candidate_id,
+                action=action,
+                reason=reason,
+                principal=principal,
+                decision_idempotency_key=idempotency_key,
+                existing_offer_id=existing_offer_id,
+                offer_link_kind=normalized_link_kind,
+            )
+            if not expected_preview_sha256:
+                conn.rollback()
+                return HTMLResponse(
+                    _mapping_confirmation_html(
+                        candidate_id=candidate_id,
+                        kind="mapping disposition",
+                        values={
+                            "action": action,
+                            "reason": reason,
+                            "idempotency_key": str(idempotency_key),
+                            "existing_offer_id": "" if existing_offer_id is None else str(existing_offer_id),
+                            "offer_link_kind": normalized_link_kind or "",
+                        },
+                        preview_sha256=preview["preview_sha256"],
+                    ),
+                    headers={"Cache-Control": "no-store"},
+                )
+            if confirm != "CONFIRM":
+                raise PersistentMappingError("exact mapping confirmation is required")
+        execute_mapping_decision(
+            _database_url(),
+            candidate_id=candidate_id,
+            action=action,
+            reason=reason,
+            principal=principal,
+            decision_idempotency_key=idempotency_key,
+            expected_preview_sha256=expected_preview_sha256,
+            existing_offer_id=existing_offer_id,
+            offer_link_kind=(offer_link_kind or "").strip().upper() or None,
+        )
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=_mapping_error_status(exc), detail=str(exc)) from exc
+    return RedirectResponse(url=f"/supplier-mapping/{candidate_id}", status_code=303)
+
+
+@app.post("/supplier-mapping/{candidate_id}/selection", response_class=HTMLResponse)
+def supplier_mapping_selection(
+    request: Request,
+    candidate_id: UUID,
+    reason: str = Form(...),
+    effective_from: date = Form(...),
+    idempotency_key: UUID = Form(...),
+    selection_action: str = Form("SELECT"),
+    expected_preview_sha256: str | None = Form(None),
+    confirm: str | None = Form(None),
+):
+    principal = action_principal(request, "procurement.offer.select")
+    try:
+        require_synthetic_mapping_capability("routine_selection_writes_enabled")
+        with _db_conn() as conn:
+            conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            detail = get_mapping_candidate_detail(conn, candidate_id)
+            normalized_action = selection_action.strip().upper()
+            effective = detail["effective_decision"]
+            mapping_decision_id: UUID | None = None
+            if normalized_action == "SELECT":
+                if not effective or effective["action"] != "APPROVE_MAPPING":
+                    raise PersistentMappingError("candidate has no effective approved mapping")
+                mapping_decision_id = UUID(str(effective["mapping_decision_id"]))
+                preview = preview_routine_offer_selection(
+                    conn,
+                    mapping_decision_id=mapping_decision_id,
+                    principal=principal,
+                    selection_idempotency_key=idempotency_key,
+                    reason=reason,
+                    effective_from=effective_from,
+                )
+            elif normalized_action == "CLEAR":
+                variant_id = str(detail["candidate"].get("proposed_variant_id") or "")
+                preview = preview_routine_offer_clear(
+                    conn,
+                    variant_id=variant_id,
+                    principal=principal,
+                    selection_idempotency_key=idempotency_key,
+                    reason=reason,
+                    effective_from=effective_from,
+                )
+            else:
+                raise PersistentMappingError("routine selection action is unsupported")
+            if not expected_preview_sha256:
+                conn.rollback()
+                return HTMLResponse(
+                    _mapping_confirmation_html(
+                        candidate_id=candidate_id,
+                        kind="routine offer selection",
+                        values={
+                            "reason": reason,
+                            "selection_action": normalized_action,
+                            "effective_from": effective_from.isoformat(),
+                            "idempotency_key": str(idempotency_key),
+                            "mapping_decision_id": "" if mapping_decision_id is None else str(mapping_decision_id),
+                        },
+                        preview_sha256=preview["preview_sha256"],
+                    ),
+                    headers={"Cache-Control": "no-store"},
+                )
+            if confirm != "CONFIRM":
+                raise PersistentMappingError("exact selection confirmation is required")
+        if normalized_action == "SELECT":
+            assert mapping_decision_id is not None
+            execute_routine_offer_selection(
+                _database_url(),
+                mapping_decision_id=mapping_decision_id,
+                principal=principal,
+                selection_idempotency_key=idempotency_key,
+                reason=reason,
+                effective_from=effective_from,
+                expected_preview_sha256=expected_preview_sha256,
+            )
+        else:
+            execute_routine_offer_clear(
+                _database_url(),
+                variant_id=variant_id,
+                principal=principal,
+                selection_idempotency_key=idempotency_key,
+                reason=reason,
+                effective_from=effective_from,
+                expected_preview_sha256=expected_preview_sha256,
+            )
+    except PersistentMappingError as exc:
+        raise HTTPException(status_code=_mapping_error_status(exc), detail=str(exc)) from exc
+    return RedirectResponse(url=f"/supplier-mapping/{candidate_id}", status_code=303)
 
 
 @app.post("/economics/target-cost")
@@ -689,9 +1292,10 @@ def reconciliation_items(unresolved_only: bool = True):
 @app.post("/reconciliation/approve-recreation")
 def approve_recreation_endpoint(req: RecreationDecision):
     _require_review_token(req.review_token)
+    actor = _server_audit_actor(req.actor)
     with _db_conn() as conn:
         try:
-            approve_recreated_variant(conn, req.old_variant_id, req.new_variant_id, actor=req.actor, note=req.note)
+            approve_recreated_variant(conn, req.old_variant_id, req.new_variant_id, actor=actor, note=req.note)
             gate = recompute_catalog_gate(conn)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
@@ -701,9 +1305,10 @@ def approve_recreation_endpoint(req: RecreationDecision):
 @app.post("/reconciliation/reject-recreation")
 def reject_recreation_endpoint(req: RecreationDecision):
     _require_review_token(req.review_token)
+    actor = _server_audit_actor(req.actor)
     with _db_conn() as conn:
         try:
-            reject_recreation_candidate(conn, req.old_variant_id, req.new_variant_id, actor=req.actor, note=req.note)
+            reject_recreation_candidate(conn, req.old_variant_id, req.new_variant_id, actor=actor, note=req.note)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
     return {"decision": "REJECTED_KEEP_SEPARATE"}
@@ -712,9 +1317,10 @@ def reject_recreation_endpoint(req: RecreationDecision):
 @app.post("/reconciliation/retire")
 def retire_endpoint(req: RetireDecision):
     _require_review_token(req.review_token)
+    actor = _server_audit_actor(req.actor)
     with _db_conn() as conn:
         try:
-            retire_missing_variant(conn, req.variant_id, actor=req.actor, note=req.note)
+            retire_missing_variant(conn, req.variant_id, actor=actor, note=req.note)
             gate = recompute_catalog_gate(conn)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
@@ -959,6 +1565,7 @@ def retire_batch(variant_ids: list[str] = Form([]), actor: str = Form(...),
     session may cover several explicitly selected identities; each ID still gets its
     own permanent audit record via retire_missing_variant. Never retires unselected IDs."""
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     if not variant_ids:
         raise HTTPException(status_code=400, detail="No historical Variant IDs selected")
     results = []
@@ -981,6 +1588,7 @@ def retire_batch(variant_ids: list[str] = Form([]), actor: str = Form(...),
 def reconciliation_decide(action: str = Form(...), old: str = Form(...), new: str = Form(None),
                           actor: str = Form(...), note: str = Form(""), review_token: str = Form("")):
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     with _db_conn() as conn:
         try:
             if action == "approve":
@@ -1282,7 +1890,7 @@ def historical_sales_review_decide(
     _require_review_token(review_token)
     source_key = str(source_key).strip()
     action = str(action).strip().upper()
-    actor = str(actor).strip()
+    actor = _server_audit_actor(actor)
     reason = str(reason).strip()
     canonical_variant_id = (
         str(canonical_variant_id).strip() if canonical_variant_id not in (None, "") else None
@@ -1337,7 +1945,8 @@ def _monday_runs_html(runs: list[dict]) -> str:
 <label>Business date <input type='date' name='business_date' value='{_form_value(inventory_business_date())}' required></label>
 <label>Idempotency key <input name='idempotency_key' required></label>
 <label>Canonical Shopify Variant IDs (comma separated) <input name='variant_ids' required></label>
-<label>Operator <input name='actor' required></label>
+<input type='hidden' name='actor' value='browser-value-ignored'>
+<p>The immutable audit actor comes from the authenticated local session.</p>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Prepare recommendations and stop for review</button></form>
 <h2>Frozen runs</h2><table><thead><tr><th>Run</th><th>Business date</th><th>Stage</th><th>Open blockers</th></tr></thead>
@@ -1360,9 +1969,9 @@ def _monday_run_html(
             )
         elif run["workflow_stage"] == "AWAITING_REVIEW":
             control = f"""<form method='post' action='{run_id}/blockers/{item['exception_id']}/exclude'>
-<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
-<label>Exclusion reason <input name='reason' required></label>
-<label>Owner/reviewer <input name='actor' required></label>
+	<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
+	<label>Exclusion reason <input name='reason' required></label>
+	<input type='hidden' name='actor' value='browser-value-ignored'>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Acknowledge and exclude from this run only</button></form>"""
         else:
@@ -1379,7 +1988,46 @@ def _monday_run_html(
     )
     review_rows = []
     for item in review["items"]:
-        frozen_terms = (item.get("metrics") or {}).get("frozen_vendor_terms") or {}
+        metrics = item.get("metrics") or {}
+        frozen_terms = metrics.get("frozen_vendor_terms") or {}
+        offer = metrics.get("frozen_offer_evidence") or {}
+        capture = metrics.get("frozen_inventory_capture") or []
+        inventory_rows = "".join(
+            "<tr>"
+            f"<td>{_html_escape(row[0])}</td><td>{_html_escape(row[1])}</td>"
+            f"<td>{_html_escape(row[2])}</td><td>{_html_escape(row[3])}</td>"
+            "</tr>"
+            for row in (metrics.get("frozen_inventory_rows") or [])
+        ) or "<tr><td colspan='4'>No frozen inventory row.</td></tr>"
+        price_rows = "".join(
+            "<tr>"
+            f"<td>{_html_escape(row[3])}</td>"
+            f"<td>{_html_escape(row[4])} {_html_escape(row[5])}</td>"
+            f"<td>${_html_escape(row[6])}</td><td>${_html_escape(row[7])}</td>"
+            f"<td>{_html_escape(row[8])} p.{_html_escape(row[9])}</td>"
+            "</tr>"
+            for row in (metrics.get("frozen_price_ladder") or [])
+        ) or "<tr><td colspan='5'>No frozen price row.</td></tr>"
+        capture_text = (
+            f"run {_html_escape(capture[0])}; business date {_html_escape(capture[1])}; "
+            f"captured {_html_escape(capture[2])}; source {_html_escape(capture[3])}; "
+            f"hash {_html_escape(capture[4])}; rows/eligible/invalid/incomplete "
+            f"{_html_escape(capture[5])}/{_html_escape(capture[6])}/"
+            f"{_html_escape(capture[7])}/{_html_escape(capture[8])}"
+            if len(capture) >= 9
+            else "Frozen current inventory capture is absent."
+        )
+        evidence_table = f"""
+<table class='facts'>
+<tr><th>Supplier / pack</th><td>{_html_escape(offer.get('supplier_sku'))}; {_html_escape(offer.get('size_text'))}; {_html_escape(offer.get('raw_pack'))}; Shopify units/case {_html_escape(offer.get('shopify_units_per_case'))}; qualifying units/case {_html_escape(offer.get('qualifying_units_per_case'))}; assortment {_html_escape(offer.get('assortment_scope'))}/{_html_escape(offer.get('assortment_group'))}; assortable {_html_escape(offer.get('assortable'))}</td></tr>
+<tr><th>Offer evidence</th><td>{_html_escape(offer.get('confidence'))}; {_html_escape(offer.get('source_file'))} p.{_html_escape(offer.get('source_page'))}; validity {_html_escape(offer.get('valid_from'))}–{_html_escape(offer.get('valid_to'))}</td></tr>
+<tr><th>Inventory capture</th><td>{capture_text}</td></tr>
+<tr><th>Inventory locations</th><td><table><tr><th>Location</th><th>Available</th><th>Captured incoming</th><th>Status</th></tr>{inventory_rows}</table></td></tr>
+<tr><th>Trusted incoming</th><td>{_html_escape(metrics.get('trusted_incoming_units'))}; reconciliation {_html_escape(metrics.get('frozen_open_po_position'))}</td></tr>
+<tr><th>Demand / coverage</th><td>Authority {_html_escape(metrics.get('frozen_sales_authority'))}; velocity {_html_escape(metrics.get('forecast_daily_velocity'))}/day; horizon {_html_escape(metrics.get('forecast_horizon_days'))} days; forecast {_html_escape(metrics.get('forecast_units'))}; baseline need {_html_escape(metrics.get('raw_need_units'))}; target {_html_escape(metrics.get('target_units'))}; reasons {_html_escape(metrics.get('need_reason_codes'))}</td></tr>
+<tr><th>Retail / margin diagnostic</th><td>Frozen retail ${_html_escape(metrics.get('frozen_catalog_retail_price'))}; unit GP ${_html_escape(metrics.get('frozen_unit_gross_profit'))}; gross margin {_html_escape(metrics.get('frozen_gross_margin_pct'))}% (diagnostic only)</td></tr>
+<tr><th>Frozen price ladder</th><td><table><tr><th>Level</th><th>Break</th><th>Case</th><th>Unit</th><th>Source</th></tr>{price_rows}</table></td></tr>
+</table>"""
         minimum_evidence = (
             f"Vendor minimum: {_html_escape(frozen_terms.get('minimum_type'))} "
             f"{_html_escape(frozen_terms.get('minimum_value'))}; below-minimum fee "
@@ -1405,7 +2053,7 @@ def _monday_run_html(
 <label>Decision <select name='action'><option>ACCEPT</option><option>EDIT_QUANTITY</option><option>REJECT</option></select></label>
 <label>Cases <input type='number' min='0' step='1' name='approved_cases' value='{_form_value(item['recommended_cases'])}'></label>
 <label>Loose units <input type='number' min='0' step='1' name='approved_loose_units' value='{_form_value(item['recommended_loose_units'])}'></label>
-<label>Comment <input name='comment'></label><label>Reviewer <input name='actor' required></label>
+	<label>Comment <input name='comment'></label><input type='hidden' name='actor' value='browser-value-ignored'>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Record immutable decision</button></form>"""
         review_rows.append(
@@ -1415,7 +2063,7 @@ def _monday_run_html(
             f"<td>{_html_escape(item['recommended_cases'])} case(s) + {_html_escape(item['recommended_loose_units'])} loose<br>"
             f"{_html_escape(item['recommended_units'])} unit(s) @ ${_html_escape(item['unit_cost'])}"
             f"<br><small>{minimum_evidence}</small>"
-            f"<details><summary>Frozen calculation evidence</summary><pre>{_html_escape(item['metrics'])}</pre></details></td>"
+            f"<details><summary>Structured frozen calculation evidence</summary>{evidence_table}<details><summary>Canonical evidence object</summary><pre>{_html_escape(item['metrics'])}</pre></details></details></td>"
             f"<td>{decision}</td></tr>"
         )
     draft_sections = []
@@ -1450,21 +2098,40 @@ def _monday_run_html(
         f"<td><a href='{run_id}/artifacts/{item['artifact_id']}'>Download hash-checked artifact</a></td></tr>"
         for item in artifacts
     ) or "<tr><td colspan='4'>No artifacts built.</td></tr>"
+    merchandise_grand = sum(
+        (Decimal(str(draft["merchandise_total"])) for draft in drafts["drafts"]),
+        Decimal("0"),
+    )
+    fee_grand = sum(
+        (Decimal(str(draft["delivery_fee"])) for draft in drafts["drafts"]),
+        Decimal("0"),
+    )
+    total_grand = sum(
+        (Decimal(str(draft["po_total"])) for draft in drafts["drafts"]),
+        Decimal("0"),
+    )
+    grand_summary = (
+        f"<p><b>Grand totals:</b> merchandise ${_html_escape(merchandise_grand)}; "
+        f"fees ${_html_escape(fee_grand)}; internal DRAFT total ${_html_escape(total_grand)}.</p>"
+        if drafts["drafts"]
+        else "<p>No vendor or grand total exists until reviewed quantities are built.</p>"
+    )
     build_form = ""
     if run["workflow_stage"] in {"REVIEWED", "DRAFTS_BUILT", "PACKET_BUILT"}:
         build_form = f"""<form method='post' action='{run_id}/build'>
-<label>Builder <input name='actor' required></label>
+	<input type='hidden' name='actor' value='browser-value-ignored'>
+	<p>Builder identity comes from the authenticated local session.</p>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Build/replay internal DRAFTs and review packet</button></form>"""
     return f"""<!doctype html><html><head><title>Monday Run {run_id}</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1240px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}
-table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;vertical-align:top;text-align:left}}form{{display:grid;gap:6px}}input,select,button{{padding:6px}}</style></head><body>
+	table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;vertical-align:top;text-align:left}}table.facts th:first-child{{width:180px}}form{{display:grid;gap:6px}}input,select,button{{padding:6px}}</style></head><body>
 {_operational_nav('../', current='Monday Procurement')}<p><a href='../monday-runs'>Back to Monday runs</a></p>
 <p class='warning'>TEST DATA — NOT FOR ORDERING. SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED. DRAFT output only.</p>
 <h1>Monday run {run_id}</h1><p>Stage: <b>{_html_escape(run['workflow_stage'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
 <h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Original reason</th><th>RUN_ONLY disposition</th></tr></thead><tbody>{blockers}</tbody></table>
 <h2>Human review</h2><table><thead><tr><th>Item</th><th>Vendor</th><th>Recommendation</th><th>Decision</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="4">No eligible recommendations.</td></tr>'}</tbody></table>
-{build_form}<h2>Vendor DRAFT POs</h2>{''.join(draft_sections) or '<p>No DRAFTs built.</p>'}
+	{build_form}<h2>Vendor DRAFT POs</h2>{''.join(draft_sections) or '<p>No DRAFTs built.</p>'}{grand_summary}
 <h2>Internal artifacts</h2><table><thead><tr><th>Type</th><th>Vendor</th><th>Bytes</th><th>Download</th></tr></thead><tbody>{artifact_rows}</tbody></table>
     </body></html>"""
 
@@ -1602,6 +2269,7 @@ def monday_runs_prepare(
     review_token: str = Form(...),
 ):
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     canonical_ids = tuple(value.strip() for value in variant_ids.split(",") if value.strip())
     if not canonical_ids:
         raise HTTPException(status_code=400, detail="At least one canonical Variant ID is required")
@@ -1649,6 +2317,7 @@ def monday_blocked_item_exclude(
     review_token: str = Form(...),
 ):
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     try:
         with _db_conn() as conn:
             acknowledge_and_exclude_blocked_item(
@@ -1679,6 +2348,7 @@ def monday_recommendation_review(
     review_token: str = Form(...),
 ):
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     try:
         with _db_conn() as conn:
             queue = list_review_queue(conn, str(run_id))
@@ -1769,6 +2439,7 @@ def monday_run_build(
     review_token: str = Form(...),
 ):
     _require_review_token(review_token)
+    actor = _server_audit_actor(actor)
     try:
         with _db_conn() as conn:
             if not draft_preview_fingerprint:
@@ -1947,6 +2618,7 @@ async def price_book_import(
     review_token: str = Form(...),
 ):
     _require_price_book_review_token(review_token)
+    actor = _server_audit_actor(actor)
     data = await price_book_file.read(MAX_PRICE_BOOK_BYTES + 1)
     if len(data) > MAX_PRICE_BOOK_BYTES:
         raise HTTPException(status_code=413, detail="Price-book CSV is too large")
@@ -1971,6 +2643,7 @@ def price_book_promote(
     review_token: str = Form(...),
 ):
     _require_price_book_review_token(review_token)
+    actor = _server_audit_actor(actor)
     try:
         with _db_conn() as conn:
             promote_price_book_batch(
@@ -1995,6 +2668,7 @@ def price_book_reject(
     review_token: str = Form(...),
 ):
     _require_price_book_review_token(review_token)
+    actor = _server_audit_actor(actor)
     try:
         with _db_conn() as conn:
             reject_price_book_batch(

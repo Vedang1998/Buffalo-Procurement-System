@@ -101,6 +101,18 @@ review_min_score = 0.82
 size_conflict_blocks_auto_match = true
 pack_conflict_blocks_auto_match = true
 fuzzy_is_supporting_evidence_only = true
+fuzzy_can_authorize = false
+
+[persistent_mapping]
+contract_version = "v1-shadow-only"
+routine_selection_scope = "ROUTINE_PROCUREMENT_STANDARD"
+review_intake_writes_enabled = false
+human_mapping_writes_enabled = false
+policy_mapping_writes_enabled = false
+routine_selection_writes_enabled = false
+selected_offer_shadow_reads_enabled = false
+recommendation_cutover_enabled = false
+offer_activation_enabled = false
 
 [po]
 official_shopify_csv_target = true

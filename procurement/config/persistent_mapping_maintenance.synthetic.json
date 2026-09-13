@@ -1,0 +1,1 @@
+{"allowed_pairs":[{"current_user":"qa_mapping_owner","session_user":"qa_release_login"}],"contract":"BUFFALO_PERSISTENT_MAPPING_MAINTENANCE_IDENTITY_V1","family":"persistent-mapping-foundation","release":"v1-shadow-only","target_schema":"qa_mapping_test"}

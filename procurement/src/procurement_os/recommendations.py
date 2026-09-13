@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
 import hashlib
 import json
+import os
 from typing import Any, Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -102,7 +103,6 @@ def _price_tiers_from_rows(rows: Iterable[tuple[Any, ...]]) -> tuple[PriceTier, 
 
 def _database_evaluation_at(conn: Any) -> datetime:
     """Use the database transaction clock as the one run-wide evaluation instant."""
-
     return conn.execute("SELECT transaction_timestamp()").fetchone()[0]
 
 
@@ -135,7 +135,7 @@ def _authoritative_sales_rows(
         "SELECT current_database(),host(inet_server_addr()),current_setting('server_version_num')::int"
     ).fetchone()
 
-    synthetic_contract = (
+    automated_test_contract = (
         str(database_name).endswith("_test")
         and server_address in {"127.0.0.1", "::1"}
         and int(server_version_num) // 10000 == 16
@@ -147,8 +147,30 @@ def _authoritative_sales_rows(
         and evidence.get("history_start") == history_start.isoformat()
         and evidence.get("history_end") == history_end.isoformat()
     )
-    if synthetic_contract:
+    demo_marker = conn.execute(
+        "SELECT value FROM meta WHERE key='synthetic_owner_demo_contract'"
+    ).fetchone()
+    owned_demo_contract = (
+        str(database_name).endswith("_demo")
+        and server_address in {"127.0.0.1", "::1"}
+        and int(server_version_num) // 10000 == 16
+        and os.getenv("BUFFALO_RUNTIME_MODE", "").strip().upper()
+        == "SYNTHETIC_DEMO"
+        and demo_marker is not None
+        and demo_marker[0] == "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
+        and gate is not None
+        and gate[0] == "PASS"
+        and evidence.get("coverage_contract")
+        == "OWNED_SYNTHETIC_DEMO_DAILY_VARIANT_COVERAGE_V1"
+        and evidence.get("source") == "SYNTHETIC_DEMO"
+        and evidence.get("history_start") == history_start.isoformat()
+        and evidence.get("history_end") == history_end.isoformat()
+    )
+    synthetic_contract = automated_test_contract or owned_demo_contract
+    if automated_test_contract:
         source = "SYNTHETIC_TEST"
+    elif owned_demo_contract:
+        source = "SYNTHETIC_DEMO"
     else:
         try:
             canonical_run_id = UUID(str(evidence.get("sales_backfill_id")))
@@ -337,7 +359,8 @@ def _load_context(
 ) -> dict[str, Any]:
     context: dict[str, Any] = {"variant_id": str(variant_id), "blockers": []}
     variant = conn.execute(
-        """SELECT variant_id,product_title,variant_title,sku,active,identity_scope,catalog_state
+        """SELECT variant_id,product_title,variant_title,sku,active,identity_scope,catalog_state,
+                  retail_price
              FROM variants WHERE variant_id=%s""",
         (str(variant_id),),
     ).fetchone()
@@ -345,6 +368,7 @@ def _load_context(
         context["blockers"].append("VARIANT_NOT_CURRENT_ACTIVE_LIVE")
         return context
     context["variant"] = list(variant)
+    context["retail_price"] = variant[7]
 
     offers = conn.execute(
         """SELECT offer_id,vendor_id::text,supplier_sku,package_type,size_text,raw_pack,
@@ -380,8 +404,21 @@ def _load_context(
     context["units_per_case"] = units_per_case
     context["qualifying_units_per_case"] = qualifying_units
     context["offer_evidence"] = {
-        "confidence": offer[11], "source_file": offer[12], "source_page": offer[13],
-        "notes": offer[14], "valid_from": offer[15], "valid_to": offer[16],
+        "supplier_sku": offer[2],
+        "package_type": offer[3],
+        "size_text": offer[4],
+        "raw_pack": offer[5],
+        "shopify_units_per_case": offer[6],
+        "qualifying_units_per_case": offer[7],
+        "assortment_scope": offer[8],
+        "assortment_group": offer[9],
+        "assortable": offer[10],
+        "confidence": offer[11],
+        "source_file": offer[12],
+        "source_page": offer[13],
+        "notes": offer[14],
+        "valid_from": offer[15],
+        "valid_to": offer[16],
     }
     if (
         (offer[15] is not None and business_date < offer[15])
@@ -703,13 +740,25 @@ def prepare_monday_run(
             blockers = sorted(set(context["blockers"]))
             if blockers:
                 exception_count += 1
+                variant_exists = "VARIANT_NOT_CURRENT_ACTIVE_LIVE" not in blockers or bool(
+                    conn.execute(
+                        "SELECT 1 FROM variants WHERE variant_id=%s",
+                        (context["variant_id"],),
+                    ).fetchone()
+                )
+                exception_variant_id = (
+                    context["variant_id"] if variant_exists else None
+                )
+                message = ", ".join(blockers)
+                if exception_variant_id is None:
+                    message += f"; requested Variant ID {context['variant_id']} is absent"
                 conn.execute(
                     """INSERT INTO exceptions(run_id,exception_type,severity,variant_id,vendor_id,
                                offer_id,supplier_sku,message,status)
                         VALUES (%s,'MONDAY_INPUT_BLOCKER','HIGH',%s,%s,%s,%s,%s,'OPEN')""",
                     (
-                        run_id,context["variant_id"],context.get("vendor_id"),context.get("offer_id"),
-                        context.get("supplier_sku"),", ".join(blockers),
+                        run_id,exception_variant_id,context.get("vendor_id"),context.get("offer_id"),
+                        context.get("supplier_sku"),message,
                     ),
                 )
                 continue
@@ -751,9 +800,33 @@ def prepare_monday_run(
                         VALUES (%s,%s,'current',%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (run_id,price[1],price[2],price[3],price[4],price[5],price[6],price[7],price[8],price[9]),
                 )
+            retail_price = (
+                Decimal(context["retail_price"])
+                if context["retail_price"] is not None
+                else None
+            )
+            unit_gross_profit = (
+                retail_price - strategic.selected_unit_cost
+                if retail_price is not None
+                else None
+            )
+            gross_margin_pct = (
+                (unit_gross_profit / retail_price * Decimal("100")).quantize(
+                    Decimal("0.01")
+                )
+                if retail_price is not None and retail_price > 0
+                else None
+            )
             metrics = {
                 "available_units": context["available_units"],
                 "trusted_incoming_units": context["trusted_incoming_units"],
+                "frozen_inventory_capture": context["inventory_capture"],
+                "frozen_inventory_rows": context["inventory_rows"],
+                "frozen_sales_authority": context["sales_authority"],
+                "frozen_price_ladder": context["prices"],
+                "frozen_catalog_retail_price": retail_price,
+                "frozen_unit_gross_profit": unit_gross_profit,
+                "frozen_gross_margin_pct": gross_margin_pct,
                 "frozen_open_po_position": context["open_po_position"],
                 "frozen_vendor_name": context["vendor_rules"][0],
                 "target_units": need.target_units,

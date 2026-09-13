@@ -19,8 +19,7 @@ from urllib.parse import urljoin
 import uuid
 from zoneinfo import ZoneInfo
 
-from fastapi.testclient import TestClient
-
+from http_auth_support import authenticated_test_client, loopback_test_client
 from postgres_test_support import validated_test_connection
 from procurement_os import api, price_book
 from procurement_os.price_book import (
@@ -1285,7 +1284,7 @@ class PriceBookPostgresTests(unittest.TestCase):
                 "/price-books/{batch_id}/reject": ["POST"],
             },
         )
-        client = TestClient(api.app)
+        client = loopback_test_client(api.app)
         with (
             patch.object(api, "_db_conn", side_effect=AssertionError("database reached")),
             patch.object(api, "get_storage", side_effect=AssertionError("storage reached")),
@@ -1314,7 +1313,7 @@ class PriceBookPostgresTests(unittest.TestCase):
                       (SELECT count(*) FROM change_log)"""
         ).fetchone()
         self.conn.commit()
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         with (
             patch.object(api, "_db_conn", self.api_connection),
             patch.object(api, "get_storage", return_value=self.storage),
@@ -1348,7 +1347,7 @@ class PriceBookPostgresTests(unittest.TestCase):
 
     def test_http_import_and_promote_are_explicit_authenticated_prg(self):
         self.prepare_offer()
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         payload = csv_bytes([base_row()])
         with (
             patch.object(api, "_db_conn", self.api_connection),
@@ -1390,7 +1389,7 @@ class PriceBookPostgresTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT count(*) FROM v_verified_future_prices").fetchone()[0], 1)
 
     def test_http_oversized_upload_stops_before_storage_or_database(self):
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         with (
             patch.object(api, "_db_conn", side_effect=AssertionError("database reached")),
             patch.object(api, "get_storage", side_effect=AssertionError("storage reached")),

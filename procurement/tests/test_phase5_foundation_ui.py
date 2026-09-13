@@ -12,8 +12,7 @@ from unittest.mock import MagicMock, patch
 from urllib.parse import urljoin
 import uuid
 
-from fastapi.testclient import TestClient
-
+from http_auth_support import authenticated_test_client
 from procurement_os import api, health
 from postgres_test_support import (
     validated_test_connection as _validated_phase5_test_database_connection,
@@ -34,6 +33,9 @@ MIGRATIONS = (
 
 NAV_LABELS = (
     "System Readiness",
+    "Supplier Mapping",
+    "Vendor Rules",
+    "Price Books",
     "Catalog Reconciliation",
     "Historical Sales Reconciliation",
     "Data/Sync Runs",
@@ -270,8 +272,11 @@ class Phase5RenderingTests(unittest.TestCase):
 
     def test_shared_navigation_itself_is_get_only_and_non_actionable(self):
         nav = api._operational_nav("../", current="Historical Sales Reconciliation")
-        self.assertEqual(nav.count("<a "), 5)
+        self.assertEqual(nav.count("<a "), 8)
         self.assertIn("../admin/status", nav)
+        self.assertIn("../supplier-mapping", nav)
+        self.assertIn("../vendor-rules", nav)
+        self.assertIn("../price-books", nav)
         self.assertIn("../reconciliation", nav)
         self.assertIn("../historical-sales/review", nav)
         self.assertIn("../data-sync-runs", nav)
@@ -305,7 +310,7 @@ class Phase5RenderingTests(unittest.TestCase):
             self.assertIn((existing, "GET"), route_methods)
 
     def test_data_sync_runs_route_returns_200_and_only_reads_backend_status(self):
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         connection = MagicMock()
         context = MagicMock()
         context.__enter__.return_value = connection

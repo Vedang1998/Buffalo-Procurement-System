@@ -72,12 +72,27 @@ def check_database(conn: Any) -> dict[str, Any]:
 
 def check_schema(conn: Any) -> dict[str, Any]:
     with conn.cursor() as cur:
+        cur.execute("SELECT pg_catalog.current_schema()")
+        schema_name = cur.fetchone()[0]
+        if not schema_name:
+            return {
+                "ok": False,
+                "tables_present": 0,
+                "missing_core_tables": list(CORE_TABLES),
+                "reason": "current schema is unavailable",
+            }
         cur.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema=%s",
+            (schema_name,),
         )
         present = {r[0] for r in cur.fetchall()}
     missing = [t for t in CORE_TABLES if t not in present]
-    return {"ok": not missing, "tables_present": len(present), "missing_core_tables": missing}
+    return {
+        "ok": not missing,
+        "schema_name": schema_name,
+        "tables_present": len(present),
+        "missing_core_tables": missing,
+    }
 
 
 def check_seed(conn: Any) -> dict[str, Any]:

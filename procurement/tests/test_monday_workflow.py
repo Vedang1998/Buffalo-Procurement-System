@@ -21,10 +21,10 @@ from urllib.parse import urljoin
 import uuid
 import zipfile
 
-from fastapi.testclient import TestClient
 from psycopg import sql
 from psycopg.errors import UniqueViolation
 
+from http_auth_support import authenticated_test_client
 from postgres_test_support import validated_test_connection
 from procurement_os import api
 from procurement_os.catalog import recompute_catalog_gate
@@ -1992,7 +1992,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.assertFalse(any("final" in path or "release" in path for path in route_methods))
 
     def test_monday_http_mutations_require_authorization_before_database_or_storage(self):
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         with patch.object(api, "_db_conn", side_effect=AssertionError("database reached")), patch.object(
             api, "get_storage", side_effect=AssertionError("storage reached")
         ):
@@ -2041,7 +2041,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         second=self._prepare("http-run-b")
         foreign_recommendation=second["recommendations"][0]["recommendation_id"]
         token="synthetic-cross-run-token"
-        client=TestClient(api.app)
+        client=authenticated_test_client(self, api.app)
         with patch.dict(os.environ,{"RECONCILIATION_REVIEW_TOKEN":token}), patch.object(
             api,"_db_conn",side_effect=lambda:nullcontext(self.conn)
         ), patch.object(
@@ -2071,7 +2071,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                       txid_current_if_assigned()"""
         ).fetchone()
         self.conn.commit()
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         with patch.object(api, "_db_conn", side_effect=lambda: nullcontext(self.conn)):
             listing = client.get("/monday-runs")
             detail = client.get(f"/monday-runs/{run['run_id']}")
@@ -2093,7 +2093,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.conn.commit()
 
     def test_real_http_chain_reviews_builds_downloads_and_replays_without_release(self):
-        client = TestClient(api.app)
+        client = authenticated_test_client(self, api.app)
         token = "synthetic-http-review-token"
         with patch.dict(os.environ, {"RECONCILIATION_REVIEW_TOKEN": token}), patch.object(
             api, "_db_conn", side_effect=lambda: nullcontext(self.conn)

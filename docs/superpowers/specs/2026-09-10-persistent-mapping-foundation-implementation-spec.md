@@ -1669,13 +1669,13 @@ AS $$
     ))
 $$;
 
-CREATE INDEX IF NOT EXISTS idx_mapping_candidates_offer_key
+CREATE INDEX idx_mapping_candidates_offer_key
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(operational_offer_key_sha256);
-CREATE INDEX IF NOT EXISTS idx_mapping_candidates_supplier_identity
+CREATE INDEX idx_mapping_candidates_supplier_identity
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(supplier_identity_key_sha256);
-CREATE INDEX IF NOT EXISTS idx_mapping_candidates_proposed_identity
+CREATE INDEX idx_mapping_candidates_proposed_identity
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(proposed_vendor_id,proposed_variant_id);
-CREATE INDEX IF NOT EXISTS idx_mapping_candidates_supplier_code
+CREATE INDEX idx_mapping_candidates_supplier_code
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_review_candidates(proposed_vendor_id,supplier_code_value)
     WHERE supplier_code_state='VALUE';
 
@@ -2217,19 +2217,19 @@ AS $$
     )
 $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mapping_decision_root_per_scope
+CREATE UNIQUE INDEX uq_mapping_decision_root_per_scope
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(decision_scope_sha256)
     WHERE supersedes_mapping_decision_id IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mapping_decision_successor
+CREATE UNIQUE INDEX uq_mapping_decision_successor
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(supersedes_mapping_decision_id)
     WHERE supersedes_mapping_decision_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_mapping_decisions_candidate
+CREATE INDEX idx_mapping_decisions_candidate
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(review_batch_id,candidate_id,decided_at);
-CREATE INDEX IF NOT EXISTS idx_mapping_decisions_offer_key
+CREATE INDEX idx_mapping_decisions_offer_key
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(operational_offer_key_sha256,decided_at);
-CREATE INDEX IF NOT EXISTS idx_mapping_decisions_supplier_identity
+CREATE INDEX idx_mapping_decisions_supplier_identity
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(supplier_identity_key_sha256,decided_at);
-CREATE INDEX IF NOT EXISTS idx_mapping_decisions_result_offer
+CREATE INDEX idx_mapping_decisions_result_offer
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_mapping_decisions(result_offer_id)
     WHERE result_offer_id IS NOT NULL;
 
@@ -2409,14 +2409,14 @@ BEGIN
               ))
            OR NEW.offer_class='UNKNOWN'
            OR NEW.assortment_scope_state<>'VALUE'
-           OR NEW.result_offer_package_type IS DISTINCT FROM CASE NEW.offer_class
+           OR NEW.result_offer_package_type IS DISTINCT FROM (CASE NEW.offer_class
                 WHEN 'REGULAR' THEN 'STANDARD'
                 WHEN 'GIFT' THEN 'GIFT'
                 WHEN 'SPECIAL' THEN 'SPECIAL'
                 WHEN 'ALTERNATE' THEN 'ALTERNATE'
                 WHEN 'COMPONENT' THEN 'COMPONENT'
                 WHEN 'COMBO' THEN 'COMBO'
-              END THEN
+              END) THEN
             RAISE EXCEPTION 'approval lacks a supported exact operational offer identity';
         END IF;
         IF NOT "__BUFFALO_TARGET_SCHEMA__".is_procurement_eligible_variant(NEW.variant_id) THEN
@@ -2629,10 +2629,10 @@ CREATE TABLE IF NOT EXISTS "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_
     PRIMARY KEY (variant_id,selection_scope)
 );
 
-CREATE INDEX IF NOT EXISTS idx_offer_selection_events_offer
+CREATE INDEX idx_offer_selection_events_offer
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events(selected_offer_id)
     WHERE selected_offer_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_offer_selection_events_mapping
+CREATE INDEX idx_offer_selection_events_mapping
     ON "__BUFFALO_TARGET_SCHEMA__".supplier_offer_selection_events(mapping_decision_id)
     WHERE mapping_decision_id IS NOT NULL;
 
