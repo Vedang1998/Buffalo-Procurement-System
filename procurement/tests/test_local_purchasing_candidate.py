@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager, nullcontext
+from datetime import date
 import hashlib
 import json
 import os
@@ -12,8 +13,10 @@ import tarfile
 from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
+from uuid import UUID
 
 import local_purchasing_candidate as candidate
+import initialize_synthetic_demo as initializer
 
 
 DATABASE_URL = (
@@ -69,8 +72,11 @@ class _Result:
 
 
 class _FactsConnection:
-    def __init__(self, *, initialized: bool) -> None:
+    def __init__(
+        self, *, initialized: bool, metadata_overrides: dict[str, str] | None = None
+    ) -> None:
         self.initialized = initialized
+        self.metadata_overrides = metadata_overrides or {}
         self.calls = 0
 
     def execute(self, _statement, _parameters=()):
@@ -99,13 +105,32 @@ class _FactsConnection:
         if self.calls == 5:
             return _Result(one=(0, 0, 0))
         if self.calls == 6:
+            metadata = {
+                "synthetic_owner_demo_contract": candidate.DEMO_CONTRACT,
+                "synthetic_owner_demo_business_date": "2026-09-13",
+                "synthetic_owner_demo_sales_backfill_id": (
+                    "00000000-0000-4000-8000-000000000902"
+                ),
+                "persistent_mapping_foundation_contract": candidate.MAPPING_CONTRACT,
+                "persistent_mapping_foundation_catalog_sha256": (
+                    candidate.MAPPING_CATALOG_SHA256
+                ),
+                "migration:014_persistent_mapping_foundation.sql": (
+                    candidate.MAPPING_MIGRATION_MARKER
+                ),
+                f"migration:{candidate.RETIREMENT_MIGRATION_NAME}": (
+                    f"sha256:{candidate.RETIREMENT_MIGRATION_SHA256}"
+                ),
+                "monday_forecast_v2_retirement_contract": (
+                    candidate.RETIREMENT_CONTRACT_VERSION
+                ),
+                "monday_forecast_v2_retirement_catalog_sha256": (
+                    candidate.RETIREMENT_CATALOG_SHA256
+                ),
+            }
+            metadata.update(self.metadata_overrides)
             return _Result(
-                all_rows=[
-                    ("synthetic_owner_demo_contract", candidate.DEMO_CONTRACT),
-                    ("persistent_mapping_foundation_contract", candidate.MAPPING_CONTRACT),
-                    ("persistent_mapping_foundation_catalog_sha256", candidate.MAPPING_CATALOG_SHA256),
-                    ("migration:014_persistent_mapping_foundation.sql", candidate.MAPPING_MIGRATION_MARKER),
-                ]
+                all_rows=sorted(metadata.items())
             )
         if self.calls == 7:
             return _Result(one=(candidate.MAPPING_CATALOG_SHA256,))
@@ -350,11 +375,92 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             "5a9fff00c1d62c2de89ca1dc27d4e264def12eb726ab249a9ab86a9fc529c72e",
         )
         initialized = _FactsConnection(initialized=True)
-        with mock.patch.object(candidate.psycopg, "connect", return_value=nullcontext(initialized)):
+        with (
+            mock.patch.object(
+                candidate.psycopg, "connect", return_value=nullcontext(initialized)
+            ),
+            mock.patch.object(
+                candidate,
+                "verify_monday_forecast_v2_retirement_contract",
+                return_value=candidate.RETIREMENT_CATALOG_SHA256,
+            ) as retirement_verified,
+        ):
             facts = candidate._database_facts(DATABASE_URL, require_initialized=True)
         self.assertEqual(facts["database"], "buffalo_test_demo")
         self.assertEqual(facts["postgres_major"], 16)
         self.assertEqual(initialized.calls, 8)
+        retirement_verified.assert_called_once_with(
+            initialized, schema=candidate.SCHEMA, require_marker=True
+        )
+        for key, value in (
+            ("synthetic_owner_demo_business_date", "not-a-date"),
+            ("synthetic_owner_demo_sales_backfill_id", "not-a-uuid"),
+        ):
+            with self.subTest(metadata_key=key):
+                metadata_drift = _FactsConnection(
+                    initialized=True, metadata_overrides={key: value}
+                )
+                with (
+                    mock.patch.object(
+                        candidate.psycopg,
+                        "connect",
+                        return_value=nullcontext(metadata_drift),
+                    ),
+                    mock.patch.object(
+                        candidate,
+                        "verify_monday_forecast_v2_retirement_contract",
+                    ) as drift_verifier,
+                    self.assertRaisesRegex(
+                        candidate.CandidateBoundaryError,
+                        "demo database contract metadata differs",
+                    ),
+                ):
+                    candidate._database_facts(
+                        DATABASE_URL, require_initialized=True
+                    )
+                drift_verifier.assert_not_called()
+        drifted = _FactsConnection(initialized=True)
+        with (
+            mock.patch.object(
+                candidate.psycopg, "connect", return_value=nullcontext(drifted)
+            ),
+            mock.patch.object(
+                candidate,
+                "verify_monday_forecast_v2_retirement_contract",
+                side_effect=candidate.MondayForecastRetirementContractError(
+                    "synthetic catalog drift"
+                ),
+            ),
+            self.assertRaisesRegex(
+                candidate.CandidateBoundaryError,
+                "demo forecast retirement contract differs",
+            ),
+        ):
+            candidate._database_facts(DATABASE_URL, require_initialized=True)
+        with (
+            mock.patch.object(
+                candidate.tomllib,
+                "loads",
+                return_value={
+                    "persistent_mapping": candidate._DISABLED_MAPPING_POLICY
+                },
+            ),
+            mock.patch.object(
+                candidate,
+                "_sha256_file",
+                side_effect=(
+                    candidate.MAPPING_MIGRATION_MARKER.removeprefix("sha256:"),
+                    "0" * 64,
+                ),
+            ),
+            mock.patch.object(candidate.psycopg, "connect") as source_connect,
+            self.assertRaisesRegex(
+                candidate.CandidateBoundaryError,
+                "forecast retirement migration source differs",
+            ),
+        ):
+            candidate._database_facts(DATABASE_URL, require_initialized=True)
+        source_connect.assert_not_called()
         empty = _FactsConnection(initialized=False)
         with mock.patch.object(candidate.psycopg, "connect", return_value=nullcontext(empty)):
             candidate._database_facts(RESTORE_URL, require_initialized=False, restore=True)
@@ -377,6 +483,154 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         )
         self.assertNotIn("INSERT INTO sales_daily", initializer_source)
         self.assertIn("finalize_sales_backfill", initializer_source)
+
+    def test_initializer_replay_binds_exact_sales_and_inventory_corpora(self):
+        from procurement_os.historical_sales import source_identity_key
+        from procurement_os.inventory import (
+            inventory_source_hash,
+            normalize_inventory_levels,
+        )
+        from procurement_os.sales import source_row_hash
+
+        business_date = date(2026, 9, 13)
+        backfill_id = UUID("00000000-0000-4000-8000-000000000902")
+        synthetic_sales = initializer._synthetic_sales_rows(business_date)
+        raw_rows = [
+            (
+                row.sale_date,
+                row.source_variant_id,
+                row.source_sku,
+                row.source_product_title,
+                row.source_variant_title,
+                row.net_items_sold,
+                row.net_sales,
+                initializer.VARIANT_ID,
+                "RESOLVED",
+                "EXACT_ACTIVE_VARIANT_ID",
+                {
+                    "candidates": [initializer.VARIANT_ID],
+                    "catalog_state": "LIVE",
+                    "source_variant_id": initializer.VARIANT_ID,
+                },
+                source_identity_key(row),
+                source_row_hash(row),
+                source_row_hash(row),
+                row.net_items_sold,
+                row.net_sales,
+                row.net_items_sold,
+                row.net_sales,
+                1,
+                False,
+                1,
+                str(backfill_id),
+                True,
+                True,
+            )
+            for row in synthetic_sales
+        ]
+        daily_rows = [
+            (
+                row.sale_date,
+                initializer.VARIANT_ID,
+                row.net_items_sold,
+                row.net_sales,
+                None,
+                "SHOPIFYQL_SALES",
+            )
+            for row in synthetic_sales
+        ]
+        inventory_rows = []
+        for spec in initializer._synthetic_inventory_capture_specs(business_date):
+            rows = normalize_inventory_levels(spec["rows"])
+            source_hash = inventory_source_hash(
+                rows, business_date=spec["business_date"]
+            )
+            evidence = {
+                "validation_counts": {
+                    "ARCHIVAL_ONLY": 0,
+                    "INCOMPLETE": 0,
+                    "INVALID": 0,
+                    "VALID": len(rows),
+                }
+            }
+            for row in rows:
+                inventory_rows.append(
+                    (
+                        spec["business_date"],
+                        spec["captured_at"],
+                        spec["captured_at"],
+                        "COMPLETED",
+                        "SYNTHETIC_DEMO",
+                        source_hash,
+                        len(rows),
+                        len(rows),
+                        0,
+                        0,
+                        0,
+                        evidence,
+                        row.variant_id,
+                        row.location_gid,
+                        row.available_quantity,
+                        row.incoming_quantity,
+                        row.on_hand_quantity,
+                        row.committed_quantity,
+                        row.reserved_quantity,
+                        row.damaged_quantity,
+                        "VALID",
+                        None,
+                        True,
+                        True,
+                    )
+                )
+
+        class CorpusConnection:
+            def __init__(self, *, raw, daily, inventory):
+                self.raw = raw
+                self.daily = daily
+                self.inventory = inventory
+
+            def execute(self, statement, _parameters=()):
+                text = str(statement)
+                if "FROM sales_backfill_run_facts" in text:
+                    return _Result(all_rows=self.raw)
+                if "FROM sales_daily" in text:
+                    return _Result(all_rows=self.daily)
+                if "FROM inventory_snapshot_runs" in text:
+                    return _Result(all_rows=self.inventory)
+                raise AssertionError(f"unexpected corpus query: {text}")
+
+        exact = CorpusConnection(
+            raw=raw_rows, daily=daily_rows, inventory=inventory_rows
+        )
+        initializer._verify_synthetic_sales_corpus(
+            exact, business_date=business_date, sales_backfill_id=backfill_id
+        )
+        initializer._verify_synthetic_inventory_corpus(
+            exact, business_date=business_date
+        )
+        with self.assertRaisesRegex(RuntimeError, "raw sales corpus differs"):
+            initializer._verify_synthetic_sales_corpus(
+                CorpusConnection(
+                    raw=raw_rows[:-1], daily=daily_rows, inventory=inventory_rows
+                ),
+                business_date=business_date,
+                sales_backfill_id=backfill_id,
+            )
+        with self.assertRaisesRegex(RuntimeError, "canonical sales corpus differs"):
+            initializer._verify_synthetic_sales_corpus(
+                CorpusConnection(
+                    raw=raw_rows, daily=daily_rows[:-1], inventory=inventory_rows
+                ),
+                business_date=business_date,
+                sales_backfill_id=backfill_id,
+            )
+        with self.assertRaisesRegex(RuntimeError, "inventory corpus differs"):
+            initializer._verify_synthetic_inventory_corpus(
+                CorpusConnection(
+                    raw=raw_rows, daily=daily_rows, inventory=inventory_rows[:-1]
+                ),
+                business_date=business_date,
+            )
 
     def test_runtime_tree_and_secret_files_require_owned_exact_modes_and_distinct_values(self):
         runtime = self._runtime()

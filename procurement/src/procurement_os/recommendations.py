@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
 import hashlib
 import json
 import os
+from enum import StrEnum
+import re
 from typing import Any, Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -23,6 +25,12 @@ from .forecasting import (
     to_forecast_observations,
 )
 from .monday_controls import MondayControlError, load_material_edit_policy
+from .monday_forecast_retirement import (
+    CURRENT_METHOD_VERSION,
+    RETIRED_METHOD_VERSION,
+    MondayForecastRetirementContractError,
+    verify_monday_forecast_v2_retirement_contract,
+)
 from .po_ledger import open_po_position
 from .replenishment import calculate_baseline_need
 from .strategic import PriceTier, evaluate_price_tiers
@@ -35,6 +43,27 @@ SAFETY_LABEL = "TEST DATA — NOT FOR ORDERING"
 
 class MondayRecommendationError(ValueError):
     pass
+
+
+class MondayRunInputValidationState(StrEnum):
+    MATCH = "MATCH"
+    MATERIAL_INPUTS_CHANGED = "MATERIAL_INPUTS_CHANGED"
+    FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED = (
+        "FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED"
+    )
+
+
+@dataclass(frozen=True)
+class MondayRunInputValidation:
+    state: MondayRunInputValidationState
+    run_id: str
+    model_version: str | None
+    workflow_stage: str | None
+    input_fingerprint: str | None
+
+    @property
+    def matches(self) -> bool:
+        return self.state is MondayRunInputValidationState.MATCH
 
 
 def _json_default(value: Any) -> Any:
@@ -730,17 +759,18 @@ def prepare_monday_run(
     normalized_ids = tuple(sorted({str(value).strip() for value in variant_ids if str(value).strip()}))
     if not key or not reviewer or not normalized_ids:
         raise MondayRecommendationError("business run key, actor, and Variant IDs are required")
-    try:
-        material_edit_policy = load_material_edit_policy().evidence()
-    except MondayControlError as exc:
-        raise MondayRecommendationError(str(exc)) from exc
     with conn.transaction():
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        try:
+            verify_monday_forecast_v2_retirement_contract(conn)
+            material_edit_policy = load_material_edit_policy().evidence()
+        except (MondayControlError, MondayForecastRetirementContractError) as exc:
+            raise MondayRecommendationError(str(exc)) from exc
         if not conn.execute("SELECT pg_try_advisory_xact_lock(%s)", (MONDAY_ANALYSIS_LOCK,)).fetchone()[0]:
             raise MondayRecommendationError("Monday analysis lock is unavailable")
         existing = conn.execute(
             """SELECT run_id,input_fingerprint,workflow_stage,procurement_output_mode,status,
-                      started_at
+                      started_at,model_version
                  FROM runs
                 WHERE run_type='MONDAY_PROCUREMENT' AND idempotency_key=%s FOR UPDATE""",
             (key,),
@@ -749,8 +779,16 @@ def prepare_monday_run(
             existing[3] != "INTERNAL_DRAFT_ONLY" or existing[4] != "RUNNING"
         ):
             raise MondayRecommendationError("run key belongs to an incompatible workflow")
+        if existing is not None and (
+            existing[6] == RETIRED_METHOD_VERSION
+            and existing[4] == "RUNNING"
+            and existing[2] in {"PREPARING", "AWAITING_REVIEW", "REVIEWED"}
+        ):
+            raise MondayRecommendationError(
+                MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED.value
+            )
         active_same_day = conn.execute(
-            """SELECT run_id,idempotency_key FROM runs
+            """SELECT run_id,idempotency_key,model_version,status,workflow_stage FROM runs
                 WHERE run_type='MONDAY_PROCUREMENT' AND status='RUNNING'
                   AND business_date=%s
                 ORDER BY run_id FOR UPDATE""",
@@ -759,6 +797,14 @@ def prepare_monday_run(
         if active_same_day is not None and (
             existing is None or active_same_day[0] != existing[0]
         ):
+            if (
+                active_same_day[2] == RETIRED_METHOD_VERSION
+                and active_same_day[3] == "RUNNING"
+                and active_same_day[4] in {"PREPARING", "AWAITING_REVIEW", "REVIEWED"}
+            ):
+                raise MondayRecommendationError(
+                    MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED.value
+                )
             raise MondayRecommendationError(
                 "an active Monday Procurement run already exists for this business date; "
                 "same-day replacement/supersession is not implemented"
@@ -993,36 +1039,66 @@ def prepare_monday_run(
     return get_monday_run(conn, str(run_id), idempotent_replay=False)
 
 
-def monday_run_inputs_match(conn: Any, run_id: str, expected_fingerprint: str) -> bool:
-    """Recompute material inputs for an unbuilt run without persisting anything."""
+def validate_monday_run_inputs(
+    conn: Any, run_id: str, expected_fingerprint: str
+) -> MondayRunInputValidation:
+    """Return a typed, fail-closed validation result for a write path."""
 
+    try:
+        verify_monday_forecast_v2_retirement_contract(conn)
+    except MondayForecastRetirementContractError:
+        return MondayRunInputValidation(
+            MondayRunInputValidationState.MATERIAL_INPUTS_CHANGED,
+            str(run_id),
+            None,
+            None,
+            None,
+        )
     run = conn.execute(
         """SELECT business_date,model_version,procurement_output_mode,input_fingerprint,
-                  started_at,procurement_input_manifest
+                  started_at,procurement_input_manifest,status,workflow_stage
              FROM runs WHERE run_id=%s AND run_type='MONDAY_PROCUREMENT'""",
         (run_id,),
     ).fetchone()
+    base = MondayRunInputValidation(
+        MondayRunInputValidationState.MATERIAL_INPUTS_CHANGED,
+        str(run_id),
+        None if run is None else str(run[1]),
+        None if run is None else str(run[7]),
+        None if run is None else str(run[3]),
+    )
+    if run is None or run[2] != "INTERNAL_DRAFT_ONLY":
+        return base
     if (
-        run is None
-        or run[1] != METHOD_VERSION
-        or run[2] != "INTERNAL_DRAFT_ONLY"
-        or run[3] != expected_fingerprint
+        run[1] == RETIRED_METHOD_VERSION
+        and run[6] == "RUNNING"
+        and run[7] in {"PREPARING", "AWAITING_REVIEW", "REVIEWED"}
     ):
-        return False
+        return MondayRunInputValidation(
+            MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED,
+            str(run_id),
+            str(run[1]),
+            str(run[7]),
+            str(run[3]),
+        )
+    if run[3] != expected_fingerprint:
+        return base
+    if run[1] != CURRENT_METHOD_VERSION or METHOD_VERSION != CURRENT_METHOD_VERSION:
+        return base
     try:
         manifest = json.loads(run[5])
         manifest_variant_ids = manifest["variant_ids"]
         variant_ids = tuple(str(value) for value in manifest_variant_ids)
         material_edit_policy = load_material_edit_policy().evidence()
     except (json.JSONDecodeError, KeyError, MondayControlError, TypeError, ValueError):
-        return False
+        return base
     if (
         not variant_ids
         or variant_ids != tuple(sorted(set(variant_ids)))
         or any(not value.strip() for value in variant_ids)
         or manifest.get("material_edit_policy") != material_edit_policy
     ):
-        return False
+        return base
     contexts = [
         _load_context(
             conn, business_date=run[0], variant_id=variant_id, evaluation_at=run[4]
@@ -1039,7 +1115,268 @@ def monday_run_inputs_match(conn: Any, run_id: str, expected_fingerprint: str) -
             "contexts": contexts,
         }
     )
-    return current == expected_fingerprint
+    return MondayRunInputValidation(
+        (
+            MondayRunInputValidationState.MATCH
+            if current == expected_fingerprint
+            else MondayRunInputValidationState.MATERIAL_INPUTS_CHANGED
+        ),
+        str(run_id),
+        str(run[1]),
+        str(run[7]),
+        str(run[3]),
+    )
+
+
+def monday_run_inputs_match(conn: Any, run_id: str, expected_fingerprint: str) -> bool:
+    """Compatibility predicate for read-only/static consumers."""
+
+    return validate_monday_run_inputs(conn, run_id, expected_fingerprint).matches
+
+
+def _normalized_retirement_request(
+    *, run_id: str, actor: str, reason: str
+) -> tuple[UUID, str, str]:
+    try:
+        parsed_run_id = UUID(str(run_id))
+    except (TypeError, ValueError) as exc:
+        raise MondayRecommendationError("retirement run ID is malformed") from exc
+    operator = str(actor).strip()
+    note = str(reason).strip()
+    if not operator or not note:
+        raise MondayRecommendationError("retirement actor and reason are required")
+    return parsed_run_id, operator, note
+
+
+def _retirement_facts(conn: Any, run_id: UUID, *, for_update: bool) -> Any:
+    suffix = " FOR UPDATE" if for_update else ""
+    return conn.execute(
+        """SELECT r.run_id,r.business_date,r.status,r.workflow_stage,
+                  r.input_fingerprint,r.model_version,r.procurement_output_mode,
+                  pg_catalog.to_jsonb(r),
+                  (SELECT count(*)::integer FROM purchase_orders p
+                    WHERE p.run_id=r.run_id),
+                  (SELECT count(*)::integer FROM monday_run_artifacts a
+                    WHERE a.run_id=r.run_id)
+             FROM runs r
+            WHERE r.run_id=%s AND r.run_type='MONDAY_PROCUREMENT'""" + suffix,
+        (run_id,),
+    ).fetchone()
+
+
+def _validated_retirement_preview(
+    conn: Any, *, run_id: UUID, actor: str, reason: str, for_update: bool
+) -> dict[str, Any]:
+    row = _retirement_facts(conn, run_id, for_update=for_update)
+    if (
+        row is None
+        or row[2] != "RUNNING"
+        or row[3] not in {"PREPARING", "AWAITING_REVIEW", "REVIEWED"}
+        or row[5] != RETIRED_METHOD_VERSION
+        or row[6] != "INTERNAL_DRAFT_ONLY"
+        or int(row[8]) != 0
+        or int(row[9]) != 0
+    ):
+        raise MondayRecommendationError(
+            "only an active unbuilt EMERGENCY_TRANSPARENT_V1 run can be retired"
+        )
+    confirmation = conn.execute(
+        """SELECT qa_mapping_test.
+                  monday_stale_forecast_retirement_confirmation_sha256(
+                      %s,%s,%s,%s,%s
+                  )""",
+        (run_id, row[4], row[3], actor, reason),
+    ).fetchone()[0]
+    after_run = dict(row[7])
+    after_run["status"] = "FAILED"
+    after_run["workflow_stage"] = "FAILED"
+    return {
+        "run_id": str(row[0]),
+        "business_date": row[1],
+        "input_fingerprint": row[4],
+        "retired_model_version": row[5],
+        "prior_status": row[2],
+        "prior_workflow_stage": row[3],
+        "target_status": "FAILED",
+        "target_workflow_stage": "FAILED",
+        "purchase_order_count": int(row[8]),
+        "artifact_count": int(row[9]),
+        "actor": actor,
+        "reason": reason,
+        "confirmation_sha256": str(confirmation),
+        "before_run_json": row[7],
+        "after_run_json": after_run,
+        "release_performed": False,
+        "shopify_calls": 0,
+    }
+
+
+def preview_monday_stale_forecast_retirement(
+    conn: Any, *, run_id: str, actor: str, reason: str
+) -> dict[str, Any]:
+    """Preview an exact V1 retirement without assigning an effect."""
+
+    parsed_run_id, operator, note = _normalized_retirement_request(
+        run_id=run_id, actor=actor, reason=reason
+    )
+    with conn.transaction():
+        conn.execute("SET TRANSACTION READ ONLY")
+        try:
+            verify_monday_forecast_v2_retirement_contract(conn)
+        except MondayForecastRetirementContractError as exc:
+            raise MondayRecommendationError(str(exc)) from exc
+        return _validated_retirement_preview(
+            conn,
+            run_id=parsed_run_id,
+            actor=operator,
+            reason=note,
+            for_update=False,
+        )
+
+
+def _retirement_result(row: Any, *, replayed: bool) -> dict[str, Any]:
+    return {
+        "run_id": str(row[0]),
+        "input_fingerprint": row[1],
+        "retired_model_version": row[2],
+        "prior_status": row[3],
+        "prior_workflow_stage": row[4],
+        "target_status": row[5],
+        "target_workflow_stage": row[6],
+        "actor": row[7],
+        "reason": row[8],
+        "confirmation_sha256": row[9],
+        "transaction_id": int(row[10]),
+        "created_at": row[11],
+        "idempotent_replay": replayed,
+        "business_date_released": True,
+        "release_performed": False,
+        "shopify_calls": 0,
+    }
+
+
+def confirm_monday_stale_forecast_retirement(
+    conn: Any,
+    *,
+    run_id: str,
+    actor: str,
+    reason: str,
+    expected_confirmation_sha256: str,
+) -> dict[str, Any]:
+    """Atomically retire one exact unbuilt V1 run and append its audit mirror."""
+
+    parsed_run_id, operator, note = _normalized_retirement_request(
+        run_id=run_id, actor=actor, reason=reason
+    )
+    if not isinstance(expected_confirmation_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_confirmation_sha256
+    ):
+        raise MondayRecommendationError("retirement confirmation hash is malformed")
+    result: dict[str, Any]
+    with conn.transaction():
+        conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        try:
+            verify_monday_forecast_v2_retirement_contract(conn)
+        except MondayForecastRetirementContractError as exc:
+            raise MondayRecommendationError(str(exc)) from exc
+        if not conn.execute(
+            "SELECT pg_try_advisory_xact_lock(%s)", (MONDAY_ANALYSIS_LOCK,)
+        ).fetchone()[0]:
+            raise MondayRecommendationError("Monday analysis lock is unavailable")
+        locked = _retirement_facts(conn, parsed_run_id, for_update=True)
+        if locked is None:
+            raise MondayRecommendationError("retirement run is absent")
+        existing = conn.execute(
+            """SELECT run_id,input_fingerprint,retired_model_version,prior_status,
+                      prior_workflow_stage,target_status,target_workflow_stage,
+                      actor,reason,confirmation_sha256,transaction_id,created_at
+                 FROM monday_stale_forecast_retirements WHERE run_id=%s""",
+            (parsed_run_id,),
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing[7] != operator
+                or existing[8] != note
+                or existing[9] != expected_confirmation_sha256
+            ):
+                raise MondayRecommendationError(
+                    "retirement request conflicts with the persisted event"
+                )
+            result = _retirement_result(existing, replayed=True)
+        else:
+            preview = _validated_retirement_preview(
+                conn,
+                run_id=parsed_run_id,
+                actor=operator,
+                reason=note,
+                for_update=False,
+            )
+            if preview["confirmation_sha256"] != expected_confirmation_sha256:
+                raise MondayRecommendationError(
+                    "retirement preview changed; review and confirm again"
+                )
+            event = conn.execute(
+                """INSERT INTO monday_stale_forecast_retirements(
+                           run_id,input_fingerprint,retired_model_version,prior_status,
+                           prior_workflow_stage,target_status,target_workflow_stage,
+                           purchase_order_count,artifact_count,actor,reason,
+                           confirmation_sha256,before_run_json,after_run_json)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,0,0,%s,%s,%s,%s::jsonb,%s::jsonb)
+                    RETURNING run_id,input_fingerprint,retired_model_version,prior_status,
+                              prior_workflow_stage,target_status,target_workflow_stage,
+                              actor,reason,confirmation_sha256,transaction_id,created_at""",
+                (
+                    parsed_run_id,
+                    preview["input_fingerprint"],
+                    preview["retired_model_version"],
+                    preview["prior_status"],
+                    preview["prior_workflow_stage"],
+                    preview["target_status"],
+                    preview["target_workflow_stage"],
+                    operator,
+                    note,
+                    preview["confirmation_sha256"],
+                    json.dumps(preview["before_run_json"], sort_keys=True),
+                    json.dumps(preview["after_run_json"], sort_keys=True),
+                ),
+            ).fetchone()
+            updated = conn.execute(
+                """UPDATE runs SET status='FAILED',workflow_stage='FAILED'
+                    WHERE run_id=%s AND status='RUNNING'
+                      AND workflow_stage=%s AND model_version=%s
+                    RETURNING run_id""",
+                (
+                    parsed_run_id,
+                    preview["prior_workflow_stage"],
+                    RETIRED_METHOD_VERSION,
+                ),
+            ).fetchall()
+            if len(updated) != 1:
+                raise MondayRecommendationError("retirement run changed before confirmation")
+            envelope = {
+                "confirmation_sha256": event[9],
+                "contract": "BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1",
+                "reason": event[8],
+                "retirement_run_id": str(event[0]),
+                "transaction_id": str(event[10]),
+            }
+            conn.execute(
+                """INSERT INTO change_log(
+                           table_name,row_key,action,before_json,after_json,actor,
+                           run_id,occurred_at,evidence_json)
+                    VALUES ('runs',%s,'UPDATE',%s::jsonb,%s::jsonb,%s,%s,%s,%s::jsonb)""",
+                (
+                    str(event[0]),
+                    json.dumps(preview["before_run_json"], sort_keys=True),
+                    json.dumps(preview["after_run_json"], sort_keys=True),
+                    operator,
+                    parsed_run_id,
+                    event[11],
+                    json.dumps(envelope, sort_keys=True),
+                ),
+            )
+            result = _retirement_result(event, replayed=False)
+    return result
 
 
 def get_monday_run(conn: Any, run_id: str, *, idempotent_replay: bool = False) -> dict[str, Any]:
@@ -1107,7 +1444,7 @@ def list_monday_runs(conn: Any) -> list[dict[str, Any]]:
     with conn.transaction():
         rows = conn.execute(
             """SELECT run_id,business_date,status,workflow_stage,input_fingerprint,
-                      exception_count,started_at
+                      exception_count,started_at,model_version
                  FROM runs
                 WHERE run_type='MONDAY_PROCUREMENT'
                   AND procurement_output_mode='INTERNAL_DRAFT_ONLY'
@@ -1118,6 +1455,7 @@ def list_monday_runs(conn: Any) -> list[dict[str, Any]]:
             "run_id": str(row[0]), "business_date": row[1], "status": row[2],
             "workflow_stage": row[3], "input_fingerprint": row[4],
             "exception_count": int(row[5]), "started_at": row[6],
+            "model_version": row[7],
             "safety_label": SAFETY_LABEL,
         }
         for row in rows

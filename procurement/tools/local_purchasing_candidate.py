@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import ipaddress
 import json
@@ -29,9 +29,23 @@ from typing import Any
 from urllib.error import URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
+from uuid import UUID
 
 import psycopg
 from psycopg import sql
+
+_PROCUREMENT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROCUREMENT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_PROCUREMENT_ROOT / "src"))
+
+from procurement_os.monday_forecast_retirement import (
+    CATALOG_SHA256 as RETIREMENT_CATALOG_SHA256,
+    CONTRACT_VERSION as RETIREMENT_CONTRACT_VERSION,
+    MIGRATION_NAME as RETIREMENT_MIGRATION_NAME,
+    MIGRATION_SHA256 as RETIREMENT_MIGRATION_SHA256,
+    MondayForecastRetirementContractError,
+    verify_monday_forecast_v2_retirement_contract,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -86,6 +100,7 @@ _MAPPING_RELATIONS = (
     "v_supplier_offer_selection_diagnostics",
     "v_selected_standard_supplier_offers",
     "v_supplier_offer_selection_shadow",
+    "monday_stale_forecast_retirements",
 )
 _DATABASE_LIFECYCLE_LOCK_PREFIX = "buffalo:local-purchasing-candidate:lifecycle:v1"
 
@@ -214,6 +229,9 @@ def _database_facts(
     migration_path = REPO_ROOT / "procurement" / "db" / (
         "014_persistent_mapping_foundation.sql"
     )
+    retirement_migration_path = (
+        REPO_ROOT / "procurement" / "db" / RETIREMENT_MIGRATION_NAME
+    )
     rules = tomllib.loads(rules_path.read_text(encoding="utf-8"))
     if rules.get("persistent_mapping") != _DISABLED_MAPPING_POLICY:
         raise CandidateBoundaryError("persistent mapping policy is not disabled")
@@ -221,6 +239,8 @@ def _database_facts(
         "sha256:"
     ):
         raise CandidateBoundaryError("persistent mapping migration source differs")
+    if _sha256_file(retirement_migration_path) != RETIREMENT_MIGRATION_SHA256:
+        raise CandidateBoundaryError("forecast retirement migration source differs")
     with psycopg.connect(database_url, connect_timeout=5) as conn:
         row = conn.execute(
             "SELECT pg_catalog.current_database(),"
@@ -286,21 +306,45 @@ def _database_facts(
                     (
                         [
                             "synthetic_owner_demo_contract",
+                            "synthetic_owner_demo_business_date",
+                            "synthetic_owner_demo_sales_backfill_id",
                             "persistent_mapping_foundation_contract",
                             "persistent_mapping_foundation_catalog_sha256",
                             "migration:014_persistent_mapping_foundation.sql",
+                            f"migration:{RETIREMENT_MIGRATION_NAME}",
+                            "monday_forecast_v2_retirement_contract",
+                            "monday_forecast_v2_retirement_catalog_sha256",
                         ],
                     ),
                 ).fetchall()
             )
+            demo_business_date = metadata.get("synthetic_owner_demo_business_date")
+            demo_sales_backfill_id = metadata.get(
+                "synthetic_owner_demo_sales_backfill_id"
+            )
+            try:
+                parsed_business_date = date.fromisoformat(str(demo_business_date))
+                parsed_sales_backfill_id = UUID(str(demo_sales_backfill_id))
+            except (TypeError, ValueError) as exc:
+                raise CandidateBoundaryError(
+                    "demo database contract metadata differs"
+                ) from exc
             if (
                 metadata.get("synthetic_owner_demo_contract") != DEMO_CONTRACT
+                or parsed_business_date.isoformat() != demo_business_date
+                or str(parsed_sales_backfill_id) != demo_sales_backfill_id
                 or metadata.get("persistent_mapping_foundation_contract")
                 != MAPPING_CONTRACT
                 or metadata.get("persistent_mapping_foundation_catalog_sha256")
                 != MAPPING_CATALOG_SHA256
                 or metadata.get("migration:014_persistent_mapping_foundation.sql")
                 != MAPPING_MIGRATION_MARKER
+                or metadata.get(f"migration:{RETIREMENT_MIGRATION_NAME}")
+                != f"sha256:{RETIREMENT_MIGRATION_SHA256}"
+                or metadata.get("monday_forecast_v2_retirement_contract")
+                != RETIREMENT_CONTRACT_VERSION
+                or metadata.get("monday_forecast_v2_retirement_catalog_sha256")
+                != RETIREMENT_CATALOG_SHA256
             ):
                 raise CandidateBoundaryError("demo database contract metadata differs")
             target = sql.Identifier(SCHEMA)
@@ -316,6 +360,14 @@ def _database_facts(
                     target
                 )
             )
+            try:
+                verify_monday_forecast_v2_retirement_contract(
+                    conn, schema=SCHEMA, require_marker=True
+                )
+            except MondayForecastRetirementContractError as exc:
+                raise CandidateBoundaryError(
+                    "demo forecast retirement contract differs"
+                ) from exc
         elif (
             schema_oid is not None
             or user_schemas

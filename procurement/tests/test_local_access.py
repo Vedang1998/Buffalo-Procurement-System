@@ -104,6 +104,12 @@ class LocalAccessTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_unsafe_request_requires_exact_origin(self):
+        self.assertEqual(
+            local_access.required_capability(
+                "POST", "/monday-runs/00000000-0000-4000-8000-000000000001/retire-stale-forecast"
+            ),
+            "procurement.order.approve",
+        )
         client = self._client()
         self.assertEqual(self._login(client).status_code, 303)
         response = client.post(
@@ -111,6 +117,15 @@ class LocalAccessTests(unittest.TestCase):
             headers={"Origin": "http://127.0.0.1:1"},
             follow_redirects=False,
         )
+        self.assertEqual(response.status_code, 403)
+        with mock.patch.object(
+            api, "_db_conn", side_effect=AssertionError("database reached")
+        ):
+            response = client.post(
+                "/monday-runs/00000000-0000-4000-8000-000000000001/retire-stale-forecast",
+                data={"reason": "synthetic", "review_token": "synthetic"},
+                headers={"Origin": "http://127.0.0.1:1"},
+            )
         self.assertEqual(response.status_code, 403)
 
     def test_list_detail_and_download_require_a_session(self):

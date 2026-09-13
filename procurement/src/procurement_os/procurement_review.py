@@ -12,7 +12,10 @@ from .monday_controls import (
     classify_material_edit,
     load_material_edit_policy,
 )
-from .recommendations import monday_run_inputs_match
+from .recommendations import (
+    MondayRunInputValidationState,
+    validate_monday_run_inputs,
+)
 
 
 REVIEW_LOCK = 5_920_230_601
@@ -70,13 +73,17 @@ def _validate_review_context(
 ) -> None:
     if row is None:
         raise ProcurementReviewError("unknown recommendation")
-    if (
-        row[1] != expected_input_fingerprint
-        or row[11] != row[1]
-        or row[12] != "INTERNAL_DRAFT_ONLY"
-    ):
+    if row[12] != "INTERNAL_DRAFT_ONLY":
         raise ProcurementReviewError("recommendation inputs changed; review is stale")
-    if not monday_run_inputs_match(conn, str(row[0]), row[1]):
+    validation = validate_monday_run_inputs(conn, str(row[0]), row[1])
+    if (
+        validation.state
+        is MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED
+    ):
+        raise ProcurementReviewError(validation.state.value)
+    if row[1] != expected_input_fingerprint or row[11] != row[1]:
+        raise ProcurementReviewError("recommendation inputs changed; review is stale")
+    if not validation.matches:
         raise ProcurementReviewError(
             "material recommendation inputs changed; prepare a new run"
         )
@@ -368,13 +375,17 @@ def acknowledge_and_exclude_blocked_item(
                  FOR UPDATE""",
             (run_id,),
         ).fetchone()
-        if (
-            run is None
-            or run[1] != expected_input_fingerprint
-            or run[2] != "INTERNAL_DRAFT_ONLY"
-        ):
+        if run is None or run[2] != "INTERNAL_DRAFT_ONLY":
             raise ProcurementReviewError("blocked-item exclusion is stale or has no run")
-        if not monday_run_inputs_match(conn, str(run_id), run[1]):
+        validation = validate_monday_run_inputs(conn, str(run_id), run[1])
+        if (
+            validation.state
+            is MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED
+        ):
+            raise ProcurementReviewError(validation.state.value)
+        if run[1] != expected_input_fingerprint:
+            raise ProcurementReviewError("blocked-item exclusion is stale or has no run")
+        if not validation.matches:
             raise ProcurementReviewError(
                 "material recommendation inputs changed; prepare a new run"
             )

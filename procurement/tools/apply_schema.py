@@ -16,10 +16,24 @@ import ipaddress
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 from urllib.parse import urlparse
 
 from psycopg import sql
+
+_PROCUREMENT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROCUREMENT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_PROCUREMENT_ROOT / "src"))
+
+from procurement_os.monday_forecast_retirement import (
+    CATALOG_SHA256 as RETIREMENT_CATALOG_SHA256,
+    CONTRACT_VERSION as RETIREMENT_CONTRACT_VERSION,
+    MIGRATION_NAME as RETIREMENT_MIGRATION_NAME,
+    MIGRATION_SHA256 as RETIREMENT_MIGRATION_SHA256,
+    compute_retirement_catalog_sha256,
+    verify_monday_forecast_v2_retirement_contract,
+)
 
 
 MAPPING_MIGRATION_NAME = "014_persistent_mapping_foundation.sql"
@@ -40,6 +54,29 @@ MIGRATION_ORDER = [
     "013_monday_p1_remediation.sql",
     MAPPING_MIGRATION_NAME,
 ]
+
+
+@dataclass(frozen=True)
+class PostMappingApplicationRelease:
+    family: str
+    version: str
+    migration_name: str
+    migration_sha256: str
+    required_mapping_release: str
+    catalog_sha256: str
+
+
+MONDAY_FORECAST_V2_RETIREMENT_RELEASE = PostMappingApplicationRelease(
+    family="monday-forecast-v2-retirement",
+    version=RETIREMENT_CONTRACT_VERSION,
+    migration_name=RETIREMENT_MIGRATION_NAME,
+    migration_sha256=RETIREMENT_MIGRATION_SHA256,
+    required_mapping_release="v1-shadow-only",
+    catalog_sha256=RETIREMENT_CATALOG_SHA256,
+)
+POST_MAPPING_APPLICATION_RELEASE_MANIFEST = (
+    MONDAY_FORECAST_V2_RETIREMENT_RELEASE,
+)
 
 
 @dataclass(frozen=True)
@@ -170,6 +207,10 @@ _MAPPING_HEADER = (
     b"-- buffalo-contract-family: persistent-mapping-foundation\n"
 )
 _MAPPING_FAMILY_LOCK_PREFIX = "buffalo:migration:persistent-mapping-foundation"
+_POST_MAPPING_HEADER = (
+    b"-- buffalo-post-mapping-replay: checksum-skip-v1\n"
+    b"-- buffalo-contract-family: monday-forecast-v2-retirement\n"
+)
 
 
 def _sha256(data: bytes) -> str:
@@ -194,6 +235,19 @@ def _release_source(db_dir: Path, release: MappingRelease = MAPPING_RELEASE) -> 
         raise RuntimeError("persistent mapping migration checksum differs")
     if b"__BUFFALO_" in raw or b"PROPOSED_UNNUMBERED" in raw:
         raise RuntimeError("persistent mapping migration retains a design token")
+    return raw
+
+
+def _post_mapping_release_source(
+    db_dir: Path, release: PostMappingApplicationRelease
+) -> bytes:
+    raw = (db_dir / release.migration_name).read_bytes()
+    if not raw.startswith(_POST_MAPPING_HEADER):
+        raise RuntimeError("post-mapping application migration header differs")
+    if _sha256(raw) != release.migration_sha256:
+        raise RuntimeError("post-mapping application migration checksum differs")
+    if b"__PIN_" in raw or b"PROPOSED_UNNUMBERED" in raw:
+        raise RuntimeError("post-mapping application migration retains a design token")
     return raw
 
 
@@ -258,6 +312,46 @@ def _verify_source_inventory(db_dir: Path) -> None:
             or "persistent_mapping" in path.name
         ) and path.name not in seen_files:
             raise RuntimeError("unmanifested persistent mapping migration exists")
+
+
+def _verify_post_mapping_source_inventory(db_dir: Path) -> None:
+    _verify_source_inventory(db_dir)
+    releases = POST_MAPPING_APPLICATION_RELEASE_MANIFEST
+    if not releases:
+        raise RuntimeError("post-mapping application release manifest is absent")
+    mapping_versions = {
+        release.version: release for release in PERSISTENT_MAPPING_RELEASE_MANIFEST
+    }
+    mapping_indexes = {
+        release.version: index
+        for index, release in enumerate(PERSISTENT_MAPPING_RELEASE_MANIFEST)
+    }
+    seen: set[str] = set()
+    seen_identities: set[tuple[str, str]] = set()
+    prior_dependency_index = -1
+    for release in releases:
+        dependency_index = mapping_indexes.get(release.required_mapping_release, -1)
+        if (
+            release.migration_name in seen
+            or (release.family, release.version) in seen_identities
+            or not release.migration_name.endswith(".sql")
+            or not re.fullmatch(r"[0-9a-f]{64}", release.migration_sha256)
+            or not re.fullmatch(r"[0-9a-f]{64}", release.catalog_sha256)
+            or release.required_mapping_release not in mapping_versions
+            or dependency_index < prior_dependency_index
+        ):
+            raise RuntimeError("post-mapping application release manifest differs")
+        _post_mapping_release_source(db_dir, release)
+        seen.add(release.migration_name)
+        seen_identities.add((release.family, release.version))
+        prior_dependency_index = dependency_index
+    for path in db_dir.glob("*.sql"):
+        raw = path.read_bytes()
+        if (
+            raw.startswith(b"-- buffalo-post-mapping-replay:")
+            or "monday_forecast_v2_retirement" in path.name
+        ) and path.name not in seen:
+            raise RuntimeError("unmanifested post-mapping application migration exists")
 
 
 def _verified_legacy_source(db_dir: Path, name: str) -> bytes:
@@ -611,7 +705,11 @@ def _validate_marker_prefix(
     mapping_keys = {
         f"migration:{release.migration_name}": release for release in releases
     }
-    allowed = set(legacy) | set(mapping_keys)
+    application_keys = {
+        f"migration:{release.migration_name}": release
+        for release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST
+    }
+    allowed = set(legacy) | set(mapping_keys) | set(application_keys)
     if set(markers) - allowed:
         raise RuntimeError("unknown mapping-family or predecessor marker exists")
     for key, expected in legacy.items():
@@ -629,6 +727,20 @@ def _validate_marker_prefix(
         if value != f"sha256:{release.migration_sha256}":
             raise RuntimeError("installed persistent mapping migration checksum differs")
         installed.append(release)
+    application_gap_seen = False
+    installed_versions = {release.version for release in installed}
+    for release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
+        value = markers.get(f"migration:{release.migration_name}")
+        if value is None:
+            application_gap_seen = True
+            continue
+        if (
+            application_gap_seen
+            or release.required_mapping_release not in installed_versions
+        ):
+            raise RuntimeError("installed post-mapping release prefix has a gap")
+        if value != f"sha256:{release.migration_sha256}":
+            raise RuntimeError("installed post-mapping migration checksum differs")
     return tuple(installed)
 
 
@@ -707,15 +819,14 @@ def _verify_or_apply_mapping_release(
     db_dir: Path,
     release: MappingRelease = MAPPING_RELEASE,
 ) -> bool:
-    _verify_source_inventory(db_dir)
+    _verify_post_mapping_source_inventory(db_dir)
     conn.execute(
         "SELECT pg_catalog.pg_advisory_xact_lock("
         "pg_catalog.hashtextextended(%s,0))",
         (f"{_MAPPING_FAMILY_LOCK_PREFIX}:{release.target_schema}",),
     )
-    installed = _validate_marker_prefix(
-        _migration_markers(conn), allow_empty=False
-    )
+    markers = _migration_markers(conn)
+    installed = _validate_marker_prefix(markers, allow_empty=False)
     releases = PERSISTENT_MAPPING_RELEASE_MANIFEST
     release_index = releases.index(release)
     if release_index < len(installed) - 1:
@@ -751,6 +862,30 @@ def _verify_or_apply_mapping_release(
         raise RuntimeError("persistent mapping metadata exists without a release marker")
     if not applying:
         return False
+
+    mapping_indexes = {
+        item.version: index for index, item in enumerate(releases)
+    }
+    for application_release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
+        dependency_index = mapping_indexes[application_release.required_mapping_release]
+        if dependency_index >= release_index:
+            continue
+        marker_key = f"migration:{application_release.migration_name}"
+        if markers is None or markers.get(marker_key) != (
+            f"sha256:{application_release.migration_sha256}"
+        ):
+            raise RuntimeError(
+                "required post-mapping application release is absent"
+            )
+        if application_release.family != "monday-forecast-v2-retirement":
+            raise RuntimeError("post-mapping application verifier is absent")
+        verified_application = verify_monday_forecast_v2_retirement_contract(
+            conn, schema=release.target_schema, require_marker=True
+        )
+        if verified_application != application_release.catalog_sha256:
+            raise RuntimeError(
+                "required post-mapping application catalog signature differs"
+            )
 
     raw = _release_source(db_dir, release)
     expected_marker = f"sha256:{release.migration_sha256}"
@@ -809,6 +944,109 @@ def _verify_or_apply_mapping_release(
     return True
 
 
+def _verify_or_apply_post_mapping_release(
+    conn: Any,
+    db_dir: Path,
+    release: PostMappingApplicationRelease = MONDAY_FORECAST_V2_RETIREMENT_RELEASE,
+) -> bool:
+    """Apply/verify one post-mapping release with its marker published last."""
+
+    if release not in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
+        raise RuntimeError("post-mapping release is not in the literal manifest")
+    _verify_post_mapping_source_inventory(db_dir)
+    required_mapping = next(
+        (
+            item
+            for item in PERSISTENT_MAPPING_RELEASE_MANIFEST
+            if item.version == release.required_mapping_release
+        ),
+        None,
+    )
+    if required_mapping is None:
+        raise RuntimeError("post-mapping release predecessor is not manifested")
+    target_schema = required_mapping.target_schema
+    conn.execute(
+        "SELECT pg_catalog.pg_advisory_xact_lock("
+        "pg_catalog.hashtextextended(%s,0))",
+        (f"{_MAPPING_FAMILY_LOCK_PREFIX}:{target_schema}",),
+    )
+    markers = _migration_markers(conn)
+    installed_mapping = _validate_marker_prefix(markers, allow_empty=False)
+    if required_mapping not in installed_mapping:
+        raise RuntimeError("post-mapping release requires its exact mapping predecessor")
+    mapping_release = installed_mapping[-1]
+    allowed_pairs = _maintenance_binding(db_dir, mapping_release)
+    schema_oid = _verify_server_and_identity(
+        conn, allowed_pairs=allowed_pairs, release=mapping_release
+    )
+    _verify_installed_release(
+        conn,
+        release=mapping_release,
+        schema_oid=schema_oid,
+        allowed_pairs=allowed_pairs,
+    )
+    marker_key = f"migration:{release.migration_name}"
+    marker_value = f"sha256:{release.migration_sha256}"
+    if markers is not None and marker_key in markers:
+        if markers[marker_key] != marker_value:
+            raise RuntimeError("installed post-mapping migration checksum differs")
+        verified = verify_monday_forecast_v2_retirement_contract(
+            conn, schema=target_schema, require_marker=True
+        )
+        if verified != release.catalog_sha256:
+            raise RuntimeError("installed post-mapping catalog signature differs")
+        return False
+
+    if mapping_release != required_mapping:
+        raise RuntimeError(
+            "post-mapping release must be installed before a mapping successor"
+        )
+
+    target = sql.Identifier(target_schema)
+    partial = conn.execute(
+        sql.SQL(
+            "SELECT pg_catalog.to_regclass(%s),"
+            "EXISTS(SELECT 1 FROM pg_catalog.pg_attribute a "
+            "WHERE a.attrelid=pg_catalog.to_regclass(%s) "
+            "AND a.attname='evidence_json' AND NOT a.attisdropped),"
+            "EXISTS(SELECT 1 FROM {}.meta WHERE key LIKE %s)"
+        ).format(target),
+        (
+            f'"{target_schema}".monday_stale_forecast_retirements',
+            f'"{target_schema}".change_log',
+            "monday_forecast_v2_retirement%",
+        ),
+    ).fetchone()
+    if partial is None or any(bool(value) for value in partial):
+        raise RuntimeError("partial post-mapping retirement contract exists")
+    conn.execute(_post_mapping_release_source(db_dir, release).decode("utf-8"))
+    computed = compute_retirement_catalog_sha256(conn, target_schema)
+    if computed != release.catalog_sha256:
+        raise RuntimeError("new post-mapping catalog signature differs")
+    conn.execute(
+        sql.SQL(
+            "INSERT INTO {}.meta(key,value) VALUES (%s,%s),(%s,%s)"
+        ).format(target),
+        (
+            "monday_forecast_v2_retirement_contract",
+            release.version,
+            "monday_forecast_v2_retirement_catalog_sha256",
+            computed,
+        ),
+    )
+    verify_monday_forecast_v2_retirement_contract(
+        conn, schema=target_schema, require_marker=False
+    )
+    conn.execute(
+        sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s)").format(target),
+        (marker_key, marker_value),
+    )
+    verify_monday_forecast_v2_retirement_contract(
+        conn, schema=target_schema, require_marker=True
+    )
+    return True
+
+
 def apply_schema_connection(
     conn: Any,
     db_dir: Path,
@@ -823,7 +1061,7 @@ def apply_schema_connection(
         for release in PERSISTENT_MAPPING_RELEASE_MANIFEST
     }
     if include_persistent_mapping and mapping_releases:
-        _verify_source_inventory(db_dir)
+        _verify_post_mapping_source_inventory(db_dir)
         first_release = PERSISTENT_MAPPING_RELEASE_MANIFEST[0]
         with conn.transaction():
             _capture_caller_search_path_oids(conn)
@@ -841,11 +1079,23 @@ def apply_schema_connection(
         if name in mapping_releases:
             if not include_persistent_mapping:
                 continue
+            mapping_release = mapping_releases[name]
             with conn.transaction():
                 if _verify_or_apply_mapping_release(
-                    conn, db_dir, mapping_releases[name]
+                    conn, db_dir, mapping_release
                 ):
                     applied.append(name)
+            for application_release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
+                if (
+                    application_release.required_mapping_release
+                    != mapping_release.version
+                ):
+                    continue
+                with conn.transaction():
+                    if _verify_or_apply_post_mapping_release(
+                        conn, db_dir, application_release
+                    ):
+                        applied.append(application_release.migration_name)
             continue
         if include_persistent_mapping and f"migration:{name}" in installed_marker_keys:
             continue
@@ -866,6 +1116,15 @@ def apply_schema_connection(
                     (f"migration:{name}",),
                 )
         applied.append(name)
+    if include_persistent_mapping:
+        for application_release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
+            with conn.transaction():
+                if _verify_or_apply_post_mapping_release(
+                    conn, db_dir, application_release
+                ):
+                    raise RuntimeError(
+                        "post-mapping release was absent after ordered application"
+                    )
     return applied
 
 

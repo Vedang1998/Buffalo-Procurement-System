@@ -8,7 +8,10 @@ import json
 from typing import Any
 
 from .readiness import po_readiness
-from .recommendations import monday_run_inputs_match
+from .recommendations import (
+    MondayRunInputValidationState,
+    validate_monday_run_inputs,
+)
 
 
 DRAFT_BUILD_LOCK = 5_920_230_701
@@ -272,9 +275,15 @@ def preview_vendor_drafts(
                 "already_built": True,
                 "release_performed": False,
             }
+        validation = validate_monday_run_inputs(conn, str(run_id), run[1])
+        if (
+            validation.state
+            is MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED
+        ):
+            raise DraftPoError(validation.state.value)
         if run[0] != "REVIEWED" or run[2] != "RUNNING":
             raise DraftPoError("DRAFT preview requires one clean fully reviewed run")
-        if not monday_run_inputs_match(conn, str(run_id), run[1]):
+        if not validation.matches:
             raise DraftPoError(
                 "material recommendation inputs changed; prepare and review a new run"
             )
@@ -318,9 +327,15 @@ def build_vendor_drafts(
             result = get_vendor_drafts(conn, run_id)
             result["idempotent_replay"] = True
             return result
+        validation = validate_monday_run_inputs(conn, str(run_id), run[1])
+        if (
+            validation.state
+            is MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED
+        ):
+            raise DraftPoError(validation.state.value)
         if run[0] != "REVIEWED" or run[2] != "RUNNING" or existing:
             raise DraftPoError("DRAFT build requires one clean fully reviewed run")
-        if not monday_run_inputs_match(conn, str(run_id), run[1]):
+        if not validation.matches:
             raise DraftPoError("material recommendation inputs changed; prepare and review a new run")
         _require_complete_reviews(conn, run_id)
         by_vendor = _reviewed_lines_by_vendor(conn, run_id)

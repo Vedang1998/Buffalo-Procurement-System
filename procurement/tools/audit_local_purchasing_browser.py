@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import date, timedelta
 from decimal import Decimal
 import hashlib
 import io
@@ -308,6 +309,253 @@ def _is_sha256(value: Any) -> bool:
     )
 
 
+def _canonical_payload_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_demand_evidence(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {
+        "contract",
+        "method_version",
+        "history_start",
+        "history_end",
+        "calendar_days",
+        "sales_coverage",
+        "daily",
+        "snapshot_groups",
+        "raw_windows",
+        "availability_summary",
+        "statuses",
+        "reason_codes",
+    }:
+        raise BrowserAcceptanceError("frozen demand-evidence contract differs")
+    history_start = date(2026, 6, 21)
+    history_end = date(2026, 9, 12)
+    if (
+        value.get("contract") != "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2"
+        or value.get("method_version") != "EMERGENCY_TRANSPARENT_V2"
+        or value.get("history_start") != history_start.isoformat()
+        or value.get("history_end") != history_end.isoformat()
+        or value.get("calendar_days") != 84
+    ):
+        raise BrowserAcceptanceError("frozen demand-evidence identity differs")
+
+    coverage = value.get("sales_coverage")
+    if not isinstance(coverage, dict) or set(coverage) != {
+        "contract",
+        "source",
+        "history_start",
+        "history_end",
+        "authority_sha256",
+        "sales_rows_sha256",
+    } or (
+        coverage.get("contract") != "OWNED_SYNTHETIC_DEMO_CANONICAL_BACKFILL_V1"
+        or coverage.get("source") != "SHOPIFYQL_SALES"
+        or coverage.get("history_start") != history_start.isoformat()
+        or coverage.get("history_end") != history_end.isoformat()
+        or not _is_sha256(coverage.get("authority_sha256"))
+        or not _is_sha256(coverage.get("sales_rows_sha256"))
+    ):
+        raise BrowserAcceptanceError("frozen sales-coverage authority differs")
+
+    statuses = {
+        "forecast_status": "EMERGENCY_BASELINE_ONLY",
+        "model_selection_status": "NOT_VALIDATED",
+        "classification_status": "NOT_CALCULATED",
+        "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
+        "safety_stock_status": "NOT_CALCULATED",
+    }
+    availability = {
+        "calendar_days": 84,
+        "unknown_days": 84,
+        "proven_full_day_in_stock_days": 0,
+        "proven_full_day_stockout_days": 0,
+        "dates_with_no_snapshot": 83,
+        "compatible_point_in_time_dates": 1,
+        "incompatible_point_in_time_dates": 0,
+        "snapshot_rows": 2,
+        "positive_snapshot_rows": 2,
+        "zero_snapshot_rows": 0,
+    }
+    reasons = [
+        "POINT_IN_TIME_INVENTORY_NOT_FULL_DAY_AVAILABILITY",
+        "STOCKOUT_CENSORING_EVIDENCE_UNAVAILABLE",
+    ]
+    if (
+        value.get("statuses") != statuses
+        or value.get("availability_summary") != availability
+        or value.get("reason_codes") != reasons
+    ):
+        raise BrowserAcceptanceError("demand availability/status evidence differs")
+
+    daily = value.get("daily")
+    if not isinstance(daily, list) or len(daily) != 84:
+        raise BrowserAcceptanceError("demand daily evidence count differs")
+    for offset, item in enumerate(daily):
+        expected_date = history_start + timedelta(days=offset)
+        expected_units = "1.0000" if offset < 70 else "2.0000"
+        if (
+            not isinstance(item, dict)
+            or set(item) != {
+                "business_date",
+                "net_units",
+                "inventory_state",
+                "state_basis",
+                "snapshot_refs",
+            }
+            or item.get("business_date") != expected_date.isoformat()
+            or item.get("net_units") != expected_units
+            or item.get("inventory_state") != "UNKNOWN"
+            or item.get("state_basis")
+            != (
+                "POINT_IN_TIME_SNAPSHOT_ONLY"
+                if expected_date == history_end
+                else "NO_POINT_IN_TIME_SNAPSHOT"
+            )
+            or not isinstance(item.get("snapshot_refs"), list)
+            or len(item["snapshot_refs"])
+            != (2 if expected_date == history_end else 0)
+        ):
+            raise BrowserAcceptanceError("demand daily evidence differs")
+
+    final_refs = daily[-1]["snapshot_refs"]
+    if any(
+        not isinstance(item, dict)
+        or set(item)
+        != {
+            "snapshot_date",
+            "location_gid",
+            "inventory_snapshot_run_id",
+            "source",
+            "source_hash",
+            "captured_at",
+            "completed_at",
+            "available_quantity",
+            "incoming_quantity",
+            "validation_status",
+        }
+        for item in final_refs
+    ):
+        raise BrowserAcceptanceError("point-in-time snapshot shape differs")
+    if [item.get("location_gid") for item in final_refs] != [
+        "synthetic-location-001",
+        "synthetic-location-002",
+    ]:
+        raise BrowserAcceptanceError("historical inventory locations differ")
+    run_ids = {item.get("inventory_snapshot_run_id") for item in final_refs}
+    source_hashes = {item.get("source_hash") for item in final_refs}
+    captured = {item.get("captured_at") for item in final_refs}
+    completed = {item.get("completed_at") for item in final_refs}
+    if (
+        len(run_ids) != 1
+        or any(not isinstance(item, str) or not item for item in run_ids)
+        or len(source_hashes) != 1
+        or any(not _is_sha256(item) for item in source_hashes)
+        or captured != {"2026-09-12T12:00:00+00:00"}
+        or completed != captured
+        or [item.get("available_quantity") for item in final_refs]
+        != ["1.0000", "2.0000"]
+        or any(
+            item.get("snapshot_date") != history_end.isoformat()
+            or item.get("source") != "SYNTHETIC_DEMO"
+            or item.get("incoming_quantity") != "0.0000"
+            or item.get("validation_status") != "VALID"
+            for item in final_refs
+        )
+    ):
+        raise BrowserAcceptanceError("point-in-time inventory evidence differs")
+
+    groups = value.get("snapshot_groups")
+    if not isinstance(groups, list) or len(groups) != 1:
+        raise BrowserAcceptanceError("snapshot-group evidence count differs")
+    group = groups[0]
+    if (
+        not isinstance(group, dict)
+        or set(group)
+        != {
+            "snapshot_date",
+            "inventory_snapshot_run_id",
+            "source",
+            "source_hash",
+            "captured_at",
+            "completed_at",
+            "locations",
+            "compatibility_status",
+            "aggregate_available_quantity",
+            "aggregate_incoming_quantity",
+        }
+        or group.get("snapshot_date") != history_end.isoformat()
+        or group.get("inventory_snapshot_run_id") not in run_ids
+        or group.get("source") != "SYNTHETIC_DEMO"
+        or group.get("source_hash") not in source_hashes
+        or group.get("captured_at") not in captured
+        or group.get("completed_at") not in completed
+        or group.get("locations")
+        != ["synthetic-location-001", "synthetic-location-002"]
+        or group.get("compatibility_status")
+        != "COMPATIBLE_POINT_IN_TIME_EVIDENCE"
+        or group.get("aggregate_available_quantity") != "3.0000"
+        or group.get("aggregate_incoming_quantity") != "0.0000"
+    ):
+        raise BrowserAcceptanceError("compatible snapshot-group evidence differs")
+
+    windows = value.get("raw_windows")
+    expected_windows = {
+        "7": (7, date(2026, 9, 6), Decimal("14"), Decimal("2")),
+        "14": (14, date(2026, 8, 30), Decimal("28"), Decimal("2")),
+        "28": (28, date(2026, 8, 16), Decimal("42"), Decimal("1.5")),
+    }
+    if not isinstance(windows, dict) or set(windows) != set(expected_windows):
+        raise BrowserAcceptanceError("raw demand-window inventory differs")
+    for key, (denominator, start, units, velocity) in expected_windows.items():
+        item = windows[key]
+        if (
+            not isinstance(item, dict)
+            or set(item)
+            != {
+                "requested_window",
+                "actual_denominator_days",
+                "inclusive_start",
+                "inclusive_end",
+                "signed_net_units",
+                "signed_calendar_velocity",
+            }
+            or item.get("requested_window") != denominator
+            or item.get("actual_denominator_days") != denominator
+            or item.get("inclusive_start") != start.isoformat()
+            or item.get("inclusive_end") != history_end.isoformat()
+            or item.get("signed_net_units") != format(units, ".4f")
+            or item.get("signed_calendar_velocity") != format(velocity, ".6f")
+        ):
+            raise BrowserAcceptanceError("raw demand-window values differ")
+    expected_sales_rows = [
+        {
+            "business_date": item["business_date"],
+            "net_units": item["net_units"],
+            "source": "SHOPIFYQL_SALES",
+        }
+        for item in daily
+    ]
+    if coverage.get("sales_rows_sha256") != _canonical_payload_sha256(
+        expected_sales_rows
+    ):
+        raise BrowserAcceptanceError("sales coverage row digest differs")
+    return {
+        "contract": value["contract"],
+        "sha256": _canonical_payload_sha256(value),
+        "calendar_days": 84,
+        "snapshot_rows": 2,
+        "statuses": statuses,
+    }
+
+
 def _validate_downloads(
     downloads: Path, runtime_root: Path, browser_state: dict[str, Any]
 ) -> dict[str, Any]:
@@ -400,6 +648,77 @@ def _validate_downloads(
                 secret = (runtime_root / secret_name).read_bytes().rstrip(b"\n")
                 if secret and secret in data:
                     raise BrowserAcceptanceError("secret bytes appeared in the review ZIP")
+
+        frozen_input = json.loads(archive.read("frozen-input-manifest.json"))
+        recommendation_evidence = json.loads(
+            archive.read("recommendations-and-reasons.json")
+        )
+        if (
+            set(frozen_input) != {"safety_label", "input_manifest"}
+            or frozen_input.get("safety_label") != "TEST DATA — NOT FOR ORDERING"
+            or set(recommendation_evidence) != {"safety_label", "items"}
+            or recommendation_evidence.get("safety_label")
+            != "TEST DATA — NOT FOR ORDERING"
+        ):
+            raise BrowserAcceptanceError("frozen recommendation evidence contract differs")
+        input_manifest = frozen_input.get("input_manifest")
+        contexts = (
+            input_manifest.get("contexts") if isinstance(input_manifest, dict) else None
+        )
+        eligible_contexts = [
+            item
+            for item in (contexts or [])
+            if isinstance(item, dict) and str(item.get("variant_id")) == "1001"
+        ]
+        recommendation_items = recommendation_evidence.get("items")
+        if (
+            not isinstance(input_manifest, dict)
+            or input_manifest.get("method_version") != "EMERGENCY_TRANSPARENT_V2"
+            or input_manifest.get("business_date") != "2026-09-13"
+            or len(eligible_contexts) != 1
+            or not isinstance(recommendation_items, list)
+            or len(recommendation_items) != 1
+            or recommendation_items[0].get("variant_id") != "1001"
+        ):
+            raise BrowserAcceptanceError("frozen V2 recommendation inventory differs")
+        manifest_demand = eligible_contexts[0].get("demand_evidence")
+        recommendation_metrics = recommendation_items[0].get("metrics") or {}
+        recommendation_demand = recommendation_metrics.get("demand_evidence")
+        if manifest_demand != recommendation_demand:
+            raise BrowserAcceptanceError(
+                "manifest and recommendation demand evidence diverge"
+            )
+        demand_result = _validate_demand_evidence(manifest_demand)
+        if browser_state.get("demandEvidence") != manifest_demand:
+            raise BrowserAcceptanceError(
+                "browser-rendered and packet demand evidence diverge"
+            )
+        uncalculated = (
+            "demand_regime",
+            "selected_model",
+            "abc_class",
+            "xyz_class",
+            "in_stock_velocity",
+            "safety_stock_units",
+        )
+        if (
+            recommendation_metrics.get("forecast_method_version")
+            != "EMERGENCY_TRANSPARENT_V2"
+            or any(recommendation_metrics.get(key) is not None for key in uncalculated)
+            or any(
+                recommendation_metrics.get(key) != expected
+                for key, expected in {
+                    "forecast_status": "EMERGENCY_BASELINE_ONLY",
+                    "model_selection_status": "NOT_VALIDATED",
+                    "classification_status": "NOT_CALCULATED",
+                    "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
+                    "safety_stock_status": "NOT_CALCULATED",
+                }.items()
+            )
+        ):
+            raise BrowserAcceptanceError(
+                "recommendation demand authority fields differ"
+            )
 
         summary = json.loads(archive.read("packet-summary.json"))
         if set(summary) != {
@@ -629,6 +948,10 @@ def _validate_downloads(
         "mapping_evidence_contract": "BUFFALO_MAPPING_EVIDENCE_METADATA_ONLY_V1",
         "mapping_evidence_safety_label": "TEST DATA — NOT FOR ORDERING",
         "packet_summary": summary,
+        "demand_evidence": demand_result,
+        "demand_evidence_payload": manifest_demand,
+        "input_manifest_payload": input_manifest,
+        "recommendation_metrics_payload": recommendation_metrics,
         "artifact_files": [
             {"name": path.name, "sha256": _sha256(path)}
             for path in (csv_files[0], zip_files[0])
@@ -674,7 +997,39 @@ def _database_acceptance(
         ).fetchall()
         run_rows = conn.execute(
             "SELECT run_id::text,status,workflow_stage,procurement_output_mode,notes,"
-            "input_fingerprint FROM runs"
+            "input_fingerprint,model_version,business_date,idempotency_key "
+            ",pg_catalog.to_jsonb(r) "
+            "FROM runs r ORDER BY run_id"
+        ).fetchall()
+        retirement_rows = conn.execute(
+            """SELECT run_id::text,input_fingerprint,retired_model_version,
+                      prior_status,prior_workflow_stage,target_status,
+                      target_workflow_stage,purchase_order_count,artifact_count,
+                      actor,reason,confirmation_sha256,before_run_json,
+                      after_run_json,transaction_id,created_at
+                 FROM monday_stale_forecast_retirements ORDER BY run_id"""
+        ).fetchall()
+        retirement_audits = conn.execute(
+            """SELECT table_name,row_key,action,before_json,after_json,actor,
+                      run_id::text,occurred_at,evidence_json
+                 FROM change_log
+                WHERE evidence_json->>'contract'=
+                      'BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1'
+                ORDER BY change_id"""
+        ).fetchall()
+        forecast_rows = conn.execute(
+            """SELECT f.run_id::text,f.variant_id,f.demand_regime,
+                      f.selected_model,f.abc_class,f.xyz_class,
+                      f.safety_stock_units,f.in_stock_velocity,f.method_version,
+                      f.history_start,f.history_end,f.horizon_days,
+                      f.diagnostics,r.procurement_input_manifest::jsonb
+                 FROM forecast_results f JOIN runs r USING(run_id)
+                ORDER BY f.run_id,f.variant_id"""
+        ).fetchall()
+        recommendation_metrics_rows = conn.execute(
+            """SELECT run_id::text,variant_id,metrics
+                 FROM procurement_recommendations
+                ORDER BY run_id,variant_id,recommendation_id"""
         ).fetchall()
         exclusion_rows = conn.execute(
             "SELECT x.actor,x.reason,e.status,e.variant_id FROM monday_run_blocker_exclusions x "
@@ -689,19 +1044,42 @@ def _database_acceptance(
             "evidence_json #>> '{review,actor}' FROM review_decisions"
         ).fetchall()
         po_rows = conn.execute(
-            "SELECT po_id::text,po_status,merchandise_total,po_total,notes,"
+            "SELECT po_id::text,run_id::text,po_status,merchandise_total,po_total,notes,"
             "reconciliation_evidence->>'economics_confirmed_by' FROM purchase_orders"
         ).fetchall()
         artifact_rows = conn.execute(
-            "SELECT artifact_type,vendor_id::text,sha256,size_bytes,octet_length(payload),"
+            "SELECT run_id::text,artifact_type,vendor_id::text,sha256,size_bytes,octet_length(payload),"
             "content_type,safety_label,created_by FROM monday_run_artifacts "
             "ORDER BY artifact_type"
         ).fetchall()
         event_rows = conn.execute(
-            "SELECT artifact_set_sha256,packet_sha256,csv_count,artifact_count,"
+            "SELECT run_id::text,artifact_set_sha256,packet_sha256,csv_count,artifact_count,"
             "verification_method,actor,monday_artifact_set_sha256(run_id) "
             "FROM monday_packet_build_events"
         ).fetchall()
+        stale_child_counts = conn.execute(
+            """SELECT
+                  (SELECT count(*) FROM forecast_results WHERE run_id=%s),
+                  (SELECT count(*) FROM procurement_recommendations WHERE run_id=%s),
+                  (SELECT count(*) FROM inventory_snapshots WHERE run_id=%s),
+                  (SELECT count(*) FROM run_price_snapshots WHERE run_id=%s),
+                  (SELECT count(*) FROM exceptions WHERE run_id=%s),
+                  (SELECT count(*) FROM review_decisions WHERE run_id=%s),
+                  (SELECT count(*) FROM monday_run_blocker_exclusions WHERE run_id=%s),
+                  (SELECT count(*) FROM monday_material_edit_confirmations WHERE run_id=%s),
+                  (SELECT count(*) FROM purchase_orders WHERE run_id=%s),
+                  (SELECT count(*) FROM purchase_order_lines l JOIN purchase_orders p
+                    USING(po_id) WHERE p.run_id=%s),
+                  (SELECT count(*) FROM monday_run_artifacts WHERE run_id=%s),
+                  (SELECT count(*) FROM monday_packet_build_events WHERE run_id=%s),
+                  (SELECT count(*) FROM po_operational_events e
+                    JOIN purchase_orders p USING(po_id) WHERE p.run_id=%s),
+                  (SELECT count(*) FROM po_reconciliation_events e
+                    JOIN purchase_order_lines l USING(po_line_id)
+                    JOIN purchase_orders p USING(po_id) WHERE p.run_id=%s),
+                  (SELECT count(*) FROM change_log WHERE run_id=%s)""",
+            tuple(browser_state.get("retiredRunId") for _ in range(15)),
+        ).fetchone()
         spoof_counts = {}
         for table in (
             "supplier_mapping_review_batches",
@@ -719,6 +1097,10 @@ def _database_acceptance(
             "purchase_order_lines",
             "monday_run_artifacts",
             "monday_packet_build_events",
+            "monday_stale_forecast_retirements",
+            "change_log",
+            "forecast_results",
+            "procurement_recommendations",
         ):
             spoof_counts[table] = int(
                 conn.execute(
@@ -737,7 +1119,7 @@ def _database_acceptance(
         "mapping_decisions": 2,
         "selection_events": 1,
         "selection_heads": 1,
-        "runs": 1,
+        "runs": 2,
         "purchase_orders": 1,
         "artifacts": 2,
     }
@@ -779,16 +1161,157 @@ def _database_acceptance(
     ):
         raise BrowserAcceptanceError("routine selection principal evidence differs")
     summary = downloads_result["packet_summary"]
+    runs_by_id = {item[0]: item for item in run_rows}
+    stale_run_id = browser_state.get("retiredRunId")
+    active_run_id = browser_state.get("runId")
+    if set(runs_by_id) != {stale_run_id, active_run_id}:
+        raise BrowserAcceptanceError("Monday run inventory differs")
+    stale_run = runs_by_id[stale_run_id]
+    active_run = runs_by_id[active_run_id]
     if (
-        len(run_rows) != 1
-        or run_rows[0][0] != browser_state["runId"]
-        or run_rows[0][1:4]
+        stale_run[1:4] != ("FAILED", "FAILED", "INTERNAL_DRAFT_ONLY")
+        or stale_run[4]
+        != "TEST DATA — NOT FOR ORDERING; fabricated stale V1 lifecycle fixture"
+        or not _is_sha256(stale_run[5])
+        or stale_run[6] != "EMERGENCY_TRANSPARENT_V1"
+        or stale_run[7].isoformat() != "2026-09-13"
+        or stale_run[8] != "synthetic-stale-v1:2026-09-13"
+        or active_run[1:4]
         != ("RUNNING", "PACKET_BUILT", "INTERNAL_DRAFT_ONLY")
-        or run_rows[0][4]
+        or active_run[4]
         != f"TEST DATA — NOT FOR ORDERING; prepared by {server_actor}"
-        or run_rows[0][5] != summary["input_fingerprint"]
+        or active_run[5] != summary["input_fingerprint"]
+        or active_run[6] != "EMERGENCY_TRANSPARENT_V2"
+        or active_run[7].isoformat() != "2026-09-13"
+        or active_run[8] != "browser-synthetic-20260913-v2"
     ):
         raise BrowserAcceptanceError("Monday run lifecycle or actor evidence differs")
+
+    if len(retirement_rows) != 1 or len(retirement_audits) != 1:
+        raise BrowserAcceptanceError("stale forecast retirement audit count differs")
+    retirement = retirement_rows[0]
+    audit = retirement_audits[0]
+    before_run = retirement[12]
+    after_run = retirement[13]
+    changed_run_fields = {
+        key for key in before_run if before_run.get(key) != after_run.get(key)
+    }
+    expected_audit_evidence = {
+        "confirmation_sha256": retirement[11],
+        "contract": "BUFFALO_STALE_FORECAST_RETIREMENT_AUDIT_V1",
+        "reason": retirement[10],
+        "retirement_run_id": retirement[0],
+        "transaction_id": str(retirement[14]),
+    }
+    if (
+        retirement[0] != stale_run_id
+        or retirement[1] != stale_run[5]
+        or retirement[1] != browser_state.get("retirementInputFingerprint")
+        or retirement[2:7]
+        != (
+            "EMERGENCY_TRANSPARENT_V1",
+            "RUNNING",
+            "PREPARING",
+            "FAILED",
+            "FAILED",
+        )
+        or retirement[7:9] != (0, 0)
+        or retirement[9] != server_actor
+        or retirement[10]
+        != "Synthetic retired forecast method requires V2 re-preparation"
+        or retirement[10] != browser_state.get("retirementReason")
+        or retirement[11] != browser_state.get("retirementConfirmationSha")
+        or not _is_sha256(retirement[11])
+        or set(before_run) != set(after_run)
+        or changed_run_fields != {"status", "workflow_stage"}
+        or before_run.get("status") != "RUNNING"
+        or before_run.get("workflow_stage") != "PREPARING"
+        or after_run.get("status") != "FAILED"
+        or after_run.get("workflow_stage") != "FAILED"
+        or stale_run[9] != after_run
+        or audit[0:3] != ("runs", stale_run_id, "UPDATE")
+        or audit[3] != before_run
+        or audit[4] != after_run
+        or audit[5] != server_actor
+        or audit[6] != stale_run_id
+        or audit[7] != retirement[15]
+        or audit[8] != expected_audit_evidence
+    ):
+        raise BrowserAcceptanceError("stale forecast retirement evidence differs")
+    if (
+        stale_child_counts is None
+        or any(int(value) != 0 for value in stale_child_counts[:-1])
+        or int(stale_child_counts[-1]) != 1
+    ):
+        raise BrowserAcceptanceError("retired V1 acquired child evidence")
+
+    if len(forecast_rows) != 1 or len(recommendation_metrics_rows) != 1:
+        raise BrowserAcceptanceError("V2 forecast/recommendation row count differs")
+    forecast_row = forecast_rows[0]
+    recommendation_row = recommendation_metrics_rows[0]
+    if (
+        forecast_row[0:2] != (active_run_id, "1001")
+        or any(value is not None for value in forecast_row[2:8])
+        or forecast_row[8] != "EMERGENCY_TRANSPARENT_V2"
+        or forecast_row[9].isoformat() != "2026-06-21"
+        or forecast_row[10].isoformat() != "2026-09-12"
+        or int(forecast_row[11]) != 3
+        or recommendation_row[0:2] != (active_run_id, "1001")
+    ):
+        raise BrowserAcceptanceError("uncalculated forecast authority fields differ")
+    diagnostics = forecast_row[12]
+    input_manifest = forecast_row[13]
+    metrics = recommendation_row[2]
+    manifest_contexts = input_manifest.get("contexts") if isinstance(input_manifest, dict) else None
+    eligible_contexts = [
+        item
+        for item in (manifest_contexts or [])
+        if isinstance(item, dict) and str(item.get("variant_id")) == "1001"
+    ]
+    demand_payload = downloads_result["demand_evidence_payload"]
+    sales_authority = (
+        eligible_contexts[0].get("sales_authority")
+        if len(eligible_contexts) == 1
+        else None
+    )
+    sales_coverage = demand_payload.get("sales_coverage")
+    if (
+        len(eligible_contexts) != 1
+        or input_manifest != downloads_result["input_manifest_payload"]
+        or metrics != downloads_result["recommendation_metrics_payload"]
+        or not isinstance(sales_authority, dict)
+        or metrics.get("frozen_sales_authority") != sales_authority
+        or not isinstance(sales_coverage, dict)
+        or sales_coverage.get("authority_sha256")
+        != _canonical_payload_sha256(sales_authority)
+        or eligible_contexts[0].get("demand_evidence") != demand_payload
+        or diagnostics.get("demand_evidence") != demand_payload
+        or metrics.get("demand_evidence") != demand_payload
+        or any(
+            diagnostics.get(key) != expected
+            for key, expected in {
+                "forecast_status": "EMERGENCY_BASELINE_ONLY",
+                "model_selection_status": "NOT_VALIDATED",
+                "classification_status": "NOT_CALCULATED",
+                "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
+                "safety_stock_status": "NOT_CALCULATED",
+            }.items()
+        )
+        or _validate_demand_evidence(demand_payload)["sha256"]
+        != downloads_result["demand_evidence"]["sha256"]
+        or any(
+            metrics.get(key) is not None
+            for key in (
+                "demand_regime",
+                "selected_model",
+                "abc_class",
+                "xyz_class",
+                "in_stock_velocity",
+                "safety_stock_units",
+            )
+        )
+    ):
+        raise BrowserAcceptanceError("frozen demand evidence diverges across surfaces")
     if exclusion_rows != [
         (
             server_actor,
@@ -816,12 +1339,13 @@ def _database_acceptance(
     if (
         len(po_rows) != 1
         or po_rows[0][0] != summary["draft_po_ids"][0]
-        or po_rows[0][1] != "DRAFT"
-        or Decimal(po_rows[0][2]) != Decimal("20.02")
+        or po_rows[0][1] != active_run_id
+        or po_rows[0][2] != "DRAFT"
         or Decimal(po_rows[0][3]) != Decimal("20.02")
-        or po_rows[0][4]
+        or Decimal(po_rows[0][4]) != Decimal("20.02")
+        or po_rows[0][5]
         != f"TEST DATA — NOT FOR ORDERING; built by {server_actor}"
-        or po_rows[0][5] != server_actor
+        or po_rows[0][6] != server_actor
     ):
         raise BrowserAcceptanceError("DRAFT purchase-order database evidence differs")
     expected_artifact_hashes = {
@@ -831,30 +1355,32 @@ def _database_acceptance(
         raise BrowserAcceptanceError("downloaded and database artifact hashes differ")
     if (
         len(artifact_rows) != 2
-        or {item[0] for item in artifact_rows}
+        or any(item[0] != active_run_id for item in artifact_rows)
+        or {item[1] for item in artifact_rows}
         != {"VENDOR_INTERNAL_CSV", "EMERGENCY_REVIEW_PACKET"}
         or any(
-            item[3] != item[4]
-            or item[6] != "TEST DATA — NOT FOR ORDERING"
-            or item[7] != server_actor
-            or item[2] not in expected_artifact_hashes
+            item[4] != item[5]
+            or item[7] != "TEST DATA — NOT FOR ORDERING"
+            or item[8] != server_actor
+            or item[3] not in expected_artifact_hashes
             for item in artifact_rows
         )
     ):
         raise BrowserAcceptanceError("database artifact evidence differs")
-    csv_artifact = next(item for item in artifact_rows if item[0] == "VENDOR_INTERNAL_CSV")
-    zip_artifact = next(item for item in artifact_rows if item[0] == "EMERGENCY_REVIEW_PACKET")
+    csv_artifact = next(item for item in artifact_rows if item[1] == "VENDOR_INTERNAL_CSV")
+    zip_artifact = next(item for item in artifact_rows if item[1] == "EMERGENCY_REVIEW_PACKET")
     if (
-        csv_artifact[1] != "00000000-0000-4000-8000-000000000001"
-        or csv_artifact[5] != "text/csv"
-        or zip_artifact[1] is not None
-        or zip_artifact[5] != "application/zip"
+        csv_artifact[2] != "00000000-0000-4000-8000-000000000001"
+        or csv_artifact[6] != "text/csv"
+        or zip_artifact[2] is not None
+        or zip_artifact[6] != "application/zip"
         or len(event_rows) != 1
-        or event_rows[0][0] != event_rows[0][6]
-        or event_rows[0][1] != zip_artifact[2]
-        or event_rows[0][2:4] != (1, 2)
-        or event_rows[0][4] != "DB_PAYLOAD_AND_STORAGE_READBACK_SHA256_V1"
-        or event_rows[0][5] != server_actor
+        or event_rows[0][0] != active_run_id
+        or event_rows[0][1] != event_rows[0][7]
+        or event_rows[0][2] != zip_artifact[3]
+        or event_rows[0][3:5] != (1, 2)
+        or event_rows[0][5] != "DB_PAYLOAD_AND_STORAGE_READBACK_SHA256_V1"
+        or event_rows[0][6] != server_actor
     ):
         raise BrowserAcceptanceError("packet build transaction evidence differs")
     if any(spoof_counts.values()):
@@ -870,6 +1396,13 @@ def _database_acceptance(
         },
         "draft_only": {"drafts": int(row[5]), "non_drafts": int(row[6])},
         "server_actor": server_actor,
+        "retired_v1": {
+            "run_id": stale_run_id,
+            "confirmation_sha256": retirement[11],
+            "transaction_id": int(retirement[14]),
+            "child_counts": [int(value) for value in stale_child_counts],
+        },
+        "demand_evidence": downloads_result["demand_evidence"],
         "spoof_actor_persisted_rows": spoof_counts,
         "artifact_hashes": sorted(expected_artifact_hashes),
     }
@@ -1003,6 +1536,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "limitations": [
             "loopback owner-demo evidence only",
             "mapping selection is shadow-only",
+            "demand evidence is an emergency baseline: point-in-time inventory remains UNKNOWN, model selection/FVA is NOT_VALIDATED, and safety stock is NOT_CALCULATED",
             "legacy active offer and CURRENT synthetic price remain the Monday consumer",
             "no Shopify, supplier, deployment, publication, release, or order action occurred",
         ],

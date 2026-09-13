@@ -63,12 +63,14 @@ from procurement_os.procurement_review import (
 from procurement_os.recommendations import (
     MONDAY_ANALYSIS_LOCK,
     MondayRecommendationError,
+    MondayRunInputValidationState,
     _authoritative_sales_rows,
     _price_tiers_from_rows,
     _sales_coverage_digest,
     _whole as recommendation_whole,
     monday_run_inputs_match,
     prepare_monday_run,
+    validate_monday_run_inputs,
 )
 from procurement_os.storage import LocalFilesystemStorage
 from procurement_os.vendor_rules import recompute_vendor_rules_gates
@@ -96,6 +98,12 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         connection.close()
 
     def setUp(self) -> None:
+        self.retirement_contract_patch = patch(
+            "procurement_os.recommendations.verify_monday_forecast_v2_retirement_contract",
+            return_value="synthetic-random-schema-unit-boundary",
+        )
+        self.retirement_contract_patch.start()
+        self.addCleanup(self.retirement_contract_patch.stop)
         self.evaluation_at = datetime(2026, 9, 7, 10, tzinfo=timezone.utc)
         self.clock_patch = patch(
             "procurement_os.recommendations._database_evaluation_at",
@@ -2183,6 +2191,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 "/monday-runs/{run_id}": ["GET"],
                 "/monday-runs/{run_id}/blockers/{exception_id}/exclude": ["POST"],
                 "/monday-runs/{run_id}/recommendations/{recommendation_id}/review": ["POST"],
+                "/monday-runs/{run_id}/retire-stale-forecast": ["POST"],
                 "/monday-runs/{run_id}/build": ["POST"],
                 "/monday-runs/{run_id}/artifacts/{artifact_id}": ["GET"],
             },
@@ -2228,6 +2237,174 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(response.status_code,403)
+                response = client.post(
+                    f"/monday-runs/{uuid.uuid4()}/retire-stale-forecast",
+                    data={"reason": "synthetic", "review_token": "wrong"},
+                )
+                self.assertEqual(response.status_code, 403)
+
+    def test_monday_renderer_suppresses_retired_v1_mutations(self):
+        run = self._prepare("retired-renderer-matrix")
+        queue = api.list_review_queue(self.conn, run["run_id"])
+        drafts = get_vendor_drafts(self.conn, run["run_id"])
+        current = api._monday_run_html(run, queue, drafts, [])
+        self.assertIn("/recommendations/", current)
+        self.assertNotIn("retire-stale-forecast", current)
+
+        retired = {
+            **run,
+            "model_version": "EMERGENCY_TRANSPARENT_V1",
+            "status": "RUNNING",
+            "workflow_stage": "AWAITING_REVIEW",
+        }
+        retired_html = api._monday_run_html(retired, queue, drafts, [])
+        self.assertIn("retire-stale-forecast", retired_html)
+        self.assertIn("FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED", retired_html)
+        self.assertNotIn("/recommendations/", retired_html)
+        self.assertNotIn("/build", retired_html)
+
+        built = {**retired, "workflow_stage": "DRAFTS_BUILT"}
+        built_html = api._monday_run_html(built, queue, drafts, [])
+        self.assertNotIn("retire-stale-forecast", built_html)
+        self.assertIn("/build", built_html)
+
+        failed = {**retired, "status": "FAILED", "workflow_stage": "FAILED"}
+        failed_html = api._monday_run_html(failed, queue, drafts, [])
+        self.assertNotIn("retire-stale-forecast", failed_html)
+        self.assertNotIn("/build", failed_html)
+        self.assertNotIn("/recommendations/", failed_html)
+
+    def test_version_aware_input_validation_never_recomputes_retired_v1(self):
+        run = self._prepare("typed-method-validation")
+        current = validate_monday_run_inputs(
+            self.conn, run["run_id"], run["input_fingerprint"]
+        )
+        self.assertIs(current.state, MondayRunInputValidationState.MATCH)
+        changed = validate_monday_run_inputs(
+            self.conn, run["run_id"], "f" * 64
+        )
+        self.assertIs(
+            changed.state, MondayRunInputValidationState.MATERIAL_INPUTS_CHANGED
+        )
+        # This random-schema suite stops at migration 013.  Construct the
+        # historical row that migration 015 is specifically designed to
+        # inherit; production code never disables this predecessor guard.
+        self.conn.execute(
+            "ALTER TABLE runs DISABLE TRIGGER trg_validate_emergency_monday_run"
+        )
+        self.conn.execute(
+            "UPDATE runs SET model_version='EMERGENCY_TRANSPARENT_V1' WHERE run_id=%s",
+            (run["run_id"],),
+        )
+        self.conn.execute(
+            "ALTER TABLE runs ENABLE TRIGGER trg_validate_emergency_monday_run"
+        )
+        self.conn.commit()
+        with patch(
+            "procurement_os.recommendations._load_context",
+            side_effect=AssertionError("retired V1 context was recomputed"),
+        ):
+            retired = validate_monday_run_inputs(
+                self.conn, run["run_id"], run["input_fingerprint"]
+            )
+            retired_with_stale_caller_fingerprint = validate_monday_run_inputs(
+                self.conn, run["run_id"], "0" * 64
+            )
+        self.assertIs(
+            retired.state,
+            MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED,
+        )
+        self.assertIs(
+            retired_with_stale_caller_fingerprint.state,
+            MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED,
+        )
+        item = run["recommendations"][0]
+        with self.assertRaisesRegex(
+            ProcurementReviewError,
+            "FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED",
+        ):
+            preview_recommendation_review(
+                self.conn,
+                recommendation_id=item["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic-retired-reviewer",
+                expected_input_fingerprint=run["input_fingerprint"],
+            )
+        with self.assertRaisesRegex(
+            DraftPoError, "FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED"
+        ):
+            preview_vendor_drafts(
+                self.conn, run_id=run["run_id"], actor="synthetic-retired-builder"
+            )
+
+    def test_monday_retirement_http_preview_confirm_uses_session_actor(self):
+        client = authenticated_test_client(self, api.app)
+        token = "synthetic-retirement-http-token"
+        run_id = uuid.uuid4()
+        preview = {
+            "run_id": str(run_id),
+            "business_date": BUSINESS_DATE,
+            "input_fingerprint": "a" * 64,
+            "retired_model_version": "EMERGENCY_TRANSPARENT_V1",
+            "prior_status": "RUNNING",
+            "prior_workflow_stage": "PREPARING",
+            "target_status": "FAILED",
+            "target_workflow_stage": "FAILED",
+            "purchase_order_count": 0,
+            "artifact_count": 0,
+            "actor": "synthetic:http-test-owner:01",
+            "reason": "Retire exact synthetic V1 run",
+            "confirmation_sha256": "b" * 64,
+        }
+        with patch.dict(
+            os.environ, {"RECONCILIATION_REVIEW_TOKEN": token}
+        ), patch.object(
+            api, "_db_conn", return_value=nullcontext(object())
+        ), patch.object(
+            api,
+            "preview_monday_stale_forecast_retirement",
+            return_value=preview,
+        ) as preview_service, patch.object(
+            api,
+            "confirm_monday_stale_forecast_retirement",
+            return_value={"idempotent_replay": False},
+        ) as confirm_service:
+            response = client.post(
+                f"/monday-runs/{run_id}/retire-stale-forecast",
+                data={
+                    "reason": preview["reason"],
+                    "actor": "spoofed-browser-actor",
+                    "review_token": token,
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertIn("Confirm exact V1 retirement", response.text)
+            self.assertIn("name='expected_confirmation_sha256'", response.text)
+            self.assertNotIn(token, response.text)
+            self.assertNotIn("spoofed-browser-actor", response.text)
+            self.assertEqual(
+                preview_service.call_args.kwargs["actor"],
+                "synthetic:http-test-owner:01",
+            )
+
+            response = client.post(
+                f"/monday-runs/{run_id}/retire-stale-forecast",
+                data={
+                    "reason": preview["reason"],
+                    "expected_confirmation_sha256": "b" * 64,
+                    "actor": "spoofed-browser-actor",
+                    "review_token": token,
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertEqual(response.headers["location"], f"/monday-runs/{run_id}")
+            self.assertEqual(
+                confirm_service.call_args.kwargs["actor"],
+                "synthetic:http-test-owner:01",
+            )
 
     def test_monday_http_review_rejects_cross_run_recommendation_before_recording(self):
         first=self._prepare("http-run-a")

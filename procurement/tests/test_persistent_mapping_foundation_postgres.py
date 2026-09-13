@@ -361,7 +361,13 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 applied = apply_schema.apply_schema_connection(
                     conn, DB_DIR, include_persistent_mapping=True
                 )
-                self.assertEqual(applied[-1], apply_schema.MAPPING_MIGRATION_NAME)
+                self.assertEqual(
+                    applied[-2:],
+                    [
+                        apply_schema.MAPPING_MIGRATION_NAME,
+                        apply_schema.MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name,
+                    ],
+                )
             else:
                 schema_oid = int(
                     conn.execute(
@@ -627,6 +633,10 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                 shutil.copyfile(DB_DIR / name, db_dir / name)
             shutil.copyfile(DB_DIR / apply_schema.MAPPING_MIGRATION_NAME, db_dir / apply_schema.MAPPING_MIGRATION_NAME)
             shutil.copyfile(
+                DB_DIR / apply_schema.MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name,
+                db_dir / apply_schema.MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name,
+            )
+            shutil.copyfile(
                 DB_DIR.parent / apply_schema.MAPPING_RELEASE.maintenance_identity_config_ref,
                 config_dir / "persistent_mapping_maintenance.synthetic.json",
             )
@@ -730,6 +740,34 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
                         apply_schema._verify_or_apply_mapping_release(
                             conn, db_dir, apply_schema.MAPPING_RELEASE
                         )
+            self._prepare_roles_and_schema()
+            with (
+                mock.patch.object(
+                    apply_schema, "PERSISTENT_MAPPING_RELEASE_MANIFEST", manifest
+                ),
+                mock.patch.object(
+                    apply_schema, "MAPPING_RELEASE_TRUST_MANIFEST", trust
+                ),
+                mock.patch.object(apply_schema, "MIGRATION_ORDER", order),
+                psycopg.connect(self.mapping_url) as fresh_conn,
+            ):
+                applied = apply_schema.apply_schema_connection(
+                    fresh_conn, db_dir, include_persistent_mapping=True
+                )
+                self.assertEqual(
+                    applied[-3:],
+                    [
+                        apply_schema.MAPPING_MIGRATION_NAME,
+                        apply_schema.MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name,
+                        TEST_V2_NAME,
+                    ],
+                )
+                self.assertEqual(
+                    apply_schema.apply_schema_connection(
+                        fresh_conn, db_dir, include_persistent_mapping=True
+                    ),
+                    [],
+                )
 
     def test_replay_independently_rejects_anchor_and_helper_tampering(self):
         with psycopg.connect(self.mapping_url) as conn:
@@ -1750,6 +1788,10 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
             shutil.copyfile(
                 DB_DIR / apply_schema.MAPPING_MIGRATION_NAME,
                 db_dir / apply_schema.MAPPING_MIGRATION_NAME,
+            )
+            shutil.copyfile(
+                DB_DIR / apply_schema.MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name,
+                db_dir / apply_schema.MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name,
             )
             shutil.copyfile(config_path, config_dir / "persistent_mapping.synthetic.json")
 

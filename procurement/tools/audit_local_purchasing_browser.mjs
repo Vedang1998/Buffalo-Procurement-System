@@ -15,6 +15,8 @@ if (!phase || !BASE || !CDP || !EVIDENCE || !DOWNLOADS || !AUTH_SECRET_PATH || !
 const AUTH_SECRET = fs.readFileSync(AUTH_SECRET_PATH, "utf8").replace(/\n$/, "");
 const REVIEW_TOKEN = fs.readFileSync(REVIEW_TOKEN_PATH, "utf8").replace(/\n$/, "");
 const SPOOF_ACTOR = "spoofed-browser-actor-must-be-ignored";
+const STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901";
+const RETIREMENT_REASON = "Synthetic retired forecast method requires V2 re-preparation";
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 class CdpClient {
@@ -588,11 +590,201 @@ async function audit(client) {
     await navigate(`${BASE}/monday-runs`);
     text = await body();
     check(text.includes("TEST DATA — NOT FOR ORDERING") && text.includes("No release or Shopify action is available"), "Monday page is visibly DRAFT-only");
+    check(
+      text.includes(STALE_V1_RUN_ID) &&
+        text.includes("EMERGENCY_TRANSPARENT_V1") &&
+        text.includes("PREPARING"),
+      "initializer exposes exactly one active fabricated V1 run requiring retirement",
+    );
+    check(
+      (await evaluate(`[
+        ...document.querySelectorAll("tbody tr")
+      ].filter((row) => row.textContent.includes("EMERGENCY_TRANSPARENT_V1")).length`)) === 1,
+      "Monday list contains exactly one fabricated V1 lifecycle row",
+    );
+    const staleV1Path = `/monday-runs/${STALE_V1_RUN_ID}`;
+    const staleRetirementPath = `${staleV1Path}/retire-stale-forecast`;
+    await navigate(`${BASE}${staleV1Path}`);
+    text = await body();
+    check(
+      text.includes("FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED") &&
+        text.includes("EMERGENCY_TRANSPARENT_V1") &&
+        text.includes("Status: RUNNING") &&
+        text.includes("stage: PREPARING"),
+      "stale V1 detail is typed, visible, and still active before confirmation",
+    );
+    check(
+      (await evaluate("Boolean(document.querySelector('form[action$=\"/retire-stale-forecast\"]'))")) &&
+        !(await evaluate("document.body.innerHTML.includes('/recommendations/')")) &&
+        !(await evaluate("document.body.innerHTML.includes('/blockers/')")) &&
+        !(await evaluate("document.body.innerHTML.includes('/build')")),
+      "stale V1 exposes only the bounded retirement mutation",
+    );
+    const formHeaders = {"Content-Type": "application/x-www-form-urlencoded"};
+    const staleBuild = await statusFetch(`${staleV1Path}/build`, {
+      method: "POST",
+      headers: formHeaders,
+      body: new URLSearchParams({actor: SPOOF_ACTOR, review_token: REVIEW_TOKEN}).toString(),
+    });
+    check(
+      staleBuild.status === 409 && staleBuild.body.includes("FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED"),
+      "stale V1 DRAFT write is refused with the exact retired-method state",
+      staleBuild,
+    );
+    const stalePrepare = await statusFetch("/monday-runs/prepare", {
+      method: "POST",
+      headers: formHeaders,
+      body: new URLSearchParams({
+        business_date: "2026-09-13",
+        idempotency_key: "browser-stale-v1-must-block",
+        variant_ids: "1001,2002",
+        actor: SPOOF_ACTOR,
+        review_token: REVIEW_TOKEN,
+      }).toString(),
+    });
+    check(
+      stalePrepare.status === 409 && stalePrepare.body.includes("FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED"),
+      "active V1 date claim blocks V2 preparation without recomputation",
+      stalePrepare,
+    );
+
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/retire-stale-forecast\"]')", {
+        reason: RETIREMENT_REASON,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    check(
+      (await waitForResponse(staleRetirementPath, "POST", transitionMark))?.status === 200,
+      "retirement preview POST returns HTTP 200",
+    );
+    text = await body();
+    const retirementPreview = await evaluate(`Object.fromEntries(
+      [...document.querySelectorAll("dl dt")].map((item) => [
+        item.textContent.trim(), item.nextElementSibling?.textContent.trim() || ""
+      ])
+    )`);
+    check(
+      text.includes("Confirm exact V1 retirement") &&
+        text.includes(RETIREMENT_REASON) &&
+        text.includes("RUNNING/PREPARING → FAILED/FAILED") &&
+        text.includes("0 / 0") &&
+        text.includes("synthetic:owner-browser:01"),
+      "retirement preview visibly binds the exact actor, reason, transition, and zero effects",
+    );
+    check(
+      retirementPreview.Run === STALE_V1_RUN_ID &&
+        retirementPreview["Business date"] === "2026-09-13" &&
+        /^[0-9a-f]{64}$/.test(retirementPreview["Frozen fingerprint"]) &&
+        retirementPreview["Retired method"] === "EMERGENCY_TRANSPARENT_V1" &&
+        retirementPreview.Transition === "RUNNING/PREPARING → FAILED/FAILED" &&
+        retirementPreview["Purchase orders / artifacts"] === "0 / 0" &&
+        retirementPreview["Authenticated actor"] === "synthetic:owner-browser:01" &&
+        retirementPreview.Reason === RETIREMENT_REASON,
+      "retirement preview definition list binds every exact confirmation fact",
+      retirementPreview,
+    );
+    const retirementInputFingerprint = retirementPreview["Frozen fingerprint"];
+    const retirementConfirmationSha = await evaluate(
+      "document.querySelector('input[name=expected_confirmation_sha256]')?.value",
+    );
+    check(/^[0-9a-f]{64}$/.test(retirementConfirmationSha), "retirement preview supplies one exact confirmation SHA-256");
+    check(
+      retirementPreview["Confirmation SHA-256"] === retirementConfirmationSha,
+      "visible and submitted retirement confirmation hashes are identical",
+    );
+    const wrongRetirementHash = await statusFetch(staleRetirementPath, {
+      method: "POST",
+      headers: formHeaders,
+      body: new URLSearchParams({
+        reason: RETIREMENT_REASON,
+        expected_confirmation_sha256: "f".repeat(64),
+        review_token: REVIEW_TOKEN,
+        actor: SPOOF_ACTOR,
+      }).toString(),
+    });
+    check(
+      wrongRetirementHash.status === 409 &&
+        wrongRetirementHash.body.includes("retirement preview changed; review and confirm again"),
+      "wrong well-shaped retirement confirmation is refused without fallback",
+      wrongRetirementHash,
+    );
+    const stillActiveV1 = await statusFetch(staleV1Path);
+    check(
+      stillActiveV1.status === 200 &&
+        stillActiveV1.body.includes("Status: <b>RUNNING</b>") &&
+        stillActiveV1.body.includes("stage: <b>PREPARING</b>") &&
+        !stillActiveV1.body.includes("/artifacts/"),
+      "retirement preview is write-free and leaves the V1 run active with no artifacts",
+    );
+    await saveHtml("05a-v1-retirement-preview-test-data.html");
+    await screenshot("05a-v1-retirement-preview-test-data.png");
+    transitionMark = ledgerMark();
+    await submit(formScript("document.querySelector('form[method=\"post\"]')", {review_token: REVIEW_TOKEN}));
+    await assertRedirect(
+      transitionMark,
+      "POST",
+      staleRetirementPath,
+      staleV1Path,
+      "confirmed immutable V1 retirement POST returns HTTP 303",
+    );
+    text = await body();
+    check(
+      text.includes("Status: FAILED") &&
+        text.includes("stage: FAILED") &&
+        text.includes("EMERGENCY_TRANSPARENT_V1") &&
+        !text.includes("retire-stale-forecast") &&
+        !text.includes("/build"),
+      "confirmed V1 remains visible, immutable, and mutation-free after the date is released",
+    );
+    check(
+      !(await evaluate("Boolean(document.querySelector('form[action$=\"/retire-stale-forecast\"]'))")) &&
+        !(await evaluate("Boolean(document.querySelector('form[action*=\"/recommendations/\"]'))")) &&
+        !(await evaluate("Boolean(document.querySelector('form[action*=\"/blockers/\"]'))")) &&
+        !(await evaluate("Boolean(document.querySelector('form[action$=\"/build\"]'))")) &&
+        !(await evaluate("Boolean(document.querySelector('a[href*=\"/artifacts/\"]'))")),
+      "retired V1 detail exposes no mutation control",
+    );
+    await saveHtml("05b-v1-retired-test-data.html");
+    await screenshot("05b-v1-retired-test-data.png");
+
+    transitionMark = ledgerMark();
+    await submit(`(() => {
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = ${JSON.stringify(staleRetirementPath)};
+      const values = ${JSON.stringify({
+        reason: RETIREMENT_REASON,
+        expected_confirmation_sha256: retirementConfirmationSha,
+        review_token: REVIEW_TOKEN,
+        actor: SPOOF_ACTOR,
+      })};
+      for (const [name, value] of Object.entries(values)) {
+        const input = document.createElement("input");
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      }
+      document.body.appendChild(form);
+      form.requestSubmit();
+      return true;
+    })()`);
+    await assertRedirect(
+      transitionMark,
+      "POST",
+      staleRetirementPath,
+      staleV1Path,
+      "exact V1 retirement replay returns the same HTTP 303 transition",
+    );
+    check((await body()).includes("Status: FAILED"), "retirement replay creates no replacement state");
+
+    await navigate(`${BASE}/monday-runs`);
     transitionMark = ledgerMark();
     await submit(
       formScript("document.querySelector('form[action=\"monday-runs/prepare\"]')", {
         business_date: "2026-09-13",
-        idempotency_key: "browser-synthetic-20260913-v1",
+        idempotency_key: "browser-synthetic-20260913-v2",
         variant_ids: "1001,2002",
         actor: SPOOF_ACTOR,
         review_token: REVIEW_TOKEN,
@@ -602,9 +794,14 @@ async function audit(client) {
     const runMatch = preparedUrl.match(/\/monday-runs\/([0-9a-f-]{36})$/);
     check(Boolean(runMatch), "prepare redirects to a concrete frozen run", preparedUrl);
     const runId = runMatch[1];
+    check(runId !== STALE_V1_RUN_ID, "V2 preparation creates a distinct immutable run identity");
     await assertRedirect(transitionMark, "POST", "/monday-runs/prepare", `/monday-runs/${runId}`, "prepare POST returns HTTP 303");
     text = await textContent();
-    check(text.includes("2002") && text.includes("1001"), "mixed eligible and blocked variants are retained");
+    check(
+      text.includes("2002") && text.includes("1001") &&
+        text.includes("EMERGENCY_TRANSPARENT_V2") && text.includes("stage: AWAITING_REVIEW"),
+      "distinct V2 preparation retains mixed eligible and blocked variants",
+    );
     check(!text.includes(SPOOF_ACTOR), "browser actor input is not authoritative or displayed");
     await saveHtml("06-mixed-run-test-data.html");
     await screenshot("06-mixed-run-test-data.png");
@@ -637,6 +834,28 @@ async function audit(client) {
     check(text.includes("ACKNOWLEDGE_AND_EXCLUDE — RUN_ONLY") && text.includes("Original blocker retained"), "valid RUN_ONLY exclusion preserves the source blocker");
     await evaluate("[...document.querySelectorAll('details')].forEach((item) => { item.open = true; })");
     text = await textContent();
+    const demandEvidence = await evaluate(
+      "JSON.parse(document.querySelector('pre.demand-evidence-json').textContent)",
+    );
+    check(
+      demandEvidence.contract === "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2" &&
+        demandEvidence.method_version === "EMERGENCY_TRANSPARENT_V2" &&
+        demandEvidence.history_start === "2026-06-21" &&
+        demandEvidence.history_end === "2026-09-12" &&
+        demandEvidence.calendar_days === 84 &&
+        demandEvidence.daily.length === 84 &&
+        demandEvidence.daily.every((item) => item.inventory_state === "UNKNOWN") &&
+        demandEvidence.snapshot_groups.length === 1 &&
+        demandEvidence.snapshot_groups[0].compatibility_status ===
+          "COMPATIBLE_POINT_IN_TIME_EVIDENCE" &&
+        demandEvidence.snapshot_groups[0].aggregate_available_quantity === "3.0000" &&
+        demandEvidence.availability_summary.unknown_days === 84 &&
+        demandEvidence.availability_summary.proven_full_day_stockout_days === 0 &&
+        demandEvidence.statuses.model_selection_status === "NOT_VALIDATED" &&
+        demandEvidence.statuses.safety_stock_status === "NOT_CALCULATED",
+      "browser parses the exact evidence-correct V2 demand object",
+      demandEvidence,
+    );
     for (const required of [
       "SUP-001",
       "750ML",
@@ -650,6 +869,14 @@ async function audit(client) {
       "1.000000",
       "baseline need 3",
       "1 case(s) + 0 loose",
+      "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2",
+      "POINT_IN_TIME_SNAPSHOT_ONLY",
+      "STOCKOUT_CENSORING_EVIDENCE_UNAVAILABLE",
+      "EVIDENCE_UNAVAILABLE",
+      "NOT_CALCULATED",
+      "UNKNOWN",
+      "COMPATIBLE_POINT_IN_TIME_EVIDENCE",
+      "synthetic-location-002",
     ]) {
       check(text.includes(required), `structured frozen evidence includes ${required}`);
     }
@@ -729,7 +956,7 @@ async function audit(client) {
     check(text.includes("Confirm vendor DRAFT economics") && text.includes("$20.02"), "vendor DRAFT preview shows the exact merchandise and total");
     check(text.includes("NOT_APPLICABLE"), "met synthetic minimum needs no fee disposition");
     const preBuildRun = await statusFetch(`/monday-runs/${runId}`);
-    check(preBuildRun.status === 200 && preBuildRun.body.includes("Stage: <b>REVIEWED</b>") && !preBuildRun.body.includes("/artifacts/"), "DRAFT preview leaves the run REVIEWED with no artifacts");
+    check(preBuildRun.status === 200 && preBuildRun.body.includes("stage: <b>REVIEWED</b>") && !preBuildRun.body.includes("/artifacts/"), "DRAFT preview leaves the run REVIEWED with no artifacts");
     await saveHtml("10-draft-preview-test-data.html");
     await screenshot("10-draft-preview-test-data.png");
     transitionMark = ledgerMark();
@@ -738,7 +965,7 @@ async function audit(client) {
     );
     await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${runId}`, "confirmed DRAFT build POST returns HTTP 303");
     text = await body();
-    check(text.includes("Stage: PACKET_BUILT") && text.includes("Synthetic Southern — DRAFT"), "one internal vendor DRAFT and packet reach terminal stage");
+    check(text.includes("stage: PACKET_BUILT") && text.includes("Synthetic Southern — DRAFT"), "one internal vendor DRAFT and packet reach terminal stage");
     check(text.includes("Grand totals:") && text.includes("internal DRAFT total $20.02"), "vendor and grand totals reconcile visibly");
     check(!text.includes("Release PO"), "no PO-release control is rendered");
     await saveHtml("11-built-test-data.html");
@@ -779,6 +1006,11 @@ async function audit(client) {
       sourceUrls: [unresolvedSourceHref, validSourceHref],
       runUrl: `${BASE}/monday-runs/${runId}`,
       runId,
+      retiredRunId: STALE_V1_RUN_ID,
+      retirementConfirmationSha,
+      retirementInputFingerprint,
+      retirementReason: RETIREMENT_REASON,
+      demandEvidence,
       artifactUrls: linksAfterReplay,
       sourceDownloads,
       artifactDownloads,
@@ -819,7 +1051,7 @@ async function audit(client) {
     );
     await navigate(state.runUrl);
     let text = await body();
-    check(text.includes("Stage: PACKET_BUILT") && text.includes("internal DRAFT total $20.02"), "reviewed run and DRAFT survive restart");
+    check(text.includes("stage: PACKET_BUILT") && text.includes("internal DRAFT total $20.02"), "reviewed run and DRAFT survive restart");
     const artifactLinks = await evaluate(`[
       ...document.querySelectorAll('a[href*="/artifacts/"]')
     ].map((anchor) => anchor.href)`);

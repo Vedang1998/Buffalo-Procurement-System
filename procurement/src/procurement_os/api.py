@@ -76,9 +76,13 @@ from .procurement_review import (
     record_recommendation_review,
 )
 from .recommendations import (
+    CURRENT_METHOD_VERSION,
+    RETIRED_METHOD_VERSION,
     MondayRecommendationError,
+    confirm_monday_stale_forecast_retirement,
     get_monday_run,
     list_monday_runs,
+    preview_monday_stale_forecast_retirement,
 )
 from .storage import get_storage
 from .synthetic_mapping_packet import (
@@ -2012,11 +2016,13 @@ def _monday_runs_html(runs: list[dict]) -> str:
         "<tr>"
         f"<td><a href='monday-runs/{_html_escape(run['run_id'])}'>{_html_escape(run['run_id'])}</a></td>"
         f"<td>{_html_escape(run['business_date'])}</td>"
+        f"<td>{_html_escape(run['status'])}</td>"
+        f"<td>{_html_escape(run['model_version'])}</td>"
         f"<td>{_html_escape(run['workflow_stage'])}</td>"
         f"<td>{_html_escape(run['exception_count'])}</td>"
         "</tr>"
         for run in runs
-    ) or "<tr><td colspan='4'>No emergency Monday runs exist.</td></tr>"
+    ) or "<tr><td colspan='6'>No emergency Monday runs exist.</td></tr>"
     return f"""<!doctype html><html><head><title>Monday Procurement Runs</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1120px;margin:2rem auto;padding:0 1rem;color:#1f2328}}
 .warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}form{{display:grid;gap:9px;max-width:700px}}input,button{{padding:7px}}</style></head><body>
@@ -2031,7 +2037,7 @@ def _monday_runs_html(runs: list[dict]) -> str:
 <p>The immutable audit actor comes from the authenticated local session.</p>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Prepare recommendations and stop for review</button></form>
-<h2>Frozen runs</h2><table><thead><tr><th>Run</th><th>Business date</th><th>Stage</th><th>Open blockers</th></tr></thead>
+<h2>Frozen runs</h2><table><thead><tr><th>Run</th><th>Business date</th><th>Status</th><th>Method</th><th>Stage</th><th>Open blockers</th></tr></thead>
 <tbody>{rows}</tbody></table></body></html>"""
 
 
@@ -2039,6 +2045,27 @@ def _monday_run_html(
     run: dict, review: dict, drafts: dict, artifacts: list[dict]
 ) -> str:
     run_id = _html_escape(run["run_id"])
+    current_v2 = (
+        run.get("model_version") == CURRENT_METHOD_VERSION
+        and run.get("status") == "RUNNING"
+    )
+    retired_v1 = run.get("model_version") == RETIRED_METHOD_VERSION
+    can_review = current_v2 and run.get("workflow_stage") == "AWAITING_REVIEW"
+    can_build = (
+        current_v2
+        and run.get("workflow_stage") in {"REVIEWED", "DRAFTS_BUILT", "PACKET_BUILT"}
+    ) or (
+        retired_v1
+        and run.get("status") == "RUNNING"
+        and run.get("workflow_stage") in {"DRAFTS_BUILT", "PACKET_BUILT"}
+    )
+    can_retire = (
+        retired_v1
+        and run.get("status") == "RUNNING"
+        and run.get("workflow_stage") in {"PREPARING", "AWAITING_REVIEW", "REVIEWED"}
+        and not drafts["drafts"]
+        and not artifacts
+    )
     blocker_rows = []
     for item in run["blockers"]:
         if item.get("excluded"):
@@ -2049,13 +2076,20 @@ def _monday_run_html(
                 f"{_html_escape(exclusion['reason'])}; at "
                 f"{_html_escape(exclusion['created_at'])}. Original blocker retained."
             )
-        elif run["workflow_stage"] == "AWAITING_REVIEW":
+        elif can_review:
             control = f"""<form method='post' action='{run_id}/blockers/{item['exception_id']}/exclude'>
 	<input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
 	<label>Exclusion reason <input name='reason' required></label>
 	<input type='hidden' name='actor' value='browser-value-ignored'>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Acknowledge and exclude from this run only</button></form>"""
+        elif can_retire:
+            control = (
+                "FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED — retire this "
+                "unbuilt V1 run before preparing with V2."
+            )
+        elif retired_v1:
+            control = "The frozen V1 run is immutable and read-only at this stage."
         else:
             control = "Not excluded before review completion."
         blocker_rows.append(
@@ -2073,6 +2107,25 @@ def _monday_run_html(
         metrics = item.get("metrics") or {}
         frozen_terms = metrics.get("frozen_vendor_terms") or {}
         offer = metrics.get("frozen_offer_evidence") or {}
+        demand_evidence = metrics.get("demand_evidence") or {}
+        demand_evidence_json = json.dumps(
+            demand_evidence, sort_keys=True, indent=2, default=str
+        )
+        if demand_evidence.get("contract") == "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2":
+            demand_evidence_row = f"""
+<tr><th>Evidence-correct demand foundation</th><td><section class='demand-evidence' data-contract='BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2'>
+<p>Contract {_html_escape(demand_evidence.get('contract'))}; method {_html_escape(demand_evidence.get('method_version'))}; bounds {_html_escape(demand_evidence.get('history_start'))}–{_html_escape(demand_evidence.get('history_end'))}; calendar days {_html_escape(demand_evidence.get('calendar_days'))}.</p>
+<p>Model/FVA {_html_escape((demand_evidence.get('statuses') or {}).get('model_selection_status'))}; classification {_html_escape((demand_evidence.get('statuses') or {}).get('classification_status'))}; stockout censoring {_html_escape((demand_evidence.get('statuses') or {}).get('stockout_censoring_status'))}; safety stock {_html_escape((demand_evidence.get('statuses') or {}).get('safety_stock_status'))}.</p>
+<p>Raw 7/14/28-day windows {_html_escape(demand_evidence.get('raw_windows'))}; availability counts {_html_escape(demand_evidence.get('availability_summary'))}; snapshot groups {_html_escape(demand_evidence.get('snapshot_groups'))}; reasons {_html_escape(demand_evidence.get('reason_codes'))}. Point-in-time inventory is evidence only and every daily availability state remains UNKNOWN.</p>
+<details><summary>Exact frozen demand evidence</summary><pre class='demand-evidence-json'>{_html_escape(demand_evidence_json)}</pre></details>
+</section></td></tr>"""
+        else:
+            demand_evidence_row = (
+                "<tr><th>Evidence-correct demand foundation</th><td>"
+                "V2 demand evidence is absent on this frozen legacy record; no "
+                "new demand, stockout, model-selection, or safety-stock claim is made."
+                "</td></tr>"
+            )
         capture = metrics.get("frozen_inventory_capture") or []
         inventory_rows = "".join(
             "<tr>"
@@ -2107,6 +2160,7 @@ def _monday_run_html(
 <tr><th>Inventory locations</th><td><table><tr><th>Location</th><th>Available</th><th>Captured incoming</th><th>Status</th></tr>{inventory_rows}</table></td></tr>
 <tr><th>Trusted incoming</th><td>{_html_escape(metrics.get('trusted_incoming_units'))}; reconciliation {_html_escape(metrics.get('frozen_open_po_position'))}</td></tr>
 <tr><th>Demand / coverage</th><td>Authority {_html_escape(metrics.get('frozen_sales_authority'))}; velocity {_html_escape(metrics.get('forecast_daily_velocity'))}/day; horizon {_html_escape(metrics.get('forecast_horizon_days'))} days; forecast {_html_escape(metrics.get('forecast_units'))}; baseline need {_html_escape(metrics.get('raw_need_units'))}; target {_html_escape(metrics.get('target_units'))}; reasons {_html_escape(metrics.get('need_reason_codes'))}</td></tr>
+{demand_evidence_row}
 <tr><th>Retail / margin diagnostic</th><td>Frozen retail ${_html_escape(metrics.get('frozen_catalog_retail_price'))}; unit GP ${_html_escape(metrics.get('frozen_unit_gross_profit'))}; gross margin {_html_escape(metrics.get('frozen_gross_margin_pct'))}% (diagnostic only)</td></tr>
 <tr><th>Frozen price ladder</th><td><table><tr><th>Level</th><th>Break</th><th>Case</th><th>Unit</th><th>Source</th></tr>{price_rows}</table></td></tr>
 </table>"""
@@ -2129,7 +2183,7 @@ def _monday_run_html(
                 f"{_html_escape(item['resulting_days_supply'])} days supply "
                 f"({_html_escape(item['days_supply_status'])})"
             )
-        else:
+        elif can_review:
             decision = f"""<form method='post' action='{run_id}/recommendations/{item['recommendation_id']}/review'>
 <input type='hidden' name='expected_input_fingerprint' value='{_form_value(run['input_fingerprint'])}'>
 <label>Decision <select name='action'><option>ACCEPT</option><option>EDIT_QUANTITY</option><option>REJECT</option></select></label>
@@ -2138,6 +2192,13 @@ def _monday_run_html(
 	<label>Comment <input name='comment'></label><input type='hidden' name='actor' value='browser-value-ignored'>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Record immutable decision</button></form>"""
+        elif retired_v1:
+            decision = (
+                "FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED — no new V1 review "
+                "or edit is permitted."
+            )
+        else:
+            decision = "No review action is available at this workflow stage."
         review_rows.append(
             "<tr>"
             f"<td>{_html_escape(item['variant_id'])}<br><small>{_html_escape(item['product_title'])} / {_html_escape(item['variant_title'])}</small></td>"
@@ -2199,18 +2260,31 @@ def _monday_run_html(
         else "<p>No vendor or grand total exists until reviewed quantities are built.</p>"
     )
     build_form = ""
-    if run["workflow_stage"] in {"REVIEWED", "DRAFTS_BUILT", "PACKET_BUILT"}:
+    if can_build:
         build_form = f"""<form method='post' action='{run_id}/build'>
 	<input type='hidden' name='actor' value='browser-value-ignored'>
 	<p>Builder identity comes from the authenticated local session.</p>
 <label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
 <button type='submit'>Build/replay internal DRAFTs and review packet</button></form>"""
+    retirement_form = ""
+    if can_retire:
+        retirement_form = f"""<section class='warning'>
+<h2>Retired forecast method requires re-preparation</h2>
+<p><code>FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED</code>. This action preserves
+the complete V1 run and marks only its status/stage FAILED, releasing the business
+date for a separately keyed V2 preparation. It cannot supersede an immutable DRAFT
+and performs no PO release or Shopify action.</p>
+<form method='post' action='{run_id}/retire-stale-forecast'>
+<label>Required retirement reason <input name='reason' required></label>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Preview exact V1 retirement</button></form></section>"""
     return f"""<!doctype html><html><head><title>Monday Run {run_id}</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1240px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}
 	table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;vertical-align:top;text-align:left}}table.facts th:first-child{{width:180px}}form{{display:grid;gap:6px}}input,select,button{{padding:6px}}</style></head><body>
 {_operational_nav('../', current='Monday Procurement')}<p><a href='../monday-runs'>Back to Monday runs</a></p>
 <p class='warning'>TEST DATA — NOT FOR ORDERING. SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED. DRAFT output only.</p>
-<h1>Monday run {run_id}</h1><p>Stage: <b>{_html_escape(run['workflow_stage'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
+<h1>Monday run {run_id}</h1><p>Status: <b>{_html_escape(run['status'])}</b>; stage: <b>{_html_escape(run['workflow_stage'])}</b>; method: <b>{_html_escape(run['model_version'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
+{retirement_form}
 <h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Original reason</th><th>RUN_ONLY disposition</th></tr></thead><tbody>{blockers}</tbody></table>
 <h2>Human review</h2><table><thead><tr><th>Item</th><th>Vendor</th><th>Recommendation</th><th>Decision</th></tr></thead><tbody>{''.join(review_rows) or '<tr><td colspan="4">No eligible recommendations.</td></tr>'}</tbody></table>
 	{build_form}<h2>Vendor DRAFT POs</h2>{''.join(draft_sections) or '<p>No DRAFTs built.</p>'}{grand_summary}
@@ -2335,6 +2409,37 @@ def _monday_draft_preview_html(*, run_id: UUID, preview: dict) -> str:
 </body></html>"""
 
 
+def _monday_stale_forecast_retirement_preview_html(
+    *, run_id: UUID, preview: dict
+) -> str:
+    return f"""<!doctype html><html><head><title>Confirm retired forecast run</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:780px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}dl{{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px}}dt{{font-weight:700}}form{{display:grid;gap:9px}}input,button{{padding:7px}}</style></head><body>
+<p class='warning'>TEST DATA — NOT FOR ORDERING. This action does not create, release, or transmit a PO.</p>
+<h1>Confirm exact V1 retirement</h1>
+<p>The frozen run and all evidence remain immutable. Confirmation changes only
+<code>status</code> and <code>workflow_stage</code> to <code>FAILED</code>, which
+releases the business date for a separately keyed V2 preparation. It cannot
+supersede an existing DRAFT.</p>
+<dl>
+<dt>Run</dt><dd><code>{_html_escape(preview['run_id'])}</code></dd>
+<dt>Business date</dt><dd>{_html_escape(preview['business_date'])}</dd>
+<dt>Frozen fingerprint</dt><dd><code>{_html_escape(preview['input_fingerprint'])}</code></dd>
+<dt>Retired method</dt><dd>{_html_escape(preview['retired_model_version'])}</dd>
+<dt>Transition</dt><dd>{_html_escape(preview['prior_status'])}/{_html_escape(preview['prior_workflow_stage'])} → {_html_escape(preview['target_status'])}/{_html_escape(preview['target_workflow_stage'])}</dd>
+<dt>Purchase orders / artifacts</dt><dd>{_html_escape(preview['purchase_order_count'])} / {_html_escape(preview['artifact_count'])}</dd>
+<dt>Authenticated actor</dt><dd>{_html_escape(preview['actor'])}</dd>
+<dt>Reason</dt><dd>{_html_escape(preview['reason'])}</dd>
+<dt>Confirmation SHA-256</dt><dd><code>{_html_escape(preview['confirmation_sha256'])}</code></dd>
+</dl>
+<form method='post'>
+<input type='hidden' name='reason' value='{_form_value(preview['reason'])}'>
+<input type='hidden' name='expected_confirmation_sha256' value='{_form_value(preview['confirmation_sha256'])}'>
+<label>Review token <input type='password' name='review_token' autocomplete='current-password' required></label>
+<button type='submit'>Confirm immutable V1 retirement</button></form>
+<p><a href='/monday-runs/{_html_escape(run_id)}'>Cancel without changing the run</a></p>
+</body></html>"""
+
+
 @app.get("/monday-runs")
 def monday_runs_page():
     with _db_conn() as conn:
@@ -2385,6 +2490,47 @@ def monday_run_detail(run_id: UUID):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return HTMLResponse(
         _monday_run_html(run, review, drafts, artifacts),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/monday-runs/{run_id}/retire-stale-forecast")
+def monday_stale_forecast_retire(
+    request: Request,
+    run_id: UUID,
+    reason: str = Form(...),
+    expected_confirmation_sha256: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_review_token(review_token)
+    principal = action_principal(request, "procurement.order.approve")
+    try:
+        with _db_conn() as conn:
+            if expected_confirmation_sha256 is None:
+                preview = preview_monday_stale_forecast_retirement(
+                    conn,
+                    run_id=str(run_id),
+                    actor=principal.principal_ref,
+                    reason=reason,
+                )
+                return HTMLResponse(
+                    _monday_stale_forecast_retirement_preview_html(
+                        run_id=run_id, preview=preview
+                    ),
+                    headers={"Cache-Control": "no-store"},
+                )
+            confirm_monday_stale_forecast_retirement(
+                conn,
+                run_id=str(run_id),
+                actor=principal.principal_ref,
+                reason=reason,
+                expected_confirmation_sha256=expected_confirmation_sha256,
+            )
+    except MondayRecommendationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"/monday-runs/{run_id}",
+        status_code=303,
         headers={"Cache-Control": "no-store"},
     )
 
