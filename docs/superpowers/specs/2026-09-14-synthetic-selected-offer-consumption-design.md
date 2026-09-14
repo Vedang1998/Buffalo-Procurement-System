@@ -1,20 +1,29 @@
 # Synthetic Selected-Offer Consumption Design
 
 **Status:** owner-approved for bounded isolated synthetic implementation;
-independent specification review required before code changes
+six review corrections incorporated for independent read-only re-review
 
 **Acceptance recorded:** `2026-09-14T12:41:37Z`
 
-**Implementation cutoff:** `2026-09-14T15:41:37Z`
+**Expired implementation cutoff:** `2026-09-14T15:41:37Z`
 
-**Hard handoff:** `2026-09-14T16:41:37Z`
+**Expired hard handoff:** `2026-09-14T16:41:37Z`
+
+**Renewed authorization / execution-host start:** `2026-09-14T22:29:54Z`
+
+**Renewed implementation cutoff:** `2026-09-15T01:29:54Z`
+
+**Renewed hard stop:** `2026-09-15T02:29:54Z`
 
 **Base:** `22ab1cf800963a6d99e65eb210d8cfb1bbec0abd`, tree
 `7c8da387d4e2b177dd3790763382247caa60914a`
 
 **Owner authorization:** `NEXT AUTHORIZATION — CONNECT SELECTED OFFER TO A
 SYNTHETIC DRAFT`, followed by `APPROVED — APPROACH 1: SYNTHETIC SELECTED-OFFER
-CONSUMPTION`.
+CONSUMPTION`, then `NEW AUTHORIZATION — REPAIR THE SIX FINDINGS AND IMPLEMENT
+THE CONNECTION`. The first implementation window was missed and its late
+specification commit remains recorded; the renewed window does not relabel that
+missed milestone as complete.
 
 ## 1. Outcome
 
@@ -68,15 +77,34 @@ The capability is enabled only when all of these independent facts agree:
 2. `BUFFALO_RUNTIME_MODE` is exactly `SYNTHETIC_DEMO` or `AUTOMATED_TEST`.
 3. Repository mapping/cutover/activation policy retains every reviewed false
    value and the new capability is false in `rules.toml`.
-4. PostgreSQL is loopback version 16, the database is an owned `*_demo` or
-   registered `*_test`, the schema is exactly `qa_mapping_test`, and the
-   session/current-role pair is the reviewed release-login/mapping-owner pair.
+4. PostgreSQL is loopback version 16, the schema is exactly
+   `qa_mapping_test`, and the session/current-role pair is exactly
+   `qa_release_login` / `qa_mapping_owner`.
 5. The exact mapping and forecast-retirement contracts are installed and
    verified. An owned demo also carries the exact synthetic demo marker.
 
 Failure of an asserted overlay fact is a hard capability refusal. Absence of
 the overlay selects the unchanged legacy resolver only for new default runs or
 genuinely pre-existing legacy-contract runs.
+
+Test/demo registration is exact and server-owned:
+
+- `AUTOMATED_TEST` requires the repository test runner's existing
+  `TEST_DATABASE_URL`; its parsed host, port and database must equal the active
+  connection, the host/server address must be loopback, and the database must
+  end in `_test`;
+- `SYNTHETIC_DEMO` requires the supervised local candidate's existing
+  `DATABASE_URL`; its parsed host, port and database must equal the active
+  connection, the database must end in `_demo`, and the exact
+  `synthetic_owner_demo_contract` marker must be present; and
+- both modes require the distinct selected-input environment flag, the
+  existing synthetic-mapping process capability, exact role/schema facts, and
+  successful installed mapping and forecast-retirement contract assertions.
+
+No connection fact is inferred from an HTTP request or run row. A suffix or an
+environment value without every other attestation refuses. The launcher adds
+the distinct environment value only after its existing source, database,
+role, schema, catalog and demo-marker preflight succeeds.
 
 The accepted limitation is explicit: no new migration adds an independent
 database trigger proving that a recommendation's offer equals the selected
@@ -90,70 +118,104 @@ Offer resolution is versioned independently of the unchanged forecast method:
 - `LEGACY_ACTIVE_STANDARD_V1`
 - `SYNTHETIC_CONFIRMED_SELECTION_V1`
 
-Add `offer_resolution_contract` to every newly created run input manifest.
-Only a manifest genuinely created before this change may omit it; omission is
-then interpreted as `LEGACY_ACTIVE_STANDARD_V1`. A new manifest must always
-carry an explicit value. An unknown value, a selected contract without complete
-lineage, or a malformed value refuses. It never downgrades to legacy.
+Legacy/default manifest construction remains byte-for-byte unchanged: it omits
+`offer_resolution_contract` and every selected-only field for both old and new
+legacy runs. Omission is the sole valid representation of
+`LEGACY_ACTIVE_STANDARD_V1`. Only a newly prepared, independently authorized
+selected-synthetic run adds
+`offer_resolution_contract = SYNTHETIC_CONFIRMED_SELECTION_V1` and its complete
+selected evidence. An unknown or malformed value, selected-only fields without
+that exact discriminator, a selected discriminator without complete evidence,
+or any selected run whose capability is unavailable refuses. None downgrades
+to legacy.
 
-`prepare_monday_run()` chooses the contract server-side for a new run. When an
-idempotency key already exists, it reads and validates the stored manifest
-before rebuilding inputs and dispatches through that stored contract. It does
-not switch an existing run merely because process configuration changed.
+`prepare_monday_run()` chooses the contract server-side for a new run. An
+asserted selected overlay acquires the full request Variant session-lock set
+before the idempotency lookup, then requires the request business date and
+normalized Variant IDs to match the stored manifest before dispatching through
+its stored contract. A non-asserted/default call retains the legacy path; if
+its minimal idempotency lookup discovers a selected-contract run, it refuses
+without reconstructing selected inputs. It never treats the stored label
+itself as capability and never switches an existing run merely because process
+configuration changed.
 
-`validate_monday_run_inputs()` follows the same dispatch rule and independently
-rechecks synthetic capability for the selected contract. Review and DRAFT
-creation therefore stop if the selected capability disappears or if any
+Every idempotency, DRAFT or packet replay first passes the existing
+server-verified local-session/named-principal authorization boundary. A run ID,
+idempotency key or stored contract never grants access. A selected terminal
+`DRAFTS_BUILT`/`PACKET_BUILT` replay reattests the synthetic selected-input
+capability and then returns the immutable stored result without recalculation.
+
+For a write-capable review/build validation, a preliminary immutable-run read
+may discover the lock set but grants no authority. The service ends that
+preflight transaction, acquires the same sorted Variant session locks, begins a
+fresh validation transaction, re-reads the exact run and recommendation, and
+then calls `validate_monday_run_inputs()`. A selected contract independently
+rechecks capability before reconstructing current selected inputs. Review and
+DRAFT creation therefore stop if the selected capability disappears or if any
 selection, mapping, offer, price or vendor input changes. `DRAFTS_BUILT` and
 `PACKET_BUILT` replay retains the existing early immutable-return behavior and
-never recalculates.
+never enters this recalculation path.
 
 No forecast method/version changes. Existing run rows, input-manifest bytes,
 fingerprints, DRAFTs and packet bytes are never rewritten or backfilled.
 
 ## 4. Transaction, locking and temporal semantics
 
-The selected resolver runs inside the existing Monday preparation
-`SERIALIZABLE` transaction. For selected-contract preparation:
+The selected resolver uses a complete, bounded transaction attempt around the
+existing Monday preparation body. For selected-contract preparation:
 
-1. validate the process-owned environment and disabled repository policy before
-   opening the analysis transaction; normalize and byte-sort the requested
-   Variant IDs without a database read;
-2. begin one fresh `SERIALIZABLE` transaction on an otherwise idle connection;
-3. acquire the existing global Monday analysis transaction lock as the first
-   database statement;
-4. acquire the exact existing selection lock key
+1. validate the process-owned environment and disabled repository policy;
+   normalize and UTF-8-byte-sort the requested Variant IDs without a database
+   read, and require the supplied connection state to be `IDLE`;
+2. acquire the exact existing session advisory-lock key
    `persistent-mapping:selection-variant:<Variant ID>` for every requested
-   Variant in UTF-8 byte-sorted Variant-ID order;
-5. use `pg_try_advisory_xact_lock` for every lock, before the first
-   snapshot-taking table or catalog read, so the service never waits and then
-   assumes an old SERIALIZABLE snapshot refreshed;
-6. if any Variant lock is unavailable, abort the whole transaction with a typed
-   retry/refusal result and persist nothing;
-7. as the first snapshot-taking reads, independently attest the database,
+   Variant using the same `pg_try_advisory_lock(hashtextextended(name,0))`
+   helper and bounded deadline as routine selection; acquire no new domain;
+3. end the driver's lock-acquisition transaction so state is `IDLE` while the
+   session locks remain held, then issue an explicit
+   `BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
+4. after transaction-control statements, acquire the existing global Monday
+   transaction lock before any snapshot-taking table/catalog read;
+5. if any session lock or the global lock is unavailable, roll back, release
+   every acquired session lock in reverse order, verify cleanup and persist
+   nothing;
+6. as the first snapshot-taking reads, independently attest the database,
    schema, roles, demo marker and installed mapping/retirement contracts, then
    load the idempotency/date claim;
-8. read the head, event, effective mapping, candidate/batch, rejection state,
+7. read the head, event, effective mapping, candidate/batch, rejection state,
    offer, vendor rules and full CURRENT price ladder from that same snapshot;
-9. calculate and insert the run, snapshots, recommendations and blockers; and
-10. commit once.
+8. calculate and insert the run, snapshots, recommendations and blockers; and
+9. commit once, then release the session locks in reverse order and verify each
+   release.
 
-The transaction-level advisory lock conflicts with the selection writer's
-session-level lock because both use the same PostgreSQL advisory key. A
-concurrent selection therefore either completes before the Monday snapshot,
-waits until after it commits, or causes an explicit lock refusal. No mixed head,
-event, mapping and offer result is accepted.
+The session advisory locks are the same locks used by the selection writer. A
+concurrent selection therefore either completes before Monday starts its fresh
+snapshot, waits until after Monday commits, or causes an explicit bounded lock
+refusal. No mixed head, event, mapping and offer result is accepted.
 
-Other concurrent writes that create a serialization failure abort the complete
-transaction. The boundary returns a typed `MONDAY_PREPARATION_RETRY_REQUIRED`
-result; a new request starts a genuinely new transaction. There is no partial
-run and no blind in-transaction retry.
+`40001` serialization and `40P01` deadlock failures abort the complete attempt,
+return the connection to `IDLE`, and may retry the entire database transaction
+at most three times under one bounded operation deadline while retaining the
+already authenticated session locks. Each retry reacquires the global lock
+before reads and obtains a genuinely fresh snapshot. Exhaustion returns typed
+`MONDAY_PREPARATION_RETRY_REQUIRED`. Other errors do not retry. An ambiguous
+commit closes/discards the connection and returns an outcome-unknown error; it
+is never blindly replayed. No retry occurs inside an aborted transaction and no
+partial run is accepted.
 
-The connection must be idle before this ordering begins. Callers may not hide a
-pre-existing snapshot inside a larger transaction. Tests instrument the first
-statements and refuse a selected-mode preparation whose connection is already
-in an active transaction. Default legacy preparation retains its established
-transaction contract.
+One `finally` path governs success, refusal, retry exhaustion, cancellation and
+unexpected failure: roll back whenever driver state is not `IDLE`, release all
+acquired session locks in reverse order through the existing balanced cleanup
+helper, verify each unlock, and close/discard the connection if cleanup or lock
+ownership is uncertain. Factor the attempt around the existing mapping
+deadline/retry/cleanup primitives rather than inventing a second lock protocol.
+
+The connection must be idle before this ordering begins and after every failed
+attempt. Callers may not hide a pre-existing snapshot inside a larger
+transaction. Tests instrument transaction control, locks, first evidence read,
+retry cleanup and persistence, and refuse selected-mode preparation whose
+connection is already active. Default legacy preparation retains its
+established transaction contract and exact manifest bytes.
 
 The run records one database transaction timestamp as `evaluation_at` and
 `selection_observed_at`. Resolver validation tests current rows for the run's
@@ -234,8 +296,19 @@ After resolution, use the existing common logic without a second offer lookup:
 
 The full price ladder and all fee evidence are frozen, not just the initially
 selected tier. A later quantity edit therefore re-evaluates the eligible tier
-from `run_price_snapshots` and frozen vendor terms. It never mixes a frozen
-selected offer with a newly fetched price or fee.
+from `run_price_snapshots` and frozen vendor terms. The calculation returns the
+chosen `run_price_snapshot_id`, level type, break unit/quantity, source
+`price_id`, unit price and case price. The source `price_id` is recovered only
+by an exact unique match against the manifest-bound ladder; zero or multiple
+matches refuse. These exact tier facts enter the preview fingerprint, material
+confirmation and append-only
+`review_decisions.evidence_json.review.final_price_tier`. That object contains
+the source `price_id`, `run_price_snapshot_id`, level type, break unit/quantity,
+unit/case price and ladder digest. It is projected into the DRAFT service/UI,
+the existing `purchase_orders.reconciliation_evidence`, and selected-only
+packet enrichment. It never retains the initial tier identity while
+calculating with a different tier and never fetches a live replacement price
+or fee.
 
 Add a versioned `selected_offer_input_evidence` object to the context and
 recommendation metrics. It contains the complete lineage listed above plus:
@@ -268,6 +341,12 @@ shape and exact stored bytes.
 The fixed demo may seed offers, vendors, rules and synthetic CURRENT price rows
 only through the legitimate pre-011 predecessor seam already used by the
 initializer. It may not disable a trigger or alter migrations 011, 014 or 015.
+
+This fixture change is fresh-database-only. The initializer inserts both
+offers and their complete BASE/BREAK ladders before applying migration 011,
+then applies the unmodified remaining migration chain and verifies the final
+rows with all constraints enabled. An already initialized demo refuses the new
+fixture contract rather than mutating protected CURRENT prices in place.
 
 The positive causal fixture contains two schema-valid active `STANDARD` offers
 for one Variant with distinguishable vendor/SKU/pack or economics. Both are
@@ -335,7 +414,13 @@ method population. Required proof includes:
 8. quantity editing crosses a price break and uses only the frozen selected
    ladder and frozen fees;
 9. deterministic multi-Variant lock order, held-lock refusal, concurrent
-   selection coherence and complete rollback are observed;
+   selection coherence and complete rollback are observed. The rollback test
+   injects a genuine public-service failure after run, inventory snapshot,
+   forecast, run-price and recommendation inserts but before commit; a fresh
+   observer connection proves zero partial rows, reviews, DRAFTs, artifacts or
+   selection-head changes and the exact preexisting selection-head digest is
+   unchanged. The service call is not hidden inside an outer test transaction,
+   and the test does not assert sequence-counter rollback;
 10. exact idempotent replay returns one run/DRAFT; conflicting reuse refuses;
 11. late selection/price/vendor change blocks review/build through existing
     stale-input validation;
