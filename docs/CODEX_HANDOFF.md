@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-13T19:20:02Z (UTC)
+**Updated:** 2026-09-14T01:46:29Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,133 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Forecast-evidence correction descendant — BOUNDED SYNTHETIC PASS / FULL GOAL INCOMPLETE
+### Persistent-mapping strict-acceptance descendant — BOUNDED SYNTHETIC PASS / FULL GOAL INCOMPLETE
+
+- The controlling code/test checkpoint is exact commit
+  `46833b9bf47aeccc7fa0d98451136dffe6101e7c`, tree
+  `93c514d937384663e1cceeddecc71c6bc19da858`, on isolated branch
+  `codex/mapping-acceptance-hardening`. It is a seven-file descendant of the
+  separately closed forecast-evidence checkpoint `5476268...`; the frozen
+  Sunday checkout remains clean at `64d8f74...` / tree `6900194...`, and the
+  protected connected checkout remains clean at `3a4704e...` / tree
+  `1986bd8...`. There was no remote, main, PR/CI, connected-app, deployment,
+  operational-database or Shopify mutation.
+- All specification-named persistent-mapping acceptance clauses now have
+  substantive executable proof: **39/39 PostgreSQL methods + 3/3 pure
+  methods PASS** in exact canonical order. The closure covers exact migration
+  replay and byte binding, failure atomicity, hostile schema/role topology,
+  immutable evidence and provenance, null/absent semantics, mapping and
+  selection idempotency/concurrency, stale-preview refusal, human-context
+  binding, immutable operational contracts, zero-authority upgrade, commit
+  uncertainty/recovery, and test-runner population enforcement. Independent
+  post-implementation review found no P0-P2 finding. This is acceptance of the
+  bounded foundation contract, not production or commercial readiness.
+- The implementation now treats ambiguous connection-level or process
+  exceptions observed from COMMIT as outcome-unknown, discards the dedicated
+  connection and never blindly replays; retryable, unique-recovery and
+  definitive database failures retain their separately typed paths. The
+  migration runner independently rejects direct, inherited,
+  transitive SET and mixed SET-to-INHERIT owner paths across schema, relation,
+  column and function privileges, and its public entry point supports the
+  reviewed staged maintenance-pair rotation without skipping installed
+  application dependencies.
+- Synthetic mapping packet V2 seals and persists explicit
+  `NOT_APPROVED` / `NOT_IMPORT_READY` source authority and import states. It
+  intentionally does not reinterpret or update preserved V1 demo rows; final
+  validation used a new owned `_demo` database and separate private runtime.
+  The accepted database contains exactly two V2 review batches/candidates,
+  both still `NOT_APPROVED` and `NOT_IMPORT_READY`.
+- Real Chromium on the clean exact implementation tree again passed **154
+  phase-one + 23 post-restart assertions**. The browser exercised fabricated
+  V2 intake, DEFER, exact existing-offer approval and separate shadow SELECT;
+  retired the fixed unbuilt V1 forecast run; prepared/reviewed its V2
+  replacement; separately confirmed a material quantity edit; built one
+  internal DRAFT for `$20.02`; replayed it without duplication; then restarted
+  the application and re-fetched the exact artifacts. There were zero non-DRAFT POs, Shopify
+  calls, releases or persisted spoof actors. Export remains
+  `INTERNAL_DRAFT_ONLY`; `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native
+  Shopify import was attempted or proven.
+- Mapping remains **SHADOW ONLY**. The accepted Monday recommendation did not
+  consume the newly reviewed mapping selection: it continued to use the
+  pre-seeded active STANDARD offer and CURRENT synthetic price. Selection
+  activation, scoped price lifecycle and the selected-offer-to-recommendation
+  cutover are disabled and unimplemented. Therefore this run does not prove a
+  causal supplier-evidence-to-priced-recommendation production chain.
+- Demand evidence remains the bounded emergency V2 correction. All 84 calendar
+  days remain `UNKNOWN`; model selection/FVA is `NOT_VALIDATED`, classification
+  and safety stock are `NOT_CALCULATED`, and stockout censoring is
+  `EVIDENCE_UNAVAILABLE`. Demand-evidence SHA-256 is
+  `8909585dcb7f294a8ca0aa32be9381e2a14ee8a988a70291ea6d852ba573d3e9`.
+- Fresh post-commit machine validation passed: startup **10/10** in 0.004s;
+  exact strict matrix **42/42** in 153.622s; affected set **195/195** in
+  222.124s; and one authoritative wrapper **809 discovered / 809 executed /
+  809 passed** in 996.897s on Python 3.13.11 and owned loopback PostgreSQL
+  16.9. Failures, errors, skips, expected failures and unexpected successes
+  were all zero. Each accepted invocation ran once with no automatic retry.
+  One earlier pre-commit full-suite invocation was manually interrupted after
+  review exposed the now-fixed public-runner maintenance-role transition; it
+  produced no accepted result and is not counted.
+- Browser durable-state SHA-256 is
+  `a6a40b0a69e5d754c072b5ab0412f01dc63cbd1461dea726689100a5db0e8076`.
+  Internal CSV and 12-member review ZIP SHA-256 values are
+  `ba5bde4f4eeb4a9d78617944ab9785f853361d9051a71c4eafffaa06ed211f79`
+  and
+  `7459aff6bb9bc8b7ab8ccdcc0a9694cb5e74a8082042d13a1a2a8686abba3b28`.
+  A real backup from `buffalo_mapping_46833b9_candidate_demo` restored into
+  new empty `buffalo_mapping_46833b9_restore_demo`; complete relation/sequence
+  state and both storage artifacts matched the same state evidence. Manifest,
+  database-dump and storage-archive SHA-256 values are respectively
+  `080b31d850923c90c732fd5a0b4d1242c34bfc97ae9477d2bdb7c31b2f938161`,
+  `1a435b81e71424a52bceba8ad90f5d77a004f3c3b9c086b6a000cc3fdc2382a4`
+  and
+  `f3e425ba4fe8e16dd453396e36e1f8d2ed20431499e7df0090c6991941aad292`.
+  Restored initializer replay returned `initialized:false`.
+- Exact accepted evidence roots are
+  `/home/runner/workspace/.ai-auth/codex/evidence/mapping-acceptance-validation-46833b9-20260914T010139Z`
+  and
+  `/home/runner/workspace/.ai-auth/codex/evidence/mapping-acceptance-browser-46833b9-final-20260914T012845Z`.
+  Startup/matrix/affected/full log SHA-256 values are
+  `8cbc2321...`, `dc3f0d39...`, `5d8e2668...` and `29f02744...`;
+  `ACCEPTANCE_SUMMARY.json` SHA-256 is `e37285d1...`; the independent recovery
+  record is `RECOVERY_VERIFICATION.txt`. The backup manifest is under
+  `/home/runner/workspace/.ai-auth/codex/mapping-acceptance-46833b9-runtime/backups/candidate-20260914T012928Z/manifest.json`.
+- The fabricated gate snapshot remains non-transferable:
+  `CATALOG_SYNC`, `SALES_BACKFILL`, `INVENTORY_HISTORY`,
+  `OPEN_PO_RECONCILIATION`, global `VENDOR_RULES` and one-vendor
+  `VENDOR_RULES` were PASS; `MAPPING_INTEGRITY` and `PRICE_COVERAGE` were WARN.
+  PO generation remained separately masked BLOCKED for
+  `SYNTHETIC DEMO / INTERNAL DRAFT ONLY`; these values grant no commercial or
+  production readiness.
+- Current states are `LOCAL_END_TO_END = PASS` for the bounded synthetic
+  descendant; `PERSISTENT_MAPPING_39_PLUS_3 = PASS` for the reviewed foundation;
+  `MAPPING_TO_MONDAY_CUTOVER = NOT_IMPLEMENTED`; `COMMERCIAL_DATA_READINESS =
+  NOT_APPROVED`; `PRODUCTION_RELEASE = BLOCKED`; `FULL_PRODUCT_REQUIREMENTS =
+  PARTIAL / INCOMPLETE`; and `GOAL = INCOMPLETE`.
+- The planned supplemental transport destination is
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Mapping_Acceptance_Hardening_Candidate_20260914.zip`.
+  It is not assembled at this documentation checkpoint. Once assembled, use
+  it only after verifying its separately reported outer SHA-256 and enclosed
+  recursive `SHA256SUMS`.
+- Exact next authorization boundary: local transport assembly and owner review
+  may complete without changing runtime behavior. Any mapping activation,
+  selected-offer recommendation cutover, scoped CURRENT-price lifecycle,
+  supplier/data authority, model/FVA/protection policy, DRAFT supersession,
+  remote integration, CI, deployment, Shopify action, PO release or real order
+  requires a separately reviewed design and explicit authority. The most
+  dependency-correct product slice is a reviewed shadow comparison/freeze of
+  selection-versus-legacy recommendation inputs; it must not silently activate
+  or alter order quantities.
+- The browser/Uvicorn processes are stopped and no public preview or tunnel
+  exists. Same-host restart instructions are in
+  `docs/SUNDAY_PURCHASING_ACCEPTANCE.md`. Generated secret values remain only
+  in the private mode-0600 files beneath the mode-0700 runtime root and are
+  excluded from source, evidence prose and the planned transport.
+
+### Prior forecast-evidence correction checkpoint — FROZEN PARENT / SUPERSEDED AS CURRENT CHECKPOINT
+
+The section below is retained as historical evidence for the separately closed
+`5476268...` checkpoint. Statements of “current” and “next” within it describe
+that earlier checkpoint; the strict-acceptance entry above is controlling.
 
 - The controlling current checkpoint is exact code/test commit
   `1729647f0ea46a147cd33fd6d8f33e8914cbcfac`, tree

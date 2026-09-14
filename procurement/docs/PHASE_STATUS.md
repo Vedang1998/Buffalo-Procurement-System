@@ -9,7 +9,59 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.
 
-## Forecast-evidence correction descendant
+## Persistent-mapping strict-acceptance descendant
+
+**BOUNDED SYNTHETIC PASS — 39+3 FOUNDATION ACCEPTED / MAPPING CUTOVER NOT
+IMPLEMENTED / FULL PRODUCT PARTIAL / PRODUCTION BLOCKED**
+
+The isolated branch `codex/mapping-acceptance-hardening` has an independently
+reviewed and locally tested implementation checkpoint at
+`46833b9bf47aeccc7fa0d98451136dffe6101e7c`, tree
+`93c514d937384663e1cceeddecc71c6bc19da858`. It descends from the separately
+closed forecast-evidence checkpoint `5476268...` without modifying the frozen
+Sunday checkout or protected connected checkout.
+
+Every specification-named persistent-mapping acceptance clause now has
+substantive executable proof: 39/39 PostgreSQL methods and 3/3 pure methods pass
+in exact canonical order. The closure covers migration trust and replay,
+pre-effect role/privilege refusal, immutable evidence, exact null/absent and
+provenance semantics, idempotency/concurrency/stale-preview outcomes, human
+context, zero operational authority, COMMIT uncertainty and actual runner-floor
+enforcement. Packet V2 additionally seals and persists `NOT_APPROVED` and
+`NOT_IMPORT_READY`; it grants no activation or import authority.
+
+Post-commit validation passed startup 10/10, strict matrix 42/42, affected set
+195/195 and the authoritative suite 809/809 with every abnormal counter zero.
+Real loopback Chromium passed 154 + 23 assertions across V2 mapping review,
+shadow selection, guarded V1 retirement, V2 Monday review, one internal DRAFT,
+downloads and application restart. Same-host backup/restore reproduced the
+complete 61-relation/33-sequence state and two storage artifacts at durable
+state SHA-256 `a6a40b0a...`; independent post-machine review found no P0-P2.
+
+This checkpoint changes no official production phase. Mapping remains
+shadow-only. The Monday recommendation still consumed the pre-seeded active
+STANDARD offer and CURRENT synthetic price, not the newly reviewed mapping
+selection. Selection activation, scoped price lifecycle and selected-offer
+recommendation cutover are unimplemented, so no causal supplier-evidence to
+priced-recommendation production chain has been proven. Forecasting remains the
+bounded emergency V2 evidence path; full model/FVA/protection, DRAFT
+supersession, strategic economics, commercial data and broad browser coverage
+remain incomplete.
+
+No deployment, operational database, Shopify call, PO release or real order is
+authorized. Current explicit states are `LOCAL_END_TO_END = PASS` for the
+bounded synthetic descendant, `PERSISTENT_MAPPING_39_PLUS_3 = PASS`,
+`MAPPING_TO_MONDAY_CUTOVER = NOT_IMPLEMENTED`, `COMMERCIAL_DATA_READINESS =
+NOT_APPROVED`, `PRODUCTION_RELEASE = BLOCKED`, `FULL_PRODUCT_REQUIREMENTS =
+PARTIAL / INCOMPLETE`, and `GOAL = INCOMPLETE`. See
+`docs/SUNDAY_PURCHASING_ACCEPTANCE.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact evidence, restart instructions and the next
+authorization boundary.
+
+## Prior forecast-evidence correction descendant
+
+**HISTORICAL CLOSED CHECKPOINT — SUPERSEDED AS CURRENT STATUS BY THE
+STRICT-ACCEPTANCE ENTRY ABOVE**
 
 **BOUNDED SYNTHETIC PASS — DEMAND EVIDENCE CORRECTED / FULL PRODUCT PARTIAL /
 PRODUCTION BLOCKED**

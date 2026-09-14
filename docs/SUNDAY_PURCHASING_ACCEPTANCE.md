@@ -1,17 +1,156 @@
-# Forecast-Evidence Correction Candidate — Acceptance Checklist
+# Persistent-Mapping Acceptance Hardening Candidate — Acceptance Checklist
 
 Controlling contract: `BUFFALO-SATURDAY-PURCHASING-COMPLETION-2026-09-12`
 
-This is a post-cutoff descendant of the frozen Sunday purchasing candidate. It
-corrects an unsupported demand-evidence inference and adds the guarded V1-to-V2
-run transition. It does not retroactively change what was completed by the
-original cutoff.
+This is a post-cutoff descendant of the frozen Sunday purchasing candidate and
+the closed forecast-evidence correction. It closes the exact 39 PostgreSQL + 3
+pure persistent-mapping acceptance matrix. It does not retroactively change
+what was completed by the original cutoff or grant authority beyond the
+reviewed local foundation.
 
 This remains an isolated, loopback-only synthetic owner-demo candidate. It
 grants no production, Shopify, supplier-contact, price-activation, deployment,
 PO-release, or real-order authority.
 
-## Frozen identities
+## Current accepted checkpoint
+
+- [x] Exact implementation commit:
+  `46833b9bf47aeccc7fa0d98451136dffe6101e7c`, tree
+  `93c514d937384663e1cceeddecc71c6bc19da858`, branch
+  `codex/mapping-acceptance-hardening`.
+- [x] Exact parent: forecast closeout `5476268c4624ea213bd2a53042f52d81b6efe66a`.
+  The separately frozen Sunday checkout remains clean at `64d8f74...`; the
+  protected connected checkout remains clean at `3a4704e...`.
+- [x] The seven-file implementation/test delta was independently reviewed.
+  Post-implementation and post-machine reviewers found no P0-P2 finding.
+- [x] All specification-named clauses passed substantive executable proof:
+  **39/39 PostgreSQL + 3/3 pure** in exact canonical order. This result is the
+  bounded persistent-mapping foundation acceptance; it is not a production,
+  commercial-data, activation, pricing or recommendation-cutover approval.
+- [x] Ambiguous connection-level or process exceptions observed from COMMIT
+  fail as `COMMIT_OUTCOME_UNKNOWN`, discard the dedicated connection and do
+  not blind-replay; retryable, unique-recovery and definitive database failures
+  retain their separately typed paths. Migration preflight covers
+  recursive SET/INHERIT and schema/relation/column/function privilege paths;
+  the public runner proves the reviewed staged maintenance-pair rotation.
+- [x] Synthetic packet V2 seals and persists exact `NOT_APPROVED` and
+  `NOT_IMPORT_READY` states. Validation used a new owned database and runtime;
+  no preserved V1 demo rows were reinterpreted or updated.
+- [x] The browser created exactly two V2 review batches/candidates, performed
+  DEFER, exact existing-offer APPROVE and a separate SELECT, and retained
+  mapping selection as SHADOW ONLY. It then exercised the guarded V1
+  retirement and V2 Monday DRAFT path from the prior checkpoint.
+- [x] Newly reviewed mapping evidence did **not** drive the Monday price or
+  quantity. The recommendation continued to consume the pre-seeded active
+  STANDARD offer and CURRENT synthetic price. Selection activation, scoped
+  price lifecycle and selected-offer recommendation cutover remain disabled
+  and unimplemented; no causal production supplier-to-order chain is proven.
+- [x] Demand evidence remains the emergency V2 boundary: all 84 days are
+  `UNKNOWN`; model selection/FVA is `NOT_VALIDATED`; classification and safety
+  stock are `NOT_CALCULATED`; stockout censoring is `EVIDENCE_UNAVAILABLE`.
+- [x] Chromium built one internal DRAFT for Synthetic Southern: two cases / 12
+  units, merchandise and PO total `$20.02`. There were zero non-DRAFT POs,
+  Shopify calls, releases or persisted spoof actors.
+- [x] Export remains `INTERNAL_DRAFT_ONLY` and
+  `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
+  attempted or proven.
+
+## Current machine, browser and recovery evidence
+
+- Startup: **10/10 PASS** in 0.004 seconds.
+- Exact strict matrix: **42/42 PASS** in 153.622 seconds.
+- Affected set: **195/195 PASS** in 222.124 seconds.
+- Final authoritative wrapper against owned loopback PostgreSQL 16.9:
+  **809 discovered / 809 executed / 809 passed** in 996.897 seconds, with
+  failures 0, errors 0, skips 0, expected failures 0 and unexpected successes
+  0. Each accepted invocation ran once; no automatic retry occurred.
+- Browser acceptance: **154/154 + 23/23 PASS** across a real process restart,
+  source identity reverified at completion.
+- Browser durable-state SHA-256:
+  `a6a40b0a69e5d754c072b5ab0412f01dc63cbd1461dea726689100a5db0e8076`.
+  Demand-evidence SHA-256:
+  `8909585dcb7f294a8ca0aa32be9381e2a14ee8a988a70291ea6d852ba573d3e9`.
+- Internal CSV SHA-256:
+  `ba5bde4f4eeb4a9d78617944ab9785f853361d9051a71c4eafffaa06ed211f79`.
+  Twelve-member review ZIP SHA-256:
+  `7459aff6bb9bc8b7ab8ccdcc0a9694cb5e74a8082042d13a1a2a8686abba3b28`.
+- Backup/restore: **PASS** from
+  `buffalo_mapping_46833b9_candidate_demo` into new empty
+  `buffalo_mapping_46833b9_restore_demo`. Browser, manifest and restored
+  relation/sequence payloads were exact-equal at state SHA-256 `a6a40b0a...`;
+  both stored artifacts were byte-identical, and restored initializer replay
+  returned `initialized:false`.
+- Backup manifest SHA-256:
+  `080b31d850923c90c732fd5a0b4d1242c34bfc97ae9477d2bdb7c31b2f938161`.
+  Database dump and storage archive SHA-256 values:
+  `1a435b81e71424a52bceba8ad90f5d77a004f3c3b9c086b6a000cc3fdc2382a4`
+  and
+  `f3e425ba4fe8e16dd453396e36e1f8d2ed20431499e7df0090c6991941aad292`.
+
+Accepted evidence:
+
+- Validation root:
+  `/home/runner/workspace/.ai-auth/codex/evidence/mapping-acceptance-validation-46833b9-20260914T010139Z`.
+  Startup/matrix/affected/full log SHA-256 values are
+  `8cbc2321289aad482131291f1375331b42ef87afbd8e2b0aeabd20b734d71193`,
+  `dc3f0d3901178a42a13cb3460ed74c7c3ee8c496eeb857edbbc225c02d40d570`,
+  `5d8e26682f6bf5a3f26d491f8872139852816f039999cbcee226d0cec1c0f78f`
+  and
+  `29f027445e047bb8506994ac4b41472a54ee6a489ec07382203099a1ea22434d`.
+- Browser root:
+  `/home/runner/workspace/.ai-auth/codex/evidence/mapping-acceptance-browser-46833b9-final-20260914T012845Z`;
+  `ACCEPTANCE_SUMMARY.json` SHA-256 is
+  `e37285d1c06b89565aa7ab0a2fd969464c0d1faa72e0fc6f9e7cb62f65291c25`.
+- Backup manifest:
+  `/home/runner/workspace/.ai-auth/codex/mapping-acceptance-46833b9-runtime/backups/candidate-20260914T012928Z/manifest.json`.
+- Planned supplemental transport, not yet assembled at this documentation
+  checkpoint:
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Mapping_Acceptance_Hardening_Candidate_20260914.zip`.
+  Verify its later-reported outer SHA-256 and enclosed recursive
+  `SHA256SUMS` before use.
+
+One pre-commit full-suite invocation was deliberately interrupted after
+independent review found the public-runner maintenance-role removal defect. It
+produced no accepted result. The defect was fixed, targeted tests passed, the
+implementation was committed, and every accepted invocation above was then
+run from the exact clean commit without retry.
+
+## Current status and remaining boundary
+
+| Area | Status | Exact boundary |
+|---|---|---|
+| Local synthetic owner vertical | WORKING / BOUNDED PASS | Mapping review, guarded V1 retirement, V2 review, one DRAFT, downloads, restart and same-host recovery were observed. |
+| Persistent mapping acceptance | 39+3 PASS / SHADOW ONLY | All strict clauses pass; activation, policy mapping, price authority and recommendation cutover remain disabled. |
+| Mapping-to-Monday causal chain | NOT IMPLEMENTED | Monday used the legacy active offer/CURRENT synthetic price, not the selected mapping result. |
+| Forecasting | PARTIAL | Emergency evidence is corrected; regimes, backtests/FVA, ABC/XYZ and empirical protection remain incomplete/unapproved. |
+| Price lifecycle | PARTIAL | No scoped CURRENT activation, carry-forward, withdrawal or deal overlay exists. |
+| Monday workflow | WORKING FOR BOUNDED SYNTHETIC CASE | One immutable internal DRAFT exists; same-day built-DRAFT supersession remains unimplemented. |
+| Export | INTERNAL DRAFT ONLY | Shopify CSV format has not been live-validated. |
+| Commercial data | NOT APPROVED | No fresh private-real catalog, sales, inventory, incoming, vendor, mapping or price authority was supplied. |
+| Production/Shopify/order release | BLOCKED | No deployment, operational database, Shopify write, PO release or real order was authorized or performed. |
+| Full Saturday contract | PARTIAL / INCOMPLETE | `GOAL = INCOMPLETE`; a bounded synthetic pass is not full-product completion. |
+
+The fabricated gate snapshot was `CATALOG_SYNC = PASS`, `SALES_BACKFILL =
+PASS`, `INVENTORY_HISTORY = PASS`, `OPEN_PO_RECONCILIATION = PASS`, global and
+one-vendor `VENDOR_RULES = PASS`, `MAPPING_INTEGRITY = WARN`, and
+`PRICE_COVERAGE = WARN`. PO generation remained separately masked BLOCKED for
+`SYNTHETIC DEMO / INTERNAL DRAFT ONLY`. These are non-transferable demo facts.
+
+Exact next authorization boundary: assemble and independently verify the local
+supplemental transport, then obtain owner review. Any shadow comparison/freeze
+that links selection evidence to recommendation inputs needs a separately
+reviewed design and must not activate offers, prices or orders. Mapping
+activation, scoped price lifecycle, full forecasting/protection, DRAFT
+supersession, private-real inputs, remote integration, CI, deployment, Shopify
+or PO release all require explicit later authority.
+
+## Prior forecast-evidence checkpoint — historical record
+
+Everything in the historical subsections below through the historical owner
+queue records the earlier `1729647...` / `5476268...` checkpoint. The current
+accepted checkpoint and owner boundary are the sections above.
+
+### Frozen identities
 
 - Frozen parent package candidate:
   `64d8f74ef0d01b87fe96a4c1972faf2dcc702375`, tree
@@ -28,7 +167,7 @@ PO-release, or real-order authority.
   deployment, publication, operational-database access, or Shopify action
   occurred.
 
-## Evidence-correct demand and V1 retirement — observed PASS
+### Evidence-correct demand and V1 retirement — observed PASS
 
 - [x] A point-in-time zero, point-in-time positive quantity and positive sale no
   longer establish a whole-day `STOCKOUT` or `IN_STOCK` state. The accepted V2
@@ -83,7 +222,7 @@ The internal CSV and review ZIP SHA-256 values were respectively
 and
 `e52249531a1837c5572f08e184900174aa24e8ce239153e72bf0d8b59c9c72bf`.
 
-## Machine validation
+### Machine validation
 
 - Offline frozen-lock check: cached `uv 0.12.3` reported `Resolved 22
   packages`.
@@ -168,7 +307,7 @@ Neither setup path reached an accepted test or browser workflow. The separate
 failed-closed restore rehearsal above did reach PostgreSQL and drove the final
 catalog-canonicalization fix; it is not counted as a passing restore or retry.
 
-## Working, partial, blocked and not implemented
+### Working, partial, blocked and not implemented
 
 | Area | Status | Exact boundary |
 |---|---|---|
@@ -192,7 +331,7 @@ full demand/model portfolio, one-bottle/receipt cases,
 BT/CS/assortment/combo economics and multi-vendor baskets were not all driven
 through Chromium. Lower-level green tests are not reported as browser proof.
 
-## Final states
+### Final states
 
 - `LOCAL_END_TO_END`: **PASS** for this bounded synthetic descendant.
 - `DEMAND_EVIDENCE_CORRECTION`: **PASS** for the implemented emergency V2
@@ -202,7 +341,7 @@ through Chromium. Lower-level green tests are not reported as browser proof.
 - `FULL_PRODUCT_REQUIREMENTS`: **PARTIAL / INCOMPLETE**.
 - `GOAL`: **INCOMPLETE** relative to the full Saturday contract.
 
-## Owner queue
+### Owner queue
 
 1. Once assembled and frozen, verify and review the transport and its explicit
    limitations.
@@ -227,9 +366,9 @@ audit. If the owned PostgreSQL cluster has also been stopped, restart it first:
 ```bash
 set -euo pipefail
 /nix/store/r8ivqqhsp8v042nhw5sap9kz2g6ar4v1-postgresql-16.9/bin/pg_ctl \
-  -D /tmp/buffalo-forecast-evidence.vTnM9m/data \
-  -l /tmp/buffalo-forecast-evidence.vTnM9m/postgres.log \
-  -o "-h 127.0.0.1 -p 60525 -k /tmp/buffalo-forecast-evidence.vTnM9m" \
+  -D /tmp/buffalo-mapping-matrix.q4ezRl/data \
+  -l /tmp/buffalo-mapping-matrix.q4ezRl/postgres.log \
+  -o "-h 127.0.0.1 -p 50369 -k /tmp/buffalo-mapping-matrix.q4ezRl" \
   -w start
 ```
 
@@ -238,11 +377,11 @@ Then start the exact candidate from its clean repository:
 ```bash
 set -euo pipefail
 cd /home/runner/workspace/.ai-auth/codex/sunday-forecast-evidence-candidate
-test "$(git rev-parse 1729647f0ea46a147cd33fd6d8f33e8914cbcfac^{tree})" = \
-  315389603f3618cddfd95f748d131e3f6ba719b9
+test "$(git rev-parse 46833b9bf47aeccc7fa0d98451136dffe6101e7c^{tree})" = \
+  93c514d937384663e1cceeddecc71c6bc19da858
 git merge-base --is-ancestor \
-  1729647f0ea46a147cd33fd6d8f33e8914cbcfac HEAD
-git diff --quiet 1729647f0ea46a147cd33fd6d8f33e8914cbcfac HEAD -- . \
+  46833b9bf47aeccc7fa0d98451136dffe6101e7c HEAD
+git diff --quiet 46833b9bf47aeccc7fa0d98451136dffe6101e7c -- . \
   ':(exclude)docs/CODEX_HANDOFF.md' \
   ':(exclude)docs/SUNDAY_PURCHASING_ACCEPTANCE.md' \
   ':(exclude)procurement/docs/PHASE_STATUS.md'
@@ -253,13 +392,13 @@ env -i \
   PYTHONPATH=procurement/src:procurement/tools \
   /home/runner/workspace/.pythonlibs/bin/python3 \
   procurement/tools/local_purchasing_candidate.py serve \
-  --database-url 'postgresql://qa_release_login@127.0.0.1:60525/buffalo_forecast_1729647_candidate_demo?options=-c%20role%3Dqa_mapping_owner' \
-  --runtime-root /home/runner/workspace/.ai-auth/codex/sunday-forecast-1729647-runtime \
+  --database-url 'postgresql://qa_release_login@127.0.0.1:50369/buffalo_mapping_46833b9_candidate_demo?options=-c%20role%3Dqa_mapping_owner' \
+  --runtime-root /home/runner/workspace/.ai-auth/codex/mapping-acceptance-46833b9-runtime \
   --port 8765
 ```
 
 Reach it only on the same host at `http://127.0.0.1:8765/`. The accepted audit
-used port 18791; port 8765 is the operator restart port, not the evidence URL.
+used port 18777; port 8765 is the operator restart port, not the evidence URL.
 There is no public preview or tunnel. This candidate's generated secret values
 remain only in mode-0600 files beneath the mode-0700 runtime root and are
 intentionally absent from this document and the planned owner transport.
