@@ -895,7 +895,7 @@ def _validate_downloads(
     unresolved = metadata_by_occurrence["synthetic-unresolved-occurrence-001"]
     if (
         unresolved["batch"].get("source_package_id")
-        != "synthetic-unresolved-review-v1"
+        != "synthetic-unresolved-review-v2"
         or unresolved["batch"].get("source_is_simulation") is not True
         or unresolved["candidate"].get("source_file_name")
         != "synthetic-unresolved-source.txt"
@@ -917,7 +917,7 @@ def _validate_downloads(
     linkage = valid["candidate"].get("independent_linkage_evidence") or []
     if (
         valid["batch"].get("source_package_id")
-        != "fabricated-authoritative-format-review-v1"
+        != "fabricated-authoritative-format-review-v2"
         or valid["batch"].get("source_is_simulation") is not False
         or not str(valid["batch"].get("source_artifact_ref", "")).startswith(
             "synthetic-packet:"
@@ -925,7 +925,7 @@ def _validate_downloads(
         or valid["batch"].get("supplier_period_scope")
         != {"kind": "FABRICATED_TEST_PERIOD"}
         or (valid["batch"].get("prerequisites") or {}).get("packet_contract")
-        != "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V1"
+        != "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V2"
         or valid["candidate"].get("proposed_variant_id") != "1001"
         or valid["candidate"].get("proposed_vendor_id")
         != "00000000-0000-4000-8000-000000000001"
@@ -1130,8 +1130,8 @@ def _database_acceptance(
         len(batch_actors) != 2
         or {item[0] for item in batch_actors}
         != {
-            "synthetic-unresolved-review-v1",
-            "fabricated-authoritative-format-review-v1",
+            "synthetic-unresolved-review-v2",
+            "fabricated-authoritative-format-review-v2",
         }
         or any(
             item[1] != server_actor

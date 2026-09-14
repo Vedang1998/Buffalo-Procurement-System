@@ -1,5 +1,5 @@
 {
-  "contract": "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V1",
+  "contract": "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V2",
   "fixture_disclosure": "FABRICATED TEST DATA ONLY. The authoritative-format case uses source_is_simulation=false only to exercise the reviewed positive database branch; it is not real supplier evidence or approval.",
   "packages": [
     {
@@ -21,16 +21,18 @@
           "supplier_code_state": "ABSENT"
         }
       ],
-      "intake_idempotency_key": "10000000-0000-4000-8000-000000000001",
+      "intake_idempotency_key": "10000000-0000-4000-8000-000000000002",
       "source_evidence": {
         "notice": "TEST DATA — NOT FOR ORDERING",
         "printed_lines": [
           "Unresolved synthetic supplier line"
         ]
       },
+      "source_authority_state": "NOT_APPROVED",
+      "source_import_state": "NOT_IMPORT_READY",
       "source_is_simulation": true,
-      "source_package_id": "synthetic-unresolved-review-v1",
-      "source_revision": "1"
+      "source_package_id": "synthetic-unresolved-review-v2",
+      "source_revision": "2"
     },
     {
       "candidates": [
@@ -71,16 +73,18 @@
           "supplier_code_value": "SUP-001"
         }
       ],
-      "intake_idempotency_key": "20000000-0000-4000-8000-000000000001",
+      "intake_idempotency_key": "20000000-0000-4000-8000-000000000002",
       "source_evidence": {
         "notice": "FABRICATED AUTHORITATIVE-FORMAT CONTRACT CASE — NOT REAL EVIDENCE",
         "printed_lines": [
           "SUP-001 Synthetic Citrus 750ML 6x750ML"
         ]
       },
+      "source_authority_state": "NOT_APPROVED",
+      "source_import_state": "NOT_IMPORT_READY",
       "source_is_simulation": false,
-      "source_package_id": "fabricated-authoritative-format-review-v1",
-      "source_revision": "1"
+      "source_package_id": "fabricated-authoritative-format-review-v2",
+      "source_revision": "2"
     }
   ]
 }

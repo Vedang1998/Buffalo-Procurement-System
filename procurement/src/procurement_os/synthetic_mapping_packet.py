@@ -14,8 +14,10 @@ PACKET_PATH = (
     / "config"
     / "synthetic_mapping_review_packet.json"
 )
-PACKET_SHA256 = "56d9b601801af23bb0c4153600af991211a98a93c85849b379045b6d646f06c4"
-PACKET_CONTRACT = "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V1"
+PACKET_SHA256 = "a9d08871dcd5b7fc11dd30a9bad2f8552a36c1a55d60d1841ab2ead62c74baae"
+PACKET_CONTRACT = "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V2"
+SOURCE_AUTHORITY_STATE = "NOT_APPROVED"
+SOURCE_IMPORT_STATE = "NOT_IMPORT_READY"
 
 
 class SyntheticPacketError(ValueError):
@@ -61,12 +63,19 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
         if not isinstance(source, dict) or set(source) != {
             "candidates",
             "intake_idempotency_key",
+            "source_authority_state",
             "source_evidence",
+            "source_import_state",
             "source_is_simulation",
             "source_package_id",
             "source_revision",
         }:
             raise SyntheticPacketError("synthetic review-package shape differs")
+        if (
+            source["source_authority_state"] != SOURCE_AUTHORITY_STATE
+            or source["source_import_state"] != SOURCE_IMPORT_STATE
+        ):
+            raise SyntheticPacketError("synthetic zero-authority contract differs")
         key = UUID(str(source["intake_idempotency_key"]))
         if key in keys:
             raise SyntheticPacketError("synthetic intake key is duplicated")
@@ -82,6 +91,12 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
             if not isinstance(printed, str) or not printed:
                 raise SyntheticPacketError("synthetic printed occurrence is absent")
             candidate["printed_occurrence_sha256"] = _hash(printed.encode("utf-8"))
+            # The write boundary accepts only fully sealed occurrence provenance.
+            # Keep these synthetic-adapter facts inside the candidate payload that
+            # is hashed below; the intake service must never invent them later.
+            candidate["source_table_name"] = "supplier_offers_v5"
+            candidate["source_row_key"] = str(candidate["occurrence_key"])
+            candidate["source_locator"] = {}
             candidate["source_file_sha256"] = artifact_sha
             origin = candidate.pop("independent_origin_material", None)
             observation = candidate.pop("independent_observation_material", None)
@@ -114,6 +129,8 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
                 "source_package_id": source["source_package_id"],
                 "source_revision": source["source_revision"],
                 "occurrence_keys": [item["occurrence_key"] for item in candidates],
+                "source_authority_state": source["source_authority_state"],
+                "source_import_state": source["source_import_state"],
             }
         )
         seal_sha = _hash(
@@ -141,6 +158,8 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
             "structural_state": "READY",
             "source_evidence_state": "READY",
             "semantic_state": "READY",
+            "source_authority_state": source["source_authority_state"],
+            "source_import_state": source["source_import_state"],
             "source_is_simulation": bool(source["source_is_simulation"]),
         }
         results.append(

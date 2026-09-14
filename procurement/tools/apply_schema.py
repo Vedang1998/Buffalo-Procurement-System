@@ -516,6 +516,7 @@ def _verify_server_and_identity(
     conn: Any,
     *,
     allowed_pairs: tuple[tuple[str, str], ...],
+    approved_pairs: tuple[tuple[str, str], ...] | None = None,
     release: MappingRelease = MAPPING_RELEASE,
 ) -> int:
     row = conn.execute(
@@ -586,6 +587,79 @@ def _verify_server_and_identity(
         ).fetchone()[0]
         if inherited:
             raise RuntimeError("maintenance owner is reachable through INHERIT")
+    complete_approved_pairs = approved_pairs or allowed_pairs
+    approved_role_names = sorted(
+        {role_name for pair in complete_approved_pairs for role_name in pair}
+    )
+    untrusted_mapping_privileges = conn.execute(
+        "WITH RECURSIVE untrusted_logins(login_oid,login_name,role_oid) AS ("
+        " SELECT r.oid,r.rolname,r.oid FROM pg_catalog.pg_roles r "
+        " WHERE r.rolcanlogin AND NOT r.rolsuper "
+        " AND NOT (r.rolname=ANY(%s))"
+        "), set_reachable(login_oid,login_name,role_oid) AS ("
+        " SELECT login_oid,login_name,role_oid FROM untrusted_logins "
+        " UNION "
+        " SELECT reachable.login_oid,reachable.login_name,m.roleid "
+        " FROM set_reachable reachable "
+        " JOIN pg_catalog.pg_auth_members m ON m.member=reachable.role_oid "
+        " WHERE m.set_option"
+        "), effective_roles(login_oid,login_name,assumed_oid,role_oid) AS ("
+        " SELECT login_oid,login_name,role_oid,role_oid FROM set_reachable "
+        " UNION "
+        " SELECT effective.login_oid,effective.login_name,effective.assumed_oid,"
+        "m.roleid FROM effective_roles effective "
+        "JOIN pg_catalog.pg_auth_members m ON m.member=effective.role_oid "
+        "WHERE m.inherit_option"
+        "), protected_relations AS ("
+        " SELECT c.oid,c.relname FROM pg_catalog.pg_class c "
+        " WHERE c.relnamespace=%s AND c.relname IN ("
+        " 'supplier_mapping_review_batches','supplier_mapping_review_candidates',"
+        " 'supplier_mapping_decisions','supplier_offer_selection_events',"
+        " 'supplier_offer_selection_heads','v_effective_supplier_mapping_decisions',"
+        " 'v_supplier_offer_selection_diagnostics',"
+        " 'v_selected_standard_supplier_offers',"
+        " 'v_supplier_offer_selection_shadow'"
+        ")), protected_functions AS ("
+        " SELECT p.oid,p.oid::pg_catalog.regprocedure::text AS identity "
+        " FROM pg_catalog.pg_proc p WHERE p.pronamespace=%s AND p.proname ~ "
+        " '^(compute_persistent_mapping_catalog_sha256$|persistent_mapping_|"
+        "supplier_mapping_policy_is_published$|reject_persistent_mapping_|"
+        "validate_mapping_review_|validate_supplier_(mapping|offer_selection)|"
+        "protect_(persistently_mapped|unactivated_mapped|persistent_mapping_rejection)|"
+        "assert_persistent_mapping_)'"
+        "), unsafe AS ("
+        " SELECT effective.login_oid,effective.login_name,effective.assumed_oid,"
+        "effective.role_oid,'schema CREATE'::text AS privilege "
+        " FROM effective_roles effective "
+        " WHERE pg_catalog.has_schema_privilege(effective.role_oid,%s,'CREATE') "
+        " UNION ALL SELECT effective.login_oid,effective.login_name,"
+        "effective.assumed_oid,effective.role_oid,'relation '||relation.relname "
+        " FROM effective_roles effective CROSS JOIN protected_relations relation "
+        " WHERE pg_catalog.has_table_privilege(effective.role_oid,relation.oid,"
+        " 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') "
+        " OR pg_catalog.has_any_column_privilege(effective.role_oid,relation.oid,"
+        " 'SELECT,INSERT,UPDATE,REFERENCES') "
+        " UNION ALL SELECT effective.login_oid,effective.login_name,"
+        "effective.assumed_oid,effective.role_oid,'function '||fn.identity "
+        " FROM effective_roles effective CROSS JOIN protected_functions fn "
+        " WHERE pg_catalog.has_function_privilege(effective.role_oid,fn.oid,'EXECUTE')"
+        ") SELECT DISTINCT unsafe.login_name,assumed.rolname,effective_role.rolname,"
+        "unsafe.privilege "
+        "FROM unsafe "
+        "JOIN pg_catalog.pg_roles assumed ON assumed.oid=unsafe.assumed_oid "
+        "JOIN pg_catalog.pg_roles effective_role ON effective_role.oid=unsafe.role_oid "
+        "ORDER BY unsafe.login_name,assumed.rolname,effective_role.rolname,unsafe.privilege",
+        (
+            approved_role_names,
+            int(schema[1]),
+            int(schema[1]),
+            int(schema[1]),
+        ),
+    ).fetchall()
+    if untrusted_mapping_privileges:
+        raise RuntimeError(
+            "untrusted login has effective persistent mapping privilege"
+        )
     conn.execute(
         "SELECT pg_catalog.set_config('search_path',%s,true)",
         (f'"{release.target_schema}",pg_catalog',),
@@ -601,8 +675,18 @@ def _verify_installed_function_catalog(
 ) -> None:
     trust = _release_trust(release)
     names = sorted({item[0] for item in trust.function_identities})
-    rows = conn.execute(
-        sql.SQL("""SELECT p.proname,
+    prior_path = str(
+        conn.execute(
+            "SELECT pg_catalog.current_setting('search_path')"
+        ).fetchone()[0]
+    )
+    conn.execute(
+        "SELECT pg_catalog.set_config('search_path',%s,true)",
+        (f'"{release.target_schema}",pg_catalog,pg_temp',),
+    )
+    try:
+        rows = conn.execute(
+            sql.SQL("""SELECT p.proname,
                   pg_catalog.pg_get_function_identity_arguments(p.oid),
                   pg_catalog.pg_get_function_result(p.oid),p.prokind,p.provolatile,
                   p.proisstrict,p.prosecdef,p.proleakproof,p.proparallel,l.lanname,
@@ -618,10 +702,15 @@ def _verify_installed_function_catalog(
              JOIN pg_catalog.pg_language l ON l.oid=p.prolang
             WHERE p.pronamespace=%s AND p.proname=ANY(%s)
             ORDER BY p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid)""").format(
-            sql.Identifier(release.target_schema)
-        ),
-        (schema_oid, names),
-    ).fetchall()
+                sql.Identifier(release.target_schema)
+            ),
+            (schema_oid, names),
+        ).fetchall()
+    finally:
+        conn.execute(
+            "SELECT pg_catalog.set_config('search_path',%s,true)",
+            (prior_path,),
+        )
     identities = tuple((str(row[0]), str(row[1])) for row in rows)
     if identities != trust.function_identities:
         raise RuntimeError("installed persistent mapping function identities differ")
@@ -783,6 +872,7 @@ def _verify_installed_release(
     release: MappingRelease,
     schema_oid: int,
     allowed_pairs: tuple[tuple[str, str], ...],
+    approved_pairs: tuple[tuple[str, str], ...] | None = None,
 ) -> None:
     _verify_pgcrypto(conn, schema_oid=schema_oid, release=release)
     _verify_installed_function_catalog(
@@ -810,8 +900,62 @@ def _verify_installed_release(
     )
     _verify_pgcrypto(conn, schema_oid=schema_oid, release=release)
     _verify_server_and_identity(
-        conn, allowed_pairs=allowed_pairs, release=release
+        conn,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+        release=release,
     )
+
+
+def _verify_installed_post_mapping_dependencies(
+    conn: Any,
+    *,
+    markers: dict[str, str],
+    required_before_mapping_index: int,
+) -> None:
+    """Verify installed application releases and predecessors of a mapping release.
+
+    A post-mapping application release may be absent while its exact mapping
+    predecessor is the highest installed release: the ordered runner installs
+    that application release immediately afterward.  Once a later mapping
+    release exists, however, every application release attached to an earlier
+    mapping version is a required part of the installed prefix.  Any
+    application marker that is already present is always verified, even when a
+    later mapping release has not yet been installed.
+    """
+
+    mapping_indexes = {
+        item.version: index
+        for index, item in enumerate(PERSISTENT_MAPPING_RELEASE_MANIFEST)
+    }
+    for application_release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
+        dependency_index = mapping_indexes[
+            application_release.required_mapping_release
+        ]
+        marker_key = f"migration:{application_release.migration_name}"
+        marker = markers.get(marker_key)
+        if marker is None:
+            if dependency_index < required_before_mapping_index:
+                raise RuntimeError(
+                    "required post-mapping application release is absent"
+                )
+            continue
+        if marker != f"sha256:{application_release.migration_sha256}":
+            raise RuntimeError(
+                "installed post-mapping migration checksum differs"
+            )
+        if application_release.family != "monday-forecast-v2-retirement":
+            raise RuntimeError("post-mapping application verifier is absent")
+        target_schema = PERSISTENT_MAPPING_RELEASE_MANIFEST[
+            dependency_index
+        ].target_schema
+        verified_application = verify_monday_forecast_v2_retirement_contract(
+            conn, schema=target_schema, require_marker=True
+        )
+        if verified_application != application_release.catalog_sha256:
+            raise RuntimeError(
+                "required post-mapping application catalog signature differs"
+            )
 
 
 def _verify_or_apply_mapping_release(
@@ -829,27 +973,54 @@ def _verify_or_apply_mapping_release(
     installed = _validate_marker_prefix(markers, allow_empty=False)
     releases = PERSISTENT_MAPPING_RELEASE_MANIFEST
     release_index = releases.index(release)
+    applying = release_index == len(installed)
+    if release_index > len(installed):
+        raise RuntimeError("persistent mapping release predecessor is absent")
+    pending_release = (
+        releases[len(installed)] if len(installed) < len(releases) else None
+    )
+    if applying:
+        identity_release = release
+        identity_is_transition = True
+    elif pending_release is not None:
+        identity_release = pending_release
+        identity_is_transition = True
+    else:
+        identity_release = installed[-1]
+        identity_is_transition = False
+    approved_pairs = _maintenance_binding(db_dir, identity_release)
+    allowed_pairs = _transition_allowed_pairs(
+        db_dir, identity_release, applying=identity_is_transition
+    )
+    required_before_mapping_index = (
+        release_index if applying else len(installed) - 1
+    )
     if release_index < len(installed) - 1:
         installed_release = installed[-1]
-        allowed_pairs = _maintenance_binding(db_dir, installed_release)
         schema_oid = _verify_server_and_identity(
-            conn, allowed_pairs=allowed_pairs, release=installed_release
+            conn,
+            allowed_pairs=allowed_pairs,
+            approved_pairs=approved_pairs,
+            release=identity_release,
         )
         _verify_installed_release(
             conn,
             release=installed_release,
             schema_oid=schema_oid,
             allowed_pairs=allowed_pairs,
+            approved_pairs=approved_pairs,
+        )
+        _verify_installed_post_mapping_dependencies(
+            conn,
+            markers=markers or {},
+            required_before_mapping_index=required_before_mapping_index,
         )
         return False
-    applying = release_index == len(installed)
-    if release_index > len(installed):
-        raise RuntimeError("persistent mapping release predecessor is absent")
-    allowed_pairs = _transition_allowed_pairs(
-        db_dir, release, applying=applying
-    )
     schema_oid = _verify_server_and_identity(
-        conn, allowed_pairs=allowed_pairs, release=release
+        conn,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+        release=identity_release,
     )
     if installed:
         _verify_installed_release(
@@ -857,35 +1028,17 @@ def _verify_or_apply_mapping_release(
             release=installed[-1],
             schema_oid=schema_oid,
             allowed_pairs=allowed_pairs,
+            approved_pairs=approved_pairs,
         )
     elif _mapping_metadata(conn, target_schema=release.target_schema):
         raise RuntimeError("persistent mapping metadata exists without a release marker")
+    _verify_installed_post_mapping_dependencies(
+        conn,
+        markers=markers or {},
+        required_before_mapping_index=required_before_mapping_index,
+    )
     if not applying:
         return False
-
-    mapping_indexes = {
-        item.version: index for index, item in enumerate(releases)
-    }
-    for application_release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST:
-        dependency_index = mapping_indexes[application_release.required_mapping_release]
-        if dependency_index >= release_index:
-            continue
-        marker_key = f"migration:{application_release.migration_name}"
-        if markers is None or markers.get(marker_key) != (
-            f"sha256:{application_release.migration_sha256}"
-        ):
-            raise RuntimeError(
-                "required post-mapping application release is absent"
-            )
-        if application_release.family != "monday-forecast-v2-retirement":
-            raise RuntimeError("post-mapping application verifier is absent")
-        verified_application = verify_monday_forecast_v2_retirement_contract(
-            conn, schema=release.target_schema, require_marker=True
-        )
-        if verified_application != application_release.catalog_sha256:
-            raise RuntimeError(
-                "required post-mapping application catalog signature differs"
-            )
 
     raw = _release_source(db_dir, release)
     expected_marker = f"sha256:{release.migration_sha256}"
@@ -897,7 +1050,10 @@ def _verify_or_apply_mapping_release(
     )
     conn.execute(raw.decode("utf-8"))
     after_oid = _verify_server_and_identity(
-        conn, allowed_pairs=allowed_pairs, release=release
+        conn,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+        release=release,
     )
     if after_oid != schema_oid:
         raise RuntimeError("persistent mapping target schema identity changed")
@@ -935,7 +1091,10 @@ def _verify_or_apply_mapping_release(
     )
     _verify_pgcrypto(conn, schema_oid=schema_oid, release=release)
     _verify_server_and_identity(
-        conn, allowed_pairs=allowed_pairs, release=release
+        conn,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+        release=release,
     )
     conn.execute(
         sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s)").format(target),
@@ -975,15 +1134,30 @@ def _verify_or_apply_post_mapping_release(
     if required_mapping not in installed_mapping:
         raise RuntimeError("post-mapping release requires its exact mapping predecessor")
     mapping_release = installed_mapping[-1]
-    allowed_pairs = _maintenance_binding(db_dir, mapping_release)
+    identity_is_transition = len(installed_mapping) < len(
+        PERSISTENT_MAPPING_RELEASE_MANIFEST
+    )
+    identity_release = (
+        PERSISTENT_MAPPING_RELEASE_MANIFEST[len(installed_mapping)]
+        if identity_is_transition
+        else mapping_release
+    )
+    approved_pairs = _maintenance_binding(db_dir, identity_release)
+    allowed_pairs = _transition_allowed_pairs(
+        db_dir, identity_release, applying=identity_is_transition
+    )
     schema_oid = _verify_server_and_identity(
-        conn, allowed_pairs=allowed_pairs, release=mapping_release
+        conn,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+        release=identity_release,
     )
     _verify_installed_release(
         conn,
         release=mapping_release,
         schema_oid=schema_oid,
         allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
     )
     marker_key = f"migration:{release.migration_name}"
     marker_value = f"sha256:{release.migration_sha256}"
@@ -1062,15 +1236,27 @@ def apply_schema_connection(
     }
     if include_persistent_mapping and mapping_releases:
         _verify_post_mapping_source_inventory(db_dir)
-        first_release = PERSISTENT_MAPPING_RELEASE_MANIFEST[0]
         with conn.transaction():
             _capture_caller_search_path_oids(conn)
             markers = _migration_markers(conn)
             installed = _validate_marker_prefix(markers, allow_empty=True)
-            identity_release = installed[-1] if installed else first_release
-            allowed_pairs = _maintenance_binding(db_dir, identity_release)
+            identity_is_transition = len(installed) < len(
+                PERSISTENT_MAPPING_RELEASE_MANIFEST
+            )
+            identity_release = (
+                PERSISTENT_MAPPING_RELEASE_MANIFEST[len(installed)]
+                if identity_is_transition
+                else installed[-1]
+            )
+            approved_pairs = _maintenance_binding(db_dir, identity_release)
+            allowed_pairs = _transition_allowed_pairs(
+                db_dir, identity_release, applying=identity_is_transition
+            )
             schema_oid = _verify_server_and_identity(
-                conn, allowed_pairs=allowed_pairs, release=identity_release
+                conn,
+                allowed_pairs=allowed_pairs,
+                approved_pairs=approved_pairs,
+                release=identity_release,
             )
             installed_marker_keys = set(markers or {})
             if not installed_marker_keys:

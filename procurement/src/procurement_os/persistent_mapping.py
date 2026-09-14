@@ -247,12 +247,18 @@ def _execute_write(
     conn: Any | None = None
     acquired: list[str] = []
 
-    def discard_connection() -> None:
+    def discard_connection() -> bool:
         nonlocal conn, acquired
-        if conn is not None:
-            conn.close()
+        doomed = conn
         conn = None
         acquired = []
+        if doomed is None:
+            return True
+        try:
+            doomed.close()
+        except BaseException:
+            return False
+        return True
 
     try:
         while transaction_attempts < MAX_TRANSACTION_ATTEMPTS:
@@ -463,7 +469,11 @@ def _execute_write(
                     if conn is not None and not conn.closed:
                         conn.rollback()
                     recovery_mode = "unique_violation"
-                    discard_connection()
+                    if not discard_connection():
+                        raise PersistentMappingError(
+                            "persistent mapping idempotency recovery was unavailable",
+                            code="IDEMPOTENCY_PROTOCOL_VIOLATION",
+                        ) from exc
                     transaction_attempts -= 1
                     continue
                 if not isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError)):
@@ -478,17 +488,28 @@ def _execute_write(
                 # payload-neutral locks before the operation's idempotency-first
                 # lookup can establish whether the commit landed.
                 recovery_mode = "unknown_commit"
-                discard_connection()
+                if not discard_connection():
+                    raise PersistentMappingError(
+                        "persistent mapping commit outcome is unknown; resubmit the same idempotency key",
+                        code="COMMIT_OUTCOME_UNKNOWN",
+                    ) from exc
                 if transaction_attempts >= MAX_TRANSACTION_ATTEMPTS:
                     raise PersistentMappingError(
                         "persistent mapping commit outcome is unknown; resubmit the same idempotency key",
                         code="COMMIT_OUTCOME_UNKNOWN",
                     ) from exc
                 continue
-            except BaseException:
-                # Cancellation and process-level exceptions are not evidence of
-                # an ambiguous database commit and are never replayed.
-                raise
+            except BaseException as exc:
+                # Any exception observed from COMMIT can arrive after the server
+                # made the transaction durable. Process-level cancellation is
+                # never blindly replayed; discard the uncertain backend and make
+                # the caller resolve by the same idempotency key.
+                last_error = exc
+                discard_connection()
+                raise PersistentMappingError(
+                    "persistent mapping commit outcome is unknown; resubmit the same idempotency key",
+                    code="COMMIT_OUTCOME_UNKNOWN",
+                ) from exc
             return result
         raise PersistentMappingError(
             "persistent mapping retry budget exhausted",
@@ -711,13 +732,13 @@ def _candidate_base(
         "supplier_identity_key_sha256": None,
         "operational_offer_key_sha256": None,
         "decision_scope_sha256": "0" * 64,
-        "source_table_name": str(value.get("source_table_name", "supplier_offers_v5")),
-        "source_row_key": str(value.get("source_row_key", value["occurrence_key"])),
-        "source_file_name": str(value.get("source_file_name", "synthetic-review.jsonl")),
+        "source_table_name": str(value["source_table_name"]),
+        "source_row_key": str(value["source_row_key"]),
+        "source_file_name": str(value["source_file_name"]),
         "source_file_sha256": source_file_sha256,
         "source_page_start": value.get("source_page_start"),
         "source_page_end": value.get("source_page_end"),
-        "source_locator": dict(value.get("source_locator", {})),
+        "source_locator": dict(value["source_locator"]),
         "proposed_variant_id": value.get("proposed_variant_id"),
         "proposed_vendor_id": value.get("proposed_vendor_id"),
         "source_vendor_identity": str(value["source_vendor_identity"]),
@@ -763,7 +784,10 @@ def _validate_supported_intake(
     connection can be opened.
     """
 
-    from .synthetic_mapping_packet import PACKET_CONTRACT, PACKET_SHA256
+    from .synthetic_mapping_packet import (
+        PACKET_CONTRACT,
+        PACKET_SHA256,
+    )
 
     required_hashes = (
         "source_artifact_sha256",
@@ -793,15 +817,31 @@ def _validate_supported_intake(
         or not candidates
     ):
         raise PersistentMappingError("review package readiness or candidate set differs")
+    if (
+        package.get("source_authority_state") != "NOT_APPROVED"
+        or package.get("source_import_state") != "NOT_IMPORT_READY"
+    ):
+        raise PersistentMappingError("review package zero-authority contract differs")
     artifact_sha = str(package["source_artifact_sha256"])
     occurrences: list[str] = []
     relationships: list[Any] = []
     for candidate in candidates:
         occurrence = str(candidate.get("occurrence_key", "")).strip()
+        source_table_name = candidate.get("source_table_name")
+        source_row_key = candidate.get("source_row_key")
+        source_file_name = candidate.get("source_file_name")
+        source_locator = candidate.get("source_locator")
         start = candidate.get("source_page_start")
         end = candidate.get("source_page_end")
         if (
             not occurrence
+            or not isinstance(source_table_name, str)
+            or not source_table_name.strip()
+            or not isinstance(source_row_key, str)
+            or not source_row_key.strip()
+            or not isinstance(source_file_name, str)
+            or not source_file_name.strip()
+            or not isinstance(source_locator, dict)
             or candidate.get("source_file_sha256") != artifact_sha
             or not isinstance(start, int)
             or not isinstance(end, int)
@@ -829,6 +869,8 @@ def _validate_supported_intake(
             "source_package_id": package.get("source_package_id"),
             "source_revision": package.get("source_revision"),
             "occurrence_keys": occurrences,
+            "source_authority_state": package.get("source_authority_state"),
+            "source_import_state": package.get("source_import_state"),
         }
     )
     seal_sha = _canonical_source_sha256(
@@ -929,8 +971,8 @@ def intake_supplier_mapping_review(
         "structural_state": str(package.get("structural_state", "READY")),
         "source_evidence_state": str(package.get("source_evidence_state", "READY")),
         "semantic_state": str(package.get("semantic_state", "READY")),
-        "source_authority_state": "NOT_APPROVED",
-        "source_import_state": "NOT_IMPORT_READY",
+        "source_authority_state": str(package["source_authority_state"]),
+        "source_import_state": str(package["source_import_state"]),
         "source_is_simulation": bool(package.get("source_is_simulation", True)),
         "creator_principal_ref": principal.principal_ref,
         "creator_role_ref": principal.role_ref,
@@ -1503,6 +1545,10 @@ def record_mapping_decision(
             or (
                 existing["offer_link_kind"] == "LINKED_EXISTING"
                 and existing["result_offer_id"] != existing_offer_id
+            )
+            or (
+                existing["offer_link_kind"] != "LINKED_EXISTING"
+                and existing_offer_id is not None
             )
             or existing["human_principal_ref"] != principal.principal_ref
             or existing["human_role_ref"] != principal.role_ref
