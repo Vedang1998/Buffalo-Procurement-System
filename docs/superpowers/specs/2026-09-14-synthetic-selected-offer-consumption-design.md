@@ -167,25 +167,25 @@ existing Monday preparation body. For selected-contract preparation:
 1. validate the process-owned environment and disabled repository policy;
    normalize and UTF-8-byte-sort the requested Variant IDs without a database
    read, and require the supplied connection state to be `IDLE`;
-2. acquire the exact existing session advisory-lock key
+2. acquire the existing bigint `MONDAY_ANALYSIS_LOCK` in session scope, then
+   acquire the exact existing session advisory-lock key
    `persistent-mapping:selection-variant:<Variant ID>` for every requested
    Variant using the same `pg_try_advisory_lock(hashtextextended(name,0))`
    helper and bounded deadline as routine selection; acquire no new domain;
-3. end the driver's lock-acquisition transaction so state is `IDLE` while the
-   session locks remain held, then issue an explicit
-   `BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE`;
-4. after transaction-control statements, acquire the existing global Monday
-   transaction lock before any snapshot-taking table/catalog read;
-5. if any session lock or the global lock is unavailable, roll back, release
+3. end the Psycopg `autocommit=False` lock-acquisition transaction so state is
+   `IDLE` while all session locks remain held; enter `conn.transaction()` and
+   immediately execute `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` before
+   any snapshot-taking statement (do not send a nested raw `BEGIN`);
+4. if any session lock is unavailable, roll back, release
    every acquired session lock in reverse order, verify cleanup and persist
    nothing;
-6. as the first snapshot-taking reads, independently attest the database,
+5. as the first snapshot-taking reads, independently attest the database,
    schema, roles, demo marker and installed mapping/retirement contracts, then
    load the idempotency/date claim;
-7. read the head, event, effective mapping, candidate/batch, rejection state,
+6. read the head, event, effective mapping, candidate/batch, rejection state,
    offer, vendor rules and full CURRENT price ladder from that same snapshot;
-8. calculate and insert the run, snapshots, recommendations and blockers; and
-9. commit once, then release the session locks in reverse order and verify each
+7. calculate and insert the run, snapshots, recommendations and blockers; and
+8. commit once, then release the session locks in reverse order and verify each
    release.
 
 The session advisory locks are the same locks used by the selection writer. A
@@ -196,8 +196,8 @@ refusal. No mixed head, event, mapping and offer result is accepted.
 `40001` serialization and `40P01` deadlock failures abort the complete attempt,
 return the connection to `IDLE`, and may retry the entire database transaction
 at most three times under one bounded operation deadline while retaining the
-already authenticated session locks. Each retry reacquires the global lock
-before reads and obtains a genuinely fresh snapshot. Exhaustion returns typed
+already authenticated global/Variant session locks. Each retry obtains a
+genuinely fresh snapshot beneath those locks. Exhaustion returns typed
 `MONDAY_PREPARATION_RETRY_REQUIRED`. Other errors do not retry. An ambiguous
 commit closes/discards the connection and returns an outcome-unknown error; it
 is never blindly replayed. No retry occurs inside an aborted transaction and no
