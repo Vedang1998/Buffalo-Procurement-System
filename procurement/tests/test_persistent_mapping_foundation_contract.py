@@ -38,7 +38,7 @@ IMPLEMENTATION_SPEC = (
     / "2026-09-10-persistent-mapping-foundation-implementation-spec.md"
 )
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 809
+EXPECTED_GLOBAL_TEST_POPULATION = 816
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):
@@ -828,6 +828,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 "policy_mapping_writes_enabled": False,
                 "routine_selection_writes_enabled": False,
                 "selected_offer_shadow_reads_enabled": False,
+                "synthetic_selected_offer_inputs_enabled": False,
                 "recommendation_cutover_enabled": False,
                 "offer_activation_enabled": False,
             },
@@ -902,6 +903,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
             "policy_mapping_writes_enabled = false\n"
             "routine_selection_writes_enabled = false\n"
             "selected_offer_shadow_reads_enabled = false\n"
+            "synthetic_selected_offer_inputs_enabled = false\n"
             "recommendation_cutover_enabled = false\n"
             "offer_activation_enabled = false\n\n"
         )
@@ -1029,7 +1031,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 [
                     f"ERROR: {module} discovered {required - 1} tests; "
                     f"required minimum is {required}",
-                    "ERROR: global discovered count 808 is below floor 809",
+                    "ERROR: global discovered count 815 is below floor 816",
                 ],
             )
 

@@ -702,7 +702,12 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         runtime = self._runtime()
         with mock.patch.dict(
             os.environ,
-            {"SHOPIFY_ACCESS_TOKEN": "must-not-propagate", "DATABASE_URL": "ambient"},
+            {
+                "SHOPIFY_ACCESS_TOKEN": "must-not-propagate",
+                "DATABASE_URL": "ambient",
+                "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "ambient-must-not-authorize",
+                "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "ambient-must-not-authorize",
+            },
             clear=False,
         ):
             environment = candidate._child_environment(
@@ -713,6 +718,11 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             )
         self.assertNotIn("SHOPIFY_ACCESS_TOKEN", environment)
         self.assertEqual(environment["BUFFALO_RUNTIME_MODE"], "SYNTHETIC_DEMO")
+        self.assertEqual(environment["BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO"], "1")
+        self.assertEqual(
+            environment["BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS"], "1"
+        )
+        self.assertNotEqual(environment["DATABASE_URL"], "ambient")
         self.assertIn("search_path%3Dqa_mapping_test%2Cpg_catalog", environment["DATABASE_URL"])
         process = _Process(pid=4567)
         process.running = True

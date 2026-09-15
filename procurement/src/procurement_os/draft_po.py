@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from functools import wraps
 import hashlib
 import json
 from typing import Any
@@ -11,6 +12,10 @@ from .readiness import po_readiness
 from .recommendations import (
     MondayRunInputValidationState,
     validate_monday_run_inputs,
+)
+from .synthetic_selected_offer import (
+    SyntheticSelectedOfferError,
+    selected_run_input_lock_scope,
 )
 
 
@@ -26,13 +31,28 @@ class DraftPoError(ValueError):
     pass
 
 
+def _with_selected_input_locks(function: Any) -> Any:
+    @wraps(function)
+    def locked(conn: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            with selected_run_input_lock_scope(
+                conn,
+                run_id=kwargs.get("run_id"),
+            ):
+                return function(conn, *args, **kwargs)
+        except SyntheticSelectedOfferError as exc:
+            raise DraftPoError(str(exc)) from exc
+
+    return locked
+
+
 def _draft_rows(conn: Any, run_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         """SELECT r.recommendation_id,r.variant_id,r.vendor_id,r.offer_id,r.frozen_supplier_sku,
                   d.decision_id,d.approved_cases,d.approved_loose_units,d.approved_units,
                   d.approved_unit_cost,d.approved_line_total,r.input_fingerprint,
                   r.frozen_minimum_type,r.frozen_minimum_value,r.frozen_below_minimum_fee,
-                  r.frozen_loose_unit_fee,d.action,d.evidence_json
+                  r.frozen_loose_unit_fee,d.action,d.evidence_json,r.metrics
              FROM procurement_recommendations r
              JOIN review_decisions d ON d.recommendation_id=r.recommendation_id
             WHERE r.run_id=%s AND d.action IN ('ACCEPT','EDIT_QUANTITY') AND d.approved_units>0
@@ -42,6 +62,10 @@ def _draft_rows(conn: Any, run_id: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for row in rows:
         review_evidence = (row[17] or {}).get("review", {})
+        selected = (row[18] or {}).get("selected_offer_input_evidence") is not None
+        final_price_tier = review_evidence.get("final_price_tier")
+        if selected and not isinstance(final_price_tier, dict):
+            raise DraftPoError("selected reviewed line is missing its final price tier")
         try:
             merchandise_total = Decimal(
                 str(review_evidence["approved_merchandise_total"])
@@ -70,7 +94,7 @@ def _draft_rows(conn: Any, run_id: str) -> list[dict[str, Any]]:
             )
         ):
             raise DraftPoError("reviewed line has invalid frozen economics")
-        result.append({
+        item = {
             "recommendation_id": int(row[0]),"variant_id": row[1],"vendor_id": str(row[2]),
             "offer_id": int(row[3]),"supplier_sku": row[4],"decision_id": int(row[5]),
             "cases": int(row[6]),"loose_units": int(row[7]),"ordered_units": int(row[8]),
@@ -81,7 +105,10 @@ def _draft_rows(conn: Any, run_id: str) -> list[dict[str, Any]]:
             "minimum_value": Decimal(row[13]) if row[13] is not None else None,
             "below_minimum_fee": Decimal(row[14]),"loose_unit_fee": Decimal(row[15] or 0),
             "action": row[16],
-        })
+        }
+        if selected:
+            item["final_price_tier"] = final_price_tier
+        result.append(item)
     return result
 
 
@@ -175,7 +202,7 @@ def _vendor_economics(
         "delivery_fee": delivery_fee,
         "po_total": (merchandise + delivery_fee).quantize(MONEY),
         "lines": [
-            {
+            ({
                 "recommendation_id": line["recommendation_id"],
                 "decision_id": line["decision_id"],
                 "variant_id": line["variant_id"],
@@ -188,7 +215,11 @@ def _vendor_economics(
                 "merchandise_total": line["merchandise_total"],
                 "loose_order_fee": line["loose_order_fee"],
                 "line_total": line["line_total"],
-            }
+            } | (
+                {"final_price_tier": line["final_price_tier"]}
+                if "final_price_tier" in line
+                else {}
+            ))
             for line in vendor_lines
         ],
     }
@@ -257,6 +288,7 @@ def _require_complete_reviews(conn: Any, run_id: str) -> None:
         )
 
 
+@_with_selected_input_locks
 def preview_vendor_drafts(
     conn: Any, *, run_id: str, actor: str
 ) -> dict[str, Any]:
@@ -301,6 +333,7 @@ def preview_vendor_drafts(
     }
 
 
+@_with_selected_input_locks
 def build_vendor_drafts(
     conn: Any,
     *,
@@ -393,7 +426,7 @@ def build_vendor_drafts(
                     economics["merchandise_total"],economics["delivery_fee"],
                     economics["po_total"],economics["below_vendor_minimum"],
                     json.dumps(
-                        {
+                        ({
                             "safety_label": SAFETY_LABEL,
                             "line_count": len(vendor_lines),
                             "has_loose": has_loose,
@@ -410,7 +443,22 @@ def build_vendor_drafts(
                             "readiness_by_variant": [
                                 line["readiness_evidence"] for line in vendor_lines
                             ],
-                        },
+                        } | (
+                            {
+                                "final_price_tiers": [
+                                    {
+                                        "recommendation_id": line["recommendation_id"],
+                                        "decision_id": line["decision_id"],
+                                        "variant_id": line["variant_id"],
+                                        "offer_id": line["offer_id"],
+                                        "final_price_tier": line["final_price_tier"],
+                                    }
+                                    for line in vendor_lines
+                                ]
+                            }
+                            if all("final_price_tier" in line for line in vendor_lines)
+                            else {}
+                        )),
                         default=str,
                         sort_keys=True,
                     ),
@@ -454,7 +502,8 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
                           l.ordered_units,l.unit_cost,l.line_total,l.comment,
                           d.evidence_json #>> '{review,approved_case_price}',
                           d.evidence_json #>> '{review,approved_merchandise_total}',
-                          d.evidence_json #>> '{review,approved_loose_order_fee}'
+                          d.evidence_json #>> '{review,approved_loose_order_fee}',
+                          d.evidence_json #> '{review,final_price_tier}'
                      FROM purchase_order_lines l
                      JOIN review_decisions d ON d.decision_id=l.review_decision_id
                     WHERE l.po_id=%s ORDER BY l.variant_id,l.po_line_id""",
@@ -484,13 +533,19 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
                     "readiness_evidence": build_evidence.get(
                         "readiness_by_variant", []
                     ),
+                    **(
+                        {"final_price_tiers": build_evidence["final_price_tiers"]}
+                        if "final_price_tiers" in build_evidence
+                        else {}
+                    ),
                     "lines": [
                         {"po_line_id": int(line[0]),"variant_id": line[1],"supplier_sku": line[2],
                          "cases": int(line[3]),"loose_units": int(line[4]),"ordered_units": int(line[5]),
                          "unit_cost": Decimal(line[6]),"line_total": Decimal(line[7]),"comment": line[8],
                          "case_price": Decimal(line[9]) if line[9] is not None else None,
                          "merchandise_total": Decimal(line[10]),
-                         "loose_order_fee": Decimal(line[11])}
+                         "loose_order_fee": Decimal(line[11]),
+                         **({"final_price_tier": line[12]} if line[12] is not None else {})}
                         for line in line_rows
                     ],
                 }

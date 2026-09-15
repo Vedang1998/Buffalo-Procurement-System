@@ -2017,7 +2017,13 @@ def _monday_runs_html(runs: list[dict]) -> str:
         f"<td><a href='monday-runs/{_html_escape(run['run_id'])}'>{_html_escape(run['run_id'])}</a></td>"
         f"<td>{_html_escape(run['business_date'])}</td>"
         f"<td>{_html_escape(run['status'])}</td>"
-        f"<td>{_html_escape(run['model_version'])}</td>"
+        f"<td>{_html_escape(run['model_version'])}"
+        + (
+            "<br><strong>SYNTHETIC SELECTED OFFER — TEST DATA / NO REAL AUTHORITY</strong>"
+            if run.get("synthetic_selected_offer_inputs")
+            else ""
+        )
+        + "</td>"
         f"<td>{_html_escape(run['workflow_stage'])}</td>"
         f"<td>{_html_escape(run['exception_count'])}</td>"
         "</tr>"
@@ -2066,6 +2072,14 @@ def _monday_run_html(
         and not drafts["drafts"]
         and not artifacts
     )
+    selected_run = bool(run.get("synthetic_selected_offer_inputs"))
+    selected_banner = (
+        "<p class='warning selected-offer-authority'>SYNTHETIC SELECTED OFFER — "
+        "TEST DATA / NO REAL AUTHORITY. Selection is input authority only for this "
+        "attested local synthetic run; real/default cutover remains disabled.</p>"
+        if selected_run
+        else ""
+    )
     blocker_rows = []
     for item in run["blockers"]:
         if item.get("excluded"):
@@ -2107,6 +2121,17 @@ def _monday_run_html(
         metrics = item.get("metrics") or {}
         frozen_terms = metrics.get("frozen_vendor_terms") or {}
         offer = metrics.get("frozen_offer_evidence") or {}
+        selected_evidence = metrics.get("selected_offer_input_evidence")
+        selected_authority_row = ""
+        if selected_evidence is not None:
+            selected_authority_row = (
+                "<tr><th>Selected input authority</th><td><pre "
+                "class='selected-offer-input-json'>"
+                + _html_escape(
+                    json.dumps(selected_evidence, sort_keys=True, indent=2, default=str)
+                )
+                + "</pre></td></tr>"
+            )
         demand_evidence = metrics.get("demand_evidence") or {}
         demand_evidence_json = json.dumps(
             demand_evidence, sort_keys=True, indent=2, default=str
@@ -2154,6 +2179,7 @@ def _monday_run_html(
         )
         evidence_table = f"""
 <table class='facts'>
+{selected_authority_row}
 <tr><th>Supplier / pack</th><td>{_html_escape(offer.get('supplier_sku'))}; {_html_escape(offer.get('size_text'))}; {_html_escape(offer.get('raw_pack'))}; Shopify units/case {_html_escape(offer.get('shopify_units_per_case'))}; qualifying units/case {_html_escape(offer.get('qualifying_units_per_case'))}; assortment {_html_escape(offer.get('assortment_scope'))}/{_html_escape(offer.get('assortment_group'))}; assortable {_html_escape(offer.get('assortable'))}</td></tr>
 <tr><th>Offer evidence</th><td>{_html_escape(offer.get('confidence'))}; {_html_escape(offer.get('source_file'))} p.{_html_escape(offer.get('source_page'))}; validity {_html_escape(offer.get('valid_from'))}–{_html_escape(offer.get('valid_to'))}</td></tr>
 <tr><th>Inventory capture</th><td>{capture_text}</td></tr>
@@ -2182,6 +2208,13 @@ def _monday_run_html(
                 f"resulting inventory {_html_escape(item['resulting_inventory_units'])} unit(s), "
                 f"{_html_escape(item['resulting_days_supply'])} days supply "
                 f"({_html_escape(item['days_supply_status'])})"
+                + (
+                    "; final frozen tier <pre class='final-price-tier-json'>"
+                    + _html_escape(json.dumps(item["final_price_tier"], sort_keys=True, default=str))
+                    + "</pre>"
+                    if item.get("final_price_tier") is not None
+                    else ""
+                )
             )
         elif can_review:
             decision = f"""<form method='post' action='{run_id}/recommendations/{item['recommendation_id']}/review'>
@@ -2218,7 +2251,15 @@ def _monday_run_html(
             f"<td>{_html_escape(line['ordered_units'])}</td><td>${_html_escape(line['unit_cost'])}</td>"
             f"<td>${_html_escape(line['merchandise_total'])}</td>"
             f"<td>${_html_escape(line['loose_order_fee'])}</td>"
-            f"<td>${_html_escape(line['line_total'])}</td></tr>"
+            f"<td>${_html_escape(line['line_total'])}"
+            + (
+                "<br><pre class='draft-final-price-tier-json'>"
+                + _html_escape(json.dumps(line["final_price_tier"], sort_keys=True, default=str))
+                + "</pre>"
+                if line.get("final_price_tier") is not None
+                else ""
+            )
+            + "</td></tr>"
             for line in draft["lines"]
         )
         draft_sections.append(
@@ -2283,6 +2324,7 @@ and performs no PO release or Shopify action.</p>
 	table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;vertical-align:top;text-align:left}}table.facts th:first-child{{width:180px}}form{{display:grid;gap:6px}}input,select,button{{padding:6px}}</style></head><body>
 {_operational_nav('../', current='Monday Procurement')}<p><a href='../monday-runs'>Back to Monday runs</a></p>
 <p class='warning'>TEST DATA — NOT FOR ORDERING. SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED. DRAFT output only.</p>
+{selected_banner}
 <h1>Monday run {run_id}</h1><p>Status: <b>{_html_escape(run['status'])}</b>; stage: <b>{_html_escape(run['workflow_stage'])}</b>; method: <b>{_html_escape(run['model_version'])}</b>; business date: {_html_escape(run['business_date'])}; fingerprint: <code>{_html_escape(run['input_fingerprint'])}</code></p>
 {retirement_form}
 <h2>Blockers</h2><table><thead><tr><th>Variant</th><th>Vendor</th><th>Original reason</th><th>RUN_ONLY disposition</th></tr></thead><tbody>{blockers}</tbody></table>
@@ -2343,6 +2385,7 @@ def _monday_review_preview_html(
 <dt>Ordered units</dt><dd>{_html_escape(preview['approved_units'])}</dd>
 <dt>Frozen applicable unit cost</dt><dd>${_html_escape(preview['approved_unit_cost'])}</dd>
 <dt>Frozen applicable case price</dt><dd>{case_price_text}</dd>
+{("<dt>Final frozen price tier</dt><dd><pre class='final-price-tier-json'>" + _html_escape(json.dumps(preview['final_price_tier'], sort_keys=True, default=str)) + "</pre></dd>" if preview.get('final_price_tier') is not None else "")}
 <dt>Merchandise total</dt><dd>${_html_escape(preview['approved_merchandise_total'])}</dd>
 <dt>Loose-order fee</dt><dd>${_html_escape(preview['approved_loose_order_fee'])}</dd>
 <dt>Recalculated line total</dt><dd>${_html_escape(preview['approved_line_total'])}</dd>
@@ -2374,20 +2417,38 @@ def _monday_review_preview_html(
 
 
 def _monday_draft_preview_html(*, run_id: UUID, preview: dict) -> str:
-    vendor_rows = "".join(
-        "<tr>"
-        f"<td>{_html_escape(item['vendor_id'])}</td>"
-        f"<td>${_html_escape(item['merchandise_total'])}</td>"
-        f"<td>{_html_escape(item['case_count'])}</td>"
-        f"<td>{_html_escape(item['minimum_type'])} {_html_escape(item['minimum_value'])}</td>"
-        f"<td>{_html_escape(item['minimum_shortfall'])}</td>"
-        f"<td>${_html_escape(item['loose_order_fee_total'])}</td>"
-        f"<td>${_html_escape(item['below_minimum_fee'])}</td>"
-        f"<td>${_html_escape(item['delivery_fee'])}</td>"
-        f"<td>${_html_escape(item['po_total'])}</td>"
-        "</tr>"
-        for item in preview["vendors"]
-    ) or "<tr><td colspan='9'>No positive reviewed quantities; the packet will record a no-order run.</td></tr>"
+    vendor_row_items = []
+    for item in preview["vendors"]:
+        selected_lines = [
+            line for line in item.get("lines", []) if line.get("final_price_tier")
+        ]
+        tier_details = ""
+        if selected_lines:
+            tier_details = (
+                "<details><summary>Selected offer and final tier evidence</summary><pre "
+                "class='draft-preview-final-price-tiers-json'>"
+                + _html_escape(
+                    json.dumps(selected_lines, sort_keys=True, indent=2, default=str)
+                )
+                + "</pre></details>"
+            )
+        vendor_row_items.append(
+            "<tr>"
+            f"<td>{_html_escape(item['vendor_id'])}{tier_details}</td>"
+            f"<td>${_html_escape(item['merchandise_total'])}</td>"
+            f"<td>{_html_escape(item['case_count'])}</td>"
+            f"<td>{_html_escape(item['minimum_type'])} {_html_escape(item['minimum_value'])}</td>"
+            f"<td>{_html_escape(item['minimum_shortfall'])}</td>"
+            f"<td>${_html_escape(item['loose_order_fee_total'])}</td>"
+            f"<td>${_html_escape(item['below_minimum_fee'])}</td>"
+            f"<td>${_html_escape(item['delivery_fee'])}</td>"
+            f"<td>${_html_escape(item['po_total'])}</td>"
+            "</tr>"
+        )
+    vendor_rows = "".join(vendor_row_items) or (
+        "<tr><td colspan='9'>No positive reviewed quantities; the packet will "
+        "record a no-order run.</td></tr>"
+    )
     disposition_text = (
         "PAY_FEE for every below-minimum vendor"
         if preview["minimum_disposition"] == "PAY_FEE"

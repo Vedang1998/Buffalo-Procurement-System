@@ -111,6 +111,7 @@ human_mapping_writes_enabled = false
 policy_mapping_writes_enabled = false
 routine_selection_writes_enabled = false
 selected_offer_shadow_reads_enabled = false
+synthetic_selected_offer_inputs_enabled = false
 recommendation_cutover_enabled = false
 offer_activation_enabled = false
 

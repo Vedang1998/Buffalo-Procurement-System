@@ -88,6 +88,7 @@ _DISABLED_MAPPING_POLICY = {
     "policy_mapping_writes_enabled": False,
     "routine_selection_writes_enabled": False,
     "selected_offer_shadow_reads_enabled": False,
+    "synthetic_selected_offer_inputs_enabled": False,
     "recommendation_cutover_enabled": False,
     "offer_activation_enabled": False,
 }
@@ -488,6 +489,7 @@ def _child_environment(
         "BUFFALO_LOCAL_PRINCIPAL_REF": "synthetic:owner-browser:01",
         "BUFFALO_LOCAL_ROLE_REF": "LOCAL_SYNTHETIC_OWNER",
         "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
         **secrets,
     }
     if SCRUBBED_NAMES.intersection(environment) != {"DATABASE_URL"}:

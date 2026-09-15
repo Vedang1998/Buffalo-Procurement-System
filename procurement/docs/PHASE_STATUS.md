@@ -5,6 +5,35 @@
 
 This file is the executive roadmap/status view. It is updated when a phase/program milestone changes. It does not replace the canonical system specification or the verified current-state handoff.
 
+## Synthetic selected-offer consumption candidate
+
+**IMPLEMENTED / VALIDATION IN PROGRESS — ISOLATED SYNTHETIC ONLY / REAL AND
+PRODUCTION CUTOVER BLOCKED**
+
+On `codex/mapping-monday-shadow-freeze`, the bounded owner-approved candidate
+connects fabricated sealed review evidence and separate human mapping/selection
+decisions to the selected offer's synthetic CURRENT ladder, the existing
+inventory/demand calculation, reviewed quantity, internal DRAFT and frozen
+packet. The causal regression deliberately keeps two active eligible STANDARD
+offers so the old resolver cannot produce a recommendation; only the selected
+`SUP-001` lineage can complete the synthetic line. Missing or changed selection
+evidence fails closed without legacy fallback.
+
+No schema migration, offer/price mutation, activation, Shopify write, release
+or real-data authority is included. Default runs retain the legacy byte shape
+and resolver. Every repository capability/cutover flag remains false, and the
+selected path requires a distinct supervised local-only flag plus exact owned
+test/demo database attestation. Direct-SQL selected-head enforcement remains a
+known blocker to any real/default use.
+
+Pre-commit evidence currently includes the intended causal red, six passing
+selected tests, one 92/92 affected-module pass, and fresh/replay initializer
+verification with two offers/four authentic pre-011 CURRENT price rows. Clean
+Chromium, the authoritative 816-test suite and final independent review remain
+pending; therefore this is not yet an accepted checkpoint and does not change
+the official production phase. The Sunday 09:00 delivery and first authorized
+implementation window were missed and remain recorded as missed.
+
 ## Architecture
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.

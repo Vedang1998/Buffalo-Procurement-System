@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-14T01:46:29Z (UTC)
+**Updated:** 2026-09-15T00:33:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,64 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Synthetic selected-offer consumption — IMPLEMENTED / VALIDATION IN PROGRESS / REAL CUTOVER BLOCKED
+
+- Work is isolated on `codex/mapping-monday-shadow-freeze`, based on owner-cited
+  checkpoint `22ab1cf800963a6d99e65eb210d8cfb1bbec0abd`, tree
+  `7c8da387d4e2b177dd3790763382247caa60914a`. The owner-approved bounded design
+  is `docs/superpowers/specs/2026-09-14-synthetic-selected-offer-consumption-design.md`;
+  its renewed implementation cutoff is `2026-09-15T01:29:54Z` and hard handoff
+  is `2026-09-15T02:29:54Z`. The original Sunday 09:00 delivery and the first
+  implementation window were missed; neither remains an active delivery date.
+- The current uncommitted candidate connects one isolated, attested synthetic
+  path: fabricated sealed supplier evidence -> human mapping approval ->
+  separate routine SELECT -> selected active VERIFIED STANDARD offer -> that
+  offer's independently seeded verified synthetic CURRENT BASE/BREAK ladder,
+  pack and vendor fees -> existing inventory/demand calculation -> separate
+  quantity review -> internal DRAFT -> existing 12-member frozen packet. With
+  two otherwise eligible active STANDARD offers, the legacy resolver is
+  deliberately ambiguous while the confirmed selected `SUP-001` offer alone
+  produces the recommendation. Missing or changed selected lineage blocks the
+  item; it never falls back to the usable legacy offer.
+- The default/real-disabled path remains byte-shaped as before: it omits the
+  selected contract and evidence, retains the legacy resolver, and does not
+  change old run, DRAFT or packet bytes. No migration or table was added. All
+  repository mapping, activation, recommendation-cutover and selected-input
+  policy flags remain false. A distinct supervised local-only capability is
+  re-attested against loopback PostgreSQL 16, exact roles/schema/contracts and
+  an owned `_test` or marked `_demo` database. Request data and a stored run
+  label cannot enable it.
+- Current pre-commit machine evidence: the first causal regression failed at
+  the intended baseline because the legacy path saw two offers and returned
+  `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`; after implementation, the six
+  selected-offer tests pass, including causal BASE-to-BREAK review/DRAFT,
+  missing-head no-fallback, fresh-observer late rollback, late CLEAR refusal,
+  held-lock typed refusal and malformed-manifest/deadline refusal. The affected
+  modules passed **92/92** once. Fresh owned-demo initialization and exact
+  initializer replay verification both passed with two offers and four legal
+  pre-011 CURRENT price rows. A clean-source Chromium run, authoritative
+  816-test run and final independent review are still pending, so this entry
+  is not an acceptance claim.
+- The focused causal fixture independently freezes the selected source price
+  IDs and run snapshot IDs, changes one reviewed line from one BASE-priced case
+  to two BREAK-priced cases, carries the exact final tier through review, DRAFT
+  reconciliation and packet evidence, and replays the run/DRAFT/packet without
+  duplication. The separate fresh-demo/browser fixture expects `SUP-001` BASE
+  `$12.00`, reviewed two-case BREAK merchandise `$19.00`, `$5.00` delivery fee
+  and one `$24.00` internal DRAFT; browser proof is not yet recorded.
+- This is synthetic implementation permission, not real supplier-data or
+  production activation. Direct SQL still lacks an independent trigger proving
+  recommendation offer = selected head. Real supplier authority and price
+  lifecycle, production identity/IdP, completed forecasting policy/FVA,
+  Shopify integration, PO release and ordering remain blocked and outside this
+  slice. No remote, PR/CI, protected checkout, deployment, operational database,
+  Shopify, supplier communication, real mapping/price approval, PO release or
+  order action occurred.
+- Exact next boundary: finish clean candidate validation and independent review
+  before the hard handoff. If any P0/P1 or runtime failure remains at the
+  implementation cutoff, preserve the candidate and report it as incomplete;
+  do not weaken controls or expand scope.
 
 ### Persistent-mapping strict-acceptance descendant — BOUNDED SYNTHETIC PASS / FULL GOAL INCOMPLETE
 

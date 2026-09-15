@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
@@ -10,9 +11,12 @@ import json
 import os
 from enum import StrEnum
 import re
+import time as monotonic_time
 from typing import Any, Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import psycopg
 
 from .forecasting import (
     DailyNetSales,
@@ -34,6 +38,19 @@ from .monday_forecast_retirement import (
 from .po_ledger import open_po_position
 from .replenishment import calculate_baseline_need
 from .strategic import PriceTier, evaluate_price_tiers
+from .synthetic_selected_offer import (
+    CONTRACT as SYNTHETIC_SELECTED_OFFER_CONTRACT,
+    SELECTED_OPERATION_SECONDS,
+    SyntheticSelectedOfferError,
+    acquire_input_locks,
+    classify_frozen_manifest,
+    release_input_locks,
+    require_attested_selected_mode,
+    require_selected_mode_process_policy,
+    resolve_selected_offer,
+    selected_blocker_evidence,
+    selected_mode_requested,
+)
 from .vendor_rules import VendorRuleValidationError, validate_vendor_rules_input
 
 
@@ -43,6 +60,115 @@ SAFETY_LABEL = "TEST DATA — NOT FOR ORDERING"
 
 class MondayRecommendationError(ValueError):
     pass
+
+
+class _DeadlineCursor:
+    """Refresh one absolute operation budget before every cursor statement."""
+
+    def __init__(self, cursor: Any, connection: "_DeadlineConnection") -> None:
+        self._cursor = cursor
+        self._connection = connection
+
+    def __enter__(self) -> "_DeadlineCursor":
+        self._cursor.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> Any:
+        return self._cursor.__exit__(exc_type, exc, traceback)
+
+    def execute(self, *args: Any, **kwargs: Any) -> "_DeadlineCursor":
+        self._connection._refresh_timeout()
+        self._cursor.execute(*args, **kwargs)
+        return self
+
+    def executemany(self, *args: Any, **kwargs: Any) -> "_DeadlineCursor":
+        self._connection._refresh_timeout()
+        self._cursor.executemany(*args, **kwargs)
+        return self
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._cursor, name)
+
+
+class _DeadlineConnection:
+    """Connection view whose SQL budget always derives from one deadline."""
+
+    def __init__(self, connection: Any, deadline: float) -> None:
+        self._connection = connection
+        self._deadline = deadline
+
+    def _refresh_timeout(self) -> None:
+        remaining = self._deadline - monotonic_time.monotonic()
+        if remaining <= 0:
+            raise MondayRecommendationError("MONDAY_PREPARATION_RETRY_REQUIRED")
+        remaining_ms = max(1, int(remaining * 1000))
+        self._connection.execute(
+            f"SET LOCAL statement_timeout = '{remaining_ms}ms'"
+        )
+        self._connection.execute(
+            f"SET LOCAL lock_timeout = '{min(5000, remaining_ms)}ms'"
+        )
+
+    def arm_commit(self) -> None:
+        """Bound the transaction COMMIT statement by the same deadline."""
+        self._refresh_timeout()
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        self._refresh_timeout()
+        return self._connection.execute(*args, **kwargs)
+
+    def cursor(self, *args: Any, **kwargs: Any) -> _DeadlineCursor:
+        return _DeadlineCursor(
+            self._connection.cursor(*args, **kwargs),
+            self,
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connection, name)
+
+
+@dataclass(frozen=True)
+class _PreparedRunReference:
+    run_id: str
+    idempotent_replay: bool
+
+
+@contextmanager
+def _monday_transaction(conn: Any, *, selected: bool):
+    """Distinguish selected-mode body failures from ambiguous COMMIT failures."""
+
+    if not selected:
+        with conn.transaction():
+            yield
+        return
+    transaction = conn.transaction()
+    transaction.__enter__()
+    try:
+        yield
+    except BaseException as exc:
+        suppress = transaction.__exit__(type(exc), exc, exc.__traceback__)
+        if not suppress:
+            raise
+    else:
+        try:
+            transaction.__exit__(None, None, None)
+        except BaseException as exc:
+            if getattr(exc, "sqlstate", None) in {"40001", "40P01"}:
+                raise
+            ambiguous = isinstance(
+                exc, (psycopg.OperationalError, psycopg.InterfaceError)
+            ) or not isinstance(exc, Exception)
+            if not ambiguous:
+                raise
+            try:
+                conn.close()
+            finally:
+                raise MondayRecommendationError(
+                    "MONDAY_PREPARATION_COMMIT_OUTCOME_UNKNOWN"
+                ) from exc
 
 
 class MondayRunInputValidationState(StrEnum):
@@ -82,6 +208,31 @@ def _canonical_json(value: Any) -> str:
 
 def _fingerprint(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode()).hexdigest()
+
+
+def _exception_sqlstate(exc: BaseException) -> str | None:
+    """Find a driver SQLSTATE without losing a fail-closed wrapper boundary."""
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        value = getattr(current, "sqlstate", None)
+        if isinstance(value, str):
+            return value
+        next_error = current.__cause__ or current.__context__
+        current = next_error if isinstance(next_error, BaseException) else None
+    return None
+
+
+def _arm_selected_commit(conn: Any, deadline: float | None) -> None:
+    if monotonic_time.monotonic() >= (deadline or 0):
+        raise MondayRecommendationError("MONDAY_PREPARATION_RETRY_REQUIRED")
+    if not isinstance(conn, _DeadlineConnection):
+        raise MondayRecommendationError(
+            "selected preparation lost its absolute deadline boundary"
+        )
+    conn.arm_commit()
 
 
 def _whole(value: Any, field: str) -> int:
@@ -414,8 +565,13 @@ def _authoritative_sales_rows(
     return list(rows), authority
 
 
-def _load_context(
-    conn: Any, *, business_date: date, variant_id: str, evaluation_at: datetime
+def _load_context_unfinalized(
+    conn: Any,
+    *,
+    business_date: date,
+    variant_id: str,
+    evaluation_at: datetime,
+    offer_resolution_contract: str | None = None,
 ) -> dict[str, Any]:
     context: dict[str, Any] = {"variant_id": str(variant_id), "blockers": []}
     variant = conn.execute(
@@ -430,7 +586,7 @@ def _load_context(
     context["variant"] = list(variant)
     context["retail_price"] = variant[7]
 
-    offers = conn.execute(
+    legacy_offers = conn.execute(
         """SELECT offer_id,vendor_id::text,supplier_sku,package_type,size_text,raw_pack,
                   shopify_units_per_case,qualifying_units_per_case,assortment_scope,
                   assortment_group,assortable,confidence,source_file,source_page,
@@ -440,11 +596,35 @@ def _load_context(
             ORDER BY offer_id""",
         (str(variant_id),),
     ).fetchall()
-    context["offers"] = [list(row) for row in offers]
-    if len(offers) != 1:
-        context["blockers"].append("EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED")
-        return context
-    offer = offers[0]
+    if offer_resolution_contract is None:
+        context["offers"] = [list(row) for row in legacy_offers]
+        if len(legacy_offers) != 1:
+            context["blockers"].append("EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED")
+            return context
+        offer = legacy_offers[0]
+    elif offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        context["legacy_offer_comparison"] = {
+            "active_standard_offer_ids": [int(row[0]) for row in legacy_offers],
+            "active_standard_offer_count": len(legacy_offers),
+        }
+        offer, selected_evidence = resolve_selected_offer(
+            conn,
+            variant_id=str(variant_id),
+            business_date=business_date,
+            evaluation_at=evaluation_at,
+        )
+        selected_evidence["legacy_active_standard_offer_comparison"] = {
+            "authority": "COMPARISON_ONLY_NO_AUTHORITY",
+            "active_standard_offer_ids": [int(row[0]) for row in legacy_offers],
+            "active_standard_offer_count": len(legacy_offers),
+        }
+        context["selected_offer_input_evidence"] = selected_evidence
+        if offer is None:
+            context["blockers"].append(str(selected_evidence["blocker"]))
+            return context
+        context["offers"] = [list(offer)]
+    else:
+        raise MondayRecommendationError("UNKNOWN_OFFER_RESOLUTION_CONTRACT")
     if offer[11] != "VERIFIED":
         context["blockers"].append("SUPPLIER_OFFER_MAPPING_NOT_VERIFIED")
     try:
@@ -530,6 +710,12 @@ def _load_context(
     if not str(vendor[11] or "").strip() or vendor[20] is None:
         context["blockers"].append("CONFIRMED_VENDOR_RULES_REQUIRED")
         return context
+    if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        context["selected_offer_input_evidence"]["applicable_vendor_terms"] = {
+            "vendor_id": context["vendor_id"],
+            "vendor_rules": list(vendor),
+            "sha256": _fingerprint(list(vendor)),
+        }
     local_evaluation = evaluation_at.astimezone(vendor_zone)
     order_weekday = business_date.strftime("%A").upper()
     if (
@@ -616,6 +802,13 @@ def _load_context(
     if sum(1 for row in prices if row[3] == "BASE") != 1:
         context["blockers"].append("EXACTLY_ONE_CURRENT_BASE_PRICE_REQUIRED")
         return context
+    if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        context["selected_offer_input_evidence"]["applicable_price_ladder"] = {
+            "contract": "FROZEN_SELECTED_OFFER_PRICE_LADDER_V1",
+            "effective_month": _month_start(business_date),
+            "rows": [list(row) for row in prices],
+            "sha256": _fingerprint([list(row) for row in prices]),
+        }
 
     history_start = business_date - timedelta(days=84)
     history_end = business_date - timedelta(days=1)
@@ -741,16 +934,104 @@ def _load_context(
     context["forecast"] = forecast
     context["need"] = need
     context["strategic"] = strategic
+    if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        eligible_rows = [
+            row
+            for row in prices
+            if row[3] == "BASE"
+            or (
+                row[3] == "BREAK"
+                and row[5] == "CS"
+                and Decimal(row[4]) <= Decimal(need.cases)
+            )
+            or (
+                row[3] == "BREAK"
+                and row[5] == "BT"
+                and Decimal(row[4])
+                <= Decimal(need.cases * qualifying_units)
+            )
+        ]
+        selected_rows = [
+            row
+            for row in eligible_rows
+            if Decimal(row[7]) == strategic.selected_unit_cost
+        ]
+        if len(selected_rows) != 1:
+            context["blockers"].append(
+                "SELECTED_INITIAL_PRICE_TIER_IDENTITY_AMBIGUOUS"
+            )
+            return context
+        initial_price = selected_rows[0]
+        context["selected_offer_input_evidence"]["initial_applicable_price_tier"] = {
+            "price_id": int(initial_price[0]),
+            "offer_id": int(initial_price[1]),
+            "level_type": initial_price[3],
+            "break_qty": initial_price[4],
+            "break_unit": initial_price[5],
+            "case_price": initial_price[6],
+            "unit_price": initial_price[7],
+            "price_ladder_sha256": context["selected_offer_input_evidence"][
+                "applicable_price_ladder"
+            ]["sha256"],
+        }
+        context["selected_offer_input_evidence_sha256"] = _fingerprint(
+            context["selected_offer_input_evidence"]
+        )
     return context
 
 
-def prepare_monday_run(
+def _load_context(
+    conn: Any,
+    *,
+    business_date: date,
+    variant_id: str,
+    evaluation_at: datetime,
+    offer_resolution_contract: str | None = None,
+) -> dict[str, Any]:
+    """Finalize every selected context as one hash-bound evidence envelope."""
+
+    context = _load_context_unfinalized(
+        conn,
+        business_date=business_date,
+        variant_id=variant_id,
+        evaluation_at=evaluation_at,
+        offer_resolution_contract=offer_resolution_contract,
+    )
+    if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        evidence = context.get("selected_offer_input_evidence")
+        if not isinstance(evidence, dict):
+            blockers = context.get("blockers") or [
+                "ROUTINE_SELECTED_OFFER_LINEAGE_INVALID"
+            ]
+            evidence = selected_blocker_evidence(
+                blocker=str(blockers[0]),
+                variant_id=str(variant_id),
+                business_date=business_date,
+                evaluation_at=evaluation_at,
+            )
+            context["selected_offer_input_evidence"] = evidence
+        if context.get("blockers"):
+            normalized_blockers = sorted(
+                {str(value) for value in context["blockers"]}
+            )
+            context["blockers"] = normalized_blockers
+            evidence["resolution_blockers"] = normalized_blockers
+            evidence["blocker"] = normalized_blockers[0]
+            evidence["recommendation_effect"] = "NO_RECOMMENDATION_BLOCKED"
+        context["selected_offer_input_evidence_sha256"] = _fingerprint(evidence)
+    return context
+
+
+def _prepare_monday_run_impl(
     conn: Any,
     *,
     business_date: date,
     idempotency_key: str,
     variant_ids: Iterable[str],
     actor: str,
+    offer_resolution_contract: str | None = None,
+    _inject_failure_after_persistence: bool = False,
+    _operation_deadline: float | None = None,
 ) -> dict[str, Any]:
     """Freeze source evidence and persist deterministic recommendations."""
 
@@ -759,18 +1040,27 @@ def prepare_monday_run(
     normalized_ids = tuple(sorted({str(value).strip() for value in variant_ids if str(value).strip()}))
     if not key or not reviewer or not normalized_ids:
         raise MondayRecommendationError("business run key, actor, and Variant IDs are required")
-    with conn.transaction():
+    with _monday_transaction(
+        conn,
+        selected=offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT,
+    ):
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+            conn = _DeadlineConnection(conn, _operation_deadline or 0)
         try:
+            if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+                require_attested_selected_mode(conn)
             verify_monday_forecast_v2_retirement_contract(conn)
             material_edit_policy = load_material_edit_policy().evidence()
         except (MondayControlError, MondayForecastRetirementContractError) as exc:
             raise MondayRecommendationError(str(exc)) from exc
-        if not conn.execute("SELECT pg_try_advisory_xact_lock(%s)", (MONDAY_ANALYSIS_LOCK,)).fetchone()[0]:
+        if offer_resolution_contract is None and not conn.execute(
+            "SELECT pg_try_advisory_xact_lock(%s)", (MONDAY_ANALYSIS_LOCK,)
+        ).fetchone()[0]:
             raise MondayRecommendationError("Monday analysis lock is unavailable")
         existing = conn.execute(
             """SELECT run_id,input_fingerprint,workflow_stage,procurement_output_mode,status,
-                      started_at,model_version
+                      started_at,model_version,procurement_input_manifest
                  FROM runs
                 WHERE run_type='MONDAY_PROCUREMENT' AND idempotency_key=%s FOR UPDATE""",
             (key,),
@@ -787,6 +1077,58 @@ def prepare_monday_run(
             raise MondayRecommendationError(
                 MondayRunInputValidationState.FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED.value
             )
+        if existing is not None:
+            try:
+                stored_manifest = json.loads(existing[7])
+                stored_contract, classified_variant_ids = classify_frozen_manifest(
+                    existing[7]
+                )
+                stored_business_date = str(stored_manifest["business_date"])
+                stored_variant_ids = tuple(
+                    str(value) for value in stored_manifest["variant_ids"]
+                )
+                if stored_variant_ids != classified_variant_ids:
+                    raise MondayRecommendationError(
+                        "run key has an invalid frozen input manifest"
+                    )
+                if hashlib.sha256(existing[7].encode("utf-8")).hexdigest() != existing[1]:
+                    raise MondayRecommendationError(
+                        "run key has an invalid frozen input manifest"
+                    )
+            except (
+                AttributeError,
+                json.JSONDecodeError,
+                SyntheticSelectedOfferError,
+                TypeError,
+            ):
+                raise MondayRecommendationError("run key has an invalid frozen input manifest")
+            except KeyError as exc:
+                raise MondayRecommendationError(
+                    "run key has an invalid frozen input manifest"
+                ) from exc
+            if stored_contract not in {None, SYNTHETIC_SELECTED_OFFER_CONTRACT}:
+                raise MondayRecommendationError("UNKNOWN_OFFER_RESOLUTION_CONTRACT")
+            if stored_contract != offer_resolution_contract:
+                if stored_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+                    raise MondayRecommendationError(
+                        "SYNTHETIC_SELECTED_OFFER_INPUTS_NOT_AUTHORIZED"
+                    )
+                raise MondayRecommendationError(
+                    "run key already exists with different frozen inputs"
+                )
+            if stored_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT and (
+                stored_business_date != str(business_date)
+                or stored_variant_ids != normalized_ids
+            ):
+                raise MondayRecommendationError(
+                    "run key already exists with different frozen inputs"
+                )
+            if (
+                stored_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT
+                and existing[2] in {"DRAFTS_BUILT", "PACKET_BUILT"}
+            ):
+                _arm_selected_commit(conn, _operation_deadline)
+                return _PreparedRunReference(str(existing[0]), True)
         active_same_day = conn.execute(
             """SELECT run_id,idempotency_key,model_version,status,workflow_stage FROM runs
                 WHERE run_type='MONDAY_PROCUREMENT' AND status='RUNNING'
@@ -820,6 +1162,7 @@ def prepare_monday_run(
                 business_date=business_date,
                 variant_id=variant_id,
                 evaluation_at=evaluation_at,
+                offer_resolution_contract=offer_resolution_contract,
             )
             for variant_id in normalized_ids
         ]
@@ -831,11 +1174,16 @@ def prepare_monday_run(
             "material_edit_policy": material_edit_policy,
             "contexts": contexts,
         }
+        if offer_resolution_contract is not None:
+            frozen_manifest["offer_resolution_contract"] = offer_resolution_contract
         input_manifest = _canonical_json(frozen_manifest)
         input_fingerprint = hashlib.sha256(input_manifest.encode()).hexdigest()
         if existing is not None:
             if existing[1] != input_fingerprint:
                 raise MondayRecommendationError("run key already exists with different frozen inputs")
+            if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+                _arm_selected_commit(conn, _operation_deadline)
+                return _PreparedRunReference(str(existing[0]), True)
             return get_monday_run(conn, str(existing[0]), idempotent_replay=True)
 
         run_id = conn.execute(
@@ -1011,6 +1359,16 @@ def prepare_monday_run(
                 "material_edit_policy": material_edit_policy,
                 "safety_label": SAFETY_LABEL,
             }
+            if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+                metrics["selected_offer_input_evidence"] = context[
+                    "selected_offer_input_evidence"
+                ]
+                metrics["selected_offer_input_evidence_sha256"] = context[
+                    "selected_offer_input_evidence_sha256"
+                ]
+                metrics["selected_price_ladder_sha256"] = context[
+                    "selected_offer_input_evidence"
+                ]["applicable_price_ladder"]["sha256"]
             conn.execute(
                 """INSERT INTO procurement_recommendations(
                            run_id,variant_id,vendor_id,offer_id,baseline_units,recommended_cases,
@@ -1032,11 +1390,144 @@ def prepare_monday_run(
                     context["vendor_rules"][5],context["vendor_rules"][6],context["vendor_rules"][7],
                 ),
             )
+        if _inject_failure_after_persistence:
+            raise MondayRecommendationError(
+                "injected selected-offer preparation failure before commit"
+            )
         conn.execute(
             "UPDATE runs SET workflow_stage='AWAITING_REVIEW',exception_count=%s WHERE run_id=%s",
             (exception_count,run_id),
         )
+        if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+            _arm_selected_commit(conn, _operation_deadline)
+    if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        return _PreparedRunReference(str(run_id), False)
     return get_monday_run(conn, str(run_id), idempotent_replay=False)
+
+
+def prepare_monday_run(
+    conn: Any,
+    *,
+    business_date: date,
+    idempotency_key: str,
+    variant_ids: Iterable[str],
+    actor: str,
+    _inject_failure_after_persistence: bool = False,
+) -> dict[str, Any]:
+    """Prepare legacy inputs unchanged or the attested synthetic selected path."""
+
+    try:
+        selected = selected_mode_requested()
+    except SyntheticSelectedOfferError as exc:
+        raise MondayRecommendationError(str(exc)) from exc
+    if not selected:
+        return _prepare_monday_run_impl(
+            conn,
+            business_date=business_date,
+            idempotency_key=idempotency_key,
+            variant_ids=variant_ids,
+            actor=actor,
+            _inject_failure_after_persistence=_inject_failure_after_persistence,
+        )
+    normalized_ids = tuple(
+        sorted(
+            {str(value).strip() for value in variant_ids if str(value).strip()},
+            key=lambda value: value.encode("utf-8"),
+        )
+    )
+    if not str(idempotency_key).strip() or not str(actor).strip() or not normalized_ids:
+        raise MondayRecommendationError(
+            "business run key, actor, and Variant IDs are required"
+        )
+    if conn.info.transaction_status.name != "IDLE":
+        raise MondayRecommendationError("SYNTHETIC_SELECTED_OFFER_INPUTS_NOT_AUTHORIZED")
+    try:
+        # Process policy is checked before the first database statement.  Full
+        # database attestation occurs inside each fresh SERIALIZABLE snapshot.
+        require_selected_mode_process_policy()
+    except SyntheticSelectedOfferError as exc:
+        raise MondayRecommendationError(str(exc)) from exc
+    lock_names: tuple[str, ...] = ()
+    lock_acquisition_started = False
+    locks_acquired = False
+    prepared: _PreparedRunReference | None = None
+    operation_deadline = monotonic_time.monotonic() + SELECTED_OPERATION_SECONDS
+    try:
+        lock_acquisition_started = True
+        lock_names = acquire_input_locks(
+            conn,
+            normalized_ids,
+            global_lock_id=MONDAY_ANALYSIS_LOCK,
+            operation_deadline=operation_deadline,
+        )
+        locks_acquired = True
+        last_error: BaseException | None = None
+        for attempt in range(3):
+            try:
+                attempt_result = _prepare_monday_run_impl(
+                    conn,
+                    business_date=business_date,
+                    idempotency_key=idempotency_key,
+                    variant_ids=normalized_ids,
+                    actor=actor,
+                    offer_resolution_contract=SYNTHETIC_SELECTED_OFFER_CONTRACT,
+                    _inject_failure_after_persistence=_inject_failure_after_persistence,
+                    _operation_deadline=operation_deadline,
+                )
+                if not isinstance(attempt_result, _PreparedRunReference):
+                    raise MondayRecommendationError(
+                        "selected preparation returned an invalid result reference"
+                    )
+                prepared = attempt_result
+                break
+            except Exception as exc:
+                last_error = exc
+                sqlstate = _exception_sqlstate(exc)
+                if sqlstate in {"57014", "55P03"}:
+                    conn.rollback()
+                    raise MondayRecommendationError(
+                        "MONDAY_PREPARATION_RETRY_REQUIRED"
+                    ) from exc
+                if sqlstate not in {"40001", "40P01"} or attempt == 2:
+                    if sqlstate in {"40001", "40P01"}:
+                        raise MondayRecommendationError(
+                            "MONDAY_PREPARATION_RETRY_REQUIRED"
+                        ) from exc
+                    raise
+                conn.rollback()
+                if monotonic_time.monotonic() >= operation_deadline:
+                    raise MondayRecommendationError(
+                        "MONDAY_PREPARATION_RETRY_REQUIRED"
+                    ) from exc
+                remaining = max(0.0, operation_deadline - monotonic_time.monotonic())
+                monotonic_time.sleep(min(0.01 * (attempt + 1), remaining))
+        if prepared is None:
+            raise MondayRecommendationError(
+                "MONDAY_PREPARATION_RETRY_REQUIRED"
+            ) from last_error
+    except SyntheticSelectedOfferError as exc:
+        raise MondayRecommendationError(str(exc)) from exc
+    finally:
+        if (
+            lock_acquisition_started
+            and not locks_acquired
+            and not getattr(conn, "closed", False)
+        ):
+            conn.close()
+        elif locks_acquired and not getattr(conn, "closed", False):
+            try:
+                release_input_locks(
+                    conn, lock_names, global_lock_id=MONDAY_ANALYSIS_LOCK
+                )
+            except SyntheticSelectedOfferError as exc:
+                raise MondayRecommendationError(str(exc)) from exc
+    if prepared is None:
+        raise MondayRecommendationError("MONDAY_PREPARATION_RETRY_REQUIRED")
+    return get_monday_run(
+        conn,
+        prepared.run_id,
+        idempotent_replay=prepared.idempotent_replay,
+    )
 
 
 def validate_monday_run_inputs(
@@ -1099,22 +1590,44 @@ def validate_monday_run_inputs(
         or manifest.get("material_edit_policy") != material_edit_policy
     ):
         return base
+    offer_resolution_contract = manifest.get("offer_resolution_contract")
+    if offer_resolution_contract not in {None, SYNTHETIC_SELECTED_OFFER_CONTRACT}:
+        return base
+    frozen_contexts = manifest.get("contexts")
+    if not isinstance(frozen_contexts, list):
+        return base
+    has_selected_fields = any(
+        isinstance(context, dict) and "selected_offer_input_evidence" in context
+        for context in frozen_contexts
+    )
+    if (offer_resolution_contract is None) == has_selected_fields:
+        return base
+    if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+        try:
+            require_attested_selected_mode(conn)
+        except SyntheticSelectedOfferError:
+            return base
     contexts = [
         _load_context(
-            conn, business_date=run[0], variant_id=variant_id, evaluation_at=run[4]
+            conn,
+            business_date=run[0],
+            variant_id=variant_id,
+            evaluation_at=run[4],
+            offer_resolution_contract=offer_resolution_contract,
         )
         for variant_id in variant_ids
     ]
-    current = _fingerprint(
-        {
-            "business_date": run[0],
-            "variant_ids": variant_ids,
-            "method_version": METHOD_VERSION,
-            "evaluation_at": run[4],
-            "material_edit_policy": material_edit_policy,
-            "contexts": contexts,
-        }
-    )
+    current_manifest = {
+        "business_date": run[0],
+        "variant_ids": variant_ids,
+        "method_version": METHOD_VERSION,
+        "evaluation_at": run[4],
+        "material_edit_policy": material_edit_policy,
+        "contexts": contexts,
+    }
+    if offer_resolution_contract is not None:
+        current_manifest["offer_resolution_contract"] = offer_resolution_contract
+    current = _fingerprint(current_manifest)
     return MondayRunInputValidation(
         (
             MondayRunInputValidationState.MATCH
@@ -1382,7 +1895,8 @@ def confirm_monday_stale_forecast_retirement(
 def get_monday_run(conn: Any, run_id: str, *, idempotent_replay: bool = False) -> dict[str, Any]:
     with conn.transaction():
         run = conn.execute(
-            """SELECT run_id,business_date,status,workflow_stage,input_fingerprint,exception_count,model_version
+            """SELECT run_id,business_date,status,workflow_stage,input_fingerprint,
+                      exception_count,model_version,procurement_input_manifest
                  FROM runs WHERE run_id=%s AND run_type='MONDAY_PROCUREMENT'
                    AND procurement_output_mode='INTERNAL_DRAFT_ONLY'""",
             (run_id,),
@@ -1435,7 +1949,12 @@ def get_monday_run(conn: Any, run_id: str, *, idempotent_replay: bool = False) -
         "input_fingerprint": run[4],"exception_count": int(run[5]),"model_version": run[6],
         "recommendations": recommendations,"blockers": blockers,"idempotent_replay": idempotent_replay,
         "safety_label": SAFETY_LABEL,
-    }
+    } | (
+        {"synthetic_selected_offer_inputs": True}
+        if json.loads(run[7]).get("offer_resolution_contract")
+        == SYNTHETIC_SELECTED_OFFER_CONTRACT
+        else {}
+    )
 
 
 def list_monday_runs(conn: Any) -> list[dict[str, Any]]:
@@ -1444,11 +1963,14 @@ def list_monday_runs(conn: Any) -> list[dict[str, Any]]:
     with conn.transaction():
         rows = conn.execute(
             """SELECT run_id,business_date,status,workflow_stage,input_fingerprint,
-                      exception_count,started_at,model_version
+                      exception_count,started_at,model_version,
+                      (procurement_input_manifest::jsonb
+                         ->> 'offer_resolution_contract') = %s
                  FROM runs
                 WHERE run_type='MONDAY_PROCUREMENT'
                   AND procurement_output_mode='INTERNAL_DRAFT_ONLY'
                 ORDER BY started_at DESC,run_id"""
+            , (SYNTHETIC_SELECTED_OFFER_CONTRACT,)
         ).fetchall()
     return [
         {
@@ -1457,6 +1979,6 @@ def list_monday_runs(conn: Any) -> list[dict[str, Any]]:
             "exception_count": int(row[5]), "started_at": row[6],
             "model_version": row[7],
             "safety_label": SAFETY_LABEL,
-        }
+        } | ({"synthetic_selected_offer_inputs": True} if row[8] else {})
         for row in rows
     ]

@@ -170,13 +170,25 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
                    '0000000002002',NULL)""",
             (BLOCKED_VARIANT_ID,),
         )
-        offer_id = conn.execute(
+        alternative_offer_id = conn.execute(
             """INSERT INTO supplier_offers(
                    variant_id,vendor_id,supplier_sku,supplier_description,
                    package_type,size_text,raw_pack,shopify_units_per_case,
                    qualifying_units_per_case,assortment_scope,assortable,
                    active,confidence,source_file,notes)
-               VALUES (%s,%s,'SUP-001','Synthetic Citrus','STANDARD','750ML',
+               VALUES (%s,%s,'SUP-ALT','Synthetic Citrus legacy alternative','STANDARD','750ML',
+                   '6x750ML',6,6,'PRODUCT',FALSE,TRUE,'VERIFIED',
+                   'fabricated-authoritative-format-source.txt',
+                   'TEST DATA — NOT FOR ORDERING') RETURNING offer_id""",
+            (VARIANT_ID, VENDOR_ID),
+        ).fetchone()[0]
+        selected_offer_id = conn.execute(
+            """INSERT INTO supplier_offers(
+                   variant_id,vendor_id,supplier_sku,supplier_description,
+                   package_type,size_text,raw_pack,shopify_units_per_case,
+                   qualifying_units_per_case,assortment_scope,assortable,
+                   active,confidence,source_file,notes)
+               VALUES (%s,%s,'SUP-001','Synthetic Citrus selected offer','STANDARD','750ML',
                    '6x750ML',6,6,'PRODUCT',FALSE,TRUE,'VERIFIED',
                    'fabricated-authoritative-format-source.txt',
                    'TEST DATA — NOT FOR ORDERING') RETURNING offer_id""",
@@ -184,12 +196,28 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
         ).fetchone()[0]
         conn.execute(
             """INSERT INTO prices(
-                   offer_id,price_state,effective_month,level_type,case_price,
-                   unit_price,source_file,extraction_confidence,verified,notes)
-               VALUES (%s,'current',%s,'BASE',10.01,1.6683333333,
-                   'synthetic-owner-demo.csv','VERIFIED',TRUE,
-                   'Legacy synthetic CURRENT fixture installed before migration 011')""",
-            (offer_id, business_date.replace(day=1)),
+                   offer_id,price_state,effective_month,level_type,break_qty,break_unit,
+                   case_price,unit_price,source_file,source_page,
+                   extraction_confidence,verified,notes)
+               VALUES
+                   (%s,'current',%s,'BASE',NULL,NULL,10.01,1.6683333333,
+                    'synthetic-owner-demo.csv',1,'VERIFIED',TRUE,
+                    'Synthetic alternative BASE installed before migration 011'),
+                   (%s,'current',%s,'BREAK',2,'CS',10.00,1.6666666667,
+                    'synthetic-owner-demo.csv',2,'VERIFIED',TRUE,
+                    'Synthetic alternative BREAK installed before migration 011'),
+                   (%s,'current',%s,'BASE',NULL,NULL,12.00,2.0000000000,
+                    'synthetic-owner-demo.csv',3,'VERIFIED',TRUE,
+                    'Synthetic selected BASE installed before migration 011'),
+                   (%s,'current',%s,'BREAK',2,'CS',9.50,1.5833333333,
+                    'synthetic-owner-demo.csv',4,'VERIFIED',TRUE,
+                    'Synthetic selected BREAK installed before migration 011')""",
+            (
+                alternative_offer_id,business_date.replace(day=1),
+                alternative_offer_id,business_date.replace(day=1),
+                selected_offer_id,business_date.replace(day=1),
+                selected_offer_id,business_date.replace(day=1),
+            ),
         )
 
 
@@ -238,7 +266,12 @@ def _synthetic_inventory_capture_specs(
     )
 
 
-def _seed_evidence(conn: psycopg.Connection, business_date: date) -> str:
+def _seed_evidence(
+    conn: psycopg.Connection,
+    business_date: date,
+    *,
+    canonical_sales_end_date: date | None = None,
+) -> str:
     from procurement_os.catalog import recompute_catalog_gate
     from procurement_os.historical_sales import (
         AUTHORITATIVE_START_DATE,
@@ -299,6 +332,7 @@ def _seed_evidence(conn: psycopg.Connection, business_date: date) -> str:
     # Exercise the production-intended durable raw-first sales pipeline.  The
     # fabricated rows are inputs to its independent page/chunk/final controls;
     # the initializer never writes a readiness PASS itself.
+    sales_end_date = canonical_sales_end_date or business_date
     sales_rows = _synthetic_sales_rows(business_date)
     totals = ControlTotals(
         net_items_sold=sum((row.net_items_sold for row in sales_rows), Decimal("0")),
@@ -307,7 +341,7 @@ def _seed_evidence(conn: psycopg.Connection, business_date: date) -> str:
     run_id = create_sales_backfill_run(
         conn,
         start_date=AUTHORITATIVE_START_DATE,
-        end_date=business_date,
+        end_date=sales_end_date,
         store_timezone="America/New_York",
         chunk_days=10000,
         page_size=1000,
@@ -664,6 +698,33 @@ def _verify_initialized_demo(
         or not metadata.get("synthetic_owner_demo_sales_backfill_id")
     ):
         raise RuntimeError("synthetic demo metadata differs")
+    offer_prices = conn.execute(
+        """SELECT o.supplier_sku,o.active,o.package_type,o.confidence,
+                  o.shopify_units_per_case,o.qualifying_units_per_case,
+                  p.price_state,p.effective_month,p.level_type,p.break_qty,p.break_unit,
+                  p.case_price,p.unit_price,p.source_file,p.source_page
+             FROM supplier_offers o JOIN prices p USING(offer_id)
+            WHERE o.variant_id=%s
+            ORDER BY o.supplier_sku,p.source_page""",
+        (VARIANT_ID,),
+    ).fetchall()
+    expected_month = business_date.replace(day=1)
+    expected_offer_prices = [
+        ("SUP-001",True,"STANDARD","VERIFIED",Decimal("6"),Decimal("6"),
+         "current",expected_month,"BASE",None,None,Decimal("12.0000"),
+         Decimal("2.0000000000"),"synthetic-owner-demo.csv",3),
+        ("SUP-001",True,"STANDARD","VERIFIED",Decimal("6"),Decimal("6"),
+         "current",expected_month,"BREAK",Decimal("2"),"CS",Decimal("9.5000"),
+         Decimal("1.5833"),"synthetic-owner-demo.csv",4),
+        ("SUP-ALT",True,"STANDARD","VERIFIED",Decimal("6"),Decimal("6"),
+         "current",expected_month,"BASE",None,None,Decimal("10.0100"),
+         Decimal("1.6683"),"synthetic-owner-demo.csv",1),
+        ("SUP-ALT",True,"STANDARD","VERIFIED",Decimal("6"),Decimal("6"),
+         "current",expected_month,"BREAK",Decimal("2"),"CS",Decimal("10.0000"),
+         Decimal("1.6667"),"synthetic-owner-demo.csv",2),
+    ]
+    if offer_prices != expected_offer_prices:
+        raise RuntimeError("synthetic selected-offer price fixture differs")
     sales_backfill_id = str(metadata["synthetic_owner_demo_sales_backfill_id"])
     try:
         sales_backfill_uuid = UUID(sales_backfill_id)
@@ -867,6 +928,7 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
             if not _verify_or_apply_post_mapping_release(conn, DB_DIR):
                 raise RuntimeError("fresh synthetic demo did not apply retirement release")
         _publish_demo_marker(conn, business_date, sales_backfill_id)
+        _verify_initialized_demo(conn, business_date)
         return {
             "initialized": True,
             "contract": DEMO_CONTRACT,
@@ -879,7 +941,7 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", required=True)
-    parser.add_argument("--business-date", type=date.fromisoformat, default=date(2026, 9, 13))
+    parser.add_argument("--business-date", type=date.fromisoformat, default=date(2026, 9, 14))
     args = parser.parse_args()
     result = initialize(args.database_url, args.business_date)
     print(json.dumps(result, sort_keys=True))

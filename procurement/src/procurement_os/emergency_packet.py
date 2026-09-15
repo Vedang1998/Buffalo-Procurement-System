@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from datetime import date, datetime
 from decimal import Decimal
+from functools import wraps
 import hashlib
 import io
 import json
@@ -14,6 +15,10 @@ import zipfile
 from .draft_po import SAFETY_LABEL, get_vendor_drafts
 from .po_csv import FORMAT_WARNING, write_vendor_draft_csvs
 from .storage import StorageAdapter
+from .synthetic_selected_offer import (
+    SyntheticSelectedOfferError,
+    selected_run_input_lock_scope,
+)
 
 
 PACKET_BUILD_LOCK = 5_920_230_801
@@ -21,6 +26,21 @@ PACKET_BUILD_LOCK = 5_920_230_801
 
 class EmergencyPacketError(ValueError):
     pass
+
+
+def _with_selected_input_locks(function: Any) -> Any:
+    @wraps(function)
+    def locked(conn: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            with selected_run_input_lock_scope(
+                conn,
+                run_id=kwargs.get("run_id"),
+            ):
+                return function(conn, *args, **kwargs)
+        except SyntheticSelectedOfferError as exc:
+            raise EmergencyPacketError(str(exc)) from exc
+
+    return locked
 
 
 def read_monday_artifact(
@@ -147,6 +167,7 @@ def _json_entry(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+@_with_selected_input_locks
 def build_emergency_review_packet(
     conn: Any, *, storage: StorageAdapter, run_id: str, actor: str,
     _inject_failure_before_stage: bool = False,
@@ -300,21 +321,49 @@ def build_emergency_review_packet(
                 (run_id,),
             ).fetchall()
         ]
-        mappings = [
-            {
+        mappings = []
+        for row in conn.execute(
+            """SELECT r.variant_id,r.vendor_id,r.offer_id,r.frozen_supplier_sku,
+                      r.units_per_case,r.frozen_qualifying_units_per_case,r.metrics,
+                      d.evidence_json #> '{review,final_price_tier}',d.action
+                 FROM procurement_recommendations r
+                 LEFT JOIN review_decisions d ON d.recommendation_id=r.recommendation_id
+                WHERE r.run_id=%s ORDER BY r.vendor_id,r.variant_id""",
+            (run_id,),
+        ).fetchall():
+            item = {
                 "variant_id": row[0], "vendor_id": str(row[1]), "offer_id": int(row[2]),
                 "supplier_sku": row[3], "units_per_case": int(row[4]),
                 "qualifying_units_per_case": int(row[5]),
                 "mapping_evidence": row[6].get("frozen_offer_evidence", {}),
             }
-            for row in conn.execute(
-                """SELECT variant_id,vendor_id,offer_id,frozen_supplier_sku,units_per_case,
-                          frozen_qualifying_units_per_case,metrics
-                     FROM procurement_recommendations WHERE run_id=%s
-                    ORDER BY vendor_id,variant_id""",
-                (run_id,),
-            ).fetchall()
-        ]
+            selected = row[6].get("selected_offer_input_evidence")
+            if selected is not None:
+                selected_sha = hashlib.sha256(
+                    json.dumps(
+                        selected,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        default=str,
+                    ).encode("utf-8")
+                ).hexdigest()
+                if selected_sha != row[6].get("selected_offer_input_evidence_sha256"):
+                    raise EmergencyPacketError(
+                        "selected offer input evidence fingerprint differs"
+                    )
+                if row[8] in {"ACCEPT", "EDIT_QUANTITY"} and not isinstance(
+                    row[7], dict
+                ):
+                    raise EmergencyPacketError(
+                        "selected DRAFT has no immutable final price tier"
+                    )
+                item.update({
+                    "selected_offer_input_evidence": selected,
+                    "selected_offer_input_evidence_sha256": selected_sha,
+                })
+                if isinstance(row[7], dict):
+                    item["final_price_tier"] = row[7]
+            mappings.append(item)
         open_ledger = [
             {"variant_id": item["variant_id"], "position": item["metrics"]["frozen_open_po_position"]}
             for item in recommendations

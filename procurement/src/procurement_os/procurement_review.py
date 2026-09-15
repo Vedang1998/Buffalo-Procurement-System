@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from functools import wraps
 import hashlib
 import json
 from typing import Any
@@ -14,7 +15,13 @@ from .monday_controls import (
 )
 from .recommendations import (
     MondayRunInputValidationState,
+    _fingerprint,
     validate_monday_run_inputs,
+)
+from .synthetic_selected_offer import (
+    CONTRACT as SYNTHETIC_SELECTED_OFFER_CONTRACT,
+    SyntheticSelectedOfferError,
+    selected_run_input_lock_scope,
 )
 
 
@@ -23,6 +30,28 @@ REVIEW_LOCK = 5_920_230_601
 
 class ProcurementReviewError(ValueError):
     pass
+
+
+def _with_selected_input_locks(identifier: str):
+    def decorate(function: Any) -> Any:
+        @wraps(function)
+        def locked(conn: Any, *args: Any, **kwargs: Any) -> Any:
+            scope = (
+                {"run_id": kwargs.get(identifier)}
+                if identifier == "run_id"
+                else {"recommendation_id": kwargs.get(identifier)}
+            )
+            try:
+                with selected_run_input_lock_scope(
+                    conn, **scope
+                ):
+                    return function(conn, *args, **kwargs)
+            except SyntheticSelectedOfferError as exc:
+                raise ProcurementReviewError(str(exc)) from exc
+
+        return locked
+
+    return decorate
 
 
 def _whole(value: Any, field: str) -> int:
@@ -91,11 +120,13 @@ def _validate_review_context(
 
 def _line_economics(
     conn: Any, row: Any, *, cases: int, loose: int
-) -> dict[str, Decimal | None]:
+) -> dict[str, Any]:
     if loose and Decimal(row[10] or 0) > 0:
         raise ProcurementReviewError("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED")
     price = conn.execute(
-        """SELECT unit_price,case_price FROM run_price_snapshots
+        """SELECT run_price_snapshot_id,offer_id,effective_month,level_type,
+                  break_qty,break_unit,case_price,unit_price,source_file,source_page
+             FROM run_price_snapshots
             WHERE run_id=%s AND offer_id=%s
               AND (
                   level_type='BASE'
@@ -107,8 +138,8 @@ def _line_economics(
     ).fetchone()
     if price is None:
         raise ProcurementReviewError("reviewed quantity has no frozen applicable price")
-    unit_cost = Decimal(price[0])
-    case_price = Decimal(price[1]) if price[1] is not None else None
+    unit_cost = Decimal(price[7])
+    case_price = Decimal(price[6]) if price[6] is not None else None
     case_merchandise = (
         Decimal(cases) * case_price
         if case_price is not None
@@ -117,13 +148,51 @@ def _line_economics(
     merchandise_total = (
         case_merchandise + Decimal(loose) * unit_cost
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return {
+    result = {
         "unit_cost": unit_cost,
         "case_price": case_price,
         "merchandise_total": merchandise_total,
         "loose_order_fee": Decimal("0.00"),
         "line_total": merchandise_total,
     }
+    metrics = row[13] or {}
+    selected_evidence = metrics.get("selected_offer_input_evidence")
+    if selected_evidence is not None:
+        if selected_evidence.get("contract") != SYNTHETIC_SELECTED_OFFER_CONTRACT:
+            raise ProcurementReviewError("selected offer price evidence is malformed")
+        ladder = selected_evidence.get("applicable_price_ladder")
+        rows = ladder.get("rows") if isinstance(ladder, dict) else None
+        if (
+            not isinstance(rows, list)
+            or ladder.get("sha256") != _fingerprint(rows)
+            or ladder.get("sha256") != metrics.get("selected_price_ladder_sha256")
+        ):
+            raise ProcurementReviewError("selected offer price ladder is not bound")
+
+        def normalized(values: Any) -> tuple[Any, ...]:
+            return tuple(
+                None if value is None else value if isinstance(value, (bool, int)) else str(value)
+                for value in values
+            )
+
+        snapshot_signature = normalized(price[1:])
+        matches = [source for source in rows if normalized(source[1:]) == snapshot_signature]
+        if len(matches) != 1:
+            raise ProcurementReviewError(
+                "selected final price tier has no unique frozen source identity"
+            )
+        source = matches[0]
+        result["final_price_tier"] = {
+            "price_id": int(source[0]),
+            "run_price_snapshot_id": int(price[0]),
+            "level_type": str(price[3]),
+            "break_qty": str(price[4]) if price[4] is not None else None,
+            "break_unit": str(price[5]) if price[5] is not None else None,
+            "unit_price": str(price[7]),
+            "case_price": str(price[6]) if price[6] is not None else None,
+            "price_ladder_sha256": ladder["sha256"],
+        }
+    return result
 
 
 def _calculate_review(
@@ -163,6 +232,7 @@ def _calculate_review(
         approved_merchandise_total = Decimal("0")
         approved_loose_order_fee = Decimal("0")
         approved_line_total = Decimal("0")
+        final_price_tier = None
     else:
         economics = _line_economics(conn, row, cases=cases, loose=loose)
         approved_unit_cost = Decimal(economics["unit_cost"])
@@ -170,6 +240,7 @@ def _calculate_review(
         approved_merchandise_total = Decimal(economics["merchandise_total"])
         approved_loose_order_fee = Decimal(economics["loose_order_fee"])
         approved_line_total = Decimal(economics["line_total"])
+        final_price_tier = economics.get("final_price_tier")
     metrics = row[13] or {}
     try:
         resulting_inventory_units = (
@@ -253,7 +324,9 @@ def _calculate_review(
         "comment": note,
         "actor": reviewer,
     }
-    return {
+    if metrics.get("selected_offer_input_evidence") is not None:
+        payload["final_price_tier"] = final_price_tier
+    result = {
         "run_id": str(row[0]),
         "action": selected_action,
         "approved_cases": cases,
@@ -271,8 +344,12 @@ def _calculate_review(
         "decision_fingerprint": _decision_fingerprint(payload),
         "payload": payload,
     }
+    if metrics.get("selected_offer_input_evidence") is not None:
+        result["final_price_tier"] = final_price_tier
+    return result
 
 
+@_with_selected_input_locks("recommendation_id")
 def preview_recommendation_review(
     conn: Any,
     *,
@@ -344,6 +421,7 @@ def _advance_when_review_complete(conn: Any, run_id: str) -> None:
         )
 
 
+@_with_selected_input_locks("run_id")
 def acknowledge_and_exclude_blocked_item(
     conn: Any,
     *,
@@ -460,6 +538,7 @@ def acknowledge_and_exclude_blocked_item(
     }
 
 
+@_with_selected_input_locks("recommendation_id")
 def confirm_material_recommendation_edit(
     conn: Any,
     *,
@@ -544,6 +623,8 @@ def confirm_material_recommendation_edit(
             "review_comment": note,
             "confirmation_reason": reason,
         }
+        if "final_price_tier" in calculated:
+            evidence["final_price_tier"] = calculated["final_price_tier"]
         confirmation = conn.execute(
             """INSERT INTO monday_material_edit_confirmations(
                        run_id,recommendation_id,input_fingerprint,
@@ -567,6 +648,7 @@ def confirm_material_recommendation_edit(
     }
 
 
+@_with_selected_input_locks("recommendation_id")
 def record_recommendation_review(
     conn: Any,
     *,
@@ -651,7 +733,11 @@ def record_recommendation_review(
                     "materiality": calculated["materiality"],
                     "material_edit_confirmation_id": existing[7],
                     "idempotent_replay": True,
-                }
+                } | (
+                    {"final_price_tier": calculated["final_price_tier"]}
+                    if "final_price_tier" in calculated
+                    else {}
+                )
             raise ProcurementReviewError("recommendation already has a different immutable review decision")
         if (
             selected_action in {"ACCEPT", "EDIT_QUANTITY"}
@@ -726,7 +812,11 @@ def record_recommendation_review(
         "materiality": calculated["materiality"],
         "material_edit_confirmation_id": material_edit_confirmation_id,
         "idempotent_replay": False,
-    }
+    } | (
+        {"final_price_tier": calculated["final_price_tier"]}
+        if "final_price_tier" in calculated
+        else {}
+    )
 
 
 def list_review_queue(conn: Any, run_id: str) -> dict[str, Any]:
@@ -821,6 +911,9 @@ def list_review_queue(conn: Any, run_id: str) -> dict[str, Any]:
                     (row[18] or {}).get("review", {}).get(
                         "material_edit_confirmation_id"
                     )
+                ),
+                "final_price_tier": (
+                    (row[18] or {}).get("review", {}).get("final_price_tier")
                 ),
             }
             for row in rows

@@ -2638,6 +2638,54 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             3,
         )
 
+    def test_asserted_selected_offer_mode_does_not_fall_back_to_legacy_offer(self):
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT count(*)
+                     FROM supplier_offers o
+                     JOIN v_verified_current_prices p USING(offer_id)
+                    WHERE o.variant_id=%s AND o.active
+                      AND o.package_type='STANDARD'""",
+                (self.variant_a,),
+            ).fetchone()[0],
+            1,
+        )
+        before = self.conn.execute(
+            """SELECT
+                   (SELECT count(*) FROM runs),
+                   (SELECT count(*) FROM procurement_recommendations),
+                   (SELECT count(*) FROM exceptions)"""
+        ).fetchone()
+        self.conn.commit()
+        with patch.dict(
+            os.environ,
+            {
+                "BUFFALO_RUNTIME_MODE": "AUTOMATED_TEST",
+                "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+            },
+            clear=False,
+        ):
+            with self.assertRaisesRegex(
+                MondayRecommendationError,
+                "^SYNTHETIC_SELECTED_OFFER_INPUTS_NOT_AUTHORIZED$",
+            ):
+                prepare_monday_run(
+                    self.conn,
+                    business_date=BUSINESS_DATE,
+                    idempotency_key="selected-offer-env-alone-must-refuse",
+                    variant_ids=(self.variant_a,),
+                    actor="test-owner",
+                )
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT
+                       (SELECT count(*) FROM runs),
+                       (SELECT count(*) FROM procurement_recommendations),
+                       (SELECT count(*) FROM exceptions)"""
+            ).fetchone(),
+            before,
+        )
+
 
 class MondayMaterialEditPolicyTests(unittest.TestCase):
     def setUp(self):

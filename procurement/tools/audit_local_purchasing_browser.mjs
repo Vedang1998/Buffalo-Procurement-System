@@ -526,8 +526,8 @@ async function audit(client) {
       "document.querySelector('a[href$=\"/source\"]')?.click()",
       {url: validSourceHref, kind: "valid-source"},
     ));
-    const offerId = await evaluate("document.querySelector('form[action$=\"/decision\"] select[name=\"existing_offer_id\"] option[value]:not([value=\"\"])')?.value");
-    check(/^\d+$/.test(offerId), "exact legacy offer identifier is server-rendered");
+    const offerId = await evaluate("[...document.querySelectorAll('form[action$=\"/decision\"] select[name=\"existing_offer_id\"] option[value]:not([value=\"\"])')].find((option) => option.textContent.includes('SUP-001'))?.value");
+    check(/^\d+$/.test(offerId), "exact SUP-001 offer identifier is server-rendered");
     transitionMark = ledgerMark();
     await submit(
       formScript("document.querySelector('form[action$=\"/decision\"]')", {
@@ -553,14 +553,14 @@ async function audit(client) {
     transitionMark = ledgerMark();
     await submit(
       formScript("document.querySelector('form[action$=\"/selection\"]')", {
-        effective_from: "2026-09-13",
+        effective_from: "2026-09-14",
         reason: "Synthetic routine offer shadow selection",
       }),
     );
     check((await waitForResponse(new URL(valid.href, BASE).pathname + "/selection", "POST", transitionMark))?.status === 200, "selection preview POST returns HTTP 200");
     text = await body();
     check(text.includes("Confirm routine offer selection"), "selection first request is a separate confirmation preview");
-    check(text.includes("2026-09-13") && text.includes("Synthetic routine offer shadow selection"), "selection preview visibly binds date and reason");
+    check(text.includes("2026-09-14") && text.includes("Synthetic routine offer shadow selection"), "selection preview visibly binds date and reason");
     status = await jsonFetch("/supplier-mapping/status");
     check(status.body.selection_event_count === 0 && status.body.selection_head_count === 0, "selection preview writes no event or head", status.body);
     await saveHtml("04-selection-preview-test-data.html");
@@ -569,22 +569,23 @@ async function audit(client) {
     await submit(formScript("document.querySelector('form[method=\"post\"]')"));
     await assertRedirect(transitionMark, "POST", new URL(valid.href, BASE).pathname + "/selection", new URL(valid.href, BASE).pathname, "confirmed selection POST returns HTTP 303");
     text = await body();
-    check(text.includes("legacy comparison MATCH"), "confirmed selection reaches exact legacy shadow MATCH");
+    check(text.includes("legacy comparison LEGACY_HAS_MULTIPLE_ACTIVE_STANDARD"), "confirmed selection records the deliberately ambiguous legacy comparison");
     status = await jsonFetch("/supplier-mapping/status");
     check(
       status.body.decision_count === 2 &&
         status.body.selection_event_count === 1 &&
         status.body.selection_head_count === 1 &&
-        status.body.shadow_match_count === 1 &&
+        status.body.shadow_match_count === 0 &&
+        status.body.shadow_nonmatch_count === 1 &&
         status.body.recommendation_cutover_enabled === false &&
         status.body.offer_activation_enabled === false,
-      "mapping and selection remain one-event SHADOW ONLY with activation and cutover disabled",
+      "mapping stays SHADOW_ONLY while the distinct synthetic Monday consumer is isolated and real activation/cutover stay disabled",
       status.body,
     );
     await saveHtml("05-shadow-match-test-data.html");
     await screenshot("05-shadow-match-test-data.png");
 
-    const inventory = await jsonFetch("/inventory-snapshots/status?as_of=2026-09-13");
+    const inventory = await jsonFetch("/inventory-snapshots/status?as_of=2026-09-14");
     check(inventory.status === 200 && inventory.body.status === "PASS", "same-day synthetic inventory status is PASS", inventory.body);
 
     await navigate(`${BASE}/monday-runs`);
@@ -635,7 +636,7 @@ async function audit(client) {
       method: "POST",
       headers: formHeaders,
       body: new URLSearchParams({
-        business_date: "2026-09-13",
+        business_date: "2026-09-14",
         idempotency_key: "browser-stale-v1-must-block",
         variant_ids: "1001,2002",
         actor: SPOOF_ACTOR,
@@ -675,7 +676,7 @@ async function audit(client) {
     );
     check(
       retirementPreview.Run === STALE_V1_RUN_ID &&
-        retirementPreview["Business date"] === "2026-09-13" &&
+        retirementPreview["Business date"] === "2026-09-14" &&
         /^[0-9a-f]{64}$/.test(retirementPreview["Frozen fingerprint"]) &&
         retirementPreview["Retired method"] === "EMERGENCY_TRANSPARENT_V1" &&
         retirementPreview.Transition === "RUNNING/PREPARING → FAILED/FAILED" &&
@@ -783,8 +784,8 @@ async function audit(client) {
     transitionMark = ledgerMark();
     await submit(
       formScript("document.querySelector('form[action=\"monday-runs/prepare\"]')", {
-        business_date: "2026-09-13",
-        idempotency_key: "browser-synthetic-20260913-v2",
+        business_date: "2026-09-14",
+        idempotency_key: "browser-synthetic-20260914-v2",
         variant_ids: "1001,2002",
         actor: SPOOF_ACTOR,
         review_token: REVIEW_TOKEN,
@@ -801,6 +802,27 @@ async function audit(client) {
       text.includes("2002") && text.includes("1001") &&
         text.includes("EMERGENCY_TRANSPARENT_V2") && text.includes("stage: AWAITING_REVIEW"),
       "distinct V2 preparation retains mixed eligible and blocked variants",
+    );
+    check(
+      text.includes("SYNTHETIC SELECTED OFFER — TEST DATA / NO REAL AUTHORITY"),
+      "selected-input run carries the exact local synthetic authority warning",
+    );
+    const selectedOfferInputEvidence = await evaluate(
+      "JSON.parse(document.querySelector('pre.selected-offer-input-json').textContent)",
+    );
+    check(
+      selectedOfferInputEvidence.contract === "SYNTHETIC_CONFIRMED_SELECTION_V1" &&
+        selectedOfferInputEvidence.authority === "SYNTHETIC_TEST_ONLY" &&
+        selectedOfferInputEvidence.historical_reconstruction === false &&
+        selectedOfferInputEvidence.selected_offer.offer_id === Number(offerId) &&
+        selectedOfferInputEvidence.selected_offer.supplier_sku === "SUP-001" &&
+        selectedOfferInputEvidence.selected_offer.raw_pack === "6x750ML" &&
+        selectedOfferInputEvidence.legacy_active_standard_offer_comparison.active_standard_offer_count === 2 &&
+        selectedOfferInputEvidence.legacy_active_standard_offer_comparison.authority === "COMPARISON_ONLY_NO_AUTHORITY" &&
+        selectedOfferInputEvidence.applicable_price_ladder.rows.length === 2 &&
+        /^[0-9a-f]{64}$/.test(selectedOfferInputEvidence.applicable_price_ladder.sha256),
+      "browser parses exact selected head, offer, comparison, and frozen ladder evidence",
+      selectedOfferInputEvidence,
     );
     check(!text.includes(SPOOF_ACTOR), "browser actor input is not authoritative or displayed");
     await saveHtml("06-mixed-run-test-data.html");
@@ -840,8 +862,8 @@ async function audit(client) {
     check(
       demandEvidence.contract === "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2" &&
         demandEvidence.method_version === "EMERGENCY_TRANSPARENT_V2" &&
-        demandEvidence.history_start === "2026-06-21" &&
-        demandEvidence.history_end === "2026-09-12" &&
+        demandEvidence.history_start === "2026-06-22" &&
+        demandEvidence.history_end === "2026-09-13" &&
         demandEvidence.calendar_days === 84 &&
         demandEvidence.daily.length === 84 &&
         demandEvidence.daily.every((item) => item.inventory_state === "UNKNOWN") &&
@@ -860,12 +882,12 @@ async function audit(client) {
       "SUP-001",
       "750ML",
       "6x750ML",
-      "2026-09-13",
+      "2026-09-14",
       "synthetic-location-001",
-      "1.6683",
+      "2.0000",
       "4.99",
-      "3.3217",
-      "66.57",
+      "2.99",
+      "59.92",
       "1.000000",
       "baseline need 3",
       "1 case(s) + 0 loose",
@@ -902,7 +924,7 @@ async function audit(client) {
     );
     check((await waitForResponse(reviewPath, "POST", transitionMark))?.status === 200, "normal recommendation preview POST returns HTTP 200");
     text = await body();
-    check(text.includes("NORMAL") && text.includes("Recalculated line total\n$10.01"), "one-case quantity preview is NORMAL and recalculates to $10.01");
+    check(text.includes("NORMAL") && text.includes("Recalculated line total\n$12.00"), "one-case quantity preview is NORMAL and recalculates to selected BASE $12.00");
     await navigate(`${BASE}/monday-runs/${runId}`);
     check((await body()).includes("Record immutable decision"), "normal preview is cancelled without a decision");
 
@@ -920,7 +942,22 @@ async function audit(client) {
     check((await waitForResponse(reviewPath, "POST", transitionMark))?.status === 200, "material recommendation preview POST returns HTTP 200");
     text = await body();
     check(text.includes("MATERIAL") && text.includes("Ordered units\n12"), "two-case edit is MATERIAL and yields 12 units");
-    check(text.includes("Merchandise total\n$20.02") && text.includes("Incremental line cash\n$10.01"), "material preview recalculates exact cash");
+    check(text.includes("Merchandise total\n$19.00") && text.includes("Incremental line cash\n$7.00"), "material preview crosses to selected BREAK and recalculates exact cash");
+    const finalPriceTier = await evaluate(
+      "JSON.parse(document.querySelector('pre.final-price-tier-json').textContent)",
+    );
+    check(
+      Number.isInteger(finalPriceTier.price_id) &&
+        Number.isInteger(finalPriceTier.run_price_snapshot_id) &&
+        finalPriceTier.level_type === "BREAK" &&
+        finalPriceTier.break_qty === "2.0000" &&
+        finalPriceTier.break_unit === "CS" &&
+        finalPriceTier.case_price === "9.5000" &&
+        finalPriceTier.unit_price === "1.5833" &&
+        finalPriceTier.price_ladder_sha256 === selectedOfferInputEvidence.applicable_price_ladder.sha256,
+      "material preview binds the exact selected BREAK source and run snapshot identities",
+      finalPriceTier,
+    );
     await saveHtml("08-material-preview-test-data.html");
     await screenshot("08-material-preview-test-data.png");
     transitionMark = ledgerMark();
@@ -942,7 +979,15 @@ async function audit(client) {
     );
     await assertRedirect(transitionMark, "POST", reviewPath, `/monday-runs/${runId}`, "final recommendation review POST returns HTTP 303");
     text = await body();
-    check(text.includes("EDIT_QUANTITY") && text.includes("12 unit(s)") && text.includes("reviewed line total $20.02"), "immutable reviewed quantity and economics are visible");
+    check(text.includes("EDIT_QUANTITY") && text.includes("12 unit(s)") && text.includes("reviewed line total $19.00"), "immutable reviewed quantity and selected BREAK economics are visible");
+    const reviewedFinalPriceTier = await evaluate(
+      "JSON.parse(document.querySelector('pre.final-price-tier-json').textContent)",
+    );
+    check(
+      JSON.stringify(reviewedFinalPriceTier) === JSON.stringify(finalPriceTier),
+      "immutable review preserves the exact final price-tier identity",
+      reviewedFinalPriceTier,
+    );
     await saveHtml("09-reviewed-test-data.html");
     await screenshot("09-reviewed-test-data.png");
 
@@ -953,8 +998,18 @@ async function audit(client) {
     );
     check((await waitForResponse(buildPath, "POST", transitionMark))?.status === 200, "DRAFT build preview POST returns HTTP 200");
     text = await body();
-    check(text.includes("Confirm vendor DRAFT economics") && text.includes("$20.02"), "vendor DRAFT preview shows the exact merchandise and total");
-    check(text.includes("NOT_APPLICABLE"), "met synthetic minimum needs no fee disposition");
+    check(text.includes("Confirm vendor DRAFT economics") && text.includes("$19.00") && text.includes("$24.00"), "vendor DRAFT preview shows selected BREAK merchandise plus fee total");
+    check(text.includes("PAY_FEE"), "below-minimum synthetic DRAFT has its explicit fee disposition");
+    const previewTierLines = await evaluate(
+      "JSON.parse(document.querySelector('pre.draft-preview-final-price-tiers-json').textContent)",
+    );
+    check(
+      previewTierLines.length === 1 &&
+        previewTierLines[0].supplier_sku === "SUP-001" &&
+        JSON.stringify(previewTierLines[0].final_price_tier) === JSON.stringify(finalPriceTier),
+      "DRAFT preview preserves selected offer and final tier evidence",
+      previewTierLines,
+    );
     const preBuildRun = await statusFetch(`/monday-runs/${runId}`);
     check(preBuildRun.status === 200 && preBuildRun.body.includes("stage: <b>REVIEWED</b>") && !preBuildRun.body.includes("/artifacts/"), "DRAFT preview leaves the run REVIEWED with no artifacts");
     await saveHtml("10-draft-preview-test-data.html");
@@ -966,8 +1021,16 @@ async function audit(client) {
     await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${runId}`, "confirmed DRAFT build POST returns HTTP 303");
     text = await body();
     check(text.includes("stage: PACKET_BUILT") && text.includes("Synthetic Southern — DRAFT"), "one internal vendor DRAFT and packet reach terminal stage");
-    check(text.includes("Grand totals:") && text.includes("internal DRAFT total $20.02"), "vendor and grand totals reconcile visibly");
+    check(text.includes("Grand totals:") && text.includes("internal DRAFT total $24.00"), "vendor and grand totals reconcile visibly");
     check(!text.includes("Release PO"), "no PO-release control is rendered");
+    const builtFinalPriceTier = await evaluate(
+      "JSON.parse(document.querySelector('pre.draft-final-price-tier-json').textContent)",
+    );
+    check(
+      JSON.stringify(builtFinalPriceTier) === JSON.stringify(finalPriceTier),
+      "built internal DRAFT preserves the exact selected final tier",
+      builtFinalPriceTier,
+    );
     await saveHtml("11-built-test-data.html");
     await screenshot("11-built-test-data.png");
 
@@ -1006,6 +1069,9 @@ async function audit(client) {
       sourceUrls: [unresolvedSourceHref, validSourceHref],
       runUrl: `${BASE}/monday-runs/${runId}`,
       runId,
+      selectedOfferId: Number(offerId),
+      selectedOfferInputEvidence,
+      finalPriceTier,
       retiredRunId: STALE_V1_RUN_ID,
       retirementConfirmationSha,
       retirementInputFingerprint,
@@ -1045,13 +1111,25 @@ async function audit(client) {
         status.body.decision_count === 2 &&
         status.body.selection_event_count === 1 &&
         status.body.selection_head_count === 1 &&
-        status.body.shadow_match_count === 1,
-      "mapping decisions and one shadow selection survive restart",
+        status.body.shadow_match_count === 0 &&
+        status.body.shadow_nonmatch_count === 1,
+      "mapping decisions and one ambiguous-legacy selection survive restart",
       status.body,
     );
     await navigate(state.runUrl);
     let text = await body();
-    check(text.includes("stage: PACKET_BUILT") && text.includes("internal DRAFT total $20.02"), "reviewed run and DRAFT survive restart");
+    check(text.includes("stage: PACKET_BUILT") && text.includes("internal DRAFT total $24.00"), "reviewed selected-offer run and DRAFT survive restart");
+    const restartedSelectedEvidence = await evaluate(
+      "JSON.parse(document.querySelector('pre.selected-offer-input-json').textContent)",
+    );
+    const restartedFinalTier = await evaluate(
+      "JSON.parse(document.querySelector('pre.draft-final-price-tier-json').textContent)",
+    );
+    check(
+      JSON.stringify(restartedSelectedEvidence) === JSON.stringify(state.selectedOfferInputEvidence) &&
+        JSON.stringify(restartedFinalTier) === JSON.stringify(state.finalPriceTier),
+      "selected offer lineage and final tier survive restart byte-semantically unchanged",
+    );
     const artifactLinks = await evaluate(`[
       ...document.querySelectorAll('a[href*="/artifacts/"]')
     ].map((anchor) => anchor.href)`);
