@@ -424,6 +424,20 @@ def _seed_evidence(
         chunk_days=10000,
         page_size=1000,
     )
+    synthetic_started_at = datetime.combine(
+        sales_end_date, datetime.min.time(), tzinfo=timezone.utc
+    ) + timedelta(hours=12)
+    with conn.transaction():
+        updated = conn.execute(
+            """UPDATE sales_backfill_runs
+                  SET started_at=%s,
+                      notes=notes || '; FABRICATED SYNTHETIC FIXTURE CLOCK'
+                WHERE sales_backfill_id=%s AND status='RUNNING'
+                RETURNING started_at""",
+            (synthetic_started_at, run_id),
+        ).fetchone()
+        if updated != (synthetic_started_at,):
+            raise RuntimeError("synthetic sales fixture clock was not installed")
     chunk = _chunk_rows(conn, run_id)
     if len(chunk) != 1:
         raise RuntimeError("synthetic sales service did not create exactly one chunk")
@@ -508,6 +522,15 @@ def _verify_synthetic_sales_corpus(
     from procurement_os.historical_sales import source_identity_key
     from procurement_os.sales import source_row_hash
 
+    expected_started_at = datetime.combine(
+        business_date, datetime.min.time(), tzinfo=timezone.utc
+    ) + timedelta(hours=12)
+    started_at = conn.execute(
+        "SELECT started_at FROM sales_backfill_runs WHERE sales_backfill_id=%s",
+        (sales_backfill_id,),
+    ).fetchone()
+    if started_at != (expected_started_at,):
+        raise RuntimeError("synthetic demo sales fixture clock differs")
     expected_rows = _synthetic_sales_rows(business_date)
     actual_raw = conn.execute(
         """SELECT r.sale_date,r.source_variant_id,r.source_sku,

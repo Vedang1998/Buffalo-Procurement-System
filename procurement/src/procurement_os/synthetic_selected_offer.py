@@ -199,8 +199,18 @@ def final_price_tier_matches_authority(
         for binding in authority["prices"]
         if binding.get("price_id") == final_price_tier.get("price_id")
     ]
+    ladder_matches = [
+        row
+        for row in ladder["rows"]
+        if isinstance(row, list)
+        and len(row) == 10
+        and row[0] == final_price_tier.get("price_id")
+    ]
     return (
         len(matches) == 1
+        and len(ladder_matches) == 1
+        and isinstance(final_price_tier.get("run_price_snapshot_id"), int)
+        and final_price_tier["run_price_snapshot_id"] > 0
         and final_price_tier.get("source_price_book_batch_id")
         == authority["source_batch"]["price_book_batch_id"]
         and final_price_tier.get("source_price_book_row_number")
@@ -210,6 +220,19 @@ def final_price_tier_matches_authority(
         and final_price_tier.get("applicable_price_authority_sha256")
         == authority["sha256"]
         and final_price_tier.get("price_ladder_sha256") == ladder.get("sha256")
+        and final_price_tier.get("level_type") == ladder_matches[0][3]
+        and (
+            (
+                final_price_tier.get("break_qty") is None
+                and ladder_matches[0][4] is None
+            )
+            or _numeric_equal(
+                final_price_tier.get("break_qty"), ladder_matches[0][4]
+            )
+        )
+        and final_price_tier.get("break_unit") == ladder_matches[0][5]
+        and _numeric_equal(final_price_tier.get("case_price"), ladder_matches[0][6])
+        and _numeric_equal(final_price_tier.get("unit_price"), ladder_matches[0][7])
     )
 
 

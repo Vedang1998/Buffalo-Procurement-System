@@ -13,8 +13,8 @@ from psycopg import sql
 MIGRATION_NAME = "016_synthetic_price_replacement.sql"
 CONTRACT_VERSION = "v1-complete-vendor-monthly-synthetic"
 TARGET_SCHEMA = "qa_mapping_test"
-MIGRATION_SHA256 = "0cae229ef7f817cc0ab540cc8afae19d9c23f7bf8db9a500749383c483bf3797"
-CATALOG_SHA256 = "c528b4d9b9a52652d048649bc9a7337ccfece3f582b8d9659b614ecd85647afc"
+MIGRATION_SHA256 = "3a8fc48cb39d8e3644c05a8f2a102e60b978beb6229105361128b2a6906a6b99"
+CATALOG_SHA256 = "9893332b0c837a0bf6c2281119c32ecceb4fb36b4bf92f70eb1aa9b95b71f7d1"
 FIXTURE_REGISTRATION_REF = "config/synthetic_price_replacement_fixture.json"
 FIXTURE_REGISTRATION_CANONICAL_SHA256 = (
     "4ac0137a42e79f560fbab6a4f6073324e553f2ca924d0e3a8c5956f51dd79659"

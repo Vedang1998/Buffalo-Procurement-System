@@ -17,6 +17,8 @@ import stat
 import tarfile
 from typing import Any
 
+from psycopg import sql
+
 
 BACKUP_V2_CONTRACT = "BUFFALO_LOCAL_CANDIDATE_BACKUP_V2"
 MANIFEST_ENV = "BUFFALO_PRICE_APPLY_BACKUP_MANIFEST"
@@ -49,6 +51,7 @@ class VerifiedPriceApplyBackup:
     raw_storage_key: str
     migration_sha256: str
     catalog_sha256: str
+    state: dict[str, Any]
 
 
 def canonical_sha256(value: Any) -> str:
@@ -119,6 +122,175 @@ def _verify_member(parent: Path, value: Any, expected_name: str) -> Path:
     return path
 
 
+def _validated_state_evidence(value: Any) -> dict[str, Any]:
+    expected_fact_keys = {
+        "review_batches",
+        "review_candidates",
+        "mapping_decisions",
+        "selection_events",
+        "selection_heads",
+        "runs",
+        "purchase_orders",
+        "artifacts",
+        "decision_payloads",
+        "selection_payloads",
+        "run_fingerprints",
+        "artifact_hashes",
+        "relation_inventory",
+        "sequence_inventory",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"facts", "sha256"}
+        or not isinstance(value.get("facts"), dict)
+        or set(value["facts"]) != expected_fact_keys
+        or _SHA256.fullmatch(str(value.get("sha256", ""))) is None
+    ):
+        raise LocalBackupV2Error("price APPLY database state evidence differs")
+    count_keys = {
+        "review_batches",
+        "review_candidates",
+        "mapping_decisions",
+        "selection_events",
+        "selection_heads",
+        "runs",
+        "purchase_orders",
+        "artifacts",
+    }
+    hash_keys = expected_fact_keys - count_keys - {
+        "relation_inventory",
+        "sequence_inventory",
+    }
+    facts = value["facts"]
+    relation_inventory = facts["relation_inventory"]
+    sequence_inventory = facts["sequence_inventory"]
+    if (
+        any(type(facts[key]) is not int or facts[key] < 0 for key in count_keys)
+        or any(not isinstance(facts[key], str) for key in hash_keys)
+        or not isinstance(relation_inventory, list)
+        or not isinstance(sequence_inventory, list)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"relation", "row_count", "sha256"}
+            or re.fullmatch(r"[a-z][a-z0-9_]*", str(item.get("relation", "")))
+            is None
+            or type(item.get("row_count")) is not int
+            or item["row_count"] < 0
+            or _SHA256.fullmatch(str(item.get("sha256", ""))) is None
+            for item in relation_inventory
+        )
+        or [item["relation"] for item in relation_inventory]
+        != sorted(item["relation"] for item in relation_inventory)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"sequence", "last_value", "is_called"}
+            or re.fullmatch(r"[a-z][a-z0-9_]*", str(item.get("sequence", "")))
+            is None
+            or type(item.get("last_value")) is not int
+            or type(item.get("is_called")) is not bool
+            for item in sequence_inventory
+        )
+        or [item["sequence"] for item in sequence_inventory]
+        != sorted(item["sequence"] for item in sequence_inventory)
+        or canonical_sha256(facts) != value["sha256"]
+    ):
+        raise LocalBackupV2Error("price APPLY database state evidence differs")
+    return value
+
+
+def database_state_evidence(conn: Any, *, schema: str) -> dict[str, Any]:
+    """Recompute V2 relation/sequence evidence through the deciding connection."""
+
+    target = sql.Identifier(schema)
+    row = conn.execute(
+        sql.SQL(
+            "SELECT "
+            "(SELECT count(*) FROM {}.supplier_mapping_review_batches),"
+            "(SELECT count(*) FROM {}.supplier_mapping_review_candidates),"
+            "(SELECT count(*) FROM {}.supplier_mapping_decisions),"
+            "(SELECT count(*) FROM {}.supplier_offer_selection_events),"
+            "(SELECT count(*) FROM {}.supplier_offer_selection_heads),"
+            "(SELECT count(*) FROM {}.runs),"
+            "(SELECT count(*) FROM {}.purchase_orders),"
+            "(SELECT count(*) FROM {}.monday_run_artifacts),"
+            "COALESCE((SELECT string_agg(payload_sha256,'|' ORDER BY payload_sha256) FROM {}.supplier_mapping_decisions),''),"
+            "COALESCE((SELECT string_agg(payload_sha256,'|' ORDER BY payload_sha256) FROM {}.supplier_offer_selection_events),''),"
+            "COALESCE((SELECT string_agg(input_fingerprint,'|' ORDER BY run_id) FROM {}.runs),''),"
+            "COALESCE((SELECT string_agg(sha256,'|' ORDER BY monday_run_artifact_id) FROM {}.monday_run_artifacts),'')"
+        ).format(*(target for _ in range(12)))
+    ).fetchone()
+    if row is None:
+        raise LocalBackupV2Error("price APPLY database state evidence differs")
+    relation_names = [
+        str(item[0])
+        for item in conn.execute(
+            "SELECT c.relname FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE n.nspname=%s AND c.relkind IN ('r','p') ORDER BY c.relname",
+            (schema,),
+        ).fetchall()
+    ]
+    relation_inventory = []
+    for relation_name in relation_names:
+        payloads = [
+            str(item[0])
+            for item in conn.execute(
+                sql.SQL(
+                    "SELECT pg_catalog.to_jsonb(t)::text FROM {}.{} t "
+                    "ORDER BY pg_catalog.to_jsonb(t)::text"
+                ).format(target, sql.Identifier(relation_name))
+            ).fetchall()
+        ]
+        relation_inventory.append(
+            {
+                "relation": relation_name,
+                "row_count": len(payloads),
+                "sha256": hashlib.sha256("\n".join(payloads).encode()).hexdigest(),
+            }
+        )
+    sequence_names = [
+        str(item[0])
+        for item in conn.execute(
+            "SELECT c.relname FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE n.nspname=%s AND c.relkind='S' ORDER BY c.relname",
+            (schema,),
+        ).fetchall()
+    ]
+    sequence_inventory = []
+    for sequence_name in sequence_names:
+        sequence_value = conn.execute(
+            sql.SQL("SELECT last_value,is_called FROM {}.{}").format(
+                target, sql.Identifier(sequence_name)
+            )
+        ).fetchone()
+        sequence_inventory.append(
+            {
+                "sequence": sequence_name,
+                "last_value": int(sequence_value[0]),
+                "is_called": bool(sequence_value[1]),
+            }
+        )
+    names = (
+        "review_batches",
+        "review_candidates",
+        "mapping_decisions",
+        "selection_events",
+        "selection_heads",
+        "runs",
+        "purchase_orders",
+        "artifacts",
+        "decision_payloads",
+        "selection_payloads",
+        "run_fingerprints",
+        "artifact_hashes",
+    )
+    facts = dict(zip(names, row, strict=True))
+    facts["relation_inventory"] = relation_inventory
+    facts["sequence_inventory"] = sequence_inventory
+    return {"facts": facts, "sha256": canonical_sha256(facts)}
+
+
 def verify_bound_price_apply_backup() -> VerifiedPriceApplyBackup:
     """Verify the launcher's exact V2 path, manifest, dump and storage bytes."""
 
@@ -187,6 +359,19 @@ def verify_price_apply_backup(
         raise LocalBackupV2Error("price APPLY recovery manifest contract differs")
     if manifest.get("contract") != BACKUP_V2_CONTRACT:
         raise LocalBackupV2Error("price APPLY recovery manifest contract differs")
+    if manifest.get("limitations") != [
+        "same-host local recovery only",
+        "synthetic price APPLY recovery proof only",
+        "sessions and secret files are intentionally excluded",
+    ]:
+        raise LocalBackupV2Error("price APPLY recovery limitations differ")
+    created_utc = manifest.get("created_utc")
+    if (
+        not isinstance(created_utc, str)
+        or re.fullmatch(r"\d{8}T\d{6}Z", created_utc) is None
+    ):
+        raise LocalBackupV2Error("price APPLY recovery creation time differs")
+    state = _validated_state_evidence(manifest.get("state"))
     source_git = manifest.get("source_git")
     if source_git != {"commit": expected_commit, "tree": expected_tree}:
         raise LocalBackupV2Error("price APPLY source identity differs")
@@ -300,4 +485,5 @@ def verify_price_apply_backup(
         raw_storage_key=price["raw_storage_key"],
         migration_sha256=schema_release["migration_sha256"],
         catalog_sha256=schema_release["catalog_sha256"],
+        state=state,
     )

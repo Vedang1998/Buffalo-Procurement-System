@@ -20,6 +20,8 @@ from typing import Any, Mapping
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import psycopg
+
 from .monday_forecast_retirement import (
     MondayForecastRetirementContractError,
     verify_monday_forecast_v2_retirement_contract,
@@ -49,6 +51,7 @@ from .price_book import (
 )
 from .storage import StorageAdapter
 from .local_backup_v2 import (
+    database_state_evidence,
     LocalBackupV2Error,
     VerifiedPriceApplyBackup,
     verify_bound_price_apply_backup,
@@ -383,12 +386,82 @@ def _declared_validation(
     conn: Any, parsed: dict[str, Any], declaration: Mapping[str, Any]
 ) -> dict[str, Any]:
     validation = _database_validation(conn, parsed)
+    current_structure = sorted(
+        (
+            int(row[0]),
+            str(row[1]),
+            (
+                None
+                if row[2] is None
+                else format(Decimal(row[2]).normalize(), "f")
+            ),
+            row[3],
+        )
+        for row in conn.execute(
+            """SELECT p.offer_id,p.level_type,p.break_qty,p.break_unit
+                 FROM prices p JOIN supplier_offers o USING(offer_id)
+                WHERE o.vendor_id=%s AND p.price_state='current' AND p.verified
+                ORDER BY p.offer_id,p.level_type,p.break_qty NULLS FIRST,
+                         p.break_unit NULLS FIRST""",
+            (validation["vendor_id"],),
+        ).fetchall()
+    )
+    candidate_structure = sorted(
+        (
+            int(row["offer_id"]),
+            str(row["level_type"]),
+            (
+                None
+                if row["break_quantity"] is None
+                else format(Decimal(row["break_quantity"]).normalize(), "f")
+            ),
+            row["break_unit"],
+        )
+        for row in validation["rows"]
+        if row["offer_id"] is not None and row["level_type"] is not None
+    )
+    structure_evidence = {
+        "contract": "SYNTHETIC_COMPLETE_VENDOR_LADDER_STRUCTURE_V1",
+        "current": current_structure,
+        "candidate": candidate_structure,
+    }
+    if candidate_structure != current_structure:
+        validation["issues"].append(
+            {
+                "code": "DECLARED_COMPLETE_LADDER_STRUCTURE_REQUIRED",
+                "severity": "ERROR",
+                "message": (
+                    "declared complete-vendor replacement must retain every "
+                    "existing offer/tier structural key"
+                ),
+                "source_row_number": None,
+                "vendor_id": validation["vendor_id"],
+                "variant_id": None,
+                "offer_id": None,
+            }
+        )
+        validation["issues"].sort(
+            key=lambda item: (
+                item["severity"],
+                item["source_row_number"] or -1,
+                item["offer_id"] or -1,
+                item["code"],
+            )
+        )
+        validation["error_count"] += 1
+        validation["validation_evidence"]["error_codes"] = sorted(
+            {
+                *validation["validation_evidence"]["error_codes"],
+                "DECLARED_COMPLETE_LADDER_STRUCTURE_REQUIRED",
+            }
+        )
     strict_fingerprint = validation["validation_fingerprint"]
     fingerprint = _sha256(
         {
             "contract": "STRICT_NORMALIZED_DECLARED_PRICE_BOOK_V1",
             "strict_v1_validation_fingerprint": strict_fingerprint,
             "declaration_sha256": declaration["declaration_sha256"],
+            "complete_ladder_structure_sha256": _sha256(structure_evidence),
         }
     )
     validation["validation_fingerprint"] = fingerprint
@@ -397,6 +470,7 @@ def _declared_validation(
         "contract": "STRICT_NORMALIZED_DECLARED_PRICE_BOOK_V1",
         "strict_v1_validation_fingerprint": strict_fingerprint,
         "declaration_sha256": declaration["declaration_sha256"],
+        "complete_ladder_structure_sha256": _sha256(structure_evidence),
     }
     return validation
 
@@ -1058,9 +1132,9 @@ def confirm_declared_price_book(
                    human_role_ref,human_authn_context_sha256,preview_sha256,
                    confirmation_sha256,confirmation_payload_sha256,
                    scope_membership_sha256,raw_content_sha256,
-                   declaration_sha256,policy_sha256)
+                   declaration_sha256,policy_sha256,recorded_at)
                VALUES (%s,'VALIDATED','VERIFIED_FUTURE',%s,%s,%s,%s,%s,%s,%s::jsonb,
-                       %s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       %s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                RETURNING recorded_at""",
             (
                 batch_id,
@@ -1088,6 +1162,7 @@ def confirm_declared_price_book(
                 batch[4],
                 batch[16],
                 preview["policy_sha256"],
+                datetime.fromisoformat(preview["observation_at"]),
             ),
         ).fetchone()[0]
         conn.execute(
@@ -1177,6 +1252,19 @@ def _prospective_current_scope_sha256(conn: Any, batch_id: str) -> str:
     if row is None or not isinstance(row[0], str) or _SHA256.fullmatch(row[0]) is None:
         raise SyntheticPriceReplacementError("replacement FUTURE scope is absent")
     return row[0]
+
+
+def _reverify_bound_backup(expected: VerifiedPriceApplyBackup) -> None:
+    """Close the preflight-to-lock file race before any deciding snapshot."""
+
+    try:
+        current = verify_bound_price_apply_backup()
+    except LocalBackupV2Error as exc:
+        raise SyntheticPriceReplacementError(
+            "price APPLY recovery proof is unavailable"
+        ) from exc
+    if current != expected:
+        raise SyntheticPriceReplacementError("price APPLY recovery proof changed")
 
 
 def _apply_snapshot(
@@ -1278,6 +1366,7 @@ def _apply_snapshot(
         or backup.prechange_scope_sha256 != state["current_scope_sha256"]
         or backup.migration_sha256 != MIGRATION_SHA256
         or backup.catalog_sha256 != CATALOG_SHA256
+        or database_state_evidence(conn, schema=SCHEMA) != backup.state
     ):
         raise SyntheticPriceReplacementError("price APPLY recovery proof differs")
     variant_ids = tuple(
@@ -1455,6 +1544,7 @@ def preview_price_replacement(
         apply_idempotency_key=apply_idempotency_key,
         deadline=deadline,
     ):
+        _reverify_bound_backup(backup)
         with conn.transaction():
             conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             require_attested_database(conn)
@@ -1525,6 +1615,89 @@ def _load_apply_replay(
     }
 
 
+def _exception_sqlstate(exc: BaseException) -> str | None:
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        value = getattr(current, "sqlstate", None)
+        if isinstance(value, str):
+            return value
+        nested = current.__cause__ or current.__context__
+        current = nested if isinstance(nested, BaseException) else None
+    return None
+
+
+@contextmanager
+def _price_apply_transaction(conn: Any):
+    """Separate retryable failures from an unknowable COMMIT result."""
+
+    transaction = conn.transaction()
+    transaction.__enter__()
+    try:
+        yield
+    except BaseException as exc:
+        suppress = transaction.__exit__(type(exc), exc, exc.__traceback__)
+        if not suppress:
+            raise
+    else:
+        try:
+            transaction.__exit__(None, None, None)
+        except BaseException as exc:
+            if _exception_sqlstate(exc) in {"40001", "40P01"}:
+                raise
+            ambiguous = isinstance(
+                exc, (psycopg.OperationalError, psycopg.InterfaceError)
+            ) or not isinstance(exc, Exception)
+            if not ambiguous:
+                raise
+            try:
+                conn.close()
+            finally:
+                raise SyntheticPriceReplacementError(
+                    "PRICE_REPLACEMENT_COMMIT_OUTCOME_UNKNOWN"
+                ) from exc
+
+
+def _run_price_apply_with_retry(
+    conn: Any, operation: Any, *, deadline: float
+) -> dict[str, Any]:
+    for attempt in range(3):
+        try:
+            if time.monotonic() >= deadline:
+                raise SyntheticPriceReplacementError(
+                    "PRICE_REPLACEMENT_RETRY_REQUIRED"
+                )
+            with _price_apply_transaction(conn):
+                remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+                conn.execute(f"SET LOCAL statement_timeout = '{remaining_ms}ms'")
+                conn.execute(
+                    f"SET LOCAL lock_timeout = '{min(5000, remaining_ms)}ms'"
+                )
+                result = operation()
+                if time.monotonic() >= deadline:
+                    raise SyntheticPriceReplacementError(
+                        "PRICE_REPLACEMENT_RETRY_REQUIRED"
+                    )
+                remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+                conn.execute(f"SET LOCAL statement_timeout = '{remaining_ms}ms'")
+            return result
+        except BaseException as exc:
+            sqlstate = _exception_sqlstate(exc)
+            if sqlstate in {"40001", "40P01"}:
+                if attempt < 2 and time.monotonic() < deadline:
+                    continue
+                raise SyntheticPriceReplacementError(
+                    "PRICE_REPLACEMENT_RETRY_REQUIRED"
+                ) from exc
+            if sqlstate in {"55P03", "57014"}:
+                raise SyntheticPriceReplacementError(
+                    "PRICE_REPLACEMENT_RETRY_REQUIRED"
+                ) from exc
+            raise
+    raise SyntheticPriceReplacementError("PRICE_REPLACEMENT_RETRY_REQUIRED")
+
+
 def apply_price_replacement(
     conn: Any,
     storage: StorageAdapter,
@@ -1563,7 +1736,10 @@ def apply_price_replacement(
         apply_idempotency_key=apply_idempotency_key,
         deadline=deadline,
     ):
-        with conn.transaction():
+        _reverify_bound_backup(backup)
+
+        def operation() -> dict[str, Any]:
+            _reverify_bound_backup(backup)
             conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             require_attested_database(conn)
             confirmation = {
@@ -1683,10 +1859,12 @@ def apply_price_replacement(
             ).fetchone()[0] != state["resulting_scope_sha256"]:
                 raise SyntheticPriceReplacementError("applied CURRENT scope differs")
             conn.execute("SET CONSTRAINTS ALL IMMEDIATE")
-        return {
-            "supplier_price_authority_event_id": event,
-            "price_book_batch_id": str(batch_id),
-            "status": "APPLIED_CURRENT",
-            "idempotent_replay": False,
-            "current_scope_sha256": state["resulting_scope_sha256"],
-        }
+            return {
+                "supplier_price_authority_event_id": event,
+                "price_book_batch_id": str(batch_id),
+                "status": "APPLIED_CURRENT",
+                "idempotent_replay": False,
+                "current_scope_sha256": state["resulting_scope_sha256"],
+            }
+
+        return _run_price_apply_with_retry(conn, operation, deadline=deadline)

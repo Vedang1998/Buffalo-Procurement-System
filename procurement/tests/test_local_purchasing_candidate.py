@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager, nullcontext
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -641,6 +641,17 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
 
             def execute(self, statement, _parameters=()):
                 text = str(statement)
+                if "SELECT started_at FROM sales_backfill_runs" in text:
+                    return _Result(
+                        one=(
+                            datetime.combine(
+                                business_date,
+                                datetime.min.time(),
+                                tzinfo=timezone.utc,
+                            )
+                            + timedelta(hours=12),
+                        )
+                    )
                 if "FROM sales_backfill_run_facts" in text:
                     return _Result(all_rows=self.raw)
                 if "FROM sales_daily" in text:

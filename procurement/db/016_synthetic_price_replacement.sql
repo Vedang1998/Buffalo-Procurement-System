@@ -556,6 +556,7 @@ BEGIN
        OR policy.price_scope_key IS DISTINCT FROM b.price_scope_key
        OR policy.fixture_database_name IS DISTINCT FROM current_database()
        OR b.supplier_verified_at IS DISTINCT FROM policy.observation_at
+       OR NEW.recorded_at IS DISTINCT FROM policy.observation_at
        OR extract(day FROM policy.observation_at AT TIME ZONE policy.policy_timezone)
             NOT BETWEEN policy.observation_window_start_day
                     AND policy.observation_window_end_day
@@ -646,6 +647,28 @@ BEGIN
                AND s.validation_status='VALID'
              GROUP BY s.offer_id
             HAVING count(*) FILTER (WHERE s.level_type='BASE')<>1
+       )
+       OR EXISTS (
+            (SELECT p.offer_id,p.level_type,p.break_qty,p.break_unit
+               FROM prices p JOIN supplier_offers o USING(offer_id)
+              WHERE o.vendor_id=b.vendor_id
+                AND p.price_state='current' AND p.verified)
+            EXCEPT
+            (SELECT s.offer_id,s.level_type,s.break_quantity,s.break_unit
+               FROM price_book_staging_rows s
+              WHERE s.price_book_batch_id=b.price_book_batch_id
+                AND s.validation_status='VALID')
+       )
+       OR EXISTS (
+            (SELECT s.offer_id,s.level_type,s.break_quantity,s.break_unit
+               FROM price_book_staging_rows s
+              WHERE s.price_book_batch_id=b.price_book_batch_id
+                AND s.validation_status='VALID')
+            EXCEPT
+            (SELECT p.offer_id,p.level_type,p.break_qty,p.break_unit
+               FROM prices p JOIN supplier_offers o USING(offer_id)
+              WHERE o.vendor_id=b.vendor_id
+                AND p.price_state='current' AND p.verified)
        )
        OR EXISTS (
             SELECT 1
