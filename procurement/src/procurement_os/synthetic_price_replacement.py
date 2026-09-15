@@ -883,8 +883,21 @@ def _confirmation_preview_in_transaction(
         {
             "source_row_number": int(row["source_row_number"]),
             "supplier_sku": row["supplier_sku"],
+            "supplier_description": row["supplier_description"],
             "offer_id": int(row["offer_id"]),
             "variant_id": row["canonical_variant_id"],
+            "package_type": row["package_type"],
+            "size_text": row["size_text"],
+            "raw_pack": row["raw_pack"],
+            "shopify_units_per_case": format(
+                Decimal(row["shopify_units_per_case"]), "f"
+            ),
+            "qualifying_units_per_case": format(
+                Decimal(row["qualifying_units_per_case"]), "f"
+            ),
+            "assortment_scope": row["assortment_scope"],
+            "assortment_group": row["assortment_group"],
+            "assortable": row["assortable"],
             "level_type": row["level_type"],
             "break_quantity": (
                 None
@@ -900,6 +913,9 @@ def _confirmation_preview_in_transaction(
             "unit_price": format(Decimal(row["unit_price"]), "f"),
             "source_file": row["source_file"],
             "source_page": row["source_page"],
+            "source_evidence": row["source_evidence"],
+            "extraction_confidence": row["extraction_confidence"],
+            "review_note": row["review_note"],
         }
         for row in typed_validation["rows"]
     ]
@@ -920,6 +936,7 @@ def _confirmation_preview_in_transaction(
             str(batch[19]) if batch[19] is not None else None
         ),
         "warning_review_reason": review_reason,
+        "declaration": declaration,
         "candidate_tiers": tiers,
         "current_tiers": [
             [

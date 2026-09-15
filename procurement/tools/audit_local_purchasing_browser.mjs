@@ -426,7 +426,18 @@ async function audit(client) {
         confirmation.observation_at === "2026-09-16T14:00:00+00:00" &&
         confirmation.application_at === "2026-10-01T14:00:00+00:00" &&
         confirmation.monday_evaluation_at === "2026-10-05T14:00:00+00:00" &&
+        confirmation.declaration.currency === "USD" &&
+        confirmation.declaration.source_period_label === "2026-10 fabricated monthly replacement" &&
+        confirmation.declaration.source_validity_basis === "FABRICATED_MONTHLY_SUPPLIER_SCHEDULE" &&
+        confirmation.declaration.supplier_verified_at === "2026-09-16T14:00:00+00:00" &&
         confirmation.candidate_tiers.length === 4 &&
+        confirmation.candidate_tiers.every((tier) =>
+          tier.package_type === "STANDARD" &&
+          tier.raw_pack === "6x750ML" &&
+          tier.shopify_units_per_case === "6.0000" &&
+          tier.qualifying_units_per_case === "6.0000" &&
+          tier.extraction_confidence === "VERIFIED" &&
+          tier.source_evidence === "fabricated exact replacement source") &&
         confirmation.current_tiers.length === 4 &&
         confirmation.commercial_authority === false &&
         confirmation.real_price_approval === false,
