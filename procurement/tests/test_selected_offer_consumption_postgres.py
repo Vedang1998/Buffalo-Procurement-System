@@ -131,6 +131,14 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
                         conn, mapping_matrix.DB_DIR
                     )
                 )
+            with conn.transaction():
+                self.assertTrue(
+                    mapping_matrix.apply_schema.verify_or_apply_synthetic_price_replacement(
+                        conn,
+                        mapping_matrix.DB_DIR,
+                        enable_fixture_registration=False,
+                    )
+                )
         return selected_offer_id, alternative_offer_id
 
     def _seed_monday_evidence(self) -> datetime:
@@ -166,6 +174,7 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
                     mapping_matrix.BUSINESS_DATE,
                     canonical_sales_end_date=mapping_matrix.BUSINESS_DATE
                     - timedelta(days=1),
+                    include_control=False,
                 )
         self.assertRegex(sales_backfill_id, r"^[0-9a-f-]{36}$")
         return evaluation_at

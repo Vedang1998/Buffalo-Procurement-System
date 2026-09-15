@@ -1,0 +1,727 @@
+"""Focused PostgreSQL acceptance for the synthetic price-to-DRAFT connection."""
+from __future__ import annotations
+
+from datetime import date, timedelta
+from decimal import Decimal
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import time
+from tempfile import TemporaryDirectory
+import unittest
+from unittest import mock
+import zipfile
+
+import psycopg
+
+import initialize_synthetic_demo as initializer
+import test_persistent_mapping_foundation_postgres as mapping_matrix
+from procurement_os import recommendations
+from procurement_os.draft_po import build_vendor_drafts, preview_vendor_drafts
+from procurement_os.emergency_packet import build_emergency_review_packet
+from procurement_os.local_backup_v2 import (
+    VerifiedPriceApplyBackup,
+    database_state_evidence,
+)
+from procurement_os.procurement_review import (
+    confirm_material_recommendation_edit,
+    preview_recommendation_review,
+    record_recommendation_review,
+)
+from procurement_os.storage import LocalFilesystemStorage
+from procurement_os.synthetic_price_replacement import (
+    SyntheticPriceReplacementError,
+    _run_price_apply_with_retry,
+    apply_price_replacement,
+    confirm_declared_price_book,
+    preview_declared_price_confirmation,
+    preview_price_replacement,
+    registered_target_declaration,
+    stage_and_validate_declared_price_book,
+)
+from procurement_os.synthetic_price_replacement_contract import (
+    CATALOG_SHA256,
+    MIGRATION_SHA256,
+)
+from procurement_os.synthetic_selected_offer import (
+    SyntheticSelectedOfferError,
+    classify_frozen_manifest,
+    final_price_tier_matches_snapshot,
+)
+
+
+BUSINESS_DATE = date(2026, 10, 5)
+BOOK_PATH = Path(__file__).resolve().parents[1] / "config" / "synthetic_price_replacement_book.csv"
+BOOK_SHA256 = "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c"
+WARNING_REASON = "Reviewed four fabricated synthetic price changes."
+
+
+class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        mapping_matrix.PersistentMappingFoundationPostgresTests.setUpClass()
+        cls.admin_url = mapping_matrix.PersistentMappingFoundationPostgresTests.admin_url
+        cls.mapping_url = mapping_matrix.PersistentMappingFoundationPostgresTests.mapping_url
+        cls.database = mapping_matrix.PersistentMappingFoundationPostgresTests.database
+        cls.test_url = cls.mapping_url
+
+    def setUp(self) -> None:
+        self.environment = mock.patch.dict(
+            os.environ,
+            {
+                "BUFFALO_RUNTIME_MODE": "AUTOMATED_TEST",
+                "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+                "TEST_DATABASE_URL": self.test_url,
+            },
+            clear=False,
+        )
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        self.fixture = mapping_matrix.PersistentMappingFoundationPostgresTests(
+            "test_legacy_recommendations_are_identical_until_cutover"
+        )
+        self.fixture.admin_url = self.admin_url
+        self.fixture.mapping_url = self.mapping_url
+        self.fixture.database = self.database
+        self.fixture._prepare_roles_and_schema()
+        self.fixture.principal = self.fixture._principal("procurement.mapping.approve")
+        self.fixture.selection_principal = self.fixture._principal(
+            "procurement.offer.select", session="price-selection"
+        )
+        self.price_principal = self.fixture._principal(
+            "procurement.price.approve", session="price-confirmation"
+        )
+        self._install_fixture()
+        self.temporary = TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.storage = LocalFilesystemStorage(self.temporary.name)
+        self.book = BOOK_PATH.read_bytes()
+        self.assertEqual(hashlib.sha256(self.book).hexdigest(), BOOK_SHA256)
+
+    def tearDown(self) -> None:
+        self.fixture._admin_cleanup()
+
+    def _install_fixture(self) -> None:
+        cutoff = tuple(mapping_matrix.apply_schema.LEGACY_MIGRATION_SHA256).index(
+            "011_monday_price_book_staging.sql"
+        )
+        with psycopg.connect(self.mapping_url, autocommit=True) as conn:
+            schema_oid = int(
+                conn.execute(
+                    "SELECT oid FROM pg_catalog.pg_namespace WHERE nspname=%s",
+                    (mapping_matrix.SCHEMA,),
+                ).fetchone()[0]
+            )
+            for name in tuple(mapping_matrix.apply_schema.LEGACY_MIGRATION_SHA256)[:cutoff]:
+                initializer._apply_legacy(conn, name, schema_oid=schema_oid)
+            initializer._seed_pre_price(conn, BUSINESS_DATE)
+            for name in tuple(mapping_matrix.apply_schema.LEGACY_MIGRATION_SHA256)[cutoff:]:
+                initializer._apply_legacy(conn, name, schema_oid=schema_oid)
+            with conn.transaction():
+                self.assertTrue(
+                    mapping_matrix.apply_schema._verify_or_apply_mapping_release(
+                        conn, mapping_matrix.DB_DIR
+                    )
+                )
+            sales_id = initializer._seed_evidence(conn, BUSINESS_DATE)
+            self._install_synthetic_test_sales_contract(conn)
+            with conn.transaction():
+                self.assertTrue(
+                    mapping_matrix.apply_schema._verify_or_apply_post_mapping_release(
+                        conn, mapping_matrix.DB_DIR
+                    )
+                )
+            with conn.transaction():
+                self.assertTrue(
+                    mapping_matrix.apply_schema.verify_or_apply_synthetic_price_replacement(
+                        conn,
+                        mapping_matrix.DB_DIR,
+                        enable_fixture_registration=True,
+                    )
+                )
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES "
+                "('synthetic_owner_demo_contract','BUFFALO_SYNTHETIC_OWNER_DEMO_V1'),"
+                "('synthetic_owner_demo_business_date',%s),"
+                "('synthetic_owner_demo_sales_backfill_id',%s)",
+                (BUSINESS_DATE.isoformat(), sales_id),
+            )
+
+    def _install_synthetic_test_sales_contract(self, conn) -> None:
+        conn.execute(
+            "UPDATE sales_daily SET source='SYNTHETIC_TEST' "
+            "WHERE source='SHOPIFYQL_SALES'"
+        )
+        history_start = BUSINESS_DATE - timedelta(days=84)
+        history_end = BUSINESS_DATE - timedelta(days=1)
+        coverage = {}
+        for variant_id in (initializer.VARIANT_ID, initializer.CONTROL_VARIANT_ID):
+            rows = conn.execute(
+                """SELECT sale_date,units_sold,net_sales,distinct_orders,source,
+                          run_id::text
+                     FROM sales_daily
+                    WHERE variant_id=%s AND source='SYNTHETIC_TEST'
+                      AND sale_date BETWEEN %s AND %s
+                    ORDER BY sale_date,source""",
+                (variant_id, history_start, history_end),
+            ).fetchall()
+            self.assertEqual(len(rows), 84)
+            coverage[str(variant_id)] = {
+                "row_count": len(rows),
+                "sha256": recommendations._sales_coverage_digest(rows),
+            }
+        evidence = {
+            "coverage_contract":
+                "DISPOSABLE_SYNTHETIC_DAILY_VARIANT_COVERAGE_V1",
+            "source": "SYNTHETIC_TEST",
+            "sales_rows": 168,
+            "variant_count": 2,
+            "history_start": history_start.isoformat(),
+            "history_end": history_end.isoformat(),
+            "variant_coverage": coverage,
+        }
+        updated = conn.execute(
+            """UPDATE readiness_gates
+                  SET status='PASS',severity='CRITICAL',blocks_po=TRUE,
+                      message='Disposable fixture has exact synthetic sales coverage.',
+                      evidence_json=%s::jsonb,checked_at=transaction_timestamp()
+                WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL'
+                  AND scope_id=''
+                RETURNING status""",
+            (json.dumps(evidence, sort_keys=True),),
+        ).fetchall()
+        self.assertEqual(updated, [("PASS",)])
+
+    def _connection(self):
+        return psycopg.connect(self.mapping_url)
+
+    def _select_fixture_offer(self) -> int:
+        with self._connection() as conn:
+            offer_id = int(
+                conn.execute(
+                    "SELECT offer_id FROM supplier_offers WHERE supplier_sku='SUP-001'"
+                ).fetchone()[0]
+            )
+        candidate_id = self.fixture._intake(self.fixture._packet(1))
+        decision = self.fixture._decide(
+            candidate_id,
+            action="APPROVE_MAPPING",
+            reason="focused uploaded-price connection",
+            offer_id=offer_id,
+            link_kind="LINKED_EXISTING",
+        )
+        self.fixture._select(decision, reason="focused uploaded-price selection")
+        return offer_id
+
+    def _stage_and_confirm(self) -> tuple[str, dict, dict]:
+        with self._connection() as conn:
+            declaration = registered_target_declaration(conn)
+            conn.commit()
+            staged = stage_and_validate_declared_price_book(
+                conn,
+                self.storage,
+                csv_bytes=self.book,
+                principal=self.price_principal,
+                expected_declaration_sha256=declaration["declaration_sha256"],
+            )
+            preview = preview_declared_price_confirmation(
+                conn,
+                self.storage,
+                batch_id=staged["price_book_batch_id"],
+                confirmation_idempotency_key="focused-price-confirm-v1",
+                warning_review_reason=WARNING_REASON,
+                principal=self.price_principal,
+            )
+            confirmed = confirm_declared_price_book(
+                conn,
+                self.storage,
+                batch_id=staged["price_book_batch_id"],
+                confirmation_idempotency_key="focused-price-confirm-v1",
+                expected_preview_sha256=preview["preview_sha256"],
+                confirm="CONFIRM",
+                warning_review_reason=WARNING_REASON,
+                principal=self.price_principal,
+            )
+        return staged["price_book_batch_id"], preview, confirmed
+
+    def _backup(self, batch_id: str) -> VerifiedPriceApplyBackup:
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT b.vendor_id::text,b.price_scope_key,b.content_sha256,
+                          b.raw_storage_key,h.supplier_price_authority_event_id::text,
+                          h.head_version,h.current_scope_sha256
+                     FROM price_book_batches b
+                     JOIN supplier_price_authority_heads h
+                       ON h.vendor_id=b.vendor_id AND h.price_scope_key=b.price_scope_key
+                    WHERE b.price_book_batch_id=%s""",
+                (batch_id,),
+            ).fetchone()
+            state = database_state_evidence(conn, schema=mapping_matrix.SCHEMA)
+        return VerifiedPriceApplyBackup(
+            manifest_ref="/owned/test/manifest.json",
+            manifest_sha256="1" * 64,
+            dump_sha256="2" * 64,
+            storage_sha256="3" * 64,
+            prechange_scope_sha256=str(row[6]),
+            database=self.database,
+            batch_id=str(batch_id),
+            vendor_id=str(row[0]),
+            price_scope_key=str(row[1]),
+            prior_event_id=str(row[4]),
+            prior_head_version=int(row[5]),
+            raw_content_sha256=str(row[2]),
+            raw_storage_key=str(row[3]),
+            migration_sha256=MIGRATION_SHA256,
+            catalog_sha256=CATALOG_SHA256,
+            state=state,
+        )
+
+    def _apply(self, batch_id: str, *, key: str = "focused-price-apply-v1") -> tuple[dict, dict]:
+        backup = self._backup(batch_id)
+        with mock.patch(
+            "procurement_os.synthetic_price_replacement.verify_bound_price_apply_backup",
+            return_value=backup,
+        ):
+            with self._connection() as conn:
+                preview = preview_price_replacement(
+                    conn,
+                    self.storage,
+                    batch_id=batch_id,
+                    apply_idempotency_key=key,
+                    principal=self.price_principal,
+                )
+            with self._connection() as conn:
+                result = apply_price_replacement(
+                    conn,
+                    self.storage,
+                    batch_id=batch_id,
+                    apply_idempotency_key=key,
+                    expected_preview_sha256=preview["preview_sha256"],
+                    confirm="CONFIRM",
+                    principal=self.price_principal,
+                )
+        return preview, result
+
+    def test_declared_stage_confirmation_preserves_current_and_uses_observation_clock(self):
+        lines = self.book.decode("utf-8").splitlines()
+        incomplete = (
+            "\n".join(
+                [lines[0]]
+                + [line.replace("synthetic-october-replacement-v1", "incomplete-v1") for line in lines[1:4]]
+            )
+            + "\n"
+        ).encode("utf-8")
+        with self._connection() as conn:
+            declaration = registered_target_declaration(conn)
+            conn.commit()
+            bad = stage_and_validate_declared_price_book(
+                conn,
+                self.storage,
+                csv_bytes=incomplete,
+                principal=self.price_principal,
+                expected_declaration_sha256=declaration["declaration_sha256"],
+            )
+            self.assertEqual((bad["status"], bad["error_count"]), ("INVALID", 1))
+            with self.assertRaisesRegex(
+                SyntheticPriceReplacementError,
+                "only a complete declared VALIDATED batch can be confirmed",
+            ):
+                preview_declared_price_confirmation(
+                    conn,
+                    self.storage,
+                    batch_id=bad["price_book_batch_id"],
+                    confirmation_idempotency_key="bad-confirm",
+                    warning_review_reason=None,
+                    principal=self.price_principal,
+                )
+        batch_id, _preview, confirmed = self._stage_and_confirm()
+        self.assertEqual(confirmed["status"], "VERIFIED_FUTURE")
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT e.recorded_at,
+                          count(*) FILTER (WHERE p.price_state='current'),
+                          count(*) FILTER (WHERE p.price_state='future')
+                     FROM price_book_promotion_events e
+                     JOIN price_book_batches b USING(price_book_batch_id)
+                     JOIN supplier_offers o ON o.vendor_id=b.vendor_id
+                     JOIN prices p USING(offer_id)
+                    WHERE b.price_book_batch_id=%s GROUP BY e.recorded_at""",
+                (batch_id,),
+            ).fetchone()
+        self.assertEqual(row[0].isoformat(), "2026-09-16T14:00:00+00:00")
+        self.assertEqual(row[1:], (4, 4))
+
+    def test_apply_late_failure_rolls_back_then_replays_without_control_vendor_change(self):
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        backup = self._backup(batch_id)
+        key = "focused-rollback-apply-v1"
+        with mock.patch(
+            "procurement_os.synthetic_price_replacement.verify_bound_price_apply_backup",
+            return_value=backup,
+        ):
+            with self._connection() as conn:
+                preview = preview_price_replacement(
+                    conn,
+                    self.storage,
+                    batch_id=batch_id,
+                    apply_idempotency_key=key,
+                    principal=self.price_principal,
+                )
+            with self.assertRaisesRegex(
+                SyntheticPriceReplacementError, "INJECTED_PRICE_APPLY_FAILURE"
+            ):
+                with self._connection() as conn:
+                    apply_price_replacement(
+                        conn,
+                        self.storage,
+                        batch_id=batch_id,
+                        apply_idempotency_key=key,
+                        expected_preview_sha256=preview["preview_sha256"],
+                        confirm="CONFIRM",
+                        principal=self.price_principal,
+                        _inject_failure_after_mutation=True,
+                    )
+            with self._connection() as observer:
+                rolled_back = observer.execute(
+                    """SELECT b.status,h.head_version,h.active_price_book_batch_id,
+                              (SELECT count(*) FROM supplier_price_authority_events
+                                WHERE apply_idempotency_key=%s),
+                              supplier_price_unaffected_state_sha256(b.vendor_id)
+                         FROM price_book_batches b
+                         JOIN supplier_price_authority_heads h
+                           ON h.vendor_id=b.vendor_id AND h.price_scope_key=b.price_scope_key
+                        WHERE b.price_book_batch_id=%s""",
+                    (key, batch_id),
+                ).fetchone()
+            self.assertEqual(rolled_back[:4], ("VERIFIED_FUTURE", 1, None, 0))
+            self.assertEqual(rolled_back[4], preview["unaffected_price_state_sha256"])
+            with self._connection() as conn:
+                applied = apply_price_replacement(
+                    conn,
+                    self.storage,
+                    batch_id=batch_id,
+                    apply_idempotency_key=key,
+                    expected_preview_sha256=preview["preview_sha256"],
+                    confirm="CONFIRM",
+                    principal=self.price_principal,
+                )
+            with self._connection() as conn:
+                replay = apply_price_replacement(
+                    conn,
+                    self.storage,
+                    batch_id=batch_id,
+                    apply_idempotency_key=key,
+                    expected_preview_sha256=preview["preview_sha256"],
+                    confirm="CONFIRM",
+                    principal=self.price_principal,
+                )
+        self.assertFalse(applied["idempotent_replay"])
+        self.assertTrue(replay["idempotent_replay"])
+        self.assertEqual(
+            replay["supplier_price_authority_event_id"],
+            applied["supplier_price_authority_event_id"],
+        )
+
+    def test_apply_retry_restarts_a_serialization_failure(self):
+        attempts = 0
+
+        def operation():
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise psycopg.errors.SerializationFailure("synthetic retry")
+            return {"result": "ok"}
+
+        with self._connection() as conn:
+            result = _run_price_apply_with_retry(
+                conn, operation, deadline=time.monotonic() + 5
+            )
+        self.assertEqual((attempts, result), (2, {"result": "ok"}))
+
+    def test_uploaded_price_drives_selected_offer_review_draft_and_packet(self):
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        _apply_preview, applied = self._apply(batch_id)
+        selected_offer_id = self._select_fixture_offer()
+        with self._connection() as conn:
+            run = recommendations.prepare_monday_run(
+                conn,
+                business_date=BUSINESS_DATE,
+                idempotency_key="focused-uploaded-price-monday-v1",
+                variant_ids=("1001",),
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(run["blockers"], [])
+        recommendation = run["recommendations"][0]
+        self.assertEqual(
+            (
+                recommendation["offer_id"],
+                recommendation["recommended_cases"],
+                str(recommendation["unit_cost"]),
+            ),
+            (selected_offer_id, 1, "6.0000"),
+        )
+        authority = recommendation["metrics"]["selected_offer_input_evidence"][
+            "applicable_price_authority"
+        ]
+        self.assertEqual(
+            authority["apply_event"]["event_id"],
+            applied["supplier_price_authority_event_id"],
+        )
+        with self._connection() as conn:
+            review_preview = preview_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="EDIT_QUANTITY",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=2,
+                approved_loose_units=0,
+                comment="cross the uploaded synthetic price break",
+            )
+            conn.rollback()
+            confirmation_id = None
+            if review_preview["materiality"]["materiality_tier"] == "MATERIAL":
+                confirmation = confirm_material_recommendation_edit(
+                    conn,
+                    recommendation_id=recommendation["recommendation_id"],
+                    actor="synthetic:matrix-owner:01",
+                    expected_input_fingerprint=run["input_fingerprint"],
+                    expected_review_preview_fingerprint=review_preview[
+                        "preview_fingerprint"
+                    ],
+                    approved_cases=2,
+                    approved_loose_units=0,
+                    comment="cross the uploaded synthetic price break",
+                    confirmation_reason="confirm fabricated uploaded break",
+                )
+                confirmation_id = confirmation["material_edit_confirmation_id"]
+            review = record_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="EDIT_QUANTITY",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=2,
+                approved_loose_units=0,
+                comment="cross the uploaded synthetic price break",
+                expected_review_preview_fingerprint=review_preview["preview_fingerprint"],
+                material_edit_confirmation_id=confirmation_id,
+            )
+            draft_preview = preview_vendor_drafts(
+                conn, run_id=run["run_id"], actor="synthetic:matrix-owner:01"
+            )
+            drafts = build_vendor_drafts(
+                conn,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+                expected_preview_fingerprint=draft_preview["preview_fingerprint"],
+                minimum_disposition=draft_preview["minimum_disposition"],
+            )
+            packet = build_emergency_review_packet(
+                conn,
+                storage=self.storage,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+        tier = review["final_price_tier"]
+        self.assertEqual(
+            (
+                tier["level_type"],
+                Decimal(tier["break_qty"]),
+                tier["break_unit"],
+                Decimal(tier["case_price"]),
+                Decimal(tier["unit_price"]),
+                tier["source_price_book_batch_id"],
+                tier["source_price_book_row_number"],
+                tier["supplier_price_authority_event_id"],
+            ),
+            (
+                "BREAK",
+                Decimal("2"),
+                "CS",
+                Decimal("30"),
+                Decimal("5"),
+                str(batch_id),
+                3,
+                applied["supplier_price_authority_event_id"],
+            ),
+        )
+        draft = drafts["drafts"][0]
+        self.assertEqual(
+            (
+                Decimal(draft["merchandise_total"]),
+                Decimal(draft["delivery_fee"]),
+                Decimal(draft["po_total"]),
+            ),
+            (Decimal("60"), Decimal("0"), Decimal("60")),
+        )
+        with self._connection() as conn:
+            self.assertTrue(
+                final_price_tier_matches_snapshot(
+                    conn,
+                    run_id=str(run["run_id"]),
+                    offer_id=selected_offer_id,
+                    final_price_tier=tier,
+                )
+            )
+            forged = {**tier, "run_price_snapshot_id": tier["run_price_snapshot_id"] + 999}
+            self.assertFalse(
+                final_price_tier_matches_snapshot(
+                    conn,
+                    run_id=str(run["run_id"]),
+                    offer_id=selected_offer_id,
+                    final_price_tier=forged,
+                )
+            )
+        with zipfile.ZipFile(io.BytesIO(self.storage.get_bytes(packet["storage_key"]))) as archive:
+            self.assertEqual(len(archive.namelist()), 12)
+            mapping_evidence = json.loads(
+                archive.read("supplier-mapping-evidence.json")
+            )["items"][0]
+        self.assertEqual(mapping_evidence["final_price_tier"], tier)
+
+    def test_default_or_wrong_runtime_refuses_before_batch_write(self):
+        with self._connection() as conn:
+            before = int(conn.execute("SELECT count(*) FROM price_book_batches").fetchone()[0])
+            with mock.patch.dict(
+                os.environ,
+                {"BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "0"},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(
+                    SyntheticPriceReplacementError,
+                    "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED",
+                ):
+                    stage_and_validate_declared_price_book(
+                        conn,
+                        self.storage,
+                        csv_bytes=self.book,
+                        principal=self.price_principal,
+                        expected_declaration_sha256="0" * 64,
+                    )
+            self.assertEqual(
+                int(conn.execute("SELECT count(*) FROM price_book_batches").fetchone()[0]),
+                before,
+            )
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+                    "DATABASE_URL": self.test_url,
+                },
+                clear=False,
+            ):
+                with self.assertRaisesRegex(
+                    SyntheticPriceReplacementError,
+                    "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED",
+                ):
+                    registered_target_declaration(conn)
+
+    def test_recovery_state_drift_refuses_before_apply(self):
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        backup = self._backup(batch_id)
+        with self._connection() as conn:
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES "
+                "('synthetic_focused_recovery_drift','intentional test-only drift')"
+            )
+        with mock.patch(
+            "procurement_os.synthetic_price_replacement.verify_bound_price_apply_backup",
+            return_value=backup,
+        ):
+            with self._connection() as conn:
+                with self.assertRaisesRegex(
+                    SyntheticPriceReplacementError,
+                    "price APPLY recovery proof differs",
+                ):
+                    preview_price_replacement(
+                        conn,
+                        self.storage,
+                        batch_id=batch_id,
+                        apply_idempotency_key="focused-drift-apply-v1",
+                        principal=self.price_principal,
+                    )
+        with self._connection() as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT status FROM price_book_batches WHERE price_book_batch_id=%s",
+                    (batch_id,),
+                ).fetchone(),
+                ("VERIFIED_FUTURE",),
+            )
+
+    def test_completed_old_price_packet_stays_byte_immutable(self):
+        selected_offer_id = self._select_fixture_offer()
+        with self._connection() as conn:
+            run = recommendations.prepare_monday_run(
+                conn,
+                business_date=BUSINESS_DATE,
+                idempotency_key="focused-old-price-packet-v1",
+                variant_ids=("1001",),
+                actor="synthetic:matrix-owner:01",
+            )
+            recommendation = run["recommendations"][0]
+            preview = preview_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+            )
+            record_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            )
+            draft_preview = preview_vendor_drafts(
+                conn, run_id=run["run_id"], actor="synthetic:matrix-owner:01"
+            )
+            build_vendor_drafts(
+                conn,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+                expected_preview_fingerprint=draft_preview["preview_fingerprint"],
+                minimum_disposition=draft_preview["minimum_disposition"],
+            )
+            packet_before = build_emergency_review_packet(
+                conn,
+                storage=self.storage,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+            manifest = json.loads(
+                conn.execute(
+                    "SELECT procurement_input_manifest FROM runs WHERE run_id=%s",
+                    (run["run_id"],),
+                ).fetchone()[0]
+            )
+        before_bytes = self.storage.get_bytes(packet_before["storage_key"])
+        malformed = dict(manifest)
+        malformed.pop("offer_resolution_contract")
+        with self.assertRaises(SyntheticSelectedOfferError):
+            classify_frozen_manifest(
+                json.dumps(malformed, sort_keys=True, separators=(",", ":"))
+            )
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        self._apply(batch_id, key="focused-after-old-packet-apply-v1")
+        with self._connection() as conn:
+            packet_after = build_emergency_review_packet(
+                conn,
+                storage=self.storage,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(packet_after["sha256"], packet_before["sha256"])
+        self.assertEqual(self.storage.get_bytes(packet_after["storage_key"]), before_bytes)
+        self.assertEqual(selected_offer_id, recommendation["offer_id"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -38,7 +38,7 @@ IMPLEMENTATION_SPEC = (
     / "2026-09-10-persistent-mapping-foundation-implementation-spec.md"
 )
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 816
+EXPECTED_GLOBAL_TEST_POPULATION = 823
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):
@@ -863,6 +863,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 "staging_required": True,
                 "transactional_promotion_required": True,
                 "run_price_snapshot_for_reproducibility": True,
+                "synthetic_price_replacement_enabled": False,
             },
         )
         self.assertEqual(
@@ -908,7 +909,11 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
             "offer_activation_enabled = false\n\n"
         )
         self.assertEqual(rules_source.count(approved_rules_addition), 1)
-        predecessor_rules = rules_source.replace(approved_rules_addition, "\n")
+        approved_pricing_addition = "synthetic_price_replacement_enabled = false\n"
+        self.assertEqual(rules_source.count(approved_pricing_addition), 1)
+        predecessor_rules = rules_source.replace(
+            approved_rules_addition, "\n"
+        ).replace(approved_pricing_addition, "")
         self.assertEqual(
             hashlib.sha256(predecessor_rules.encode("utf-8")).hexdigest(),
             "43e94dc4db8b8c7d7927a4e5f9a3c8cd11814ff71329764c79f41efbdfe05c5c",
@@ -1031,7 +1036,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 [
                     f"ERROR: {module} discovered {required - 1} tests; "
                     f"required minimum is {required}",
-                    "ERROR: global discovered count 815 is below floor 816",
+                    "ERROR: global discovered count 822 is below floor 823",
                 ],
             )
 

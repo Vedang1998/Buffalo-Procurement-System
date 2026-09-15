@@ -40,7 +40,7 @@ CREATE TABLE supplier_price_schedule_policies (
         fixture_policy_config_sha256 ~ '^[0-9a-f]{64}$'
     ),
     fixture_database_name TEXT NOT NULL CHECK (
-        fixture_database_name ~ '^[a-z][a-z0-9_]*_demo$'
+        fixture_database_name ~ '^[a-z][a-z0-9_]*_(demo|test)$'
     ),
     policy_principal_ref TEXT NOT NULL CHECK (
         policy_principal_ref='synthetic:price-fixture-registration:01'
@@ -1548,7 +1548,7 @@ BEGIN
     IF registration_sha IS DISTINCT FROM
        '4ac0137a42e79f560fbab6a4f6073324e553f2ca924d0e3a8c5956f51dd79659'
        OR supplier_price_text_sha256(registration_text) IS DISTINCT FROM registration_sha
-       OR current_database() !~ '^[a-z][a-z0-9_]*_demo$' THEN
+       OR current_database() !~ '^[a-z][a-z0-9_]*_(demo|test)$' THEN
         RAISE EXCEPTION 'synthetic baseline registration identity differs';
     END IF;
     registration := registration_text::jsonb;

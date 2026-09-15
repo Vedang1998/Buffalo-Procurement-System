@@ -376,6 +376,12 @@ def verify_price_apply_backup(
     if source_git != {"commit": expected_commit, "tree": expected_tree}:
         raise LocalBackupV2Error("price APPLY source identity differs")
     database = manifest.get("database")
+    expected_database_suffix = (
+        "_test"
+        if os.getenv("BUFFALO_RUNTIME_MODE", "").strip().upper()
+        == "AUTOMATED_TEST"
+        else "_demo"
+    )
     if (
         not isinstance(database, dict)
         or database.get("postgres_major") != 16
@@ -383,7 +389,7 @@ def verify_price_apply_backup(
         or database.get("current_user") != "qa_mapping_owner"
         or database.get("database_owner") != "qa_mapping_owner"
         or not isinstance(database.get("database"), str)
-        or not database["database"].endswith("_demo")
+        or not database["database"].endswith(expected_database_suffix)
         or database.get("server_address") not in {"127.0.0.1", "::1"}
     ):
         raise LocalBackupV2Error("price APPLY database identity differs")

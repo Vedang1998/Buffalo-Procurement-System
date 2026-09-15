@@ -168,6 +168,11 @@ def require_process_policy() -> tuple[str, str, int]:
         variable = "TEST_DATABASE_URL" if mode == "AUTOMATED_TEST" else "DATABASE_URL"
         database_url = os.getenv(variable, "")
         expected_database = _validate_synthetic_database_url(database_url)
+        expected_suffix = "_test" if mode == "AUTOMATED_TEST" else "_demo"
+        if not expected_database.endswith(expected_suffix):
+            raise SyntheticPriceReplacementError(
+                "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
+            )
         parsed = urlparse(database_url)
         if parsed.port is None:
             raise SyntheticPriceReplacementError(
@@ -1669,6 +1674,7 @@ def _run_price_apply_with_retry(
                     "PRICE_REPLACEMENT_RETRY_REQUIRED"
                 )
             with _price_apply_transaction(conn):
+                conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
                 remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
                 conn.execute(f"SET LOCAL statement_timeout = '{remaining_ms}ms'")
                 conn.execute(
@@ -1740,7 +1746,6 @@ def apply_price_replacement(
 
         def operation() -> dict[str, Any]:
             _reverify_bound_backup(backup)
-            conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             require_attested_database(conn)
             confirmation = {
                 "contract": "BUFFALO_SYNTHETIC_PRICE_APPLY_CONFIRMATION_V1",

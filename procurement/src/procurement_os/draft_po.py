@@ -16,6 +16,7 @@ from .recommendations import (
 from .synthetic_selected_offer import (
     SyntheticSelectedOfferError,
     final_price_tier_matches_authority,
+    final_price_tier_matches_snapshot,
     selected_run_input_lock_scope,
 )
 
@@ -75,6 +76,15 @@ def _draft_rows(conn: Any, run_id: str) -> list[dict[str, Any]]:
         ):
             raise DraftPoError(
                 "selected reviewed line price authority differs from its run"
+            )
+        if selected and not final_price_tier_matches_snapshot(
+            conn,
+            run_id=str(run_id),
+            offer_id=int(row[3]),
+            final_price_tier=final_price_tier,
+        ):
+            raise DraftPoError(
+                "selected reviewed line price snapshot differs from its run"
             )
         try:
             merchandise_total = Decimal(

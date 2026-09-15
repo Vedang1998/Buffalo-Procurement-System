@@ -18,6 +18,7 @@ from .storage import StorageAdapter
 from .synthetic_selected_offer import (
     SyntheticSelectedOfferError,
     final_price_tier_matches_authority,
+    final_price_tier_matches_snapshot,
     selected_run_input_lock_scope,
 )
 
@@ -363,6 +364,15 @@ def build_emergency_review_packet(
                 ):
                     raise EmergencyPacketError(
                         "selected DRAFT price authority differs from its run"
+                    )
+                if isinstance(row[7], dict) and not final_price_tier_matches_snapshot(
+                    conn,
+                    run_id=str(run_id),
+                    offer_id=int(row[2]),
+                    final_price_tier=row[7],
+                ):
+                    raise EmergencyPacketError(
+                        "selected DRAFT price snapshot differs from its run"
                     )
                 item.update({
                     "selected_offer_input_evidence": selected,

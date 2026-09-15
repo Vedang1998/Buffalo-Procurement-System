@@ -641,16 +641,17 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
 
             def execute(self, statement, _parameters=()):
                 text = str(statement)
-                if "SELECT started_at FROM sales_backfill_runs" in text:
-                    return _Result(
-                        one=(
-                            datetime.combine(
-                                business_date,
-                                datetime.min.time(),
-                                tzinfo=timezone.utc,
-                            )
-                            + timedelta(hours=12),
+                if "SELECT started_at,completed_at FROM sales_backfill_runs" in text:
+                    started_at = (
+                        datetime.combine(
+                            business_date,
+                            datetime.min.time(),
+                            tzinfo=timezone.utc,
                         )
+                        + timedelta(hours=12)
+                    )
+                    return _Result(
+                        one=(started_at, started_at + timedelta(minutes=4))
                     )
                 if "FROM sales_backfill_run_facts" in text:
                     return _Result(all_rows=self.raw)

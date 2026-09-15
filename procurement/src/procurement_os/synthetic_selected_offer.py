@@ -15,7 +15,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from urllib.parse import urlparse
 
 from psycopg.rows import dict_row
@@ -233,6 +233,54 @@ def final_price_tier_matches_authority(
         and final_price_tier.get("break_unit") == ladder_matches[0][5]
         and _numeric_equal(final_price_tier.get("case_price"), ladder_matches[0][6])
         and _numeric_equal(final_price_tier.get("unit_price"), ladder_matches[0][7])
+    )
+
+
+def final_price_tier_matches_snapshot(
+    conn: Any,
+    *,
+    run_id: str,
+    offer_id: int,
+    final_price_tier: Mapping[str, Any],
+) -> bool:
+    """Bind the reviewed tier to the exact immutable snapshot in this run."""
+
+    snapshot_id = final_price_tier.get("run_price_snapshot_id")
+    if not isinstance(snapshot_id, int) or snapshot_id <= 0:
+        return False
+    row = conn.execute(
+        """SELECT offer_id,level_type,break_qty,break_unit,case_price,unit_price,
+                  source_price_id,source_price_book_batch_id::text,
+                  source_price_book_row_number,
+                  supplier_price_authority_event_id::text
+             FROM run_price_snapshots
+            WHERE run_id=%s AND run_price_snapshot_id=%s""",
+        (run_id, snapshot_id),
+    ).fetchone()
+    if row is None:
+        return False
+    actual_authority = (row[6], row[7], row[8], row[9])
+    expected_authority = (
+        final_price_tier.get("price_id"),
+        final_price_tier.get("source_price_book_batch_id"),
+        final_price_tier.get("source_price_book_row_number"),
+        final_price_tier.get("supplier_price_authority_event_id"),
+    )
+    return (
+        int(row[0]) == int(offer_id)
+        and row[1] == final_price_tier.get("level_type")
+        and (
+            (row[2] is None and final_price_tier.get("break_qty") is None)
+            or _numeric_equal(row[2], final_price_tier.get("break_qty"))
+        )
+        and row[3] == final_price_tier.get("break_unit")
+        and _numeric_equal(row[4], final_price_tier.get("case_price"))
+        and _numeric_equal(row[5], final_price_tier.get("unit_price"))
+        and (
+            actual_authority == expected_authority
+            if any(value is not None for value in actual_authority)
+            else all(value is None for value in actual_authority)
+        )
     )
 
 

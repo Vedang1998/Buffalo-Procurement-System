@@ -8,10 +8,12 @@ from decimal import Decimal
 import ipaddress
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 from urllib.parse import parse_qs, urlparse
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg import sql
@@ -26,6 +28,10 @@ from apply_schema import (
     verify_or_apply_synthetic_price_replacement,
 )
 from local_purchasing_candidate import acquire_database_lifecycle_lock
+from procurement_os.synthetic_price_replacement_contract import (
+    FIXTURE_REGISTRATION_CANONICAL_SHA256,
+    FIXTURE_REGISTRATION_REF,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +44,31 @@ BLOCKED_VARIANT_ID = "2002"
 CONTROL_VARIANT_ID = "3003"
 DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901"
+
+
+def _registered_business_date() -> date:
+    path = ROOT / FIXTURE_REGISTRATION_REF
+    try:
+        value = json.loads(path.read_bytes())
+        canonical = json.dumps(
+            value,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        evaluation_at = datetime.fromisoformat(value["monday_evaluation_at"])
+        policy_timezone = ZoneInfo(value["policy_timezone"])
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError("synthetic price fixture clock is malformed") from exc
+    if (
+        hashlib.sha256(canonical).hexdigest()
+        != FIXTURE_REGISTRATION_CANONICAL_SHA256
+        or evaluation_at.tzinfo is None
+        or evaluation_at.astimezone(policy_timezone).weekday() != 0
+    ):
+        raise RuntimeError("synthetic price fixture clock differs")
+    return evaluation_at.astimezone(policy_timezone).date()
 
 
 def _require_owned_target(conn: psycopg.Connection, database_url: str) -> None:
@@ -58,10 +89,15 @@ def _require_owned_target(conn: psycopg.Connection, database_url: str) -> None:
         or parsed.password is not None
         or parsed.fragment
         or parsed.params
-        or re.fullmatch(r"[a-z][a-z0-9_]*_demo", database) is None
+        or re.fullmatch(r"[a-z][a-z0-9_]*_(demo|test)", database) is None
         or query != {"options": ["-c role=qa_mapping_owner"]}
     ):
         raise RuntimeError("synthetic demo database must be loopback")
+    if database.endswith("_test") and (
+        os.getenv("BUFFALO_RUNTIME_MODE", "").strip().upper() != "AUTOMATED_TEST"
+        or os.getenv("TEST_DATABASE_URL") != database_url
+    ):
+        raise RuntimeError("synthetic test database was not server-registered")
     row = conn.execute(
         "SELECT pg_catalog.current_database(),"
         "pg_catalog.current_setting('server_version_num')::integer,"
@@ -281,8 +317,10 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
 
 def _synthetic_inventory_capture_specs(
     business_date: date,
+    *,
+    include_control: bool = True,
 ) -> tuple[dict[str, object], ...]:
-    return (
+    specs = (
         {
             "business_date": business_date - timedelta(days=1),
             "captured_at": datetime.combine(
@@ -334,6 +372,19 @@ def _synthetic_inventory_capture_specs(
             ),
         },
     )
+    if include_control:
+        return specs
+    return tuple(
+        {
+            **spec,
+            "rows": tuple(
+                row
+                for row in spec["rows"]
+                if row["variant_id"] != CONTROL_VARIANT_ID
+            ),
+        }
+        for spec in specs
+    )
 
 
 def _seed_evidence(
@@ -341,6 +392,7 @@ def _seed_evidence(
     business_date: date,
     *,
     canonical_sales_end_date: date | None = None,
+    include_control: bool = True,
 ) -> str:
     from procurement_os.catalog import recompute_catalog_gate
     from procurement_os.historical_sales import (
@@ -378,15 +430,18 @@ def _seed_evidence(
                    'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
             (VARIANT_ID, business_date),
         )
-        conn.execute(
-            """INSERT INTO variant_policies(
-                   variant_id,policy_type,value_json,active,effective_from,
-                   approved_by,note)
-               VALUES (%s,'REPLENISHMENT_MODE','{"mode":"ROUTINE"}',TRUE,%s,
-                   'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
-            (CONTROL_VARIANT_ID, business_date),
-        )
-    for capture_spec in _synthetic_inventory_capture_specs(business_date):
+        if include_control:
+            conn.execute(
+                """INSERT INTO variant_policies(
+                       variant_id,policy_type,value_json,active,effective_from,
+                       approved_by,note)
+                   VALUES (%s,'REPLENISHMENT_MODE','{"mode":"ROUTINE"}',TRUE,%s,
+                       'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
+                (CONTROL_VARIANT_ID, business_date),
+            )
+    for capture_spec in _synthetic_inventory_capture_specs(
+        business_date, include_control=include_control
+    ):
         capture = capture_daily_inventory(
             conn,
             business_date=capture_spec["business_date"],
@@ -411,7 +466,9 @@ def _seed_evidence(
     # fabricated rows are inputs to its independent page/chunk/final controls;
     # the initializer never writes a readiness PASS itself.
     sales_end_date = canonical_sales_end_date or business_date
-    sales_rows = _synthetic_sales_rows(business_date)
+    sales_rows = _synthetic_sales_rows(
+        business_date, include_control=include_control
+    )
     totals = ControlTotals(
         net_items_sold=sum((row.net_items_sold for row in sales_rows), Decimal("0")),
         net_sales=sum((row.net_sales or Decimal("0") for row in sales_rows), Decimal("0")),
@@ -474,10 +531,80 @@ def _seed_evidence(
     )
     if sales_result["status"] != "PASS":
         raise RuntimeError("synthetic sales service did not pass its derived controls")
+    synthetic_completed_at = synthetic_started_at + timedelta(minutes=4)
+    with conn.transaction():
+        conn.execute(
+            """UPDATE sales_backfill_runs
+                  SET started_at=%s,completed_at=%s,last_checkpoint_at=%s
+                WHERE sales_backfill_id=%s AND status='COMPLETED'""",
+            (
+                synthetic_started_at,
+                synthetic_completed_at,
+                synthetic_completed_at,
+                run_id,
+            ),
+        )
+        conn.execute(
+            """UPDATE sales_backfill_chunks
+                  SET created_at=%s,started_at=%s,completed_at=%s,last_checkpoint_at=%s
+                WHERE sales_backfill_id=%s AND status='COMPLETED'""",
+            (
+                synthetic_started_at,
+                synthetic_started_at + timedelta(minutes=1),
+                synthetic_started_at + timedelta(minutes=3),
+                synthetic_started_at + timedelta(minutes=3),
+                run_id,
+            ),
+        )
+        conn.execute(
+            """UPDATE sales_backfill_pages p
+                  SET created_at=%s,requested_at=%s,fetched_at=%s,
+                      persisted_at=%s,completed_at=%s
+                 FROM sales_backfill_chunks c
+                WHERE p.sales_backfill_chunk_id=c.sales_backfill_chunk_id
+                  AND c.sales_backfill_id=%s AND p.status='COMPLETED'""",
+            (
+                synthetic_started_at + timedelta(minutes=1),
+                synthetic_started_at + timedelta(minutes=1),
+                synthetic_started_at + timedelta(minutes=2),
+                synthetic_started_at + timedelta(minutes=2),
+                synthetic_started_at + timedelta(minutes=2),
+                run_id,
+            ),
+        )
+        conn.execute(
+            """UPDATE shopify_sales_daily_raw
+                  SET fetched_at=%s,first_fetched_at=%s,last_fetched_at=%s
+                WHERE sales_backfill_id=%s""",
+            (
+                synthetic_started_at + timedelta(minutes=2),
+                synthetic_started_at + timedelta(minutes=2),
+                synthetic_started_at + timedelta(minutes=2),
+                run_id,
+            ),
+        )
+        conn.execute(
+            """UPDATE sales_backfill_run_facts
+                  SET first_observed_at=%s,last_observed_at=%s
+                WHERE sales_backfill_id=%s""",
+            (
+                synthetic_started_at + timedelta(minutes=2),
+                synthetic_started_at + timedelta(minutes=2),
+                run_id,
+            ),
+        )
+        conn.execute(
+            """UPDATE readiness_gates SET checked_at=%s
+                WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL'
+                  AND scope_id=''""",
+            (synthetic_completed_at,),
+        )
     return str(run_id)
 
 
-def _synthetic_sales_rows(business_date: date) -> list[object]:
+def _synthetic_sales_rows(
+    business_date: date, *, include_control: bool = True
+) -> list[object]:
     """Return the exact fabricated corpus consumed by the real backfill service."""
 
     from procurement_os.sales import SalesSourceRow
@@ -486,17 +613,19 @@ def _synthetic_sales_rows(business_date: date) -> list[object]:
     for offset in range(84):
         sale_date = business_date - timedelta(days=84 - offset)
         target_units = Decimal("1") if offset < 70 else Decimal("2")
-        rows.extend(
-            (
-                SalesSourceRow(
-                    sale_date=sale_date,
-                    source_variant_id=VARIANT_ID,
-                    source_sku="SYN-1001",
-                    source_product_title="Synthetic Citrus",
-                    source_variant_title="750ML",
-                    net_items_sold=target_units,
-                    net_sales=target_units * Decimal("4.99"),
-                ),
+        rows.append(
+            SalesSourceRow(
+                sale_date=sale_date,
+                source_variant_id=VARIANT_ID,
+                source_sku="SYN-1001",
+                source_product_title="Synthetic Citrus",
+                source_variant_title="750ML",
+                net_items_sold=target_units,
+                net_sales=target_units * Decimal("4.99"),
+            )
+        )
+        if include_control:
+            rows.append(
                 SalesSourceRow(
                     sale_date=sale_date,
                     source_variant_id=CONTROL_VARIANT_ID,
@@ -505,9 +634,8 @@ def _synthetic_sales_rows(business_date: date) -> list[object]:
                     source_variant_title="750ML",
                     net_items_sold=Decimal("1"),
                     net_sales=Decimal("6.99"),
-                ),
+                )
             )
-        )
     return rows
 
 
@@ -526,10 +654,11 @@ def _verify_synthetic_sales_corpus(
         business_date, datetime.min.time(), tzinfo=timezone.utc
     ) + timedelta(hours=12)
     started_at = conn.execute(
-        "SELECT started_at FROM sales_backfill_runs WHERE sales_backfill_id=%s",
+        "SELECT started_at,completed_at FROM sales_backfill_runs "
+        "WHERE sales_backfill_id=%s",
         (sales_backfill_id,),
     ).fetchone()
-    if started_at != (expected_started_at,):
+    if started_at != (expected_started_at, expected_started_at + timedelta(minutes=4)):
         raise RuntimeError("synthetic demo sales fixture clock differs")
     expected_rows = _synthetic_sales_rows(business_date)
     actual_raw = conn.execute(
@@ -1042,6 +1171,8 @@ def _verify_initialized_demo(
 
 
 def initialize(database_url: str, business_date: date) -> dict[str, object]:
+    if business_date != _registered_business_date():
+        raise RuntimeError("synthetic demo business date differs from registered fixture")
     if (
         len(PERSISTENT_MAPPING_RELEASE_MANIFEST) != 1
         or len(POST_MAPPING_APPLICATION_RELEASE_MANIFEST) != 1
@@ -1110,7 +1241,9 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", required=True)
-    parser.add_argument("--business-date", type=date.fromisoformat, default=date(2026, 9, 14))
+    parser.add_argument(
+        "--business-date", type=date.fromisoformat, default=_registered_business_date()
+    )
     args = parser.parse_args()
     result = initialize(args.database_url, args.business_date)
     print(json.dumps(result, sort_keys=True))

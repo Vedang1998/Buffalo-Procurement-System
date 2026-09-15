@@ -1281,6 +1281,10 @@ class PriceBookPostgresTests(unittest.TestCase):
                 "/price-books/{batch_id}/raw.csv": ["GET"],
                 "/price-books/import": ["POST"],
                 "/price-books/{batch_id}/promote": ["POST"],
+                "/price-books/{batch_id}/confirmation-preview": ["POST"],
+                "/price-books/{batch_id}/confirm": ["POST"],
+                "/price-books/{batch_id}/apply-preview": ["POST"],
+                "/price-books/{batch_id}/apply": ["POST"],
                 "/price-books/{batch_id}/reject": ["POST"],
             },
         )

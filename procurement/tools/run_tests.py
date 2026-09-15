@@ -65,6 +65,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_supplier_review_package.py": 15,
     "test_supplier_review_real_v5.py": 29,
     "test_supplier_review_v5.py": 16,
+    "test_synthetic_price_replacement_postgres.py": 7,
     "test_test_runner.py": 24,
     "test_vendor_rules.py": 16,
 }
