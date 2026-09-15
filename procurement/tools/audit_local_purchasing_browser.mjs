@@ -5,15 +5,16 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const [phase, BASE, CDP, EVIDENCE, DOWNLOADS, AUTH_SECRET_PATH, REVIEW_TOKEN_PATH, STATE_PATH] =
+const [phase, BASE, CDP, EVIDENCE, DOWNLOADS, AUTH_SECRET_PATH, REVIEW_TOKEN_PATH, PRICE_TOKEN_PATH, PRICE_BOOK_PATH, STATE_PATH] =
   process.argv.slice(2);
 
-if (!phase || !BASE || !CDP || !EVIDENCE || !DOWNLOADS || !AUTH_SECRET_PATH || !REVIEW_TOKEN_PATH || !STATE_PATH) {
+if (!phase || !BASE || !CDP || !EVIDENCE || !DOWNLOADS || !AUTH_SECRET_PATH || !REVIEW_TOKEN_PATH || !PRICE_TOKEN_PATH || !PRICE_BOOK_PATH || !STATE_PATH) {
   throw new Error("browser audit arguments are incomplete");
 }
 
 const AUTH_SECRET = fs.readFileSync(AUTH_SECRET_PATH, "utf8").replace(/\n$/, "");
 const REVIEW_TOKEN = fs.readFileSync(REVIEW_TOKEN_PATH, "utf8").replace(/\n$/, "");
+const PRICE_TOKEN = fs.readFileSync(PRICE_TOKEN_PATH, "utf8").replace(/\n$/, "");
 const SPOOF_ACTOR = "spoofed-browser-actor-must-be-ignored";
 const STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901";
 const RETIREMENT_REASON = "Synthetic retired forecast method requires V2 re-preparation";
@@ -277,6 +278,16 @@ async function audit(client) {
     form.requestSubmit();
     return true;
   })()`;
+  const setFileInput = async (selector, filename) => {
+    await client.send("DOM.enable");
+    const document = await client.send("DOM.getDocument", {depth: 2});
+    const found = await client.send("DOM.querySelector", {
+      nodeId: document.root.nodeId,
+      selector,
+    });
+    if (!found.nodeId) throw new Error(`file input not found: ${selector}`);
+    await client.send("DOM.setFileInputFiles", {nodeId: found.nodeId, files: [filename]});
+  };
   const waitForDownloads = async (expected) => {
     const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
@@ -361,7 +372,90 @@ async function audit(client) {
     );
   };
 
-  if (phase === "phase1") {
+  if (phase === "price") {
+    await navigate(`${BASE}/price-books`);
+    check((await body()).includes("Authentication required"), "unauthenticated price-book list is refused");
+    await login();
+    let text = await body();
+    check(
+      text.includes("SYNTHETIC REPLACEMENT PRICE BOOK") &&
+        text.includes("TEST DATA / NO REAL AUTHORITY"),
+      "price-book page exposes only the registered synthetic replacement form",
+    );
+    await setFileInput("#synthetic-price-replacement input[type=file]", PRICE_BOOK_PATH);
+    let transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('#synthetic-price-replacement form')", {
+        actor: SPOOF_ACTOR,
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    const batchUrl = await currentUrl();
+    const batchId = new URL(batchUrl).pathname.split("/").pop();
+    check(/^[0-9a-f-]{36}$/.test(batchId), "browser upload creates one server-issued price-book batch", batchId);
+    await assertRedirect(transitionMark, "POST", "/price-books/import", `/price-books/${batchId}`, "declared upload returns the exact batch redirect");
+    text = await body();
+    check(
+      text.includes("SYNTHETIC DECLARED PRICE EVIDENCE") &&
+        text.includes("36.0000") && text.includes("6.0000") &&
+        text.includes("30.0000") && text.includes("5.0000") &&
+        text.includes("72.0000") && text.includes("12.0000") &&
+        text.includes("60.0000") && text.includes("10.0000"),
+      "browser detail exposes all four distinctive uploaded BASE/BREAK tiers",
+    );
+    await saveHtml("00-price-upload-detail-test-data.html");
+    await screenshot("00-price-upload-detail-test-data.png");
+
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/confirmation-preview\"]')", {
+        confirmation_idempotency_key: "browser-price-confirmation-v1",
+        actor: SPOOF_ACTOR,
+        warning_review_reason: "Reviewed four fabricated synthetic price changes.",
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    check((await waitForResponse(`/price-books/${batchId}/confirmation-preview`, "POST", transitionMark))?.status === 200, "price confirmation preview returns HTTP 200");
+    const confirmation = await evaluate(
+      "JSON.parse(document.querySelector('#declared-price-confirmation-json').textContent)",
+    );
+    check(
+      confirmation.contract === "BUFFALO_SYNTHETIC_PRICE_CONFIRMATION_PREVIEW_V1" &&
+        confirmation.price_book_batch_id === batchId &&
+        confirmation.observation_at === "2026-09-16T14:00:00+00:00" &&
+        confirmation.application_at === "2026-10-01T14:00:00+00:00" &&
+        confirmation.monday_evaluation_at === "2026-10-05T14:00:00+00:00" &&
+        confirmation.candidate_tiers.length === 4 &&
+        confirmation.current_tiers.length === 4 &&
+        confirmation.commercial_authority === false &&
+        confirmation.real_price_approval === false,
+      "separate confirmation binds source, current diff, clocks, and zero real authority",
+      confirmation,
+    );
+    await saveHtml("00-price-confirmation-preview-test-data.html");
+    await screenshot("00-price-confirmation-preview-test-data.png");
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/confirm\"]')", {
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    await assertRedirect(transitionMark, "POST", `/price-books/${batchId}/confirm`, `/price-books/${batchId}`, "separate price confirmation returns the exact batch redirect");
+    text = await body();
+    check(
+      text.includes("VERIFIED_FUTURE") && text.includes("Guarded effective-boundary APPLY"),
+      "confirmed upload remains FUTURE and exposes a separately guarded APPLY",
+    );
+    const price = {
+      batchId,
+      batchUrl,
+      confirmationPreviewSha256: confirmation.preview_sha256,
+      rawContentSha256: confirmation.raw_content_sha256,
+    };
+    fs.writeFileSync(STATE_PATH, JSON.stringify({price}, null, 2) + "\n", {mode: 0o600});
+    results.price = price;
+  } else if (phase === "phase1") {
+    const priorState = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
     await navigate(`${BASE}/supplier-mapping`);
     check((await body()).includes("Authentication required"), "unauthenticated mapping list is refused");
     check(latestResponse("/supplier-mapping")?.status === 401, "unauthenticated list returns HTTP 401", latestResponse("/supplier-mapping"));
@@ -378,6 +472,45 @@ async function audit(client) {
     check(cookies[0].secure === false, "loopback session cookie does not claim HTTPS transport", cookies[0].secure);
     check(cookies[0].expires > Date.now() / 1000, "session cookie has a future bounded expiry", cookies[0].expires);
     check(!(await evaluate("document.cookie")).includes("buffalo_local_session"), "session token is unavailable to page script");
+
+    await navigate(priorState.price.batchUrl);
+    let text = await body();
+    check(text.includes("VERIFIED_FUTURE"), "confirmed FUTURE price survives the backup boundary");
+    let transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/apply-preview\"]')", {
+        apply_idempotency_key: "browser-price-apply-v1",
+        actor: SPOOF_ACTOR,
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    check((await waitForResponse(`/price-books/${priorState.price.batchId}/apply-preview`, "POST", transitionMark))?.status === 200, "guarded APPLY preview returns HTTP 200");
+    const applyPreview = await evaluate(
+      "JSON.parse(document.querySelector('#synthetic-price-apply-json').textContent)",
+    );
+    check(
+      applyPreview.contract === "BUFFALO_SYNTHETIC_PRICE_APPLY_PREVIEW_V1" &&
+        applyPreview.price_book_batch_id === priorState.price.batchId &&
+        applyPreview.expected_current_row_count === 4 &&
+        applyPreview.resulting_current_row_count === 4 &&
+        applyPreview.application_at === "2026-10-01T14:00:00+00:00" &&
+        applyPreview.commercial_authority === false &&
+        applyPreview.real_price_approval === false,
+      "APPLY preview binds the V2 recovery proof, exact scope counts, and zero real authority",
+      applyPreview,
+    );
+    await saveHtml("00-price-apply-preview-test-data.html");
+    await screenshot("00-price-apply-preview-test-data.png");
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/apply\"]')", {
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    await assertRedirect(transitionMark, "POST", `/price-books/${priorState.price.batchId}/apply`, `/price-books/${priorState.price.batchId}`, "guarded APPLY returns the exact batch redirect");
+    text = await body();
+    check(text.includes("APPLIED_CURRENT"), "browser APPLY makes only the confirmed synthetic batch CURRENT");
+    priorState.price.applyPreview = applyPreview;
 
     for (const [pathname, label] of [
       ["/vendor-rules", "vendor-rule operator page"],
@@ -427,7 +560,7 @@ async function audit(client) {
     );
 
     await navigate(`${BASE}/supplier-mapping`);
-    let text = await body();
+    text = await body();
     check(text.includes("TEST DATA — NOT FOR ORDERING"), "mapping page has the synthetic safety banner");
     check(text.includes("Batches: 0 · candidates: 0 · decisions: 0"), "mapping registry begins empty");
 
@@ -443,7 +576,7 @@ async function audit(client) {
       {before: statusBeforeCsrf.body, after: statusAfterCsrf.body},
     );
 
-    let transitionMark = ledgerMark();
+    transitionMark = ledgerMark();
     await submit(formScript("document.querySelector('form[action=\"/supplier-mapping/intake\"]')"));
     await assertRedirect(transitionMark, "POST", "/supplier-mapping/intake", "/supplier-mapping", "first intake POST returns HTTP 303");
     text = await body();
@@ -553,14 +686,14 @@ async function audit(client) {
     transitionMark = ledgerMark();
     await submit(
       formScript("document.querySelector('form[action$=\"/selection\"]')", {
-        effective_from: "2026-09-14",
+        effective_from: "2026-10-05",
         reason: "Synthetic routine offer shadow selection",
       }),
     );
     check((await waitForResponse(new URL(valid.href, BASE).pathname + "/selection", "POST", transitionMark))?.status === 200, "selection preview POST returns HTTP 200");
     text = await body();
     check(text.includes("Confirm routine offer selection"), "selection first request is a separate confirmation preview");
-    check(text.includes("2026-09-14") && text.includes("Synthetic routine offer shadow selection"), "selection preview visibly binds date and reason");
+    check(text.includes("2026-10-05") && text.includes("Synthetic routine offer shadow selection"), "selection preview visibly binds date and reason");
     status = await jsonFetch("/supplier-mapping/status");
     check(status.body.selection_event_count === 0 && status.body.selection_head_count === 0, "selection preview writes no event or head", status.body);
     await saveHtml("04-selection-preview-test-data.html");
@@ -585,7 +718,7 @@ async function audit(client) {
     await saveHtml("05-shadow-match-test-data.html");
     await screenshot("05-shadow-match-test-data.png");
 
-    const inventory = await jsonFetch("/inventory-snapshots/status?as_of=2026-09-14");
+    const inventory = await jsonFetch("/inventory-snapshots/status?as_of=2026-10-05");
     check(inventory.status === 200 && inventory.body.status === "PASS", "same-day synthetic inventory status is PASS", inventory.body);
 
     await navigate(`${BASE}/monday-runs`);
@@ -636,7 +769,7 @@ async function audit(client) {
       method: "POST",
       headers: formHeaders,
       body: new URLSearchParams({
-        business_date: "2026-09-14",
+        business_date: "2026-10-05",
         idempotency_key: "browser-stale-v1-must-block",
         variant_ids: "1001,2002",
         actor: SPOOF_ACTOR,
@@ -676,7 +809,7 @@ async function audit(client) {
     );
     check(
       retirementPreview.Run === STALE_V1_RUN_ID &&
-        retirementPreview["Business date"] === "2026-09-14" &&
+        retirementPreview["Business date"] === "2026-10-05" &&
         /^[0-9a-f]{64}$/.test(retirementPreview["Frozen fingerprint"]) &&
         retirementPreview["Retired method"] === "EMERGENCY_TRANSPARENT_V1" &&
         retirementPreview.Transition === "RUNNING/PREPARING → FAILED/FAILED" &&
@@ -784,8 +917,8 @@ async function audit(client) {
     transitionMark = ledgerMark();
     await submit(
       formScript("document.querySelector('form[action=\"monday-runs/prepare\"]')", {
-        business_date: "2026-09-14",
-        idempotency_key: "browser-synthetic-20260914-v2",
+        business_date: "2026-10-05",
+        idempotency_key: "browser-synthetic-20261005-v2",
         variant_ids: "1001,2002",
         actor: SPOOF_ACTOR,
         review_token: REVIEW_TOKEN,
@@ -862,8 +995,8 @@ async function audit(client) {
     check(
       demandEvidence.contract === "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2" &&
         demandEvidence.method_version === "EMERGENCY_TRANSPARENT_V2" &&
-        demandEvidence.history_start === "2026-06-22" &&
-        demandEvidence.history_end === "2026-09-13" &&
+        demandEvidence.history_start === "2026-07-13" &&
+        demandEvidence.history_end === "2026-10-04" &&
         demandEvidence.calendar_days === 84 &&
         demandEvidence.daily.length === 84 &&
         demandEvidence.daily.every((item) => item.inventory_state === "UNKNOWN") &&
@@ -882,7 +1015,7 @@ async function audit(client) {
       "SUP-001",
       "750ML",
       "6x750ML",
-      "2026-09-14",
+      "2026-10-05",
       "synthetic-location-001",
       "2.0000",
       "4.99",
@@ -924,7 +1057,7 @@ async function audit(client) {
     );
     check((await waitForResponse(reviewPath, "POST", transitionMark))?.status === 200, "normal recommendation preview POST returns HTTP 200");
     text = await body();
-    check(text.includes("NORMAL") && text.includes("Recalculated line total\n$12.00"), "one-case quantity preview is NORMAL and recalculates to selected BASE $12.00");
+    check(text.includes("NORMAL") && text.includes("Recalculated line total\n$36.00"), "one-case quantity preview is NORMAL and recalculates to uploaded BASE $36.00");
     await navigate(`${BASE}/monday-runs/${runId}`);
     check((await body()).includes("Record immutable decision"), "normal preview is cancelled without a decision");
 
@@ -942,7 +1075,7 @@ async function audit(client) {
     check((await waitForResponse(reviewPath, "POST", transitionMark))?.status === 200, "material recommendation preview POST returns HTTP 200");
     text = await body();
     check(text.includes("MATERIAL") && text.includes("Ordered units\n12"), "two-case edit is MATERIAL and yields 12 units");
-    check(text.includes("Merchandise total\n$19.00") && text.includes("Incremental line cash\n$7.00"), "material preview crosses to selected BREAK and recalculates exact cash");
+    check(text.includes("Merchandise total\n$60.00") && text.includes("Incremental line cash\n$24.00"), "material preview crosses to uploaded BREAK and recalculates exact cash");
     const finalPriceTier = await evaluate(
       "JSON.parse(document.querySelector('pre.final-price-tier-json').textContent)",
     );
@@ -952,8 +1085,11 @@ async function audit(client) {
         finalPriceTier.level_type === "BREAK" &&
         finalPriceTier.break_qty === "2.0000" &&
         finalPriceTier.break_unit === "CS" &&
-        finalPriceTier.case_price === "9.5000" &&
-        finalPriceTier.unit_price === "1.5833" &&
+        finalPriceTier.case_price === "30.0000" &&
+        finalPriceTier.unit_price === "5.0000" &&
+        finalPriceTier.source_price_book_batch_id === priorState.price.batchId &&
+        Number.isInteger(finalPriceTier.source_price_book_row_number) &&
+        typeof finalPriceTier.supplier_price_authority_event_id === "string" &&
         finalPriceTier.price_ladder_sha256 === selectedOfferInputEvidence.applicable_price_ladder.sha256,
       "material preview binds the exact selected BREAK source and run snapshot identities",
       finalPriceTier,
@@ -979,7 +1115,7 @@ async function audit(client) {
     );
     await assertRedirect(transitionMark, "POST", reviewPath, `/monday-runs/${runId}`, "final recommendation review POST returns HTTP 303");
     text = await body();
-    check(text.includes("EDIT_QUANTITY") && text.includes("12 unit(s)") && text.includes("reviewed line total $19.00"), "immutable reviewed quantity and selected BREAK economics are visible");
+    check(text.includes("EDIT_QUANTITY") && text.includes("12 unit(s)") && text.includes("reviewed line total $60.00"), "immutable reviewed quantity and uploaded BREAK economics are visible");
     const reviewedFinalPriceTier = await evaluate(
       "JSON.parse(document.querySelector('pre.final-price-tier-json').textContent)",
     );
@@ -998,8 +1134,8 @@ async function audit(client) {
     );
     check((await waitForResponse(buildPath, "POST", transitionMark))?.status === 200, "DRAFT build preview POST returns HTTP 200");
     text = await body();
-    check(text.includes("Confirm vendor DRAFT economics") && text.includes("$19.00") && text.includes("$24.00"), "vendor DRAFT preview shows selected BREAK merchandise plus fee total");
-    check(text.includes("PAY_FEE"), "below-minimum synthetic DRAFT has its explicit fee disposition");
+    check(text.includes("Confirm vendor DRAFT economics") && text.includes("$60.00"), "vendor DRAFT preview shows uploaded BREAK merchandise and exact total");
+    check(text.includes("NOT_APPLICABLE"), "above-minimum synthetic DRAFT has no invented fee disposition");
     const previewTierLines = await evaluate(
       "JSON.parse(document.querySelector('pre.draft-preview-final-price-tiers-json').textContent)",
     );
@@ -1021,7 +1157,7 @@ async function audit(client) {
     await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${runId}`, "confirmed DRAFT build POST returns HTTP 303");
     text = await body();
     check(text.includes("stage: PACKET_BUILT") && text.includes("Synthetic Southern — DRAFT"), "one internal vendor DRAFT and packet reach terminal stage");
-    check(text.includes("Grand totals:") && text.includes("internal DRAFT total $24.00"), "vendor and grand totals reconcile visibly");
+    check(text.includes("Grand totals:") && text.includes("internal DRAFT total $60.00"), "vendor and grand totals reconcile visibly");
     check(!text.includes("Release PO"), "no PO-release control is rendered");
     const builtFinalPriceTier = await evaluate(
       "JSON.parse(document.querySelector('pre.draft-final-price-tier-json').textContent)",
@@ -1064,6 +1200,7 @@ async function audit(client) {
     await saveHtml("12-replay-test-data.html");
 
     const state = {
+      price: priorState.price,
       unresolvedCandidateUrl: new URL(unresolved.href, BASE).href,
       validCandidateUrl: new URL(valid.href, BASE).href,
       sourceUrls: [unresolvedSourceHref, validSourceHref],
@@ -1118,7 +1255,7 @@ async function audit(client) {
     );
     await navigate(state.runUrl);
     let text = await body();
-    check(text.includes("stage: PACKET_BUILT") && text.includes("internal DRAFT total $24.00"), "reviewed selected-offer run and DRAFT survive restart");
+    check(text.includes("stage: PACKET_BUILT") && text.includes("internal DRAFT total $60.00"), "reviewed uploaded-price run and DRAFT survive restart");
     const restartedSelectedEvidence = await evaluate(
       "JSON.parse(document.querySelector('pre.selected-offer-input-json').textContent)",
     );

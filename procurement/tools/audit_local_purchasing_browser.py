@@ -37,6 +37,7 @@ from local_purchasing_candidate import (
     _database_facts,
     _runtime_paths,
     _state_evidence,
+    backup_v2,
 )
 
 
@@ -106,6 +107,7 @@ def _start_server(
     runtime_root: Path,
     port: int,
     log_path: Path,
+    price_apply_backup_label: str | None = None,
 ) -> tuple[subprocess.Popen[bytes], Any]:
     log_handle = log_path.open("ab", buffering=0)
     environment = {
@@ -123,8 +125,7 @@ def _start_server(
         "LC_ALL": "C.UTF-8",
         "PYTHONPATH": str(REPO_ROOT / "procurement" / "src"),
     }
-    process = subprocess.Popen(
-        (
+    command = [
             sys.executable,
             str(LAUNCHER),
             "serve",
@@ -134,7 +135,11 @@ def _start_server(
             str(runtime_root),
             "--port",
             str(port),
-        ),
+    ]
+    if price_apply_backup_label is not None:
+        command.extend(("--price-apply-backup-label", price_apply_backup_label))
+    process = subprocess.Popen(
+        command,
         cwd=REPO_ROOT,
         env=environment,
         stdout=log_handle,
@@ -266,6 +271,8 @@ def _run_phase(
             str(downloads),
             str(runtime_root / "local-auth.secret"),
             str(runtime_root / "review-token.secret"),
+            str(runtime_root / "price-token.secret"),
+            str(REPO_ROOT / "procurement" / "config" / "synthetic_price_replacement_book.csv"),
             str(state_path),
         ),
         cwd=REPO_ROOT,
@@ -336,8 +343,8 @@ def _validate_demand_evidence(value: Any) -> dict[str, Any]:
         "reason_codes",
     }:
         raise BrowserAcceptanceError("frozen demand-evidence contract differs")
-    history_start = date(2026, 6, 22)
-    history_end = date(2026, 9, 13)
+    history_start = date(2026, 7, 13)
+    history_end = date(2026, 10, 4)
     if (
         value.get("contract") != "BUFFALO_EMERGENCY_DEMAND_EVIDENCE_V2"
         or value.get("method_version") != "EMERGENCY_TRANSPARENT_V2"
@@ -458,7 +465,7 @@ def _validate_demand_evidence(value: Any) -> dict[str, Any]:
         or any(not isinstance(item, str) or not item for item in run_ids)
         or len(source_hashes) != 1
         or any(not _is_sha256(item) for item in source_hashes)
-        or captured != {"2026-09-13T12:00:00+00:00"}
+        or captured != {"2026-10-04T12:00:00+00:00"}
         or completed != captured
         or [item.get("available_quantity") for item in final_refs]
         != ["1.0000", "2.0000"]
@@ -583,18 +590,19 @@ def _validate_downloads(
         "cases": "2",
         "loose_units": "0",
         "ordered_units": "12",
-        "unit_cost": "1.5833",
-        "case_price": "9.5000",
-        "line_merchandise_total": "19.00",
+        "unit_cost": "5.0000",
+        "case_price": "30.0000",
+        "line_merchandise_total": "60.00",
         "line_loose_order_fee": "0.00",
-        "line_total": "19.00",
-        "vendor_merchandise_total": "19.00",
-        "vendor_below_minimum_fee": "5.00",
-        "vendor_delivery_fee": "5.00",
-        "vendor_po_total": "24.00",
-        "below_vendor_minimum": "TRUE",
-        "minimum_shortfall": "1.00",
-        "minimum_disposition": "PAY_FEE",
+        "line_total": "60.00",
+        "vendor_merchandise_total": "60.00",
+        "vendor_loose_order_fee_total": "0.00",
+        "vendor_below_minimum_fee": "0.00",
+        "vendor_delivery_fee": "0.00",
+        "vendor_po_total": "60.00",
+        "below_vendor_minimum": "FALSE",
+        "minimum_shortfall": "0.00",
+        "minimum_disposition": "NOT_APPLICABLE",
         "economics_confirmed_by": "synthetic:owner-browser:01",
     }
     differences = {
@@ -678,7 +686,7 @@ def _validate_downloads(
         if (
             not isinstance(input_manifest, dict)
             or input_manifest.get("method_version") != "EMERGENCY_TRANSPARENT_V2"
-            or input_manifest.get("business_date") != "2026-09-14"
+            or input_manifest.get("business_date") != "2026-10-05"
             or len(eligible_contexts) != 1
             or not isinstance(recommendation_items, list)
             or len(recommendation_items) != 1
@@ -810,8 +818,8 @@ def _validate_downloads(
             or summary["vendor_draft_count"] != 1
             or len(summary["draft_po_ids"]) != 1
             or summary["draft_po_ids"][0] != row.get("draft_po_id")
-            or Decimal(str(summary["merchandise_total"])) != Decimal("19.00")
-            or Decimal(str(summary["po_total"])) != Decimal("24.00")
+            or Decimal(str(summary["merchandise_total"])) != Decimal("60.00")
+            or Decimal(str(summary["po_total"])) != Decimal("60.00")
             or summary["release_performed"] is not False
             or summary["shopify_calls"] != 0
         ):
@@ -824,12 +832,12 @@ def _validate_downloads(
             vendor.get("vendor_id") != "00000000-0000-4000-8000-000000000001"
             or vendor.get("vendor_name") != "Synthetic Southern"
             or vendor.get("draft_po_id") != row.get("draft_po_id")
-            or Decimal(str(vendor.get("merchandise_total"))) != Decimal("19.00")
-            or Decimal(str(vendor.get("po_total"))) != Decimal("24.00")
-            or Decimal(str(vendor.get("delivery_fee"))) != Decimal("5.00")
-            or vendor.get("below_vendor_minimum") is not True
-            or Decimal(str(vendor.get("minimum_shortfall"))) != Decimal("1.00")
-            or vendor.get("minimum_disposition") != "PAY_FEE"
+            or Decimal(str(vendor.get("merchandise_total"))) != Decimal("60.00")
+            or Decimal(str(vendor.get("po_total"))) != Decimal("60.00")
+            or Decimal(str(vendor.get("delivery_fee"))) != Decimal("0.00")
+            or vendor.get("below_vendor_minimum") is not False
+            or Decimal(str(vendor.get("minimum_shortfall"))) != Decimal("0.00")
+            or vendor.get("minimum_disposition") != "NOT_APPLICABLE"
             or vendor.get("economics_confirmed_by")
             != "synthetic:owner-browser:01"
             or not _is_sha256(vendor.get("draft_preview_fingerprint"))
@@ -877,9 +885,9 @@ def _validate_downloads(
             or not _is_sha256(confirmation.get("review_preview_fingerprint"))
             or evidence.get("materiality_tier") != "MATERIAL"
             or Decimal(str(evidence.get("baseline_multiplier"))) != Decimal("4")
-            or Decimal(str(evidence.get("recommended_line_cash"))) != Decimal("12.00")
-            or Decimal(str(evidence.get("incremental_line_cash"))) != Decimal("7.00")
-            or Decimal(str(evidence.get("final_line_cash"))) != Decimal("19.00")
+            or Decimal(str(evidence.get("recommended_line_cash"))) != Decimal("36.00")
+            or Decimal(str(evidence.get("incremental_line_cash"))) != Decimal("24.00")
+            or Decimal(str(evidence.get("final_line_cash"))) != Decimal("60.00")
             or evidence.get("review_comment") != "Synthetic material quantity acceptance"
         ):
             raise BrowserAcceptanceError("material confirmation evidence differs")
@@ -895,11 +903,11 @@ def _validate_downloads(
             "variant_id": "1001",
             "vendor_name": "Synthetic Southern",
             "action": "EDIT_QUANTITY",
-            "approved_unit_cost": "1.5833",
-            "approved_case_price": "9.5000",
-            "approved_merchandise_total": "19.00",
+            "approved_unit_cost": "5.0000",
+            "approved_case_price": "30.0000",
+            "approved_merchandise_total": "60.00",
             "approved_loose_order_fee": "0.00",
-            "approved_line_total": "19.00",
+            "approved_line_total": "60.00",
             "comment": "Synthetic material quantity acceptance",
             "decided_by": "synthetic:owner-browser:01",
         }
@@ -1046,9 +1054,9 @@ def _database_acceptance(
             "(SELECT count(*) FROM prices WHERE price_state='current'),"
             "(SELECT count(*) FROM supplier_offers o JOIN prices p USING(offer_id) "
             " WHERE o.supplier_sku='SUP-001' AND o.active AND p.price_state='current' "
-            " AND ((p.level_type='BASE' AND p.case_price=12.00 AND p.unit_price=2.0000) "
+            " AND ((p.level_type='BASE' AND p.case_price=36.00 AND p.unit_price=6.0000) "
             "   OR (p.level_type='BREAK' AND p.break_qty=2 AND p.break_unit='CS' "
-            "       AND p.case_price=9.50 AND p.unit_price=1.5833))),"
+            "       AND p.case_price=30.00 AND p.unit_price=5.0000))),"
             "(SELECT count(*) FROM purchase_orders WHERE po_status='DRAFT'),"
             "(SELECT count(*) FROM purchase_orders WHERE po_status<>'DRAFT')"
         ).fetchone()
@@ -1122,7 +1130,9 @@ def _database_acceptance(
         ).fetchall()
         selected_price_snapshots = conn.execute(
             """SELECT run_price_snapshot_id,offer_id,effective_month,level_type,
-                      break_qty,break_unit,case_price,unit_price,source_file,source_page
+                      break_qty,break_unit,case_price,unit_price,source_file,source_page,
+                      source_price_id,source_price_book_batch_id::text,
+                      source_price_book_row_number,supplier_price_authority_event_id::text
                  FROM run_price_snapshots
                 WHERE run_id=%s ORDER BY run_price_snapshot_id""",
             (browser_state.get("runId"),),
@@ -1189,7 +1199,7 @@ def _database_acceptance(
                 ).fetchone()[0]
             )
     assert row is not None
-    expected = (2, 2, 4, 4, 2, 1, 0)
+    expected = (3, 3, 6, 6, 2, 1, 0)
     if tuple(int(value) for value in row) != expected:
         raise BrowserAcceptanceError("database nonauthority/control totals differ")
     facts = state["facts"]
@@ -1255,16 +1265,16 @@ def _database_acceptance(
         != "TEST DATA — NOT FOR ORDERING; fabricated stale V1 lifecycle fixture"
         or not _is_sha256(stale_run[5])
         or stale_run[6] != "EMERGENCY_TRANSPARENT_V1"
-        or stale_run[7].isoformat() != "2026-09-14"
-        or stale_run[8] != "synthetic-stale-v1:2026-09-14"
+        or stale_run[7].isoformat() != "2026-10-05"
+        or stale_run[8] != "synthetic-stale-v1:2026-10-05"
         or active_run[1:4]
         != ("RUNNING", "PACKET_BUILT", "INTERNAL_DRAFT_ONLY")
         or active_run[4]
         != f"TEST DATA — NOT FOR ORDERING; prepared by {server_actor}"
         or active_run[5] != summary["input_fingerprint"]
         or active_run[6] != "EMERGENCY_TRANSPARENT_V2"
-        or active_run[7].isoformat() != "2026-09-14"
-        or active_run[8] != "browser-synthetic-20260914-v2"
+        or active_run[7].isoformat() != "2026-10-05"
+        or active_run[8] != "browser-synthetic-20261005-v2"
     ):
         raise BrowserAcceptanceError("Monday run lifecycle or actor evidence differs")
 
@@ -1334,8 +1344,8 @@ def _database_acceptance(
         forecast_row[0:2] != (active_run_id, "1001")
         or any(value is not None for value in forecast_row[2:8])
         or forecast_row[8] != "EMERGENCY_TRANSPARENT_V2"
-        or forecast_row[9].isoformat() != "2026-06-22"
-        or forecast_row[10].isoformat() != "2026-09-13"
+        or forecast_row[9].isoformat() != "2026-07-13"
+        or forecast_row[10].isoformat() != "2026-10-04"
         or int(forecast_row[11]) != 3
         or recommendation_row[0:2] != (active_run_id, "1001")
     ):
@@ -1423,8 +1433,8 @@ def _database_acceptance(
         or po_rows[0][0] != summary["draft_po_ids"][0]
         or po_rows[0][1] != active_run_id
         or po_rows[0][2] != "DRAFT"
-        or Decimal(po_rows[0][3]) != Decimal("19.00")
-        or Decimal(po_rows[0][4]) != Decimal("24.00")
+        or Decimal(po_rows[0][3]) != Decimal("60.00")
+        or Decimal(po_rows[0][4]) != Decimal("60.00")
         or po_rows[0][5]
         != f"TEST DATA — NOT FOR ORDERING; built by {server_actor}"
         or po_rows[0][6] != server_actor
@@ -1455,7 +1465,7 @@ def _database_acceptance(
         and len(snapshot_tier_rows) == 1
         and tuple(
             None if value is None else str(value)
-            for value in snapshot_tier_rows[0][1:]
+            for value in snapshot_tier_rows[0][1:10]
         )
         == tuple(
             None if value is None else str(value)
@@ -1473,8 +1483,15 @@ def _database_acceptance(
         or final_tier.get("level_type") != "BREAK"
         or Decimal(str(final_tier.get("break_qty"))) != Decimal("2")
         or final_tier.get("break_unit") != "CS"
-        or Decimal(str(final_tier.get("case_price"))) != Decimal("9.5000")
-        or Decimal(str(final_tier.get("unit_price"))) != Decimal("1.5833")
+        or Decimal(str(final_tier.get("case_price"))) != Decimal("30.0000")
+        or Decimal(str(final_tier.get("unit_price"))) != Decimal("5.0000")
+        or int(snapshot_tier_rows[0][10]) != final_tier.get("price_id")
+        or snapshot_tier_rows[0][11]
+        != final_tier.get("source_price_book_batch_id")
+        or int(snapshot_tier_rows[0][12])
+        != final_tier.get("source_price_book_row_number")
+        or snapshot_tier_rows[0][13]
+        != final_tier.get("supplier_price_authority_event_id")
         or not source_snapshot_match
     ):
         raise BrowserAcceptanceError("selected run price-tier identity differs")
@@ -1599,6 +1616,32 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     port=args.port,
                     log_path=server_log,
                 )
+                price_phase = _run_phase(
+                    node=node,
+                    phase="price",
+                    base_url=base_url,
+                    cdp_endpoint=cdp_endpoint,
+                    evidence=args.evidence_root,
+                    downloads=downloads,
+                    runtime_root=args.runtime_root,
+                    state_path=state_path,
+                )
+                price_state = json.loads(state_path.read_text(encoding="utf-8"))
+                price_batch_id = str(price_state["price"]["batchId"])
+                _stop_server(server, log_handle, args.runtime_root)
+                server = None
+                log_handle = None
+                apply_backup_manifest = Path(
+                    backup_v2(args.database_url, args.runtime_root, price_batch_id)
+                )
+                apply_backup_label = apply_backup_manifest.parent.name
+                server, log_handle = _start_server(
+                    database_url=args.database_url,
+                    runtime_root=args.runtime_root,
+                    port=args.port,
+                    log_path=server_log,
+                    price_apply_backup_label=apply_backup_label,
+                )
                 phase1 = _run_phase(
                     node=node,
                     phase="phase1",
@@ -1617,6 +1660,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     runtime_root=args.runtime_root,
                     port=args.port,
                     log_path=server_log,
+                    price_apply_backup_label=apply_backup_label,
                 )
                 phase2 = _run_phase(
                     node=node,
@@ -1661,6 +1705,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "database": _database_facts(args.database_url, require_initialized=True),
         "phase1": phase1,
         "phase2": phase2,
+        "price_phase": price_phase,
+        "price_apply_backup": {
+            "label": apply_backup_label,
+            "manifest_sha256": _sha256(apply_backup_manifest),
+        },
         "downloads": downloads_result,
         "database_acceptance": database_result,
         "limitations": [
@@ -1707,6 +1756,7 @@ def main() -> int:
                 "passed": True,
                 "phase1_assertions": result["phase1"]["assertionCount"],
                 "phase2_assertions": result["phase2"]["assertionCount"],
+                "price_assertions": result["price_phase"]["assertionCount"],
                 "evidence_root": str(args.evidence_root),
                 "state_sha256": result["database_acceptance"]["state"]["sha256"],
             },
