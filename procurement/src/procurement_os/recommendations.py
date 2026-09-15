@@ -858,9 +858,10 @@ def _load_context_unfinalized(
                       AND m.break_qty IS NOT DISTINCT FROM p.break_qty
                       AND m.break_unit IS NOT DISTINCT FROM p.break_unit
                     WHERE p.source_price_book_batch_id=%s
+                      AND p.offer_id=%s
                       AND p.price_state='current'
                     ORDER BY p.price_id""",
-                (authority_batch_id,),
+                (authority_batch_id, context["offer_id"]),
             ).fetchall()
             if (
                 len(authority) != 1
