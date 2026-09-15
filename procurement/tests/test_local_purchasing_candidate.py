@@ -695,6 +695,29 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             )
 
     def test_runtime_tree_and_secret_files_require_owned_exact_modes_and_distinct_values(self):
+        fresh = self.root / "fresh-runtime"
+        fresh.mkdir(mode=0o700)
+        initialized = candidate.initialize_runtime(fresh)
+        self.assertEqual(initialized["contract"], candidate.LOCAL_RUNTIME_CONTRACT)
+        self.assertFalse(initialized["secret_values_exposed"])
+        self.assertNotIn("fabricated-secret", json.dumps(initialized))
+        candidate._runtime_paths(fresh)
+        generated = candidate._secret_values(fresh)
+        self.assertEqual(len(set(generated.values())), 3)
+        with self.assertRaisesRegex(
+            candidate.CandidateBoundaryError, "runtime root must be empty"
+        ):
+            candidate.initialize_runtime(fresh)
+        occupied = self.root / "occupied-runtime"
+        occupied.mkdir(mode=0o700)
+        sentinel = occupied / "sentinel"
+        sentinel.write_text("preserve me", encoding="utf-8")
+        with self.assertRaisesRegex(
+            candidate.CandidateBoundaryError, "runtime root must be empty"
+        ):
+            candidate.initialize_runtime(occupied)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve me")
+
         runtime = self._runtime()
         storage, backups, pid = candidate._runtime_paths(runtime)
         self.assertEqual((storage, backups, pid), (runtime / "storage", runtime / "backups", runtime / candidate.PID_FILE))

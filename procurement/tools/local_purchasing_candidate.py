@@ -16,9 +16,13 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import platform
+import pwd
 import re
+import secrets
 import shutil
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -81,6 +85,10 @@ MAPPING_CATALOG_SHA256 = (
     "5a9fff00c1d62c2de89ca1dc27d4e264def12eb726ab249a9ab86a9fc529c72e"
 )
 PID_FILE = "candidate.pid"
+DATABASE_MANIFEST_FILE = "database.json"
+POSTGRES_DATA_DIR = "postgres-data"
+LOCAL_RUNTIME_CONTRACT = "BUFFALO_LOCAL_SYNTHETIC_RUNTIME_V1"
+LOCAL_DATABASE_CONTRACT = "BUFFALO_LOCAL_SYNTHETIC_DATABASE_V1"
 SECRET_FILES = {
     "BUFFALO_LOCAL_AUTH_SECRET_FILE": "local-auth.secret",
     "RECONCILIATION_REVIEW_TOKEN": "review-token.secret",
@@ -455,6 +463,92 @@ def _runtime_paths(runtime_root: Path) -> tuple[Path, Path, Path]:
     for directory in (storage, backups):
         _require_mode(directory, 0o700, directory=True)
     return storage, backups, runtime_root / PID_FILE
+
+
+def _write_exclusive_file(path: Path, payload: bytes, *, mode: int = 0o600) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, mode)
+    try:
+        os.fchmod(descriptor, mode)
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("exclusive file write made no progress")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def initialize_runtime(runtime_root: Path) -> dict[str, Any]:
+    """Populate one caller-owned empty mode-0700 root without exposing secrets."""
+
+    if not runtime_root.is_absolute():
+        raise CandidateBoundaryError("runtime root must be absolute")
+    _require_mode(runtime_root, 0o700, directory=True)
+    if any(runtime_root.iterdir()):
+        raise CandidateBoundaryError("runtime root must be empty")
+    created: list[Path] = []
+    try:
+        for name in ("storage", "backups"):
+            path = runtime_root / name
+            path.mkdir(mode=0o700)
+            path.chmod(0o700)
+            created.append(path)
+        values: set[bytes] = set()
+        for filename in SECRET_FILES.values():
+            value = secrets.token_urlsafe(32).encode("ascii")
+            if value in values:
+                raise CandidateBoundaryError("generated local secrets were not distinct")
+            values.add(value)
+            path = runtime_root / filename
+            _write_exclusive_file(path, value + b"\n")
+            created.append(path)
+        root_descriptor = os.open(runtime_root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(root_descriptor)
+        finally:
+            os.close(root_descriptor)
+        _runtime_paths(runtime_root)
+        _secret_values(runtime_root)
+        return {
+            "contract": LOCAL_RUNTIME_CONTRACT,
+            "runtime_root": str(runtime_root),
+            "storage_root": str(runtime_root / "storage"),
+            "backup_root": str(runtime_root / "backups"),
+            "secret_files": sorted(SECRET_FILES.values()),
+            "secret_values_exposed": False,
+        }
+    except BaseException:
+        cleanup_error: BaseException | None = None
+        for path in reversed(created):
+            try:
+                info = path.stat(follow_symlinks=False)
+                if path.is_symlink() or info.st_uid != os.getuid():
+                    raise CandidateBoundaryError(
+                        "runtime ownership changed during initialization cleanup"
+                    )
+                if stat.S_ISDIR(info.st_mode):
+                    path.rmdir()
+                elif stat.S_ISREG(info.st_mode):
+                    path.unlink()
+                else:
+                    raise CandidateBoundaryError(
+                        "runtime object type changed during initialization cleanup"
+                    )
+            except FileNotFoundError:
+                pass
+            except BaseException as exc:
+                cleanup_error = exc
+                break
+        if cleanup_error is not None:
+            raise CandidateBoundaryError(
+                "runtime initialization failed and cleanup was incomplete"
+            ) from cleanup_error
+        raise
 
 
 def _secret_values(runtime_root: Path) -> dict[str, str]:
@@ -839,6 +933,355 @@ def _postgres_tool(name: str) -> str:
     if not re.search(r"\(PostgreSQL\) 16(?:\.|\s|$)", completed.stdout):
         raise CandidateBoundaryError(f"{name} is not PostgreSQL 16")
     return path
+
+
+def check_prerequisites() -> dict[str, Any]:
+    """Report, without installing anything, the exact supported Linux toolchain."""
+
+    checks: dict[str, dict[str, Any]] = {}
+    checks["python"] = {
+        "required": ">=3.13,<3.14",
+        "observed": platform.python_version(),
+        "ok": sys.version_info[:2] == (3, 13),
+    }
+    for name in (
+        "initdb",
+        "pg_ctl",
+        "createdb",
+        "pg_dump",
+        "pg_restore",
+        "pg_controldata",
+        "postgres",
+    ):
+        try:
+            path = _postgres_tool(name)
+            checks[name] = {"required": "PostgreSQL 16", "path": path, "ok": True}
+        except (CandidateBoundaryError, OSError, subprocess.SubprocessError) as exc:
+            checks[name] = {"required": "PostgreSQL 16", "ok": False, "error": str(exc)}
+    for name in ("node",):
+        path = shutil.which(name)
+        version = ""
+        if path is not None:
+            try:
+                version = subprocess.run(
+                    [path, "--version"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env={"PATH": os.path.dirname(path), "LANG": "C.UTF-8"},
+                    timeout=10,
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                path = None
+        checks[name] = {
+            "required": "available",
+            "path": path,
+            "observed": version,
+            "ok": path is not None,
+        }
+    uv = shutil.which("uv")
+    uvx = shutil.which("uvx")
+    uv_version = ""
+    if uv is not None:
+        try:
+            uv_version = subprocess.run(
+                [uv, "--version"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env={"PATH": os.path.dirname(uv), "LANG": "C.UTF-8"},
+                timeout=10,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            uv = None
+    checks["uv"] = {
+        "required": "uv 0.12.3 directly or an available uvx resolver",
+        "path": uv,
+        "uvx_path": uvx,
+        "observed": uv_version,
+        "ok": bool(uv_version.startswith("uv 0.12.3 ") or uvx is not None),
+    }
+    chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+    checks["chromium"] = {
+        "required": "chromium or chromium-browser",
+        "path": chromium,
+        "ok": chromium is not None,
+    }
+    return {
+        "contract": "BUFFALO_LOCAL_PREREQUISITES_V1",
+        "platform": platform.system(),
+        "supported_platform": "Linux",
+        "checks": checks,
+        "ok": platform.system() == "Linux" and all(
+            item["ok"] for item in checks.values()
+        ),
+        "installs_performed": False,
+    }
+
+
+def _local_database_url(database: str, port: int) -> str:
+    options = urlencode({"options": "-c role=qa_mapping_owner"}, quote_via=quote)
+    return f"postgresql://qa_release_login@127.0.0.1:{port}/{database}?{options}"
+
+
+def _cluster_system_identifier(data_directory: Path) -> str:
+    control = _postgres_tool("pg_controldata")
+    completed = subprocess.run(
+        [control, str(data_directory)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"PATH": os.path.dirname(control), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+        timeout=10,
+    )
+    match = re.search(r"^Database system identifier:\s*(\d+)\s*$", completed.stdout, re.MULTILINE)
+    if match is None:
+        raise CandidateBoundaryError("local database system identifier is absent")
+    return match.group(1)
+
+
+def _load_local_database_manifest(runtime_root: Path) -> dict[str, Any]:
+    _runtime_paths(runtime_root)
+    path = runtime_root / DATABASE_MANIFEST_FILE
+    _require_mode(path, 0o600, directory=False)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CandidateBoundaryError("local database registration is unreadable") from exc
+    expected = {
+        "contract",
+        "database",
+        "port",
+        "data_directory",
+        "system_identifier",
+        "postgres_major",
+        "server_address",
+        "session_user",
+        "current_user",
+        "price_migration_sha256",
+        "price_catalog_sha256",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected
+        or value.get("contract") != LOCAL_DATABASE_CONTRACT
+        or not isinstance(value.get("database"), str)
+        or re.fullmatch(r"[a-z][a-z0-9_]*_demo", value["database"]) is None
+        or not isinstance(value.get("port"), int)
+        or isinstance(value.get("port"), bool)
+        or not 1024 <= value["port"] <= 65535
+        or value.get("data_directory") != POSTGRES_DATA_DIR
+        or not isinstance(value.get("system_identifier"), str)
+        or re.fullmatch(r"\d+", value["system_identifier"]) is None
+        or value.get("postgres_major") != 16
+        or value.get("server_address") != "127.0.0.1"
+        or value.get("session_user") != "qa_release_login"
+        or value.get("current_user") != "qa_mapping_owner"
+        or value.get("price_migration_sha256") != PRICE_REPLACEMENT_MIGRATION_SHA256
+        or value.get("price_catalog_sha256") != PRICE_REPLACEMENT_CATALOG_SHA256
+    ):
+        raise CandidateBoundaryError("local database registration differs")
+    data_directory = runtime_root / POSTGRES_DATA_DIR
+    _require_mode(data_directory, 0o700, directory=True)
+    if _cluster_system_identifier(data_directory) != value["system_identifier"]:
+        raise CandidateBoundaryError("local database cluster identity differs")
+    return value
+
+
+def _run_pg_ctl(data_directory: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    pg_ctl = _postgres_tool("pg_ctl")
+    return subprocess.run(
+        [pg_ctl, "-D", str(data_directory), *arguments],
+        check=check,
+        capture_output=True,
+        text=True,
+        env={"PATH": os.path.dirname(pg_ctl), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+        timeout=60,
+    )
+
+
+def initialize_local_database(
+    runtime_root: Path, *, database: str, port: int
+) -> dict[str, Any]:
+    """Create and initialize one owned loopback PG16 demo under the runtime root."""
+
+    if platform.system() != "Linux":
+        raise CandidateBoundaryError("local database initialization is supported only on Linux")
+    _runtime_paths(runtime_root)
+    _secret_values(runtime_root)
+    if re.fullmatch(r"[a-z][a-z0-9_]*_demo", database) is None:
+        raise CandidateBoundaryError("database name must end in _demo")
+    if not isinstance(port, int) or isinstance(port, bool) or not 1024 <= port <= 65535:
+        raise CandidateBoundaryError("local database port is outside the supported range")
+    data_directory = runtime_root / POSTGRES_DATA_DIR
+    manifest_path = runtime_root / DATABASE_MANIFEST_FILE
+    log_path = runtime_root / "postgres.log"
+    if data_directory.exists() or manifest_path.exists() or log_path.exists():
+        raise CandidateBoundaryError("local database runtime is already occupied")
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError as exc:
+            raise CandidateBoundaryError("local database port is unavailable") from exc
+    initdb = _postgres_tool("initdb")
+    os_user = pwd.getpwuid(os.getuid()).pw_name
+    started = False
+    try:
+        subprocess.run(
+            [
+                initdb,
+                "-D",
+                str(data_directory),
+                "--auth-local=trust",
+                "--auth-host=trust",
+                "--no-locale",
+                "--encoding=UTF8",
+                "--username",
+                os_user,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={"PATH": os.path.dirname(initdb), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+            timeout=60,
+        )
+        data_directory.chmod(0o700)
+        _run_pg_ctl(
+            data_directory,
+            "-l",
+            str(log_path),
+            "-o",
+            f"-F -h 127.0.0.1 -p {port} -k {runtime_root}",
+            "-w",
+            "start",
+        )
+        started = True
+        log_path.chmod(0o600)
+        admin_url = f"postgresql://{quote(os_user)}@127.0.0.1:{port}/postgres"
+        with psycopg.connect(admin_url, autocommit=True, connect_timeout=5) as conn:
+            conn.execute(
+                "CREATE ROLE qa_mapping_owner NOLOGIN NOINHERIT NOSUPERUSER "
+                "NOCREATEDB NOCREATEROLE NOREPLICATION"
+            )
+            conn.execute(
+                "CREATE ROLE qa_release_login LOGIN NOINHERIT NOSUPERUSER "
+                "NOCREATEDB NOCREATEROLE NOREPLICATION"
+            )
+            conn.execute(
+                "GRANT qa_mapping_owner TO qa_release_login "
+                "WITH INHERIT FALSE, SET TRUE, ADMIN FALSE"
+            )
+            conn.execute(
+                sql.SQL("CREATE DATABASE {} OWNER qa_mapping_owner").format(
+                    sql.Identifier(database)
+                )
+            )
+        database_url = _local_database_url(database, port)
+        from initialize_synthetic_demo import _registered_business_date, initialize
+
+        initialized = initialize(database_url, _registered_business_date())
+        if initialized.get("initialized") is not True:
+            raise CandidateBoundaryError("local synthetic database initialization differed")
+        _database_facts(
+            database_url, require_initialized=True, require_price_release=True
+        )
+        manifest = {
+            "contract": LOCAL_DATABASE_CONTRACT,
+            "database": database,
+            "port": port,
+            "data_directory": POSTGRES_DATA_DIR,
+            "system_identifier": _cluster_system_identifier(data_directory),
+            "postgres_major": 16,
+            "server_address": "127.0.0.1",
+            "session_user": "qa_release_login",
+            "current_user": "qa_mapping_owner",
+            "price_migration_sha256": PRICE_REPLACEMENT_MIGRATION_SHA256,
+            "price_catalog_sha256": PRICE_REPLACEMENT_CATALOG_SHA256,
+        }
+        _write_exclusive_file(
+            manifest_path,
+            (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode("utf-8"),
+        )
+        return {
+            "initialized": True,
+            "database_url": database_url,
+            "database": database,
+            "port": port,
+            "system_identifier": manifest["system_identifier"],
+            "business_date": initialized["business_date"],
+        }
+    except BaseException:
+        if started:
+            try:
+                _run_pg_ctl(data_directory, "-m", "immediate", "-w", "stop")
+            except BaseException:
+                raise CandidateBoundaryError(
+                    "local database initialization failed and server cleanup was incomplete"
+                )
+        if manifest_path.exists():
+            manifest_path.unlink()
+        if log_path.exists():
+            log_path.unlink()
+        if data_directory.exists():
+            shutil.rmtree(data_directory)
+        raise
+
+
+def local_database_status(runtime_root: Path) -> dict[str, Any]:
+    manifest = _load_local_database_manifest(runtime_root)
+    data_directory = runtime_root / POSTGRES_DATA_DIR
+    status = _run_pg_ctl(data_directory, "status", check=False)
+    running = status.returncode == 0
+    result = {
+        "contract": LOCAL_DATABASE_CONTRACT,
+        "database": manifest["database"],
+        "port": manifest["port"],
+        "system_identifier": manifest["system_identifier"],
+        "running": running,
+    }
+    if running:
+        _database_facts(
+            _local_database_url(manifest["database"], manifest["port"]),
+            require_initialized=True,
+            require_price_release=True,
+        )
+    return result
+
+
+def start_local_database(runtime_root: Path) -> dict[str, Any]:
+    manifest = _load_local_database_manifest(runtime_root)
+    if _run_pg_ctl(runtime_root / POSTGRES_DATA_DIR, "status", check=False).returncode == 0:
+        raise CandidateBoundaryError("local database is already running")
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", manifest["port"]))
+        except OSError as exc:
+            raise CandidateBoundaryError("local database port is unavailable") from exc
+    _run_pg_ctl(
+        runtime_root / POSTGRES_DATA_DIR,
+        "-l",
+        str(runtime_root / "postgres.log"),
+        "-o",
+        f"-F -h 127.0.0.1 -p {manifest['port']} -k {runtime_root}",
+        "-w",
+        "start",
+    )
+    return local_database_status(runtime_root)
+
+
+def stop_local_database(runtime_root: Path) -> dict[str, Any]:
+    manifest = _load_local_database_manifest(runtime_root)
+    data_directory = runtime_root / POSTGRES_DATA_DIR
+    if _run_pg_ctl(data_directory, "status", check=False).returncode != 0:
+        raise CandidateBoundaryError("local database is not running")
+    _run_pg_ctl(data_directory, "-m", "fast", "-w", "stop")
+    return {
+        "contract": LOCAL_DATABASE_CONTRACT,
+        "database": manifest["database"],
+        "port": manifest["port"],
+        "system_identifier": manifest["system_identifier"],
+        "running": False,
+    }
 
 
 def _state_evidence(database_url: str) -> dict[str, Any]:
@@ -1673,6 +2116,16 @@ def _restore_locked(
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("check-prerequisites")
+    runtime_parser = subparsers.add_parser("initialize-runtime")
+    runtime_parser.add_argument("--runtime-root", required=True, type=Path)
+    database_parser = subparsers.add_parser("initialize-database")
+    database_parser.add_argument("--runtime-root", required=True, type=Path)
+    database_parser.add_argument("--database-name", required=True)
+    database_parser.add_argument("--port", required=True, type=int)
+    for name in ("database-status", "database-start", "database-stop"):
+        child = subparsers.add_parser(name)
+        child.add_argument("--runtime-root", required=True, type=Path)
     for name in ("serve", "backup", "backup-v2"):
         child = subparsers.add_parser(name)
         child.add_argument("--database-url", required=True)
@@ -1688,6 +2141,34 @@ def main() -> int:
     restore_parser.add_argument("--manifest", required=True, type=Path)
     args = parser.parse_args()
     try:
+        if args.command == "check-prerequisites":
+            result = check_prerequisites()
+            print(json.dumps(result, sort_keys=True))
+            return 0 if result["ok"] else 1
+        if args.command == "initialize-runtime":
+            print(json.dumps(initialize_runtime(args.runtime_root), sort_keys=True))
+            return 0
+        if args.command == "initialize-database":
+            print(
+                json.dumps(
+                    initialize_local_database(
+                        args.runtime_root,
+                        database=args.database_name,
+                        port=args.port,
+                    ),
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.command == "database-status":
+            print(json.dumps(local_database_status(args.runtime_root), sort_keys=True))
+            return 0
+        if args.command == "database-start":
+            print(json.dumps(start_local_database(args.runtime_root), sort_keys=True))
+            return 0
+        if args.command == "database-stop":
+            print(json.dumps(stop_local_database(args.runtime_root), sort_keys=True))
+            return 0
         if args.command == "serve":
             if args.port < 1024 or args.port > 65535:
                 raise CandidateBoundaryError("local port must be between 1024 and 65535")
