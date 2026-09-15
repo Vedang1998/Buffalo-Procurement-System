@@ -703,7 +703,7 @@ async function audit(client) {
     await submit(formScript("document.querySelector('form[method=\"post\"]')"));
     await assertRedirect(transitionMark, "POST", new URL(valid.href, BASE).pathname + "/selection", new URL(valid.href, BASE).pathname, "confirmed selection POST returns HTTP 303");
     text = await body();
-    check(text.includes("legacy comparison LEGACY_HAS_MULTIPLE_ACTIVE_STANDARD"), "confirmed selection records the deliberately ambiguous legacy comparison");
+    check(text.includes("legacy comparison HEAD_STALE_OR_INELIGIBLE"), "current-date shadow diagnostics keep the future-effective selection non-operational");
     status = await jsonFetch("/supplier-mapping/status");
     check(
       status.body.decision_count === 2 &&
