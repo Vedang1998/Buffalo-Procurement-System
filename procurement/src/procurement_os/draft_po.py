@@ -216,7 +216,10 @@ def _vendor_economics(
                 "loose_order_fee": line["loose_order_fee"],
                 "line_total": line["line_total"],
             } | (
-                {"final_price_tier": line["final_price_tier"]}
+                {
+                    "supplier_sku": line["supplier_sku"],
+                    "final_price_tier": line["final_price_tier"],
+                }
                 if "final_price_tier" in line
                 else {}
             ))
