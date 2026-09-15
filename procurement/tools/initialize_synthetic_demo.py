@@ -23,6 +23,7 @@ from apply_schema import (
     _verify_or_apply_mapping_release,
     _verify_or_apply_post_mapping_release,
     apply_verified_legacy_file,
+    verify_or_apply_synthetic_price_replacement,
 )
 from local_purchasing_candidate import acquire_database_lifecycle_lock
 
@@ -31,8 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DB_DIR = ROOT / "db"
 SCHEMA = "qa_mapping_test"
 VENDOR_ID = "00000000-0000-4000-8000-000000000001"
+CONTROL_VENDOR_ID = "00000000-0000-4000-8000-000000000002"
 VARIANT_ID = "1001"
 BLOCKED_VARIANT_ID = "2002"
+CONTROL_VARIANT_ID = "3003"
 DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901"
 
@@ -170,6 +173,30 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
                    '0000000002002',NULL)""",
             (BLOCKED_VARIANT_ID,),
         )
+        conn.execute(
+            "INSERT INTO vendors(vendor_id,vendor_name,active) VALUES (%s,%s,TRUE)",
+            (CONTROL_VENDOR_ID, "Synthetic Northern Control"),
+        )
+        conn.execute(
+            """INSERT INTO vendor_operating_rules(
+                   vendor_id,order_days,order_cutoff_local,timezone_name,
+                   expected_delivery_days,order_cycle_days,lead_time_days,
+                   lead_time_variability_days,reliability_pct,minimum_type,
+                   minimum_value,below_minimum_fee,loose_order_allowed,
+                   loose_unit_fee,confirmation_source,confirmed_by,rules_version)
+               VALUES (%s,ARRAY[%s],'23:59:59','America/New_York',ARRAY[%s],
+                   2,1,0,1,'DOLLAR',40,4,FALSE,NULL,
+                   'FABRICATED OWNER DEMO','synthetic:local-owner:01',1)""",
+            (CONTROL_VENDOR_ID, order_day, delivery_day),
+        )
+        conn.execute(
+            """INSERT INTO variants(
+                   variant_id,product_id,product_title,variant_title,active,
+                   catalog_state,identity_scope,sku,barcode,retail_price)
+               VALUES (%s,'synthetic-product-3003','Synthetic Northern Control','750ML',
+                   TRUE,'LIVE','CURRENT','SYN-3003','0000000003003',6.99)""",
+            (CONTROL_VARIANT_ID,),
+        )
         alternative_offer_id = conn.execute(
             """INSERT INTO supplier_offers(
                    variant_id,vendor_id,supplier_sku,supplier_description,
@@ -219,6 +246,37 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
                 selected_offer_id,business_date.replace(day=1),
             ),
         )
+        control_offer_id = conn.execute(
+            """INSERT INTO supplier_offers(
+                   variant_id,vendor_id,supplier_sku,supplier_description,
+                   package_type,size_text,raw_pack,shopify_units_per_case,
+                   qualifying_units_per_case,assortment_scope,assortable,
+                   active,confidence,source_file,notes)
+               VALUES (%s,%s,'CTRL-3003','Synthetic Northern control offer',
+                   'STANDARD','750ML','6x750ML',6,6,'PRODUCT',FALSE,TRUE,'VERIFIED',
+                   'fabricated-authoritative-format-source.txt',
+                   'TEST DATA — NOT FOR ORDERING') RETURNING offer_id""",
+            (CONTROL_VARIANT_ID, CONTROL_VENDOR_ID),
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT INTO prices(
+                   offer_id,price_state,effective_month,level_type,break_qty,break_unit,
+                   case_price,unit_price,source_file,source_page,
+                   extraction_confidence,verified,notes)
+               VALUES
+                   (%s,'current',%s,'BASE',NULL,NULL,24.00,4.0000,
+                    'synthetic-control-demo.csv',1,'VERIFIED',TRUE,
+                    'Synthetic control BASE installed before migration 011'),
+                   (%s,'current',%s,'BREAK',2,'CS',21.00,3.5000,
+                    'synthetic-control-demo.csv',2,'VERIFIED',TRUE,
+                    'Synthetic control BREAK installed before migration 011')""",
+            (
+                control_offer_id,
+                business_date.replace(day=1),
+                control_offer_id,
+                business_date.replace(day=1),
+            ),
+        )
 
 
 def _synthetic_inventory_capture_specs(
@@ -246,6 +304,12 @@ def _synthetic_inventory_capture_specs(
                     "available_quantity": 2,
                     "incoming_quantity": 0,
                 },
+                {
+                    "variant_id": CONTROL_VARIANT_ID,
+                    "location_gid": "synthetic-location-001",
+                    "available_quantity": 4,
+                    "incoming_quantity": 0,
+                },
             ),
         },
         {
@@ -259,6 +323,12 @@ def _synthetic_inventory_capture_specs(
                     "variant_id": VARIANT_ID,
                     "location_gid": "synthetic-location-001",
                     "available_quantity": 0,
+                    "incoming_quantity": 0,
+                },
+                {
+                    "variant_id": CONTROL_VARIANT_ID,
+                    "location_gid": "synthetic-location-001",
+                    "available_quantity": 4,
                     "incoming_quantity": 0,
                 },
             ),
@@ -296,7 +366,7 @@ def _seed_evidence(
                    shopify_reported_variant_count,live_rows_received,
                    exact_current_ids,new_live_variants,source_hash,
                    pagination_complete,notes)
-               VALUES (pg_catalog.now(),'COMPLETED','FABRICATED_OFFLINE',1,1,1,0,%s,
+               VALUES (pg_catalog.now(),'COMPLETED','FABRICATED_OFFLINE',3,3,3,0,%s,
                    TRUE,'TEST DATA — no Shopify call')""",
             ("c" * 64,),
         )
@@ -307,6 +377,14 @@ def _seed_evidence(
                VALUES (%s,'REPLENISHMENT_MODE','{"mode":"ROUTINE"}',TRUE,%s,
                    'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
             (VARIANT_ID, business_date),
+        )
+        conn.execute(
+            """INSERT INTO variant_policies(
+                   variant_id,policy_type,value_json,active,effective_from,
+                   approved_by,note)
+               VALUES (%s,'REPLENISHMENT_MODE','{"mode":"ROUTINE"}',TRUE,%s,
+                   'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
+            (CONTROL_VARIANT_ID, business_date),
         )
     for capture_spec in _synthetic_inventory_capture_specs(business_date):
         capture = capture_daily_inventory(
@@ -390,18 +468,33 @@ def _synthetic_sales_rows(business_date: date) -> list[object]:
 
     from procurement_os.sales import SalesSourceRow
 
-    return [
-        SalesSourceRow(
-            sale_date=business_date - timedelta(days=84 - offset),
-            source_variant_id=VARIANT_ID,
-            source_sku="SYN-1001",
-            source_product_title="Synthetic Citrus",
-            source_variant_title="750ML",
-            net_items_sold=(units := Decimal("1") if offset < 70 else Decimal("2")),
-            net_sales=units * Decimal("4.99"),
+    rows: list[SalesSourceRow] = []
+    for offset in range(84):
+        sale_date = business_date - timedelta(days=84 - offset)
+        target_units = Decimal("1") if offset < 70 else Decimal("2")
+        rows.extend(
+            (
+                SalesSourceRow(
+                    sale_date=sale_date,
+                    source_variant_id=VARIANT_ID,
+                    source_sku="SYN-1001",
+                    source_product_title="Synthetic Citrus",
+                    source_variant_title="750ML",
+                    net_items_sold=target_units,
+                    net_sales=target_units * Decimal("4.99"),
+                ),
+                SalesSourceRow(
+                    sale_date=sale_date,
+                    source_variant_id=CONTROL_VARIANT_ID,
+                    source_sku="SYN-3003",
+                    source_product_title="Synthetic Northern Control",
+                    source_variant_title="750ML",
+                    net_items_sold=Decimal("1"),
+                    net_sales=Decimal("6.99"),
+                ),
+            )
         )
-        for offset in range(84)
-    ]
+    return rows
 
 
 def _verify_synthetic_sales_corpus(
@@ -445,13 +538,13 @@ def _verify_synthetic_sales_corpus(
             row.source_variant_title,
             row.net_items_sold,
             row.net_sales,
-            VARIANT_ID,
+            row.source_variant_id,
             "RESOLVED",
             "EXACT_ACTIVE_VARIANT_ID",
             {
-                "candidates": [VARIANT_ID],
+                "candidates": [row.source_variant_id],
                 "catalog_state": "LIVE",
-                "source_variant_id": VARIANT_ID,
+                "source_variant_id": row.source_variant_id,
             },
             source_identity_key(row),
             source_row_hash(row),
@@ -481,7 +574,7 @@ def _verify_synthetic_sales_corpus(
     expected_daily = [
         (
             row.sale_date,
-            VARIANT_ID,
+            row.source_variant_id,
             row.net_items_sold,
             row.net_sales,
             None,
@@ -679,6 +772,11 @@ def _verify_initialized_demo(
     with conn.transaction():
         if _verify_or_apply_post_mapping_release(conn, DB_DIR):
             raise RuntimeError("initialized demo unexpectedly applied retirement state")
+    with conn.transaction():
+        if verify_or_apply_synthetic_price_replacement(conn, DB_DIR):
+            raise RuntimeError(
+                "initialized demo unexpectedly applied synthetic price state"
+            )
     metadata = dict(
         conn.execute(
             """SELECT key,value FROM meta WHERE key=ANY(%s)""",
@@ -725,6 +823,43 @@ def _verify_initialized_demo(
     ]
     if offer_prices != expected_offer_prices:
         raise RuntimeError("synthetic selected-offer price fixture differs")
+    control_offer_prices = conn.execute(
+        """SELECT o.supplier_sku,o.active,o.package_type,o.confidence,
+                  o.shopify_units_per_case,o.qualifying_units_per_case,
+                  p.price_state,p.effective_month,p.level_type,p.break_qty,p.break_unit,
+                  p.case_price,p.unit_price,p.source_file,p.source_page
+             FROM supplier_offers o JOIN prices p USING(offer_id)
+            WHERE o.variant_id=%s
+            ORDER BY p.source_page""",
+        (CONTROL_VARIANT_ID,),
+    ).fetchall()
+    expected_control_prices = [
+        ("CTRL-3003",True,"STANDARD","VERIFIED",Decimal("6"),Decimal("6"),
+         "current",expected_month,"BASE",None,None,Decimal("24.0000"),
+         Decimal("4.0000"),"synthetic-control-demo.csv",1),
+        ("CTRL-3003",True,"STANDARD","VERIFIED",Decimal("6"),Decimal("6"),
+         "current",expected_month,"BREAK",Decimal("2"),"CS",Decimal("21.0000"),
+         Decimal("3.5000"),"synthetic-control-demo.csv",2),
+    ]
+    if control_offer_prices != expected_control_prices:
+        raise RuntimeError("synthetic control-vendor price fixture differs")
+    authority = conn.execute(
+        """SELECT p.vendor_id::text,p.price_scope_key,p.fixture_database_name,
+                  h.head_version,h.active_price_book_batch_id,
+                  e.action,e.resulting_current_scope_sha256=h.current_scope_sha256
+             FROM supplier_price_schedule_policies p
+             JOIN supplier_price_authority_heads h
+               ON h.vendor_id=p.vendor_id AND h.price_scope_key=p.price_scope_key
+             JOIN supplier_price_authority_events e
+               ON e.supplier_price_authority_event_id=h.supplier_price_authority_event_id
+            ORDER BY p.vendor_id"""
+    ).fetchall()
+    if authority != [
+        (VENDOR_ID,"COMPLETE_VENDOR",conn.info.dbname,1,None,"ADOPT_EXISTING_BASELINE",True),
+        (CONTROL_VENDOR_ID,"COMPLETE_VENDOR",conn.info.dbname,1,None,
+         "ADOPT_EXISTING_BASELINE",True),
+    ]:
+        raise RuntimeError("synthetic baseline price authority differs")
     sales_backfill_id = str(metadata["synthetic_owner_demo_sales_backfill_id"])
     try:
         sales_backfill_uuid = UUID(sales_backfill_id)
@@ -927,6 +1062,15 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
         with conn.transaction():
             if not _verify_or_apply_post_mapping_release(conn, DB_DIR):
                 raise RuntimeError("fresh synthetic demo did not apply retirement release")
+        with conn.transaction():
+            if not verify_or_apply_synthetic_price_replacement(
+                conn,
+                DB_DIR,
+                enable_fixture_registration=True,
+            ):
+                raise RuntimeError(
+                    "fresh synthetic demo did not apply synthetic price release"
+                )
         _publish_demo_marker(conn, business_date, sales_backfill_id)
         _verify_initialized_demo(conn, business_date)
         return {
@@ -935,6 +1079,8 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
             "business_date": business_date.isoformat(),
             "variant_id": VARIANT_ID,
             "vendor_id": VENDOR_ID,
+            "control_variant_id": CONTROL_VARIANT_ID,
+            "control_vendor_id": CONTROL_VENDOR_ID,
         }
 
 

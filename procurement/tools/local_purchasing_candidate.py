@@ -47,6 +47,27 @@ from procurement_os.monday_forecast_retirement import (
     MondayForecastRetirementContractError,
     verify_monday_forecast_v2_retirement_contract,
 )
+from procurement_os.local_backup_v2 import (
+    BACKUP_V2_CONTRACT,
+    MANIFEST_ENV as PRICE_APPLY_MANIFEST_ENV,
+    MANIFEST_SHA_ENV as PRICE_APPLY_MANIFEST_SHA_ENV,
+    RUNTIME_ROOT_ENV as LOCAL_RUNTIME_ROOT_ENV,
+    SOURCE_COMMIT_ENV,
+    SOURCE_TREE_ENV,
+    LocalBackupV2Error,
+    VerifiedPriceApplyBackup,
+    canonical_sha256,
+    verify_price_apply_backup,
+)
+from procurement_os.synthetic_price_replacement_contract import (
+    CATALOG_SHA256 as PRICE_REPLACEMENT_CATALOG_SHA256,
+    CONTRACT_VERSION as PRICE_REPLACEMENT_CONTRACT_VERSION,
+    FIXTURE_REGISTRATION_CANONICAL_SHA256 as PRICE_FIXTURE_SHA256,
+    MIGRATION_NAME as PRICE_REPLACEMENT_MIGRATION_NAME,
+    MIGRATION_SHA256 as PRICE_REPLACEMENT_MIGRATION_SHA256,
+    SyntheticPriceReplacementContractError,
+    verify_synthetic_price_replacement_contract,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -105,6 +126,7 @@ _MAPPING_RELATIONS = (
     "monday_stale_forecast_retirements",
 )
 _DATABASE_LIFECYCLE_LOCK_PREFIX = "buffalo:local-purchasing-candidate:lifecycle:v1"
+_PRICE_BACKUP_LABEL = re.compile(r"^candidate-v2-\d{8}T\d{6}Z-[0-9a-f]{12}$")
 
 
 class CandidateBoundaryError(RuntimeError):
@@ -224,7 +246,11 @@ def _application_database_url(database_url: str) -> str:
 
 
 def _database_facts(
-    database_url: str, *, require_initialized: bool, restore: bool = False
+    database_url: str,
+    *,
+    require_initialized: bool,
+    restore: bool = False,
+    require_price_release: bool = False,
 ) -> dict[str, Any]:
     database = _database_name(database_url, restore=restore)
     rules_path = REPO_ROOT / "procurement" / "config" / "rules.toml"
@@ -233,6 +259,9 @@ def _database_facts(
     )
     retirement_migration_path = (
         REPO_ROOT / "procurement" / "db" / RETIREMENT_MIGRATION_NAME
+    )
+    price_migration_path = (
+        REPO_ROOT / "procurement" / "db" / PRICE_REPLACEMENT_MIGRATION_NAME
     )
     rules = tomllib.loads(rules_path.read_text(encoding="utf-8"))
     if rules.get("persistent_mapping") != _DISABLED_MAPPING_POLICY:
@@ -243,6 +272,11 @@ def _database_facts(
         raise CandidateBoundaryError("persistent mapping migration source differs")
     if _sha256_file(retirement_migration_path) != RETIREMENT_MIGRATION_SHA256:
         raise CandidateBoundaryError("forecast retirement migration source differs")
+    if require_price_release:
+        if rules.get("pricing", {}).get("synthetic_price_replacement_enabled") is not False:
+            raise CandidateBoundaryError("synthetic price replacement policy is not disabled")
+        if _sha256_file(price_migration_path) != PRICE_REPLACEMENT_MIGRATION_SHA256:
+            raise CandidateBoundaryError("synthetic price replacement migration source differs")
     with psycopg.connect(database_url, connect_timeout=5) as conn:
         row = conn.execute(
             "SELECT pg_catalog.current_database(),"
@@ -370,6 +404,32 @@ def _database_facts(
                 raise CandidateBoundaryError(
                     "demo forecast retirement contract differs"
                 ) from exc
+            if require_price_release:
+                try:
+                    computed_price_catalog = verify_synthetic_price_replacement_contract(
+                        conn, schema=SCHEMA, require_marker=True
+                    )
+                except SyntheticPriceReplacementContractError as exc:
+                    raise CandidateBoundaryError(
+                        "demo synthetic price replacement contract differs"
+                    ) from exc
+                if computed_price_catalog != PRICE_REPLACEMENT_CATALOG_SHA256:
+                    raise CandidateBoundaryError(
+                        "demo synthetic price replacement catalog differs"
+                    )
+                policy_facts = conn.execute(
+                    sql.SQL(
+                        "SELECT count(*),"
+                        "bool_and(fixture_database_name=current_database()),"
+                        "bool_and(fixture_policy_config_sha256=%s) "
+                        "FROM {}.supplier_price_schedule_policies"
+                    ).format(target),
+                    (PRICE_FIXTURE_SHA256,),
+                ).fetchone()
+                if policy_facts != (2, True, True):
+                    raise CandidateBoundaryError(
+                        "demo synthetic price registration differs"
+                    )
         elif (
             schema_oid is not None
             or user_schemas
@@ -473,7 +533,13 @@ def _write_reserved_pid(descriptor: int, pid: int) -> None:
 
 
 def _child_environment(
-    *, database_url: str, runtime_root: Path, storage: Path, port: int
+    *,
+    database_url: str,
+    runtime_root: Path,
+    storage: Path,
+    port: int,
+    source_git: dict[str, str],
+    price_apply_manifest: tuple[Path, str] | None = None,
 ) -> dict[str, str]:
     secrets = _secret_values(runtime_root)
     environment = {
@@ -490,8 +556,16 @@ def _child_environment(
         "BUFFALO_LOCAL_ROLE_REF": "LOCAL_SYNTHETIC_OWNER",
         "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
         "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+        "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+        LOCAL_RUNTIME_ROOT_ENV: str(runtime_root),
+        SOURCE_COMMIT_ENV: source_git["commit"],
+        SOURCE_TREE_ENV: source_git["tree"],
         **secrets,
     }
+    if price_apply_manifest is not None:
+        manifest_path, manifest_sha256 = price_apply_manifest
+        environment[PRICE_APPLY_MANIFEST_ENV] = str(manifest_path)
+        environment[PRICE_APPLY_MANIFEST_SHA_ENV] = manifest_sha256
     if SCRUBBED_NAMES.intersection(environment) != {"DATABASE_URL"}:
         raise CandidateBoundaryError("child environment credential allowlist differs")
     return environment
@@ -559,16 +633,45 @@ def _terminate_owned_process_group(
     raise CandidateBoundaryError("owned child process group survived termination")
 
 
-def serve(database_url: str, runtime_root: Path, port: int) -> int:
+def serve(
+    database_url: str,
+    runtime_root: Path,
+    port: int,
+    price_apply_backup_label: str | None = None,
+) -> int:
     if port < 1024 or port > 65535:
         raise CandidateBoundaryError("local port must be between 1024 and 65535")
     with _database_lifecycle_guard(database_url):
-        return _serve_locked(database_url, runtime_root, port)
+        return _serve_locked(
+            database_url,
+            runtime_root,
+            port,
+            price_apply_backup_label=price_apply_backup_label,
+        )
 
 
-def _serve_locked(database_url: str, runtime_root: Path, port: int) -> int:
-    _database_facts(database_url, require_initialized=True)
+def _serve_locked(
+    database_url: str,
+    runtime_root: Path,
+    port: int,
+    *,
+    price_apply_backup_label: str | None = None,
+) -> int:
+    facts = _database_facts(
+        database_url, require_initialized=True, require_price_release=True
+    )
     storage, _, pid_file = _runtime_paths(runtime_root)
+    source_git = _source_identity()
+    price_apply_manifest: tuple[Path, str] | None = None
+    if price_apply_backup_label is not None:
+        manifest_path, manifest_sha256, verified = _resolve_price_apply_backup(
+            runtime_root=runtime_root,
+            label=price_apply_backup_label,
+            source_git=source_git,
+        )
+        if verified.database != facts["database"]:
+            raise CandidateBoundaryError("price APPLY backup database differs")
+        price_apply_manifest = (manifest_path, manifest_sha256)
     reservation = _reserve_pid_file(pid_file)
     reservation_identity = _reservation_identity(reservation)
     child: subprocess.Popen[bytes] | None = None
@@ -593,6 +696,8 @@ def _serve_locked(database_url: str, runtime_root: Path, port: int) -> int:
                 runtime_root=runtime_root,
                 storage=storage,
                 port=port,
+                source_git=source_git,
+                price_apply_manifest=price_apply_manifest,
             ),
             start_new_session=True,
         )
@@ -641,6 +746,64 @@ def _sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _source_identity() -> dict[str, str]:
+    """Return the exact clean commit/tree that owns the running source bytes."""
+
+    git = shutil.which("git")
+    if git is None:
+        raise CandidateBoundaryError("git is unavailable")
+    environment = {
+        "PATH": os.path.dirname(git),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+    }
+
+    def run(*arguments: str) -> str:
+        completed = subprocess.run(
+            [git, *arguments],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+            timeout=10,
+        )
+        return completed.stdout.strip()
+
+    if Path(run("rev-parse", "--show-toplevel")).resolve() != REPO_ROOT.resolve():
+        raise CandidateBoundaryError("source repository root differs")
+    if run("status", "--porcelain=v1", "--untracked-files=all"):
+        raise CandidateBoundaryError("local candidate source tree is not clean")
+    identity = {
+        "commit": run("rev-parse", "HEAD^{commit}"),
+        "tree": run("rev-parse", "HEAD^{tree}"),
+    }
+    if any(re.fullmatch(r"[0-9a-f]{40}", value) is None for value in identity.values()):
+        raise CandidateBoundaryError("source repository identity differs")
+    return identity
+
+
+def _resolve_price_apply_backup(
+    *, runtime_root: Path, label: str, source_git: dict[str, str]
+) -> tuple[Path, str, VerifiedPriceApplyBackup]:
+    if _PRICE_BACKUP_LABEL.fullmatch(label) is None or Path(label).name != label:
+        raise CandidateBoundaryError("price APPLY backup label differs")
+    _, backups, _ = _runtime_paths(runtime_root)
+    manifest_path = backups / label / "manifest.json"
+    try:
+        manifest_sha256 = _sha256_file(manifest_path)
+        verified = verify_price_apply_backup(
+            runtime_root=runtime_root,
+            manifest_path=manifest_path,
+            expected_manifest_sha=manifest_sha256,
+            expected_commit=source_git["commit"],
+            expected_tree=source_git["tree"],
+        )
+    except (LocalBackupV2Error, OSError, KeyError) as exc:
+        raise CandidateBoundaryError("price APPLY backup binding differs") from exc
+    return manifest_path, manifest_sha256, verified
 
 
 def _storage_inventory(storage: Path) -> list[dict[str, Any]]:
@@ -775,6 +938,91 @@ def _state_evidence(database_url: str) -> dict[str, Any]:
     return {"facts": evidence, "sha256": hashlib.sha256(encoded).hexdigest()}
 
 
+def _price_replacement_backup_evidence(
+    database_url: str, batch_id: str
+) -> dict[str, Any]:
+    """Bind one confirmed FUTURE batch to its exact pre-change CURRENT scope."""
+
+    try:
+        canonical_batch_id = str(UUID(str(batch_id)))
+    except (TypeError, ValueError) as exc:
+        raise CandidateBoundaryError("price replacement batch ID is malformed") from exc
+    with psycopg.connect(database_url, connect_timeout=5) as conn:
+        target = sql.Identifier(SCHEMA)
+        rows = conn.execute(
+            sql.SQL(
+                "SELECT b.price_book_batch_id::text,b.vendor_id::text,"
+                "b.price_scope_key,b.content_sha256,b.raw_storage_key,"
+                "h.supplier_price_authority_event_id::text,h.head_version,"
+                "{}.supplier_price_scope_current_payload(b.vendor_id)::text,"
+                "{}.supplier_price_scope_current_sha256(b.vendor_id),b.row_count,"
+                "(SELECT count(*) FROM {}.price_book_scope_memberships m "
+                "  WHERE m.price_book_batch_id=b.price_book_batch_id),"
+                "(SELECT count(*) FROM {}.prices x "
+                "  WHERE x.source_price_book_batch_id=b.price_book_batch_id "
+                "    AND x.price_state='future' AND x.verified),"
+                "e.raw_content_sha256,e.declaration_sha256,e.policy_sha256,"
+                "e.scope_membership_sha256,b.declaration_sha256,p.policy_sha256,"
+                "b.scope_membership_sha256 "
+                "FROM {}.price_book_batches b "
+                "JOIN {}.supplier_price_schedule_policies p "
+                "  ON p.policy_ref=b.schedule_policy_ref "
+                "JOIN {}.supplier_price_authority_heads h "
+                "  ON h.vendor_id=b.vendor_id AND h.price_scope_key=b.price_scope_key "
+                "JOIN {}.price_book_promotion_events e "
+                "  ON e.price_book_batch_id=b.price_book_batch_id "
+                " AND e.replacement_contract=b.replacement_contract "
+                "WHERE b.price_book_batch_id=%s "
+                "  AND b.status='VERIFIED_FUTURE' "
+                "  AND b.replacement_contract='SYNTHETIC_COMPLETE_VENDOR_MONTHLY_V1' "
+                "  AND b.price_scope_key='COMPLETE_VENDOR' "
+                "  AND p.fixture_database_name=current_database()"
+            ).format(*(target for _ in range(8))),
+            (canonical_batch_id,),
+        ).fetchall()
+    if len(rows) != 1:
+        raise CandidateBoundaryError("confirmed synthetic replacement batch is absent")
+    row = rows[0]
+    try:
+        scope_rows = json.loads(str(row[7]))
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise CandidateBoundaryError("pre-change price scope is malformed") from exc
+    if (
+        str(row[0]) != canonical_batch_id
+        or row[2] != "COMPLETE_VENDOR"
+        or not isinstance(scope_rows, list)
+        or not scope_rows
+        or re.fullmatch(r"[0-9a-f]{64}", str(row[3])) is None
+        or str(row[4]) != f"price-books/raw/{row[3]}.csv"
+        or int(row[6]) < 1
+        or int(row[9]) < 1
+        or (int(row[10]), int(row[11])) != (int(row[9]), int(row[9]))
+        or (str(row[12]), str(row[13]), str(row[14]), str(row[15]))
+        != (str(row[3]), str(row[16]), str(row[17]), str(row[18]))
+        or any(
+            re.fullmatch(r"[0-9a-f]{64}", str(value)) is None
+            for value in (row[8], row[12], row[13], row[14], row[15])
+        )
+    ):
+        raise CandidateBoundaryError("confirmed synthetic replacement evidence differs")
+    return {
+        "price_replacement": {
+            "price_book_batch_id": str(row[0]),
+            "vendor_id": str(row[1]),
+            "price_scope_key": str(row[2]),
+            "prior_event_id": str(row[5]),
+            "prior_head_version": int(row[6]),
+            "raw_content_sha256": str(row[3]),
+            "raw_storage_key": str(row[4]),
+        },
+        "prechange_current_scope": {
+            "rows": scope_rows,
+            "rows_sha256": canonical_sha256(scope_rows),
+            "database_scope_sha256": str(row[8]),
+        },
+    }
+
+
 def _validate_storage_archive(
     archive_path: Path, expected_files: list[dict[str, Any]]
 ) -> None:
@@ -801,6 +1049,13 @@ def _validate_storage_archive(
 def backup(database_url: str, runtime_root: Path) -> Path:
     with _database_lifecycle_guard(database_url):
         return _backup_locked(database_url, runtime_root)
+
+
+def backup_v2(database_url: str, runtime_root: Path, batch_id: str) -> Path:
+    """Create a stopped-app, source-bound V2 recovery proof for one batch."""
+
+    with _database_lifecycle_guard(database_url):
+        return _backup_v2_locked(database_url, runtime_root, batch_id)
 
 
 def _backup_locked(database_url: str, runtime_root: Path) -> Path:
@@ -875,6 +1130,141 @@ def _backup_locked(database_url: str, runtime_root: Path) -> Path:
             json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )
         manifest_path.chmod(0o600)
+        return manifest_path
+    except BaseException:
+        if destination_created and destination is not None:
+            shutil.rmtree(destination)
+        raise
+    finally:
+        try:
+            os.close(reservation)
+        except OSError:
+            pass
+        _release_reserved_pid_path(pid_file, reservation_identity)
+
+
+def _backup_v2_locked(
+    database_url: str, runtime_root: Path, batch_id: str
+) -> Path:
+    facts = _database_facts(
+        database_url, require_initialized=True, require_price_release=True
+    )
+    storage, backups, pid_file = _runtime_paths(runtime_root)
+    reservation = _reserve_pid_file(pid_file)
+    reservation_identity = _reservation_identity(reservation)
+    destination: Path | None = None
+    destination_created = False
+    try:
+        source_before = _source_identity()
+        price_before = _price_replacement_backup_evidence(database_url, batch_id)
+        state_before = _state_evidence(database_url)
+        pg_dump = _postgres_tool("pg_dump")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        batch_suffix = str(UUID(str(batch_id))).replace("-", "")[:12]
+        destination = backups / f"candidate-v2-{stamp}-{batch_suffix}"
+        destination.mkdir(mode=0o700)
+        destination_created = True
+        dump_path = destination / "database.dump"
+        archive_path = destination / "storage.tar"
+        subprocess.run(
+            [
+                pg_dump,
+                "--dbname",
+                database_url,
+                "--format=custom",
+                "--schema",
+                SCHEMA,
+                "--extension",
+                "pgcrypto",
+                "--file",
+                str(dump_path),
+            ],
+            check=True,
+            env={"PATH": os.path.dirname(pg_dump), "LANG": "C.UTF-8"},
+            timeout=120,
+        )
+        dump_path.chmod(0o600)
+        storage_files = _storage_inventory(storage)
+        raw_binding = price_before["price_replacement"]
+        raw_members = {
+            item["path"]: item for item in storage_files
+        }
+        if (
+            raw_binding["raw_storage_key"] not in raw_members
+            or raw_members[raw_binding["raw_storage_key"]]["sha256"]
+            != raw_binding["raw_content_sha256"]
+        ):
+            raise CandidateBoundaryError(
+                "confirmed replacement raw source is absent from storage"
+            )
+        with tarfile.open(archive_path, "w") as archive:
+            for item in storage_files:
+                archive.add(
+                    storage / item["path"], arcname=item["path"], recursive=False
+                )
+        archive_path.chmod(0o600)
+        _validate_storage_archive(archive_path, storage_files)
+        if _storage_inventory(storage) != storage_files:
+            raise CandidateBoundaryError("storage changed during V2 backup")
+        state_after = _state_evidence(database_url)
+        price_after = _price_replacement_backup_evidence(database_url, batch_id)
+        source_after = _source_identity()
+        if state_after != state_before:
+            raise CandidateBoundaryError("database changed during V2 backup")
+        if price_after != price_before:
+            raise CandidateBoundaryError("price replacement state changed during V2 backup")
+        if source_after != source_before:
+            raise CandidateBoundaryError("source changed during V2 backup")
+        manifest = {
+            "contract": BACKUP_V2_CONTRACT,
+            "created_utc": stamp,
+            "database": facts,
+            "database_dump": {
+                "path": dump_path.name,
+                "sha256": _sha256_file(dump_path),
+                "bytes": dump_path.stat().st_size,
+            },
+            "storage_archive": {
+                "path": archive_path.name,
+                "sha256": _sha256_file(archive_path),
+                "bytes": archive_path.stat().st_size,
+                "files": storage_files,
+            },
+            "state": state_after,
+            "limitations": [
+                "same-host local recovery only",
+                "synthetic price APPLY recovery proof only",
+                "sessions and secret files are intentionally excluded",
+            ],
+            "source_git": source_after,
+            "schema_release": {
+                "migration": PRICE_REPLACEMENT_MIGRATION_NAME,
+                "migration_sha256": PRICE_REPLACEMENT_MIGRATION_SHA256,
+                "catalog_sha256": PRICE_REPLACEMENT_CATALOG_SHA256,
+            },
+            **price_after,
+        }
+        manifest_path = destination / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.chmod(0o600)
+        manifest_sha256 = _sha256_file(manifest_path)
+        try:
+            verified = verify_price_apply_backup(
+                runtime_root=runtime_root,
+                manifest_path=manifest_path,
+                expected_manifest_sha=manifest_sha256,
+                expected_commit=source_after["commit"],
+                expected_tree=source_after["tree"],
+            )
+        except LocalBackupV2Error as exc:
+            raise CandidateBoundaryError("new V2 backup failed verification") from exc
+        if verified.database != facts["database"] or verified.batch_id != str(
+            UUID(str(batch_id))
+        ):
+            raise CandidateBoundaryError("new V2 backup identity differs")
         return manifest_path
     except BaseException:
         if destination_created and destination is not None:
@@ -1283,12 +1673,15 @@ def _restore_locked(
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name in ("serve", "backup"):
+    for name in ("serve", "backup", "backup-v2"):
         child = subparsers.add_parser(name)
         child.add_argument("--database-url", required=True)
         child.add_argument("--runtime-root", required=True, type=Path)
         if name == "serve":
             child.add_argument("--port", type=int, default=8765)
+            child.add_argument("--price-apply-backup-label")
+        elif name == "backup-v2":
+            child.add_argument("--batch-id", required=True, type=UUID)
     restore_parser = subparsers.add_parser("restore")
     restore_parser.add_argument("--database-url", required=True)
     restore_parser.add_argument("--restore-storage-root", required=True, type=Path)
@@ -1298,13 +1691,27 @@ def main() -> int:
         if args.command == "serve":
             if args.port < 1024 or args.port > 65535:
                 raise CandidateBoundaryError("local port must be between 1024 and 65535")
-            return serve(args.database_url, args.runtime_root, args.port)
+            return serve(
+                args.database_url,
+                args.runtime_root,
+                args.port,
+                price_apply_backup_label=args.price_apply_backup_label,
+            )
         if args.command == "backup":
             print(backup(args.database_url, args.runtime_root))
             return 0
+        if args.command == "backup-v2":
+            print(backup_v2(args.database_url, args.runtime_root, str(args.batch_id)))
+            return 0
         print(json.dumps(restore(args.database_url, args.restore_storage_root, args.manifest), sort_keys=True))
         return 0
-    except (CandidateBoundaryError, OSError, psycopg.Error, subprocess.SubprocessError) as exc:
+    except (
+        CandidateBoundaryError,
+        LocalBackupV2Error,
+        OSError,
+        psycopg.Error,
+        subprocess.SubprocessError,
+    ) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 

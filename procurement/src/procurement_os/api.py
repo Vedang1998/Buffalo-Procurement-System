@@ -85,6 +85,17 @@ from .recommendations import (
     preview_monday_stale_forecast_retirement,
 )
 from .storage import get_storage
+from .synthetic_price_replacement import (
+    CONTRACT as SYNTHETIC_PRICE_REPLACEMENT_CONTRACT,
+    SyntheticPriceReplacementError,
+    apply_price_replacement,
+    confirm_declared_price_book,
+    get_declared_price_book_batch,
+    preview_declared_price_confirmation,
+    preview_price_replacement,
+    registered_target_declaration,
+    stage_and_validate_declared_price_book,
+)
 from .synthetic_mapping_packet import (
     SyntheticPacketError,
     load_synthetic_mapping_packets,
@@ -2772,7 +2783,9 @@ def monday_run_artifact(run_id: UUID, artifact_id: int):
     )
 
 
-def _price_book_list_html(batches: list[dict]) -> str:
+def _price_book_list_html(
+    batches: list[dict], declared_target: dict | None = None
+) -> str:
     rows = "".join(
         "<tr>"
         f"<td><a href='price-books/{_html_escape(batch['price_book_batch_id'])}'>"
@@ -2786,6 +2799,21 @@ def _price_book_list_html(batches: list[dict]) -> str:
         "</tr>"
         for batch in batches
     ) or "<tr><td colspan='7'>No price-book batches have been staged.</td></tr>"
+    declared_form = ""
+    if declared_target is not None:
+        declared_form = f"""<section id='synthetic-price-replacement'>
+<h2>SYNTHETIC REPLACEMENT PRICE BOOK — TEST DATA / NO REAL AUTHORITY</h2>
+<p>Registered target: {_html_escape(declared_target['vendor_name'])}; source validity
+{_html_escape(declared_target['source_valid_from'])} through
+{_html_escape(declared_target['source_valid_through'])}. Upload remains staging-only.</p>
+<form method='post' action='price-books/import' enctype='multipart/form-data'>
+<input type='hidden' name='replacement_contract' value='{SYNTHETIC_PRICE_REPLACEMENT_CONTRACT}'>
+<input type='hidden' name='expected_declaration_sha256' value='{_form_value(declared_target['declaration_sha256'])}'>
+<label>Fabricated replacement CSV <input type='file' name='price_book_file' accept='.csv,text/csv' required></label><br>
+<label>Operator <input name='actor' required></label><br>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Stage and validate declared synthetic replacement</button>
+</form></section>"""
     return f"""<!doctype html><html><head><title>Price Books</title></head><body>
 {_operational_nav('/', current='Price Books')}
 <h1>Price Book Import / Validation</h1>
@@ -2797,6 +2825,7 @@ def _price_book_list_html(batches: list[dict]) -> str:
 <label>Price-book review token <input type='password' name='review_token' required></label><br>
 <button type='submit'>Stage and validate FUTURE</button>
 </form>
+{declared_form}
 <h2>Durable batches</h2>
 <table border='1' cellpadding='5'><thead><tr><th>Batch</th><th>Vendor</th><th>State</th>
 <th>Effective</th><th>Status</th><th>Valid rows</th><th>Errors</th></tr></thead>
@@ -2828,6 +2857,46 @@ def _price_book_detail_html(batch: dict) -> str:
         "<label>Warning review reason <input name='warning_review_reason' required></label><br>"
         if batch["warning_count"] else ""
     )
+    declared_controls = ""
+    if batch.get("replacement_contract") == SYNTHETIC_PRICE_REPLACEMENT_CONTRACT:
+        tier_rows = "".join(
+            "<tr>"
+            f"<td>{_html_escape(tier['source_row_number'])}</td>"
+            f"<td>{_html_escape(tier['supplier_sku'])}</td>"
+            f"<td>{_html_escape(tier['variant_id'])}</td>"
+            f"<td>{_html_escape(tier['level_type'])}</td>"
+            f"<td>{_html_escape(tier['break_quantity'])}</td>"
+            f"<td>{_html_escape(tier['break_unit'])}</td>"
+            f"<td>{_html_escape(tier['case_price'])}</td>"
+            f"<td>{_html_escape(tier['unit_price'])}</td>"
+            "</tr>"
+            for tier in batch.get("tiers", [])
+        ) or "<tr><td colspan='8'>No reusable candidate tiers remain.</td></tr>"
+        action_form = ""
+        if batch["status"] == "VALIDATED":
+            action_form = f"""<h2>Separate synthetic price confirmation</h2>
+<form method='post' action='../price-books/{batch_id}/confirmation-preview'>
+<label>Confirmation idempotency key <input name='confirmation_idempotency_key' required></label><br>
+<label>Operator <input name='actor' required></label><br>
+{warning_reason}
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Preview exact confirmation</button></form>"""
+        elif batch["status"] == "VERIFIED_FUTURE":
+            action_form = f"""<h2>Guarded effective-boundary APPLY</h2>
+<p>A launcher-bound BACKUP V2 is required; no browser path or label grants recovery authority.</p>
+<form method='post' action='../price-books/{batch_id}/apply-preview'>
+<label>APPLY idempotency key <input name='apply_idempotency_key' required></label><br>
+<label>Operator <input name='actor' required></label><br>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>Preview guarded CURRENT replacement</button></form>"""
+        declared_controls = f"""<section id='declared-price-evidence'>
+<h2>SYNTHETIC DECLARED PRICE EVIDENCE — NO REAL AUTHORITY</h2>
+<p>Policy: {_html_escape(batch.get('schedule_policy_ref'))}; declaration:
+<code>{_html_escape(batch.get('declaration_sha256'))}</code>; membership:
+<code>{_html_escape(batch.get('scope_membership_sha256'))}</code>.</p>
+<table border='1' cellpadding='5'><thead><tr><th>Source row</th><th>SKU</th><th>Variant</th>
+<th>Tier</th><th>Break qty</th><th>Break unit</th><th>Case</th><th>Unit</th></tr></thead>
+<tbody>{tier_rows}</tbody></table>{action_form}</section>"""
     reject_form = ""
     if batch["status"] in {"INVALID", "VALIDATED"}:
         reject_form = f"""<h2>Reject / discard typed staging</h2>
@@ -2837,6 +2906,13 @@ def _price_book_detail_html(batch: dict) -> str:
 <label>Reason <input name='reason' required></label><br>
 <label>Price-book review token <input type='password' name='review_token' required></label><br>
 <button type='submit'>Reject and purge typed staging</button></form>"""
+    legacy_promotion_form = "" if declared_controls else f"""<form method='post' action='../price-books/{batch_id}/promote'>
+<input type='hidden' name='expected_validation_fingerprint' value='{_form_value(batch['validation_fingerprint'])}'>
+<label>Operator <input name='actor' required></label><br>
+{warning_reason}
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'{disabled}>Promote VERIFIED FUTURE pricing</button>
+</form>"""
     return f"""<!doctype html><html><head><title>Price Book {_html_escape(batch['batch_ref'])}</title></head><body>
 {_operational_nav('/', current='Price Books')}
 <p><a href='../price-books'>Back to Price Books</a></p>
@@ -2852,14 +2928,45 @@ def _price_book_detail_html(batch: dict) -> str:
 <table border='1' cellpadding='5'><thead><tr><th>Row</th><th>Severity</th><th>Code</th><th>Message</th></tr></thead>
 <tbody>{issues}</tbody></table>
 {blocker}
-<form method='post' action='../price-books/{batch_id}/promote'>
-<input type='hidden' name='expected_validation_fingerprint' value='{_form_value(batch['validation_fingerprint'])}'>
-<label>Operator <input name='actor' required></label><br>
-{warning_reason}
-<label>Price-book review token <input type='password' name='review_token' required></label><br>
-<button type='submit'{disabled}>Promote VERIFIED FUTURE pricing</button>
-</form>{reject_form}
+{legacy_promotion_form}{declared_controls}{reject_form}
 </body></html>"""
+
+
+def _declared_price_confirmation_html(
+    *, batch_id: UUID, preview: dict, actor: str, warning_review_reason: str | None
+) -> str:
+    return f"""<!doctype html><html><head><title>Confirm Synthetic Price Book</title></head><body>
+{_operational_nav('/', current='Price Books')}
+<h1>SEPARATE SYNTHETIC PRICE CONFIRMATION — NO REAL AUTHORITY</h1>
+<p>This preview has not written promotion, FUTURE, CURRENT, or authority state.</p>
+<pre id='declared-price-confirmation-json'>{_html_escape(json.dumps(preview, sort_keys=True, indent=2, default=str))}</pre>
+<form method='post' action='/price-books/{_html_escape(batch_id)}/confirm'>
+<input type='hidden' name='confirmation_idempotency_key' value='{_form_value(preview['confirmation_idempotency_key'])}'>
+<input type='hidden' name='expected_preview_sha256' value='{_form_value(preview['preview_sha256'])}'>
+<input type='hidden' name='actor' value='{_form_value(actor)}'>
+<input type='hidden' name='warning_review_reason' value='{_form_value(warning_review_reason or '')}'>
+<input type='hidden' name='confirm' value='CONFIRM'>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>CONFIRM exact VERIFIED FUTURE price book</button>
+</form></body></html>"""
+
+
+def _price_apply_preview_html(
+    *, batch_id: UUID, preview: dict, actor: str
+) -> str:
+    return f"""<!doctype html><html><head><title>Apply Synthetic Price Replacement</title></head><body>
+{_operational_nav('/', current='Price Books')}
+<h1>GUARDED SYNTHETIC CURRENT REPLACEMENT — NO REAL AUTHORITY</h1>
+<p>The server has verified its launcher-bound BACKUP V2. This preview has not changed CURRENT.</p>
+<pre id='synthetic-price-apply-json'>{_html_escape(json.dumps(preview, sort_keys=True, indent=2, default=str))}</pre>
+<form method='post' action='/price-books/{_html_escape(batch_id)}/apply'>
+<input type='hidden' name='apply_idempotency_key' value='{_form_value(preview['apply_idempotency_key'])}'>
+<input type='hidden' name='expected_preview_sha256' value='{_form_value(preview['preview_sha256'])}'>
+<input type='hidden' name='actor' value='{_form_value(actor)}'>
+<input type='hidden' name='confirm' value='CONFIRM'>
+<label>Price-book review token <input type='password' name='review_token' required></label><br>
+<button type='submit'>CONFIRM guarded effective-boundary APPLY</button>
+</form></body></html>"""
 
 
 @app.get("/price-books/template.csv")
@@ -2875,7 +2982,11 @@ def price_book_template():
 def price_books_page():
     with _db_conn() as conn:
         batches = list_price_book_batches(conn)
-    return _price_book_list_html(batches)
+        try:
+            declared_target = registered_target_declaration(conn)
+        except SyntheticPriceReplacementError:
+            declared_target = None
+    return _price_book_list_html(batches, declared_target)
 
 
 @app.get("/price-books/{batch_id}", response_class=HTMLResponse)
@@ -2883,7 +2994,24 @@ def price_book_detail(batch_id: UUID):
     try:
         with _db_conn() as conn:
             batch = get_price_book_batch(conn, str(batch_id))
-    except PriceBookError as exc:
+            has_contract_column = bool(
+                conn.execute(
+                    """SELECT EXISTS (
+                         SELECT 1 FROM pg_catalog.pg_attribute
+                          WHERE attrelid='price_book_batches'::regclass
+                            AND attname='replacement_contract'
+                            AND NOT attisdropped)"""
+                ).fetchone()[0]
+            )
+            if has_contract_column:
+                contract = conn.execute(
+                    "SELECT replacement_contract FROM price_book_batches "
+                    "WHERE price_book_batch_id=%s",
+                    (str(batch_id),),
+                ).fetchone()
+                if contract is not None and contract[0] is not None:
+                    batch = get_declared_price_book_batch(conn, str(batch_id))
+    except (PriceBookError, SyntheticPriceReplacementError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _price_book_detail_html(batch)
 
@@ -2904,9 +3032,12 @@ def price_book_raw(batch_id: UUID):
 
 @app.post("/price-books/import")
 async def price_book_import(
+    request: Request,
     price_book_file: UploadFile = File(...),
     actor: str = Form(...),
     review_token: str = Form(...),
+    replacement_contract: str | None = Form(None),
+    expected_declaration_sha256: str | None = Form(None),
 ):
     _require_price_book_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -2915,10 +3046,32 @@ async def price_book_import(
         raise HTTPException(status_code=413, detail="Price-book CSV is too large")
     try:
         with _db_conn() as conn:
-            result = stage_and_validate_price_book(
-                conn, get_storage(), csv_bytes=data, actor=actor
-            )
-    except PriceBookError as exc:
+            if replacement_contract is None:
+                if expected_declaration_sha256 is not None:
+                    raise SyntheticPriceReplacementError(
+                        "declared price contract is incomplete"
+                    )
+                result = stage_and_validate_price_book(
+                    conn, get_storage(), csv_bytes=data, actor=actor
+                )
+            elif replacement_contract == SYNTHETIC_PRICE_REPLACEMENT_CONTRACT:
+                principal = action_principal(
+                    request, "procurement.price.approve"
+                )
+                result = stage_and_validate_declared_price_book(
+                    conn,
+                    get_storage(),
+                    csv_bytes=data,
+                    principal=principal,
+                    expected_declaration_sha256=(
+                        expected_declaration_sha256 or ""
+                    ),
+                )
+            else:
+                raise SyntheticPriceReplacementError(
+                    "declared price contract is unknown"
+                )
+    except (PriceBookError, SyntheticPriceReplacementError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RedirectResponse(
         url=f"../price-books/{result['price_book_batch_id']}", status_code=303
@@ -2946,6 +3099,131 @@ def price_book_promote(
                 warning_review_reason=warning_review_reason,
             )
     except PriceBookError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
+
+
+@app.post("/price-books/{batch_id}/confirmation-preview")
+def declared_price_confirmation_preview(
+    request: Request,
+    batch_id: UUID,
+    confirmation_idempotency_key: str = Form(...),
+    actor: str = Form(...),
+    warning_review_reason: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    actor = _server_audit_actor(actor)
+    principal = action_principal(request, "procurement.price.approve")
+    try:
+        with _db_conn() as conn:
+            preview = preview_declared_price_confirmation(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                confirmation_idempotency_key=confirmation_idempotency_key,
+                warning_review_reason=warning_review_reason,
+                principal=principal,
+            )
+    except SyntheticPriceReplacementError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return HTMLResponse(
+        _declared_price_confirmation_html(
+            batch_id=batch_id,
+            preview=preview,
+            actor=actor,
+            warning_review_reason=warning_review_reason,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/price-books/{batch_id}/confirm")
+def declared_price_confirm(
+    request: Request,
+    batch_id: UUID,
+    confirmation_idempotency_key: str = Form(...),
+    expected_preview_sha256: str = Form(...),
+    confirm: str = Form(...),
+    actor: str = Form(...),
+    warning_review_reason: str | None = Form(None),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    _server_audit_actor(actor)
+    principal = action_principal(request, "procurement.price.approve")
+    try:
+        with _db_conn() as conn:
+            confirm_declared_price_book(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                confirmation_idempotency_key=confirmation_idempotency_key,
+                expected_preview_sha256=expected_preview_sha256,
+                confirm=confirm,
+                warning_review_reason=warning_review_reason,
+                principal=principal,
+            )
+    except SyntheticPriceReplacementError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
+
+
+@app.post("/price-books/{batch_id}/apply-preview")
+def synthetic_price_apply_preview(
+    request: Request,
+    batch_id: UUID,
+    apply_idempotency_key: str = Form(...),
+    actor: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    actor = _server_audit_actor(actor)
+    principal = action_principal(request, "procurement.price.approve")
+    try:
+        with _db_conn() as conn:
+            preview = preview_price_replacement(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                apply_idempotency_key=apply_idempotency_key,
+                principal=principal,
+            )
+    except SyntheticPriceReplacementError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return HTMLResponse(
+        _price_apply_preview_html(
+            batch_id=batch_id, preview=preview, actor=actor
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/price-books/{batch_id}/apply")
+def synthetic_price_apply(
+    request: Request,
+    batch_id: UUID,
+    apply_idempotency_key: str = Form(...),
+    expected_preview_sha256: str = Form(...),
+    confirm: str = Form(...),
+    actor: str = Form(...),
+    review_token: str = Form(...),
+):
+    _require_price_book_review_token(review_token)
+    _server_audit_actor(actor)
+    principal = action_principal(request, "procurement.price.approve")
+    try:
+        with _db_conn() as conn:
+            apply_price_replacement(
+                conn,
+                get_storage(),
+                batch_id=str(batch_id),
+                apply_idempotency_key=apply_idempotency_key,
+                expected_preview_sha256=expected_preview_sha256,
+                confirm=confirm,
+                principal=principal,
+            )
+    except SyntheticPriceReplacementError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RedirectResponse(url=f"../../price-books/{batch_id}", status_code=303)
 

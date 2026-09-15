@@ -83,6 +83,136 @@ def _is_positive_number(value: Any) -> bool:
     return parsed.is_finite() and parsed > 0
 
 
+def _compact_sha256(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), default=str
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _valid_applicable_price_authority(
+    authority: Any, ladder: Any, offer: Any
+) -> bool:
+    """Validate the optional 016 authority envelope without changing V1."""
+
+    if not isinstance(authority, dict):
+        return False
+    unsigned = {key: value for key, value in authority.items() if key != "sha256"}
+    head = authority.get("head")
+    event = authority.get("apply_event")
+    confirmation = authority.get("price_confirmation")
+    batch = authority.get("source_batch")
+    bindings = authority.get("prices")
+    ladder_rows = ladder.get("rows") if isinstance(ladder, dict) else None
+    ladder_ids = (
+        [row[0] for row in ladder_rows if isinstance(row, list) and len(row) == 10]
+        if isinstance(ladder_rows, list)
+        else []
+    )
+    if not (
+        authority.get("contract")
+        == "BUFFALO_SYNTHETIC_APPLICABLE_PRICE_AUTHORITY_V1"
+        and _is_nonblank(authority.get("policy_ref"))
+        and _is_sha256(authority.get("policy_sha256"))
+        and authority.get("commercial_authority") is False
+        and authority.get("real_price_approval") is False
+        and _is_sha256(authority.get("sha256"))
+        and authority["sha256"] == _compact_sha256(unsigned)
+        and isinstance(head, dict)
+        and _is_nonblank(head.get("event_id"))
+        and isinstance(head.get("head_version"), int)
+        and head["head_version"] >= 2
+        and _is_nonblank(head.get("active_price_book_batch_id"))
+        and _is_sha256(head.get("current_scope_sha256"))
+        and isinstance(event, dict)
+        and event.get("event_id") == head.get("event_id")
+        and event.get("price_book_batch_id")
+        == head.get("active_price_book_batch_id")
+        and event.get("resulting_current_scope_sha256")
+        == head.get("current_scope_sha256")
+        and _is_sha256(event.get("raw_content_sha256"))
+        and _is_sha256(event.get("scope_membership_sha256"))
+        and _is_sha256(event.get("payload_sha256"))
+        and _is_nonblank(str(event.get("recorded_at") or ""))
+        and isinstance(confirmation, dict)
+        and isinstance(confirmation.get("promotion_event_id"), int)
+        and confirmation["promotion_event_id"] > 0
+        and _is_sha256(confirmation.get("confirmation_payload_sha256"))
+        and isinstance(batch, dict)
+        and batch.get("price_book_batch_id")
+        == head.get("active_price_book_batch_id")
+        and batch.get("raw_content_sha256")
+        == event.get("raw_content_sha256")
+        and batch.get("scope_membership_sha256")
+        == event.get("scope_membership_sha256")
+        and isinstance(bindings, list)
+        and bindings
+        and len(bindings) == len(ladder_ids)
+        and len(ladder_ids) == len(set(ladder_ids))
+        and isinstance(offer, dict)
+    ):
+        return False
+    binding_ids: list[int] = []
+    row_numbers: list[int] = []
+    for binding in bindings:
+        if not (
+            isinstance(binding, dict)
+            and isinstance(binding.get("price_id"), int)
+            and isinstance(binding.get("source_row_number"), int)
+            and binding["source_row_number"] >= 2
+            and _is_sha256(binding.get("source_row_sha256"))
+        ):
+            return False
+        binding_ids.append(binding["price_id"])
+        row_numbers.append(binding["source_row_number"])
+    return (
+        sorted(binding_ids) == sorted(ladder_ids)
+        and len(binding_ids) == len(set(binding_ids))
+        and len(row_numbers) == len(set(row_numbers))
+        and all(row[1] == offer.get("offer_id") for row in ladder_rows)
+    )
+
+
+def final_price_tier_matches_authority(
+    evidence: Any, final_price_tier: Any
+) -> bool:
+    """Bind a reviewed tier to optional 016 lineage; V1 remains unchanged."""
+
+    if not isinstance(evidence, dict) or not isinstance(final_price_tier, dict):
+        return False
+    lineage_keys = {
+        "source_price_book_batch_id",
+        "source_price_book_row_number",
+        "supplier_price_authority_event_id",
+        "applicable_price_authority_sha256",
+    }
+    if "applicable_price_authority" not in evidence:
+        return not bool(lineage_keys.intersection(final_price_tier))
+    authority = evidence.get("applicable_price_authority")
+    ladder = evidence.get("applicable_price_ladder")
+    offer = evidence.get("selected_offer")
+    if not _valid_applicable_price_authority(authority, ladder, offer):
+        return False
+    matches = [
+        binding
+        for binding in authority["prices"]
+        if binding.get("price_id") == final_price_tier.get("price_id")
+    ]
+    return (
+        len(matches) == 1
+        and final_price_tier.get("source_price_book_batch_id")
+        == authority["source_batch"]["price_book_batch_id"]
+        and final_price_tier.get("source_price_book_row_number")
+        == matches[0]["source_row_number"]
+        and final_price_tier.get("supplier_price_authority_event_id")
+        == authority["apply_event"]["event_id"]
+        and final_price_tier.get("applicable_price_authority_sha256")
+        == authority["sha256"]
+        and final_price_tier.get("price_ladder_sha256") == ladder.get("sha256")
+    )
+
+
 def _pg_jsonb_text(value: Any) -> str:
     """Render JSON-compatible data in PostgreSQL jsonb object-key order."""
 
@@ -1021,6 +1151,12 @@ def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
                 ).encode("utf-8")
             ).hexdigest()
             != ladder.get("sha256")
+            or (
+                "applicable_price_authority" in evidence
+                and not _valid_applicable_price_authority(
+                    evidence.get("applicable_price_authority"), ladder, offer
+                )
+            )
             or not isinstance(initial_tier, dict)
             or initial_tier.get("price_ladder_sha256") != ladder.get("sha256")
             or initial_tier.get("offer_id") != offer.get("offer_id")

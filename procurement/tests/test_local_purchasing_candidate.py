@@ -345,7 +345,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
 
         with (
             mock.patch.object(candidate, "_database_lifecycle_guard", side_effect=guarded),
-            mock.patch.object(candidate, "_serve_locked", side_effect=lambda *_: body("serve", 0)),
+            mock.patch.object(candidate, "_serve_locked", side_effect=lambda *_, **__: body("serve", 0)),
             mock.patch.object(candidate, "_backup_locked", side_effect=lambda *_: body("backup", Path("manifest"))),
             mock.patch.object(candidate, "_restore_locked", side_effect=lambda *_: body("restore", {"restored": True})),
         ):
@@ -554,13 +554,13 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                 row.source_variant_title,
                 row.net_items_sold,
                 row.net_sales,
-                initializer.VARIANT_ID,
+                row.source_variant_id,
                 "RESOLVED",
                 "EXACT_ACTIVE_VARIANT_ID",
                 {
-                    "candidates": [initializer.VARIANT_ID],
+                    "candidates": [row.source_variant_id],
                     "catalog_state": "LIVE",
-                    "source_variant_id": initializer.VARIANT_ID,
+                    "source_variant_id": row.source_variant_id,
                 },
                 source_identity_key(row),
                 source_row_hash(row),
@@ -581,7 +581,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         daily_rows = [
             (
                 row.sale_date,
-                initializer.VARIANT_ID,
+                row.source_variant_id,
                 row.net_items_sold,
                 row.net_sales,
                 None,
@@ -715,6 +715,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                 runtime_root=runtime,
                 storage=runtime / "storage",
                 port=18765,
+                source_git={"commit": "a" * 40, "tree": "b" * 40},
             )
         self.assertNotIn("SHOPIFY_ACCESS_TOKEN", environment)
         self.assertEqual(environment["BUFFALO_RUNTIME_MODE"], "SYNTHETIC_DEMO")
@@ -722,6 +723,12 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         self.assertEqual(
             environment["BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS"], "1"
         )
+        self.assertEqual(
+            environment["BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT"], "1"
+        )
+        self.assertEqual(environment[candidate.SOURCE_COMMIT_ENV], "a" * 40)
+        self.assertEqual(environment[candidate.SOURCE_TREE_ENV], "b" * 40)
+        self.assertNotIn(candidate.PRICE_APPLY_MANIFEST_ENV, environment)
         self.assertNotEqual(environment["DATABASE_URL"], "ambient")
         self.assertIn("search_path%3Dqa_mapping_test%2Cpg_catalog", environment["DATABASE_URL"])
         process = _Process(pid=4567)
@@ -769,6 +776,11 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         with (
             mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts"),
+            mock.patch.object(
+                candidate,
+                "_source_identity",
+                return_value={"commit": "a" * 40, "tree": "b" * 40},
+            ),
             mock.patch.object(candidate, "_child_environment", return_value={"SAFE": "1"}),
             mock.patch.object(candidate, "_wait_for_health"),
             mock.patch.object(candidate.signal, "signal", return_value=object()),
@@ -785,6 +797,11 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         with (
             mock.patch.object(candidate, "_database_lifecycle_guard", return_value=nullcontext()),
             mock.patch.object(candidate, "_database_facts"),
+            mock.patch.object(
+                candidate,
+                "_source_identity",
+                return_value={"commit": "a" * 40, "tree": "b" * 40},
+            ),
             mock.patch.object(candidate, "_child_environment", return_value={}),
             mock.patch.object(candidate.subprocess, "Popen", return_value=leaking),
             mock.patch.object(candidate, "_write_reserved_pid", side_effect=OSError("write refused")),

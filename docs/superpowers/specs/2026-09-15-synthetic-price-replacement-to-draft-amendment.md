@@ -130,20 +130,23 @@ price capability and human-context GUCs only after that attestation. New 016
 triggers use a new 016-owned capability helper and may call the unchanged
 014-owned human-context helper.
 
-Two distinct immutable server-owned fixture instants are registered during
+Three distinct immutable server-owned fixture instants are registered during
 fresh initialization and reattested from the database: a source-observation /
 FUTURE-confirmation instant inside the configured day-15-through-20 upload
-window, and an application/Monday-evaluation instant at the configured day-one
-effective boundary. Neither is accepted from an HTTP form/query and neither
+window, an application instant at the configured day-one effective boundary,
+and a later legal Monday-evaluation instant. None is accepted from an HTTP
+form/query and none
 changes the host clock. Default/real paths continue using their existing
 clock. Promotion may use the registered observation instant and policy month
 only inside this fully attested synthetic mode; replacement uses the distinct
 application instant and refuses before the policy boundary or outside declared
 source validity. Declared list/detail temporal status uses the same registered
-observation instant. Both instants and all window/boundary comparisons use the
+observation instant. All three instants and all window/boundary comparisons use the
 policy timezone: the observation month must immediately precede the declared
 effective month, and the application local date must equal the declared day-one
-boundary. Late application is not supported in this slice.
+boundary. The Monday-evaluation local date must be the registered later Monday
+and must satisfy the vendor order calendar. Late application is not supported
+in this slice.
 
 The application never manufactures its own backup label. Introduce additive
 manifest contract `BUFFALO_LOCAL_CANDIDATE_BACKUP_V2`; leave V1 generation and
@@ -185,8 +188,14 @@ survive; set the batch to `APPLIED_CURRENT`; advance only the exact scope head;
 and reconcile event/head/count/value/member/unaffected-scope fingerprints
 before commit. The state change consumes the scope's FUTURE projection. New
 016 forward-replaces only the 011-owned batch-status constraint/update guard,
-price-provenance guard, protected-price guard, and CURRENT-price view definitions
-needed for this transition. The batch constraint/guard admits only the declared
+price-provenance guard, protected-price guard, CURRENT-price view definitions,
+and promotion-trigger routing needed for this transition. The original 011
+promotion validator remains byte-exact behind a legacy-only trigger predicate;
+a 016-owned declared validator repeats every 011 non-temporal predicate, lock,
+and provenance check, substitutes only the registered policy-zone observation-
+month expression, and adds the declaration/policy checks. The legacy and
+declared trigger predicates are mutually exclusive and exhaustive for every
+valid promotion row. The batch constraint/guard admits only the declared
 `VERIFIED_FUTURE -> APPLIED_CURRENT` transition. Every legacy and undeclared
 branch remains exact. New guard arms permit deletion of the registered adopted
 baseline and FUTURE-to-CURRENT transition only with the same-transaction APPLY

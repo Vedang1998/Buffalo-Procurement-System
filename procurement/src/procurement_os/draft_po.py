@@ -15,6 +15,7 @@ from .recommendations import (
 )
 from .synthetic_selected_offer import (
     SyntheticSelectedOfferError,
+    final_price_tier_matches_authority,
     selected_run_input_lock_scope,
 )
 
@@ -62,10 +63,19 @@ def _draft_rows(conn: Any, run_id: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for row in rows:
         review_evidence = (row[17] or {}).get("review", {})
-        selected = (row[18] or {}).get("selected_offer_input_evidence") is not None
+        selected_evidence = (row[18] or {}).get(
+            "selected_offer_input_evidence"
+        )
+        selected = selected_evidence is not None
         final_price_tier = review_evidence.get("final_price_tier")
         if selected and not isinstance(final_price_tier, dict):
             raise DraftPoError("selected reviewed line is missing its final price tier")
+        if selected and not final_price_tier_matches_authority(
+            selected_evidence, final_price_tier
+        ):
+            raise DraftPoError(
+                "selected reviewed line price authority differs from its run"
+            )
         try:
             merchandise_total = Decimal(
                 str(review_evidence["approved_merchandise_total"])

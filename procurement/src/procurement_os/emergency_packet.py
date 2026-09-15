@@ -17,6 +17,7 @@ from .po_csv import FORMAT_WARNING, write_vendor_draft_csvs
 from .storage import StorageAdapter
 from .synthetic_selected_offer import (
     SyntheticSelectedOfferError,
+    final_price_tier_matches_authority,
     selected_run_input_lock_scope,
 )
 
@@ -356,6 +357,12 @@ def build_emergency_review_packet(
                 ):
                     raise EmergencyPacketError(
                         "selected DRAFT has no immutable final price tier"
+                    )
+                if isinstance(row[7], dict) and not final_price_tier_matches_authority(
+                    selected, row[7]
+                ):
+                    raise EmergencyPacketError(
+                        "selected DRAFT price authority differs from its run"
                     )
                 item.update({
                     "selected_offer_input_evidence": selected,

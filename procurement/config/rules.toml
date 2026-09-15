@@ -45,6 +45,7 @@ strict_normalized_import_contract = true
 staging_required = true
 transactional_promotion_required = true
 run_price_snapshot_for_reproducibility = true
+synthetic_price_replacement_enabled = false
 
 [assortment]
 default_scope = "same_product"

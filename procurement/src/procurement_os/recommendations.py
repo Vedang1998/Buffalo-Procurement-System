@@ -789,13 +789,14 @@ def _load_context_unfinalized(
 
     prices = conn.execute(
         """SELECT price_id,offer_id,effective_month,level_type,break_qty,break_unit,
-                  case_price,unit_price,source_file,source_page
+                  case_price,unit_price,source_file,source_page,
+                  source_price_book_batch_id::text,source_price_book_row_number
              FROM v_verified_current_prices
             WHERE offer_id=%s ORDER BY CASE level_type WHEN 'BASE' THEN 0 ELSE 1 END,
                   break_unit,break_qty,price_id""",
         (context["offer_id"],),
     ).fetchall()
-    context["prices"] = [list(row) for row in prices]
+    context["prices"] = [list(row[:10]) for row in prices]
     if not prices or any(row[2] != _month_start(business_date) for row in prices):
         context["blockers"].append("VERIFIED_CURRENT_PRICE_FOR_RUN_MONTH_REQUIRED")
         return context
@@ -806,9 +807,133 @@ def _load_context_unfinalized(
         context["selected_offer_input_evidence"]["applicable_price_ladder"] = {
             "contract": "FROZEN_SELECTED_OFFER_PRICE_LADDER_V1",
             "effective_month": _month_start(business_date),
-            "rows": [list(row) for row in prices],
-            "sha256": _fingerprint([list(row) for row in prices]),
+            "rows": [list(row[:10]) for row in prices],
+            "sha256": _fingerprint([list(row[:10]) for row in prices]),
         }
+        lineage_rows = [(int(row[0]), row[10], row[11]) for row in prices]
+        has_lineage = [row[1] is not None or row[2] is not None for row in lineage_rows]
+        if any(has_lineage):
+            batch_ids = {str(row[1]) for row in lineage_rows if row[1] is not None}
+            if not all(has_lineage) or len(batch_ids) != 1:
+                context["blockers"].append("APPLICABLE_PRICE_AUTHORITY_INVALID")
+                return context
+            authority_batch_id = next(iter(batch_ids))
+            authority = conn.execute(
+                """SELECT b.price_book_batch_id::text,b.vendor_id::text,b.status,
+                          b.content_sha256,b.scope_membership_sha256,
+                          b.schedule_policy_ref,p.policy_sha256,
+                          h.supplier_price_authority_event_id::text,h.head_version,
+                          h.active_price_book_batch_id::text,h.current_scope_sha256,
+                          e.action,e.price_book_batch_id::text,e.raw_content_sha256,
+                          e.scope_membership_sha256,e.resulting_current_scope_sha256,
+                          e.payload_sha256,e.recorded_at,
+                          pe.price_book_promotion_event_id,
+                          pe.confirmation_payload_sha256
+                     FROM price_book_batches b
+                     JOIN supplier_price_schedule_policies p
+                       ON p.policy_ref=b.schedule_policy_ref
+                     JOIN supplier_price_authority_heads h
+                       ON h.vendor_id=b.vendor_id AND h.price_scope_key=b.price_scope_key
+                     JOIN supplier_price_authority_events e
+                       ON e.supplier_price_authority_event_id=
+                          h.supplier_price_authority_event_id
+                     JOIN price_book_promotion_events pe
+                       ON pe.price_book_batch_id=b.price_book_batch_id
+                      AND pe.replacement_contract=b.replacement_contract
+                    WHERE b.price_book_batch_id=%s""",
+                (authority_batch_id,),
+            ).fetchall()
+            bindings = conn.execute(
+                """SELECT p.price_id,m.source_row_number,m.source_row_sha256
+                     FROM prices p
+                     JOIN price_book_scope_memberships m
+                       ON m.price_book_batch_id=p.source_price_book_batch_id
+                      AND m.source_row_number=p.source_price_book_row_number
+                      AND m.offer_id=p.offer_id
+                      AND m.level_type=p.level_type
+                      AND m.break_qty IS NOT DISTINCT FROM p.break_qty
+                      AND m.break_unit IS NOT DISTINCT FROM p.break_unit
+                    WHERE p.source_price_book_batch_id=%s
+                      AND p.price_state='current'
+                    ORDER BY p.price_id""",
+                (authority_batch_id,),
+            ).fetchall()
+            if (
+                len(authority) != 1
+                or len(bindings) != len(prices)
+                or {int(row[0]) for row in bindings}
+                != {int(row[0]) for row in prices}
+            ):
+                context["blockers"].append("APPLICABLE_PRICE_AUTHORITY_INVALID")
+                return context
+            record = authority[0]
+            if (
+                record[1] != context["vendor_id"]
+                or record[2] != "APPLIED_CURRENT"
+                or record[0] != authority_batch_id
+                or record[3] is None
+                or record[4] != conn.execute(
+                    "SELECT supplier_price_membership_sha256(%s)",
+                    (authority_batch_id,),
+                ).fetchone()[0]
+                or record[9] != authority_batch_id
+                or record[10] != conn.execute(
+                    "SELECT supplier_price_scope_current_sha256(%s)",
+                    (context["vendor_id"],),
+                ).fetchone()[0]
+                or record[11] != "APPLY_REPLACEMENT"
+                or record[12] != authority_batch_id
+                or record[13] != record[3]
+                or record[14] != record[4]
+                or record[15] != record[10]
+            ):
+                context["blockers"].append("APPLICABLE_PRICE_AUTHORITY_INVALID")
+                return context
+            authority_payload = {
+                "contract": "BUFFALO_SYNTHETIC_APPLICABLE_PRICE_AUTHORITY_V1",
+                "policy_ref": record[5],
+                "policy_sha256": record[6],
+                "head": {
+                    "event_id": record[7],
+                    "head_version": int(record[8]),
+                    "active_price_book_batch_id": record[9],
+                    "current_scope_sha256": record[10],
+                },
+                "apply_event": {
+                    "event_id": record[7],
+                    "price_book_batch_id": record[12],
+                    "raw_content_sha256": record[13],
+                    "scope_membership_sha256": record[14],
+                    "resulting_current_scope_sha256": record[15],
+                    "payload_sha256": record[16],
+                    "recorded_at": record[17],
+                },
+                "price_confirmation": {
+                    "promotion_event_id": int(record[18]),
+                    "confirmation_payload_sha256": record[19],
+                },
+                "source_batch": {
+                    "price_book_batch_id": record[0],
+                    "raw_content_sha256": record[3],
+                    "scope_membership_sha256": record[4],
+                },
+                "prices": [
+                    {
+                        "price_id": int(row[0]),
+                        "source_row_number": int(row[1]),
+                        "source_row_sha256": row[2],
+                    }
+                    for row in bindings
+                ],
+                "commercial_authority": False,
+                "real_price_approval": False,
+            }
+            context["selected_offer_input_evidence"][
+                "applicable_price_authority"
+            ] = {
+                **authority_payload,
+                "sha256": _fingerprint(authority_payload),
+            }
 
     history_start = business_date - timedelta(days=84)
     history_end = business_date - timedelta(days=1)
@@ -1269,14 +1394,53 @@ def _prepare_monday_run_impl(
                     forecast.horizon_days,
                 ),
             )
-            for price in context["prices"]:
-                conn.execute(
-                    """INSERT INTO run_price_snapshots(
-                               run_id,offer_id,price_state,effective_month,level_type,break_qty,
-                               break_unit,case_price,unit_price,source_file,source_page)
-                        VALUES (%s,%s,'current',%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (run_id,price[1],price[2],price[3],price[4],price[5],price[6],price[7],price[8],price[9]),
+            price_authority = (
+                context.get("selected_offer_input_evidence", {}).get(
+                    "applicable_price_authority"
                 )
+                if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT
+                else None
+            )
+            authority_by_price = (
+                {
+                    int(item["price_id"]): item
+                    for item in price_authority["prices"]
+                }
+                if isinstance(price_authority, dict)
+                else {}
+            )
+            for price in context["prices"]:
+                lineage = authority_by_price.get(int(price[0]))
+                if price_authority is None:
+                    conn.execute(
+                        """INSERT INTO run_price_snapshots(
+                                   run_id,offer_id,price_state,effective_month,level_type,break_qty,
+                                   break_unit,case_price,unit_price,source_file,source_page)
+                            VALUES (%s,%s,'current',%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (run_id,price[1],price[2],price[3],price[4],price[5],price[6],price[7],price[8],price[9]),
+                    )
+                elif lineage is None:
+                    raise MondayRecommendationError(
+                        "APPLICABLE_PRICE_AUTHORITY_INVALID"
+                    )
+                else:
+                    conn.execute(
+                        """INSERT INTO run_price_snapshots(
+                                   run_id,offer_id,price_state,effective_month,level_type,
+                                   break_qty,break_unit,case_price,unit_price,source_file,
+                                   source_page,source_price_id,source_price_book_batch_id,
+                                   source_price_book_row_number,
+                                   supplier_price_authority_event_id)
+                            VALUES (%s,%s,'current',%s,%s,%s,%s,%s,%s,%s,%s,
+                                    %s,%s,%s,%s)""",
+                        (
+                            run_id,price[1],price[2],price[3],price[4],price[5],
+                            price[6],price[7],price[8],price[9],price[0],
+                            price_authority["source_batch"]["price_book_batch_id"],
+                            lineage["source_row_number"],
+                            price_authority["apply_event"]["event_id"],
+                        ),
+                    )
             retail_price = (
                 Decimal(context["retail_price"])
                 if context["retail_price"] is not None

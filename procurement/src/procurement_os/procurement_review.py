@@ -21,6 +21,7 @@ from .recommendations import (
 from .synthetic_selected_offer import (
     CONTRACT as SYNTHETIC_SELECTED_OFFER_CONTRACT,
     SyntheticSelectedOfferError,
+    _valid_applicable_price_authority,
     selected_run_input_lock_scope,
 )
 
@@ -125,7 +126,10 @@ def _line_economics(
         raise ProcurementReviewError("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED")
     price = conn.execute(
         """SELECT run_price_snapshot_id,offer_id,effective_month,level_type,
-                  break_qty,break_unit,case_price,unit_price,source_file,source_page
+                  break_qty,break_unit,case_price,unit_price,source_file,source_page,
+                  source_price_id,source_price_book_batch_id::text,
+                  source_price_book_row_number,
+                  supplier_price_authority_event_id::text
              FROM run_price_snapshots
             WHERE run_id=%s AND offer_id=%s
               AND (
@@ -175,7 +179,7 @@ def _line_economics(
                 for value in values
             )
 
-        snapshot_signature = normalized(price[1:])
+        snapshot_signature = normalized(price[1:10])
         matches = [source for source in rows if normalized(source[1:]) == snapshot_signature]
         if len(matches) != 1:
             raise ProcurementReviewError(
@@ -192,6 +196,46 @@ def _line_economics(
             "case_price": str(price[6]) if price[6] is not None else None,
             "price_ladder_sha256": ladder["sha256"],
         }
+        authority_present = "applicable_price_authority" in selected_evidence
+        authority = selected_evidence.get("applicable_price_authority")
+        snapshot_lineage = price[10:14]
+        if authority_present:
+            selected_offer = selected_evidence.get("selected_offer")
+            if not _valid_applicable_price_authority(
+                authority, ladder, selected_offer
+            ):
+                raise ProcurementReviewError(
+                    "selected offer price authority is malformed"
+                )
+            bindings = [
+                item
+                for item in authority["prices"]
+                if item.get("price_id") == int(source[0])
+            ]
+            if (
+                len(bindings) != 1
+                or any(value is None for value in snapshot_lineage)
+                or int(price[10]) != int(source[0])
+                or str(price[11])
+                != authority["source_batch"]["price_book_batch_id"]
+                or int(price[12]) != int(bindings[0]["source_row_number"])
+                or str(price[13]) != authority["apply_event"]["event_id"]
+            ):
+                raise ProcurementReviewError(
+                    "selected final price tier authority is not bound"
+                )
+            result["final_price_tier"].update(
+                {
+                    "source_price_book_batch_id": str(price[11]),
+                    "source_price_book_row_number": int(price[12]),
+                    "supplier_price_authority_event_id": str(price[13]),
+                    "applicable_price_authority_sha256": authority["sha256"],
+                }
+            )
+        elif any(value is not None for value in snapshot_lineage):
+            raise ProcurementReviewError(
+                "selected final price tier has unbound authority lineage"
+            )
     return result
 
 

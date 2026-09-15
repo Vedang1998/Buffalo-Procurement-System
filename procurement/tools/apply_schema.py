@@ -34,6 +34,16 @@ from procurement_os.monday_forecast_retirement import (
     compute_retirement_catalog_sha256,
     verify_monday_forecast_v2_retirement_contract,
 )
+from procurement_os.synthetic_price_replacement_contract import (
+    CATALOG_SHA256 as SYNTHETIC_PRICE_CATALOG_SHA256,
+    CONTRACT_VERSION as SYNTHETIC_PRICE_CONTRACT_VERSION,
+    FIXTURE_REGISTRATION_CANONICAL_SHA256,
+    FIXTURE_REGISTRATION_REF,
+    MIGRATION_NAME as SYNTHETIC_PRICE_MIGRATION_NAME,
+    MIGRATION_SHA256 as SYNTHETIC_PRICE_MIGRATION_SHA256,
+    compute_synthetic_price_catalog_sha256,
+    verify_synthetic_price_replacement_contract,
+)
 
 
 MAPPING_MIGRATION_NAME = "014_persistent_mapping_foundation.sql"
@@ -76,6 +86,15 @@ MONDAY_FORECAST_V2_RETIREMENT_RELEASE = PostMappingApplicationRelease(
 )
 POST_MAPPING_APPLICATION_RELEASE_MANIFEST = (
     MONDAY_FORECAST_V2_RETIREMENT_RELEASE,
+)
+
+SYNTHETIC_PRICE_REPLACEMENT_RELEASE = PostMappingApplicationRelease(
+    family="synthetic-price-replacement",
+    version=SYNTHETIC_PRICE_CONTRACT_VERSION,
+    migration_name=SYNTHETIC_PRICE_MIGRATION_NAME,
+    migration_sha256=SYNTHETIC_PRICE_MIGRATION_SHA256,
+    required_mapping_release="v1-shadow-only",
+    catalog_sha256=SYNTHETIC_PRICE_CATALOG_SHA256,
 )
 
 
@@ -211,6 +230,10 @@ _POST_MAPPING_HEADER = (
     b"-- buffalo-post-mapping-replay: checksum-skip-v1\n"
     b"-- buffalo-contract-family: monday-forecast-v2-retirement\n"
 )
+_SYNTHETIC_PRICE_HEADER = (
+    b"-- buffalo-post-mapping-application-release: marker-last\n"
+    b"-- buffalo-contract-family: synthetic-price-replacement\n"
+)
 
 
 def _sha256(data: bytes) -> str:
@@ -249,6 +272,40 @@ def _post_mapping_release_source(
     if b"__PIN_" in raw or b"PROPOSED_UNNUMBERED" in raw:
         raise RuntimeError("post-mapping application migration retains a design token")
     return raw
+
+
+def _synthetic_price_release_source(db_dir: Path) -> bytes:
+    release = SYNTHETIC_PRICE_REPLACEMENT_RELEASE
+    raw = (db_dir / release.migration_name).read_bytes()
+    if not raw.startswith(_SYNTHETIC_PRICE_HEADER):
+        raise RuntimeError("synthetic price replacement migration header differs")
+    if _sha256(raw) != release.migration_sha256:
+        raise RuntimeError("synthetic price replacement migration checksum differs")
+    if b"__PIN_" in raw or b"PROPOSED_UNNUMBERED" in raw:
+        raise RuntimeError("synthetic price replacement migration retains a design token")
+    return raw
+
+
+def _synthetic_price_fixture_registration(db_dir: Path) -> bytes:
+    path = db_dir.parent / FIXTURE_REGISTRATION_REF
+    raw = path.read_bytes()
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("synthetic price fixture registration is malformed") from exc
+    canonical = _canonical_json(value)
+    if _sha256(canonical) != FIXTURE_REGISTRATION_CANONICAL_SHA256:
+        raise RuntimeError("synthetic price fixture registration checksum differs")
+    if (
+        not isinstance(value, dict)
+        or value.get("contract")
+        != "BUFFALO_SYNTHETIC_PRICE_REPLACEMENT_FIXTURE_V1"
+        or value.get("schema") != MAPPING_RELEASE.target_schema
+        or not isinstance(value.get("policies"), list)
+        or len(value["policies"]) != 2
+    ):
+        raise RuntimeError("synthetic price fixture registration contract differs")
+    return canonical
 
 
 def _release_trust(release: MappingRelease) -> MappingReleaseTrust:
@@ -798,7 +855,10 @@ def _validate_marker_prefix(
         f"migration:{release.migration_name}": release
         for release in POST_MAPPING_APPLICATION_RELEASE_MANIFEST
     }
-    allowed = set(legacy) | set(mapping_keys) | set(application_keys)
+    synthetic_price_key = f"migration:{SYNTHETIC_PRICE_REPLACEMENT_RELEASE.migration_name}"
+    allowed = set(legacy) | set(mapping_keys) | set(application_keys) | {
+        synthetic_price_key
+    }
     if set(markers) - allowed:
         raise RuntimeError("unknown mapping-family or predecessor marker exists")
     for key, expected in legacy.items():
@@ -830,6 +890,11 @@ def _validate_marker_prefix(
             raise RuntimeError("installed post-mapping release prefix has a gap")
         if value != f"sha256:{release.migration_sha256}":
             raise RuntimeError("installed post-mapping migration checksum differs")
+    synthetic_price_marker = markers.get(synthetic_price_key)
+    if synthetic_price_marker is not None and synthetic_price_marker != (
+        f"sha256:{SYNTHETIC_PRICE_REPLACEMENT_RELEASE.migration_sha256}"
+    ):
+        raise RuntimeError("installed synthetic price migration checksum differs")
     return tuple(installed)
 
 
@@ -1216,6 +1281,133 @@ def _verify_or_apply_post_mapping_release(
         (marker_key, marker_value),
     )
     verify_monday_forecast_v2_retirement_contract(
+        conn, schema=target_schema, require_marker=True
+    )
+    return True
+
+
+def verify_or_apply_synthetic_price_replacement(
+    conn: Any,
+    db_dir: Path,
+    *,
+    enable_fixture_registration: bool = False,
+) -> bool:
+    """Install/verify synthetic price release 016 after exact 014 and 015.
+
+    The optional registration bytes come only from the checksum-pinned source
+    artifact and live in transaction-local GUCs. Generic test/demo installs are
+    deliberately headless.
+    """
+
+    release = SYNTHETIC_PRICE_REPLACEMENT_RELEASE
+    raw = _synthetic_price_release_source(db_dir)
+    registration = (
+        _synthetic_price_fixture_registration(db_dir)
+        if enable_fixture_registration
+        else None
+    )
+    _verify_post_mapping_source_inventory(db_dir)
+    target_schema = MAPPING_RELEASE.target_schema
+    approved_pairs = _maintenance_binding(db_dir, MAPPING_RELEASE)
+    allowed_pairs = _transition_allowed_pairs(
+        db_dir,
+        MAPPING_RELEASE,
+        applying=False,
+    )
+    schema_oid = _verify_server_and_identity(
+        conn,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+        release=MAPPING_RELEASE,
+    )
+    _verify_installed_release(
+        conn,
+        release=MAPPING_RELEASE,
+        schema_oid=schema_oid,
+        allowed_pairs=allowed_pairs,
+        approved_pairs=approved_pairs,
+    )
+    conn.execute(
+        "SELECT pg_catalog.pg_advisory_xact_lock("
+        "pg_catalog.hashtextextended(%s,0))",
+        (f"{_MAPPING_FAMILY_LOCK_PREFIX}:{target_schema}",),
+    )
+    markers = _migration_markers(conn) or {}
+    mapping_marker = markers.get(f"migration:{MAPPING_RELEASE.migration_name}")
+    retirement_marker = markers.get(
+        f"migration:{MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_name}"
+    )
+    if mapping_marker != f"sha256:{MAPPING_RELEASE.migration_sha256}":
+        raise RuntimeError("synthetic price replacement mapping predecessor differs")
+    if retirement_marker != (
+        f"sha256:{MONDAY_FORECAST_V2_RETIREMENT_RELEASE.migration_sha256}"
+    ):
+        raise RuntimeError("synthetic price replacement 015 predecessor differs")
+    verify_monday_forecast_v2_retirement_contract(
+        conn, schema=target_schema, require_marker=True
+    )
+    marker_key = f"migration:{release.migration_name}"
+    marker_value = f"sha256:{release.migration_sha256}"
+    if marker_key in markers:
+        if markers[marker_key] != marker_value:
+            raise RuntimeError("installed synthetic price migration checksum differs")
+        verified = verify_synthetic_price_replacement_contract(
+            conn, schema=target_schema, require_marker=True
+        )
+        if verified != release.catalog_sha256:
+            raise RuntimeError("installed synthetic price catalog signature differs")
+        return False
+    target = sql.Identifier(target_schema)
+    partial = conn.execute(
+        sql.SQL(
+            "SELECT pg_catalog.to_regclass(%s),"
+            "EXISTS(SELECT 1 FROM pg_catalog.pg_attribute a "
+            "WHERE a.attrelid=pg_catalog.to_regclass(%s) "
+            "AND a.attname='replacement_contract' AND NOT a.attisdropped),"
+            "EXISTS(SELECT 1 FROM {}.meta WHERE key LIKE %s)"
+        ).format(target),
+        (
+            f'"{target_schema}".supplier_price_authority_events',
+            f'"{target_schema}".price_book_batches',
+            "synthetic_price_replacement%",
+        ),
+    ).fetchone()
+    if partial is None or any(bool(value) for value in partial):
+        raise RuntimeError("partial synthetic price replacement contract exists")
+    if registration is not None:
+        conn.execute(
+            "SELECT pg_catalog.set_config(%s,%s,true),"
+            "pg_catalog.set_config(%s,%s,true)",
+            (
+                "procurement.synthetic_price_fixture_registration",
+                registration.decode("utf-8"),
+                "procurement.synthetic_price_fixture_sha256",
+                FIXTURE_REGISTRATION_CANONICAL_SHA256,
+            ),
+        )
+    conn.execute(raw.decode("utf-8"))
+    computed = compute_synthetic_price_catalog_sha256(conn, target_schema)
+    if computed != release.catalog_sha256:
+        raise RuntimeError("new synthetic price catalog signature differs")
+    conn.execute(
+        sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s),(%s,%s)").format(
+            target
+        ),
+        (
+            "synthetic_price_replacement_contract",
+            release.version,
+            "synthetic_price_replacement_catalog_sha256",
+            computed,
+        ),
+    )
+    verify_synthetic_price_replacement_contract(
+        conn, schema=target_schema, require_marker=False
+    )
+    conn.execute(
+        sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s)").format(target),
+        (marker_key, marker_value),
+    )
+    verify_synthetic_price_replacement_contract(
         conn, schema=target_schema, require_marker=True
     )
     return True
