@@ -19,7 +19,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   its renewed implementation cutoff is `2026-09-15T01:29:54Z` and hard handoff
   is `2026-09-15T02:29:54Z`. The original Sunday 09:00 delivery and the first
   implementation window were missed; neither remains an active delivery date.
-- The current uncommitted candidate connects one isolated, attested synthetic
+- The current local candidate connects one isolated, attested synthetic
   path: fabricated sealed supplier evidence -> human mapping approval ->
   separate routine SELECT -> selected active VERIFIED STANDARD offer -> that
   offer's independently seeded verified synthetic CURRENT BASE/BREAK ladder,

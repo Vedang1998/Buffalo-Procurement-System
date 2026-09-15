@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from psycopg.rows import dict_row
 
 from .monday_forecast_retirement import (
+    RETIRED_METHOD_VERSION,
     MondayForecastRetirementContractError,
     verify_monday_forecast_v2_retirement_contract,
 )
@@ -1075,7 +1076,7 @@ def selected_run_input_lock_scope(
         if recommendation_id is not None:
             row = conn.execute(
                 """SELECT ru.procurement_input_manifest,ru.input_fingerprint,
-                          ru.workflow_stage
+                          ru.workflow_stage,ru.model_version
                      FROM procurement_recommendations r
                      JOIN runs ru ON ru.run_id=r.run_id
                     WHERE r.recommendation_id=%s""",
@@ -1083,7 +1084,8 @@ def selected_run_input_lock_scope(
             ).fetchone()
         else:
             row = conn.execute(
-                """SELECT procurement_input_manifest,input_fingerprint,workflow_stage
+                """SELECT procurement_input_manifest,input_fingerprint,workflow_stage,
+                          model_version
                       FROM runs
                     WHERE run_id=%s AND run_type='MONDAY_PROCUREMENT'""",
                 (run_id,),
@@ -1098,6 +1100,11 @@ def selected_run_input_lock_scope(
                 conn.close()
         raise
     if row is None:
+        yield
+        return
+    if row[3] == RETIRED_METHOD_VERSION:
+        # Historical V1 manifests predate the selected-input envelope. Their
+        # dedicated retirement contract remains the sole mutation authority.
         yield
         return
     if hashlib.sha256(str(row[0]).encode("utf-8")).hexdigest() != row[1]:
