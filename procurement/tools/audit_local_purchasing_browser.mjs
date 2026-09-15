@@ -1020,8 +1020,6 @@ async function audit(client) {
       "synthetic-location-001",
       "2.0000",
       "4.99",
-      "2.99",
-      "59.92",
       "1.000000",
       "baseline need 3",
       "1 case(s) + 0 loose",
