@@ -376,6 +376,7 @@ async function audit(client) {
     await navigate(`${BASE}/price-books`);
     check((await body()).includes("Authentication required"), "unauthenticated price-book list is refused");
     await login();
+    await navigate(`${BASE}/price-books`);
     let text = await body();
     check(
       text.includes("SYNTHETIC REPLACEMENT PRICE BOOK") &&
