@@ -508,9 +508,9 @@ def _validate_demand_evidence(value: Any) -> dict[str, Any]:
 
     windows = value.get("raw_windows")
     expected_windows = {
-        "7": (7, date(2026, 9, 6), Decimal("14"), Decimal("2")),
-        "14": (14, date(2026, 8, 30), Decimal("28"), Decimal("2")),
-        "28": (28, date(2026, 8, 16), Decimal("42"), Decimal("1.5")),
+        "7": (7, history_end - timedelta(days=6), Decimal("14"), Decimal("2")),
+        "14": (14, history_end - timedelta(days=13), Decimal("28"), Decimal("2")),
+        "28": (28, history_end - timedelta(days=27), Decimal("42"), Decimal("1.5")),
     }
     if not isinstance(windows, dict) or set(windows) != set(expected_windows):
         raise BrowserAcceptanceError("raw demand-window inventory differs")
