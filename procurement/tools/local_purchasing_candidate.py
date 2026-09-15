@@ -2100,26 +2100,45 @@ def restore_same_database(
     manifest = verified[0]
     source_database = manifest["database"]["database"]
     local = _load_local_database_manifest(runtime_root)
+    runtime_storage = runtime_root / "storage"
     if (
         local["state"] != "EMPTY_RESTORE_TARGET"
         or local["database"] != source_database
         or int(urlparse(database_url).port or 0) != local["port"]
         or _local_database_url(local["database"], local["port"]) != database_url
         or not _backup_has_price_release(manifest)
+        or restore_root != runtime_storage
+        or any(runtime_storage.iterdir())
     ):
         raise CandidateBoundaryError("same-database restore target differs")
-    with _database_lifecycle_guard(
-        database_url, expected_database=source_database
-    ):
-        result = _restore_locked(
-            database_url,
-            restore_root,
-            manifest_path,
-            expected_database=source_database,
-            verified_preflight=verified,
-        )
-        _update_local_database_state(runtime_root, "INITIALIZED_DEMO")
-        return result
+    # initialize-runtime deliberately creates the exact empty storage directory
+    # that serve will later consume.  Release only that verified empty leaf so
+    # the existing restore publisher can create it atomically at the same path.
+    runtime_storage.rmdir()
+    try:
+        with _database_lifecycle_guard(
+            database_url, expected_database=source_database
+        ):
+            result = _restore_locked(
+                database_url,
+                restore_root,
+                manifest_path,
+                expected_database=source_database,
+                verified_preflight=verified,
+            )
+            _update_local_database_state(runtime_root, "INITIALIZED_DEMO")
+            return result
+    except BaseException:
+        if runtime_storage.exists():
+            _require_mode(runtime_storage, 0o700, directory=True)
+            if any(runtime_storage.iterdir()):
+                raise CandidateBoundaryError(
+                    "same-database restore storage cleanup was incomplete"
+                )
+        else:
+            runtime_storage.mkdir(mode=0o700)
+            runtime_storage.chmod(0o700)
+        raise
 
 
 def _restore_locked(
