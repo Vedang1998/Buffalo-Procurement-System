@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-15T00:33:00Z (UTC)
+**Updated:** 2026-09-15T01:01:14Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Synthetic selected-offer consumption — IMPLEMENTED / VALIDATION IN PROGRESS / REAL CUTOVER BLOCKED
+### Synthetic selected-offer consumption — BOUNDED SYNTHETIC PASS / REAL CUTOVER BLOCKED
 
 - Work is isolated on `codex/mapping-monday-shadow-freeze`, based on owner-cited
   checkpoint `22ab1cf800963a6d99e65eb210d8cfb1bbec0abd`, tree
@@ -37,24 +37,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   re-attested against loopback PostgreSQL 16, exact roles/schema/contracts and
   an owned `_test` or marked `_demo` database. Request data and a stored run
   label cannot enable it.
-- Current pre-commit machine evidence: the first causal regression failed at
-  the intended baseline because the legacy path saw two offers and returned
-  `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`; after implementation, the six
-  selected-offer tests pass, including causal BASE-to-BREAK review/DRAFT,
+- The focused causal test first failed at the intended baseline: with a valid
+  confirmed selection and two eligible active STANDARD offers, the legacy path
+  ignored the selection, emitted `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`
+  and created zero recommendations. After implementation, all six new
+  selected-offer tests pass, covering the causal BASE-to-BREAK chain,
   missing-head no-fallback, fresh-observer late rollback, late CLEAR refusal,
   held-lock typed refusal and malformed-manifest/deadline refusal. The affected
-  modules passed **92/92** once. Fresh owned-demo initialization and exact
-  initializer replay verification both passed with two offers and four legal
-  pre-011 CURRENT price rows. A clean-source Chromium run, authoritative
-  816-test run and final independent review are still pending, so this entry
-  is not an acceptance claim.
+  modules passed **92/92**. Fresh owned-demo initialization and exact replay
+  verification both passed with two offers and four legal pre-011 CURRENT
+  price rows.
+- The authoritative clean-source wrapper passed **816 discovered / 816
+  executed / 816 passed** in 1049.228s, with zero failures, errors, skips,
+  expected failures or unexpected successes. It ran against owned loopback
+  PostgreSQL 16 at implementation commit
+  `08be4a86b927999ddb7e8a48938deec787bf864e`, tree
+  `7990fd45b48917c5c90168821ef1dbdd8e508a0b`; the retained log is
+  `/home/runner/workspace/.ai-auth/codex/evidence/selected-offer-validation-08be4a8-20260915T004310Z/full.log`
+  (SHA-256 `99fa95236f6cc03f346b92b0dfbef5036877aa6a5a0d5359ac07e9445c33ef8b`).
 - The focused causal fixture independently freezes the selected source price
   IDs and run snapshot IDs, changes one reviewed line from one BASE-priced case
   to two BREAK-priced cases, carries the exact final tier through review, DRAFT
   reconciliation and packet evidence, and replays the run/DRAFT/packet without
   duplication. The separate fresh-demo/browser fixture expects `SUP-001` BASE
   `$12.00`, reviewed two-case BREAK merchandise `$19.00`, `$5.00` delivery fee
-  and one `$24.00` internal DRAFT; browser proof is not yet recorded.
+  and one `$24.00` internal DRAFT. Real loopback Chromium passed **160/160
+  phase-one + 24/24 post-restart assertions**, with zero console/runtime
+  errors and no request outside `127.0.0.1`. The evidence root is
+  `/home/runner/workspace/.ai-auth/codex/evidence/selected-offer-browser-08be4a8-20260915T004135Z`;
+  summary SHA-256 is
+  `53f2ad15a8e501f05fec2f2d23ffae2ab554673e2c7838af8c3fe09a600a624e`,
+  database-state digest is
+  `30cfa94ccda17743c48c77441d78db1e4b1a149cbbdc1333fa3cc055c2a6b188`,
+  and the 12-member review ZIP SHA-256 is
+  `6355b8711ed762a000da75dc085d420735e4ca2d969c28d23d0540487d416c92`.
+  Browser replay completed without duplication before restart; after restart,
+  persisted state and both artifact re-fetches remained byte-identical.
 - This is synthetic implementation permission, not real supplier-data or
   production activation. Direct SQL still lacks an independent trigger proving
   recommendation offer = selected head. Real supplier authority and price
@@ -63,10 +81,18 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   slice. No remote, PR/CI, protected checkout, deployment, operational database,
   Shopify, supplier communication, real mapping/price approval, PO release or
   order action occurred.
-- Exact next boundary: finish clean candidate validation and independent review
-  before the hard handoff. If any P0/P1 or runtime failure remains at the
-  implementation cutoff, preserve the candidate and report it as incomplete;
-  do not weaken controls or expand scope.
+- Independent read-only review of the backend chain and the final six-line
+  browser-auditor correction found no P0-P2 issue. The reviewer independently
+  checked the 39-file browser inventory, 160+24 assertions, both artifact
+  streams, packet membership, restart parity and database digest. This is a
+  bounded machine/reviewer pass for the isolated synthetic service/UI
+  connection; owner acceptance of the resulting evidence remains pending.
+- Exact next boundary: stop this task, preserve the recoverable candidate and
+  obtain owner acceptance of this checkpoint. Any real/default selected-offer
+  consumption requires a separately reviewed design with independent database
+  enforcement, real identity and approved real supplier/price inputs;
+  deployment, Shopify writes, PO release and ordering remain separately
+  unauthorized.
 
 ### Persistent-mapping strict-acceptance descendant — BOUNDED SYNTHETIC PASS / FULL GOAL INCOMPLETE
 

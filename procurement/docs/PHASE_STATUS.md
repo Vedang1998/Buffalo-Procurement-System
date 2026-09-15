@@ -7,7 +7,7 @@ This file is the executive roadmap/status view. It is updated when a phase/progr
 
 ## Synthetic selected-offer consumption candidate
 
-**IMPLEMENTED / VALIDATION IN PROGRESS — ISOLATED SYNTHETIC ONLY / REAL AND
+**BOUNDED SYNTHETIC PASS — ISOLATED SYNTHETIC ONLY / REAL AND
 PRODUCTION CUTOVER BLOCKED**
 
 On `codex/mapping-monday-shadow-freeze`, the bounded owner-approved candidate
@@ -26,13 +26,17 @@ selected path requires a distinct supervised local-only flag plus exact owned
 test/demo database attestation. Direct-SQL selected-head enforcement remains a
 known blocker to any real/default use.
 
-Pre-commit evidence currently includes the intended causal red, six passing
-selected tests, one 92/92 affected-module pass, and fresh/replay initializer
-verification with two offers/four authentic pre-011 CURRENT price rows. Clean
-Chromium, the authoritative 816-test suite and final independent review remain
-pending; therefore this is not yet an accepted checkpoint and does not change
-the official production phase. The Sunday 09:00 delivery and first authorized
-implementation window were missed and remain recorded as missed.
+Evidence includes the intended causal red, six passing selected tests, one
+92/92 affected-module pass, fresh/replay initializer verification with two
+offers/four schema-valid synthetic pre-011 CURRENT price rows, and a clean
+authoritative **816/816** suite with every abnormal result counter zero. Real loopback
+Chromium passed **160 + 24** assertions through mapping, selection, selected
+BASE-to-BREAK economics, review, DRAFT, packet replay and application restart;
+independent review found no P0-P2 issue. This is a bounded machine/reviewer pass
+for only the isolated synthetic service/UI connection; owner acceptance remains
+pending, and the result does not change the official production phase. The
+Sunday 09:00 delivery and first authorized implementation window were missed
+and remain recorded as missed.
 
 ## Architecture
 
