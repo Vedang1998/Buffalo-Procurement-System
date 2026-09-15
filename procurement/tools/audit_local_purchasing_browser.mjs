@@ -434,8 +434,8 @@ async function audit(client) {
         confirmation.candidate_tiers.every((tier) =>
           tier.package_type === "STANDARD" &&
           tier.raw_pack === "6x750ML" &&
-          tier.shopify_units_per_case === "6.0000" &&
-          tier.qualifying_units_per_case === "6.0000" &&
+          tier.shopify_units_per_case === "6" &&
+          tier.qualifying_units_per_case === "6" &&
           tier.extraction_confidence === "VERIFIED" &&
           tier.source_evidence === "fabricated exact replacement source") &&
         confirmation.current_tiers.length === 4 &&
