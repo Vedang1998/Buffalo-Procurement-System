@@ -158,10 +158,17 @@ def acquire_database_lifecycle_lock(conn: Any, database: str) -> str:
 
 
 @contextmanager
-def _database_lifecycle_guard(database_url: str, *, restore: bool = False):
+def _database_lifecycle_guard(
+    database_url: str,
+    *,
+    restore: bool = False,
+    expected_database: str | None = None,
+):
     """Hold a dedicated PostgreSQL session lock for one whole lifecycle action."""
 
-    database = _database_name(database_url, restore=restore)
+    database = _database_name(
+        database_url, restore=restore, expected_database=expected_database
+    )
     with psycopg.connect(database_url, autocommit=True, connect_timeout=5) as conn:
         row = conn.execute(
             "SELECT pg_catalog.current_database(),"
@@ -206,7 +213,12 @@ def _require_mode(path: Path, mode: int, *, directory: bool) -> None:
         raise CandidateBoundaryError(f"path ownership differs: {path}")
 
 
-def _database_name(database_url: str, *, restore: bool = False) -> str:
+def _database_name(
+    database_url: str,
+    *,
+    restore: bool = False,
+    expected_database: str | None = None,
+) -> str:
     try:
         parsed = urlparse(database_url)
         parsed_port = parsed.port
@@ -226,7 +238,13 @@ def _database_name(database_url: str, *, restore: bool = False) -> str:
         raise CandidateBoundaryError("database session role must be qa_release_login")
     database = parsed.path.removeprefix("/")
     suffix = "_restore_demo" if restore else "_demo"
-    if (
+    if expected_database is not None:
+        if (
+            re.fullmatch(r"[a-z][a-z0-9_]*_demo", expected_database) is None
+            or database != expected_database
+        ):
+            raise CandidateBoundaryError("database name differs from backup source")
+    elif (
         not database
         or not database.endswith(suffix)
         or re.fullmatch(r"[a-z][a-z0-9_]*", database) is None
@@ -259,8 +277,11 @@ def _database_facts(
     require_initialized: bool,
     restore: bool = False,
     require_price_release: bool = False,
+    expected_database: str | None = None,
 ) -> dict[str, Any]:
-    database = _database_name(database_url, restore=restore)
+    database = _database_name(
+        database_url, restore=restore, expected_database=expected_database
+    )
     rules_path = REPO_ROOT / "procurement" / "config" / "rules.toml"
     migration_path = REPO_ROOT / "procurement" / "db" / (
         "014_persistent_mapping_foundation.sql"
@@ -1060,6 +1081,7 @@ def _load_local_database_manifest(runtime_root: Path) -> dict[str, Any]:
         "current_user",
         "price_migration_sha256",
         "price_catalog_sha256",
+        "state",
     }
     if (
         not isinstance(value, dict)
@@ -1079,6 +1101,7 @@ def _load_local_database_manifest(runtime_root: Path) -> dict[str, Any]:
         or value.get("current_user") != "qa_mapping_owner"
         or value.get("price_migration_sha256") != PRICE_REPLACEMENT_MIGRATION_SHA256
         or value.get("price_catalog_sha256") != PRICE_REPLACEMENT_CATALOG_SHA256
+        or value.get("state") not in {"INITIALIZED_DEMO", "EMPTY_RESTORE_TARGET"}
     ):
         raise CandidateBoundaryError("local database registration differs")
     data_directory = runtime_root / POSTGRES_DATA_DIR
@@ -1101,7 +1124,7 @@ def _run_pg_ctl(data_directory: Path, *arguments: str, check: bool = True) -> su
 
 
 def initialize_local_database(
-    runtime_root: Path, *, database: str, port: int
+    runtime_root: Path, *, database: str, port: int, empty_restore_target: bool = False
 ) -> dict[str, Any]:
     """Create and initialize one owned loopback PG16 demo under the runtime root."""
 
@@ -1177,14 +1200,18 @@ def initialize_local_database(
                 )
             )
         database_url = _local_database_url(database, port)
-        from initialize_synthetic_demo import _registered_business_date, initialize
+        initialized: dict[str, Any] | None = None
+        if empty_restore_target:
+            _database_facts(database_url, require_initialized=False)
+        else:
+            from initialize_synthetic_demo import _registered_business_date, initialize
 
-        initialized = initialize(database_url, _registered_business_date())
-        if initialized.get("initialized") is not True:
-            raise CandidateBoundaryError("local synthetic database initialization differed")
-        _database_facts(
-            database_url, require_initialized=True, require_price_release=True
-        )
+            initialized = initialize(database_url, _registered_business_date())
+            if initialized.get("initialized") is not True:
+                raise CandidateBoundaryError("local synthetic database initialization differed")
+            _database_facts(
+                database_url, require_initialized=True, require_price_release=True
+            )
         manifest = {
             "contract": LOCAL_DATABASE_CONTRACT,
             "database": database,
@@ -1197,18 +1224,24 @@ def initialize_local_database(
             "current_user": "qa_mapping_owner",
             "price_migration_sha256": PRICE_REPLACEMENT_MIGRATION_SHA256,
             "price_catalog_sha256": PRICE_REPLACEMENT_CATALOG_SHA256,
+            "state": (
+                "EMPTY_RESTORE_TARGET"
+                if empty_restore_target
+                else "INITIALIZED_DEMO"
+            ),
         }
         _write_exclusive_file(
             manifest_path,
             (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode("utf-8"),
         )
         return {
-            "initialized": True,
+            "initialized": not empty_restore_target,
+            "empty_restore_target": empty_restore_target,
             "database_url": database_url,
             "database": database,
             "port": port,
             "system_identifier": manifest["system_identifier"],
-            "business_date": initialized["business_date"],
+            "business_date": None if initialized is None else initialized["business_date"],
         }
     except BaseException:
         if started:
@@ -1242,9 +1275,10 @@ def local_database_status(runtime_root: Path) -> dict[str, Any]:
     if running:
         _database_facts(
             _local_database_url(manifest["database"], manifest["port"]),
-            require_initialized=True,
-            require_price_release=True,
+            require_initialized=manifest["state"] == "INITIALIZED_DEMO",
+            require_price_release=manifest["state"] == "INITIALIZED_DEMO",
         )
+    result["state"] = manifest["state"]
     return result
 
 
@@ -1934,8 +1968,14 @@ def _restore_preflight(
     return manifest, dump_path, archive_path, expected_files
 
 
-def _clean_failed_restore(database_url: str) -> None:
-    database = _database_name(database_url, restore=True)
+def _clean_failed_restore(
+    database_url: str, *, expected_database: str | None = None
+) -> None:
+    database = _database_name(
+        database_url,
+        restore=expected_database is None,
+        expected_database=expected_database,
+    )
     with psycopg.connect(database_url, autocommit=True, connect_timeout=5) as conn:
         row = conn.execute(
             "SELECT current_database()::text,current_setting('server_version_num')::integer,"
@@ -1955,7 +1995,12 @@ def _clean_failed_restore(database_url: str) -> None:
             raise CandidateBoundaryError("restore cleanup target differs")
         conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(SCHEMA)))
         conn.execute("DROP EXTENSION IF EXISTS pgcrypto CASCADE")
-    _database_facts(database_url, require_initialized=False, restore=True)
+    _database_facts(
+        database_url,
+        require_initialized=False,
+        restore=expected_database is None,
+        expected_database=expected_database,
+    )
 
 
 def _validate_restore_toc(value: str) -> None:
@@ -2009,16 +2054,110 @@ def restore(database_url: str, restore_root: Path, manifest_path: Path) -> dict[
         return _restore_locked(database_url, restore_root, manifest_path)
 
 
+def _backup_has_price_release(manifest: dict[str, Any]) -> bool:
+    inventory = manifest.get("state", {}).get("facts", {}).get(
+        "relation_inventory", []
+    )
+    return any(
+        isinstance(item, dict)
+        and item.get("relation") == "supplier_price_schedule_policies"
+        for item in inventory
+    )
+
+
+def _update_local_database_state(runtime_root: Path, state: str) -> None:
+    if state != "INITIALIZED_DEMO":
+        raise CandidateBoundaryError("local database state transition differs")
+    manifest = _load_local_database_manifest(runtime_root)
+    if manifest["state"] != "EMPTY_RESTORE_TARGET":
+        raise CandidateBoundaryError("local restore target state differs")
+    manifest["state"] = state
+    path = runtime_root / DATABASE_MANIFEST_FILE
+    replacement = runtime_root / f".{DATABASE_MANIFEST_FILE}.new"
+    _write_exclusive_file(
+        replacement,
+        (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode("utf-8"),
+    )
+    try:
+        os.replace(replacement, path)
+        root_descriptor = os.open(runtime_root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(root_descriptor)
+        finally:
+            os.close(root_descriptor)
+    finally:
+        if replacement.exists():
+            replacement.unlink()
+
+
+def restore_same_database(
+    database_url: str,
+    runtime_root: Path,
+    restore_root: Path,
+    manifest_path: Path,
+) -> dict[str, Any]:
+    verified = _restore_preflight(manifest_path)
+    manifest = verified[0]
+    source_database = manifest["database"]["database"]
+    local = _load_local_database_manifest(runtime_root)
+    if (
+        local["state"] != "EMPTY_RESTORE_TARGET"
+        or local["database"] != source_database
+        or int(urlparse(database_url).port or 0) != local["port"]
+        or _local_database_url(local["database"], local["port"]) != database_url
+        or not _backup_has_price_release(manifest)
+    ):
+        raise CandidateBoundaryError("same-database restore target differs")
+    with _database_lifecycle_guard(
+        database_url, expected_database=source_database
+    ):
+        result = _restore_locked(
+            database_url,
+            restore_root,
+            manifest_path,
+            expected_database=source_database,
+            verified_preflight=verified,
+        )
+        _update_local_database_state(runtime_root, "INITIALIZED_DEMO")
+        return result
+
+
 def _restore_locked(
-    database_url: str, restore_root: Path, manifest_path: Path
+    database_url: str,
+    restore_root: Path,
+    manifest_path: Path,
+    *,
+    expected_database: str | None = None,
+    verified_preflight: tuple[
+        dict[str, Any], Path, Path, list[dict[str, Any]]
+    ]
+    | None = None,
 ) -> dict[str, Any]:
     target_facts = _database_facts(
-        database_url, require_initialized=False, restore=True
+        database_url,
+        require_initialized=False,
+        restore=expected_database is None,
+        expected_database=expected_database,
     )
     if not restore_root.is_absolute():
         raise CandidateBoundaryError("restore storage root must be a new absolute path")
     _require_mode(restore_root.parent, 0o700, directory=True)
-    manifest, dump_path, archive_path, expected_files = _restore_preflight(manifest_path)
+    manifest, dump_path, archive_path, expected_files = (
+        verified_preflight
+        if verified_preflight is not None
+        else _restore_preflight(manifest_path)
+    )
+    contains_price_release = _backup_has_price_release(manifest)
+    if contains_price_release and expected_database is None:
+        raise CandidateBoundaryError(
+            "016 backup requires restore-same-database on a new owned cluster"
+        )
+    if expected_database is not None and (
+        not contains_price_release
+        or manifest.get("database", {}).get("database") != expected_database
+        or target_facts["database"] != expected_database
+    ):
+        raise CandidateBoundaryError("same-database restore provenance differs")
     pg_restore = _postgres_tool("pg_restore")
     listed = subprocess.run(
         [pg_restore, "--list", str(dump_path)],
@@ -2081,7 +2220,11 @@ def _restore_locked(
         )
         _normalize_restored_acl_representation(database_url)
         restored_facts = _database_facts(
-            database_url, require_initialized=True, restore=True
+            database_url,
+            require_initialized=True,
+            restore=expected_database is None,
+            require_price_release=contains_price_release,
+            expected_database=expected_database,
         )
         state = _state_evidence(database_url)
         if state != manifest["state"]:
@@ -2101,7 +2244,12 @@ def _restore_locked(
                 storage_cleanup_error = cleanup_exc
         if mutated_database:
             try:
-                _clean_failed_restore(database_url)
+                if expected_database is None:
+                    _clean_failed_restore(database_url)
+                else:
+                    _clean_failed_restore(
+                        database_url, expected_database=expected_database
+                    )
             except BaseException as cleanup_exc:
                 raise CandidateBoundaryError(
                     "restore failed and owned-target cleanup was incomplete"
@@ -2119,10 +2267,11 @@ def main() -> int:
     subparsers.add_parser("check-prerequisites")
     runtime_parser = subparsers.add_parser("initialize-runtime")
     runtime_parser.add_argument("--runtime-root", required=True, type=Path)
-    database_parser = subparsers.add_parser("initialize-database")
-    database_parser.add_argument("--runtime-root", required=True, type=Path)
-    database_parser.add_argument("--database-name", required=True)
-    database_parser.add_argument("--port", required=True, type=int)
+    for name in ("initialize-database", "initialize-restore-target"):
+        database_parser = subparsers.add_parser(name)
+        database_parser.add_argument("--runtime-root", required=True, type=Path)
+        database_parser.add_argument("--database-name", required=True)
+        database_parser.add_argument("--port", required=True, type=int)
     for name in ("database-status", "database-start", "database-stop"):
         child = subparsers.add_parser(name)
         child.add_argument("--runtime-root", required=True, type=Path)
@@ -2139,6 +2288,13 @@ def main() -> int:
     restore_parser.add_argument("--database-url", required=True)
     restore_parser.add_argument("--restore-storage-root", required=True, type=Path)
     restore_parser.add_argument("--manifest", required=True, type=Path)
+    same_restore_parser = subparsers.add_parser("restore-same-database")
+    same_restore_parser.add_argument("--database-url", required=True)
+    same_restore_parser.add_argument("--runtime-root", required=True, type=Path)
+    same_restore_parser.add_argument(
+        "--restore-storage-root", required=True, type=Path
+    )
+    same_restore_parser.add_argument("--manifest", required=True, type=Path)
     args = parser.parse_args()
     try:
         if args.command == "check-prerequisites":
@@ -2148,13 +2304,15 @@ def main() -> int:
         if args.command == "initialize-runtime":
             print(json.dumps(initialize_runtime(args.runtime_root), sort_keys=True))
             return 0
-        if args.command == "initialize-database":
+        if args.command in {"initialize-database", "initialize-restore-target"}:
             print(
                 json.dumps(
                     initialize_local_database(
                         args.runtime_root,
                         database=args.database_name,
                         port=args.port,
+                        empty_restore_target=args.command
+                        == "initialize-restore-target",
                     ),
                     sort_keys=True,
                 )
@@ -2183,6 +2341,19 @@ def main() -> int:
             return 0
         if args.command == "backup-v2":
             print(backup_v2(args.database_url, args.runtime_root, str(args.batch_id)))
+            return 0
+        if args.command == "restore-same-database":
+            print(
+                json.dumps(
+                    restore_same_database(
+                        args.database_url,
+                        args.runtime_root,
+                        args.restore_storage_root,
+                        args.manifest,
+                    ),
+                    sort_keys=True,
+                )
+            )
             return 0
         print(json.dumps(restore(args.database_url, args.restore_storage_root, args.manifest), sort_keys=True))
         return 0

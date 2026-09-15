@@ -14,7 +14,7 @@ MIGRATION_NAME = "016_synthetic_price_replacement.sql"
 CONTRACT_VERSION = "v1-complete-vendor-monthly-synthetic"
 TARGET_SCHEMA = "qa_mapping_test"
 MIGRATION_SHA256 = "5d74074b7c2f79eb8e9b92bbb3302923c80003b6bce25803671078b0645ea35d"
-CATALOG_SHA256 = "e44bae7420211d45e89c7d36a3eaca1b1d83a451ae833fb4f679aba5ed05f911"
+CATALOG_SHA256 = "00e01c90bdc324544b2746880d5c8d6821dad3a6b1698b761a78d91c8b9c1a88"
 FIXTURE_REGISTRATION_REF = "config/synthetic_price_replacement_fixture.json"
 FIXTURE_REGISTRATION_CANONICAL_SHA256 = (
     "4ac0137a42e79f560fbab6a4f6073324e553f2ca924d0e3a8c5956f51dd79659"
@@ -123,7 +123,11 @@ def _normalize(value: Any) -> Any:
         return "<NULL>"
     if isinstance(value, (list, tuple)):
         return tuple(_normalize(item) for item in value)
-    return str(value)
+    text = str(value)
+    # PostgreSQL stores parser byte offsets in pg_node_tree values. pg_dump
+    # reconstructs the same trigger expression with different whitespace, so
+    # offsets are transport noise rather than executable catalog identity.
+    return re.sub(r":location -?\d+", ":location <NORMALIZED>", text)
 
 
 def synthetic_price_catalog_projection(conn: Any, schema: str) -> dict[str, Any]:
