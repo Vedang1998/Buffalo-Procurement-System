@@ -353,6 +353,32 @@ def registered_target_declaration(conn: Any) -> dict[str, Any]:
     )
 
 
+def registered_monday_evaluation_at(conn: Any) -> datetime:
+    """Return the sole server-owned Monday instant for this fabricated fixture."""
+
+    require_attested_database(conn)
+    fixture = _fixture()
+    targets = [
+        item for item in fixture["policies"] if item.get("target_for_replacement") is True
+    ]
+    if len(targets) != 1:
+        raise SyntheticPriceReplacementError(
+            "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
+        )
+    row = conn.execute(
+        f'''SELECT monday_evaluation_at
+              FROM "{SCHEMA}".supplier_price_schedule_policies
+             WHERE policy_ref=%s AND fixture_database_name=current_database()''',
+        (targets[0]["policy_ref"],),
+    ).fetchone()
+    expected = datetime.fromisoformat(fixture["monday_evaluation_at"])
+    if row is None or row[0] != expected:
+        raise SyntheticPriceReplacementError(
+            "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
+        )
+    return row[0]
+
+
 def _declared_validation(
     conn: Any, parsed: dict[str, Any], declaration: Mapping[str, Any]
 ) -> dict[str, Any]:

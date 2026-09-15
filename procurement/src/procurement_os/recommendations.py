@@ -292,6 +292,10 @@ def _price_tiers_from_rows(rows: Iterable[tuple[Any, ...]]) -> tuple[PriceTier, 
 
 def _database_evaluation_at(conn: Any) -> datetime:
     """Use the database transaction clock as the one run-wide evaluation instant."""
+    if os.getenv("BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT") == "1":
+        from .synthetic_price_replacement import registered_monday_evaluation_at
+
+        return registered_monday_evaluation_at(conn)
     return conn.execute("SELECT transaction_timestamp()").fetchone()[0]
 
 
