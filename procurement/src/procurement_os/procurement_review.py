@@ -127,10 +127,11 @@ def _line_economics(
     price = conn.execute(
         """SELECT run_price_snapshot_id,offer_id,effective_month,level_type,
                   break_qty,break_unit,case_price,unit_price,source_file,source_page,
-                  source_price_id,source_price_book_batch_id::text,
-                  source_price_book_row_number,
-                  supplier_price_authority_event_id::text
-             FROM run_price_snapshots
+                  (to_jsonb(s)->>'source_price_id')::bigint,
+                  to_jsonb(s)->>'source_price_book_batch_id',
+                  (to_jsonb(s)->>'source_price_book_row_number')::integer,
+                  to_jsonb(s)->>'supplier_price_authority_event_id'
+             FROM run_price_snapshots s
             WHERE run_id=%s AND offer_id=%s
               AND (
                   level_type='BASE'

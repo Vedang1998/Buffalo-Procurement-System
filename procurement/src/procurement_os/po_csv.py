@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import csv
+from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import io
+import json
 from typing import Any
 
 from .draft_po import SAFETY_LABEL, get_vendor_drafts
@@ -13,6 +15,7 @@ from .storage import StorageAdapter
 
 
 FORMAT_WARNING = "SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED"
+INTERNAL_OUTPUT_CONTRACT = "BUFFALO_INTERNAL_DRAFT_LINE_V2"
 CSV_HEADERS = (
     "safety_label","format_status","run_id","draft_po_id","vendor_name","variant_id",
     "supplier_sku","cases","loose_units","ordered_units","unit_cost","case_price",
@@ -21,6 +24,9 @@ CSV_HEADERS = (
     "vendor_below_minimum_fee","vendor_delivery_fee","vendor_po_total",
     "below_vendor_minimum","minimum_shortfall","minimum_disposition",
     "economics_confirmed_by","draft_preview_fingerprint",
+    "internal_output_contract","captured_available_quantity",
+    "inventory_captured_at","source_inventory_snapshot_run_id",
+    "inventory_location_scope_json",
 )
 
 
@@ -35,11 +41,37 @@ def _cell(value: Any) -> str:
     return text
 
 
+def _captured_at(value: Any) -> str:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            raise PoCsvError("captured inventory timestamp must be timezone-aware")
+        return value.astimezone(timezone.utc).isoformat()
+    text = str(value)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except (TypeError, ValueError) as exc:
+        raise PoCsvError("captured inventory timestamp is malformed") from exc
+    if parsed.tzinfo is None:
+        raise PoCsvError("captured inventory timestamp must be timezone-aware")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
 def render_vendor_draft_csv(run_id: str, draft: dict[str, Any]) -> bytes:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=CSV_HEADERS, lineterminator="\n")
     writer.writeheader()
     for line in sorted(draft["lines"], key=lambda item: (item["variant_id"], item["po_line_id"])):
+        required_stock = (
+            "captured_available_quantity",
+            "inventory_captured_at",
+            "source_inventory_snapshot_run_id",
+            "inventory_location_scope",
+        )
+        if any(field not in line for field in required_stock):
+            raise PoCsvError("new internal DRAFT output requires frozen captured stock")
+        scope = line["inventory_location_scope"]
+        if not isinstance(scope, list) or not scope:
+            raise PoCsvError("new internal DRAFT output requires location stock evidence")
         writer.writerow(
             {
                 "safety_label": SAFETY_LABEL,
@@ -76,6 +108,17 @@ def render_vendor_draft_csv(run_id: str, draft: dict[str, Any]) -> bytes:
                 "economics_confirmed_by": _cell(draft.get("economics_confirmed_by") or ""),
                 "draft_preview_fingerprint": _cell(
                     draft.get("draft_preview_fingerprint") or ""
+                ),
+                "internal_output_contract": INTERNAL_OUTPUT_CONTRACT,
+                "captured_available_quantity": (
+                    f"{Decimal(line['captured_available_quantity']):.4f}"
+                ),
+                "inventory_captured_at": _captured_at(line["inventory_captured_at"]),
+                "source_inventory_snapshot_run_id": _cell(
+                    line["source_inventory_snapshot_run_id"]
+                ),
+                "inventory_location_scope_json": _cell(
+                    json.dumps(scope, sort_keys=True, separators=(",", ":"))
                 ),
             }
         )

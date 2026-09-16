@@ -1124,7 +1124,12 @@ def _run_pg_ctl(data_directory: Path, *arguments: str, check: bool = True) -> su
 
 
 def initialize_local_database(
-    runtime_root: Path, *, database: str, port: int, empty_restore_target: bool = False
+    runtime_root: Path,
+    *,
+    database: str,
+    port: int,
+    empty_restore_target: bool = False,
+    fixture_profile: str = "baseline-v1",
 ) -> dict[str, Any]:
     """Create and initialize one owned loopback PG16 demo under the runtime root."""
 
@@ -1206,7 +1211,11 @@ def initialize_local_database(
         else:
             from initialize_synthetic_demo import _registered_business_date, initialize
 
-            initialized = initialize(database_url, _registered_business_date())
+            initialized = initialize(
+                database_url,
+                _registered_business_date(),
+                profile=fixture_profile,
+            )
             if initialized.get("initialized") is not True:
                 raise CandidateBoundaryError("local synthetic database initialization differed")
             _database_facts(
@@ -2291,6 +2300,12 @@ def main() -> int:
         database_parser.add_argument("--runtime-root", required=True, type=Path)
         database_parser.add_argument("--database-name", required=True)
         database_parser.add_argument("--port", required=True, type=int)
+        if name == "initialize-database":
+            database_parser.add_argument(
+                "--fixture-profile",
+                choices=("baseline-v1", "multivendor-v2"),
+                default="baseline-v1",
+            )
     for name in ("database-status", "database-start", "database-stop"):
         child = subparsers.add_parser(name)
         child.add_argument("--runtime-root", required=True, type=Path)
@@ -2332,6 +2347,9 @@ def main() -> int:
                         port=args.port,
                         empty_restore_target=args.command
                         == "initialize-restore-target",
+                        fixture_profile=getattr(
+                            args, "fixture_profile", "baseline-v1"
+                        ),
                     ),
                     sort_keys=True,
                 )

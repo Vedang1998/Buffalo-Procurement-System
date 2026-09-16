@@ -311,6 +311,89 @@ def _require_complete_reviews(conn: Any, run_id: str) -> None:
         )
 
 
+def _frozen_stock_line_evidence(
+    *,
+    metrics: Any,
+    available_quantity: Any,
+    captured_at: Any,
+    source_inventory_snapshot_run_id: Any,
+) -> dict[str, Any]:
+    """Return validated run-bound stock evidence, or nothing for legacy rows."""
+
+    values = metrics if isinstance(metrics, dict) else {}
+    capture = values.get("frozen_inventory_capture")
+    locations = values.get("frozen_inventory_rows")
+    if (
+        available_quantity is None
+        and captured_at is None
+        and source_inventory_snapshot_run_id is None
+        and capture is None
+        and locations is None
+    ):
+        return {}
+    if (
+        available_quantity is None
+        or captured_at is None
+        or source_inventory_snapshot_run_id is None
+        or not isinstance(capture, list)
+        or len(capture) < 3
+        or not isinstance(locations, list)
+        or not locations
+    ):
+        raise DraftPoError("frozen captured-stock evidence is incomplete")
+    source_run = str(source_inventory_snapshot_run_id)
+    if str(capture[0]) != source_run or str(capture[2]) != str(captured_at):
+        raise DraftPoError("frozen captured-stock source differs from its run snapshot")
+    normalized_locations: list[dict[str, Any]] = []
+    location_total = Decimal("0")
+    try:
+        for item in locations:
+            if (
+                not isinstance(item, list)
+                or len(item) < 5
+                or item[1] is None
+                or item[2] is None
+                or item[3] != "VALID"
+                or str(item[4]) != source_run
+            ):
+                raise DraftPoError("frozen captured-stock location evidence is invalid")
+            location_available = Decimal(str(item[1]))
+            location_incoming = Decimal(str(item[2]))
+            if (
+                not location_available.is_finite()
+                or location_available < 0
+                or not location_incoming.is_finite()
+                or location_incoming < 0
+            ):
+                raise DraftPoError("frozen captured-stock quantities are invalid")
+            location_total += location_available
+            normalized_locations.append(
+                {
+                    "location_gid": str(item[0]),
+                    "available_quantity": str(location_available),
+                    "captured_incoming_quantity": str(location_incoming),
+                    "validation_status": "VALID",
+                }
+            )
+        frozen_available = Decimal(str(available_quantity))
+        metrics_available = Decimal(str(values["available_units"]))
+    except (InvalidOperation, KeyError, TypeError, ValueError) as exc:
+        raise DraftPoError("frozen captured-stock quantities are invalid") from exc
+    if (
+        not frozen_available.is_finite()
+        or frozen_available < 0
+        or location_total != frozen_available
+        or metrics_available != frozen_available
+    ):
+        raise DraftPoError("frozen captured-stock aggregate does not reconcile")
+    return {
+        "captured_available_quantity": frozen_available,
+        "inventory_captured_at": captured_at,
+        "source_inventory_snapshot_run_id": source_run,
+        "inventory_location_scope": normalized_locations,
+    }
+
+
 @_with_selected_input_locks
 def preview_vendor_drafts(
     conn: Any, *, run_id: str, actor: str
@@ -526,9 +609,15 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
                           d.evidence_json #>> '{review,approved_case_price}',
                           d.evidence_json #>> '{review,approved_merchandise_total}',
                           d.evidence_json #>> '{review,approved_loose_order_fee}',
-                          d.evidence_json #> '{review,final_price_tier}'
+                          d.evidence_json #> '{review,final_price_tier}',
+                          r.metrics,i.available_quantity,i.captured_at,
+                          i.source_inventory_snapshot_run_id::text
                      FROM purchase_order_lines l
                      JOIN review_decisions d ON d.decision_id=l.review_decision_id
+                     JOIN procurement_recommendations r
+                       ON r.recommendation_id=l.recommendation_id
+                     LEFT JOIN inventory_snapshots i
+                       ON i.run_id=r.run_id AND i.variant_id=r.variant_id
                     WHERE l.po_id=%s ORDER BY l.variant_id,l.po_line_id""",
                 (row[0],),
             ).fetchall()
@@ -568,7 +657,13 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
                          "case_price": Decimal(line[9]) if line[9] is not None else None,
                          "merchandise_total": Decimal(line[10]),
                          "loose_order_fee": Decimal(line[11]),
-                         **({"final_price_tier": line[12]} if line[12] is not None else {})}
+                         **({"final_price_tier": line[12]} if line[12] is not None else {}),
+                         **_frozen_stock_line_evidence(
+                             metrics=line[13],
+                             available_quantity=line[14],
+                             captured_at=line[15],
+                             source_inventory_snapshot_run_id=line[16],
+                         )}
                         for line in line_rows
                     ],
                 }

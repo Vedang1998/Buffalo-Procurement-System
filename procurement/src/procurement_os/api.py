@@ -99,6 +99,7 @@ from .synthetic_price_replacement import (
 from .synthetic_mapping_packet import (
     SyntheticPacketError,
     load_synthetic_mapping_packets,
+    load_synthetic_multivendor_mapping_packets,
 )
 from .vendor_rules import evaluate_vendor_rules, update_vendor_rules
 from . import catalog as catalog_service
@@ -923,7 +924,19 @@ def supplier_mapping_intake(request: Request):
     principal = action_principal(request, "procurement.review.intake")
     try:
         require_synthetic_mapping_capability("review_intake_writes_enabled")
-        packets = load_synthetic_mapping_packets()
+        with _db_conn() as conn:
+            marker = conn.execute(
+                "SELECT value FROM meta WHERE key=%s",
+                ("synthetic_multivendor_acceptance_contract",),
+            ).fetchone()
+        if marker is None:
+            packets = load_synthetic_mapping_packets()
+        elif marker == ("BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2",):
+            packets = load_synthetic_multivendor_mapping_packets()
+        else:
+            raise PersistentMappingError(
+                "synthetic multivendor fixture registration differs"
+            )
         database_url = _database_url()
         results = [
             execute_supplier_mapping_intake(
@@ -935,7 +948,7 @@ def supplier_mapping_intake(request: Request):
             )
             for packet in packets
         ]
-        if len(results) != 2:
+        if len(results) != len(packets):
             raise PersistentMappingError("synthetic intake scenario count differs")
     except PersistentMappingError as exc:
         raise HTTPException(status_code=_mapping_error_status(exc), detail=str(exc)) from exc
@@ -2194,6 +2207,7 @@ def _monday_run_html(
 <tr><th>Supplier / pack</th><td>{_html_escape(offer.get('supplier_sku'))}; {_html_escape(offer.get('size_text'))}; {_html_escape(offer.get('raw_pack'))}; Shopify units/case {_html_escape(offer.get('shopify_units_per_case'))}; qualifying units/case {_html_escape(offer.get('qualifying_units_per_case'))}; assortment {_html_escape(offer.get('assortment_scope'))}/{_html_escape(offer.get('assortment_group'))}; assortable {_html_escape(offer.get('assortable'))}</td></tr>
 <tr><th>Offer evidence</th><td>{_html_escape(offer.get('confidence'))}; {_html_escape(offer.get('source_file'))} p.{_html_escape(offer.get('source_page'))}; validity {_html_escape(offer.get('valid_from'))}–{_html_escape(offer.get('valid_to'))}</td></tr>
 <tr><th>Inventory capture</th><td>{capture_text}</td></tr>
+<tr><th>Captured Available</th><td>{_html_escape(metrics.get('available_units'))} unit(s), captured at {_html_escape(capture[2] if len(capture) >= 3 else None)} from snapshot run {_html_escape(capture[0] if capture else None)}. This is frozen run evidence, not a live inventory read.</td></tr>
 <tr><th>Inventory locations</th><td><table><tr><th>Location</th><th>Available</th><th>Captured incoming</th><th>Status</th></tr>{inventory_rows}</table></td></tr>
 <tr><th>Trusted incoming</th><td>{_html_escape(metrics.get('trusted_incoming_units'))}; reconciliation {_html_escape(metrics.get('frozen_open_po_position'))}</td></tr>
 <tr><th>Demand / coverage</th><td>Authority {_html_escape(metrics.get('frozen_sales_authority'))}; velocity {_html_escape(metrics.get('forecast_daily_velocity'))}/day; horizon {_html_escape(metrics.get('forecast_horizon_days'))} days; forecast {_html_escape(metrics.get('forecast_units'))}; baseline need {_html_escape(metrics.get('raw_need_units'))}; target {_html_escape(metrics.get('target_units'))}; reasons {_html_escape(metrics.get('need_reason_codes'))}</td></tr>
@@ -2260,6 +2274,8 @@ def _monday_run_html(
             f"<td>{_html_escape(line['variant_id'])}</td><td>{_html_escape(line['supplier_sku'])}</td>"
             f"<td>{_html_escape(line['cases'])}</td><td>{_html_escape(line['loose_units'])}</td>"
             f"<td>{_html_escape(line['ordered_units'])}</td><td>${_html_escape(line['unit_cost'])}</td>"
+            f"<td>{_html_escape(line.get('captured_available_quantity'))}</td>"
+            f"<td>{_html_escape(line.get('inventory_captured_at'))}</td>"
             f"<td>${_html_escape(line['merchandise_total'])}</td>"
             f"<td>${_html_escape(line['loose_order_fee'])}</td>"
             f"<td>${_html_escape(line['line_total'])}"
@@ -2283,7 +2299,7 @@ def _monday_run_html(
             f"disposition {_html_escape(draft.get('minimum_disposition'))}; confirmed by "
             f"{_html_escape(draft.get('economics_confirmed_by'))}</p>"
             "<table><thead><tr><th>Variant</th><th>Supplier SKU</th><th>Cases</th><th>Loose</th>"
-            "<th>Units</th><th>Unit cost</th><th>Merchandise</th><th>Loose fee</th>"
+            "<th>Units</th><th>Unit cost</th><th>Captured Available</th><th>Captured at</th><th>Merchandise</th><th>Loose fee</th>"
             f"<th>Line total</th></tr></thead><tbody>{line_rows}</tbody></table>"
         )
     artifact_rows = "".join(

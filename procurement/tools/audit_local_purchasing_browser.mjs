@@ -466,6 +466,350 @@ async function audit(client) {
     };
     fs.writeFileSync(STATE_PATH, JSON.stringify({price}, null, 2) + "\n", {mode: 0o600});
     results.price = price;
+  } else if (phase === "multivendor") {
+    const state = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
+    await navigate(`${BASE}/supplier-mapping`);
+    check((await body()).includes("Authentication required"), "multivendor mapping begins behind authentication");
+    await login();
+
+    await navigate(state.price.batchUrl);
+    let text = await body();
+    check(text.includes("VERIFIED_FUTURE"), "confirmed replacement survives the backup boundary");
+    let transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/apply-preview\"]')", {
+        apply_idempotency_key: "browser-multivendor-price-apply-v1",
+        actor: SPOOF_ACTOR,
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    const applyPreview = await evaluate(
+      "JSON.parse(document.querySelector('#synthetic-price-apply-json').textContent)",
+    );
+    check(
+      applyPreview.resulting_current_row_count === 4 &&
+        applyPreview.expected_current_row_count === 4 &&
+        applyPreview.real_price_approval === false,
+      "Southern replacement APPLY preview binds the exact synthetic scope",
+      applyPreview,
+    );
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/apply\"]')", {
+        review_token: PRICE_TOKEN,
+      }),
+    );
+    await assertRedirect(
+      transitionMark,
+      "POST",
+      `/price-books/${state.price.batchId}/apply`,
+      `/price-books/${state.price.batchId}`,
+      "multivendor replacement APPLY is a separate confirmed browser action",
+    );
+    check((await body()).includes("APPLIED_CURRENT"), "uploaded Southern prices are CURRENT");
+
+    await navigate(`${BASE}/supplier-mapping`);
+    transitionMark = ledgerMark();
+    await submit(formScript("document.querySelector('form[action=\"/supplier-mapping/intake\"]')"));
+    await assertRedirect(
+      transitionMark,
+      "POST",
+      "/supplier-mapping/intake",
+      "/supplier-mapping",
+      "browser intakes the exact registered V1 plus multivendor V3 packets",
+    );
+    let status = await jsonFetch("/supplier-mapping/status");
+    check(
+      status.body.review_batch_count === 3 && status.body.candidate_count === 7,
+      "multivendor intake creates exactly three sealed batches and seven candidates",
+      status.body,
+    );
+    const candidates = await evaluate(`[
+      ...document.querySelectorAll("tbody tr")
+    ].map((row) => ({text:row.innerText,href:row.querySelector("a[href^='/supplier-mapping/']")?.getAttribute("href")})).filter((item) => item.href)`);
+    check(candidates.length === 7, "browser list exposes all seven purposeful candidates", candidates);
+
+    const decide = async (record, {action = "APPROVE_MAPPING", select = false} = {}) => {
+      await navigate(new URL(record.href, BASE).href);
+      const candidateText = await body();
+      const variantMatch = candidateText.match(/proposed Variant ([0-9]+)/);
+      const variantId = variantMatch ? variantMatch[1] : "UNRESOLVED";
+      const decisionSelector = "document.querySelector('form[action$=\"/decision\"]')";
+      const existingOfferId = await evaluate(
+        `${decisionSelector}.querySelector('select[name="existing_offer_id"] option[value]:not([value=""])')?.value || ""`,
+      );
+      const values = {
+        action,
+        reason: action === "DEFER" ? "Synthetic unresolved identity remains deferred" : `Fabricated exact acceptance mapping for ${variantId}`,
+        offer_link_kind: action === "APPROVE_MAPPING" ? "LINKED_EXISTING" : "",
+        existing_offer_id: action === "APPROVE_MAPPING" ? existingOfferId : "",
+      };
+      check(
+        action !== "APPROVE_MAPPING" || /^\d+$/.test(existingOfferId),
+        `Variant ${variantId} has one exact existing offer selected by the browser`,
+        {existingOfferId},
+      );
+      await submit(formScript(decisionSelector, values));
+      check((await body()).includes("Confirm mapping disposition"), `Variant ${variantId} mapping preview is write-free`);
+      await submit(formScript("document.querySelector('form[method=\"post\"]')"));
+      check((await body()).includes(action), `Variant ${variantId} mapping decision is visible after confirmation`);
+      if (select) {
+        const selectionSelector = "document.querySelector('form[action$=\"/selection\"]')";
+        await submit(
+          formScript(selectionSelector, {
+            effective_from: "2026-10-05",
+            reason: `Fabricated routine selection for ${variantId}`,
+          }),
+        );
+        check((await body()).includes("Confirm routine offer selection"), `Variant ${variantId} selection preview is separate`);
+        await submit(formScript("document.querySelector('form[method=\"post\"]')"));
+        check((await body()).includes("SELECT"), `Variant ${variantId} selection is visible after confirmation`);
+      }
+      return {variantId, existingOfferId};
+    };
+
+    const unresolved = candidates.find((item) => item.text.includes("synthetic-unresolved"));
+    const byVariant = (variantId) => candidates.find((item) => item.text.includes(variantId));
+    check(Boolean(unresolved) && ["1001","4001","4002","4003","4004","4005"].every((id) => Boolean(byVariant(id))), "candidate rows map to the six declared Variant IDs plus unresolved control");
+    await decide(unresolved, {action: "DEFER"});
+    const mapped = {};
+    for (const variantId of ["1001","4001","4002","4003","4004","4005"]) {
+      mapped[variantId] = await decide(byVariant(variantId), {
+        action: "APPROVE_MAPPING",
+        select: variantId !== "4003",
+      });
+    }
+    status = await jsonFetch("/supplier-mapping/status");
+    check(
+      status.body.decision_count === 7 &&
+        status.body.selection_event_count === 5 &&
+        status.body.selection_head_count === 5,
+      "browser creates seven decisions and exactly five deliberate selection heads",
+      status.body,
+    );
+
+    const stalePath = `/monday-runs/${STALE_V1_RUN_ID}`;
+    await navigate(`${BASE}${stalePath}`);
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action$=\"/retire-stale-forecast\"]')", {
+        reason: RETIREMENT_REASON,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    check((await body()).includes("Confirm exact V1 retirement"), "stale V1 retirement is previewed in the UI");
+    await submit(
+      formScript("document.querySelector('form[method=\"post\"]')", {review_token: REVIEW_TOKEN}),
+    );
+    check((await body()).includes("Status: FAILED"), "stale V1 date claim is retired by confirmed browser action");
+
+    await navigate(`${BASE}/monday-runs`);
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[action=\"monday-runs/prepare\"]')", {
+        business_date: "2026-10-05",
+        idempotency_key: "browser-multivendor-20261005-v1",
+        variant_ids: "1001,4001,4002,4003,4004,4005",
+        actor: SPOOF_ACTOR,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    const runUrl = await currentUrl();
+    const runMatch = runUrl.match(/\/monday-runs\/([0-9a-f-]{36})$/);
+    check(Boolean(runMatch), "multivendor prepare redirects to one frozen run", runUrl);
+    const runId = runMatch[1];
+    text = await body();
+    check(
+      text.includes("ROUTINE_SELECTED_OFFER_HEAD_REQUIRED") &&
+        text.includes("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"),
+      "missing selection and positive loose-fee semantics remain explicit blockers",
+    );
+
+    for (const variantId of ["4003", "4004"]) {
+      const selector = `[...document.querySelectorAll('form[action*="/blockers/"]')].find((form) => form.closest("tr")?.innerText.includes(${JSON.stringify(variantId)}))`;
+      transitionMark = ledgerMark();
+      await submit(
+        formScript(selector, {
+          reason: `Acknowledged synthetic blocker for Variant ${variantId}; omit RUN_ONLY`,
+          actor: SPOOF_ACTOR,
+          review_token: REVIEW_TOKEN,
+        }),
+      );
+      check((await body()).includes("ACKNOWLEDGE_AND_EXCLUDE — RUN_ONLY"), `Variant ${variantId} blocker is retained with a RUN_ONLY exclusion`);
+    }
+
+    const review = async (variantId, values, {material = false, reject = false} = {}) => {
+      const selector = `[...document.querySelectorAll('form[action*="/recommendations/"][action$="/review"]')].find((form) => form.closest("tr")?.innerText.includes(${JSON.stringify(variantId)}))`;
+      const actionPath = await evaluate(`new URL(${selector}.action).pathname`);
+      transitionMark = ledgerMark();
+      await submit(formScript(selector, {...values, actor: SPOOF_ACTOR, review_token: REVIEW_TOKEN}));
+      if (reject) {
+        await assertRedirect(transitionMark, "POST", actionPath, `/monday-runs/${runId}`, `Variant ${variantId} REJECT is immutable`);
+        return;
+      }
+      check((await currentUrl()).endsWith(actionPath), `Variant ${variantId} review preview stays on its action`);
+      if (material) {
+        await submit(
+          formScript("document.querySelector('form[method=\"post\"]')", {
+            actor: SPOOF_ACTOR,
+            review_token: REVIEW_TOKEN,
+            material_confirmation_reason: "Confirmed fabricated material quantity and cash exposure",
+          }),
+        );
+        check((await body()).includes("Distinct MATERIAL-risk confirmation recorded"), `Variant ${variantId} receives separate material confirmation`);
+      }
+      transitionMark = ledgerMark();
+      await submit(
+        formScript("document.querySelector('form[method=\"post\"]')", {
+          actor: SPOOF_ACTOR,
+          review_token: REVIEW_TOKEN,
+        }),
+      );
+      await assertRedirect(transitionMark, "POST", actionPath, `/monday-runs/${runId}`, `Variant ${variantId} final review is confirmed`);
+    };
+
+    await review("1001", {
+      action: "EDIT_QUANTITY", approved_cases: "2", approved_loose_units: "0",
+      comment: "Cross uploaded Southern 2 CS break",
+    }, {material: true});
+    await review("4001", {
+      action: "EDIT_QUANTITY", approved_cases: "2", approved_loose_units: "0",
+      comment: "Cross Western 18 BT multipack break",
+    });
+    await review("4002", {
+      action: "ACCEPT", approved_cases: "1", approved_loose_units: "0", comment: "",
+    });
+    await review("4005", {
+      action: "REJECT", approved_cases: "0", approved_loose_units: "0",
+      comment: "Allocated item remains excluded from internal DRAFT",
+    }, {reject: true});
+
+    text = await body();
+    check(text.includes("stage: REVIEWED"), "all four recommendation dispositions reach REVIEWED");
+    check(text.includes("Captured Available") && text.includes("2026-10-05 12:00:00+00:00"), "review displays frozen Available and capture time");
+    const finalTiers = await evaluate(`[
+      ...document.querySelectorAll("pre.final-price-tier-json")
+    ].map((node) => JSON.parse(node.textContent))`);
+    check(
+      finalTiers.some((tier) => tier.level_type === "BREAK" && tier.break_unit === "CS" && tier.case_price === "30.0000" && tier.source_price_book_batch_id === state.price.batchId) &&
+        finalTiers.some((tier) => tier.level_type === "BREAK" && tier.break_unit === "BT" && tier.break_qty === "18.0000" && tier.case_price === "42.0000"),
+      "review binds both the uploaded CS tier and Western BT tier",
+      finalTiers,
+    );
+
+    const buildPath = `/monday-runs/${runId}/build`;
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("[...document.forms].find((form) => (form.getAttribute('action') || '').endsWith('/build'))", {
+        actor: SPOOF_ACTOR,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    text = await body();
+    check(
+      text.includes("Confirm vendor DRAFT economics") &&
+        text.includes("$60.00") && text.includes("$102.00") && text.includes("$109.00") &&
+        text.includes("$162.00") && text.includes("$169.00") && text.includes("PAY_FEE"),
+      "DRAFT preview independently reconciles both vendors and one Western fee",
+    );
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("document.querySelector('form[method=\"post\"]')", {
+        actor: SPOOF_ACTOR,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${runId}`, "two-vendor DRAFT build is separately confirmed");
+    text = await body();
+    check(
+      text.includes("stage: PACKET_BUILT") &&
+        text.includes("Synthetic Southern — DRAFT") &&
+        text.includes("Synthetic Western Acceptance — DRAFT") &&
+        text.includes("internal DRAFT total $169.00"),
+      "exactly two participating vendor DRAFTs reach PACKET_BUILT",
+    );
+    check(text.includes("Captured Available") && text.includes("Captured at"), "built line output displays frozen stock evidence");
+    await saveHtml("multivendor-built-test-data.html");
+    await screenshot("multivendor-built-test-data.png");
+
+    const artifactLinks = await evaluate(`[
+      ...document.querySelectorAll('a[href*="/artifacts/"]')
+    ].map((anchor) => ({href:anchor.href,row:anchor.closest("tr").innerText}))`);
+    check(artifactLinks.length === 3, "two vendor CSVs and one packet are exposed", artifactLinks);
+    const artifactDownloads = [];
+    for (let index = 0; index < artifactLinks.length; index += 1) {
+      artifactDownloads.push(await downloadFromClick(
+        `document.querySelectorAll('a[href*="/artifacts/"]')[${index}].click()`,
+        {url: artifactLinks[index].href, row: artifactLinks[index].row, kind: "multivendor-artifact"},
+      ));
+    }
+    const linksBeforeReplay = artifactLinks.map((item) => item.href);
+    await navigate(`${BASE}/monday-runs/${runId}`);
+    transitionMark = ledgerMark();
+    await submit(
+      formScript("[...document.forms].find((form) => (form.getAttribute('action') || '').endsWith('/build'))", {
+        actor: SPOOF_ACTOR,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${runId}`, "terminal two-vendor build replays through the browser");
+    const linksAfterReplay = await evaluate(`[
+      ...document.querySelectorAll('a[href*="/artifacts/"]')
+    ].map((anchor) => anchor.href)`);
+    check(JSON.stringify(linksAfterReplay) === JSON.stringify(linksBeforeReplay), "replay creates no DRAFT or artifact duplication");
+    Object.assign(state, {
+      applyPreview,
+      runId,
+      runUrl: `${BASE}/monday-runs/${runId}`,
+      mapped,
+      finalTiers,
+      artifactUrls: linksAfterReplay,
+      artifactDownloads,
+    });
+    fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + "\n", {mode: 0o600});
+    Object.assign(results, state);
+  } else if (["multivendor_restart", "multivendor_recovery", "multivendor_recovery_restart"].includes(phase)) {
+    const state = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
+    const currentRunUrl = `${BASE}/monday-runs/${state.runId}`;
+    await navigate(currentRunUrl);
+    check((await body()).includes("Authentication required"), `${phase} invalidates the prior process session`);
+    await login();
+    await navigate(currentRunUrl);
+    let text = await body();
+    check(
+      text.includes("stage: PACKET_BUILT") &&
+        text.includes("Synthetic Southern — DRAFT") &&
+        text.includes("Synthetic Western Acceptance — DRAFT") &&
+        text.includes("internal DRAFT total $169.00"),
+      `${phase} retains exact two-vendor economics`,
+    );
+    const links = await evaluate(`[
+      ...document.querySelectorAll('a[href*="/artifacts/"]')
+    ].map((anchor) => anchor.href)`);
+    check(
+      JSON.stringify(links.map((url) => new URL(url).pathname)) ===
+        JSON.stringify(state.artifactUrls.map((url) => new URL(url).pathname)),
+      `${phase} preserves immutable artifact identities`,
+    );
+    const downloads = [];
+    for (let index = 0; index < links.length; index += 1) {
+      downloads.push(await downloadFromClick(
+        `document.querySelectorAll('a[href*="/artifacts/"]')[${index}].click()`,
+        {url: links[index], kind: phase},
+      ));
+    }
+    const buildPath = `/monday-runs/${state.runId}/build`;
+    const transitionMark = ledgerMark();
+    await submit(
+      formScript("[...document.forms].find((form) => (form.getAttribute('action') || '').endsWith('/build'))", {
+        actor: SPOOF_ACTOR,
+        review_token: REVIEW_TOKEN,
+      }),
+    );
+    await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${state.runId}`, `${phase} terminal build replay is idempotent`);
+    state[`${phase}Downloads`] = downloads;
+    fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + "\n", {mode: 0o600});
+    Object.assign(results, {state, downloads});
   } else if (phase === "phase1") {
     const priorState = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
     await navigate(`${BASE}/supplier-mapping`);

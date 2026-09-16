@@ -43,6 +43,11 @@ VARIANT_ID = "1001"
 BLOCKED_VARIANT_ID = "2002"
 CONTROL_VARIANT_ID = "3003"
 DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
+MULTIVENDOR_DEMO_CONTRACT = "BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2"
+MULTIVENDOR_PROFILE = "multivendor-v2"
+BASELINE_PROFILE = "baseline-v1"
+WESTERN_VENDOR_ID = "00000000-0000-4000-8000-000000000003"
+WESTERN_VARIANT_IDS = ("4001", "4002", "4003", "4004", "4005")
 STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901"
 
 
@@ -205,8 +210,7 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
                    variant_id,product_id,product_title,variant_title,active,
                    catalog_state,identity_scope,sku,barcode,retail_price)
                VALUES (%s,'synthetic-product-2002','Synthetic Inactive Blocker','750ML',
-                   FALSE,'LIVE','CURRENT','SYN-2002',
-                   '0000000002002',NULL)""",
+                   FALSE,'LIVE','CURRENT','SYN-2002','0000000002002',NULL)""",
             (BLOCKED_VARIANT_ID,),
         )
         conn.execute(
@@ -307,18 +311,113 @@ def _seed_pre_price(conn: psycopg.Connection, business_date: date) -> None:
                     'synthetic-control-demo.csv',2,'VERIFIED',TRUE,
                     'Synthetic control BREAK installed before migration 011')""",
             (
-                control_offer_id,
-                business_date.replace(day=1),
-                control_offer_id,
-                business_date.replace(day=1),
+                control_offer_id,business_date.replace(day=1),
+                control_offer_id,business_date.replace(day=1),
             ),
         )
+
+
+def _seed_multivendor_pre_price(
+    conn: psycopg.Connection, business_date: date
+) -> None:
+    """Install the code-pinned Western acceptance scope before migration 011."""
+
+    order_day = business_date.strftime("%A").upper()
+    delivery_day = (business_date + timedelta(days=3)).strftime("%A").upper()
+    variants = (
+        ("4001", "Synthetic Western Multipack", "4x187ML", "SYN-4001", "0000000004001", Decimal("19.99")),
+        ("4002", "Synthetic Western Bottle", "750ML", "SYN-4002", "0000000004002", Decimal("8.99")),
+        ("4003", "Synthetic Western Legacy", "1L", "SYN-4003", "0000000004003", Decimal("9.99")),
+        ("4004", "Synthetic Western Loose", "375ML", "SYN-4004", "0000000004004", Decimal("6.99")),
+        ("4005", "Synthetic Western Allocated", "750ML", "SYN-4005", "0000000004005", Decimal("11.99")),
+    )
+    offers = (
+        ("4001", "WEST-MULTI-4001", "4x187ML", "4x6x187ML", 4, 12, Decimal("48"), Decimal("12"), Decimal("18"), "BT", Decimal("42"), Decimal("10.5")),
+        ("4002", "WEST-BTL-4002", "750ML", "4x750ML", 4, 4, Decimal("18"), Decimal("4.5"), None, None, None, None),
+        ("4003", "WEST-LEGACY-4003", "1L", "4x1L", 4, 4, Decimal("16"), Decimal("4"), None, None, None, None),
+        ("4004", "WEST-LOOSE-4004", "375ML", "6x375ML", 6, 6, Decimal("24"), Decimal("4"), None, None, None, None),
+        ("4005", "WEST-ALLOC-4005", "750ML", "4x750ML", 4, 4, Decimal("20"), Decimal("5"), None, None, None, None),
+    )
+    with conn.transaction():
+        conn.execute(
+            "INSERT INTO vendors(vendor_id,vendor_name,active) VALUES (%s,%s,TRUE)",
+            (WESTERN_VENDOR_ID, "Synthetic Western Acceptance"),
+        )
+        conn.execute(
+            """INSERT INTO vendor_operating_rules(
+                   vendor_id,order_days,order_cutoff_local,timezone_name,
+                   expected_delivery_days,order_cycle_days,lead_time_days,
+                   lead_time_variability_days,reliability_pct,minimum_type,
+                   minimum_value,below_minimum_fee,loose_order_allowed,
+                   loose_unit_fee,confirmation_source,confirmed_by,rules_version)
+               VALUES (%s,ARRAY[%s],'23:59:59','America/New_York',ARRAY[%s],
+                   2,1,0,1,'DOLLAR',120,7,TRUE,3,
+                   'FABRICATED MULTIVENDOR ACCEPTANCE','synthetic:local-owner:01',1)""",
+            (WESTERN_VENDOR_ID, order_day, delivery_day),
+        )
+        for variant in variants:
+            conn.execute(
+                """INSERT INTO variants(
+                       variant_id,product_id,product_title,variant_title,active,
+                       catalog_state,identity_scope,sku,barcode,retail_price)
+                   VALUES (%s,%s,%s,%s,TRUE,'LIVE','CURRENT',%s,%s,%s)""",
+                (
+                    variant[0],
+                    f"synthetic-product-{variant[0]}",
+                    variant[1],
+                    variant[2],
+                    variant[3],
+                    variant[4],
+                    variant[5],
+                ),
+            )
+        for page, offer in enumerate(offers, start=1):
+            offer_id = conn.execute(
+                """INSERT INTO supplier_offers(
+                       variant_id,vendor_id,supplier_sku,supplier_description,
+                       package_type,size_text,raw_pack,shopify_units_per_case,
+                       qualifying_units_per_case,assortment_scope,assortable,
+                       active,confidence,source_file,source_page,notes)
+                   VALUES (%s,%s,%s,%s,'STANDARD',%s,%s,%s,%s,'PRODUCT',FALSE,
+                       TRUE,'VERIFIED','synthetic-multivendor-v2.txt',%s,
+                       'FABRICATED TEST DATA — NOT FOR ORDERING') RETURNING offer_id""",
+                (
+                    offer[0],WESTERN_VENDOR_ID,offer[1],
+                    f"Fabricated acceptance offer for Variant {offer[0]}",
+                    offer[2],offer[3],offer[4],offer[5],page,
+                ),
+            ).fetchone()[0]
+            conn.execute(
+                """INSERT INTO prices(
+                       offer_id,price_state,effective_month,level_type,break_qty,
+                       break_unit,case_price,unit_price,source_file,source_page,
+                       extraction_confidence,verified,notes)
+                   VALUES (%s,'current',%s,'BASE',NULL,NULL,%s,%s,
+                       'synthetic-multivendor-v2.csv',%s,'VERIFIED',TRUE,
+                       'FABRICATED multivendor BASE')""",
+                (offer_id,business_date.replace(day=1),offer[6],offer[7],page * 2 - 1),
+            )
+            if offer[8] is not None:
+                conn.execute(
+                    """INSERT INTO prices(
+                           offer_id,price_state,effective_month,level_type,break_qty,
+                           break_unit,case_price,unit_price,source_file,source_page,
+                           extraction_confidence,verified,notes)
+                       VALUES (%s,'current',%s,'BREAK',%s,%s,%s,%s,
+                           'synthetic-multivendor-v2.csv',%s,'VERIFIED',TRUE,
+                           'FABRICATED multivendor BREAK')""",
+                    (
+                        offer_id,business_date.replace(day=1),offer[8],offer[9],
+                        offer[10],offer[11],page * 2,
+                    ),
+                )
 
 
 def _synthetic_inventory_capture_specs(
     business_date: date,
     *,
     include_control: bool = True,
+    include_multivendor: bool = False,
 ) -> tuple[dict[str, object], ...]:
     specs = (
         {
@@ -372,6 +471,25 @@ def _synthetic_inventory_capture_specs(
             ),
         },
     )
+    if include_multivendor:
+        specs = tuple(
+            {
+                **spec,
+                "rows": tuple(spec["rows"])
+                + tuple(
+                    {
+                        "variant_id": variant_id,
+                        "location_gid": "synthetic-location-001",
+                        "available_quantity": (
+                            3 if spec["business_date"] < business_date else 0
+                        ),
+                        "incoming_quantity": 0,
+                    }
+                    for variant_id in WESTERN_VARIANT_IDS
+                ),
+            }
+            for spec in specs
+        )
     if include_control:
         return specs
     return tuple(
@@ -393,6 +511,7 @@ def _seed_evidence(
     *,
     canonical_sales_end_date: date | None = None,
     include_control: bool = True,
+    include_multivendor: bool = False,
 ) -> str:
     from procurement_os.catalog import recompute_catalog_gate
     from procurement_os.historical_sales import (
@@ -412,15 +531,16 @@ def _seed_evidence(
     from procurement_os.vendor_rules import recompute_vendor_rules_gates
 
     with conn.transaction():
+        catalog_count = 8 if include_multivendor else 3
         conn.execute(
             """INSERT INTO catalog_sync_runs(
                    completed_at,status,shopify_api_version,
                    shopify_reported_variant_count,live_rows_received,
                    exact_current_ids,new_live_variants,source_hash,
                    pagination_complete,notes)
-               VALUES (pg_catalog.now(),'COMPLETED','FABRICATED_OFFLINE',3,3,3,0,%s,
+               VALUES (pg_catalog.now(),'COMPLETED','FABRICATED_OFFLINE',%s,%s,%s,0,%s,
                    TRUE,'TEST DATA — no Shopify call')""",
-            ("c" * 64,),
+            (catalog_count, catalog_count, catalog_count, "c" * 64),
         )
         conn.execute(
             """INSERT INTO variant_policies(
@@ -439,8 +559,22 @@ def _seed_evidence(
                        'synthetic:local-owner:01','FABRICATED OWNER DEMO POLICY')""",
                 (CONTROL_VARIANT_ID, business_date),
             )
+        if include_multivendor:
+            for variant_id in WESTERN_VARIANT_IDS:
+                mode = "ALLOCATED" if variant_id == "4005" else "ROUTINE"
+                conn.execute(
+                    """INSERT INTO variant_policies(
+                           variant_id,policy_type,value_json,active,effective_from,
+                           approved_by,note)
+                       VALUES (%s,'REPLENISHMENT_MODE',%s::jsonb,TRUE,%s,
+                           'synthetic:local-owner:01',
+                           'FABRICATED MULTIVENDOR ACCEPTANCE POLICY')""",
+                    (variant_id, json.dumps({"mode": mode}), business_date),
+                )
     for capture_spec in _synthetic_inventory_capture_specs(
-        business_date, include_control=include_control
+        business_date,
+        include_control=include_control,
+        include_multivendor=include_multivendor,
     ):
         capture = capture_daily_inventory(
             conn,
@@ -467,7 +601,9 @@ def _seed_evidence(
     # the initializer never writes a readiness PASS itself.
     sales_end_date = canonical_sales_end_date or business_date
     sales_rows = _synthetic_sales_rows(
-        business_date, include_control=include_control
+        business_date,
+        include_control=include_control,
+        include_multivendor=include_multivendor,
     )
     totals = ControlTotals(
         net_items_sold=sum((row.net_items_sold for row in sales_rows), Decimal("0")),
@@ -603,7 +739,10 @@ def _seed_evidence(
 
 
 def _synthetic_sales_rows(
-    business_date: date, *, include_control: bool = True
+    business_date: date,
+    *,
+    include_control: bool = True,
+    include_multivendor: bool = False,
 ) -> list[object]:
     """Return the exact fabricated corpus consumed by the real backfill service."""
 
@@ -636,6 +775,31 @@ def _synthetic_sales_rows(
                     net_sales=Decimal("6.99"),
                 )
             )
+        if include_multivendor:
+            for variant_id in WESTERN_VARIANT_IDS:
+                rows.append(
+                    SalesSourceRow(
+                        sale_date=sale_date,
+                        source_variant_id=variant_id,
+                        source_sku=f"SYN-{variant_id}",
+                        source_product_title={
+                            "4001": "Synthetic Western Multipack",
+                            "4002": "Synthetic Western Bottle",
+                            "4003": "Synthetic Western Legacy",
+                            "4004": "Synthetic Western Loose",
+                            "4005": "Synthetic Western Allocated",
+                        }[variant_id],
+                        source_variant_title={
+                            "4001": "4x187ML",
+                            "4002": "750ML",
+                            "4003": "1L",
+                            "4004": "375ML",
+                            "4005": "750ML",
+                        }[variant_id],
+                        net_items_sold=target_units,
+                        net_sales=target_units * Decimal("4.99"),
+                    )
+                )
     return rows
 
 
@@ -644,6 +808,7 @@ def _verify_synthetic_sales_corpus(
     *,
     business_date: date,
     sales_backfill_id: UUID,
+    include_multivendor: bool = False,
 ) -> None:
     """Bind replay acceptance to the exact raw and canonical fabricated facts."""
 
@@ -660,7 +825,9 @@ def _verify_synthetic_sales_corpus(
     ).fetchone()
     if started_at != (expected_started_at, expected_started_at + timedelta(minutes=4)):
         raise RuntimeError("synthetic demo sales fixture clock differs")
-    expected_rows = _synthetic_sales_rows(business_date)
+    expected_rows = _synthetic_sales_rows(
+        business_date, include_multivendor=include_multivendor
+    )
     actual_raw = conn.execute(
         """SELECT r.sale_date,r.source_variant_id,r.source_sku,
                   r.source_product_title,r.source_variant_title,r.net_items_sold,
@@ -739,7 +906,10 @@ def _verify_synthetic_sales_corpus(
 
 
 def _verify_synthetic_inventory_corpus(
-    conn: psycopg.Connection, *, business_date: date
+    conn: psycopg.Connection,
+    *,
+    business_date: date,
+    include_multivendor: bool = False,
 ) -> None:
     from procurement_os.inventory import (
         inventory_source_hash,
@@ -747,7 +917,9 @@ def _verify_synthetic_inventory_corpus(
     )
 
     expected_rows: list[tuple[object, ...]] = []
-    for spec in _synthetic_inventory_capture_specs(business_date):
+    for spec in _synthetic_inventory_capture_specs(
+        business_date, include_multivendor=include_multivendor
+    ):
         rows = normalize_inventory_levels(spec["rows"])
         source_hash = inventory_source_hash(
             rows, business_date=spec["business_date"]
@@ -892,7 +1064,11 @@ def _seed_stale_v1_fixture(
 
 
 def _publish_demo_marker(
-    conn: psycopg.Connection, business_date: date, sales_backfill_id: str
+    conn: psycopg.Connection,
+    business_date: date,
+    sales_backfill_id: str,
+    *,
+    profile: str = BASELINE_PROFILE,
 ) -> None:
     with conn.transaction():
         conn.execute(
@@ -908,10 +1084,18 @@ def _publish_demo_marker(
             "INSERT INTO meta(key,value) VALUES (%s,%s)",
             ("synthetic_owner_demo_contract", DEMO_CONTRACT),
         )
+        if profile == MULTIVENDOR_PROFILE:
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES (%s,%s)",
+                ("synthetic_multivendor_acceptance_contract", MULTIVENDOR_DEMO_CONTRACT),
+            )
 
 
 def _verify_initialized_demo(
-    conn: psycopg.Connection, business_date: date
+    conn: psycopg.Connection,
+    business_date: date,
+    *,
+    profile: str = BASELINE_PROFILE,
 ) -> None:
     from procurement_os.historical_sales import AUTHORITATIVE_START_DATE
 
@@ -937,6 +1121,7 @@ def _verify_initialized_demo(
                     "synthetic_owner_demo_contract",
                     "synthetic_owner_demo_business_date",
                     "synthetic_owner_demo_sales_backfill_id",
+                    "synthetic_multivendor_acceptance_contract",
                 ],
             ),
         ).fetchall()
@@ -946,6 +1131,15 @@ def _verify_initialized_demo(
         or metadata.get("synthetic_owner_demo_business_date")
         != business_date.isoformat()
         or not metadata.get("synthetic_owner_demo_sales_backfill_id")
+        or (
+            profile == MULTIVENDOR_PROFILE
+            and metadata.get("synthetic_multivendor_acceptance_contract")
+            != MULTIVENDOR_DEMO_CONTRACT
+        )
+        or (
+            profile == BASELINE_PROFILE
+            and "synthetic_multivendor_acceptance_contract" in metadata
+        )
     ):
         raise RuntimeError("synthetic demo metadata differs")
     offer_prices = conn.execute(
@@ -1100,8 +1294,54 @@ def _verify_initialized_demo(
         conn,
         business_date=business_date,
         sales_backfill_id=sales_backfill_uuid,
+        include_multivendor=profile == MULTIVENDOR_PROFILE,
     )
-    _verify_synthetic_inventory_corpus(conn, business_date=business_date)
+    _verify_synthetic_inventory_corpus(
+        conn,
+        business_date=business_date,
+        include_multivendor=profile == MULTIVENDOR_PROFILE,
+    )
+    if profile == MULTIVENDOR_PROFILE:
+        western_rows = conn.execute(
+            """SELECT v.variant_id,o.supplier_sku,o.raw_pack,
+                      o.shopify_units_per_case,o.qualifying_units_per_case,
+                      p.level_type,p.break_qty,p.break_unit,p.case_price,p.unit_price
+                 FROM variants v
+                 JOIN supplier_offers o USING(variant_id)
+                 JOIN prices p USING(offer_id)
+                WHERE o.vendor_id=%s AND o.active AND p.price_state='current'
+                ORDER BY v.variant_id,p.level_type,p.break_qty NULLS FIRST""",
+            (WESTERN_VENDOR_ID,),
+        ).fetchall()
+        expected_western = [
+            ("4001","WEST-MULTI-4001","4x6x187ML",Decimal("4"),Decimal("12"),
+             "BASE",None,None,Decimal("48.0000"),Decimal("12.0000")),
+            ("4001","WEST-MULTI-4001","4x6x187ML",Decimal("4"),Decimal("12"),
+             "BREAK",Decimal("18"),"BT",Decimal("42.0000"),Decimal("10.5000")),
+            ("4002","WEST-BTL-4002","4x750ML",Decimal("4"),Decimal("4"),
+             "BASE",None,None,Decimal("18.0000"),Decimal("4.5000")),
+            ("4003","WEST-LEGACY-4003","4x1L",Decimal("4"),Decimal("4"),
+             "BASE",None,None,Decimal("16.0000"),Decimal("4.0000")),
+            ("4004","WEST-LOOSE-4004","6x375ML",Decimal("6"),Decimal("6"),
+             "BASE",None,None,Decimal("24.0000"),Decimal("4.0000")),
+            ("4005","WEST-ALLOC-4005","4x750ML",Decimal("4"),Decimal("4"),
+             "BASE",None,None,Decimal("20.0000"),Decimal("5.0000")),
+        ]
+        if western_rows != expected_western:
+            raise RuntimeError("synthetic multivendor offer/price fixture differs")
+        western_terms = conn.execute(
+            """SELECT v.vendor_name,r.minimum_type,r.minimum_value,
+                      r.below_minimum_fee,r.loose_order_allowed,r.loose_unit_fee,
+                      r.confirmation_source
+                 FROM vendors v JOIN vendor_operating_rules r USING(vendor_id)
+                WHERE v.vendor_id=%s""",
+            (WESTERN_VENDOR_ID,),
+        ).fetchone()
+        if western_terms != (
+            "Synthetic Western Acceptance","DOLLAR",Decimal("120"),Decimal("7"),
+            True,Decimal("3"),"FABRICATED MULTIVENDOR ACCEPTANCE",
+        ):
+            raise RuntimeError("synthetic multivendor vendor terms differ")
     expected = _stale_v1_fixture_values(business_date)
     fixture = conn.execute(
         """SELECT run_type,status,workflow_stage,model_version,
@@ -1170,7 +1410,14 @@ def _verify_initialized_demo(
         raise RuntimeError("synthetic stale V1 lifecycle state differs")
 
 
-def initialize(database_url: str, business_date: date) -> dict[str, object]:
+def initialize(
+    database_url: str,
+    business_date: date,
+    *,
+    profile: str = BASELINE_PROFILE,
+) -> dict[str, object]:
+    if profile not in {BASELINE_PROFILE, MULTIVENDOR_PROFILE}:
+        raise RuntimeError("synthetic demo profile is not registered")
     if business_date != _registered_business_date():
         raise RuntimeError("synthetic demo business date differs from registered fixture")
     if (
@@ -1186,8 +1433,8 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
             "SELECT pg_catalog.to_regnamespace(%s)", (SCHEMA,)
         ).fetchone()[0]
         if existing is not None:
-            _verify_initialized_demo(conn, business_date)
-            return {"initialized": False, "contract": DEMO_CONTRACT}
+            _verify_initialized_demo(conn, business_date, profile=profile)
+            return {"initialized": False, "contract": DEMO_CONTRACT, "profile": profile}
         with conn.transaction():
             conn.execute(
                 sql.SQL("CREATE SCHEMA {} AUTHORIZATION CURRENT_USER").format(
@@ -1206,12 +1453,18 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
         for name in legacy_names[:11]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
         _seed_pre_price(conn, business_date)
+        if profile == MULTIVENDOR_PROFILE:
+            _seed_multivendor_pre_price(conn, business_date)
         for name in legacy_names[11:]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
         with conn.transaction():
             if not _verify_or_apply_mapping_release(conn, DB_DIR):
                 raise RuntimeError("fresh synthetic demo did not apply mapping release")
-        sales_backfill_id = _seed_evidence(conn, business_date)
+        sales_backfill_id = _seed_evidence(
+            conn,
+            business_date,
+            include_multivendor=profile == MULTIVENDOR_PROFILE,
+        )
         _seed_stale_v1_fixture(conn, business_date)
         with conn.transaction():
             if not _verify_or_apply_post_mapping_release(conn, DB_DIR):
@@ -1225,8 +1478,10 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
                 raise RuntimeError(
                     "fresh synthetic demo did not apply synthetic price release"
                 )
-        _publish_demo_marker(conn, business_date, sales_backfill_id)
-        _verify_initialized_demo(conn, business_date)
+        _publish_demo_marker(
+            conn, business_date, sales_backfill_id, profile=profile
+        )
+        _verify_initialized_demo(conn, business_date, profile=profile)
         return {
             "initialized": True,
             "contract": DEMO_CONTRACT,
@@ -1235,6 +1490,7 @@ def initialize(database_url: str, business_date: date) -> dict[str, object]:
             "vendor_id": VENDOR_ID,
             "control_variant_id": CONTROL_VARIANT_ID,
             "control_vendor_id": CONTROL_VENDOR_ID,
+            "profile": profile,
         }
 
 
@@ -1244,8 +1500,13 @@ def main() -> None:
     parser.add_argument(
         "--business-date", type=date.fromisoformat, default=_registered_business_date()
     )
+    parser.add_argument(
+        "--profile",
+        choices=(BASELINE_PROFILE, MULTIVENDOR_PROFILE),
+        default=BASELINE_PROFILE,
+    )
     args = parser.parse_args()
-    result = initialize(args.database_url, args.business_date)
+    result = initialize(args.database_url, args.business_date, profile=args.profile)
     print(json.dumps(result, sort_keys=True))
 
 

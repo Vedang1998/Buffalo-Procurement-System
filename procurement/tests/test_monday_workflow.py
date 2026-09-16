@@ -951,7 +951,23 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         run=self._prepare(); self._review_all(run); self._build_drafts(run)
         position=open_po_position(self.conn,variant_id=self.variant_a,vendor_id=self.vendor_a)
         self.assertEqual(position["trusted_incoming_units"],0)
-        po_id=get_vendor_drafts(self.conn,run["run_id"])["drafts"][0]["po_id"]
+        snapshot=get_vendor_drafts(self.conn,run["run_id"])
+        for draft in snapshot["drafts"]:
+            for line in draft["lines"]:
+                self.assertEqual(line["captured_available_quantity"],Decimal("0"))
+                self.assertEqual(
+                    line["inventory_captured_at"],
+                    datetime(2026,9,7,12,tzinfo=timezone.utc),
+                )
+                self.assertTrue(line["source_inventory_snapshot_run_id"])
+                self.assertEqual(
+                    set(line["inventory_location_scope"][0]),
+                    {
+                        "location_gid","available_quantity",
+                        "captured_incoming_quantity","validation_status",
+                    },
+                )
+        po_id=snapshot["drafts"][0]["po_id"]
         with self.assertRaises(Exception):
             self.conn.execute("UPDATE purchase_orders SET po_status='FINAL' WHERE po_id=%s",(po_id,))
         self.conn.rollback()
@@ -967,6 +983,15 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 "loose_units":0,"ordered_units":6,"unit_cost":Decimal("10"),
                 "case_price":Decimal("60"),"merchandise_total":Decimal("60"),
                 "loose_order_fee":Decimal("0"),"line_total":Decimal("60"),
+                "captured_available_quantity":Decimal("3"),
+                "inventory_captured_at":datetime(2026,9,13,12,tzinfo=timezone.utc),
+                "source_inventory_snapshot_run_id":"capture-run-1",
+                "inventory_location_scope":[{
+                    "available_quantity":"3.0000",
+                    "captured_incoming_quantity":"0.0000",
+                    "location_gid":"location-1",
+                    "validation_status":"VALID",
+                }],
             }],
         }
         first=render_vendor_draft_csv("run-1",draft)
@@ -976,6 +1001,22 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.assertIn(FORMAT_WARNING,text)
         self.assertIn("'=MALICIOUS",text)
         self.assertIn("'@sku",text)
+        rows=list(csv.DictReader(io.StringIO(text)))
+        self.assertEqual(rows[0]["internal_output_contract"],"BUFFALO_INTERNAL_DRAFT_LINE_V2")
+        self.assertEqual(rows[0]["captured_available_quantity"],"3.0000")
+        self.assertEqual(rows[0]["inventory_captured_at"],"2026-09-13T12:00:00+00:00")
+        self.assertEqual(rows[0]["source_inventory_snapshot_run_id"],"capture-run-1")
+        self.assertEqual(
+            json.loads(rows[0]["inventory_location_scope_json"]),
+            draft["lines"][0]["inventory_location_scope"],
+        )
+        without_stock={**draft,"lines":[{
+            key:value for key,value in draft["lines"][0].items()
+            if not key.startswith("captured_")
+            and key not in {"inventory_captured_at","source_inventory_snapshot_run_id","inventory_location_scope"}
+        }]}
+        with self.assertRaisesRegex(Exception,"requires frozen captured stock"):
+            render_vendor_draft_csv("run-1",without_stock)
 
     def test_packet_is_deterministic_complete_and_idempotent(self):
         run=self._prepare(); self._review_all(run); self._build_drafts(run)
@@ -1060,6 +1101,11 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 )
                 self.assertIn(rows[0]["minimum_disposition"],{"PAY_FEE","NOT_APPLICABLE"})
                 self.assertRegex(rows[0]["draft_preview_fingerprint"],r"^[0-9a-f]{64}$")
+                self.assertEqual(rows[0]["internal_output_contract"],"BUFFALO_INTERNAL_DRAFT_LINE_V2")
+                self.assertEqual(Decimal(rows[0]["captured_available_quantity"]),Decimal("0"))
+                self.assertEqual(rows[0]["inventory_captured_at"],"2026-09-07T12:00:00+00:00")
+                self.assertTrue(rows[0]["source_inventory_snapshot_run_id"])
+                self.assertTrue(json.loads(rows[0]["inventory_location_scope_json"]))
         replay=build_emergency_review_packet(self.conn,storage=self.storage,run_id=run["run_id"],actor="packet-owner")
         self.assertTrue(replay["idempotent_replay"]); self.assertEqual(replay["sha256"],packet["sha256"])
 
@@ -2602,6 +2648,8 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             self.assertEqual(detail.status_code, 200)
             self.assertIn("DRAFT", detail.text)
             self.assertIn("disposition PAY_FEE", detail.text)
+            self.assertIn("Captured Available", detail.text)
+            self.assertIn("Captured at", detail.text)
             self.assertNotIn("Release PO", detail.text)
             artifacts = list_monday_artifacts(self.conn, run_id)
             self.assertEqual(len(artifacts), 3)
@@ -2614,6 +2662,13 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
                 self.assertEqual(response.headers["cache-control"], "no-store")
                 downloads[artifact["artifact_type"]] = response.content
             self.assertIn("TEST DATA — NOT FOR ORDERING", downloads["VENDOR_INTERNAL_CSV"].decode())
+            csv_rows=list(csv.DictReader(io.StringIO(downloads["VENDOR_INTERNAL_CSV"].decode())))
+            self.assertTrue(csv_rows)
+            self.assertTrue(all(row["internal_output_contract"]=="BUFFALO_INTERNAL_DRAFT_LINE_V2" for row in csv_rows))
+            self.assertTrue(all(Decimal(row["captured_available_quantity"])==0 for row in csv_rows))
+            self.assertTrue(all(row["inventory_captured_at"]=="2026-09-07T12:00:00+00:00" for row in csv_rows))
+            self.assertTrue(all(row["source_inventory_snapshot_run_id"] for row in csv_rows))
+            self.assertTrue(all(json.loads(row["inventory_location_scope_json"]) for row in csv_rows))
             with zipfile.ZipFile(io.BytesIO(downloads["EMERGENCY_REVIEW_PACKET"])) as archive:
                 self.assertIn("TEST DATA — NOT FOR ORDERING", archive.read("packet-summary.json").decode())
             replay = client.post(

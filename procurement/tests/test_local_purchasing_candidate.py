@@ -670,6 +670,37 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         initializer._verify_synthetic_inventory_corpus(
             exact, business_date=business_date
         )
+        from procurement_os.synthetic_mapping_packet import (
+            load_synthetic_mapping_packets,
+            load_synthetic_multivendor_mapping_packets,
+        )
+
+        multivendor_sales=initializer._synthetic_sales_rows(
+            business_date,include_multivendor=True
+        )
+        self.assertEqual(len(multivendor_sales),588)
+        self.assertEqual(
+            sorted({row.source_variant_id for row in multivendor_sales}),
+            ["1001","3003","4001","4002","4003","4004","4005"],
+        )
+        self.assertTrue(all(
+            sum(row.source_variant_id==variant for row in multivendor_sales)==84
+            for variant in {row.source_variant_id for row in multivendor_sales}
+        ))
+        self.assertEqual(len(load_synthetic_mapping_packets()),2)
+        combined=load_synthetic_multivendor_mapping_packets()
+        self.assertEqual((len(combined),sum(len(item["candidates"]) for item in combined)),(3,7))
+        multipack=next(
+            candidate for packet in combined for candidate in packet["candidates"]
+            if candidate.get("proposed_variant_id")=="4001"
+        )
+        self.assertEqual(
+            (
+                multipack["physical_units_value"],multipack["retail_pack_units_value"],
+                multipack["shopify_units_value"],multipack["qualifying_units_value"],
+            ),
+            ("24.0000","6.0000","4.0000","12.0000"),
+        )
         with self.assertRaisesRegex(RuntimeError, "raw sales corpus differs"):
             initializer._verify_synthetic_sales_corpus(
                 CorpusConnection(

@@ -240,7 +240,10 @@ class PersistentMappingHttpTests(unittest.TestCase):
             {"package": {"id": value}, "candidates": [{"id": value}], "intake_idempotency_key": uuid4()}
             for value in (1, 2)
         ]
+        connection = _Connection()
+        connection.fetchone = mock.Mock(return_value=None)
         with (
+            mock.patch.object(api, "_db_conn", return_value=nullcontext(connection)),
             mock.patch.object(api, "load_synthetic_mapping_packets", return_value=packets),
             mock.patch.object(api, "_database_url", return_value="synthetic-db-url"),
             mock.patch.object(api, "execute_supplier_mapping_intake", return_value={"created": True}) as execute,
@@ -391,7 +394,10 @@ class PersistentMappingHttpTests(unittest.TestCase):
         ]
         for code in transient_codes:
             with self.subTest(route="intake", code=code):
+                connection = _Connection()
+                connection.fetchone = mock.Mock(return_value=None)
                 with (
+                    mock.patch.object(api, "_db_conn", return_value=nullcontext(connection)),
                     mock.patch.object(api, "load_synthetic_mapping_packets", return_value=packets),
                     mock.patch.object(
                         api,

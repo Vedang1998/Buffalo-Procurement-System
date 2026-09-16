@@ -16,6 +16,17 @@ PACKET_PATH = (
 )
 PACKET_SHA256 = "a9d08871dcd5b7fc11dd30a9bad2f8552a36c1a55d60d1841ab2ead62c74baae"
 PACKET_CONTRACT = "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V2"
+MULTIVENDOR_PACKET_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "config"
+    / "synthetic_mapping_review_packet_multivendor_v3.json"
+)
+MULTIVENDOR_PACKET_SHA256 = (
+    "06918f92517a49a97326f1f65c22cb3a50f5643575610b007ba56c40d2cc41e6"
+)
+MULTIVENDOR_PACKET_CONTRACT = (
+    "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_MULTIVENDOR_V3"
+)
 SOURCE_AUTHORITY_STATE = "NOT_APPROVED"
 SOURCE_IMPORT_STATE = "NOT_IMPORT_READY"
 
@@ -39,9 +50,11 @@ def _hash(value: Any) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
-    raw = PACKET_PATH.read_bytes()
-    if _hash(raw) != PACKET_SHA256:
+def _load_synthetic_mapping_packets(
+    *, path: Path, expected_sha256: str, contract: str, package_count: int
+) -> list[dict[str, Any]]:
+    raw = path.read_bytes()
+    if _hash(raw) != expected_sha256:
         raise SyntheticPacketError("synthetic mapping packet checksum differs")
     try:
         value = json.loads(raw)
@@ -53,9 +66,9 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
         "packages",
     }:
         raise SyntheticPacketError("synthetic mapping packet shape differs")
-    if value["contract"] != PACKET_CONTRACT or not isinstance(value["packages"], list):
+    if value["contract"] != contract or not isinstance(value["packages"], list):
         raise SyntheticPacketError("synthetic mapping packet contract differs")
-    if len(value["packages"]) != 2:
+    if len(value["packages"]) != package_count:
         raise SyntheticPacketError("synthetic mapping packet scenario count differs")
     results: list[dict[str, Any]] = []
     keys: set[UUID] = set()
@@ -152,8 +165,8 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
             "source_payload_sha256": payload_sha,
             "supplier_period_scope": {"kind": "FABRICATED_TEST_PERIOD"},
             "prerequisites": {
-                "packet_contract": PACKET_CONTRACT,
-                "packet_sha256": PACKET_SHA256,
+                "packet_contract": contract,
+                "packet_sha256": expected_sha256,
             },
             "structural_state": "READY",
             "source_evidence_state": "READY",
@@ -171,3 +184,21 @@ def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
             }
         )
     return results
+
+
+def load_synthetic_mapping_packets() -> list[dict[str, Any]]:
+    return _load_synthetic_mapping_packets(
+        path=PACKET_PATH,
+        expected_sha256=PACKET_SHA256,
+        contract=PACKET_CONTRACT,
+        package_count=2,
+    )
+
+
+def load_synthetic_multivendor_mapping_packets() -> list[dict[str, Any]]:
+    return load_synthetic_mapping_packets() + _load_synthetic_mapping_packets(
+        path=MULTIVENDOR_PACKET_PATH,
+        expected_sha256=MULTIVENDOR_PACKET_SHA256,
+        contract=MULTIVENDOR_PACKET_CONTRACT,
+        package_count=1,
+    )
