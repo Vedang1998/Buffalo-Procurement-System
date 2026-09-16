@@ -236,7 +236,7 @@ def _database_acceptance(database_url: str, run_id: str) -> dict[str, Any]:
         ]:
             raise BrowserAcceptanceError("durable line economics differ")
         blockers = conn.execute(
-            """SELECT e.variant_id,e.exception_type,x.action
+            """SELECT e.variant_id,e.message,x.action
                  FROM exceptions e JOIN monday_run_blocker_exclusions x USING(exception_id)
                 WHERE e.run_id=%s ORDER BY e.variant_id""",
             (run_id,),

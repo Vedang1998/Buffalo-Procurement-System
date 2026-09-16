@@ -687,6 +687,45 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             sum(row.source_variant_id==variant for row in multivendor_sales)==84
             for variant in {row.source_variant_id for row in multivendor_sales}
         ))
+        from decimal import Decimal
+        from procurement_os.forecasting import DemandObservation, forecast_demand
+        from procurement_os.replenishment import calculate_baseline_need
+
+        def fixture_need(variant_id: str, units_per_case: int):
+            observations = [
+                DemandObservation(row.sale_date, row.net_items_sold, "UNKNOWN")
+                for row in multivendor_sales
+                if row.source_variant_id == variant_id
+            ]
+            forecast = forecast_demand(observations, horizon_days=3)
+            return forecast, calculate_baseline_need(
+                forecast_daily_velocity=forecast.forecast_daily_velocity,
+                available_units=Decimal("0"),
+                trusted_incoming_units=Decimal("0"),
+                order_cycle_days=2,
+                lead_time_days=1,
+                lead_time_variability_days=Decimal("0"),
+                policy_mode="ROUTINE",
+                units_per_case=units_per_case,
+                loose_order_allowed=True,
+                loose_unit_fee=Decimal("3"),
+                forecast_units_for_protection=forecast.forecast_units,
+                forecast_horizon_days=3,
+            )
+
+        for variant_id in ("4001", "4002"):
+            forecast, need = fixture_need(variant_id, 4)
+            self.assertEqual(forecast.forecast_units, Decimal("3.9286"))
+            self.assertEqual(forecast.outlier_capped_days, 0)
+            self.assertEqual(
+                (need.raw_need_units, need.cases, need.loose_units), (4, 1, 0)
+            )
+        loose_forecast, loose_need = fixture_need("4004", 6)
+        self.assertEqual(loose_forecast.forecast_units, Decimal("3.0000"))
+        self.assertEqual(
+            (loose_need.raw_need_units, loose_need.cases, loose_need.loose_units),
+            (3, 0, 3),
+        )
         self.assertEqual(len(load_synthetic_mapping_packets()),2)
         combined=load_synthetic_multivendor_mapping_packets()
         self.assertEqual((len(combined),sum(len(item["candidates"]) for item in combined)),(3,7))

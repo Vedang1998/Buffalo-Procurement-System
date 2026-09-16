@@ -777,6 +777,19 @@ def _synthetic_sales_rows(
             )
         if include_multivendor:
             for variant_id in WESTERN_VARIANT_IDS:
+                # Keep the two accepted Western lines at an independently
+                # reproducible four-unit baseline need.  A 2/2/0 cadence has
+                # no robust-outlier adjustment and forecasts 3.9286 units
+                # over the registered three-day protection period.  The
+                # dedicated loose-unit control deliberately retains the
+                # original three-unit need below.
+                western_units = (
+                    Decimal("2")
+                    if variant_id in {"4001", "4002"} and offset % 3 in {0, 1}
+                    else Decimal("0")
+                    if variant_id in {"4001", "4002"}
+                    else target_units
+                )
                 rows.append(
                     SalesSourceRow(
                         sale_date=sale_date,
@@ -796,8 +809,8 @@ def _synthetic_sales_rows(
                             "4004": "375ML",
                             "4005": "750ML",
                         }[variant_id],
-                        net_items_sold=target_units,
-                        net_sales=target_units * Decimal("4.99"),
+                        net_items_sold=western_units,
+                        net_sales=western_units * Decimal("4.99"),
                     )
                 )
     return rows
