@@ -2617,7 +2617,7 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             self.assertIn("$5", built.text)
             self.assertIn("PAY_FEE", built.text)
             self.assertIn("Preview grand totals:", built.text)
-            self.assertIn("merchandise $150.0100", built.text)
+            self.assertIn("merchandise $150.01", built.text)
             self.assertIn("fees $5.00", built.text)
             self.assertIn("internal DRAFT total $155.01", built.text)
             self.assertNotIn(token, built.text)

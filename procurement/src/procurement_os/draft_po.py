@@ -580,7 +580,7 @@ def build_vendor_drafts(
 def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
     with conn.transaction():
         run = conn.execute(
-            """SELECT workflow_stage,input_fingerprint FROM runs
+            """SELECT workflow_stage,input_fingerprint,model_version FROM runs
                 WHERE run_id=%s AND run_type='MONDAY_PROCUREMENT'
                   AND procurement_output_mode='INTERNAL_DRAFT_ONLY'""",
             (run_id,),
@@ -670,5 +670,6 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
             )
     return {
         "run_id": str(run_id),"workflow_stage": run[0],"input_fingerprint": run[1],
-        "drafts": drafts,"safety_label": SAFETY_LABEL,"release_performed": False,
+        "model_version": run[2],"drafts": drafts,"safety_label": SAFETY_LABEL,
+        "release_performed": False,
     }

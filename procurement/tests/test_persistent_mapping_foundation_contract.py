@@ -46,7 +46,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
         source = SERVICE.read_text(encoding="utf-8")
         self.assertEqual(
             hashlib.sha256(source.encode("utf-8")).hexdigest(),
-            "899aa1c285320434d6d95d8fb85fea4ea314ac5fd00a379071f2201a0d50ef91",
+            "5c47db4e51af91c1d84f74462959143170670700a408deabd2709ffbb8ca76dd",
         )
         tree = ast.parse(source)
         import_contract = set()
@@ -95,6 +95,20 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 ("from", 0, "uuid", "UUID", None),
                 ("from", 0, "uuid", "uuid5", None),
                 ("from", 1, "config", "load_rules", None),
+                (
+                    "from",
+                    1,
+                    "synthetic_mapping_packet",
+                    "MULTIVENDOR_PACKET_CONTRACT",
+                    None,
+                ),
+                (
+                    "from",
+                    1,
+                    "synthetic_mapping_packet",
+                    "MULTIVENDOR_PACKET_SHA256",
+                    None,
+                ),
                 (
                     "from",
                     1,
