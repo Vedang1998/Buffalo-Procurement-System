@@ -690,6 +690,11 @@ async function audit(client) {
 
     text = await body();
     check(text.includes("stage: REVIEWED"), "all four recommendation dispositions reach REVIEWED");
+    await evaluate(`{
+      document.querySelectorAll("details").forEach((node) => { node.open = true; });
+      true;
+    }`);
+    text = await body();
     check(text.includes("Captured Available") && text.includes("2026-10-05 12:00:00+00:00"), "review displays frozen Available and capture time");
     const finalTiers = await evaluate(`[
       ...document.querySelectorAll("pre.final-price-tier-json")
