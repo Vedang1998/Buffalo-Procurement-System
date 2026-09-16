@@ -2481,11 +2481,24 @@ def _monday_draft_preview_html(*, run_id: UUID, preview: dict) -> str:
         if preview["minimum_disposition"] == "PAY_FEE"
         else "NOT_APPLICABLE — no vendor is below minimum"
     )
+    merchandise_grand = sum(
+        (Decimal(str(item["merchandise_total"])) for item in preview["vendors"]),
+        Decimal("0"),
+    )
+    fee_grand = sum(
+        (Decimal(str(item["delivery_fee"])) for item in preview["vendors"]),
+        Decimal("0"),
+    )
+    total_grand = sum(
+        (Decimal(str(item["po_total"])) for item in preview["vendors"]),
+        Decimal("0"),
+    )
     return f"""<!doctype html><html><head><title>Confirm vendor DRAFT economics</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1040px;margin:2rem auto;padding:0 1rem;color:#1f2328}}.warning{{border:2px solid #b42318;background:#ffebe9;padding:12px;font-weight:700}}table{{border-collapse:collapse;width:100%;margin:16px 0}}th,td{{border:1px solid #d1d9e0;padding:7px;text-align:left}}form{{display:grid;gap:9px;max-width:700px}}input,button{{padding:7px}}</style></head><body>
 <p class='warning'>TEST DATA — NOT FOR ORDERING. Confirm exact vendor totals and fee disposition before DRAFT persistence.</p>
 <h1>Confirm vendor DRAFT economics</h1>
 <table><thead><tr><th>Vendor ID</th><th>Merchandise</th><th>Cases</th><th>Minimum</th><th>Shortfall</th><th>Loose-order fees</th><th>Below-minimum fee</th><th>Total fees</th><th>DRAFT total</th></tr></thead><tbody>{vendor_rows}</tbody></table>
+<p><b>Preview grand totals:</b> merchandise ${_html_escape(merchandise_grand)}; fees ${_html_escape(fee_grand)}; internal DRAFT total ${_html_escape(total_grand)}.</p>
 <p><b>Minimum disposition:</b> {_html_escape(disposition_text)}. DELAY or ADD_LEGITIMATE_NEED requires cancelling and changing the reviewed run; the system never adds filler.</p>
 <form method='post'>
 <input type='hidden' name='actor' value='{_form_value(preview['actor'])}'>
