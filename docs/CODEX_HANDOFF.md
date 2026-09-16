@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-15T01:01:14Z (UTC)
+**Updated:** 2026-09-16T01:55:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,96 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Price-to-DRAFT acceptance follow-up — BOUNDED SYNTHETIC MACHINE PASS / EXTERNAL REVIEW PENDING
+
+- The frozen prerequisite remains commit
+  `20dd65ad6e60f044bd25fbb92b46cca1f54d2357`, tree
+  `3ebebd652a12f0dbbe45d0f4a330dd5c8f21d638`. The isolated follow-up branch is
+  `codex/price-to-draft-acceptance-followup`. The exact machine-tested
+  implementation is commit `450b55375fa97fa60535e2249d1cfddd5b838c5e`,
+  tree `05ce96f32140e66c3089e856d220247d73b16904`. The later closeout commit is
+  documentation-only and is identified separately in the review transport.
+- The required frozen-candidate suite was run before follow-up implementation.
+  It discovered and executed all **823** registered tests, with **795 passes,
+  0 failures and 32 errors** in 992.768s. The first error was the demonstrated
+  compatibility defect: 013-only Monday fixtures lacked the nullable
+  `run_price_snapshots.source_price_id` lineage columns added by migration 016,
+  while shared review code selected those columns directly. The retained raw
+  log SHA-256 is
+  `d9e579c991e8a6a14faccb113d7f5989330fdf0dcca7ff738fb2f22a586940f0`.
+  Its separately run startup validation passed **10/10**.
+- The follow-up preserves the accepted price schema and Southern uploaded-book
+  path. It adds one code-pinned synthetic V3 mapping packet and an additive
+  multivendor fixture profile; it does not modify migrations or grant arbitrary
+  fixture authority. Browser actions create seven mapping decisions and five
+  selections. Six purposefully different purchasing inputs cover the selected
+  Southern bottle, a Western retail multipack, a Western individual bottle,
+  missing selection despite a usable legacy offer, a positive-loose-fee
+  blocker, and an allocated/excluded item. Southern alone uses the uploaded
+  replacement book; Western uses disclosed schema-valid pre-011 synthetic
+  CURRENT rows. Northern remains an unaffected control.
+- The final browser run passed **19 price + 81 multivendor + 20 source-restart
+  + 20 restored + 20 restored-restart = 160 assertions**. It produced exactly
+  two DRAFTs and three lines. Southern Variant 1001 was edited across its
+  uploaded BREAK tier to 2 cases / $60 merchandise / $60 total. Western Variant
+  4001 was edited across its 18-BT tier to 2 cases / $84; Variant 4002 was
+  accepted at 1 case / $18. Western merchandise was $102, its $120 minimum had
+  an $18 shortfall, and the $7 below-minimum fee was charged once, producing a
+  $109 vendor total. Grand merchandise was **$162**, fees **$7**, and DRAFT
+  total **$169**. Variant 4003 remained blocked for missing selected-offer head
+  without legacy fallback; Variant 4004 remained blocked for unresolved
+  positive loose-unit fee; Variant 4005 retained its zero-unit
+  `ROUTINE_EXCLUDED` recommendation and was immutably rejected.
+- New internal DRAFT CSV V2 lines and the review/DRAFT UI expose the run-bound
+  captured Available quantity, timezone-aware capture time, source inventory
+  snapshot-run ID, and canonical location-scope evidence. The accepted lines
+  freeze Available `0.0000` at `2026-10-05T12:00:00+00:00`; they do not read a
+  newer live quantity during export. Retired V1 runs keep the exact historical
+  25-column CSV renderer and stored packet bytes.
+- A supported populated V1 backup taken after DRAFT creation contains the exact
+  database dump and four storage members. It restored into a new owned
+  PostgreSQL 16 cluster using the same logical database name. Source and target
+  system identifiers are distinct (`7685939127348653914` and
+  `7685939307666866400`), while complete durable state SHA-256 is identical:
+  `fa62374e234522f43bd948d59c1786863a1dee1ecec397597278abf8807f8101`.
+  Authenticated restored and post-restart downloads preserved both vendor CSVs
+  and the 13-member review packet byte-for-byte. Exact artifact SHA-256 values
+  are `babbdab54dcbc7cec050d32abb6a64afa01a8497dc8eb9ea34ea17ccecd91c05`,
+  `3efef523da9ebf30cb71df8b528ec914d6c1c2a5e9da4315a68dc0037aabc353`,
+  and `60f35b489740a0a3f3533afd9c2479ff8a9dee3d54622d61de3882c5178c1598`;
+  replay retained
+  two POs, three lines and three artifacts without duplication. The V2
+  pre-application backup remains a separate contract and was not used as the
+  populated restore artifact.
+- The final authoritative wrapper on exact `450b553...` passed **823 discovered
+  / 823 executed / 823 passed** in 1032.763s. Failures, errors, skips, expected
+  failures and unexpected successes were all zero. The retained log is
+  `/home/runner/workspace/.ai-auth/codex/evidence/price-to-draft-final-validation-450b553-20260916T0130Z/full.log`
+  with SHA-256
+  `acbe37ac0f3c628e2035d1bdc6161116f3038d3bfd77c772f8506788c2280998`.
+  Startup validation separately passed **10/10**, log SHA-256
+  `b9c37738f7e36a217480772a37fa4a76f5531320ee39c8a363f9facbe1956630`.
+- Chronology correction: the previous hard stop was
+  `2026-09-15T11:15:34Z`; final source `20dd65ad...` at 07:54:24Z and accepted
+  price-browser records around 07:55Z preceded it, but the prior recovery backup
+  records `20260915T225242Z` and therefore occurred after that cutoff. The older
+  statement that all recovery work completed before the cutoff was unsupported.
+  The frozen archive and timestamps remain unchanged; no continuous work is
+  inferred for the gap. This follow-up used a new observed window beginning
+  `2026-09-15T23:53:21Z`, with implementation cutoff
+  `2026-09-16T02:53:21Z` and hard stop `2026-09-16T03:53:21Z`.
+- This is fabricated, loopback Linux, internal-DRAFT evidence only. It does not
+  establish commercial data authority, production forecasting/policy readiness,
+  deployment portability, native Shopify CSV acceptance, public/remote owner
+  access, PO release or ordering. Direct-SQL selected-offer enforcement remains
+  a known limitation. No remote, PR/CI, protected-checkout, deployment,
+  operational database, Shopify, supplier or order action occurred. Independent
+  external acceptance and owner acceptance remain pending.
+- Exact next boundary: preserve the tested implementation and documentation-only
+  closeout, expose one additive review transport, and stop. Any real/default
+  activation, commercial inputs, remote integration, deployment, Shopify write,
+  PO release or order requires separate design, review and owner authorization.
 
 ### Synthetic selected-offer consumption — BOUNDED SYNTHETIC PASS / REAL CUTOVER BLOCKED
 

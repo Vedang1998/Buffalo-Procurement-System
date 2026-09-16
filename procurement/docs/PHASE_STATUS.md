@@ -5,6 +5,38 @@
 
 This file is the executive roadmap/status view. It is updated when a phase/program milestone changes. It does not replace the canonical system specification or the verified current-state handoff.
 
+## Synthetic price-to-DRAFT acceptance follow-up
+
+**BOUNDED SYNTHETIC MACHINE PASS — EXTERNAL REVIEW PENDING / REAL AND
+PRODUCTION USE BLOCKED**
+
+The isolated follow-up from received `20dd65ad...` has a machine-tested
+implementation at `450b55375fa97fa60535e2249d1cfddd5b838c5e`, tree
+`05ce96f32140e66c3089e856d220247d73b16904`. The frozen candidate's required
+first wrapper run discovered/executed 823 tests and exposed a real legacy-schema
+compatibility defect (795 pass, 32 errors); its startup validation passed 10/10.
+The follow-up repaired that narrow defect, added a checksum-pinned fabricated
+multivendor profile and frozen-stock DRAFT output, and preserved old packet/CSV
+bytes.
+
+Real loopback Chromium then passed 160 assertions across uploaded Southern
+replacement pricing, six purposeful inputs, two actual DRAFT vendors, review,
+two CSVs, one 13-member packet, source restart, populated backup, same-logical-
+name restore into a physically distinct PostgreSQL 16 cluster, restored login
+and downloads, restored restart and replay. The exact results are two POs,
+three lines, merchandise $162, one $7 fee and total $169. New DRAFT lines bind
+captured Available, capture time, source snapshot and location scope. Complete
+source and restored state share digest `fa62374e...8101`, and all three artifact
+hashes remain identical.
+
+The final authoritative suite passed 823/823 in 1032.763s with every abnormal
+counter zero; startup passed 10/10. This is a synthetic machine acceptance
+candidate, not phase completion, release, commercial authority or owner
+acceptance. The older claim that a 22:52:42Z recovery preceded the prior
+11:15:34Z hard stop is additively corrected as unsupported; frozen evidence is
+unchanged. See `docs/PRICE_TO_DRAFT_ACCEPTANCE_FOLLOWUP.md` and the top entry
+in `docs/CODEX_HANDOFF.md` for exact evidence and limits.
+
 ## Synthetic selected-offer consumption candidate
 
 **BOUNDED SYNTHETIC PASS — ISOLATED SYNTHETIC ONLY / REAL AND
