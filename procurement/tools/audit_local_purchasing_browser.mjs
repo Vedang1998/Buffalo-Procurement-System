@@ -643,7 +643,8 @@ async function audit(client) {
 
     const review = async (variantId, values, {material = false, reject = false} = {}) => {
       const selector = `[...document.querySelectorAll('form[action*="/recommendations/"][action$="/review"]')].find((form) => form.closest("tr")?.innerText.includes(${JSON.stringify(variantId)}))`;
-      const actionPath = await evaluate(`new URL(${selector}.action).pathname`);
+      const actionValue = await evaluate(`(${selector}).getAttribute("action")`);
+      const actionPath = new URL(actionValue, await currentUrl()).pathname;
       transitionMark = ledgerMark();
       await submit(formScript(selector, {...values, actor: SPOOF_ACTOR, review_token: REVIEW_TOKEN}));
       if (reject) {
