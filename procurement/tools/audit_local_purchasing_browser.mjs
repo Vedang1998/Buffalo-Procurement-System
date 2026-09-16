@@ -563,7 +563,10 @@ async function audit(client) {
         );
         check((await body()).includes("Confirm routine offer selection"), `Variant ${variantId} selection preview is separate`);
         await submit(formScript("document.querySelector('form[method=\"post\"]')"));
-        check((await body()).includes("SELECT"), `Variant ${variantId} selection is visible after confirmation`);
+        check(
+          new URL(await currentUrl()).pathname === new URL(record.href, BASE).pathname,
+          `Variant ${variantId} selection confirmation returns to its exact candidate`,
+        );
       }
       return {variantId, existingOfferId};
     };
