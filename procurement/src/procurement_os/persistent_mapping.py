@@ -785,6 +785,8 @@ def _validate_supported_intake(
     """
 
     from .synthetic_mapping_packet import (
+        MULTIVENDOR_PACKET_CONTRACT,
+        MULTIVENDOR_PACKET_SHA256,
         PACKET_CONTRACT,
         PACKET_SHA256,
     )
@@ -805,10 +807,16 @@ def _validate_supported_intake(
     ):
         raise PersistentMappingError("review package hash contract is malformed")
     prerequisites = package.get("prerequisites")
-    if prerequisites != {
-        "packet_contract": PACKET_CONTRACT,
-        "packet_sha256": PACKET_SHA256,
-    }:
+    if prerequisites not in (
+        {
+            "packet_contract": PACKET_CONTRACT,
+            "packet_sha256": PACKET_SHA256,
+        },
+        {
+            "packet_contract": MULTIVENDOR_PACKET_CONTRACT,
+            "packet_sha256": MULTIVENDOR_PACKET_SHA256,
+        },
+    ):
         raise PersistentMappingError("review package prerequisite proof differs")
     if (
         package.get("structural_state") != "READY"

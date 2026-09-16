@@ -690,6 +690,11 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         self.assertEqual(len(load_synthetic_mapping_packets()),2)
         combined=load_synthetic_multivendor_mapping_packets()
         self.assertEqual((len(combined),sum(len(item["candidates"]) for item in combined)),(3,7))
+        from procurement_os.persistent_mapping import _validate_supported_intake
+        for packet in combined:
+            _validate_supported_intake(
+                package=packet["package"],candidates=packet["candidates"]
+            )
         multipack=next(
             candidate for packet in combined for candidate in packet["candidates"]
             if candidate.get("proposed_variant_id")=="4001"
