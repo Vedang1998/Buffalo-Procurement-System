@@ -340,15 +340,27 @@ async function audit(client) {
   };
   const snapshotDownloads = () =>
     new Set(fs.readdirSync(DOWNLOADS).filter((name) => !name.endsWith(".crdownload")));
+  let downloadSequence = 0;
   const downloadFromClick = async (clickExpression, metadata) => {
     const before = snapshotDownloads();
     await evaluate(clickExpression);
     await waitForDownloads(before.size + 1);
     const added = [...snapshotDownloads()].filter((name) => !before.has(name));
     check(added.length === 1, "one browser click creates exactly one completed download", {metadata, added});
-    const name = added[0];
+    const receivedName = added[0];
+    const receivedPath = path.join(DOWNLOADS, receivedName);
+    downloadSequence += 1;
+    const name = `${phase}-${String(downloadSequence).padStart(2, "0")}-${receivedName}`;
     const filename = path.join(DOWNLOADS, name);
-    return {...metadata, name, bytes: fs.statSync(filename).size, sha256: sha256File(filename)};
+    check(!fs.existsSync(filename), "download evidence filename is unique", {name});
+    fs.renameSync(receivedPath, filename);
+    return {
+      ...metadata,
+      name,
+      receivedName,
+      bytes: fs.statSync(filename).size,
+      sha256: sha256File(filename),
+    };
   };
   const login = async () => {
     await navigate(`${BASE}/auth/login`);
