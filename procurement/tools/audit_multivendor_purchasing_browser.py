@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 import hashlib
 import io
 import json
@@ -132,11 +132,19 @@ def _validate_initial_downloads(
     western = by_vendor.get("Synthetic Western Acceptance")
     if southern is None or western is None or len(southern) != 1 or len(western) != 2:
         raise BrowserAcceptanceError("vendor CSV partition differs")
-    expected_lines = {
-        "1001": ("2", "0", "30.0000", "60.00"),
-        "4001": ("2", "0", "42.0000", "84.00"),
-        "4002": ("1", "0", "18.0000", "18.00"),
-    }
+    expected_lines = (
+        {
+            "1001": ("3", "0", "30.0000", "90.00"),
+            "4001": ("2", "0", "42.0000", "84.00"),
+            "4002": ("1", "0", "18.0000", "18.00"),
+        }
+        if development_forecast
+        else {
+            "1001": ("2", "0", "30.0000", "60.00"),
+            "4001": ("2", "0", "42.0000", "84.00"),
+            "4002": ("1", "0", "18.0000", "18.00"),
+        }
+    )
     for row in southern + western:
         expected = expected_lines.get(row["variant_id"])
         actual = (
@@ -149,16 +157,20 @@ def _validate_initial_downloads(
             raise BrowserAcceptanceError(
                 f"line economics differ for Variant {row['variant_id']}: {actual}"
             )
+    western_merchandise = "102.00"
+    western_total = "109.00"
     if any(
-        row["vendor_po_total"] != "109.00"
-        or row["vendor_merchandise_total"] != "102.00"
+        row["vendor_po_total"] != western_total
+        or row["vendor_merchandise_total"] != western_merchandise
         or row["vendor_below_minimum_fee"] != "7.00"
         or row["vendor_delivery_fee"] != "7.00"
         or row["minimum_disposition"] != "PAY_FEE"
         for row in western
     ):
         raise BrowserAcceptanceError("Western vendor-scoped fee economics differ")
-    if southern[0]["vendor_po_total"] != "60.00":
+    if southern[0]["vendor_po_total"] != (
+        "90.00" if development_forecast else "60.00"
+    ):
         raise BrowserAcceptanceError("Southern uploaded-price total differs")
 
     with zipfile.ZipFile(zip_files[0]) as archive:
@@ -219,7 +231,11 @@ def _validate_initial_downloads(
         "packet_members": sorted(names),
         "forecast_and_protection": forecast_member,
         "vendor_rows": by_vendor,
-        "totals": {"merchandise": "162.00", "fees": "7.00", "total": "169.00"},
+        "totals": (
+            {"merchandise": "192.00", "fees": "7.00", "total": "199.00"}
+            if development_forecast
+            else {"merchandise": "162.00", "fees": "7.00", "total": "169.00"}
+        ),
     }
 
 
@@ -248,10 +264,16 @@ def _database_acceptance(
         if tuple(int(value) for value in counts) != (3, 7, 7, 5, 5, 4, 2, 3, 3):
             raise BrowserAcceptanceError(f"durable workflow counts differ: {counts}")
         stage = conn.execute(
-            "SELECT workflow_stage FROM runs WHERE run_id=%s", (run_id,)
+            "SELECT workflow_stage,model_version FROM runs WHERE run_id=%s", (run_id,)
         ).fetchone()
         if stage is None or stage[0] != "PACKET_BUILT":
             raise BrowserAcceptanceError("workflow stage differs")
+        if stage[1] != (
+            "DEVELOPMENT_ROLLING_ORIGIN_V1"
+            if development_forecast
+            else "EMERGENCY_TRANSPARENT_V2"
+        ):
+            raise BrowserAcceptanceError("run method version differs")
         pos = conn.execute(
             """SELECT p.vendor_id::text,v.vendor_name,p.merchandise_total,
                       p.delivery_fee,p.po_total,count(l.po_line_id)
@@ -265,10 +287,18 @@ def _database_acceptance(
             (str(row[1]), str(row[2]), str(row[3]), str(row[4]), int(row[5]))
             for row in pos
         ]
-        if exact_pos != [
-            ("Synthetic Southern", "60.00", "0.00", "60.00", 1),
-            ("Synthetic Western Acceptance", "102.00", "7.00", "109.00", 2),
-        ]:
+        expected_pos = (
+            [
+                ("Synthetic Southern", "90.00", "0.00", "90.00", 1),
+                ("Synthetic Western Acceptance", "102.00", "7.00", "109.00", 2),
+            ]
+            if development_forecast
+            else [
+                ("Synthetic Southern", "60.00", "0.00", "60.00", 1),
+                ("Synthetic Western Acceptance", "102.00", "7.00", "109.00", 2),
+            ]
+        )
+        if exact_pos != expected_pos:
             raise BrowserAcceptanceError(f"durable vendor economics differ: {exact_pos}")
         variants = conn.execute(
             """SELECT l.variant_id,l.cases,l.loose_units,l.line_total
@@ -276,11 +306,12 @@ def _database_acceptance(
                 WHERE p.run_id=%s ORDER BY l.variant_id""",
             (run_id,),
         ).fetchall()
-        if [(str(v), int(c), int(loose), str(total)) for v,c,loose,total in variants] != [
-            ("1001", 2, 0, "60.00"),
-            ("4001", 2, 0, "84.00"),
-            ("4002", 1, 0, "18.00"),
-        ]:
+        expected_variants = (
+            [("1001", 3, 0, "90.00"), ("4001", 2, 0, "84.00"), ("4002", 1, 0, "18.00")]
+            if development_forecast
+            else [("1001", 2, 0, "60.00"), ("4001", 2, 0, "84.00"), ("4002", 1, 0, "18.00")]
+        )
+        if [(str(v), int(c), int(loose), str(total)) for v,c,loose,total in variants] != expected_variants:
             raise BrowserAcceptanceError("durable line economics differ")
         blockers = conn.execute(
             """SELECT e.variant_id,e.message,x.action
@@ -299,10 +330,11 @@ def _database_acceptance(
                 WHERE r.run_id=%s ORDER BY r.variant_id""",
             (run_id,),
         ).fetchall()
-        if [(str(a), str(b)) for a,b in rejected] != [
-            ("1001", "EDIT_QUANTITY"), ("4001", "EDIT_QUANTITY"),
-            ("4002", "ACCEPT"), ("4005", "REJECT"),
-        ]:
+        expected_reviews = [
+            ("1001", "ACCEPT" if development_forecast else "EDIT_QUANTITY"),
+            ("4001", "EDIT_QUANTITY"), ("4002", "ACCEPT"), ("4005", "REJECT"),
+        ]
+        if [(str(a), str(b)) for a,b in rejected] != expected_reviews:
             raise BrowserAcceptanceError("review dispositions differ")
         artifacts = conn.execute(
             """SELECT artifact_type,vendor_id::text,sha256,size_bytes
@@ -314,7 +346,8 @@ def _database_acceptance(
             """SELECT f.variant_id,f.selected_model,f.demand_regime,f.xyz_class,
                       f.forecast_units,f.safety_stock_units,
                       f.baseline_replenishment_units,f.method_version,f.diagnostics,
-                      r.metrics
+                      r.metrics,r.recommended_cases,r.recommended_loose_units,
+                      r.recommended_units
                  FROM forecast_results f
                  JOIN procurement_recommendations r
                    ON r.run_id=f.run_id AND r.variant_id=f.variant_id
@@ -339,6 +372,30 @@ def _database_acceptance(
                     if str(row[0]) == "4005"
                     else Decimal(row[9].get("target_units")) == forecast_target
                 )
+                effective_inventory = Decimal(row[9].get("available_units")) + Decimal(
+                    row[9].get("trusted_incoming_units")
+                )
+                operational_target = Decimal(row[9].get("target_units"))
+                expected_raw_need = max(
+                    0,
+                    int((operational_target - effective_inventory).to_integral_value(
+                        rounding=ROUND_CEILING
+                    )),
+                )
+                units_per_case = int(
+                    Decimal(
+                        row[9]["frozen_offer_evidence"]["shopify_units_per_case"]
+                    )
+                )
+                loose_allowed = bool(row[9]["frozen_vendor_terms"]["loose_order_allowed"])
+                expected_cases, expected_loose = (
+                    divmod(expected_raw_need, units_per_case)
+                    if loose_allowed
+                    else ((expected_raw_need + units_per_case - 1) // units_per_case, 0)
+                )
+                if str(row[0]) == "4005":
+                    expected_cases, expected_loose = 0, 0
+                expected_horizon = 10 if str(row[0]) == "1001" else 3
                 if (
                     row[7] != "DEVELOPMENT_ROLLING_ORIGIN_V1"
                     or not validate_development_forecast_evidence(evidence)
@@ -350,6 +407,12 @@ def _database_acceptance(
                     or Decimal(row[5])
                     != Decimal(evidence.get("protection_units"))
                     or not need_target_matches
+                    or int(evidence.get("horizon_days")) != expected_horizon
+                    or int(row[9].get("raw_need_units")) != expected_raw_need
+                    or int(row[6]) != expected_raw_need
+                    or int(row[10]) != expected_cases
+                    or int(row[11]) != expected_loose
+                    or int(row[12]) != expected_cases * units_per_case + expected_loose
                 ):
                     raise BrowserAcceptanceError(
                         f"development forecast row differs for Variant {row[0]}"
@@ -382,6 +445,12 @@ def _database_acceptance(
                     "evidence_sha256": row[9].get(
                         "development_forecast_evidence_sha256"
                     ),
+                    "recommended_cases": int(row[10]),
+                    "recommended_loose_units": int(row[11]),
+                    "recommended_units": int(row[12]),
+                    "horizon_days": (
+                        row[9].get("development_forecast_evidence") or {}
+                    ).get("horizon_days"),
                 }
                 for row in forecast_rows
             ],

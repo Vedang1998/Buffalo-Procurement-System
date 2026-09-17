@@ -642,6 +642,8 @@ async function audit(client) {
     const developmentForecasts = await evaluate(`[
       ...document.querySelectorAll("pre.development-forecast-evidence-json")
     ].map((node) => JSON.parse(node.textContent))`);
+    const developmentMode = developmentForecasts.length > 0;
+    let originalRecommendations = [];
     if (developmentForecasts.length > 0) {
       check(
         developmentForecasts.length === 4 &&
@@ -670,6 +672,42 @@ async function audit(client) {
             value.includes('empirical full-horizon protection');
         }`),
         "development model and protection evidence are intelligible in the review UI",
+      );
+      originalRecommendations = await evaluate(`[
+        ...document.querySelectorAll('form[action*="/recommendations/"][action$="/review"]')
+      ].map((form) => {
+        const row = form.closest('tr');
+        const evidence = JSON.parse(row.querySelector('pre.development-forecast-evidence-json').textContent);
+        return {
+          variantId: row.cells[0].innerText.trim().split(/\\s+/)[0],
+          recommendedCases: Number(form.elements.approved_cases.value),
+          recommendedLooseUnits: Number(form.elements.approved_loose_units.value),
+          horizonDays: evidence.horizon_days,
+          nextOrderDate: evidence.protection_calendar.next_order_date,
+          nextReceiptDate: evidence.protection_calendar.next_receipt_date,
+          point: evidence.point_forecast_units,
+          protection: evidence.protection_units,
+          target: evidence.target_units,
+          evidenceSha256: evidence.sha256,
+        };
+      })`);
+      check(
+        JSON.stringify(originalRecommendations.map((item) => [
+          item.variantId,item.recommendedCases,item.recommendedLooseUnits,
+          item.horizonDays,item.nextOrderDate,item.nextReceiptDate,
+        ])) === JSON.stringify([
+          ["1001",3,0,10,"2026-10-12","2026-10-15"],
+          ["4001",1,0,3,"2026-10-07","2026-10-08"],
+          ["4002",1,0,3,"2026-10-07","2026-10-08"],
+          ["4005",0,0,3,"2026-10-07","2026-10-08"],
+        ]) && originalRecommendations.every((item) =>
+          Math.round(Number(item.point) * 10000) +
+            Math.round(Number(item.protection) * 10000) ===
+            Math.round(Number(item.target) * 10000) &&
+          /^[0-9a-f]{64}$/.test(item.evidenceSha256)
+        ),
+        "browser freezes unequal calendar horizons and the original calculated quantities before review",
+        originalRecommendations,
       );
     }
 
@@ -717,16 +755,19 @@ async function audit(client) {
       await assertRedirect(transitionMark, "POST", actionPath, `/monday-runs/${runId}`, `Variant ${variantId} final review is confirmed`);
     };
 
-    await review("1001", {
+    await review("1001", developmentMode ? {
+      action: "ACCEPT", approved_cases: "3", approved_loose_units: "0", comment: "",
+    } : {
       action: "EDIT_QUANTITY", approved_cases: "2", approved_loose_units: "0",
       comment: "Cross uploaded Southern 2 CS break",
-    }, {material: true});
+    }, {material: !developmentMode});
     await review("4001", {
       action: "EDIT_QUANTITY", approved_cases: "2", approved_loose_units: "0",
       comment: "Cross Western 18 BT multipack break",
     });
     await review("4002", {
-      action: "ACCEPT", approved_cases: "1", approved_loose_units: "0", comment: "",
+      action: "ACCEPT", approved_cases: "1",
+      approved_loose_units: "0", comment: "",
     });
     await review("4005", {
       action: "REJECT", approved_cases: "0", approved_loose_units: "0",
@@ -760,10 +801,13 @@ async function audit(client) {
       }),
     );
     text = await body();
+    const expectedDraftAmounts = developmentMode
+      ? ["$90.00", "$102.00", "$109.00", "$192.00", "$199.00"]
+      : ["$60.00", "$102.00", "$109.00", "$162.00", "$169.00"];
     check(
       text.includes("Confirm vendor DRAFT economics") &&
-        text.includes("$60.00") && text.includes("$102.00") && text.includes("$109.00") &&
-        text.includes("$162.00") && text.includes("$169.00") && text.includes("PAY_FEE"),
+        expectedDraftAmounts.every((amount) => text.includes(amount)) &&
+        text.includes("PAY_FEE"),
       "DRAFT preview independently reconciles both vendors and one Western fee",
     );
     transitionMark = ledgerMark();
@@ -779,7 +823,7 @@ async function audit(client) {
       text.includes("stage: PACKET_BUILT") &&
         text.includes("Synthetic Southern — DRAFT") &&
         text.includes("Synthetic Western Acceptance — DRAFT") &&
-        text.includes("internal DRAFT total $169.00"),
+        text.includes(`internal DRAFT total $${developmentMode ? "199.00" : "169.00"}`),
       "exactly two participating vendor DRAFTs reach PACKET_BUILT",
     );
     check(text.includes("Captured Available") && text.includes("Captured at"), "built line output displays frozen stock evidence");
@@ -818,6 +862,8 @@ async function audit(client) {
       mapped,
       finalTiers,
       developmentForecasts,
+      developmentMode,
+      originalRecommendations,
       artifactUrls: linksAfterReplay,
       artifactDownloads,
     });
@@ -835,7 +881,7 @@ async function audit(client) {
       text.includes("stage: PACKET_BUILT") &&
         text.includes("Synthetic Southern — DRAFT") &&
         text.includes("Synthetic Western Acceptance — DRAFT") &&
-        text.includes("internal DRAFT total $169.00"),
+        text.includes(`internal DRAFT total $${state.developmentMode ? "199.00" : "169.00"}`),
       `${phase} retains exact two-vendor economics`,
     );
     const replayedDevelopmentForecasts = await evaluate(`[

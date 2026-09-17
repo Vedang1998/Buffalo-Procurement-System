@@ -418,6 +418,36 @@ def _seed_multivendor_pre_price(
                 )
 
 
+def _configure_development_forecast_vendor_calendars(
+    conn: psycopg.Connection, business_date: date
+) -> None:
+    """Install unequal, code-pinned calendars for the development profile only."""
+
+    if business_date.strftime("%A").upper() != "MONDAY":
+        raise RuntimeError("development forecast fixture must evaluate on Monday")
+    with conn.transaction():
+        southern = conn.execute(
+            """UPDATE vendor_operating_rules
+                  SET order_days=ARRAY['MONDAY'],
+                      expected_delivery_days=ARRAY['THURSDAY'],
+                      order_cycle_days=7,lead_time_days=1,
+                      lead_time_variability_days=0
+                WHERE vendor_id=%s""",
+            (VENDOR_ID,),
+        )
+        western = conn.execute(
+            """UPDATE vendor_operating_rules
+                  SET order_days=ARRAY['MONDAY','WEDNESDAY'],
+                      expected_delivery_days=ARRAY['THURSDAY'],
+                      order_cycle_days=2,lead_time_days=1,
+                      lead_time_variability_days=0
+                WHERE vendor_id=%s""",
+            (WESTERN_VENDOR_ID,),
+        )
+        if southern.rowcount != 1 or western.rowcount != 1:
+            raise RuntimeError("development forecast vendor calendars are incomplete")
+
+
 def _synthetic_inventory_capture_specs(
     business_date: date,
     *,
@@ -1377,6 +1407,20 @@ def _verify_initialized_demo(
             True,Decimal("3"),"FABRICATED MULTIVENDOR ACCEPTANCE",
         ):
             raise RuntimeError("synthetic multivendor vendor terms differ")
+    if profile == DEVELOPMENT_FORECAST_PROFILE:
+        forecast_calendars = conn.execute(
+            """SELECT vendor_id::text,order_days,expected_delivery_days,
+                      order_cycle_days,lead_time_days,lead_time_variability_days
+                 FROM vendor_operating_rules
+                WHERE vendor_id=ANY(%s)
+                ORDER BY vendor_id""",
+            ([VENDOR_ID, WESTERN_VENDOR_ID],),
+        ).fetchall()
+        if forecast_calendars != [
+            (VENDOR_ID,["MONDAY"],["THURSDAY"],7,1,Decimal("0")),
+            (WESTERN_VENDOR_ID,["MONDAY","WEDNESDAY"],["THURSDAY"],2,1,Decimal("0")),
+        ]:
+            raise RuntimeError("development forecast vendor calendars differ")
     expected = _stale_v1_fixture_values(business_date)
     fixture = conn.execute(
         """SELECT run_type,status,workflow_stage,model_version,
@@ -1494,6 +1538,8 @@ def initialize(
         _seed_pre_price(conn, business_date)
         if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
             _seed_multivendor_pre_price(conn, business_date)
+        if profile == DEVELOPMENT_FORECAST_PROFILE:
+            _configure_development_forecast_vendor_calendars(conn, business_date)
         for name in legacy_names[11:]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
         with conn.transaction():

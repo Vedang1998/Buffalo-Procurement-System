@@ -84,6 +84,9 @@ from .recommendations import (
     list_monday_runs,
     preview_monday_stale_forecast_retirement,
 )
+from .development_forecast import (
+    METHOD_VERSION as DEVELOPMENT_FORECAST_METHOD_VERSION,
+)
 from .storage import get_storage
 from .synthetic_price_replacement import (
     CONTRACT as SYNTHETIC_PRICE_REPLACEMENT_CONTRACT,
@@ -2076,7 +2079,8 @@ def _monday_run_html(
 ) -> str:
     run_id = _html_escape(run["run_id"])
     current_v2 = (
-        run.get("model_version") == CURRENT_METHOD_VERSION
+        run.get("model_version")
+        in {CURRENT_METHOD_VERSION, DEVELOPMENT_FORECAST_METHOD_VERSION}
         and run.get("status") == "RUNNING"
     )
     retired_v1 = run.get("model_version") == RETIRED_METHOD_VERSION

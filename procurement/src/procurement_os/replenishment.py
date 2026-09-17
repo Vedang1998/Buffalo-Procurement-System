@@ -54,6 +54,7 @@ def calculate_baseline_need(
     forecast_units_for_protection: object,
     forecast_horizon_days: int,
     open_po_blocked: bool = False,
+    protection_days_override: int | None = None,
 ) -> BaselineNeed:
     """Calculate legitimate baseline need without filler or untrusted incoming."""
 
@@ -88,9 +89,19 @@ def calculate_baseline_need(
     if loose_order_allowed and fee is None:
         raise ValueError("loose_unit_fee is required when loose ordering is allowed")
     fee = fee or zero
-    protection_days = order_cycle_days + lead_time_days + int(
+    legacy_protection_days = order_cycle_days + lead_time_days + int(
         variability.to_integral_value(rounding=ROUND_CEILING)
     )
+    if protection_days_override is None:
+        protection_days = legacy_protection_days
+    elif (
+        isinstance(protection_days_override, bool)
+        or not isinstance(protection_days_override, int)
+        or protection_days_override < 1
+    ):
+        raise ValueError("protection_days_override must be a positive whole day count")
+    else:
+        protection_days = protection_days_override
     if (
         isinstance(forecast_horizon_days, bool)
         or not isinstance(forecast_horizon_days, int)
@@ -163,6 +174,7 @@ def calculate_development_baseline_need(
     loose_unit_fee: object | None,
     forecast_horizon_days: int,
     open_po_blocked: bool = False,
+    protection_days_override: int | None = None,
 ) -> BaselineNeed:
     """Bind one calculated point forecast plus empirical protection exactly once.
 
@@ -192,6 +204,7 @@ def calculate_development_baseline_need(
         forecast_units_for_protection=target,
         forecast_horizon_days=forecast_horizon_days,
         open_po_blocked=open_po_blocked,
+        protection_days_override=protection_days_override,
     )
     if result.status not in {"READY_FOR_REVIEW", "NO_ORDER_NEEDED"}:
         return result

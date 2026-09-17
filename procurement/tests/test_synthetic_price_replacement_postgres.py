@@ -689,6 +689,10 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
         self.assertEqual(mapping_evidence["final_price_tier"], tier)
 
     def test_development_forecast_calculation_drives_recommendation_and_packet(self):
+        with self._connection() as conn:
+            initializer._configure_development_forecast_vendor_calendars(
+                conn, BUSINESS_DATE
+            )
         batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
         self._apply(batch_id, key="focused-development-price-apply-v1")
         self._select_fixture_offer()
@@ -732,10 +736,19 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                 actor="synthetic:matrix-owner:01",
             )
         self.assertEqual(run["blockers"], [])
+        self.assertEqual(run["model_version"], "DEVELOPMENT_ROLLING_ORIGIN_V1")
         self.assertEqual(len(run["recommendations"]), 1)
         recommendation = run["recommendations"][0]
         metrics = recommendation["metrics"]
         evidence = metrics["development_forecast_evidence"]
+        self.assertEqual(
+            (
+                evidence["protection_calendar"]["next_order_date"],
+                evidence["protection_calendar"]["next_receipt_date"],
+                evidence["horizon_days"],
+            ),
+            ("2026-10-12", "2026-10-15", 10),
+        )
         self.assertEqual(
             metrics["development_forecast_contract"],
             DEVELOPMENT_FORECAST_CONTRACT,

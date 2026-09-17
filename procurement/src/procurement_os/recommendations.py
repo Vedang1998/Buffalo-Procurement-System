@@ -30,7 +30,9 @@ from .forecasting import (
 )
 from .development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    METHOD_VERSION as DEVELOPMENT_FORECAST_METHOD_VERSION,
     DevelopmentForecastError,
+    calculate_calendar_protection_horizon,
     development_forecast_contract_for_run,
     plan_development_forecast,
 )
@@ -1061,9 +1063,23 @@ def _load_context_unfinalized(
         )
     elif development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT:
         try:
+            protection_calendar = calculate_calendar_protection_horizon(
+                evaluation_at=evaluation_at,
+                timezone_name=confirmed_rules.timezone_name,
+                order_days=confirmed_rules.order_days,
+                order_cutoff_local=confirmed_rules.order_cutoff_local,
+                expected_delivery_days=confirmed_rules.expected_delivery_days,
+                order_cycle_days=confirmed_rules.order_cycle_days,
+                lead_time_days=confirmed_rules.lead_time_days,
+                lead_time_variability_days=(
+                    confirmed_rules.lead_time_variability_days
+                ),
+            )
+            protection_days = int(protection_calendar["horizon_days"])
             forecast = plan_development_forecast(
                 observations,
                 horizon_days=protection_days,
+                protection_calendar=protection_calendar,
             )
         except DevelopmentForecastError as exc:
             raise MondayRecommendationError(
@@ -1094,6 +1110,7 @@ def _load_context_unfinalized(
             loose_order_allowed=bool(vendor[8]),
             loose_unit_fee=vendor[9],
             open_po_blocked=bool(position["blocks_reorder"]),
+            protection_days_override=protection_days,
         )
     else:
         raise MondayRecommendationError(
@@ -1366,10 +1383,15 @@ def _prepare_monday_run_impl(
             )
             for variant_id in normalized_ids
         ]
+        run_method_version = (
+            DEVELOPMENT_FORECAST_METHOD_VERSION
+            if development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT
+            else METHOD_VERSION
+        )
         frozen_manifest = {
             "business_date": business_date,
             "variant_ids": normalized_ids,
-            "method_version": METHOD_VERSION,
+            "method_version": run_method_version,
             "evaluation_at": evaluation_at,
             "material_edit_policy": material_edit_policy,
             "contexts": contexts,
@@ -1399,7 +1421,7 @@ def _prepare_monday_run_impl(
                 RETURNING run_id""",
             (
                 datetime.combine(business_date - timedelta(days=1), time.max, tzinfo=timezone.utc),
-                business_date,evaluation_at,key,input_fingerprint,METHOD_VERSION,
+                business_date,evaluation_at,key,input_fingerprint,run_method_version,
                 f"{SAFETY_LABEL}; prepared by {reviewer}",input_manifest,
             ),
         ).fetchone()[0]
@@ -1867,8 +1889,6 @@ def validate_monday_run_inputs(
         )
     if run[3] != expected_fingerprint:
         return base
-    if run[1] != CURRENT_METHOD_VERSION or METHOD_VERSION != CURRENT_METHOD_VERSION:
-        return base
     try:
         manifest = json.loads(run[5])
         manifest_variant_ids = manifest["variant_ids"]
@@ -1888,6 +1908,20 @@ def validate_monday_run_inputs(
         return base
     development_forecast_contract = manifest.get("development_forecast_contract")
     if development_forecast_contract not in {None, DEVELOPMENT_FORECAST_CONTRACT}:
+        return base
+    expected_method_version = (
+        DEVELOPMENT_FORECAST_METHOD_VERSION
+        if development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT
+        else CURRENT_METHOD_VERSION
+    )
+    if (
+        run[1] != expected_method_version
+        or manifest.get("method_version") != expected_method_version
+        or (
+            development_forecast_contract is None
+            and METHOD_VERSION != CURRENT_METHOD_VERSION
+        )
+    ):
         return base
     frozen_contexts = manifest.get("contexts")
     if not isinstance(frozen_contexts, list):
@@ -1937,7 +1971,7 @@ def validate_monday_run_inputs(
     current_manifest = {
         "business_date": run[0],
         "variant_ids": variant_ids,
-        "method_version": METHOD_VERSION,
+        "method_version": expected_method_version,
         "evaluation_at": run[4],
         "material_edit_policy": material_edit_policy,
         "contexts": contexts,

@@ -1,6 +1,6 @@
 """Deterministic development forecast, classification, and protection tests."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 import unittest
 from unittest.mock import patch
@@ -8,6 +8,7 @@ from unittest.mock import patch
 from procurement_os.development_forecast import (
     _predict,
     assign_gp_dollar_abc,
+    calculate_calendar_protection_horizon,
     plan_development_forecast,
     validate_development_forecast_evidence,
 )
@@ -27,6 +28,38 @@ def observations(values: list[object]) -> list[DemandObservation]:
 
 class DevelopmentForecastTests(unittest.TestCase):
     def test_constant_oracle_controls_need_and_case_count(self):
+        evaluation_at = datetime(2026, 10, 5, 14, tzinfo=timezone.utc)
+        southern_calendar = calculate_calendar_protection_horizon(
+            evaluation_at=evaluation_at,
+            timezone_name="America/New_York",
+            order_days=("MONDAY",),
+            order_cutoff_local=time(23, 59, 59),
+            expected_delivery_days=("THURSDAY",),
+            order_cycle_days=7,
+            lead_time_days=1,
+            lead_time_variability_days="0",
+        )
+        western_calendar = calculate_calendar_protection_horizon(
+            evaluation_at=evaluation_at,
+            timezone_name="America/New_York",
+            order_days=("MONDAY", "WEDNESDAY"),
+            order_cutoff_local=time(23, 59, 59),
+            expected_delivery_days=("THURSDAY",),
+            order_cycle_days=2,
+            lead_time_days=1,
+            lead_time_variability_days="0",
+        )
+        self.assertEqual(
+            (
+                southern_calendar["next_order_date"],
+                southern_calendar["next_receipt_date"],
+                southern_calendar["horizon_days"],
+                western_calendar["next_order_date"],
+                western_calendar["next_receipt_date"],
+                western_calendar["horizon_days"],
+            ),
+            ("2026-10-12", "2026-10-15", 10, "2026-10-07", "2026-10-08", 3),
+        )
         plan = plan_development_forecast(
             observations([2] * 84),
             horizon_days=14,
@@ -91,6 +124,10 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertEqual(plan.point_forecast_units, Decimal("10.0000"))
         self.assertEqual(plan.evidence["selection_metrics"]["wape"], "0.000000")
         self.assertEqual(plan.evidence["evaluation_metrics"]["wape"], "0.000000")
+        self.assertEqual(
+            {item["forecast_horizon_days"] for item in plan.evidence["candidates"]},
+            {7},
+        )
 
         perturbed = values[:70] + [20] * 14
         later = plan_development_forecast(observations(perturbed), horizon_days=7)
@@ -99,7 +136,9 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertNotEqual(plan.point_forecast_units, later.point_forecast_units)
 
         trend = plan_development_forecast(
-            observations([Decimal(index) / Decimal("10") for index in range(84)]),
+            observations(
+                [Decimal(84 - index) / Decimal("10") for index in range(84)]
+            ),
             horizon_days=3,
             category_daily_velocity="2",
         )
@@ -139,7 +178,7 @@ class DevelopmentForecastTests(unittest.TestCase):
     def test_returns_stockouts_and_unknown_availability_never_invent_state(self):
         series = observations([2] * 84)
         series[10] = DemandObservation(series[10].business_date, Decimal("-8"), "UNKNOWN")
-        series[20] = DemandObservation(series[20].business_date, Decimal("0"), "STOCKOUT")
+        series[42] = DemandObservation(series[42].business_date, Decimal("0"), "STOCKOUT")
         plan = plan_development_forecast(series, horizon_days=14)
         self.assertEqual(plan.status, "READY")
         self.assertEqual(plan.evidence["availability"]["negative_net_days"], 1)
@@ -148,6 +187,23 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertIn("NEGATIVE_NET_DAYS_FLOORED_FOR_DEMAND_ONLY", plan.evidence["reason_codes"])
         self.assertIn("PROVEN_STOCKOUT_DAYS_CAUSALLY_IMPUTED", plan.evidence["reason_codes"])
         self.assertIn("UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK", plan.evidence["reason_codes"])
+        self.assertEqual(
+            plan.evidence["protection"]["censored_stockout_origin_count"], 1
+        )
+
+        unavailable = observations([2] * 84)
+        unavailable[42] = DemandObservation(
+            unavailable[42].business_date, Decimal("0"), "STOCKOUT"
+        )
+        unavailable[56] = DemandObservation(
+            unavailable[56].business_date, Decimal("0"), "STOCKOUT"
+        )
+        blocked = plan_development_forecast(unavailable, horizon_days=14)
+        self.assertEqual(blocked.status, "BLOCKED")
+        self.assertIn(
+            "EMPIRICAL_PROTECTION_ORIGINS_INSUFFICIENT",
+            blocked.evidence["reason_codes"],
+        )
 
     def test_model_failure_and_metric_ties_fall_back_deterministically(self):
         original = _predict
@@ -179,6 +235,19 @@ class DevelopmentForecastTests(unittest.TestCase):
             plan.point_forecast_units + plan.protection_units,
         )
 
+        cap_series = observations([1] * 42 + [2] * 42)
+        with patch(
+            "procurement_os.development_forecast._predict",
+            side_effect=lambda _name, _history, horizon, _policy, _prior: [
+                Decimal("100")
+            ]
+            * horizon,
+        ):
+            capped = plan_development_forecast(cap_series, horizon_days=10)
+        self.assertEqual(capped.status, "READY")
+        self.assertGreater(capped.evidence["caps"]["calibration_cap_hits"], 0)
+        self.assertGreater(capped.protection_units, 0)
+
     def test_gp_dollar_abc_never_substitutes_revenue_or_current_price(self):
         classes = assign_gp_dollar_abc(
             [
@@ -192,6 +261,21 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertNotEqual(classes["b"]["abc_class"], "A")
         self.assertEqual(classes["c"]["abc_class"], "NOT_CONFIGURED")
         self.assertEqual(classes["c"]["status"], "MISSING_HISTORICAL_COGS")
+        self.assertEqual(classes["a"]["classification_period_days"], 84)
+        nonpositive = assign_gp_dollar_abc(
+            [
+                {"variant_id": "x", "historical_revenue": "10", "historical_cogs": "10"},
+                {"variant_id": "y", "historical_revenue": "5", "historical_cogs": "7"},
+            ]
+        )
+        self.assertEqual(
+            {row["abc_class"] for row in nonpositive.values()},
+            {"NOT_CONFIGURED"},
+        )
+        self.assertEqual(
+            {row["status"] for row in nonpositive.values()},
+            {"NONPOSITIVE_HISTORICAL_GROSS_PROFIT"},
+        )
 
     def test_evidence_hash_and_new_contract_fail_closed_on_tamper(self):
         plan = plan_development_forecast(observations([2] * 84), horizon_days=14)
@@ -199,6 +283,7 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertTrue(validate_development_forecast_evidence(frozen))
         for mutation in (
             lambda value: value.pop("policy"),
+            lambda value: value.pop("protection_calendar"),
             lambda value: value.update({"target_units": "999.0000"}),
             lambda value: value.update({"sha256": "0" * 64}),
             lambda value: value.update({"method_version": "EMERGENCY_TRANSPARENT_V2"}),
