@@ -690,7 +690,7 @@ async function audit(client) {
           target: evidence.target_units,
           evidenceSha256: evidence.sha256,
         };
-      })`);
+      }).sort((left, right) => left.variantId.localeCompare(right.variantId))`);
       check(
         JSON.stringify(originalRecommendations.map((item) => [
           item.variantId,item.recommendedCases,item.recommendedLooseUnits,
