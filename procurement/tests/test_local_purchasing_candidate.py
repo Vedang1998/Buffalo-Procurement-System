@@ -817,6 +817,7 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                 "DATABASE_URL": "ambient",
                 "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "ambient-must-not-authorize",
                 "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "ambient-must-not-authorize",
+                "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "ambient-must-not-authorize",
             },
             clear=False,
         ):
@@ -835,6 +836,9 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         )
         self.assertEqual(
             environment["BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT"], "1"
+        )
+        self.assertEqual(
+            environment["BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST"], "1"
         )
         self.assertEqual(environment[candidate.SOURCE_COMMIT_ENV], "a" * 40)
         self.assertEqual(environment[candidate.SOURCE_TREE_ENV], "b" * 40)

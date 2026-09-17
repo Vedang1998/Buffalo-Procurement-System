@@ -28,6 +28,12 @@ from .forecasting import (
     forecast_demand,
     to_forecast_observations,
 )
+from .development_forecast import (
+    CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    DevelopmentForecastError,
+    development_forecast_contract_for_run,
+    plan_development_forecast,
+)
 from .monday_controls import MondayControlError, load_material_edit_policy
 from .monday_forecast_retirement import (
     CURRENT_METHOD_VERSION,
@@ -36,7 +42,10 @@ from .monday_forecast_retirement import (
     verify_monday_forecast_v2_retirement_contract,
 )
 from .po_ledger import open_po_position
-from .replenishment import calculate_baseline_need
+from .replenishment import (
+    calculate_baseline_need,
+    calculate_development_baseline_need,
+)
 from .strategic import PriceTier, evaluate_price_tiers
 from .synthetic_selected_offer import (
     CONTRACT as SYNTHETIC_SELECTED_OFFER_CONTRACT,
@@ -576,8 +585,16 @@ def _load_context_unfinalized(
     variant_id: str,
     evaluation_at: datetime,
     offer_resolution_contract: str | None = None,
+    development_forecast_contract: str | None = None,
 ) -> dict[str, Any]:
     context: dict[str, Any] = {"variant_id": str(variant_id), "blockers": []}
+    if development_forecast_contract is not None:
+        if development_forecast_contract != DEVELOPMENT_FORECAST_CONTRACT:
+            raise MondayRecommendationError(
+                "DEVELOPMENT_FORECAST_CONTRACT_INVALID"
+            )
+        context["development_forecast_contract"] = development_forecast_contract
+        context["development_forecast_status"] = "NOT_REACHED"
     variant = conn.execute(
         """SELECT variant_id,product_title,variant_title,sku,active,identity_scope,catalog_state,
                   retail_price
@@ -1025,22 +1042,63 @@ def _load_context_unfinalized(
     protection_days = int(vendor[2]) + int(vendor[3]) + int(
         Decimal(vendor[4]).to_integral_value(rounding=ROUND_CEILING)
     )
-    forecast = forecast_demand(observations, horizon_days=protection_days)
-    need = calculate_baseline_need(
-        forecast_daily_velocity=forecast.forecast_daily_velocity,
-        forecast_units_for_protection=forecast.forecast_units,
-        forecast_horizon_days=protection_days,
-        available_units=available,
-        trusted_incoming_units=trusted_incoming,
-        order_cycle_days=int(vendor[2]),
-        lead_time_days=int(vendor[3]),
-        lead_time_variability_days=vendor[4],
-        policy_mode=policy_mode,
-        units_per_case=units_per_case,
-        loose_order_allowed=bool(vendor[8]),
-        loose_unit_fee=vendor[9],
-        open_po_blocked=bool(position["blocks_reorder"]),
-    )
+    if development_forecast_contract is None:
+        forecast = forecast_demand(observations, horizon_days=protection_days)
+        need = calculate_baseline_need(
+            forecast_daily_velocity=forecast.forecast_daily_velocity,
+            forecast_units_for_protection=forecast.forecast_units,
+            forecast_horizon_days=protection_days,
+            available_units=available,
+            trusted_incoming_units=trusted_incoming,
+            order_cycle_days=int(vendor[2]),
+            lead_time_days=int(vendor[3]),
+            lead_time_variability_days=vendor[4],
+            policy_mode=policy_mode,
+            units_per_case=units_per_case,
+            loose_order_allowed=bool(vendor[8]),
+            loose_unit_fee=vendor[9],
+            open_po_blocked=bool(position["blocks_reorder"]),
+        )
+    elif development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT:
+        try:
+            forecast = plan_development_forecast(
+                observations,
+                horizon_days=protection_days,
+            )
+        except DevelopmentForecastError as exc:
+            raise MondayRecommendationError(
+                "DEVELOPMENT_FORECAST_INPUT_INVALID"
+            ) from exc
+        development_evidence = forecast.to_json_dict()
+        context["development_forecast_evidence"] = development_evidence
+        context["development_forecast_evidence_sha256"] = forecast.evidence_sha256
+        if forecast.status != "READY":
+            context["development_forecast_status"] = "BLOCKED"
+            context["blockers"].append(
+                "DEVELOPMENT_FORECAST_PROTECTION_UNAVAILABLE"
+            )
+            return context
+        context["development_forecast_status"] = "READY"
+        need = calculate_development_baseline_need(
+            forecast_daily_velocity=forecast.forecast_daily_velocity,
+            point_forecast_units=forecast.point_forecast_units,
+            empirical_protection_units=forecast.protection_units,
+            forecast_horizon_days=protection_days,
+            available_units=available,
+            trusted_incoming_units=trusted_incoming,
+            order_cycle_days=int(vendor[2]),
+            lead_time_days=int(vendor[3]),
+            lead_time_variability_days=vendor[4],
+            policy_mode=policy_mode,
+            units_per_case=units_per_case,
+            loose_order_allowed=bool(vendor[8]),
+            loose_unit_fee=vendor[9],
+            open_po_blocked=bool(position["blocks_reorder"]),
+        )
+    else:
+        raise MondayRecommendationError(
+            "DEVELOPMENT_FORECAST_CONTRACT_INVALID"
+        )
     if need.status == "BLOCKED":
         context["blockers"].extend(need.reason_codes)
         return context
@@ -1117,6 +1175,7 @@ def _load_context(
     variant_id: str,
     evaluation_at: datetime,
     offer_resolution_contract: str | None = None,
+    development_forecast_contract: str | None = None,
 ) -> dict[str, Any]:
     """Finalize every selected context as one hash-bound evidence envelope."""
 
@@ -1126,6 +1185,7 @@ def _load_context(
         variant_id=variant_id,
         evaluation_at=evaluation_at,
         offer_resolution_contract=offer_resolution_contract,
+        development_forecast_contract=development_forecast_contract,
     )
     if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
         evidence = context.get("selected_offer_input_evidence")
@@ -1177,12 +1237,21 @@ def _prepare_monday_run_impl(
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
             conn = _DeadlineConnection(conn, _operation_deadline or 0)
+        development_forecast_contract: str | None = None
         try:
             if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
                 require_attested_selected_mode(conn)
+                development_forecast_contract = development_forecast_contract_for_run(
+                    conn,
+                    offer_resolution_contract=offer_resolution_contract,
+                )
             verify_monday_forecast_v2_retirement_contract(conn)
             material_edit_policy = load_material_edit_policy().evidence()
-        except (MondayControlError, MondayForecastRetirementContractError) as exc:
+        except (
+            DevelopmentForecastError,
+            MondayControlError,
+            MondayForecastRetirementContractError,
+        ) as exc:
             raise MondayRecommendationError(str(exc)) from exc
         if offer_resolution_contract is None and not conn.execute(
             "SELECT pg_try_advisory_xact_lock(%s)", (MONDAY_ANALYSIS_LOCK,)
@@ -1293,6 +1362,7 @@ def _prepare_monday_run_impl(
                 variant_id=variant_id,
                 evaluation_at=evaluation_at,
                 offer_resolution_contract=offer_resolution_contract,
+                development_forecast_contract=development_forecast_contract,
             )
             for variant_id in normalized_ids
         ]
@@ -1306,6 +1376,10 @@ def _prepare_monday_run_impl(
         }
         if offer_resolution_contract is not None:
             frozen_manifest["offer_resolution_contract"] = offer_resolution_contract
+        if development_forecast_contract is not None:
+            frozen_manifest["development_forecast_contract"] = (
+                development_forecast_contract
+            )
         input_manifest = _canonical_json(frozen_manifest)
         input_fingerprint = hashlib.sha256(input_manifest.encode()).hexdigest()
         if existing is not None:
@@ -1370,31 +1444,58 @@ def _prepare_monday_run_impl(
                     context["inventory_capture"][0],
                 ),
             )
+            development_evidence = context.get("development_forecast_evidence")
+            if isinstance(development_evidence, dict):
+                evaluation_metrics = development_evidence["evaluation_metrics"]
+                forecast_diagnostics = {
+                    "demand_evidence": context["demand_evidence"],
+                    "development_forecast_evidence": development_evidence,
+                    "development_forecast_evidence_sha256": context[
+                        "development_forecast_evidence_sha256"
+                    ],
+                    "forecast_status": "DEVELOPMENT_CALCULATED",
+                    "model_selection_status": "ROLLING_ORIGIN_FVA_CALCULATED",
+                    "classification_status": "XYZ_CALCULATED_ABC_NOT_CONFIGURED",
+                    "stockout_censoring_status": "EXPLICIT_CAUSAL_EVIDENCE_ONLY",
+                    "safety_stock_status": "EMPIRICAL_FULL_HORIZON_PROTECTION",
+                    "reason_codes": forecast.reason_codes,
+                    "outlier_capped_days": 0,
+                }
+                demand_regime = development_evidence["demand_regime"]
+                selected_model = development_evidence["selected_model"]
+                xyz_class = development_evidence["xyz_class"]
+                protection_units = forecast.protection_units
+                wape = evaluation_metrics["wape"]
+                mase = evaluation_metrics["mase"]
+                bias = evaluation_metrics["bias"]
+            else:
+                forecast_diagnostics = {
+                    "demand_evidence": context["demand_evidence"],
+                    "forecast_status": "EMERGENCY_BASELINE_ONLY",
+                    "model_selection_status": "NOT_VALIDATED",
+                    "classification_status": "NOT_CALCULATED",
+                    "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
+                    "safety_stock_status": "NOT_CALCULATED",
+                    "reason_codes": forecast.reason_codes,
+                    "outlier_capped_days": forecast.outlier_capped_days,
+                }
+                demand_regime = selected_model = xyz_class = protection_units = None
+                wape = mase = bias = None
             conn.execute(
                 """INSERT INTO forecast_results(
-                           run_id,variant_id,demand_regime,selected_model,forecast_units,
+                           run_id,variant_id,demand_regime,selected_model,xyz_class,forecast_units,
                            safety_stock_units,protection_days,baseline_replenishment_units,
-                           calendar_velocity,in_stock_velocity,confidence,diagnostics,
+                           calendar_velocity,in_stock_velocity,wape,mase,bias,confidence,diagnostics,
                            input_fingerprint,method_version,history_start,history_end,horizon_days)
-                    VALUES (%s,%s,NULL,NULL,%s,NULL,%s,%s,%s,NULL,%s,%s::jsonb,
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,
                             %s,%s,%s,%s,%s)""",
                 (
-                    run_id,context["variant_id"],forecast.forecast_units,
+                    run_id,context["variant_id"],demand_regime,selected_model,
+                    xyz_class,forecast.forecast_units,protection_units,
                     need.protection_days,need.raw_need_units,
-                    forecast.calendar_velocity,forecast.confidence,
-                    json.dumps(
-                        {
-                            "demand_evidence": context["demand_evidence"],
-                            "forecast_status": "EMERGENCY_BASELINE_ONLY",
-                            "model_selection_status": "NOT_VALIDATED",
-                            "classification_status": "NOT_CALCULATED",
-                            "stockout_censoring_status": "EVIDENCE_UNAVAILABLE",
-                            "safety_stock_status": "NOT_CALCULATED",
-                            "reason_codes": forecast.reason_codes,
-                            "outlier_capped_days": forecast.outlier_capped_days,
-                        },
-                        sort_keys=True,
-                    ),
+                    forecast.calendar_velocity,forecast.in_stock_velocity,
+                    wape,mase,bias,forecast.confidence,
+                    json.dumps(forecast_diagnostics, sort_keys=True),
                     input_fingerprint,forecast.method_version,forecast.history_start,forecast.history_end,
                     forecast.horizon_days,
                 ),
@@ -1528,6 +1629,29 @@ def _prepare_monday_run_impl(
                 "material_edit_policy": material_edit_policy,
                 "safety_label": SAFETY_LABEL,
             }
+            if isinstance(development_evidence, dict):
+                metrics.update(
+                    {
+                        "development_forecast_contract": DEVELOPMENT_FORECAST_CONTRACT,
+                        "development_forecast_evidence": development_evidence,
+                        "development_forecast_evidence_sha256": context[
+                            "development_forecast_evidence_sha256"
+                        ],
+                        "forecast_status": "DEVELOPMENT_CALCULATED",
+                        "model_selection_status": "ROLLING_ORIGIN_FVA_CALCULATED",
+                        "classification_status": "XYZ_CALCULATED_ABC_NOT_CONFIGURED",
+                        "stockout_censoring_status": "EXPLICIT_CAUSAL_EVIDENCE_ONLY",
+                        "safety_stock_status": "EMPIRICAL_FULL_HORIZON_PROTECTION",
+                        "forecast_point_units": forecast.point_forecast_units,
+                        "safety_stock_units": forecast.protection_units,
+                        "forecast_target_units": forecast.target_units,
+                        "demand_regime": development_evidence["demand_regime"],
+                        "selected_model": development_evidence["selected_model"],
+                        "abc_class": development_evidence["abc_class"],
+                        "xyz_class": development_evidence["xyz_class"],
+                        "in_stock_velocity": forecast.in_stock_velocity,
+                    }
+                )
             if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
                 metrics["selected_offer_input_evidence"] = context[
                     "selected_offer_input_evidence"
@@ -1762,6 +1886,9 @@ def validate_monday_run_inputs(
     offer_resolution_contract = manifest.get("offer_resolution_contract")
     if offer_resolution_contract not in {None, SYNTHETIC_SELECTED_OFFER_CONTRACT}:
         return base
+    development_forecast_contract = manifest.get("development_forecast_contract")
+    if development_forecast_contract not in {None, DEVELOPMENT_FORECAST_CONTRACT}:
+        return base
     frozen_contexts = manifest.get("contexts")
     if not isinstance(frozen_contexts, list):
         return base
@@ -1771,10 +1898,30 @@ def validate_monday_run_inputs(
     )
     if (offer_resolution_contract is None) == has_selected_fields:
         return base
+    has_development_fields = any(
+        isinstance(context, dict)
+        and bool(
+            {
+                "development_forecast_contract",
+                "development_forecast_status",
+                "development_forecast_evidence",
+                "development_forecast_evidence_sha256",
+            }.intersection(context)
+        )
+        for context in frozen_contexts
+    )
+    if (development_forecast_contract is None) != (not has_development_fields):
+        return base
     if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
         try:
             require_attested_selected_mode(conn)
-        except SyntheticSelectedOfferError:
+            current_development_contract = development_forecast_contract_for_run(
+                conn,
+                offer_resolution_contract=offer_resolution_contract,
+            )
+        except (DevelopmentForecastError, SyntheticSelectedOfferError):
+            return base
+        if current_development_contract != development_forecast_contract:
             return base
     contexts = [
         _load_context(
@@ -1783,6 +1930,7 @@ def validate_monday_run_inputs(
             variant_id=variant_id,
             evaluation_at=run[4],
             offer_resolution_contract=offer_resolution_contract,
+            development_forecast_contract=development_forecast_contract,
         )
         for variant_id in variant_ids
     ]
@@ -1796,6 +1944,10 @@ def validate_monday_run_inputs(
     }
     if offer_resolution_contract is not None:
         current_manifest["offer_resolution_contract"] = offer_resolution_contract
+    if development_forecast_contract is not None:
+        current_manifest["development_forecast_contract"] = (
+            development_forecast_contract
+        )
     current = _fingerprint(current_manifest)
     return MondayRunInputValidation(
         (

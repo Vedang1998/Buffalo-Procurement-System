@@ -20,6 +20,10 @@ from urllib.parse import urlparse
 
 from psycopg.rows import dict_row
 
+from .development_forecast import (
+    CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    validate_development_forecast_evidence,
+)
 from .monday_forecast_retirement import (
     RETIRED_METHOD_VERSION,
     MondayForecastRetirementContractError,
@@ -738,6 +742,62 @@ def release_variant_locks(conn: Any, lock_names: Iterable[str]) -> None:
             ) from exc
 
 
+_DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS = {
+    "development_forecast_contract",
+    "development_forecast_status",
+}
+_DEVELOPMENT_FORECAST_CONTEXT_EVIDENCE_KEYS = {
+    "development_forecast_evidence",
+    "development_forecast_evidence_sha256",
+}
+
+
+def _valid_frozen_development_forecast_context(
+    context: Mapping[str, Any],
+    *,
+    manifest_contract: Any,
+    blockers: list[Any],
+) -> bool:
+    """Reject partial new evidence instead of downgrading it to legacy."""
+
+    all_keys = (
+        _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS
+        | _DEVELOPMENT_FORECAST_CONTEXT_EVIDENCE_KEYS
+    )
+    present = all_keys.intersection(context)
+    if manifest_contract is None:
+        return not present
+    if (
+        manifest_contract != DEVELOPMENT_FORECAST_CONTRACT
+        or not _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS.issubset(present)
+        or context.get("development_forecast_contract") != manifest_contract
+    ):
+        return False
+    status = context.get("development_forecast_status")
+    if status == "NOT_REACHED":
+        return (
+            present == _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS
+            and bool(blockers)
+        )
+    if status not in {"READY", "BLOCKED"} or present != all_keys:
+        return False
+    evidence = context.get("development_forecast_evidence")
+    evidence_sha256 = context.get("development_forecast_evidence_sha256")
+    if (
+        not validate_development_forecast_evidence(evidence)
+        or not isinstance(evidence, dict)
+        or evidence.get("status") != status
+        or evidence.get("sha256") != evidence_sha256
+    ):
+        return False
+    if status == "BLOCKED":
+        return (
+            bool(blockers)
+            and "DEVELOPMENT_FORECAST_PROTECTION_UNAVAILABLE" in blockers
+        )
+    return True
+
+
 def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
     """Classify one frozen manifest without letting a stored label grant authority."""
 
@@ -784,14 +844,34 @@ def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
         else set()
         for context in contexts
     ]
+    development_contract = manifest.get("development_forecast_contract")
+    development_contract_present = "development_forecast_contract" in manifest
+    development_context_keys = (
+        _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS
+        | _DEVELOPMENT_FORECAST_CONTEXT_EVIDENCE_KEYS
+    )
+    development_fields = [
+        development_context_keys.intersection(context)
+        if isinstance(context, dict)
+        else set()
+        for context in contexts
+    ]
     if contract is None:
-        if "offer_resolution_contract" in manifest or any(selected_fields):
+        if (
+            "offer_resolution_contract" in manifest
+            or any(selected_fields)
+            or development_contract_present
+            or any(development_fields)
+        ):
             raise SyntheticSelectedOfferError(
                 "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
             )
         return None, variant_ids
     if contract != CONTRACT or any(
         fields != selected_only_context_keys for fields in selected_fields
+    ) or (
+        development_contract_present
+        and development_contract != DEVELOPMENT_FORECAST_CONTRACT
     ):
         raise SyntheticSelectedOfferError(
             "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
@@ -835,6 +915,16 @@ def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
             )
         blockers = context.get("blockers")
         if not isinstance(blockers, list):
+            raise SyntheticSelectedOfferError(
+                "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
+            )
+        if not _valid_frozen_development_forecast_context(
+            context,
+            manifest_contract=(
+                development_contract if development_contract_present else None
+            ),
+            blockers=blockers,
+        ):
             raise SyntheticSelectedOfferError(
                 "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
             )

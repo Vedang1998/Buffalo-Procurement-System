@@ -639,6 +639,35 @@ async function audit(client) {
         text.includes("LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"),
       "missing selection and positive loose-fee semantics remain explicit blockers",
     );
+    const developmentForecasts = await evaluate(`[
+      ...document.querySelectorAll("pre.development-forecast-evidence-json")
+    ].map((node) => JSON.parse(node.textContent))`);
+    if (developmentForecasts.length > 0) {
+      check(
+        developmentForecasts.length === 4 &&
+          developmentForecasts.every((item) =>
+            item.contract === "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1" &&
+            item.method_version === "DEVELOPMENT_ROLLING_ORIGIN_V1" &&
+            item.status === "READY" &&
+            item.commercial_authority === false &&
+            item.production_activation === false &&
+            typeof item.selected_model === "string" &&
+            ["X", "Y", "Z"].includes(item.xyz_class) &&
+            item.abc_class === "NOT_CONFIGURED" &&
+            Math.round(Number(item.point_forecast_units) * 10000) +
+              Math.round(Number(item.protection_units) * 10000) ===
+              Math.round(Number(item.target_units) * 10000) &&
+            /^[0-9a-f]{64}$/.test(item.sha256)
+          ),
+        "browser exposes four exact calculated development forecast/protection records",
+        developmentForecasts,
+      );
+      check(
+        text.includes("LOCAL SYNTHETIC DEVELOPMENT ONLY — NO COMMERCIAL AUTHORITY") &&
+          text.includes("empirical full-horizon protection"),
+        "development model and protection evidence are intelligible in the review UI",
+      );
+    }
 
     for (const variantId of ["4003", "4004"]) {
       const selector = `[...document.querySelectorAll('form[action*="/blockers/"]')].find((form) => form.closest("tr")?.innerText.includes(${JSON.stringify(variantId)}))`;
@@ -784,6 +813,7 @@ async function audit(client) {
       runUrl: `${BASE}/monday-runs/${runId}`,
       mapped,
       finalTiers,
+      developmentForecasts,
       artifactUrls: linksAfterReplay,
       artifactDownloads,
     });
@@ -803,6 +833,14 @@ async function audit(client) {
         text.includes("Synthetic Western Acceptance — DRAFT") &&
         text.includes("internal DRAFT total $169.00"),
       `${phase} retains exact two-vendor economics`,
+    );
+    const replayedDevelopmentForecasts = await evaluate(`[
+      ...document.querySelectorAll("pre.development-forecast-evidence-json")
+    ].map((node) => JSON.parse(node.textContent))`);
+    check(
+      JSON.stringify(replayedDevelopmentForecasts.map((item) => item.sha256)) ===
+        JSON.stringify((state.developmentForecasts || []).map((item) => item.sha256)),
+      `${phase} retains exact forecast and protection evidence hashes`,
     );
     const links = await evaluate(`[
       ...document.querySelectorAll('a[href*="/artifacts/"]')

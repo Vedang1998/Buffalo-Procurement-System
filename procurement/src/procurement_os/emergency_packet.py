@@ -12,6 +12,10 @@ import json
 from typing import Any
 import zipfile
 
+from .development_forecast import (
+    CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    validate_development_forecast_evidence,
+)
 from .draft_po import SAFETY_LABEL, get_vendor_drafts
 from .po_csv import FORMAT_WARNING, write_vendor_draft_csvs
 from .storage import StorageAdapter
@@ -246,6 +250,10 @@ def build_emergency_review_packet(
         ).fetchone()
         if input_manifest_text is None or not input_manifest_text[0]:
             raise EmergencyPacketError("frozen input manifest is missing")
+        try:
+            input_manifest = json.loads(input_manifest_text[0])
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise EmergencyPacketError("frozen input manifest is malformed") from exc
         entries["human-review-decisions.csv"] = _review_csv(conn, run_id)
         exceptions = [
             {
@@ -387,7 +395,7 @@ def build_emergency_review_packet(
         ]
     evidence_label = {"safety_label": SAFETY_LABEL}
     entries["frozen-input-manifest.json"] = _json_entry(
-        {**evidence_label, "input_manifest": json.loads(input_manifest_text[0])}
+        {**evidence_label, "input_manifest": input_manifest}
     )
     entries["recommendations-and-reasons.json"] = _json_entry({**evidence_label, "items": recommendations})
     entries["frozen-price-economics.json"] = _json_entry({**evidence_label, "items": prices})
@@ -414,6 +422,57 @@ def build_emergency_review_packet(
             ],
         }
     )
+    development_contract_present = "development_forecast_contract" in input_manifest
+    development_contract = input_manifest.get("development_forecast_contract")
+    if development_contract_present:
+        if development_contract != DEVELOPMENT_FORECAST_CONTRACT:
+            raise EmergencyPacketError(
+                "development forecast contract is unknown or malformed"
+            )
+        development_items = []
+        for context in input_manifest.get("contexts", []):
+            if not isinstance(context, dict):
+                raise EmergencyPacketError(
+                    "development forecast context is malformed"
+                )
+            status = context.get("development_forecast_status")
+            item = {
+                "variant_id": context.get("variant_id"),
+                "status": status,
+                "blockers": context.get("blockers"),
+            }
+            if status in {"READY", "BLOCKED"}:
+                evidence = context.get("development_forecast_evidence")
+                if (
+                    not validate_development_forecast_evidence(evidence)
+                    or evidence.get("status") != status
+                    or evidence.get("sha256")
+                    != context.get("development_forecast_evidence_sha256")
+                ):
+                    raise EmergencyPacketError(
+                        "development forecast evidence is malformed"
+                    )
+                item.update(
+                    {
+                        "evidence": evidence,
+                        "evidence_sha256": evidence["sha256"],
+                        "calculated_need": context.get("need"),
+                    }
+                )
+            elif status != "NOT_REACHED":
+                raise EmergencyPacketError(
+                    "development forecast status is malformed"
+                )
+            development_items.append(item)
+        entries["forecast-and-protection-evidence.json"] = _json_entry(
+            {
+                **evidence_label,
+                "contract": DEVELOPMENT_FORECAST_CONTRACT,
+                "commercial_authority": False,
+                "production_activation": False,
+                "items": development_items,
+            }
+        )
     summary = {
         "safety_label": SAFETY_LABEL,
         "format_status": FORMAT_WARNING,

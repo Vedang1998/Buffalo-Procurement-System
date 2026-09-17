@@ -20,6 +20,10 @@ import zipfile
 
 import psycopg
 
+from procurement_os.development_forecast import (
+    CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    validate_development_forecast_evidence,
+)
 from audit_local_purchasing_browser import (
     BrowserAcceptanceError,
     _free_port,
@@ -44,6 +48,8 @@ from local_purchasing_candidate import (
 
 SAFETY_LABEL = "TEST DATA — NOT FOR ORDERING"
 DATABASE = "buffalo_multivendor_acceptance_demo"
+DEVELOPMENT_DATABASE = "buffalo_development_forecast_acceptance_demo"
+DEVELOPMENT_PROFILE = "development-forecast-v1"
 
 
 def _sha256(path: Path) -> str:
@@ -86,7 +92,12 @@ def _artifact_group(state: dict[str, Any], key: str) -> list[dict[str, Any]]:
     return value
 
 
-def _validate_initial_downloads(downloads: Path, state: dict[str, Any]) -> dict[str, Any]:
+def _validate_initial_downloads(
+    downloads: Path,
+    state: dict[str, Any],
+    *,
+    development_forecast: bool,
+) -> dict[str, Any]:
     initial = _artifact_group(state, "artifactDownloads")
     files = [downloads / str(item["name"]) for item in initial]
     if not all(path.is_file() and _sha256(path) == item["sha256"] for path, item in zip(files, initial, strict=True)):
@@ -153,7 +164,8 @@ def _validate_initial_downloads(downloads: Path, state: dict[str, Any]) -> dict[
     with zipfile.ZipFile(zip_files[0]) as archive:
         names = archive.namelist()
         embedded = sorted(name for name in names if name.endswith(".internal.csv"))
-        if len(names) != 13 or len(embedded) != 2:
+        expected_member_count = 14 if development_forecast else 13
+        if len(names) != expected_member_count or len(embedded) != 2:
             raise BrowserAcceptanceError("two-vendor packet member inventory differs")
         manifest = json.loads(archive.read("manifest.json"))
         if sorted(manifest.get("entries", {})) != sorted(
@@ -170,18 +182,53 @@ def _validate_initial_downloads(downloads: Path, state: dict[str, Any]) -> dict[
         economics = summary.get("vendor_draft_economics")
         if not isinstance(economics, list) or len(economics) != 2:
             raise BrowserAcceptanceError("packet vendor economics differ")
+        forecast_member = None
+        if development_forecast:
+            if "forecast-and-protection-evidence.json" not in names:
+                raise BrowserAcceptanceError(
+                    "development packet member is missing"
+                )
+            forecast_member = json.loads(
+                archive.read("forecast-and-protection-evidence.json")
+            )
+            items = forecast_member.get("items")
+            if (
+                forecast_member.get("contract") != DEVELOPMENT_FORECAST_CONTRACT
+                or forecast_member.get("commercial_authority") is not False
+                or forecast_member.get("production_activation") is not False
+                or not isinstance(items, list)
+                or len(items) != 6
+            ):
+                raise BrowserAcceptanceError(
+                    "development packet evidence shape differs"
+                )
+            for item in items:
+                if item.get("status") in {"READY", "BLOCKED"} and (
+                    not validate_development_forecast_evidence(item.get("evidence"))
+                    or item.get("evidence_sha256")
+                    != item["evidence"].get("sha256")
+                ):
+                    raise BrowserAcceptanceError(
+                        "development packet evidence hash differs"
+                    )
     return {
         "files": [
             {"name": path.name, "bytes": path.stat().st_size, "sha256": _sha256(path)}
             for path in files
         ],
         "packet_members": sorted(names),
+        "forecast_and_protection": forecast_member,
         "vendor_rows": by_vendor,
         "totals": {"merchandise": "162.00", "fees": "7.00", "total": "169.00"},
     }
 
 
-def _database_acceptance(database_url: str, run_id: str) -> dict[str, Any]:
+def _database_acceptance(
+    database_url: str,
+    run_id: str,
+    *,
+    development_forecast: bool,
+) -> dict[str, Any]:
     with psycopg.connect(database_url) as conn:
         conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
         counts = conn.execute(
@@ -263,6 +310,48 @@ def _database_acceptance(database_url: str, run_id: str) -> dict[str, Any]:
                 ORDER BY artifact_type,vendor_id NULLS LAST""",
             (run_id,),
         ).fetchall()
+        forecast_rows = conn.execute(
+            """SELECT f.variant_id,f.selected_model,f.demand_regime,f.xyz_class,
+                      f.forecast_units,f.safety_stock_units,
+                      f.baseline_replenishment_units,f.method_version,f.diagnostics,
+                      r.metrics
+                 FROM forecast_results f
+                 JOIN procurement_recommendations r
+                   ON r.run_id=f.run_id AND r.variant_id=f.variant_id
+                WHERE f.run_id=%s ORDER BY f.variant_id""",
+            (run_id,),
+        ).fetchall()
+        if development_forecast:
+            if len(forecast_rows) != 4:
+                raise BrowserAcceptanceError(
+                    "development forecast result population differs"
+                )
+            for row in forecast_rows:
+                evidence = row[9].get("development_forecast_evidence")
+                if (
+                    row[7] != "DEVELOPMENT_ROLLING_ORIGIN_V1"
+                    or not validate_development_forecast_evidence(evidence)
+                    or row[1] != evidence.get("selected_model")
+                    or row[2] != evidence.get("demand_regime")
+                    or row[3] != evidence.get("xyz_class")
+                    or Decimal(row[4])
+                    != Decimal(evidence.get("point_forecast_units"))
+                    or Decimal(row[5])
+                    != Decimal(evidence.get("protection_units"))
+                    or Decimal(row[9].get("target_units"))
+                    != Decimal(evidence.get("point_forecast_units"))
+                    + Decimal(evidence.get("protection_units"))
+                ):
+                    raise BrowserAcceptanceError(
+                        f"development forecast row differs for Variant {row[0]}"
+                    )
+        elif any(
+            row[9].get("development_forecast_contract") is not None
+            for row in forecast_rows
+        ):
+            raise BrowserAcceptanceError(
+                "legacy multivendor run unexpectedly activated development forecasting"
+            )
         return {
             "counts": [int(value) for value in counts],
             "stage": stage[0],
@@ -271,6 +360,22 @@ def _database_acceptance(database_url: str, run_id: str) -> dict[str, Any]:
             "blockers": [[str(value) for value in row] for row in blockers],
             "reviews": [[str(value) for value in row] for row in rejected],
             "artifacts": [[None if value is None else str(value) for value in row] for row in artifacts],
+            "forecast_results": [
+                {
+                    "variant_id": str(row[0]),
+                    "selected_model": row[1],
+                    "demand_regime": row[2],
+                    "xyz_class": row[3],
+                    "point_forecast_units": str(row[4]),
+                    "protection_units": None if row[5] is None else str(row[5]),
+                    "baseline_replenishment_units": str(row[6]),
+                    "method_version": row[7],
+                    "evidence_sha256": row[9].get(
+                        "development_forecast_evidence_sha256"
+                    ),
+                }
+                for row in forecast_rows
+            ],
             "state": _state_evidence(database_url),
         }
 
@@ -296,6 +401,8 @@ def _start_chromium(chromium: str, profile: Path, port: int, log: Path) -> tuple
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     source_identity = _source_identity()
+    development_forecast = args.fixture_profile == DEVELOPMENT_PROFILE
+    database = DEVELOPMENT_DATABASE if development_forecast else DATABASE
     os.umask(0o077)
     if args.work_root.exists() or args.evidence_root.exists():
         raise BrowserAcceptanceError("work and evidence roots must both be new")
@@ -315,10 +422,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     while target_pg_port == source_pg_port:
         target_pg_port = _free_port()
     source_init = initialize_local_database(
-        source_runtime, database=DATABASE, port=source_pg_port,
-        fixture_profile="multivendor-v2",
+        source_runtime, database=database, port=source_pg_port,
+        fixture_profile=args.fixture_profile,
     )
-    source_url = _local_database_url(DATABASE, source_pg_port)
+    source_url = _local_database_url(database, source_pg_port)
     app_port = _free_port()
     chromium_port = _free_port()
     chromium = shutil.which("chromium") or shutil.which("chromium-browser")
@@ -385,19 +492,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             server_log = None
 
             browser_state = json.loads(state_path.read_text(encoding="utf-8"))
-            initial_downloads = _validate_initial_downloads(downloads, browser_state)
+            initial_downloads = _validate_initial_downloads(
+                downloads,
+                browser_state,
+                development_forecast=development_forecast,
+            )
             source_acceptance = _database_acceptance(
-                source_url, str(browser_state["runId"])
+                source_url,
+                str(browser_state["runId"]),
+                development_forecast=development_forecast,
             )
             source_storage = _storage_inventory(source_runtime / "storage")
             v1_manifest = backup(source_url, source_runtime)
             target_init = initialize_local_database(
-                target_runtime, database=DATABASE, port=target_pg_port,
+                target_runtime, database=database, port=target_pg_port,
                 empty_restore_target=True,
             )
             if source_init["system_identifier"] == target_init["system_identifier"]:
                 raise BrowserAcceptanceError("source and recovery clusters are not distinct")
-            target_url = _local_database_url(DATABASE, target_pg_port)
+            target_url = _local_database_url(database, target_pg_port)
             restore_result = restore_same_database(
                 target_url, target_runtime, target_runtime / "storage", v1_manifest
             )
@@ -442,12 +555,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 if sorted(item["sha256"] for item in _artifact_group(final_state, key)) != initial_hashes:
                     raise BrowserAcceptanceError(f"{key} artifact bytes differ")
             target_acceptance = _database_acceptance(
-                target_url, str(final_state["runId"])
+                target_url,
+                str(final_state["runId"]),
+                development_forecast=development_forecast,
             )
             if target_acceptance["state"] != source_acceptance["state"]:
                 raise BrowserAcceptanceError("recovery replay changed durable state")
             result = {
-                "contract": "BUFFALO_MULTIVENDOR_PRICE_TO_DRAFT_ACCEPTANCE_V1",
+                "contract": (
+                    "BUFFALO_DEVELOPMENT_FORECAST_TO_DRAFT_ACCEPTANCE_V1"
+                    if development_forecast
+                    else "BUFFALO_MULTIVENDOR_PRICE_TO_DRAFT_ACCEPTANCE_V1"
+                ),
+                "fixture_profile": args.fixture_profile,
                 "safety_label": SAFETY_LABEL,
                 "source_identity": source_identity,
                 "source_cluster": source_init,
@@ -472,7 +592,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     "CSV remains internal DRAFT format and is not a validated Shopify import format",
                 ],
             }
-            _write_json(args.evidence_root / "MULTIVENDOR_ACCEPTANCE_SUMMARY.json", result)
+            summary_name = (
+                "DEVELOPMENT_FORECAST_ACCEPTANCE_SUMMARY.json"
+                if development_forecast
+                else "MULTIVENDOR_ACCEPTANCE_SUMMARY.json"
+            )
+            _write_json(args.evidence_root / summary_name, result)
     finally:
         if server is not None and server_log is not None:
             try:
@@ -508,6 +633,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--work-root", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
+    parser.add_argument(
+        "--fixture-profile",
+        choices=("multivendor-v2", DEVELOPMENT_PROFILE),
+        default="multivendor-v2",
+    )
     args = parser.parse_args()
     result = run(args)
     print(json.dumps({

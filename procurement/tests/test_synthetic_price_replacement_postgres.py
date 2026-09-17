@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 import hashlib
 import io
 import json
@@ -20,6 +20,10 @@ import initialize_synthetic_demo as initializer
 import test_persistent_mapping_foundation_postgres as mapping_matrix
 from procurement_os import recommendations
 from procurement_os.draft_po import build_vendor_drafts, preview_vendor_drafts
+from procurement_os.development_forecast import (
+    CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    validate_development_forecast_evidence,
+)
 from procurement_os.emergency_packet import build_emergency_review_packet
 from procurement_os.local_backup_v2 import (
     VerifiedPriceApplyBackup,
@@ -141,6 +145,7 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                 "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
                 "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
                 "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "1",
                 "TEST_DATABASE_URL": self.test_url,
             },
             clear=False,
@@ -185,6 +190,7 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             for name in tuple(mapping_matrix.apply_schema.LEGACY_MIGRATION_SHA256)[:cutoff]:
                 initializer._apply_legacy(conn, name, schema_oid=schema_oid)
             initializer._seed_pre_price(conn, BUSINESS_DATE)
+            initializer._seed_multivendor_pre_price(conn, BUSINESS_DATE)
             for name in tuple(mapping_matrix.apply_schema.LEGACY_MIGRATION_SHA256)[cutoff:]:
                 initializer._apply_legacy(conn, name, schema_oid=schema_oid)
             with conn.transaction():
@@ -193,7 +199,11 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                         conn, mapping_matrix.DB_DIR
                     )
                 )
-            sales_id = initializer._seed_evidence(conn, BUSINESS_DATE)
+            sales_id = initializer._seed_evidence(
+                conn,
+                BUSINESS_DATE,
+                include_multivendor=True,
+            )
             self._install_synthetic_test_sales_contract(conn)
             with conn.transaction():
                 self.assertTrue(
@@ -213,7 +223,9 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                 "INSERT INTO meta(key,value) VALUES "
                 "('synthetic_owner_demo_contract','BUFFALO_SYNTHETIC_OWNER_DEMO_V1'),"
                 "('synthetic_owner_demo_business_date',%s),"
-                "('synthetic_owner_demo_sales_backfill_id',%s)",
+                "('synthetic_owner_demo_sales_backfill_id',%s),"
+                "('synthetic_multivendor_acceptance_contract',"
+                " 'BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2')",
                 (BUSINESS_DATE.isoformat(), sales_id),
             )
 
@@ -225,7 +237,12 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
         history_start = BUSINESS_DATE - timedelta(days=84)
         history_end = BUSINESS_DATE - timedelta(days=1)
         coverage = {}
-        for variant_id in (initializer.VARIANT_ID, initializer.CONTROL_VARIANT_ID):
+        covered_variant_ids = (
+            initializer.VARIANT_ID,
+            initializer.CONTROL_VARIANT_ID,
+            *initializer.WESTERN_VARIANT_IDS,
+        )
+        for variant_id in covered_variant_ids:
             rows = conn.execute(
                 """SELECT sale_date,units_sold,net_sales,distinct_orders,source,
                           run_id::text
@@ -244,8 +261,8 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             "coverage_contract":
                 "DISPOSABLE_SYNTHETIC_DAILY_VARIANT_COVERAGE_V1",
             "source": "SYNTHETIC_TEST",
-            "sales_rows": 168,
-            "variant_count": 2,
+            "sales_rows": 84 * len(covered_variant_ids),
+            "variant_count": len(covered_variant_ids),
             "history_start": history_start.isoformat(),
             "history_end": history_end.isoformat(),
             "variant_coverage": coverage,
@@ -650,7 +667,10 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                     final_price_tier=tier,
                 )
             )
-            forged = {**tier, "run_price_snapshot_id": tier["run_price_snapshot_id"] + 999}
+            forged = {
+                **tier,
+                "run_price_snapshot_id": tier["run_price_snapshot_id"] + 999,
+            }
             self.assertFalse(
                 final_price_tier_matches_snapshot(
                     conn,
@@ -659,12 +679,194 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                     final_price_tier=forged,
                 )
             )
-        with zipfile.ZipFile(io.BytesIO(self.storage.get_bytes(packet["storage_key"]))) as archive:
+        with zipfile.ZipFile(
+            io.BytesIO(self.storage.get_bytes(packet["storage_key"]))
+        ) as archive:
             self.assertEqual(len(archive.namelist()), 12)
             mapping_evidence = json.loads(
                 archive.read("supplier-mapping-evidence.json")
             )["items"][0]
         self.assertEqual(mapping_evidence["final_price_tier"], tier)
+
+    def test_development_forecast_calculation_drives_recommendation_and_packet(self):
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        self._apply(batch_id, key="focused-development-price-apply-v1")
+        self._select_fixture_offer()
+        with self._connection() as conn:
+            with conn.transaction():
+                conn.execute(
+                    "INSERT INTO meta(key,value) VALUES (%s,%s)",
+                    (
+                        initializer.DEVELOPMENT_FORECAST_META_KEY,
+                        initializer.DEVELOPMENT_FORECAST_DEMO_CONTRACT,
+                    ),
+                )
+            with mock.patch.dict(
+                os.environ,
+                {"BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "0"},
+            ):
+                with self.assertRaisesRegex(
+                    recommendations.MondayRecommendationError,
+                    "synthetic development forecast is not authorized",
+                ):
+                    recommendations.prepare_monday_run(
+                        conn,
+                        business_date=BUSINESS_DATE,
+                        idempotency_key="forecast-marker-alone-must-refuse",
+                        variant_ids=("1001",),
+                        actor="synthetic:matrix-owner:01",
+                    )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM runs WHERE idempotency_key=%s",
+                    ("forecast-marker-alone-must-refuse",),
+                ).fetchone()[0],
+                0,
+            )
+            conn.rollback()
+            run = recommendations.prepare_monday_run(
+                conn,
+                business_date=BUSINESS_DATE,
+                idempotency_key="focused-development-forecast-monday-v1",
+                variant_ids=("1001",),
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(run["blockers"], [])
+        self.assertEqual(len(run["recommendations"]), 1)
+        recommendation = run["recommendations"][0]
+        metrics = recommendation["metrics"]
+        evidence = metrics["development_forecast_evidence"]
+        self.assertEqual(
+            metrics["development_forecast_contract"],
+            DEVELOPMENT_FORECAST_CONTRACT,
+        )
+        self.assertTrue(validate_development_forecast_evidence(evidence))
+        point = Decimal(evidence["point_forecast_units"])
+        protection = Decimal(evidence["protection_units"])
+        target = point + protection
+        effective = Decimal(metrics["available_units"]) + Decimal(
+            metrics["trusted_incoming_units"]
+        )
+        independent_raw_need = max(
+            0,
+            int((target - effective).to_integral_value(rounding=ROUND_CEILING)),
+        )
+        units_per_case = int(
+            Decimal(metrics["frozen_offer_evidence"]["shopify_units_per_case"])
+        )
+        independent_cases = (
+            independent_raw_need + units_per_case - 1
+        ) // units_per_case
+        self.assertEqual(Decimal(metrics["target_units"]), target)
+        self.assertEqual(int(metrics["raw_need_units"]), independent_raw_need)
+        self.assertEqual(recommendation["recommended_cases"], independent_cases)
+        self.assertEqual(
+            recommendation["recommended_units"],
+            independent_cases * units_per_case,
+        )
+        with self._connection() as conn:
+            frozen = conn.execute(
+                """SELECT selected_model,demand_regime,xyz_class,forecast_units,
+                          safety_stock_units,baseline_replenishment_units,
+                          method_version,diagnostics
+                     FROM forecast_results
+                    WHERE run_id=%s AND variant_id='1001'""",
+                (run["run_id"],),
+            ).fetchone()
+            self.assertEqual(
+                (
+                    frozen[0],
+                    frozen[1],
+                    frozen[2],
+                    Decimal(frozen[3]),
+                    Decimal(frozen[4]),
+                    int(frozen[5]),
+                    frozen[6],
+                ),
+                (
+                    evidence["selected_model"],
+                    evidence["demand_regime"],
+                    evidence["xyz_class"],
+                    point,
+                    protection,
+                    independent_raw_need,
+                    evidence["method_version"],
+                ),
+            )
+            self.assertEqual(
+                frozen[7]["development_forecast_evidence_sha256"],
+                evidence["sha256"],
+            )
+            manifest = conn.execute(
+                "SELECT procurement_input_manifest FROM runs WHERE run_id=%s",
+                (run["run_id"],),
+            ).fetchone()[0]
+            malformed = json.loads(manifest)
+            del malformed["contexts"][0][
+                "development_forecast_evidence_sha256"
+            ]
+            with self.assertRaisesRegex(
+                SyntheticSelectedOfferError,
+                "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID",
+            ):
+                classify_frozen_manifest(json.dumps(malformed, sort_keys=True))
+            conn.rollback()
+            review_preview = preview_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=recommendation["recommended_cases"],
+                approved_loose_units=recommendation["recommended_loose_units"],
+                comment="",
+            )
+            review = record_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=recommendation["recommended_cases"],
+                approved_loose_units=recommendation["recommended_loose_units"],
+                comment="",
+                expected_review_preview_fingerprint=review_preview[
+                    "preview_fingerprint"
+                ],
+            )
+            draft_preview = preview_vendor_drafts(
+                conn,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+            drafts = build_vendor_drafts(
+                conn,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+                expected_preview_fingerprint=draft_preview["preview_fingerprint"],
+                minimum_disposition=draft_preview["minimum_disposition"],
+            )
+            packet = build_emergency_review_packet(
+                conn,
+                storage=self.storage,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(review["approved_cases"], independent_cases)
+        self.assertEqual(drafts["drafts"][0]["lines"][0]["cases"], independent_cases)
+        with zipfile.ZipFile(io.BytesIO(self.storage.get_bytes(packet["storage_key"]))) as archive:
+            self.assertIn("forecast-and-protection-evidence.json", archive.namelist())
+            forecast_member = json.loads(
+                archive.read("forecast-and-protection-evidence.json")
+            )
+        self.assertEqual(forecast_member["contract"], DEVELOPMENT_FORECAST_CONTRACT)
+        self.assertFalse(forecast_member["commercial_authority"])
+        self.assertEqual(len(forecast_member["items"]), 1)
+        self.assertEqual(forecast_member["items"][0]["variant_id"], "1001")
+        self.assertEqual(
+            forecast_member["items"][0]["evidence_sha256"],
+            evidence["sha256"],
+        )
 
     def test_review_rejects_authority_envelope_when_snapshot_lineage_is_missing(self):
         run, recommendation = self._prepare_applied_selected_run(

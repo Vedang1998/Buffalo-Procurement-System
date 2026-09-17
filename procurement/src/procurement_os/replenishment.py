@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
 
@@ -143,5 +143,71 @@ def calculate_baseline_need(
             "BASELINE_NEED_ONLY",
             "EMPIRICAL_SAFETY_STOCK_NOT_VALIDATED",
             "NO_FILLER_ADDED",
+        ),
+    )
+
+
+def calculate_development_baseline_need(
+    *,
+    forecast_daily_velocity: object,
+    point_forecast_units: object,
+    empirical_protection_units: object,
+    available_units: object | None,
+    trusted_incoming_units: object | None,
+    order_cycle_days: int,
+    lead_time_days: int,
+    lead_time_variability_days: object,
+    policy_mode: str | None,
+    units_per_case: int,
+    loose_order_allowed: bool,
+    loose_unit_fee: object | None,
+    forecast_horizon_days: int,
+    open_po_blocked: bool = False,
+) -> BaselineNeed:
+    """Bind one calculated point forecast plus empirical protection exactly once.
+
+    The existing function remains the byte-compatible emergency/default path.
+    This development adapter proves the target identity explicitly and replaces
+    only the emergency ``EMPIRICAL_SAFETY_STOCK_NOT_VALIDATED`` reason on a
+    routine calculated result.
+    """
+
+    point = _decimal(point_forecast_units, "point_forecast_units")
+    protection = _decimal(
+        empirical_protection_units, "empirical_protection_units"
+    )
+    assert point is not None and protection is not None
+    target = point + protection
+    result = calculate_baseline_need(
+        forecast_daily_velocity=forecast_daily_velocity,
+        available_units=available_units,
+        trusted_incoming_units=trusted_incoming_units,
+        order_cycle_days=order_cycle_days,
+        lead_time_days=lead_time_days,
+        lead_time_variability_days=lead_time_variability_days,
+        policy_mode=policy_mode,
+        units_per_case=units_per_case,
+        loose_order_allowed=loose_order_allowed,
+        loose_unit_fee=loose_unit_fee,
+        forecast_units_for_protection=target,
+        forecast_horizon_days=forecast_horizon_days,
+        open_po_blocked=open_po_blocked,
+    )
+    if result.status not in {"READY_FOR_REVIEW", "NO_ORDER_NEEDED"}:
+        return result
+    if result.target_units != target:
+        raise ValueError("development forecast target did not bind exactly")
+    reasons = tuple(
+        reason
+        for reason in result.reason_codes
+        if reason != "EMPIRICAL_SAFETY_STOCK_NOT_VALIDATED"
+    )
+    return replace(
+        result,
+        reason_codes=(
+            *reasons,
+            "DEVELOPMENT_POINT_FORECAST_BOUND",
+            "EMPIRICAL_FULL_HORIZON_PROTECTION_BOUND",
+            "PROTECTION_NOT_DOUBLE_COUNTED",
         ),
     )

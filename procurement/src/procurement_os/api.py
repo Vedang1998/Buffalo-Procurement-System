@@ -2175,6 +2175,29 @@ def _monday_run_html(
                 "new demand, stockout, model-selection, or safety-stock claim is made."
                 "</td></tr>"
             )
+        development_forecast_evidence = metrics.get(
+            "development_forecast_evidence"
+        )
+        if (
+            isinstance(development_forecast_evidence, dict)
+            and development_forecast_evidence.get("contract")
+            == "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1"
+        ):
+            development_json = json.dumps(
+                development_forecast_evidence,
+                sort_keys=True,
+                indent=2,
+                default=str,
+            )
+            development_forecast_row = f"""
+<tr><th>Development forecast / protection</th><td><section class='development-forecast-evidence' data-contract='BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1'>
+<p><b>LOCAL SYNTHETIC DEVELOPMENT ONLY — NO COMMERCIAL AUTHORITY.</b> Method {_html_escape(development_forecast_evidence.get('method_version'))}; selected model {_html_escape(development_forecast_evidence.get('selected_model'))}; regime {_html_escape(development_forecast_evidence.get('demand_regime'))}; XYZ {_html_escape(development_forecast_evidence.get('xyz_class'))}; ABC {_html_escape(development_forecast_evidence.get('abc_class'))} ({_html_escape(development_forecast_evidence.get('abc_status'))}).</p>
+<p>Point forecast {_html_escape(development_forecast_evidence.get('point_forecast_units'))}; empirical full-horizon protection {_html_escape(development_forecast_evidence.get('protection_units'))}; target {_html_escape(development_forecast_evidence.get('target_units'))}; horizon {_html_escape(development_forecast_evidence.get('horizon_days'))} day(s).</p>
+<p>Selection metrics {_html_escape(development_forecast_evidence.get('selection_metrics'))}; final evaluation {_html_escape(development_forecast_evidence.get('evaluation_metrics'))}; reasons {_html_escape(development_forecast_evidence.get('reason_codes'))}; cap evidence {_html_escape(development_forecast_evidence.get('caps'))}.</p>
+<details><summary>Exact frozen development forecast evidence</summary><pre class='development-forecast-evidence-json'>{_html_escape(development_json)}</pre></details>
+</section></td></tr>"""
+        else:
+            development_forecast_row = ""
         capture = metrics.get("frozen_inventory_capture") or []
         inventory_rows = "".join(
             "<tr>"
@@ -2212,6 +2235,7 @@ def _monday_run_html(
 <tr><th>Trusted incoming</th><td>{_html_escape(metrics.get('trusted_incoming_units'))}; reconciliation {_html_escape(metrics.get('frozen_open_po_position'))}</td></tr>
 <tr><th>Demand / coverage</th><td>Authority {_html_escape(metrics.get('frozen_sales_authority'))}; velocity {_html_escape(metrics.get('forecast_daily_velocity'))}/day; horizon {_html_escape(metrics.get('forecast_horizon_days'))} days; forecast {_html_escape(metrics.get('forecast_units'))}; baseline need {_html_escape(metrics.get('raw_need_units'))}; target {_html_escape(metrics.get('target_units'))}; reasons {_html_escape(metrics.get('need_reason_codes'))}</td></tr>
 {demand_evidence_row}
+{development_forecast_row}
 <tr><th>Retail / margin diagnostic</th><td>Frozen retail ${_html_escape(metrics.get('frozen_catalog_retail_price'))}; unit GP ${_html_escape(metrics.get('frozen_unit_gross_profit'))}; gross margin {_html_escape(metrics.get('frozen_gross_margin_pct'))}% (diagnostic only)</td></tr>
 <tr><th>Frozen price ladder</th><td><table><tr><th>Level</th><th>Break</th><th>Case</th><th>Unit</th><th>Source</th></tr>{price_rows}</table></td></tr>
 </table>"""

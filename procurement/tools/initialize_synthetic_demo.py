@@ -32,6 +32,10 @@ from procurement_os.synthetic_price_replacement_contract import (
     FIXTURE_REGISTRATION_CANONICAL_SHA256,
     FIXTURE_REGISTRATION_REF,
 )
+from procurement_os.development_forecast import (
+    FIXTURE_CONTRACT as DEVELOPMENT_FORECAST_DEMO_CONTRACT,
+    FIXTURE_META_KEY as DEVELOPMENT_FORECAST_META_KEY,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +49,7 @@ CONTROL_VARIANT_ID = "3003"
 DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 MULTIVENDOR_DEMO_CONTRACT = "BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2"
 MULTIVENDOR_PROFILE = "multivendor-v2"
+DEVELOPMENT_FORECAST_PROFILE = "development-forecast-v1"
 BASELINE_PROFILE = "baseline-v1"
 WESTERN_VENDOR_ID = "00000000-0000-4000-8000-000000000003"
 WESTERN_VARIANT_IDS = ("4001", "4002", "4003", "4004", "4005")
@@ -1097,10 +1102,15 @@ def _publish_demo_marker(
             "INSERT INTO meta(key,value) VALUES (%s,%s)",
             ("synthetic_owner_demo_contract", DEMO_CONTRACT),
         )
-        if profile == MULTIVENDOR_PROFILE:
+        if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
             conn.execute(
                 "INSERT INTO meta(key,value) VALUES (%s,%s)",
                 ("synthetic_multivendor_acceptance_contract", MULTIVENDOR_DEMO_CONTRACT),
+            )
+        if profile == DEVELOPMENT_FORECAST_PROFILE:
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES (%s,%s)",
+                (DEVELOPMENT_FORECAST_META_KEY, DEVELOPMENT_FORECAST_DEMO_CONTRACT),
             )
 
 
@@ -1135,6 +1145,7 @@ def _verify_initialized_demo(
                     "synthetic_owner_demo_business_date",
                     "synthetic_owner_demo_sales_backfill_id",
                     "synthetic_multivendor_acceptance_contract",
+                    DEVELOPMENT_FORECAST_META_KEY,
                 ],
             ),
         ).fetchall()
@@ -1145,13 +1156,22 @@ def _verify_initialized_demo(
         != business_date.isoformat()
         or not metadata.get("synthetic_owner_demo_sales_backfill_id")
         or (
-            profile == MULTIVENDOR_PROFILE
+            profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}
             and metadata.get("synthetic_multivendor_acceptance_contract")
             != MULTIVENDOR_DEMO_CONTRACT
         )
         or (
             profile == BASELINE_PROFILE
             and "synthetic_multivendor_acceptance_contract" in metadata
+        )
+        or (
+            profile == DEVELOPMENT_FORECAST_PROFILE
+            and metadata.get(DEVELOPMENT_FORECAST_META_KEY)
+            != DEVELOPMENT_FORECAST_DEMO_CONTRACT
+        )
+        or (
+            profile != DEVELOPMENT_FORECAST_PROFILE
+            and DEVELOPMENT_FORECAST_META_KEY in metadata
         )
     ):
         raise RuntimeError("synthetic demo metadata differs")
@@ -1307,14 +1327,16 @@ def _verify_initialized_demo(
         conn,
         business_date=business_date,
         sales_backfill_id=sales_backfill_uuid,
-        include_multivendor=profile == MULTIVENDOR_PROFILE,
+        include_multivendor=profile
+        in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE},
     )
     _verify_synthetic_inventory_corpus(
         conn,
         business_date=business_date,
-        include_multivendor=profile == MULTIVENDOR_PROFILE,
+        include_multivendor=profile
+        in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE},
     )
-    if profile == MULTIVENDOR_PROFILE:
+    if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
         western_rows = conn.execute(
             """SELECT v.variant_id,o.supplier_sku,o.raw_pack,
                       o.shopify_units_per_case,o.qualifying_units_per_case,
@@ -1429,7 +1451,11 @@ def initialize(
     *,
     profile: str = BASELINE_PROFILE,
 ) -> dict[str, object]:
-    if profile not in {BASELINE_PROFILE, MULTIVENDOR_PROFILE}:
+    if profile not in {
+        BASELINE_PROFILE,
+        MULTIVENDOR_PROFILE,
+        DEVELOPMENT_FORECAST_PROFILE,
+    }:
         raise RuntimeError("synthetic demo profile is not registered")
     if business_date != _registered_business_date():
         raise RuntimeError("synthetic demo business date differs from registered fixture")
@@ -1466,7 +1492,7 @@ def initialize(
         for name in legacy_names[:11]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
         _seed_pre_price(conn, business_date)
-        if profile == MULTIVENDOR_PROFILE:
+        if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
             _seed_multivendor_pre_price(conn, business_date)
         for name in legacy_names[11:]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
@@ -1476,7 +1502,8 @@ def initialize(
         sales_backfill_id = _seed_evidence(
             conn,
             business_date,
-            include_multivendor=profile == MULTIVENDOR_PROFILE,
+            include_multivendor=profile
+            in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE},
         )
         _seed_stale_v1_fixture(conn, business_date)
         with conn.transaction():
@@ -1515,7 +1542,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--profile",
-        choices=(BASELINE_PROFILE, MULTIVENDOR_PROFILE),
+        choices=(
+            BASELINE_PROFILE,
+            MULTIVENDOR_PROFILE,
+            DEVELOPMENT_FORECAST_PROFILE,
+        ),
         default=BASELINE_PROFILE,
     )
     args = parser.parse_args()

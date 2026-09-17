@@ -27,6 +27,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_catalog_readiness.py": 14,
     "test_catalog_reconciliation_phase3.py": 12,
     "test_economics.py": 4,
+    "test_development_forecast.py": 9,
     "test_forecasting.py": 16,
     "test_historical_sales_review_api.py": 17,
     "test_identity_investigation.py": 32,
@@ -65,7 +66,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_supplier_review_package.py": 15,
     "test_supplier_review_real_v5.py": 29,
     "test_supplier_review_v5.py": 16,
-    "test_synthetic_price_replacement_postgres.py": 9,
+    "test_synthetic_price_replacement_postgres.py": 10,
     "test_test_runner.py": 24,
     "test_vendor_rules.py": 16,
 }

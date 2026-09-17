@@ -672,6 +672,7 @@ def _child_environment(
         "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
         "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
         "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+        "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "1",
         LOCAL_RUNTIME_ROOT_ENV: str(runtime_root),
         SOURCE_COMMIT_ENV: source_git["commit"],
         SOURCE_TREE_ENV: source_git["tree"],
@@ -2303,7 +2304,11 @@ def main() -> int:
         if name == "initialize-database":
             database_parser.add_argument(
                 "--fixture-profile",
-                choices=("baseline-v1", "multivendor-v2"),
+                choices=(
+                    "baseline-v1",
+                    "multivendor-v2",
+                    "development-forecast-v1",
+                ),
                 default="baseline-v1",
             )
     for name in ("database-status", "database-start", "database-stop"):
