@@ -62,7 +62,9 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
         finally:
             self.fixture.doCleanups()
 
-    def _reset_with_two_priced_active_offers(self) -> tuple[int, int]:
+    def _reset_with_two_priced_active_offers(
+        self, *, discriminating_alternative: bool = False
+    ) -> tuple[int, int]:
         fixture = self.fixture
         fixture._prepare_roles_and_schema()
         cutoff = mapping_matrix.apply_schema.MIGRATION_ORDER.index(
@@ -84,11 +86,42 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
                         schema_oid=schema_oid,
                     )
         fixture._seed_catalog()
-        selected_offer_id = fixture._legacy_offer(sku="SUP-001")
-        alternative_offer_id = fixture._legacy_offer(sku="SUP-ALT")
+        if discriminating_alternative:
+            alternative_offer_id = fixture._legacy_offer(sku="SUP-ALT")
+            selected_offer_id = fixture._legacy_offer(sku="SUP-001")
+        else:
+            selected_offer_id = fixture._legacy_offer(sku="SUP-001")
+            alternative_offer_id = fixture._legacy_offer(sku="SUP-ALT")
         with psycopg.connect(fixture.mapping_url) as conn:
-            conn.execute(
-                f"""INSERT INTO {mapping_matrix.SCHEMA}.prices(
+            if discriminating_alternative:
+                conn.execute(
+                    f"""INSERT INTO {mapping_matrix.SCHEMA}.prices(
+                               offer_id,price_state,effective_month,level_type,
+                               break_qty,break_unit,case_price,unit_price,source_file,
+                               source_page,extraction_confidence,verified,notes)
+                        VALUES
+                           (%s,'current',DATE '2026-09-01','BASE',NULL,NULL,
+                            24.0000,4.0000,'selected-offer-discriminator.csv',1,
+                            'VERIFIED',true,'authentic pre-011 cheaper BASE'),
+                           (%s,'current',DATE '2026-09-01','BREAK',2,'CS',
+                            21.0000,3.5000,'selected-offer-discriminator.csv',2,
+                            'VERIFIED',true,'authentic pre-011 cheaper BREAK'),
+                           (%s,'current',DATE '2026-09-01','BASE',NULL,NULL,
+                            60.0000,10.0000,'selected-offer-discriminator.csv',3,
+                            'VERIFIED',true,'authentic pre-011 selected BASE'),
+                           (%s,'current',DATE '2026-09-01','BREAK',2,'CS',
+                            54.0000,9.0000,'selected-offer-discriminator.csv',4,
+                            'VERIFIED',true,'authentic pre-011 selected BREAK')""",
+                    (
+                        alternative_offer_id,
+                        alternative_offer_id,
+                        selected_offer_id,
+                        selected_offer_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    f"""INSERT INTO {mapping_matrix.SCHEMA}.prices(
                            offer_id,price_state,effective_month,level_type,
                            break_qty,break_unit,case_price,unit_price,source_file,
                            source_page,extraction_confidence,verified,notes)
@@ -102,8 +135,8 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
                        (%s,'current',DATE '2026-09-01','BASE',NULL,NULL,
                         60.0000,10.0000,'selected-offer-causal.csv',3,
                         'VERIFIED',true,'authentic pre-011 alternative BASE')""",
-                (selected_offer_id, selected_offer_id, alternative_offer_id),
-            )
+                    (selected_offer_id, selected_offer_id, alternative_offer_id),
+                )
         with psycopg.connect(fixture.mapping_url) as conn:
             schema_oid = int(
                 conn.execute(
@@ -318,6 +351,7 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
         selected_evidence = recommendation["metrics"][
             "selected_offer_input_evidence"
         ]
+        self.assertNotIn("applicable_price_authority", selected_evidence)
         self.assertEqual(selected_evidence["contract"], SELECTED_CONTRACT)
         self.assertEqual(selected_evidence["authority"], "SYNTHETIC_TEST_ONLY")
         self.assertEqual(
@@ -410,6 +444,17 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
                         "selected-offer-causal.csv",
                         2,
                     ),
+                )
+                self.assertEqual(
+                    conn.execute(
+                        f"""SELECT source_price_id,source_price_book_batch_id,
+                                   source_price_book_row_number,
+                                   supplier_price_authority_event_id
+                              FROM {mapping_matrix.SCHEMA}.run_price_snapshots
+                             WHERE run_id=%s ORDER BY run_price_snapshot_id""",
+                        (run["run_id"],),
+                    ).fetchall(),
+                    [(None, None, None, None), (None, None, None, None)],
                 )
                 conn.rollback()
                 confirmation_id = None
@@ -509,6 +554,146 @@ class SelectedOfferConsumptionPostgresTests(unittest.TestCase):
             mapping_evidence["selected_offer_input_evidence_sha256"],
             recommendation["metrics"]["selected_offer_input_evidence_sha256"],
         )
+
+    def test_selected_nonlowest_noncheapest_offer_drives_monday_and_snapshot_ladder(self):
+        selected_offer_id, cheaper_offer_id = (
+            self._reset_with_two_priced_active_offers(
+                discriminating_alternative=True
+            )
+        )
+        self.assertGreater(selected_offer_id, cheaper_offer_id)
+        evaluation_at = self._seed_monday_evidence()
+        candidate_id = self.fixture._intake(self.fixture._packet(1))
+        decision = self.fixture._decide(
+            candidate_id,
+            action="APPROVE_MAPPING",
+            reason="select the higher-ID and higher-cost synthetic offer",
+            offer_id=selected_offer_id,
+            link_kind="LINKED_EXISTING",
+        )
+        self.fixture._select(
+            decision, reason="confirm the discriminating synthetic selection"
+        )
+        with psycopg.connect(self.fixture.mapping_url) as conn:
+            preconditions = conn.execute(
+                f"""SELECT sh.selected_offer_id,
+                           s.offer_id AS selected_offer_id,
+                           MIN(sp.unit_price) FILTER (WHERE sp.level_type='BASE'),
+                           a.offer_id AS cheaper_offer_id,
+                           MIN(ap.unit_price) FILTER (WHERE ap.level_type='BASE'),
+                           sh.legacy_active_standard_count,sh.shadow_comparison
+                      FROM {mapping_matrix.SCHEMA}.v_supplier_offer_selection_shadow sh
+                      JOIN {mapping_matrix.SCHEMA}.supplier_offers s
+                        ON s.offer_id=sh.selected_offer_id
+                      JOIN {mapping_matrix.SCHEMA}.prices sp ON sp.offer_id=s.offer_id
+                      JOIN {mapping_matrix.SCHEMA}.supplier_offers a
+                        ON a.offer_id=%s
+                      JOIN {mapping_matrix.SCHEMA}.prices ap ON ap.offer_id=a.offer_id
+                     WHERE sh.variant_id='1001'
+                     GROUP BY sh.selected_offer_id,s.offer_id,a.offer_id,
+                              sh.legacy_active_standard_count,sh.shadow_comparison""",
+                (cheaper_offer_id,),
+            ).fetchone()
+        self.assertEqual(
+            preconditions,
+            (
+                selected_offer_id,
+                selected_offer_id,
+                Decimal("10.0000"),
+                cheaper_offer_id,
+                Decimal("4.0000"),
+                2,
+                "LEGACY_HAS_MULTIPLE_ACTIVE_STANDARD",
+            ),
+        )
+        with mock.patch.dict(
+            os.environ,
+            {"BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1"},
+            clear=False,
+        ):
+            with mock.patch.object(
+                recommendations, "_database_evaluation_at", return_value=evaluation_at
+            ):
+                with psycopg.connect(self.fixture.mapping_url) as conn:
+                    run = recommendations.prepare_monday_run(
+                        conn,
+                        business_date=mapping_matrix.BUSINESS_DATE,
+                        idempotency_key="selected-offer-discriminating-alternative",
+                        variant_ids=("1001",),
+                        actor="synthetic:matrix-owner:01",
+                    )
+        self.assertEqual(run["blockers"], [])
+        self.assertEqual(len(run["recommendations"]), 1)
+        recommendation = run["recommendations"][0]
+        self.assertEqual(
+            (
+                recommendation["offer_id"],
+                recommendation["recommended_cases"],
+                Decimal(recommendation["unit_cost"]),
+            ),
+            (selected_offer_id, 1, Decimal("10.0000")),
+        )
+        ladder = recommendation["metrics"]["selected_offer_input_evidence"][
+            "applicable_price_ladder"
+        ]["rows"]
+        self.assertEqual(
+            [
+                (
+                    row[1],
+                    row[3],
+                    row[4],
+                    row[5],
+                    Decimal(row[6]),
+                    Decimal(row[7]),
+                    row[9],
+                )
+                for row in ladder
+            ],
+            [
+                (selected_offer_id, "BASE", None, None, Decimal("60"), Decimal("10"), 3),
+                (selected_offer_id, "BREAK", "2.0000", "CS", Decimal("54"), Decimal("9"), 4),
+            ],
+        )
+        with psycopg.connect(self.fixture.mapping_url) as conn:
+            snapshots = conn.execute(
+                f"""SELECT offer_id,level_type,break_qty,break_unit,
+                           case_price,unit_price,source_page
+                      FROM {mapping_matrix.SCHEMA}.run_price_snapshots
+                     WHERE run_id=%s ORDER BY run_price_snapshot_id""",
+                (run["run_id"],),
+            ).fetchall()
+            cheaper_snapshot_count = int(
+                conn.execute(
+                    f"""SELECT count(*)
+                          FROM {mapping_matrix.SCHEMA}.run_price_snapshots
+                         WHERE run_id=%s AND offer_id=%s""",
+                    (run["run_id"], cheaper_offer_id),
+                ).fetchone()[0]
+            )
+        self.assertEqual(
+            snapshots,
+            [
+                (
+                    selected_offer_id,
+                    "BASE",
+                    None,
+                    None,
+                    Decimal("60.0000"),
+                    Decimal("10.0000"),
+                    3,
+                ),
+                (
+                    selected_offer_id,
+                    "BREAK",
+                    Decimal("2.0000"),
+                    "CS",
+                    Decimal("54.0000"),
+                    Decimal("9.0000"),
+                    4,
+                ),
+            ],
+        )
+        self.assertEqual(cheaper_snapshot_count, 0)
 
     def test_selected_mode_missing_head_never_uses_legacy_offer(self):
         selected_offer_id, _price_id = self.fixture._reset_with_grandfathered_current_price(

@@ -38,7 +38,7 @@ IMPLEMENTATION_SPEC = (
     / "2026-09-10-persistent-mapping-foundation-implementation-spec.md"
 )
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 823
+EXPECTED_GLOBAL_TEST_POPULATION = 827
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):
@@ -1050,7 +1050,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 [
                     f"ERROR: {module} discovered {required - 1} tests; "
                     f"required minimum is {required}",
-                    "ERROR: global discovered count 822 is below floor 823",
+                    "ERROR: global discovered count 826 is below floor 827",
                 ],
             )
 

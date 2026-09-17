@@ -73,6 +73,28 @@ Southern totals: merchandise $60, fees $0, DRAFT $60. Western totals:
 merchandise $102, $120 minimum, $18 shortfall, one $7 fee, DRAFT $109.
 Grand totals: merchandise **$162**, fees **$7**, DRAFT **$169**.
 
+## Internal CSV V2 fee-field contract
+
+For `BUFFALO_INTERNAL_DRAFT_LINE_V2`, `vendor_delivery_fee` is the existing
+aggregate vendor-fees field. It equals `vendor_loose_order_fee_total +
+vendor_below_minimum_fee`; the below-minimum field is a component already
+**included** in `vendor_delivery_fee`. Consumers must not add that component a
+second time. The total relationship is:
+
+`vendor_po_total = vendor_merchandise_total + vendor_delivery_fee`.
+
+In the accepted Western synthetic example, merchandise is `$102.00`, the
+below-minimum component is `$7.00`, aggregate fees in `vendor_delivery_fee` are
+`$7.00`, and the PO total is `$109.00`—not `$116.00`.
+
+The vendor-level merchandise, loose-fee, below-minimum-fee, aggregate-fee,
+PO-total and minimum fields repeat identically on every line for the same
+`(run_id, draft_po_id)`. Consumers must read or validate those fields once per
+vendor DRAFT, not sum the repeated values across its line rows. A clearer
+`vendor_total_fees` name may be considered only in a future separately
+versioned output change. This closeout does not change runtime calculations,
+CSV headers, format versions, retired output or stored artifact bytes.
+
 ## Browser and recovery proof
 
 The final real-loopback Chromium workflow ran five phases: price upload and

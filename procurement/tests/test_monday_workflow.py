@@ -973,6 +973,154 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
         self.conn.rollback()
         self.assertEqual(self.conn.execute("SELECT po_status FROM purchase_orders WHERE po_id=%s",(po_id,)).fetchone()[0],"DRAFT")
 
+    def test_nonzero_multilocation_stock_stays_frozen_through_actual_csv(self):
+        frozen_at = datetime(2026, 9, 7, 13, 17, tzinfo=timezone.utc)
+        frozen_capture = capture_daily_inventory(
+            self.conn,
+            business_date=BUSINESS_DATE,
+            captured_at=frozen_at,
+            source="SYNTHETIC_MULTILOCATION_STOCK_ACCEPTANCE",
+            rows=(
+                {
+                    "variant_id": self.variant_a,
+                    "location_gid": "location-east",
+                    "available_quantity": 1,
+                    "incoming_quantity": 0,
+                },
+                {
+                    "variant_id": self.variant_a,
+                    "location_gid": "location-west",
+                    "available_quantity": 1,
+                    "incoming_quantity": 0,
+                },
+                {
+                    "variant_id": self.variant_b,
+                    "location_gid": "location-control",
+                    "available_quantity": 0,
+                    "incoming_quantity": 0,
+                },
+            ),
+        )
+        self.assertEqual(frozen_capture["readiness"]["status"], "PASS")
+        run = prepare_monday_run(
+            self.conn,
+            business_date=BUSINESS_DATE,
+            idempotency_key="monday-nonzero-multilocation-stock",
+            variant_ids=(self.variant_a,),
+            actor="test-owner",
+        )
+        self.assertEqual(run["blockers"], [])
+        self.assertEqual(len(run["recommendations"]), 1)
+        self._review_all(run)
+        built = self._build_drafts(run, actor="multilocation-builder")
+        line = built["drafts"][0]["lines"][0]
+        self.assertEqual(line["captured_available_quantity"], Decimal("2"))
+        self.assertEqual(line["ordered_units"], 6)
+        self.assertEqual(line["inventory_captured_at"], frozen_at)
+        self.assertEqual(
+            line["source_inventory_snapshot_run_id"],
+            frozen_capture["inventory_snapshot_run_id"],
+        )
+        expected_scope = [
+            {
+                "location_gid": "location-east",
+                "available_quantity": "1.0000",
+                "captured_incoming_quantity": "0.0000",
+                "validation_status": "VALID",
+            },
+            {
+                "location_gid": "location-west",
+                "available_quantity": "1.0000",
+                "captured_incoming_quantity": "0.0000",
+                "validation_status": "VALID",
+            },
+        ]
+        self.assertEqual(line["inventory_location_scope"], expected_scope)
+
+        later_capture = capture_daily_inventory(
+            self.conn,
+            business_date=BUSINESS_DATE,
+            captured_at=datetime(2026, 9, 7, 14, 17, tzinfo=timezone.utc),
+            source="SYNTHETIC_LATER_LIVE_STOCK",
+            rows=(
+                {
+                    "variant_id": self.variant_a,
+                    "location_gid": "location-east",
+                    "available_quantity": 8,
+                    "incoming_quantity": 0,
+                },
+                {
+                    "variant_id": self.variant_a,
+                    "location_gid": "location-west",
+                    "available_quantity": 9,
+                    "incoming_quantity": 0,
+                },
+                {
+                    "variant_id": self.variant_b,
+                    "location_gid": "location-control",
+                    "available_quantity": 0,
+                    "incoming_quantity": 0,
+                },
+            ),
+        )
+        self.assertNotEqual(
+            later_capture["inventory_snapshot_run_id"],
+            frozen_capture["inventory_snapshot_run_id"],
+        )
+        self.assertEqual(
+            self.conn.execute(
+                """SELECT inventory_snapshot_run_id::text
+                     FROM inventory_snapshot_runs
+                    WHERE business_date=%s AND status='COMPLETED'
+                    ORDER BY completed_at DESC,inventory_snapshot_run_id DESC LIMIT 1""",
+                (BUSINESS_DATE,),
+            ).fetchone()[0],
+            later_capture["inventory_snapshot_run_id"],
+        )
+        self.conn.commit()
+
+        build_emergency_review_packet(
+            self.conn,
+            storage=self.storage,
+            run_id=run["run_id"],
+            actor="multilocation-packet-builder",
+        )
+        csv_artifact = next(
+            item
+            for item in list_monday_artifacts(self.conn, run["run_id"])
+            if item["artifact_type"] == "VENDOR_INTERNAL_CSV"
+            and item["vendor_id"] == self.vendor_a
+        )
+        csv_payload = read_monday_artifact(
+            self.conn,
+            storage=self.storage,
+            run_id=run["run_id"],
+            artifact_id=csv_artifact["artifact_id"],
+        )["data"]
+        rows = list(csv.DictReader(io.StringIO(csv_payload.decode("utf-8"))))
+        self.assertEqual(len(rows), 1)
+        csv_line = rows[0]
+        self.assertEqual(csv_line["captured_available_quantity"], "2.0000")
+        self.assertNotEqual(csv_line["captured_available_quantity"], "17.0000")
+        self.assertNotEqual(csv_line["captured_available_quantity"], "6.0000")
+        self.assertEqual(
+            csv_line["inventory_captured_at"], "2026-09-07T13:17:00+00:00"
+        )
+        self.assertEqual(
+            csv_line["source_inventory_snapshot_run_id"],
+            frozen_capture["inventory_snapshot_run_id"],
+        )
+        self.assertNotEqual(
+            csv_line["source_inventory_snapshot_run_id"],
+            later_capture["inventory_snapshot_run_id"],
+        )
+        csv_scope = json.loads(csv_line["inventory_location_scope_json"])
+        self.assertEqual(csv_scope, expected_scope)
+        self.assertEqual(
+            sum(Decimal(item["captured_incoming_quantity"]) for item in csv_scope),
+            Decimal("0"),
+        )
+
     def test_internal_csv_is_deterministic_labeled_and_formula_safe(self):
         draft={
             "po_id":"draft-1","vendor_name":"=MALICIOUS",

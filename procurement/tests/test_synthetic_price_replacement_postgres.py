@@ -26,6 +26,8 @@ from procurement_os.local_backup_v2 import (
     database_state_evidence,
 )
 from procurement_os.procurement_review import (
+    _REVIEW_CONTEXT_SQL,
+    ProcurementReviewError,
     confirm_material_recommendation_edit,
     preview_recommendation_review,
     record_recommendation_review,
@@ -56,6 +58,70 @@ BUSINESS_DATE = date(2026, 10, 5)
 BOOK_PATH = Path(__file__).resolve().parents[1] / "config" / "synthetic_price_replacement_book.csv"
 BOOK_SHA256 = "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c"
 WARNING_REASON = "Reviewed four fabricated synthetic price changes."
+
+
+class _ProjectedSingleRowCursor:
+    """Return one deliberately altered projection while delegating cursor facts."""
+
+    def __init__(self, cursor, row) -> None:
+        self._cursor = cursor
+        self._row = row
+        self._returned = False
+
+    def fetchone(self):
+        if self._returned:
+            return None
+        self._returned = True
+        return self._row
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
+class _ReviewLineageProjectionConnection:
+    """Inject one read-boundary lineage fault without changing stored evidence."""
+
+    _PRICE_QUERY_PREFIX = (
+        "SELECT run_price_snapshot_id,offer_id,effective_month,level_type,"
+    )
+
+    def __init__(
+        self,
+        connection,
+        *,
+        omit_snapshot_lineage: bool = False,
+        omit_authority_envelope: bool = False,
+    ) -> None:
+        self._connection = connection
+        self.omit_snapshot_lineage = omit_snapshot_lineage
+        self.omit_authority_envelope = omit_authority_envelope
+        self.snapshot_projection_hits = 0
+        self.context_projection_hits = 0
+
+    def execute(self, statement, parameters=None, **kwargs):
+        cursor = self._connection.execute(statement, parameters, **kwargs)
+        query = str(statement).lstrip()
+        if self.omit_snapshot_lineage and query.startswith(self._PRICE_QUERY_PREFIX):
+            row = cursor.fetchone()
+            self.snapshot_projection_hits += 1
+            projected = tuple(row[:10]) + (None, None, None, None)
+            return _ProjectedSingleRowCursor(cursor, projected)
+        if self.omit_authority_envelope and query.startswith(
+            _REVIEW_CONTEXT_SQL.lstrip()
+        ):
+            row = cursor.fetchone()
+            self.context_projection_hits += 1
+            projected = list(row)
+            metrics = json.loads(json.dumps(projected[13]))
+            del metrics["selected_offer_input_evidence"][
+                "applicable_price_authority"
+            ]
+            projected[13] = metrics
+            return _ProjectedSingleRowCursor(cursor, tuple(projected))
+        return cursor
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
 
 
 class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
@@ -305,6 +371,22 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                     principal=self.price_principal,
                 )
         return preview, result
+
+    def _prepare_applied_selected_run(self, *, key: str) -> tuple[dict, dict]:
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        self._apply(batch_id, key=f"{key}-apply")
+        self._select_fixture_offer()
+        with self._connection() as conn:
+            run = recommendations.prepare_monday_run(
+                conn,
+                business_date=BUSINESS_DATE,
+                idempotency_key=key,
+                variant_ids=("1001",),
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(run["blockers"], [])
+        self.assertEqual(len(run["recommendations"]), 1)
+        return run, run["recommendations"][0]
 
     def test_declared_stage_confirmation_preserves_current_and_uses_observation_clock(self):
         lines = self.book.decode("utf-8").splitlines()
@@ -583,6 +665,124 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                 archive.read("supplier-mapping-evidence.json")
             )["items"][0]
         self.assertEqual(mapping_evidence["final_price_tier"], tier)
+
+    def test_review_rejects_authority_envelope_when_snapshot_lineage_is_missing(self):
+        run, recommendation = self._prepare_applied_selected_run(
+            key="focused-review-missing-snapshot-lineage"
+        )
+        with self._connection() as conn:
+            control = preview_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+            )
+            self.assertTrue(
+                all(
+                    control["final_price_tier"].get(field) is not None
+                    for field in (
+                        "source_price_book_batch_id",
+                        "source_price_book_row_number",
+                        "supplier_price_authority_event_id",
+                        "applicable_price_authority_sha256",
+                    )
+                )
+            )
+            projected = _ReviewLineageProjectionConnection(
+                conn, omit_snapshot_lineage=True
+            )
+            with self.assertRaisesRegex(
+                ProcurementReviewError,
+                "^selected final price tier authority is not bound$",
+            ):
+                record_recommendation_review(
+                    projected,
+                    recommendation_id=recommendation["recommendation_id"],
+                    action="ACCEPT",
+                    actor="synthetic:matrix-owner:01",
+                    expected_input_fingerprint=run["input_fingerprint"],
+                    expected_review_preview_fingerprint=control[
+                        "preview_fingerprint"
+                    ],
+                )
+            self.assertEqual(projected.snapshot_projection_hits, 1)
+            self.assertEqual(projected.context_projection_hits, 0)
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM review_decisions WHERE recommendation_id=%s",
+                    (recommendation["recommendation_id"],),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT workflow_stage FROM runs WHERE run_id=%s",
+                    (run["run_id"],),
+                ).fetchone()[0],
+                "AWAITING_REVIEW",
+            )
+
+    def test_review_rejects_snapshot_lineage_without_binding_authority_envelope(self):
+        run, recommendation = self._prepare_applied_selected_run(
+            key="focused-review-missing-authority-envelope"
+        )
+        with self._connection() as conn:
+            control = preview_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+            )
+            self.assertIn(
+                "applicable_price_authority",
+                control["metrics"]["selected_offer_input_evidence"],
+            )
+            projected = _ReviewLineageProjectionConnection(
+                conn, omit_authority_envelope=True
+            )
+            with self.assertRaisesRegex(
+                ProcurementReviewError,
+                "^selected final price tier has unbound authority lineage$",
+            ):
+                record_recommendation_review(
+                    projected,
+                    recommendation_id=recommendation["recommendation_id"],
+                    action="ACCEPT",
+                    actor="synthetic:matrix-owner:01",
+                    expected_input_fingerprint=run["input_fingerprint"],
+                    expected_review_preview_fingerprint=control[
+                        "preview_fingerprint"
+                    ],
+                )
+            self.assertEqual(projected.context_projection_hits, 1)
+            snapshot_lineage = conn.execute(
+                """SELECT source_price_id,source_price_book_batch_id,
+                          source_price_book_row_number,
+                          supplier_price_authority_event_id
+                     FROM run_price_snapshots
+                    WHERE run_id=%s ORDER BY run_price_snapshot_id""",
+                (run["run_id"],),
+            ).fetchall()
+            self.assertTrue(snapshot_lineage)
+            self.assertTrue(
+                all(all(value is not None for value in row) for row in snapshot_lineage)
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM review_decisions WHERE recommendation_id=%s",
+                    (recommendation["recommendation_id"],),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT workflow_stage FROM runs WHERE run_id=%s",
+                    (run["run_id"],),
+                ).fetchone()[0],
+                "AWAITING_REVIEW",
+            )
 
     def test_default_or_wrong_runtime_refuses_before_batch_write(self):
         with self._connection() as conn:
