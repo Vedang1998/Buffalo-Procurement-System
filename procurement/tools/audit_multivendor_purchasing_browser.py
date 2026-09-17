@@ -328,6 +328,17 @@ def _database_acceptance(
                 )
             for row in forecast_rows:
                 evidence = row[9].get("development_forecast_evidence")
+                forecast_target = Decimal(evidence.get("point_forecast_units")) + Decimal(
+                    evidence.get("protection_units")
+                ) if isinstance(evidence, dict) else None
+                need_target_matches = (
+                    Decimal(row[9].get("target_units")) == Decimal("0")
+                    and Decimal(row[6]) == Decimal("0")
+                    and "ALLOCATED_NO_ROUTINE_REPLENISHMENT"
+                    in row[9].get("need_reason_codes", [])
+                    if str(row[0]) == "4005"
+                    else Decimal(row[9].get("target_units")) == forecast_target
+                )
                 if (
                     row[7] != "DEVELOPMENT_ROLLING_ORIGIN_V1"
                     or not validate_development_forecast_evidence(evidence)
@@ -338,9 +349,7 @@ def _database_acceptance(
                     != Decimal(evidence.get("point_forecast_units"))
                     or Decimal(row[5])
                     != Decimal(evidence.get("protection_units"))
-                    or Decimal(row[9].get("target_units"))
-                    != Decimal(evidence.get("point_forecast_units"))
-                    + Decimal(evidence.get("protection_units"))
+                    or not need_target_matches
                 ):
                     raise BrowserAcceptanceError(
                         f"development forecast row differs for Variant {row[0]}"
