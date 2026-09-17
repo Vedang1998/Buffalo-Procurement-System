@@ -2,8 +2,8 @@
 
 ## Disposition
 
-**BOUNDED SYNTHETIC MACHINE PASS — EXTERNAL INDEPENDENT REVIEW AND OWNER
-ACCEPTANCE PENDING — REAL/DEFAULT USE BLOCKED**
+**BOUNDED SYNTHETIC MACHINE + INDEPENDENT REVIEW PASS — OWNER USABILITY AND
+REAL/DEFAULT USE BLOCKED**
 
 This record is additive. It does not alter or supersede the frozen
 `20dd65ad6e60f044bd25fbb92b46cca1f54d2357` archive or its evidence.
@@ -14,9 +14,12 @@ This record is additive. It does not alter or supersede the frozen
 |---|---|---|
 | Received prerequisite | `20dd65ad6e60f044bd25fbb92b46cca1f54d2357` | `3ebebd652a12f0dbbe45d0f4a330dd5c8f21d638` |
 | Machine-tested implementation | `450b55375fa97fa60535e2249d1cfddd5b838c5e` | `05ce96f32140e66c3089e856d220247d73b16904` |
+| Independently reviewed candidate | `85242ba6919093933fc7b684406493945cf14bba` | `2ede46ef2b3bba6e246fa81d3834ddb450bd3463` |
+| Bounded regression test candidate | `369e5efc22ecd076d81d9a08b91c0686443981e5` | `1d7468c6549e6260e9ab36b4826e3dbe1b6d06e2` |
 
-The final closeout commit changes documentation only and is named in the
-transport-level `SOURCE_IDENTITIES.txt`.
+The final closeout commit after the bounded regression candidate changes
+documentation only and is named in the transport-level
+`SOURCE_IDENTITIES.txt`.
 
 ## Frozen-candidate checkpoint
 
@@ -116,19 +119,73 @@ Authenticated downloads before restart, after source restart, after restore and
 after restored restart retained the same three artifact hashes and replay
 created no extra POs, lines, decisions or artifacts.
 
-## Final machine validation
+## Independent review checkpoint
 
-On exact implementation `450b553...`:
+The owner accepted Claude's coordinated independent review of exact commit
+`85242ba...`, tree `2ede46e...`. Claude independently executed or verified at
+that exact target:
 
-- authoritative suite: **823 discovered / 823 executed / 823 passed** in
-  1032.763s; every abnormal counter zero; log SHA-256
-  `acbe37ac0f3c628e2035d1bdc6161116f3038d3bfd77c772f8506788c2280998`;
-- startup validation: **10/10 passed**, log SHA-256
-  `b9c37738f7e36a217480772a37fa4a76f5531320ee39c8a363f9facbe1956630`;
-- accepted browser summary SHA-256
-  `62d76e67a95a9ac79716e149296be36ba5fc212f8896f789f05350e140419ce7`.
+- authoritative **823/823**, with every abnormal counter zero;
+- startup **10/10**;
+- selected-offer **6/6** and synthetic-price **7/7**;
+- actual browser/recovery **160/160**;
+- populated restore into a distinct PostgreSQL cluster with byte-identical
+  artifacts; and
+- fresh cleanup checks.
 
-The documentation-only closeout is not represented as retested code.
+The exact implementation beneath that documentation target is `450b553...`.
+Its authoritative log SHA-256 is
+`acbe37ac0f3c628e2035d1bdc6161116f3038d3bfd77c772f8506788c2280998`,
+startup log SHA-256 is
+`b9c37738f7e36a217480772a37fa4a76f5531320ee39c8a363f9facbe1956630`,
+and accepted browser-summary SHA-256 is
+`62d76e67a95a9ac79716e149296be36ba5fc212f8896f789f05350e140419ce7`.
+Those are Claude's results at the reviewed target, not executions of the later
+bounded regression follow-up.
+
+## Bounded regression and documentation closeout
+
+Exact test commit `369e5ef...`, tree `1d7468c...`, retains the accepted
+reviewer's nonblocking proofs:
+
+- **A-1:** the confirmed offer has both a higher ID and a higher price than an
+  eligible alternative, yet the actual mapping/selection/Monday path uses its
+  independently expected cost and freezes only its BASE/BREAK ladder;
+- **B-1:** two separate actual review/economics-path negatives reject,
+  respectively, an authority envelope without required snapshot lineage and
+  snapshot lineage without its authority envelope; the lawful both-absent
+  legacy path still completes review, DRAFT and packet generation;
+- **C-2:** a separate prepare-to-CSV scenario freezes Available `2.0000` from
+  two named locations at `2026-09-07T13:17:00+00:00`, including its source-run
+  ID, despite a later capture of `17`; and
+- **C-1:** the documentation above clarifies aggregate fee containment without
+  changing runtime arithmetic, CSV headers, versions or prior artifact bytes.
+
+New machine results on that exact test commit are:
+
+- affected focused modules: **113/113 passed** in 118.836s; log SHA-256
+  `6b167b1a830d440314e3ec50c9190eded3078c56d5d7eceb808463d52bbcef9e`;
+- authoritative suite: **827 discovered / 827 executed / 827 passed** in
+  1029.822s; failures, errors, skips, expected failures and unexpected
+  successes all zero; log SHA-256
+  `69aa1938cd28ae3cc19b06b4d4916b7a9839ac3bfb251c09e03f8172b9c1cb4f`;
+- startup validation: **10/10 passed** in 0.003s; log SHA-256
+  `5eef6e01d9377b779737bd712f324b0d67e4b63b4c371bee617609073ad34b47`.
+
+The additional stock scenario is one of the new 827 tests and is reported
+separately from the unchanged prior 160 browser/recovery assertions. The
+browser and populated-restore workflow was not rerun merely for this
+test/documentation delta. Read-only reviewers found no product or test
+causality defect; their one documentation-status finding is remediated here.
+
+Between reviewed parent `85242ba...` and test commit `369e5ef...`, the
+`procurement/src`, `procurement/db` and `procurement/config` tree objects remain
+exactly `21466a109cf2faa387d1c7ceb083a625ba8acabb`,
+`c6fd3e0459473ad479c106222a3b8d9746c0862a` and
+`37fda861a54c6ab915ef97474e98f4e35b28fbf9`. Product runtime, migrations and
+configuration are therefore byte-identical. The original causal-red raw log
+and original cleanup transcript remain absent; this follow-up does not
+recreate or infer their historical bytes.
 
 ## Additive chronology correction
 
@@ -156,5 +213,7 @@ all completed before the implementation cutoff.
   Replit or deployment portability.
 - Real-data readiness, full forecast/model/FVA policy, production activation,
   Shopify writes, PO release, supplier communication and orders remain blocked.
-- Internal read-only review does not constitute external Claude approval or
-  owner acceptance.
+- Claude's coordinated independent review is accepted only for exact synthetic
+  candidate `85242ba...`; it is not commercial approval, owner usability
+  acceptance, deployment approval or real cutover. The later regression
+  executions are separately attributed above.

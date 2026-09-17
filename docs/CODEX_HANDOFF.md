@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-16T01:55:00Z (UTC)
+**Updated:** 2026-09-17T01:36:28Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,15 +10,52 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Price-to-DRAFT acceptance follow-up — BOUNDED SYNTHETIC MACHINE PASS / EXTERNAL REVIEW PENDING
+### Price-to-DRAFT acceptance follow-up — BOUNDED SYNTHETIC MACHINE + INDEPENDENT REVIEW PASS / OWNER USABILITY + REAL USE BLOCKED
 
 - The frozen prerequisite remains commit
   `20dd65ad6e60f044bd25fbb92b46cca1f54d2357`, tree
   `3ebebd652a12f0dbbe45d0f4a330dd5c8f21d638`. The isolated follow-up branch is
   `codex/price-to-draft-acceptance-followup`. The exact machine-tested
   implementation is commit `450b55375fa97fa60535e2249d1cfddd5b838c5e`,
-  tree `05ce96f32140e66c3089e856d220247d73b16904`. The later closeout commit is
+  tree `05ce96f32140e66c3089e856d220247d73b16904`. Claude's independently reviewed
+  candidate is commit `85242ba6919093933fc7b684406493945cf14bba`, tree
+  `2ede46ef2b3bba6e246fa81d3834ddb450bd3463`. The bounded regression test
+  candidate is commit `369e5efc22ecd076d81d9a08b91c0686443981e5`, tree
+  `1d7468c6549e6260e9ab36b4826e3dbe1b6d06e2`. The later closeout commit is
   documentation-only and is identified separately in the review transport.
+- The owner accepted Claude's coordinated independent review at exact
+  `85242ba...`. Claude independently executed or verified authoritative
+  **823/823** with every abnormal counter zero, startup **10/10**,
+  selected-offer **6/6**, synthetic-price **7/7**, actual browser/recovery
+  **160/160**, distinct-cluster populated restore with byte-identical artifacts,
+  and fresh cleanup checks. These remain Claude's results at that exact target;
+  they are not relabeled as executions of the later follow-up.
+- The bounded follow-up retains four specific review proofs without changing
+  product behavior: A-1 selects a higher-ID, more-expensive offer through the
+  actual mapping/selection/Monday path and freezes only its ladder; B-1 has two
+  separate actual review-path negatives for each half-bound price-authority
+  state while preserving lawful legacy success; C-2 freezes nonzero Available
+  `2.0000` across two named locations and carries its time/run identity through
+  actual stored CSV despite a later live value of `17`; C-1 documents that the
+  below-minimum fee is already contained in aggregate `vendor_delivery_fee`.
+- On exact `369e5ef...`, affected focused modules passed **113/113** in
+  118.836s (log SHA-256
+  `6b167b1a830d440314e3ec50c9190eded3078c56d5d7eceb808463d52bbcef9e`),
+  the authoritative wrapper passed **827 discovered / 827 executed / 827
+  passed** in 1029.822s with every abnormal counter zero (log SHA-256
+  `69aa1938cd28ae3cc19b06b4d4916b7a9839ac3bfb251c09e03f8172b9c1cb4f`),
+  and startup passed **10/10** in 0.003s (log SHA-256
+  `5eef6e01d9377b779737bd712f324b0d67e4b63b4c371bee617609073ad34b47`).
+  The stock case is a separate regression, not part of the prior 160 browser
+  assertions; browser/recovery was not rerun for this test/documentation delta.
+- Parent-to-test-commit changes are confined to tests, the sum-derived runner
+  floors and one documentation file. `procurement/src`, `procurement/db` and
+  `procurement/config` retain exact tree IDs
+  `21466a109cf2faa387d1c7ceb083a625ba8acabb`,
+  `c6fd3e0459473ad479c106222a3b8d9746c0862a` and
+  `37fda861a54c6ab915ef97474e98f4e35b28fbf9`; runtime, migrations and
+  configuration are byte-identical. The original causal-red raw log and
+  original cleanup transcript remain absent and were not reconstructed.
 - The required frozen-candidate suite was run before follow-up implementation.
   It discovered and executed all **823** registered tests, with **795 passes,
   0 failures and 32 errors** in 992.768s. The first error was the demonstrated
@@ -93,8 +130,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   deployment portability, native Shopify CSV acceptance, public/remote owner
   access, PO release or ordering. Direct-SQL selected-offer enforcement remains
   a known limitation. No remote, PR/CI, protected-checkout, deployment,
-  operational database, Shopify, supplier or order action occurred. Independent
-  external acceptance and owner acceptance remain pending.
+  operational database, Shopify, supplier or order action occurred. Claude's
+  coordinated review is accepted for the exact synthetic candidate only; owner
+  usability acceptance, commercial approval, deployment approval and real
+  cutover remain absent.
 - Exact next boundary: preserve the tested implementation and documentation-only
   closeout, expose one additive review transport, and stop. Any real/default
   activation, commercial inputs, remote integration, deployment, Shopify write,
