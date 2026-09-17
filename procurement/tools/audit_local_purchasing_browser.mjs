@@ -663,8 +663,12 @@ async function audit(client) {
         developmentForecasts,
       );
       check(
-        text.includes("LOCAL SYNTHETIC DEVELOPMENT ONLY — NO COMMERCIAL AUTHORITY") &&
-          text.includes("empirical full-horizon protection"),
+        await evaluate(`{
+          const value = [...document.querySelectorAll('.development-forecast-evidence')]
+            .map((node) => node.textContent).join(' ');
+          value.includes('LOCAL SYNTHETIC DEVELOPMENT ONLY — NO COMMERCIAL AUTHORITY') &&
+            value.includes('empirical full-horizon protection');
+        }`),
         "development model and protection evidence are intelligible in the review UI",
       );
     }
