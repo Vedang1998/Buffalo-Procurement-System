@@ -6,6 +6,9 @@
     "classification_period_days": 84,
     "missing_cost_status": "NOT_CONFIGURED"
   },
+  "availability": {
+    "minimum_proven_in_stock_days_for_full_protection": 28
+  },
   "candidate_order": [
     "NAIVE",
     "SEASONAL_NAIVE",
@@ -29,6 +32,16 @@
     "minimum_relative_improvement": "0.02",
     "simple_baseline": "NAIVE"
   },
+  "history": {
+    "connected_history_days": 84,
+    "maximum_history_days": 84
+  },
+  "metrics": {
+    "bias": "MEAN_FORECAST_MINUS_ACTUAL",
+    "mae": "MEAN_ABSOLUTE_ERROR",
+    "mase": "MAE_DIVIDED_BY_PRESELECTION_NAIVE_SCALE_OR_NULL",
+    "wape": "SUM_ABSOLUTE_ERROR_DIVIDED_BY_SUM_ABSOLUTE_ACTUAL_OR_NULL"
+  },
   "method_version": "DEVELOPMENT_ROLLING_ORIGIN_V1",
   "naive": {
     "trailing_window_days": 28
@@ -42,7 +55,7 @@
   "rate_cap": {
     "maximum_calendar_mean_multiplier": "1.25"
   },
-  "selection_metric": "WAPE_THEN_MAE",
+  "selection_metric": "WAPE_WHEN_DEFINED_ELSE_MAE",
   "seasonal_naive": {
     "minimum_history_days": 28,
     "period_days": 7
@@ -54,6 +67,7 @@
     "minimum_history_days": 28,
     "minimum_positive_days": 2
   },
+  "tie_break_rule": "CANDIDATE_ORDER",
   "windows": {
     "calibration_days": 21,
     "evaluation_days": 14,

@@ -250,6 +250,10 @@ def calculate_calendar_protection_horizon(
     )
     if variability < 0:
         raise DevelopmentForecastError("lead_time_variability_days cannot be negative")
+    if variability != 0:
+        raise DevelopmentForecastError(
+            "nonzero lead-time variability requires a validated delivery-delay model"
+        )
     order_indexes = {
         _WEEKDAY_INDEX[str(day).strip().upper()]
         for day in order_days
@@ -317,7 +321,7 @@ def calculate_calendar_protection_horizon(
         "calendar_days_until_receipt": calendar_days,
         "lead_time_variability_days": str(variability),
         "variability_days_ceiling": variability_days,
-        "variability_treatment": "EVIDENCE_ONLY_NOT_DEMAND_HORIZON",
+        "variability_treatment": "ZERO_CONFIRMED_EMPIRICAL_DEMAND_PROTECTION_ONLY",
         "horizon_days": horizon_days,
     }
 
@@ -345,13 +349,16 @@ def load_development_forecast_policy(
         values,
         {
             "abc",
+            "availability",
             "candidate_order",
             "category_shrinkage",
             "commercial_authority",
             "contract",
             "damped_ets",
             "fva",
+            "history",
             "method_version",
+            "metrics",
             "naive",
             "production_activation",
             "protection",
@@ -359,6 +366,7 @@ def load_development_forecast_policy(
             "selection_metric",
             "seasonal_naive",
             "tsb",
+            "tie_break_rule",
             "windows",
             "xyz",
         },
@@ -370,7 +378,8 @@ def load_development_forecast_policy(
         or values.get("method_version") != METHOD_VERSION
         or values.get("commercial_authority") is not False
         or values.get("production_activation") is not False
-        or values.get("selection_metric") != "WAPE_THEN_MAE"
+        or values.get("selection_metric") != "WAPE_WHEN_DEFINED_ELSE_MAE"
+        or values.get("tie_break_rule") != "CANDIDATE_ORDER"
         or candidate_order
         != [
             "NAIVE",
@@ -383,9 +392,12 @@ def load_development_forecast_policy(
         raise DevelopmentForecastError("development forecast policy identity differs")
     for field in (
         "abc",
+        "availability",
         "category_shrinkage",
         "damped_ets",
         "fva",
+        "history",
+        "metrics",
         "naive",
         "protection",
         "rate_cap",
@@ -396,6 +408,41 @@ def load_development_forecast_policy(
     ):
         if not isinstance(values.get(field), dict):
             raise DevelopmentForecastError(f"policy {field} must be an object")
+    nested_key_inventory = {
+        "abc": {
+            "a_cumulative_share",
+            "b_incremental_share",
+            "basis",
+            "classification_period_days",
+            "missing_cost_status",
+        },
+        "category_shrinkage": {"minimum_history_days", "prior_strength_days"},
+        "damped_ets": {"alpha", "beta", "minimum_history_days", "phi"},
+        "fva": {"minimum_relative_improvement", "simple_baseline"},
+        "naive": {"trailing_window_days"},
+        "protection": {
+            "minimum_full_horizon_origins",
+            "quantile",
+            "residual_definition",
+        },
+        "rate_cap": {"maximum_calendar_mean_multiplier"},
+        "seasonal_naive": {"minimum_history_days", "period_days"},
+        "tsb": {
+            "alpha_probability",
+            "alpha_size",
+            "intermittent_zero_share",
+            "minimum_history_days",
+            "minimum_positive_days",
+        },
+        "xyz": {
+            "minimum_week_buckets",
+            "x_max_coefficient_of_variation",
+            "y_max_coefficient_of_variation",
+            "zero_demand_class",
+        },
+    }
+    for field, keys in nested_key_inventory.items():
+        _require_exact_keys(values[field], keys, f"policy {field}")
     windows = values["windows"]
     _require_exact_keys(
         windows,
@@ -413,8 +460,57 @@ def load_development_forecast_policy(
         _positive_int(windows[key], f"windows.{key}")
     if windows["calibration_days"] <= windows["minimum_selection_origins"]:
         raise DevelopmentForecastError("policy calibration window is too short")
+    history = values["history"]
+    _require_exact_keys(
+        history,
+        {"connected_history_days", "maximum_history_days"},
+        "policy history",
+    )
+    connected_history_days = _positive_int(
+        history.get("connected_history_days"), "history.connected_history_days"
+    )
+    maximum_history_days = _positive_int(
+        history.get("maximum_history_days"), "history.maximum_history_days"
+    )
+    if connected_history_days > maximum_history_days:
+        raise DevelopmentForecastError("connected forecast history exceeds its cap")
+    availability = values["availability"]
+    _require_exact_keys(
+        availability,
+        {"minimum_proven_in_stock_days_for_full_protection"},
+        "policy availability",
+    )
+    _positive_int(
+        availability.get("minimum_proven_in_stock_days_for_full_protection"),
+        "availability.minimum_proven_in_stock_days_for_full_protection",
+    )
+    if values["metrics"] != {
+        "bias": "MEAN_FORECAST_MINUS_ACTUAL",
+        "mae": "MEAN_ABSOLUTE_ERROR",
+        "mase": "MAE_DIVIDED_BY_PRESELECTION_NAIVE_SCALE_OR_NULL",
+        "wape": "SUM_ABSOLUTE_ERROR_DIVIDED_BY_SUM_ABSOLUTE_ACTUAL_OR_NULL",
+    }:
+        raise DevelopmentForecastError("policy metric definitions differ")
     if values["abc"].get("basis") != "HISTORICAL_GROSS_PROFIT_DOLLARS":
         raise DevelopmentForecastError("policy ABC basis differs")
+    if values["abc"].get("missing_cost_status") != "NOT_CONFIGURED":
+        raise DevelopmentForecastError("policy missing-cost status differs")
+    if values["fva"].get("simple_baseline") != "NAIVE":
+        raise DevelopmentForecastError("policy FVA baseline differs")
+    if values["xyz"].get("zero_demand_class") != "Z":
+        raise DevelopmentForecastError("policy zero-demand class differs")
+    for obj, key in (
+        (values["category_shrinkage"], "minimum_history_days"),
+        (values["damped_ets"], "minimum_history_days"),
+        (values["naive"], "trailing_window_days"),
+        (values["protection"], "minimum_full_horizon_origins"),
+        (values["seasonal_naive"], "minimum_history_days"),
+        (values["seasonal_naive"], "period_days"),
+        (values["tsb"], "minimum_history_days"),
+        (values["tsb"], "minimum_positive_days"),
+        (values["xyz"], "minimum_week_buckets"),
+    ):
+        _positive_int(obj.get(key), key)
     _positive_int(
         values["abc"].get("classification_period_days"),
         "abc.classification_period_days",
@@ -848,6 +944,8 @@ def plan_development_forecast(
         raise DevelopmentForecastError("horizon_days exceeds the development bound")
     active_policy = policy or load_development_forecast_policy()
     ordered, normalized = _validated_observations(observations)
+    if len(ordered) > int(active_policy.values["history"]["maximum_history_days"]):
+        raise DevelopmentForecastError("forecast history exceeds the policy cap")
     # A final-cutoff category scalar cannot be used at earlier rolling origins
     # without leaking future information.  No independently frozen causal
     # category history exists in this bounded slice, so the category model is
@@ -1148,6 +1246,16 @@ def plan_development_forecast(
     zero_share = Decimal(sum(1 for item in normalized if item == 0)) / Decimal(
         len(normalized)
     )
+    proven_in_stock_days = sum(
+        1 for item in ordered if item.inventory_state == "IN_STOCK"
+    )
+    unknown_days = sum(1 for item in ordered if item.inventory_state == "UNKNOWN")
+    minimum_proven_in_stock_days = int(
+        active_policy.values["availability"][
+            "minimum_proven_in_stock_days_for_full_protection"
+        ]
+    )
+    availability_limited = proven_in_stock_days < minimum_proven_in_stock_days
     intermittent_threshold = _decimal(
         active_policy.values["tsb"]["intermittent_zero_share"],
         "tsb.intermittent_zero_share",
@@ -1205,11 +1313,13 @@ def plan_development_forecast(
             "proven_stockout_days": sum(
                 1 for item in ordered if item.inventory_state == "STOCKOUT"
             ),
-            "proven_in_stock_days": sum(
-                1 for item in ordered if item.inventory_state == "IN_STOCK"
+            "proven_in_stock_days": proven_in_stock_days,
+            "unknown_days": unknown_days,
+            "minimum_proven_in_stock_days_for_full_protection": (
+                minimum_proven_in_stock_days
             ),
-            "unknown_days": sum(
-                1 for item in ordered if item.inventory_state == "UNKNOWN"
+            "protection_qualification": (
+                "LIMITED" if availability_limited else "FULL"
             ),
             "negative_net_days": sum(1 for item in ordered if item.net_units < 0),
         },
@@ -1239,6 +1349,9 @@ def plan_development_forecast(
                     "censored_stockout_origin_dates": censored_calibration_origin_dates,
                     "origin_dates": calibration_origin_dates,
                     "shortfalls": [str(item.quantize(UNITS)) for item in shortfalls],
+                    "availability_qualification": (
+                        "LIMITED" if availability_limited else "FULL"
+                    ),
                 },
             }
         )
@@ -1253,10 +1366,12 @@ def plan_development_forecast(
     confidence = (
         "HIGH"
         if evaluation_status == "SUFFICIENT"
+        and not availability_limited
         and evaluation_wape is not None
         and evaluation_wape <= Decimal("0.20")
         else "MEDIUM"
         if evaluation_status == "SUFFICIENT"
+        and not availability_limited
         and evaluation_wape is not None
         and evaluation_wape <= Decimal("0.50")
         else "LOW"
@@ -1272,6 +1387,8 @@ def plan_development_forecast(
         reasons.append("DEVELOPMENT_RATE_CAP_APPLIED")
     if evaluation_status != "SUFFICIENT":
         reasons.append("EVALUATION_ORIGINS_INSUFFICIENT_FOR_CONFIDENCE")
+    if availability_limited:
+        reasons.append("AVAILABILITY_COVERAGE_LIMITS_PROTECTION")
     reasons.append("EMPIRICAL_FULL_HORIZON_PROTECTION_BOUND")
     return _finalize_evidence(
         {
@@ -1282,7 +1399,11 @@ def plan_development_forecast(
             "confidence": confidence,
             "reason_codes": reasons,
             "protection": {
-                "status": "CALCULATED",
+                "status": (
+                    "CALCULATED_LIMITED_AVAILABILITY"
+                    if availability_limited
+                    else "CALCULATED"
+                ),
                 "method": "FULL_HORIZON_SHORTFALL_EMPIRICAL_QUANTILE",
                 "quantile": str(quantile),
                 "minimum_origin_count": minimum_calibration,
@@ -1297,6 +1418,9 @@ def plan_development_forecast(
                     for item in shortfalls
                 ],
                 "units": str(protection),
+                "availability_qualification": (
+                    "LIMITED" if availability_limited else "FULL"
+                ),
             },
         }
     )
@@ -1313,9 +1437,60 @@ def validate_development_forecast_evidence(value: Any) -> bool:
     candidates = value.get("candidates")
     protection_calendar = value.get("protection_calendar")
     try:
+        active_policy = load_development_forecast_policy()
         sha256 = value.get("sha256")
+        history_start = date.fromisoformat(str(value.get("history_start")))
+        history_end = date.fromisoformat(str(value.get("history_end")))
+        history_days = value.get("history_days")
+        base_keys = {
+            "contract",
+            "method_version",
+            "policy",
+            "history_start",
+            "history_end",
+            "cutoff_date",
+            "history_days",
+            "horizon_days",
+            "protection_calendar",
+            "calendar_velocity",
+            "in_stock_velocity",
+            "input_sha256",
+            "category_prior",
+            "commercial_authority",
+            "production_activation",
+            "status",
+            "selected_model",
+            "demand_regime",
+            "xyz_class",
+            "xyz_coefficient_of_variation",
+            "abc_class",
+            "forecast_daily_velocity",
+            "point_forecast_units",
+            "protection_units",
+            "target_units",
+            "confidence",
+            "reason_codes",
+            "split",
+            "candidates",
+            "protection",
+            "caps",
+            "sha256",
+        }
+        selected_keys = {
+            "abc_status",
+            "selection_metrics",
+            "evaluation_metrics",
+            "evaluation_origin_count",
+            "minimum_evaluation_origin_count",
+            "evaluation_status",
+            "availability",
+        }
+        expected_top_keys = base_keys | (
+            selected_keys if value.get("selected_model") is not None else set()
+        )
         if not (
-            value.get("contract") == CONTRACT
+            set(value) == expected_top_keys
+            and value.get("contract") == CONTRACT
             and value.get("method_version") == METHOD_VERSION
             and value.get("commercial_authority") is False
             and value.get("production_activation") is False
@@ -1323,15 +1498,16 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             and len(sha256) == _SHA256_LENGTH
             and bytes.fromhex(sha256)
             and sha256 == canonical_evidence_sha256(unsigned)
-            and policy == load_development_forecast_policy().evidence()
+            and policy == active_policy.evidence()
             and value.get("status") in {"READY", "BLOCKED"}
-            and isinstance(value.get("history_days"), int)
-            and value["history_days"] > 0
+            and isinstance(history_days, int)
+            and 0 < history_days
+            <= int(active_policy.values["history"]["maximum_history_days"])
             and isinstance(value.get("horizon_days"), int)
             and 0 < value["horizon_days"] <= 31
-            and date.fromisoformat(str(value.get("history_start")))
-            <= date.fromisoformat(str(value.get("history_end")))
-            == date.fromisoformat(str(value.get("cutoff_date")))
+            and history_start <= history_end
+            and (history_end - history_start).days + 1 == history_days
+            and history_end == date.fromisoformat(str(value.get("cutoff_date")))
             and isinstance(value.get("input_sha256"), str)
             and len(value["input_sha256"]) == _SHA256_LENGTH
             and bytes.fromhex(value["input_sha256"])
@@ -1350,8 +1526,24 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             and protection_calendar.get("horizon_days") == value["horizon_days"]
             and isinstance(candidates, list)
             and isinstance(protection, dict)
-            and protection.get("status")
-            == ("CALCULATED" if value.get("status") == "READY" else "UNAVAILABLE")
+        ):
+            return False
+
+        calendar_velocity = _decimal(
+            value.get("calendar_velocity"), "calendar_velocity"
+        )
+        in_stock_velocity_raw = value.get("in_stock_velocity")
+        if not (
+            calendar_velocity >= 0
+            and (
+                in_stock_velocity_raw is None
+                or _decimal(in_stock_velocity_raw, "in_stock_velocity") >= 0
+            )
+            and _decimal(
+                value.get("forecast_daily_velocity"),
+                "forecast_daily_velocity",
+            )
+            >= 0
         ):
             return False
 
@@ -1421,87 +1613,528 @@ def validate_development_forecast_evidence(value: Any) -> bool:
                 and (next_receipt - evaluation_date).days
                 == protection_calendar.get("calendar_days_until_receipt")
                 == value["horizon_days"]
-                and variability >= 0
+                and variability == 0
                 and int(
                     variability.to_integral_value(rounding=ROUND_CEILING)
                 )
                 == protection_calendar.get("variability_days_ceiling")
                 and protection_calendar.get("variability_treatment")
-                == "EVIDENCE_ONLY_NOT_DEMAND_HORIZON"
+                == "ZERO_CONFIRMED_EMPIRICAL_DEMAND_PROTECTION_ONLY"
             ):
                 return False
         else:
             return False
 
-        if value.get("status") != "READY":
-            return True
-
-        expected_candidates = list(
-            load_development_forecast_policy().values["candidate_order"]
-        )
-        if [item.get("name") for item in candidates] != expected_candidates:
+        expected_candidates = list(active_policy.values["candidate_order"])
+        if candidates and [item.get("name") for item in candidates] != expected_candidates:
             return False
+        candidate_metrics: dict[str, dict[str, Any]] = {}
+        for item in candidates:
+            if not isinstance(item, dict):
+                return False
+            expected_candidate_keys = {
+                "name",
+                "status",
+                "reason_codes",
+                "selection_metrics",
+                "selection_origin_dates",
+                "postprocessing_cap_hits",
+                "forecast_horizon_days",
+            }
+            if value.get("selected_model") is not None:
+                expected_candidate_keys.add("selected")
+            status = item.get("status")
+            reasons = item.get("reason_codes")
+            origins = item.get("selection_origin_dates")
+            metrics = item.get("selection_metrics")
+            if not (
+                set(item) == expected_candidate_keys
+                and item.get("name") in expected_candidates
+                and status in {"ELIGIBLE", "INAPPLICABLE", "FAILED"}
+                and isinstance(reasons, list)
+                and all(isinstance(reason, str) and reason for reason in reasons)
+                and len(reasons) == len(set(reasons))
+                and isinstance(origins, list)
+                and len(origins) == len(set(origins))
+                and all(date.fromisoformat(str(origin)) for origin in origins)
+                and item.get("forecast_horizon_days") == value["horizon_days"]
+                and isinstance(item.get("postprocessing_cap_hits"), int)
+                and item["postprocessing_cap_hits"] >= 0
+                and (
+                    "selected" not in item or isinstance(item.get("selected"), bool)
+                )
+            ):
+                return False
+            if status == "ELIGIBLE":
+                if not (
+                    reasons == []
+                    and isinstance(metrics, dict)
+                    and set(metrics)
+                    == {"observation_count", "bias", "mae", "wape", "mase"}
+                    and metrics.get("observation_count") == len(origins)
+                    and len(origins)
+                    >= int(active_policy.values["windows"]["minimum_selection_origins"])
+                    and Decimal(str(metrics.get("bias"))).is_finite()
+                    and Decimal(str(metrics.get("mae"))) >= 0
+                    and (
+                        metrics.get("wape") is None
+                        or Decimal(str(metrics.get("wape"))) >= 0
+                    )
+                    and (
+                        metrics.get("mase") is None
+                        or Decimal(str(metrics.get("mase"))) >= 0
+                    )
+                ):
+                    return False
+                candidate_metrics[str(item["name"])] = metrics
+            elif metrics is not None or not reasons or item.get("selected") is True:
+                return False
+
+        eligible_origin_sets = {
+            tuple(item["selection_origin_dates"])
+            for item in candidates
+            if item.get("status") == "ELIGIBLE"
+        }
+        if len(eligible_origin_sets) > 1:
+            return False
+
+        def metric_objective(metrics: Mapping[str, Any]) -> Decimal:
+            raw = metrics.get("wape")
+            return Decimal(str(metrics.get("mae") if raw is None else raw))
+
+        expected_selected_model: str | None = None
+        expected_fva_reason: str | None = None
+        baseline_name = str(active_policy.values["fva"]["simple_baseline"])
+        baseline_metrics = candidate_metrics.get(baseline_name)
+        if baseline_metrics is not None:
+            best_name = min(
+                candidate_metrics,
+                key=lambda name: (
+                    metric_objective(candidate_metrics[name]),
+                    expected_candidates.index(name),
+                ),
+            )
+            expected_selected_model = baseline_name
+            expected_fva_reason = "SIMPLE_BASELINE_SELECTED"
+            if best_name != baseline_name:
+                baseline_score = metric_objective(baseline_metrics)
+                best_score = metric_objective(candidate_metrics[best_name])
+                improvement = (
+                    Decimal("0")
+                    if baseline_score == 0
+                    else max(
+                        (baseline_score - best_score) / baseline_score,
+                        Decimal("0"),
+                    )
+                )
+                if improvement >= _decimal(
+                    active_policy.values["fva"]["minimum_relative_improvement"],
+                    "fva.minimum_relative_improvement",
+                ):
+                    expected_selected_model = best_name
+                    expected_fva_reason = "COMPLEX_MODEL_CLEARED_FVA_GATE"
+                else:
+                    expected_fva_reason = (
+                        "COMPLEX_MODEL_DID_NOT_CLEAR_FVA_GATE"
+                    )
+
         selected_model = value.get("selected_model")
         selected_rows = [
             item for item in candidates if item.get("selected") is True
         ]
-        eligible_counts = {
-            item["selection_metrics"]["observation_count"]
-            for item in candidates
-            if item.get("status") == "ELIGIBLE"
-            and isinstance(item.get("selection_metrics"), dict)
-        }
-        eligible_origin_sets = {
-            tuple(item.get("selection_origin_dates", []))
-            for item in candidates
-            if item.get("status") == "ELIGIBLE"
-        }
+        if selected_model is None:
+            if selected_rows or value.get("selection_metrics") is not None:
+                return False
+        elif not (
+            selected_model == expected_selected_model
+            and len(selected_rows) == 1
+            and selected_rows[0].get("name") == selected_model
+            and selected_rows[0].get("status") == "ELIGIBLE"
+            and value.get("selection_metrics")
+            == selected_rows[0].get("selection_metrics")
+            and all("selected" in item for item in candidates)
+        ):
+            return False
+
+        if value.get("status") == "BLOCKED" and selected_model is None:
+            windows = active_policy.values["windows"]
+            expected_evaluation_start = history_days - int(
+                windows["evaluation_days"]
+            )
+            expected_calibration_start = expected_evaluation_start - int(
+                windows["calibration_days"]
+            )
+            expected_selection_start = max(
+                int(windows["minimum_training_days"]),
+                expected_calibration_start
+                - int(windows["selection_origin_days"]),
+            )
+            expected_split = {
+                "selection_start_index": expected_selection_start,
+                "calibration_start_index": expected_calibration_start,
+                "evaluation_start_index": expected_evaluation_start,
+            }
+            chronology_blocked = candidates == []
+            baseline_blocked = (
+                [item.get("name") for item in candidates]
+                == expected_candidates
+                and baseline_metrics is None
+            )
+            if not (
+                Decimal(str(value.get("forecast_daily_velocity"))) == 0
+                and Decimal(str(value.get("point_forecast_units"))) == 0
+                and value.get("protection_units") is None
+                and value.get("target_units") is None
+                and value.get("confidence") == "LOW"
+                and value.get("split") == expected_split
+                and value.get("xyz_coefficient_of_variation") is None
+                and value.get("abc_class") == "NOT_CONFIGURED"
+                and value.get("caps") == {"daily_rate_cap_hits": 0}
+                and set(protection)
+                == {"status", "full_horizon_origin_count", "shortfalls"}
+                and protection.get("status") == "UNAVAILABLE"
+                and protection.get("full_horizon_origin_count") == 0
+                and protection.get("shortfalls") == []
+                and (
+                    (
+                        chronology_blocked
+                        and value.get("demand_regime") == "THIN"
+                        and value.get("xyz_class") == "NOT_CONFIGURED"
+                        and value["reason_codes"]
+                        == ["INSUFFICIENT_CHRONOLOGICAL_WINDOWS"]
+                    )
+                    or (
+                        baseline_blocked
+                        and value.get("demand_regime") == "UNCLASSIFIED"
+                        and value.get("xyz_class") == "NOT_CONFIGURED"
+                        and value["reason_codes"] == ["SIMPLE_BASELINE_UNAVAILABLE"]
+                    )
+                )
+            ):
+                return False
+            return True
+
+        if selected_model is None:
+            return False
+
         evaluation_count = value.get("evaluation_origin_count")
         minimum_evaluation = value.get("minimum_evaluation_origin_count")
         evaluation_status = value.get("evaluation_status")
         point = Decimal(str(value.get("point_forecast_units")))
-        protection_units = Decimal(str(value.get("protection_units")))
-        target = Decimal(str(value.get("target_units")))
+        availability = value.get("availability")
+        if not isinstance(availability, dict):
+            return False
+        windows = active_policy.values["windows"]
+        expected_evaluation_start = history_days - int(windows["evaluation_days"])
+        expected_calibration_start = expected_evaluation_start - int(
+            windows["calibration_days"]
+        )
+        expected_selection_start = max(
+            int(windows["minimum_training_days"]),
+            expected_calibration_start - int(windows["selection_origin_days"]),
+        )
+
+        def history_date(index: int) -> str:
+            return (history_start + timedelta(days=index)).isoformat()
+
+        expected_split = {
+            "selection_start_date": history_date(expected_selection_start),
+            "selection_end_date": history_date(expected_calibration_start - 1),
+            "calibration_start_date": history_date(expected_calibration_start),
+            "calibration_end_date": history_date(expected_evaluation_start - 1),
+            "evaluation_start_date": history_date(expected_evaluation_start),
+            "evaluation_end_date": history_end.isoformat(),
+        }
+        caps = value.get("caps")
+        evaluation_metrics = value.get("evaluation_metrics")
+        if not (
+            value.get("demand_regime") in {"REGULAR", "INTERMITTENT"}
+            and value.get("xyz_class") in {"X", "Y", "Z"}
+            and (
+                value.get("xyz_coefficient_of_variation") is None
+                or _decimal(
+                    value.get("xyz_coefficient_of_variation"),
+                    "xyz_coefficient_of_variation",
+                )
+                >= 0
+            )
+            and value.get("abc_class") == "NOT_CONFIGURED"
+            and value.get("abc_status") == "MISSING_HISTORICAL_COGS"
+            and value.get("split") == expected_split
+            and isinstance(caps, dict)
+            and set(caps)
+            == {
+                "daily_rate_cap",
+                "daily_rate_cap_hits",
+                "selection_cap_hits",
+                "evaluation_cap_hits",
+                "calibration_cap_hits",
+                "final_cap_hits",
+            }
+            and _decimal(caps.get("daily_rate_cap"), "daily_rate_cap") >= 0
+            and all(
+                isinstance(caps.get(key), int) and caps[key] >= 0
+                for key in (
+                    "daily_rate_cap_hits",
+                    "selection_cap_hits",
+                    "evaluation_cap_hits",
+                    "calibration_cap_hits",
+                    "final_cap_hits",
+                )
+            )
+            and caps["daily_rate_cap_hits"]
+            == caps["selection_cap_hits"]
+            + caps["evaluation_cap_hits"]
+            + caps["calibration_cap_hits"]
+            + caps["final_cap_hits"]
+            and isinstance(evaluation_metrics, dict)
+            and set(evaluation_metrics)
+            == {"observation_count", "bias", "mae", "wape", "mase"}
+            and Decimal(str(evaluation_metrics.get("bias"))).is_finite()
+            and Decimal(str(evaluation_metrics.get("mae"))) >= 0
+            and (
+                evaluation_metrics.get("wape") is None
+                or Decimal(str(evaluation_metrics.get("wape"))) >= 0
+            )
+            and (
+                evaluation_metrics.get("mase") is None
+                or Decimal(str(evaluation_metrics.get("mase"))) >= 0
+            )
+            and set(availability)
+            == {
+                "proven_stockout_days",
+                "proven_in_stock_days",
+                "unknown_days",
+                "minimum_proven_in_stock_days_for_full_protection",
+                "protection_qualification",
+                "negative_net_days",
+            }
+        ):
+            return False
+        proven_in_stock_days = availability.get("proven_in_stock_days")
+        proven_stockout_days = availability.get("proven_stockout_days")
+        unknown_days = availability.get("unknown_days")
+        minimum_in_stock_days = int(
+            active_policy.values["availability"][
+                "minimum_proven_in_stock_days_for_full_protection"
+            ]
+        )
+        if not (
+            all(
+                isinstance(item, int) and item >= 0
+                for item in (proven_in_stock_days, proven_stockout_days, unknown_days)
+            )
+            and proven_in_stock_days + proven_stockout_days + unknown_days
+            == history_days
+            and isinstance(availability.get("negative_net_days"), int)
+            and 0 <= availability["negative_net_days"] <= history_days
+            and availability.get(
+                "minimum_proven_in_stock_days_for_full_protection"
+            )
+            == minimum_in_stock_days
+        ):
+            return False
+        availability_limited = proven_in_stock_days < minimum_in_stock_days
+        if availability.get("protection_qualification") != (
+            "LIMITED" if availability_limited else "FULL"
+        ):
+            return False
         shortfalls = [
             Decimal(str(item)) for item in protection.get("shortfalls", [])
         ]
         quantile = _decimal(protection.get("quantile"), "protection.quantile")
+        protection_keys = {
+            "status",
+            "method",
+            "quantile",
+            "minimum_origin_count",
+            "full_horizon_origin_count",
+            "censored_stockout_origin_count",
+            "censored_stockout_origin_dates",
+            "origin_dates",
+            "shortfalls",
+            "availability_qualification",
+        }
+        if value.get("status") == "READY":
+            protection_keys.add("units")
+        origin_dates = protection.get("origin_dates")
+        censored_dates = protection.get("censored_stockout_origin_dates")
         if not (
-            selected_model in expected_candidates
-            and len(selected_rows) == 1
-            and selected_rows[0].get("name") == selected_model
-            and len(eligible_counts) == 1
-            and len(eligible_origin_sets) == 1
-            and next(iter(eligible_counts)) > 0
-            and len(next(iter(eligible_origin_sets)))
-            == next(iter(eligible_counts))
-            and isinstance(evaluation_count, int)
+            set(protection) == protection_keys
+            and quantile
+            == _decimal(
+                active_policy.values["protection"]["quantile"],
+                "policy protection.quantile",
+            )
+            and protection.get("minimum_origin_count")
+            == int(
+                active_policy.values["protection"][
+                    "minimum_full_horizon_origins"
+                ]
+            )
+            and isinstance(origin_dates, list)
+            and len(origin_dates) == len(set(origin_dates)) == len(shortfalls)
+            and all(
+                history_start <= date.fromisoformat(str(item)) <= history_end
+                for item in origin_dates
+            )
+            and isinstance(censored_dates, list)
+            and len(censored_dates) == len(set(censored_dates))
+            and all(
+                history_start <= date.fromisoformat(str(item)) <= history_end
+                for item in censored_dates
+            )
+            and not set(origin_dates).intersection(censored_dates)
+            and protection.get("censored_stockout_origin_count")
+            == len(censored_dates)
+        ):
+            return False
+        if not (
+            isinstance(evaluation_count, int)
             and evaluation_count > 0
             and isinstance(minimum_evaluation, int)
-            and minimum_evaluation > 0
+            and minimum_evaluation
+            == int(active_policy.values["windows"]["minimum_evaluation_origins"])
             and evaluation_status
             == (
                 "SUFFICIENT"
                 if evaluation_count >= minimum_evaluation
                 else "INSUFFICIENT_FOR_CONFIDENCE"
             )
-            and (
-                evaluation_status == "SUFFICIENT" or value.get("confidence") == "LOW"
-            )
+            and evaluation_metrics.get("observation_count")
+            == evaluation_count
             and point >= 0
-            and protection_units >= 0
-            and target == point + protection_units
             and protection.get("method")
             == "FULL_HORIZON_SHORTFALL_EMPIRICAL_QUANTILE"
             and isinstance(protection.get("minimum_origin_count"), int)
             and isinstance(protection.get("full_horizon_origin_count"), int)
             and protection["full_horizon_origin_count"] == len(shortfalls)
-            and len(shortfalls) >= protection["minimum_origin_count"] > 0
             and all(item >= 0 for item in shortfalls)
+            and protection.get("availability_qualification")
+            == ("LIMITED" if availability_limited else "FULL")
+        ):
+            return False
+
+        xyz_reason_codes: list[str] = []
+        xyz_coefficient_raw = value.get("xyz_coefficient_of_variation")
+        if calendar_velocity == 0:
+            if not (
+                value.get("xyz_class")
+                == active_policy.values["xyz"]["zero_demand_class"]
+                and xyz_coefficient_raw is None
+            ):
+                return False
+            xyz_reason_codes.append("ZERO_DEMAND_XYZ_POLICY")
+        else:
+            if xyz_coefficient_raw is None:
+                return False
+            xyz_coefficient = _decimal(
+                xyz_coefficient_raw, "xyz_coefficient_of_variation"
+            )
+            x_max = _decimal(
+                active_policy.values["xyz"]["x_max_coefficient_of_variation"],
+                "xyz.x_max",
+            )
+            y_max = _decimal(
+                active_policy.values["xyz"]["y_max_coefficient_of_variation"],
+                "xyz.y_max",
+            )
+            expected_xyz = "X" if xyz_coefficient <= x_max else "Y" if xyz_coefficient <= y_max else "Z"
+            if value.get("xyz_class") != expected_xyz:
+                return False
+
+        expected_velocity = (point / Decimal(value["horizon_days"])).quantize(
+            VELOCITY, rounding=ROUND_HALF_UP
+        )
+        if _decimal(
+            value.get("forecast_daily_velocity"), "forecast_daily_velocity"
+        ) != expected_velocity:
+            return False
+
+        if value.get("status") == "BLOCKED":
+            expected_blocked_reasons = [
+                expected_fva_reason,
+                *xyz_reason_codes,
+                "EMPIRICAL_PROTECTION_ORIGINS_INSUFFICIENT",
+            ]
+            if not (
+                value.get("protection_units") is None
+                and value.get("target_units") is None
+                and value.get("confidence") == "LOW"
+                and protection.get("status") == "UNAVAILABLE"
+                and value["reason_codes"] == expected_blocked_reasons
+                and len(shortfalls)
+                == protection["full_horizon_origin_count"]
+                < protection["minimum_origin_count"]
+            ):
+                return False
+            return True
+
+        protection_units = Decimal(str(value.get("protection_units")))
+        target = Decimal(str(value.get("target_units")))
+        evaluation_wape_raw = value["evaluation_metrics"].get("wape")
+        evaluation_wape = (
+            None
+            if evaluation_wape_raw is None
+            else Decimal(str(evaluation_wape_raw))
+        )
+        expected_confidence = (
+            "HIGH"
+            if evaluation_status == "SUFFICIENT"
+            and not availability_limited
+            and evaluation_wape is not None
+            and evaluation_wape <= Decimal("0.20")
+            else "MEDIUM"
+            if evaluation_status == "SUFFICIENT"
+            and not availability_limited
+            and evaluation_wape is not None
+            and evaluation_wape <= Decimal("0.50")
+            else "LOW"
+        )
+        expected_protection_status = (
+            "CALCULATED_LIMITED_AVAILABILITY"
+            if availability_limited
+            else "CALCULATED"
+        )
+        expected_reason_codes = [expected_fva_reason, *xyz_reason_codes]
+        if proven_stockout_days:
+            expected_reason_codes.append("PROVEN_STOCKOUT_DAYS_CAUSALLY_IMPUTED")
+        if unknown_days:
+            expected_reason_codes.append("UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK")
+        if availability["negative_net_days"]:
+            expected_reason_codes.append(
+                "NEGATIVE_NET_DAYS_FLOORED_FOR_DEMAND_ONLY"
+            )
+        if caps["daily_rate_cap_hits"]:
+            expected_reason_codes.append("DEVELOPMENT_RATE_CAP_APPLIED")
+        if evaluation_status != "SUFFICIENT":
+            expected_reason_codes.append(
+                "EVALUATION_ORIGINS_INSUFFICIENT_FOR_CONFIDENCE"
+            )
+        if availability_limited:
+            expected_reason_codes.append(
+                "AVAILABILITY_COVERAGE_LIMITS_PROTECTION"
+            )
+        expected_reason_codes.append("EMPIRICAL_FULL_HORIZON_PROTECTION_BOUND")
+        if not (
+            value.get("confidence") == expected_confidence
+            and protection.get("status") == expected_protection_status
+            and protection_units >= 0
+            and target == point + protection_units
+            and protection.get("units") == value.get("protection_units")
+            and len(shortfalls)
+            == protection["full_horizon_origin_count"]
+            >= protection["minimum_origin_count"]
+            > 0
             and protection_units
             == _quantile(shortfalls, quantile).quantize(
                 UNITS, rounding=ROUND_HALF_UP
             )
+            and (
+                "AVAILABILITY_COVERAGE_LIMITS_PROTECTION" in value["reason_codes"]
+            )
+            == availability_limited
+            and value["reason_codes"] == expected_reason_codes
         ):
             return False
         return True

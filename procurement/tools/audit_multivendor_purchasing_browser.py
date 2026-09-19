@@ -406,6 +406,21 @@ def _database_acceptance(
                     != Decimal(evidence.get("point_forecast_units"))
                     or Decimal(row[5])
                     != Decimal(evidence.get("protection_units"))
+                    or evidence.get("confidence") != "LOW"
+                    or evidence.get("availability", {}).get(
+                        "proven_in_stock_days"
+                    )
+                    != 0
+                    or evidence.get("availability", {}).get("unknown_days")
+                    != 84
+                    or evidence.get("availability", {}).get(
+                        "protection_qualification"
+                    )
+                    != "LIMITED"
+                    or evidence.get("protection", {}).get("status")
+                    != "CALCULATED_LIMITED_AVAILABILITY"
+                    or "AVAILABILITY_COVERAGE_LIMITS_PROTECTION"
+                    not in evidence.get("reason_codes", [])
                     or not need_target_matches
                     or int(evidence.get("horizon_days")) != expected_horizon
                     or int(row[9].get("raw_need_units")) != expected_raw_need

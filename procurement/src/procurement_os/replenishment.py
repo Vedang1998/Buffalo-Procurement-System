@@ -188,7 +188,15 @@ def calculate_development_baseline_need(
     protection = _decimal(
         empirical_protection_units, "empirical_protection_units"
     )
+    variability = _decimal(
+        lead_time_variability_days, "lead_time_variability_days"
+    )
     assert point is not None and protection is not None
+    assert variability is not None
+    if protection_days_override is not None and variability != 0:
+        raise ValueError(
+            "nonzero lead-time variability requires a validated delivery-delay model"
+        )
     target = point + protection
     result = calculate_baseline_need(
         forecast_daily_velocity=forecast_daily_velocity,

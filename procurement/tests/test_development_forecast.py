@@ -9,6 +9,7 @@ from procurement_os.development_forecast import (
     _predict,
     assign_gp_dollar_abc,
     calculate_calendar_protection_horizon,
+    load_development_forecast_policy,
     plan_development_forecast,
     validate_development_forecast_evidence,
 )
@@ -20,9 +21,15 @@ from procurement_os.replenishment import calculate_development_baseline_need
 START = date(2026, 6, 1)
 
 
-def observations(values: list[object]) -> list[DemandObservation]:
+def observations(
+    values: list[object], *, inventory_state: str = "UNKNOWN"
+) -> list[DemandObservation]:
     return [
-        DemandObservation(START + timedelta(days=index), Decimal(str(value)), "UNKNOWN")
+        DemandObservation(
+            START + timedelta(days=index),
+            Decimal(str(value)),
+            inventory_state,
+        )
         for index, value in enumerate(values)
     ]
 
@@ -61,24 +68,21 @@ class DevelopmentForecastTests(unittest.TestCase):
             ),
             ("2026-10-12", "2026-10-15", 10, "2026-10-07", "2026-10-08", 3),
         )
-        variable_calendar = calculate_calendar_protection_horizon(
-            evaluation_at=evaluation_at,
-            timezone_name="America/New_York",
-            order_days=("MONDAY",),
-            order_cutoff_local=time(23, 59, 59),
-            expected_delivery_days=("THURSDAY",),
-            order_cycle_days=7,
-            lead_time_days=1,
-            lead_time_variability_days="1.2",
-        )
-        self.assertEqual(variable_calendar["horizon_days"], 10)
-        self.assertEqual(variable_calendar["variability_days_ceiling"], 2)
-        self.assertEqual(
-            variable_calendar["variability_treatment"],
-            "EVIDENCE_ONLY_NOT_DEMAND_HORIZON",
-        )
+        with self.assertRaisesRegex(
+            ValueError, "nonzero lead-time variability requires"
+        ):
+            calculate_calendar_protection_horizon(
+                evaluation_at=evaluation_at,
+                timezone_name="America/New_York",
+                order_days=("MONDAY",),
+                order_cutoff_local=time(23, 59, 59),
+                expected_delivery_days=("THURSDAY",),
+                order_cycle_days=7,
+                lead_time_days=1,
+                lead_time_variability_days="1.2",
+            )
         plan = plan_development_forecast(
-            observations([2] * 84),
+            observations([2] * 84, inventory_state="IN_STOCK"),
             horizon_days=14,
         )
         self.assertEqual(plan.point_forecast_units, Decimal("28.0000"))
@@ -101,24 +105,25 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertEqual(need.target_units, Decimal("28.0000"))
         self.assertEqual(need.raw_need_units, 18)
         self.assertEqual((need.cases, need.loose_units, need.ordered_units), (3, 0, 18))
-        no_double_count = calculate_development_baseline_need(
-            forecast_daily_velocity=plan.forecast_daily_velocity,
-            point_forecast_units=plan.point_forecast_units,
-            empirical_protection_units=plan.protection_units,
-            available_units="8",
-            trusted_incoming_units="2",
-            order_cycle_days=7,
-            lead_time_days=7,
-            lead_time_variability_days="2.5",
-            policy_mode="ROUTINE",
-            units_per_case=6,
-            loose_order_allowed=False,
-            loose_unit_fee=None,
-            forecast_horizon_days=14,
-            protection_days_override=14,
-        )
-        self.assertEqual(no_double_count, need)
-        self.assertIn("PROTECTION_NOT_DOUBLE_COUNTED", no_double_count.reason_codes)
+        with self.assertRaisesRegex(
+            ValueError, "nonzero lead-time variability requires"
+        ):
+            calculate_development_baseline_need(
+                forecast_daily_velocity=plan.forecast_daily_velocity,
+                point_forecast_units=plan.point_forecast_units,
+                empirical_protection_units=plan.protection_units,
+                available_units="8",
+                trusted_incoming_units="2",
+                order_cycle_days=7,
+                lead_time_days=7,
+                lead_time_variability_days="2.5",
+                policy_mode="ROUTINE",
+                units_per_case=6,
+                loose_order_allowed=False,
+                loose_unit_fee=None,
+                forecast_horizon_days=14,
+                protection_days_override=14,
+            )
 
     def test_changed_history_changes_the_calculated_purchase_quantity(self):
         needs = []
@@ -262,6 +267,14 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertIn("PROVEN_STOCKOUT_DAYS_CAUSALLY_IMPUTED", plan.evidence["reason_codes"])
         self.assertIn("UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK", plan.evidence["reason_codes"])
         self.assertEqual(plan.evidence["protection"]["censored_stockout_origin_count"], 0)
+        self.assertEqual(
+            plan.evidence["protection"]["status"],
+            "CALCULATED_LIMITED_AVAILABILITY",
+        )
+        self.assertEqual(
+            plan.evidence["availability"]["protection_qualification"],
+            "LIMITED",
+        )
         self.assertEqual(plan.evidence["evaluation_status"], "INSUFFICIENT_FOR_CONFIDENCE")
         self.assertEqual(plan.confidence, "LOW")
         self.assertIn(
@@ -327,6 +340,12 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertGreater(capped.protection_units, 0)
 
     def test_gp_dollar_abc_never_substitutes_revenue_or_current_price(self):
+        policy = load_development_forecast_policy()
+        self.assertEqual(policy.values["abc"]["classification_period_days"], 84)
+        self.assertEqual(policy.values["history"]["connected_history_days"], 84)
+        self.assertEqual(policy.values["history"]["maximum_history_days"], 84)
+        self.assertEqual(policy.values["selection_metric"], "WAPE_WHEN_DEFINED_ELSE_MAE")
+        self.assertEqual(policy.values["tie_break_rule"], "CANDIDATE_ORDER")
         classes = assign_gp_dollar_abc(
             [
                 {"variant_id": "a", "historical_revenue": "100", "historical_cogs": "10"},
@@ -398,7 +417,7 @@ class DevelopmentForecastTests(unittest.TestCase):
             expected_delivery_days=("THURSDAY",),
             order_cycle_days=7,
             lead_time_days=1,
-            lead_time_variability_days="1.2",
+            lead_time_variability_days="0",
         )
         actual = plan_development_forecast(
             observations([2] * 84),
@@ -410,6 +429,31 @@ class DevelopmentForecastTests(unittest.TestCase):
         )
         rehash(actual)
         self.assertFalse(validate_development_forecast_evidence(actual))
+
+        selected = plan_development_forecast(
+            observations(
+                [7 if index % 7 in {4, 5} else 0 for index in range(84)]
+            ),
+            horizon_days=6,
+        ).to_json_dict()
+        selected["selected_model"] = "NAIVE"
+        selected["selection_metrics"] = next(
+            item["selection_metrics"]
+            for item in selected["candidates"]
+            if item["name"] == "NAIVE"
+        )
+        for item in selected["candidates"]:
+            item["selected"] = item["name"] == "NAIVE"
+        rehash(selected)
+        self.assertFalse(validate_development_forecast_evidence(selected))
+
+        blocked = plan_development_forecast(
+            observations([1] * 40), horizon_days=3
+        ).to_json_dict()
+        blocked["point_forecast_units"] = "999999.0000"
+        blocked["candidates"] = [{"name": "not-a-candidate"}]
+        rehash(blocked)
+        self.assertFalse(validate_development_forecast_evidence(blocked))
 
 
 if __name__ == "__main__":

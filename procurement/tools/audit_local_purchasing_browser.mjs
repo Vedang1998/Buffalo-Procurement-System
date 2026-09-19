@@ -656,6 +656,13 @@ async function audit(client) {
             typeof item.selected_model === "string" &&
             ["X", "Y", "Z"].includes(item.xyz_class) &&
             item.abc_class === "NOT_CONFIGURED" &&
+            item.confidence === "LOW" &&
+            item.availability.proven_in_stock_days === 0 &&
+            item.availability.unknown_days === 84 &&
+            item.availability.protection_qualification === "LIMITED" &&
+            item.protection.status === "CALCULATED_LIMITED_AVAILABILITY" &&
+            item.protection.availability_qualification === "LIMITED" &&
+            item.reason_codes.includes("AVAILABILITY_COVERAGE_LIMITS_PROTECTION") &&
             Math.round(Number(item.point_forecast_units) * 10000) +
               Math.round(Number(item.protection_units) * 10000) ===
               Math.round(Number(item.target_units) * 10000) &&
@@ -669,7 +676,10 @@ async function audit(client) {
           const value = [...document.querySelectorAll('.development-forecast-evidence')]
             .map((node) => node.textContent).join(' ');
           value.includes('LOCAL SYNTHETIC DEVELOPMENT ONLY — NO COMMERCIAL AUTHORITY') &&
-            value.includes('empirical full-horizon protection');
+            value.includes('empirical full-horizon protection') &&
+            value.includes('CALCULATED_LIMITED_AVAILABILITY') &&
+            value.includes('availability qualification LIMITED') &&
+            value.includes('confidence LOW');
         }`),
         "development model and protection evidence are intelligible in the review UI",
       );

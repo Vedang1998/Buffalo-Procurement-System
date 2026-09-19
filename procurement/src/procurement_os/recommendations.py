@@ -34,6 +34,7 @@ from .development_forecast import (
     DevelopmentForecastError,
     calculate_calendar_protection_horizon,
     development_forecast_contract_for_run,
+    load_development_forecast_policy,
     plan_development_forecast,
 )
 from .monday_controls import MondayControlError, load_material_edit_policy
@@ -317,7 +318,7 @@ def _sales_coverage_digest(rows: Iterable[tuple[Any, ...]]) -> str:
 
 
 def _authoritative_sales_rows(
-    conn: Any, *, business_date: date, variant_id: str
+    conn: Any, *, business_date: date, variant_id: str, history_days: int = 84
 ) -> tuple[list[tuple[Any, ...]], dict[str, Any]]:
     """Return one proven sales source or fail closed on current coverage.
 
@@ -327,7 +328,9 @@ def _authoritative_sales_rows(
     manifest.  Other ad-hoc ``sales_daily`` sources never become buying input.
     """
 
-    history_start = business_date - timedelta(days=84)
+    if isinstance(history_days, bool) or not isinstance(history_days, int) or history_days < 1:
+        raise MondayRecommendationError("CURRENT_SALES_COVERAGE_UNPROVEN")
+    history_start = business_date - timedelta(days=history_days)
     history_end = business_date - timedelta(days=1)
     gate = conn.execute(
         """SELECT status,evidence_json
@@ -530,12 +533,14 @@ def _authoritative_sales_rows(
     ).fetchall()
     if synthetic_contract:
         coverage = (evidence.get("variant_coverage") or {}).get(str(variant_id))
-        expected_dates = [history_start + timedelta(days=offset) for offset in range(84)]
+        expected_dates = [
+            history_start + timedelta(days=offset) for offset in range(history_days)
+        ]
         if (
             not isinstance(coverage, dict)
-            or len(rows) != 84
+            or len(rows) != history_days
             or [row[0] for row in rows] != expected_dates
-            or coverage.get("row_count") != 84
+            or coverage.get("row_count") != history_days
             or coverage.get("sha256") != _sales_coverage_digest(rows)
         ):
             raise MondayRecommendationError("CURRENT_SALES_COVERAGE_UNPROVEN")
@@ -959,11 +964,29 @@ def _load_context_unfinalized(
                 "sha256": _fingerprint(authority_payload),
             }
 
-    history_start = business_date - timedelta(days=84)
+    try:
+        development_policy = (
+            load_development_forecast_policy()
+            if development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT
+            else None
+        )
+    except DevelopmentForecastError as exc:
+        raise MondayRecommendationError(
+            "DEVELOPMENT_FORECAST_INPUT_INVALID"
+        ) from exc
+    history_days = (
+        int(development_policy.values["history"]["connected_history_days"])
+        if development_policy is not None
+        else 84
+    )
+    history_start = business_date - timedelta(days=history_days)
     history_end = business_date - timedelta(days=1)
     try:
         sales_rows, sales_authority = _authoritative_sales_rows(
-            conn, business_date=business_date, variant_id=str(variant_id)
+            conn,
+            business_date=business_date,
+            variant_id=str(variant_id),
+            history_days=history_days,
         )
     except MondayRecommendationError:
         context["blockers"].append("CURRENT_SALES_COVERAGE_UNPROVEN")
