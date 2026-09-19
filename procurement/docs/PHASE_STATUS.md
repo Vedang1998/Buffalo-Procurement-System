@@ -5,6 +5,42 @@
 
 This file is the executive roadmap/status view. It is updated when a phase/program milestone changes. It does not replace the canonical system specification or the verified current-state handoff.
 
+## Development Forecast V2 five-finding remediation
+
+**BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS — EXTERNAL REVIEW, REAL
+POLICY AND PRODUCTION USE BLOCKED**
+
+The separate `development-forecast-v2` profile is machine-tested at material
+commit `ac65b8fc3263834d1a4c91001330e227f14870bb`, tree
+`6bbb6bfbeade34771b6f95cc0bf3cc257c5d986d`, from the reviewed frozen
+prerequisite `dd131602...`. Its immutable registry preserves V1 and requires an
+exact server-owned V2 fixture/policy/schedule/runtime tuple; mixed, partial and
+caller-selected identities refuse. No migration, table or dependency was
+added.
+
+The five bounded findings are closed: semantic forecast-to-need binding,
+incomplete-ABC refusal, policy-bound confidence, anchored alternating-week
+scheduling and adequate longer-horizon origins. The fabricated 138-day V2
+corpus proves Southern H17 and Western H3 through the actual selected-price,
+review, DRAFT and packet path while preserving separate owner quantity edits.
+
+Exact material validation passed 13/13 pure forecast, 15/15 launcher/fixture,
+13/13 PostgreSQL service, 10/10 startup and **845/845** authoritative tests
+with every abnormal counter zero. Chromium passed **171 assertions** through
+browser-created state, two DRAFTs/three lines, the 14-member packet, source
+restart, same-name restore into a distinct PostgreSQL 16 cluster, recovered
+restart and terminal replay. Final economics are $282 merchandise + one $7
+fee = $289, and source/target durable state shares SHA-256
+`32b0a4de9f37c554e69f76693ef4ede8c914dcbee93e0b7d4efd8bdf6db08f98`.
+
+This does not change the official production phase. All inputs and schedule
+anchors are fabricated; availability remains UNKNOWN/limited; connected ABC
+has no historical COGS; real forecast-policy approval, real backtesting,
+direct-SQL cutover enforcement, production identity/IdP, owner access, native
+Shopify validation, deployment, PO release and ordering remain blocked. See
+`docs/DEVELOPMENT_FORECAST_V2_CLOSEOUT.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact identities, evidence and next boundary.
+
 ## Wednesday development forecast-to-DRAFT candidate
 
 **BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS — OWNER/EXTERNAL REVIEW,

@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-19T15:47:22Z (UTC)
+**Updated:** 2026-09-19T23:20:36Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,75 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Development Forecast V2 five-finding remediation — BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS / EXTERNAL REVIEW AND REAL USE BLOCKED
+
+- The reviewed reconstruction remains frozen at commit
+  `dd1316022c3e778963c84d818f79ce61f61f192a`, tree
+  `cc98458065117be8850225099591acb60e48f469`. The separate isolated material
+  child is commit `ac65b8fc3263834d1a4c91001330e227f14870bb`, tree
+  `6bbb6bfbeade34771b6f95cc0bf3cc257c5d986d`. The range is five linear
+  commits, 18 files and `+4482/-289`; the final closeout is documentation-only
+  and is identified separately in the additive review archive.
+- The new `development-forecast-v2` fixture/profile is registered separately
+  from V1 and requires the exact server-owned profile, fixture, policy,
+  schedule, database and runtime attestation tuple. Unknown, partial, mixed or
+  hash-mismatched tuples refuse without fallback. Existing V1 policy, fixture,
+  run and packet bytes are not relabeled or converted. No migration, table or
+  dependency was added; the `procurement/db` tree remains
+  `c6fd3e0459473ad479c106222a3b8d9746c0862a`.
+- All five bounded findings are closed in the registered V2 path: forecast
+  evidence is semantically rebound to baseline need and deterministic replay;
+  incomplete ABC cohorts receive no letters; confidence thresholds are
+  explicit policy inputs; the schedule resolves independent anchored review,
+  submission and receipt opportunities; and 138 contiguous synthetic days
+  support unchanged origin minima through H31. Southern proves an anchored
+  H17 interval (2026-10-05 through start-of-day 2026-10-22); Western is the H3
+  weekly control. Owner quantity edits remain separate immutable review facts.
+- Exact material validation passed pure forecast **13/13**, launcher/fixture
+  **15/15**, PostgreSQL service **13/13**, startup **10/10**, and the
+  authoritative repository wrapper **845 discovered / 845 executed / 845
+  passed** in 1180.378s, with every abnormal counter zero. The authoritative
+  suite log SHA-256 is
+  `a3205c1075393556d5de84df1a11b43dfe575bc85426f51350325194523be193`.
+- Fresh Chromium on exact `ac65b8f...` passed **171 assertions**: 19 price, 86
+  V2 workflow, and 22 each for source restart, distinct-cluster recovery and
+  recovered restart. Browser actions created the decisions and run; nothing
+  was precompleted. The result is two DRAFTs, three lines and a 14-member
+  packet. Southern contributes $180; Western contributes $102 merchandise and
+  one $7 below-minimum fee; grand merchandise is **$282**, fees **$7**, and
+  DRAFT total **$289**. Variant 4003 remains blocked for missing selected-offer
+  head and Variant 4004 freezes four loose units plus a `$3.00` fee before the
+  unresolved-fee blocker.
+- Recovery used distinct PostgreSQL system identifiers
+  `7687385158040509340` and `7687385410796826131`; source and target durable
+  state SHA-256 is identical:
+  `32b0a4de9f37c554e69f76693ef4ede8c914dcbee93e0b7d4efd8bdf6db08f98`.
+  Source restart, restore, recovered restart and terminal replay preserved the
+  exact two CSVs and packet. The browser summary SHA-256 is
+  `59e5cad333b05f172c86b3707c65e5cad5d5c38550579ac6274889b1b2d750b4`.
+- Two read-only same-model reviewers inspected exact `ac65b8f...` and found no
+  remaining P0-P2 issue. They did not run database/browser checks and are not
+  external/Claude review. The first pre-final browser attempt remains an
+  explicit diagnostic: it exposed an invalid V2 loose-fee fixture rather than
+  being counted as evidence. The corrected V2-only history passed while V1
+  fixture bytes and results stayed unchanged.
+- Both demo databases, app instances and Chromium were stopped. A six-secret
+  exact-value scan found zero matches in retained evidence; the exact isolated
+  runtime roots, databases, backups and secrets were deleted. No owned
+  listener/process remains.
+- This remains fabricated synthetic internal-DRAFT evidence. UNKNOWN
+  availability forces limited/LOW evidence; connected ABC lacks historical
+  COGS; category shrinkage lacks a causal prior; nonzero lead variability
+  refuses; real policy/data/backtesting, direct-SQL enforcement, production
+  identity, owner access, native Shopify validation, deployment, PO release
+  and orders remain blocked. The official production phase is unchanged.
+  Exact evidence, hashes and the five-finding matrix are in
+  `docs/DEVELOPMENT_FORECAST_V2_CLOSEOUT.md`.
+- Exact next boundary: preserve the material commit plus documentation-only
+  child, expose the additive V2 review archive for independent review, and
+  stop. External acceptance or any real/default activation requires a new
+  reviewed owner authorization.
 
 ### Wednesday development forecast-to-DRAFT — BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS / OWNER AND REAL USE BLOCKED
 
