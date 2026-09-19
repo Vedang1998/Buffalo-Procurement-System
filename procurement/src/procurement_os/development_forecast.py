@@ -901,7 +901,11 @@ def _weekly_xyz(
     variance = sum(((item - mean) ** 2 for item in weekly), Decimal("0")) / Decimal(
         len(weekly)
     )
-    coefficient = variance.sqrt() / mean
+    # The class decision must use the same precision frozen into evidence so
+    # a genuine plan cannot cross a boundary when it is later revalidated.
+    coefficient = (variance.sqrt() / mean).quantize(
+        METRIC, rounding=ROUND_HALF_UP
+    )
     x_max = _decimal(
         policy.values["xyz"]["x_max_coefficient_of_variation"], "xyz.x_max"
     )
@@ -2082,17 +2086,15 @@ def validate_development_forecast_evidence(value: Any) -> bool:
 
         xyz_reason_codes: list[str] = []
         xyz_coefficient_raw = value.get("xyz_coefficient_of_variation")
-        if calendar_velocity == 0:
+        if xyz_coefficient_raw is None:
             if not (
                 value.get("xyz_class")
                 == active_policy.values["xyz"]["zero_demand_class"]
-                and xyz_coefficient_raw is None
+                and calendar_velocity == 0
             ):
                 return False
             xyz_reason_codes.append("ZERO_DEMAND_XYZ_POLICY")
         else:
-            if xyz_coefficient_raw is None:
-                return False
             xyz_coefficient = _decimal(
                 xyz_coefficient_raw, "xyz_coefficient_of_variation"
             )

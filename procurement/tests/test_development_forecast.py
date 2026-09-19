@@ -292,6 +292,53 @@ class DevelopmentForecastTests(unittest.TestCase):
             },
         )
 
+        boundary_values: list[Decimal] = []
+        for week in range(12):
+            weekly_total = (
+                Decimal("0.4999996")
+                if week % 2 == 0
+                else Decimal("1.5000004")
+            )
+            boundary_values.extend([weekly_total, *([Decimal("0")] * 6)])
+        boundary_observations = observations(boundary_values)
+        boundary = plan_development_forecast(
+            boundary_observations, horizon_days=3
+        )
+        self.assertEqual(
+            (
+                boundary.evidence["xyz_coefficient_of_variation"],
+                boundary.evidence["xyz_class"],
+            ),
+            ("0.500000", "X"),
+        )
+        self.assertTrue(
+            validate_development_forecast_evidence(boundary.to_json_dict())
+        )
+        self.assertTrue(
+            validate_development_forecast_context_evidence(
+                boundary.to_json_dict(),
+                [
+                    {
+                        "business_date": item.business_date.isoformat(),
+                        "net_units": str(item.net_units),
+                        "inventory_state": item.inventory_state,
+                    }
+                    for item in boundary_observations
+                ],
+            )
+        )
+        tiny_observations = observations([Decimal("0.0000001")] * 84)
+        tiny = plan_development_forecast(tiny_observations, horizon_days=3)
+        self.assertEqual(tiny.evidence["calendar_velocity"], "0.000000")
+        self.assertEqual(
+            (
+                tiny.evidence["xyz_coefficient_of_variation"],
+                tiny.evidence["xyz_class"],
+            ),
+            ("0.000000", "X"),
+        )
+        self.assertTrue(validate_development_forecast_evidence(tiny.to_json_dict()))
+
     def test_intermittent_zero_and_thin_cases_are_explicit(self):
         intermittent = plan_development_forecast(
             observations([5 if index % 10 == 0 else 0 for index in range(84)]),
