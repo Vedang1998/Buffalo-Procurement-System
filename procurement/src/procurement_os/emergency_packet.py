@@ -14,7 +14,9 @@ import zipfile
 
 from .development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
-    validate_development_forecast_context_evidence,
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
+    validate_development_baseline_need_context,
+    validate_connected_development_forecast_context_evidence,
 )
 from .draft_po import SAFETY_LABEL, get_vendor_drafts
 from .po_csv import FORMAT_WARNING, write_vendor_draft_csvs
@@ -425,7 +427,10 @@ def build_emergency_review_packet(
     development_contract_present = "development_forecast_contract" in input_manifest
     development_contract = input_manifest.get("development_forecast_contract")
     if development_contract_present:
-        if development_contract != DEVELOPMENT_FORECAST_CONTRACT:
+        if development_contract not in {
+            DEVELOPMENT_FORECAST_CONTRACT,
+            DEVELOPMENT_FORECAST_V2_CONTRACT,
+        }:
             raise EmergencyPacketError(
                 "development forecast contract is unknown or malformed"
             )
@@ -444,16 +449,26 @@ def build_emergency_review_packet(
             if status in {"READY", "BLOCKED"}:
                 evidence = context.get("development_forecast_evidence")
                 if (
-                    not validate_development_forecast_context_evidence(
+                    not validate_connected_development_forecast_context_evidence(
                         evidence,
                         context.get("demand_observations"),
+                        expected_contract=str(development_contract),
                     )
+                    or not isinstance(evidence, dict)
+                    or evidence.get("contract") != development_contract
                     or evidence.get("status") != status
                     or evidence.get("sha256")
                     != context.get("development_forecast_evidence_sha256")
                 ):
                     raise EmergencyPacketError(
                         "development forecast evidence is malformed"
+                    )
+                if status == "READY" and not validate_development_baseline_need_context(
+                    context,
+                    manifest_contract=str(development_contract),
+                ):
+                    raise EmergencyPacketError(
+                        "development forecast need evidence is malformed"
                     )
                 item.update(
                     {
@@ -462,6 +477,10 @@ def build_emergency_review_packet(
                         "calculated_need": context.get("need"),
                     }
                 )
+                if development_contract == DEVELOPMENT_FORECAST_V2_CONTRACT:
+                    item["calculated_need_binding"] = context.get(
+                        "development_baseline_need_binding"
+                    )
             elif status != "NOT_REACHED":
                 raise EmergencyPacketError(
                     "development forecast status is malformed"
@@ -470,7 +489,7 @@ def build_emergency_review_packet(
         entries["forecast-and-protection-evidence.json"] = _json_entry(
             {
                 **evidence_label,
-                "contract": DEVELOPMENT_FORECAST_CONTRACT,
+                "contract": development_contract,
                 "commercial_authority": False,
                 "production_activation": False,
                 "items": development_items,

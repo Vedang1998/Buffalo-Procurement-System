@@ -769,6 +769,223 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                 business_date=business_date,
             )
 
+    def test_development_forecast_v2_fixture_profile_is_exact_and_registered(self):
+        business_date = initializer._registered_business_date()
+        rows = initializer._synthetic_sales_rows(
+            business_date,
+            include_multivendor=True,
+            history_days=138,
+            development_profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+        )
+        variant_ids = sorted({row.source_variant_id for row in rows})
+        self.assertEqual(
+            variant_ids,
+            ["1001", "3003", "4001", "4002", "4003", "4004", "4005"],
+        )
+        self.assertEqual(len(rows), 966)
+        self.assertTrue(
+            all(
+                sum(row.source_variant_id == variant_id for row in rows) == 138
+                for variant_id in variant_ids
+            )
+        )
+        self.assertEqual(
+            (min(row.sale_date for row in rows), max(row.sale_date for row in rows)),
+            (date(2026, 5, 20), date(2026, 10, 4)),
+        )
+        southern = [row for row in rows if row.source_variant_id == "1001"]
+        western = [row for row in rows if row.source_variant_id == "4001"]
+        self.assertTrue(all(row.net_items_sold == 2 for row in southern))
+        self.assertEqual(
+            [row.net_items_sold for row in western[:6]],
+            [2, 2, 0, 2, 2, 0],
+        )
+        with self.assertRaisesRegex(RuntimeError, "registered profile"):
+            initializer._synthetic_sales_rows(
+                business_date,
+                include_multivendor=True,
+                history_days=84,
+                development_profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+            )
+        for profile in (None, initializer.DEVELOPMENT_FORECAST_PROFILE):
+            with self.subTest(profile=profile), self.assertRaisesRegex(
+                RuntimeError, "registered profile"
+            ):
+                initializer._synthetic_sales_rows(
+                    business_date,
+                    include_multivendor=True,
+                    history_days=138,
+                    development_profile=profile,
+                )
+
+        class MarkerConnection:
+            def __init__(self) -> None:
+                self.parameters: list[tuple[object, ...]] = []
+
+            def transaction(self):
+                return nullcontext()
+
+            def execute(self, _statement, parameters=()):
+                self.parameters.append(tuple(parameters))
+                return _Result()
+
+        marker = MarkerConnection()
+        initializer._publish_demo_marker(
+            marker,
+            business_date,
+            "00000000-0000-4000-8000-000000000902",
+            profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+        )
+        published: dict[str, str] = {}
+        for parameters in marker.parameters:
+            self.assertEqual(len(parameters) % 2, 0)
+            published.update(
+                {
+                    str(parameters[index]): str(parameters[index + 1])
+                    for index in range(0, len(parameters), 2)
+                }
+            )
+        registration = initializer.development_forecast_v2_registration()
+        self.assertEqual(
+            published,
+            {
+                "synthetic_owner_demo_business_date": "2026-10-05",
+                "synthetic_owner_demo_sales_backfill_id": (
+                    "00000000-0000-4000-8000-000000000902"
+                ),
+                "synthetic_owner_demo_contract": initializer.DEMO_CONTRACT,
+                "synthetic_multivendor_acceptance_contract": (
+                    initializer.MULTIVENDOR_DEMO_CONTRACT
+                ),
+                initializer.DEVELOPMENT_FORECAST_META_KEY: (
+                    initializer.DEVELOPMENT_FORECAST_V2_DEMO_CONTRACT
+                ),
+                initializer.DEVELOPMENT_FORECAST_PROFILE_META_KEY: (
+                    initializer.DEVELOPMENT_FORECAST_V2_PROFILE
+                ),
+                initializer.DEVELOPMENT_FORECAST_REGISTRATION_META_KEY: json.dumps(
+                    registration,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            },
+        )
+        self.assertEqual(registration["profile"], "development-forecast-v2")
+        self.assertEqual(
+            registration["evidence_contract"],
+            "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V2",
+        )
+        self.assertFalse(registration["commercial_authority"])
+        self.assertFalse(registration["production_activation"])
+
+        class ExistingConnection:
+            def execute(self, statement, _parameters=()):
+                if "to_regnamespace" not in str(statement):
+                    raise AssertionError(f"unexpected replay query: {statement}")
+                return _Result(one=(initializer.SCHEMA,))
+
+        replay_verifier = mock.Mock()
+        with (
+            mock.patch.object(initializer, "_require_owned_target"),
+            mock.patch.object(
+                initializer.psycopg,
+                "connect",
+                return_value=nullcontext(ExistingConnection()),
+            ),
+            mock.patch.object(
+                initializer, "_verify_initialized_demo", replay_verifier
+            ),
+        ):
+            replay = initializer.initialize(
+                DATABASE_URL,
+                business_date,
+                profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+            )
+        self.assertEqual(
+            replay,
+            {
+                "initialized": False,
+                "contract": initializer.DEMO_CONTRACT,
+                "profile": initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+            },
+        )
+        replay_verifier.assert_called_once_with(
+            mock.ANY,
+            business_date,
+            profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+        )
+
+        with (
+            mock.patch.object(initializer, "_require_owned_target"),
+            mock.patch.object(
+                initializer.psycopg,
+                "connect",
+                return_value=nullcontext(ExistingConnection()),
+            ),
+            mock.patch.object(
+                initializer,
+                "_verify_initialized_demo",
+                side_effect=RuntimeError("synthetic demo metadata differs"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "metadata differs"),
+        ):
+            initializer.initialize(
+                DATABASE_URL,
+                business_date,
+                profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+            )
+
+        occupied = self._runtime("occupied-v1-runtime")
+        (occupied / candidate.POSTGRES_DATA_DIR).mkdir(mode=0o700)
+        with self.assertRaisesRegex(
+            candidate.CandidateBoundaryError, "runtime is already occupied"
+        ):
+            candidate.initialize_local_database(
+                occupied,
+                database="buffalo_v2_refusal_demo",
+                port=55434,
+                fixture_profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+            )
+
+        cli_runtime = self.root / "cli-runtime"
+        cli_result = {
+            "initialized": True,
+            "database": "buffalo_v2_cli_demo",
+        }
+        with (
+            mock.patch.object(
+                candidate,
+                "initialize_local_database",
+                return_value=cli_result,
+            ) as initialize_database,
+            mock.patch.object(
+                candidate.sys,
+                "argv",
+                [
+                    "local_purchasing_candidate.py",
+                    "initialize-database",
+                    "--runtime-root",
+                    str(cli_runtime),
+                    "--database-name",
+                    "buffalo_v2_cli_demo",
+                    "--port",
+                    "55435",
+                    "--fixture-profile",
+                    initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+                ],
+            ),
+            mock.patch("builtins.print") as printed,
+        ):
+            self.assertEqual(candidate.main(), 0)
+        initialize_database.assert_called_once_with(
+            cli_runtime,
+            database="buffalo_v2_cli_demo",
+            port=55435,
+            empty_restore_target=False,
+            fixture_profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+        )
+        printed.assert_called_once_with(json.dumps(cli_result, sort_keys=True))
+
     def test_runtime_tree_and_secret_files_require_owned_exact_modes_and_distinct_values(self):
         fresh = self.root / "fresh-runtime"
         fresh.mkdir(mode=0o700)

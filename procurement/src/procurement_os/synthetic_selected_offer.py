@@ -22,7 +22,10 @@ from psycopg.rows import dict_row
 
 from .development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
-    validate_development_forecast_context_evidence,
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
+    development_forecast_definition,
+    validate_development_baseline_need_context,
+    validate_connected_development_forecast_context_evidence,
 )
 from .monday_forecast_retirement import (
     RETIRED_METHOD_VERSION,
@@ -750,6 +753,9 @@ _DEVELOPMENT_FORECAST_CONTEXT_EVIDENCE_KEYS = {
     "development_forecast_evidence",
     "development_forecast_evidence_sha256",
 }
+_DEVELOPMENT_FORECAST_CONTEXT_BINDING_KEYS = {
+    "development_baseline_need_binding",
+}
 
 
 def _valid_frozen_development_forecast_context(
@@ -760,15 +766,22 @@ def _valid_frozen_development_forecast_context(
 ) -> bool:
     """Reject partial new evidence instead of downgrading it to legacy."""
 
-    all_keys = (
+    evidence_keys = (
         _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS
         | _DEVELOPMENT_FORECAST_CONTEXT_EVIDENCE_KEYS
     )
-    present = all_keys.intersection(context)
+    all_known_keys = evidence_keys | _DEVELOPMENT_FORECAST_CONTEXT_BINDING_KEYS
+    present = all_known_keys.intersection(context)
     if manifest_contract is None:
         return not present
+    expected_keys = (
+        evidence_keys | _DEVELOPMENT_FORECAST_CONTEXT_BINDING_KEYS
+        if manifest_contract == DEVELOPMENT_FORECAST_V2_CONTRACT
+        else evidence_keys
+    )
     if (
-        manifest_contract != DEVELOPMENT_FORECAST_CONTRACT
+        manifest_contract
+        not in {DEVELOPMENT_FORECAST_CONTRACT, DEVELOPMENT_FORECAST_V2_CONTRACT}
         or not _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS.issubset(present)
         or context.get("development_forecast_contract") != manifest_contract
     ):
@@ -779,16 +792,22 @@ def _valid_frozen_development_forecast_context(
             present == _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS
             and bool(blockers)
         )
-    if status not in {"READY", "BLOCKED"} or present != all_keys:
+    if status not in {"READY", "BLOCKED"} or present != (
+        expected_keys
+        if status == "READY"
+        else evidence_keys
+    ):
         return False
     evidence = context.get("development_forecast_evidence")
     evidence_sha256 = context.get("development_forecast_evidence_sha256")
     if (
-        not validate_development_forecast_context_evidence(
+        not validate_connected_development_forecast_context_evidence(
             evidence,
             context.get("demand_observations"),
+            expected_contract=str(manifest_contract),
         )
         or not isinstance(evidence, dict)
+        or evidence.get("contract") != manifest_contract
         or evidence.get("status") != status
         or evidence.get("sha256") != evidence_sha256
     ):
@@ -798,7 +817,10 @@ def _valid_frozen_development_forecast_context(
             bool(blockers)
             and "DEVELOPMENT_FORECAST_PROTECTION_UNAVAILABLE" in blockers
         )
-    return True
+    return validate_development_baseline_need_context(
+        context,
+        manifest_contract=manifest_contract,
+    )
 
 
 def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
@@ -852,6 +874,7 @@ def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
     development_context_keys = (
         _DEVELOPMENT_FORECAST_CONTEXT_BASE_KEYS
         | _DEVELOPMENT_FORECAST_CONTEXT_EVIDENCE_KEYS
+        | _DEVELOPMENT_FORECAST_CONTEXT_BINDING_KEYS
     )
     development_fields = [
         development_context_keys.intersection(context)
@@ -874,7 +897,14 @@ def classify_frozen_manifest(raw: Any) -> tuple[str | None, tuple[str, ...]]:
         fields != selected_only_context_keys for fields in selected_fields
     ) or (
         development_contract_present
-        and development_contract != DEVELOPMENT_FORECAST_CONTRACT
+        and development_contract
+        not in {DEVELOPMENT_FORECAST_CONTRACT, DEVELOPMENT_FORECAST_V2_CONTRACT}
+    ):
+        raise SyntheticSelectedOfferError(
+            "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
+        )
+    if development_contract_present and manifest.get("method_version") != (
+        development_forecast_definition(str(development_contract)).method_version
     ):
         raise SyntheticSelectedOfferError(
             "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
@@ -1412,6 +1442,14 @@ def selected_run_input_lock_scope(
             "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
         )
     contract, variant_ids = classify_frozen_manifest(row[0])
+    manifest_value = json.loads(row[0])
+    if (
+        "development_forecast_contract" in manifest_value
+        and row[3] != manifest_value.get("method_version")
+    ):
+        raise SyntheticSelectedOfferError(
+            "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID"
+        )
     if contract is None:
         yield
         return

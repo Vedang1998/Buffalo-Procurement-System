@@ -2308,6 +2308,7 @@ def main() -> int:
                     "baseline-v1",
                     "multivendor-v2",
                     "development-forecast-v1",
+                    "development-forecast-v2",
                 ),
                 default="baseline-v1",
             )

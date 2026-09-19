@@ -1,16 +1,30 @@
 """Deterministic development forecast, classification, and protection tests."""
 
+import copy
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 import unittest
 from unittest.mock import patch
 
 from procurement_os.development_forecast import (
+    BASELINE_NEED_BINDING_CONTRACT,
+    CONTRACT,
+    DevelopmentForecastSchedule,
+    V2_CONTRACT,
+    _classify_confidence,
     _predict,
     assign_gp_dollar_abc,
+    build_development_baseline_need_binding,
+    calculate_anchored_schedule_horizon,
     calculate_calendar_protection_horizon,
+    development_forecast_v2_registration,
     load_development_forecast_policy,
+    load_development_forecast_schedule,
     plan_development_forecast,
+    serialize_baseline_need,
+    validate_anchored_schedule_evidence,
+    validate_connected_development_forecast_context_evidence,
+    validate_development_baseline_need_context,
     validate_development_forecast_context_evidence,
     validate_development_forecast_evidence,
 )
@@ -33,6 +47,35 @@ def observations(
         )
         for index, value in enumerate(values)
     ]
+
+
+def v2_observations(
+    values: list[object], *, inventory_state: str = "IN_STOCK"
+) -> list[DemandObservation]:
+    start = date(2026, 5, 20)
+    return [
+        DemandObservation(
+            start + timedelta(days=index),
+            Decimal(str(value)),
+            inventory_state,
+        )
+        for index, value in enumerate(values)
+    ]
+
+
+def abc_cohort(rows: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "contract": "BUFFALO_DEVELOPMENT_ABC_COHORT_V2",
+        "scope": {
+            "scope_id": "synthetic-abc-cohort",
+            "lookback_start": "2026-07-13",
+            "lookback_end": "2026-10-04",
+            "classification_period_days": 84,
+        },
+        "eligible_variant_ids": sorted(str(row["variant_id"]) for row in rows),
+        "exclusions": [],
+        "rows": rows,
+    }
 
 
 class DevelopmentForecastTests(unittest.TestCase):
@@ -473,32 +516,505 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertEqual(policy.values["history"]["maximum_history_days"], 84)
         self.assertEqual(policy.values["selection_metric"], "WAPE_WHEN_DEFINED_ELSE_MAE")
         self.assertEqual(policy.values["tie_break_rule"], "CANDIDATE_ORDER")
-        classes = assign_gp_dollar_abc(
-            [
+        incomplete = assign_gp_dollar_abc(
+            abc_cohort(
+                [
                 {"variant_id": "a", "historical_revenue": "100", "historical_cogs": "10"},
                 {"variant_id": "b", "historical_revenue": "500", "historical_cogs": "490"},
                 {"variant_id": "c", "historical_revenue": "50", "historical_cogs": None},
-            ]
+                ]
+            )
         )
-        self.assertEqual(classes["a"]["abc_class"], "A")
-        self.assertEqual(classes["a"]["gross_profit_dollars"], "90.00")
-        self.assertNotEqual(classes["b"]["abc_class"], "A")
-        self.assertEqual(classes["c"]["abc_class"], "NOT_CONFIGURED")
-        self.assertEqual(classes["c"]["status"], "MISSING_HISTORICAL_COGS")
-        self.assertEqual(classes["a"]["classification_period_days"], 84)
+        self.assertEqual(incomplete["cohort_status"], "INCOMPLETE")
+        self.assertEqual(incomplete["classification_status"], "NOT_CONFIGURED")
+        self.assertEqual(
+            {row["abc_class"] for row in incomplete["members"]},
+            {"NOT_CONFIGURED"},
+        )
+        by_id = {row["variant_id"]: row for row in incomplete["members"]}
+        self.assertEqual(by_id["a"]["gross_profit_dollars"], "90.00")
+        self.assertEqual(by_id["a"]["status"], "COHORT_INCOMPLETE_KNOWN_GP_DIAGNOSTIC")
+        self.assertEqual(by_id["c"]["status"], "INVALID_HISTORICAL_COST_EVIDENCE")
+
+        complete = assign_gp_dollar_abc(
+            abc_cohort(
+                [
+                    {"variant_id": "a", "historical_revenue": "100", "historical_cogs": "10"},
+                    {"variant_id": "b", "historical_revenue": "500", "historical_cogs": "490"},
+                    {"variant_id": "c", "historical_revenue": "50", "historical_cogs": "45"},
+                ]
+            )
+        )
+        complete_by_id = {row["variant_id"]: row for row in complete["members"]}
+        self.assertEqual(complete["classification_status"], "CALCULATED")
+        self.assertEqual(complete_by_id["a"]["abc_class"], "A")
+        self.assertNotEqual(complete_by_id["b"]["abc_class"], "A")
         nonpositive = assign_gp_dollar_abc(
-            [
+            abc_cohort([
                 {"variant_id": "x", "historical_revenue": "10", "historical_cogs": "10"},
                 {"variant_id": "y", "historical_revenue": "5", "historical_cogs": "7"},
-            ]
+            ])
         )
         self.assertEqual(
-            {row["abc_class"] for row in nonpositive.values()},
+            {row["abc_class"] for row in nonpositive["members"]},
             {"NOT_CONFIGURED"},
         )
         self.assertEqual(
-            {row["status"] for row in nonpositive.values()},
+            {row["status"] for row in nonpositive["members"]},
             {"NONPOSITIVE_HISTORICAL_GROSS_PROFIT"},
+        )
+
+    def test_v2_registry_schedule_and_policy_are_exact_and_anchored(self):
+        policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
+        schedule = load_development_forecast_schedule()
+        registration = development_forecast_v2_registration()
+        self.assertEqual(policy.values["history"], {
+            "connected_history_days": 138,
+            "maximum_history_days": 138,
+        })
+        self.assertEqual(
+            policy.values["windows"],
+            {
+                "minimum_training_days": 28,
+                "selection_origin_days": 38,
+                "calibration_days": 38,
+                "evaluation_days": 34,
+                "minimum_selection_origins": 8,
+                "minimum_evaluation_origins": 4,
+            },
+        )
+        self.assertEqual(registration["profile"], "development-forecast-v2")
+        self.assertEqual(registration["policy_source_sha256"], policy.source_sha256)
+        self.assertEqual(registration["schedule_source_sha256"], schedule.source_sha256)
+        evaluation = datetime(2026, 10, 5, 14, tzinfo=timezone.utc)
+        common = {
+            "timezone_name": "America/New_York",
+            "order_cutoff_local": time(17, 0),
+            "expected_delivery_days": ["THURSDAY"],
+            "lead_time_days": 1,
+            "lead_time_variability_days": "0",
+        }
+        southern = calculate_anchored_schedule_horizon(
+            evaluation_at=evaluation,
+            business_date=date(2026, 10, 5),
+            vendor_id="00000000-0000-4000-8000-000000000001",
+            vendor_rules={**common, "order_days": ["MONDAY"], "order_cycle_days": 14},
+            schedule=schedule,
+        )
+        western = calculate_anchored_schedule_horizon(
+            evaluation_at=evaluation,
+            business_date=date(2026, 10, 5),
+            vendor_id="00000000-0000-4000-8000-000000000003",
+            vendor_rules={
+                **common,
+                "order_days": ["MONDAY", "WEDNESDAY"],
+                "order_cycle_days": 2,
+            },
+            schedule=schedule,
+        )
+        self.assertEqual(
+            (
+                southern["current_order_receipt_date"],
+                southern["next_submission_date"],
+                southern["next_order_receipt_date"],
+                southern["horizon_days"],
+                western["current_order_receipt_date"],
+                western["next_submission_date"],
+                western["next_order_receipt_date"],
+                western["horizon_days"],
+            ),
+            (
+                "2026-10-08", "2026-10-19", "2026-10-22", 17,
+                "2026-10-08", "2026-10-07", "2026-10-08", 3,
+            ),
+        )
+        self.assertTrue(validate_anchored_schedule_evidence(southern))
+        self.assertTrue(validate_anchored_schedule_evidence(western))
+        with self.assertRaisesRegex(ValueError, "off the registered schedule"):
+            calculate_anchored_schedule_horizon(
+                evaluation_at=evaluation + timedelta(days=7),
+                business_date=date(2026, 10, 12),
+                vendor_id="00000000-0000-4000-8000-000000000001",
+                vendor_rules={**common, "order_days": ["MONDAY"], "order_cycle_days": 14},
+                schedule=schedule,
+            )
+        with self.assertRaisesRegex(ValueError, "open registered schedule"):
+            calculate_anchored_schedule_horizon(
+                evaluation_at=datetime(2026, 10, 5, 21, tzinfo=timezone.utc),
+                business_date=date(2026, 10, 5),
+                vendor_id="00000000-0000-4000-8000-000000000001",
+                vendor_rules={**common, "order_days": ["MONDAY"], "order_cycle_days": 14},
+                schedule=schedule,
+            )
+
+        exception_values = copy.deepcopy(schedule.values)
+        southern_schedule = exception_values["vendors"][0]
+        southern_schedule["submission_opportunities"]["removed_dates"] = [
+            "2026-10-19"
+        ]
+        southern_schedule["submission_opportunities"]["added_dates"] = [
+            "2026-10-20"
+        ]
+        exception_schedule = DevelopmentForecastSchedule(
+            values=exception_values,
+            source_sha256="f" * 64,
+            canonical_sha256="e" * 64,
+            source_file="fabricated-exception-test.json",
+        )
+        shifted_submission = calculate_anchored_schedule_horizon(
+            evaluation_at=evaluation,
+            business_date=date(2026, 10, 5),
+            vendor_id="00000000-0000-4000-8000-000000000001",
+            vendor_rules={**common, "order_days": ["MONDAY"], "order_cycle_days": 14},
+            schedule=exception_schedule,
+        )
+        self.assertEqual(shifted_submission["next_submission_date"], "2026-10-20")
+        self.assertEqual(
+            shifted_submission["vendor_rules_projection"]["order_cycle_days"],
+            14,
+        )
+
+        added_values = copy.deepcopy(schedule.values)
+        added_southern = added_values["vendors"][0]
+        for opportunity in ("review_opportunities", "submission_opportunities"):
+            added_southern[opportunity]["added_dates"] = ["2026-10-06"]
+        added_schedule = DevelopmentForecastSchedule(
+            values=added_values,
+            source_sha256="d" * 64,
+            canonical_sha256="c" * 64,
+            source_file="fabricated-added-current-test.json",
+        )
+        added_current = calculate_anchored_schedule_horizon(
+            evaluation_at=evaluation + timedelta(days=1),
+            business_date=date(2026, 10, 6),
+            vendor_id="00000000-0000-4000-8000-000000000001",
+            vendor_rules={**common, "order_days": ["MONDAY"], "order_cycle_days": 14},
+            schedule=added_schedule,
+        )
+        self.assertEqual(added_current["current_submission_date"], "2026-10-06")
+        self.assertEqual(added_current["horizon_days"], 16)
+
+    def test_v2_h1_through_h31_have_policy_adequate_origin_evidence(self):
+        policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
+        patterns = {
+            "constant": [2] * 138,
+            "variable": [1 + index % 5 for index in range(138)],
+            "intermittent": [5 if index % 10 == 0 else 0 for index in range(138)],
+        }
+        for pattern, values in patterns.items():
+            for horizon in range(1, 32):
+                with self.subTest(pattern=pattern, horizon=horizon):
+                    plan = plan_development_forecast(
+                        v2_observations(values),
+                        horizon_days=horizon,
+                        policy=policy,
+                    )
+                    self.assertEqual(plan.status, "READY")
+                    self.assertTrue(validate_development_forecast_evidence(plan.to_json_dict()))
+                    windows = plan.evidence["origin_windows"]
+                    self.assertEqual(
+                        windows["selection"]["planned_origin_count"], 38 - horizon + 1
+                    )
+                    self.assertEqual(
+                        windows["calibration"]["planned_origin_count"], 38 - horizon + 1
+                    )
+                    self.assertEqual(
+                        windows["evaluation"]["planned_origin_count"], 34 - horizon + 1
+                    )
+                    self.assertGreaterEqual(
+                        windows["selection"]["usable_origin_count"], 8
+                    )
+                    self.assertGreaterEqual(
+                        windows["calibration"]["usable_origin_count"], 8
+                    )
+                    self.assertGreaterEqual(
+                        windows["evaluation"]["usable_origin_count"], 4
+                    )
+
+    def test_v2_history_and_stockout_evidence_fail_closed_without_lowering_minima(self):
+        policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
+        for count in (137, 139):
+            with self.subTest(count=count):
+                with self.assertRaisesRegex(
+                    ValueError, "exactly 138 days|policy cap"
+                ):
+                    plan_development_forecast(
+                        v2_observations([2] * count), horizon_days=17, policy=policy
+                    )
+        missing = v2_observations([2] * 138)
+        del missing[80]
+        with self.assertRaisesRegex(ValueError, "calendar complete"):
+            plan_development_forecast(missing, horizon_days=17, policy=policy)
+        censored = v2_observations([2] * 138)
+        for index in range(66, 90):
+            censored[index] = DemandObservation(
+                censored[index].business_date, Decimal("0"), "STOCKOUT"
+            )
+        blocked = plan_development_forecast(censored, horizon_days=17, policy=policy)
+        self.assertEqual(blocked.status, "BLOCKED")
+        self.assertIn(
+            "EMPIRICAL_PROTECTION_ORIGINS_INSUFFICIENT",
+            blocked.reason_codes,
+        )
+        self.assertTrue(validate_development_forecast_evidence(blocked.to_json_dict()))
+        self.assertEqual(
+            blocked.evidence["origin_windows"]["calibration"]["usable_origin_count"],
+            0,
+        )
+
+        selection_censored = v2_observations([2] * 138)
+        for index in range(28, 66):
+            selection_censored[index] = DemandObservation(
+                selection_censored[index].business_date, Decimal("0"), "STOCKOUT"
+            )
+        no_selection = plan_development_forecast(
+            selection_censored, horizon_days=17, policy=policy
+        )
+        self.assertEqual(no_selection.status, "BLOCKED")
+        self.assertIn("SIMPLE_BASELINE_UNAVAILABLE", no_selection.reason_codes)
+        self.assertEqual(
+            no_selection.evidence["origin_windows"]["selection"][
+                "usable_origin_count"
+            ],
+            0,
+        )
+        self.assertTrue(
+            validate_development_forecast_evidence(no_selection.to_json_dict())
+        )
+        self.assertFalse(
+            validate_connected_development_forecast_context_evidence(
+                no_selection.to_json_dict(),
+                [
+                    {
+                        "business_date": item.business_date.isoformat(),
+                        "net_units": str(item.net_units),
+                        "inventory_state": item.inventory_state,
+                    }
+                    for item in selection_censored
+                ],
+                expected_contract=V2_CONTRACT,
+            )
+        )
+
+        evaluation_censored = v2_observations([2] * 138)
+        for index in range(104, 138):
+            evaluation_censored[index] = DemandObservation(
+                evaluation_censored[index].business_date, Decimal("0"), "STOCKOUT"
+            )
+        no_evaluation = plan_development_forecast(
+            evaluation_censored, horizon_days=17, policy=policy
+        )
+        self.assertEqual(no_evaluation.status, "BLOCKED")
+        self.assertIn("EVALUATION_ORIGINS_UNAVAILABLE", no_evaluation.reason_codes)
+        self.assertTrue(
+            validate_development_forecast_evidence(no_evaluation.to_json_dict())
+        )
+
+        thin_evaluation = v2_observations([2] * 138)
+        thin_evaluation[120] = DemandObservation(
+            thin_evaluation[120].business_date, Decimal("0"), "STOCKOUT"
+        )
+        insufficient_evaluation = plan_development_forecast(
+            thin_evaluation, horizon_days=17, policy=policy
+        )
+        self.assertEqual(insufficient_evaluation.status, "BLOCKED")
+        self.assertEqual(insufficient_evaluation.evidence["evaluation_origin_count"], 1)
+        self.assertEqual(
+            insufficient_evaluation.evidence["evaluation_status"],
+            "INSUFFICIENT_FOR_READINESS",
+        )
+        self.assertIn(
+            "EVALUATION_ORIGINS_INSUFFICIENT_FOR_READINESS",
+            insufficient_evaluation.reason_codes,
+        )
+        self.assertTrue(
+            validate_development_forecast_evidence(
+                insufficient_evaluation.to_json_dict()
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "exceeds the development bound"):
+            plan_development_forecast(
+                v2_observations([2] * 138), horizon_days=32, policy=policy
+            )
+
+    def test_v2_confidence_and_need_binding_are_policy_and_context_bound(self):
+        policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
+        self.assertEqual(
+            _classify_confidence(
+                evaluation_status="SUFFICIENT",
+                availability_limited=False,
+                evaluation_wape=Decimal("0.20"),
+                policy=policy,
+            ),
+            "HIGH",
+        )
+        self.assertEqual(
+            _classify_confidence(
+                evaluation_status="SUFFICIENT",
+                availability_limited=False,
+                evaluation_wape=Decimal("0.50"),
+                policy=policy,
+            ),
+            "MEDIUM",
+        )
+        calendar = calculate_anchored_schedule_horizon(
+            evaluation_at=datetime(2026, 10, 5, 14, tzinfo=timezone.utc),
+            business_date=date(2026, 10, 5),
+            vendor_id="00000000-0000-4000-8000-000000000001",
+            vendor_rules={
+                "timezone_name": "America/New_York",
+                "order_days": ["MONDAY"],
+                "order_cutoff_local": time(17, 0),
+                "expected_delivery_days": ["THURSDAY"],
+                "order_cycle_days": 14,
+                "lead_time_days": 1,
+                "lead_time_variability_days": "0",
+            },
+        )
+        source = v2_observations([2] * 138)
+        plan = plan_development_forecast(
+            source, horizon_days=17, protection_calendar=calendar, policy=policy
+        )
+        shifted = [
+            DemandObservation(
+                item.business_date - timedelta(days=31),
+                item.net_units,
+                item.inventory_state,
+            )
+            for item in source
+        ]
+        with self.assertRaisesRegex(ValueError, "not adjacent"):
+            plan_development_forecast(
+                shifted,
+                horizon_days=17,
+                protection_calendar=calendar,
+                policy=policy,
+            )
+        need = calculate_development_baseline_need(
+            forecast_daily_velocity=plan.forecast_daily_velocity,
+            point_forecast_units=plan.point_forecast_units,
+            empirical_protection_units=plan.protection_units,
+            forecast_horizon_days=17,
+            available_units="0",
+            trusted_incoming_units="0",
+            order_cycle_days=14,
+            lead_time_days=1,
+            lead_time_variability_days="0",
+            policy_mode="ROUTINE",
+            units_per_case=6,
+            loose_order_allowed=False,
+            loose_unit_fee=None,
+            protection_days_override=17,
+        )
+        vendor = [None] * 22
+        vendor[0:13] = [
+            "Synthetic Southern", True, 14, 1, Decimal("0"), "DOLLAR",
+            Decimal("0"), Decimal("0"), False, None,
+            "FABRICATED", "synthetic:owner", 1,
+        ]
+        vendor[13:22] = [
+            ["MONDAY"], time(17, 0), "America/New_York", ["THURSDAY"],
+            Decimal("1"), None, None, datetime(2026, 9, 1, tzinfo=timezone.utc),
+            datetime(2026, 9, 1, tzinfo=timezone.utc),
+        ]
+        context = {
+            "variant_id": "1001",
+            "development_forecast_contract": V2_CONTRACT,
+            "development_forecast_status": "READY",
+            "development_forecast_evidence": plan.to_json_dict(),
+            "development_forecast_evidence_sha256": plan.evidence_sha256,
+            "demand_observations": [
+                {
+                    "business_date": item.business_date.isoformat(),
+                    "net_units": str(item.net_units),
+                    "inventory_state": item.inventory_state,
+                }
+                for item in source
+            ],
+            "available_units": Decimal("0"),
+            "trusted_incoming_units": Decimal("0"),
+            "inventory_capture": ["capture"],
+            "inventory_rows": [["location", Decimal("0"), Decimal("0"), "VALID"]],
+            "open_po_position": {"blocks_reorder": False},
+            "policy_mode": "ROUTINE",
+            "policies": [[1, {"mode": "ROUTINE"}]],
+            "units_per_case": 6,
+            "qualifying_units_per_case": 6,
+            "offer_id": 1,
+            "offer_evidence": {"supplier_sku": "SUP-001"},
+            "vendor_id": "00000000-0000-4000-8000-000000000001",
+            "vendor_rules": vendor,
+            "need": serialize_baseline_need(need),
+            "blockers": [],
+        }
+        binding = build_development_baseline_need_binding(context, need)
+        self.assertEqual(binding["contract"], BASELINE_NEED_BINDING_CONTRACT)
+        context["development_baseline_need_binding"] = binding
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                context, manifest_contract=V2_CONTRACT
+            )
+        )
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                context, manifest_contract=CONTRACT
+            )
+        )
+        mixed_context = dict(context)
+        mixed_context["development_forecast_contract"] = CONTRACT
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                mixed_context, manifest_contract=V2_CONTRACT
+            )
+        )
+        copied = dict(context)
+        copied["variant_id"] = "4001"
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                copied, manifest_contract=V2_CONTRACT
+            )
+        )
+        mismatched_sha = copy.deepcopy(context)
+        mismatched_sha["development_forecast_evidence_sha256"] = "0" * 64
+        mismatched_sha["development_baseline_need_binding"] = (
+            build_development_baseline_need_binding(mismatched_sha, need)
+        )
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                mismatched_sha, manifest_contract=V2_CONTRACT
+            )
+        )
+        caller_plan = plan_development_forecast(
+            source,
+            horizon_days=17,
+            policy=policy,
+        )
+        self.assertTrue(
+            validate_development_forecast_evidence(caller_plan.to_json_dict())
+        )
+        caller_context = copy.deepcopy(context)
+        caller_context["development_forecast_evidence"] = (
+            caller_plan.to_json_dict()
+        )
+        caller_context["development_forecast_evidence_sha256"] = (
+            caller_plan.evidence_sha256
+        )
+        caller_context["development_baseline_need_binding"] = (
+            build_development_baseline_need_binding(caller_context, need)
+        )
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                caller_context, manifest_contract=V2_CONTRACT
+            )
+        )
+        malformed_calendar = caller_plan.to_json_dict()
+        malformed_calendar["protection_calendar"] = []
+        self.assertFalse(
+            validate_connected_development_forecast_context_evidence(
+                malformed_calendar,
+                context["demand_observations"],
+                expected_contract=V2_CONTRACT,
+            )
         )
 
     def test_evidence_hash_and_new_contract_fail_closed_on_tamper(self):
@@ -517,6 +1033,19 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertTrue(
             validate_development_forecast_context_evidence(
                 frozen, frozen_observations
+            )
+        )
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                {
+                    "development_forecast_contract": CONTRACT,
+                    "development_forecast_evidence": frozen,
+                    "development_forecast_evidence_sha256": frozen["sha256"],
+                    "demand_observations": frozen_observations,
+                    "need": None,
+                    "blockers": ["MISSING_OR_INVALID_REPLENISHMENT_POLICY"],
+                },
+                manifest_contract=CONTRACT,
             )
         )
         for mutation in (

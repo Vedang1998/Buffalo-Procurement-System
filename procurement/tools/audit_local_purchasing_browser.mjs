@@ -18,6 +18,8 @@ const PRICE_TOKEN = fs.readFileSync(PRICE_TOKEN_PATH, "utf8").replace(/\n$/, "")
 const SPOOF_ACTOR = "spoofed-browser-actor-must-be-ignored";
 const STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901";
 const RETIREMENT_REASON = "Synthetic retired forecast method requires V2 re-preparation";
+const DEVELOPMENT_V1_CONTRACT = "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1";
+const DEVELOPMENT_V2_CONTRACT = "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V2";
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 class CdpClient {
@@ -643,13 +645,39 @@ async function audit(client) {
       ...document.querySelectorAll("pre.development-forecast-evidence-json")
     ].map((node) => JSON.parse(node.textContent))`);
     const developmentMode = developmentForecasts.length > 0;
+    const developmentContracts = [...new Set(
+      developmentForecasts.map((item) => item.contract),
+    )];
+    check(
+      developmentContracts.length <= 1,
+      "one homogeneous development forecast contract governs the run",
+      developmentContracts,
+    );
+    const developmentContract = developmentContracts[0] || null;
+    const developmentV2 = developmentContract === DEVELOPMENT_V2_CONTRACT;
+    const developmentExpected = developmentContract === DEVELOPMENT_V1_CONTRACT
+      ? {
+          method: "DEVELOPMENT_ROLLING_ORIGIN_V1", historyDays: 84,
+          southernCases: 3, southernHorizon: 10,
+          southernNextSubmission: "2026-10-12", southernNextReceipt: "2026-10-15",
+          total: "199.00", draftAmounts: ["$90.00", "$102.00", "$109.00", "$192.00", "$199.00"],
+        }
+      : developmentV2
+        ? {
+            method: "DEVELOPMENT_ROLLING_ORIGIN_V2", historyDays: 138,
+            southernCases: 6, southernHorizon: 17,
+            southernNextSubmission: "2026-10-19", southernNextReceipt: "2026-10-22",
+            total: "289.00", draftAmounts: ["$180.00", "$102.00", "$109.00", "$282.00", "$289.00"],
+          }
+        : null;
     let originalRecommendations = [];
     if (developmentForecasts.length > 0) {
       check(
-        developmentForecasts.length === 4 &&
+        developmentExpected !== null &&
+          developmentForecasts.length === 4 &&
           developmentForecasts.every((item) =>
-            item.contract === "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1" &&
-            item.method_version === "DEVELOPMENT_ROLLING_ORIGIN_V1" &&
+            item.contract === developmentContract &&
+            item.method_version === developmentExpected.method &&
             item.status === "READY" &&
             item.commercial_authority === false &&
             item.production_activation === false &&
@@ -658,7 +686,7 @@ async function audit(client) {
             item.abc_class === "NOT_CONFIGURED" &&
             item.confidence === "LOW" &&
             item.availability.proven_in_stock_days === 0 &&
-            item.availability.unknown_days === 84 &&
+            item.availability.unknown_days === developmentExpected.historyDays &&
             item.availability.protection_qualification === "LIMITED" &&
             item.protection.status === "CALCULATED_LIMITED_AVAILABILITY" &&
             item.protection.availability_qualification === "LIMITED" &&
@@ -671,6 +699,41 @@ async function audit(client) {
         "browser exposes four exact calculated development forecast/protection records",
         developmentForecasts,
       );
+      if (developmentV2) {
+        check(
+          developmentForecasts.every((item) => {
+            const expectedOrigins = item.horizon_days === 17
+              ? [22, 22, 18]
+              : item.horizon_days === 3
+                ? [36, 36, 32]
+                : null;
+            const windows = item.origin_windows;
+            return item.history_start === "2026-05-20" &&
+              item.history_end === "2026-10-04" &&
+              item.policy?.source_sha256 === "fee2e91e14565a835f1d69c27ff547ccdda5c22c6bc43a2bb003c2b78f190b52" &&
+              item.policy?.canonical_sha256 === "ff62b1d313a18a907e811e8722431efee2349fc95a31e08ea5843ca2664ca858" &&
+              item.confidence_policy?.metric === "EVALUATION_WAPE" &&
+              item.confidence_policy?.boundary_rule === "UPPER_BOUNDS_INCLUSIVE" &&
+              item.confidence_policy?.high_max_inclusive === "0.200000" &&
+              item.confidence_policy?.medium_max_inclusive === "0.500000" &&
+              item.protection_calendar?.schedule?.source_sha256 === "1cb3edf5e82f2f01cb0a4c972d6140f97e767df67468373b245d6dd414ad8640" &&
+              item.protection_calendar?.schedule?.canonical_sha256 === "2c8b09152d3005b227a93ba700a8c08eec68433bf8f39e44c85353af34639c39" &&
+              item.protection_calendar?.interval_semantics === "HALF_OPEN_[EVALUATION_DATE,NEXT_RECEIPT)_RECEIPT_START_OF_DAY" &&
+              expectedOrigins !== null &&
+              [windows.selection, windows.calibration, windows.evaluation]
+                .every((window, index) =>
+                  window.planned_origin_count === expectedOrigins[index] &&
+                  window.usable_origin_count === expectedOrigins[index] &&
+                  window.censored_origin_count === 0 &&
+                  window.overlapping_targets === true &&
+                  window.independent_samples === false &&
+                  window.target_interval_semantics === "HALF_OPEN_[ORIGIN,ORIGIN_PLUS_HORIZON)"
+                );
+          }),
+          "V2 freezes exact 138-day policy, anchored schedule, and adequate H17/H3 origin evidence",
+          developmentForecasts,
+        );
+      }
       check(
         await evaluate(`{
           const value = [...document.querySelectorAll('.development-forecast-evidence')]
@@ -693,8 +756,9 @@ async function audit(client) {
           recommendedCases: Number(form.elements.approved_cases.value),
           recommendedLooseUnits: Number(form.elements.approved_loose_units.value),
           horizonDays: evidence.horizon_days,
-          nextOrderDate: evidence.protection_calendar.next_order_date,
-          nextReceiptDate: evidence.protection_calendar.next_receipt_date,
+          currentReceiptDate: evidence.protection_calendar.current_order_receipt_date || null,
+          nextOrderDate: evidence.protection_calendar.next_order_date || evidence.protection_calendar.next_submission_date,
+          nextReceiptDate: evidence.protection_calendar.next_receipt_date || evidence.protection_calendar.next_order_receipt_date,
           point: evidence.point_forecast_units,
           protection: evidence.protection_units,
           target: evidence.target_units,
@@ -706,7 +770,7 @@ async function audit(client) {
           item.variantId,item.recommendedCases,item.recommendedLooseUnits,
           item.horizonDays,item.nextOrderDate,item.nextReceiptDate,
         ])) === JSON.stringify([
-          ["1001",3,0,10,"2026-10-12","2026-10-15"],
+          ["1001",developmentExpected.southernCases,0,developmentExpected.southernHorizon,developmentExpected.southernNextSubmission,developmentExpected.southernNextReceipt],
           ["4001",1,0,3,"2026-10-07","2026-10-08"],
           ["4002",1,0,3,"2026-10-07","2026-10-08"],
           ["4005",0,0,3,"2026-10-07","2026-10-08"],
@@ -719,6 +783,16 @@ async function audit(client) {
         "browser freezes unequal calendar horizons and the original calculated quantities before review",
         originalRecommendations,
       );
+      if (developmentV2) {
+        check(
+          originalRecommendations.every((item) => item.currentReceiptDate === "2026-10-08") &&
+            originalRecommendations.find((item) => item.variantId === "1001")?.point === "34.0000" &&
+            originalRecommendations.find((item) => item.variantId === "1001")?.protection === "0.0000" &&
+            originalRecommendations.find((item) => item.variantId === "1001")?.target === "34.0000",
+          "V2 browser review binds H17 demand to the anchored receipt interval before owner decisions",
+          originalRecommendations,
+        );
+      }
     }
 
     for (const variantId of ["4003", "4004"]) {
@@ -766,7 +840,7 @@ async function audit(client) {
     };
 
     await review("1001", developmentMode ? {
-      action: "ACCEPT", approved_cases: "3", approved_loose_units: "0", comment: "",
+      action: "ACCEPT", approved_cases: String(developmentExpected.southernCases), approved_loose_units: "0", comment: "",
     } : {
       action: "EDIT_QUANTITY", approved_cases: "2", approved_loose_units: "0",
       comment: "Cross uploaded Southern 2 CS break",
@@ -812,7 +886,7 @@ async function audit(client) {
     );
     text = await body();
     const expectedDraftAmounts = developmentMode
-      ? ["$90.00", "$102.00", "$109.00", "$192.00", "$199.00"]
+      ? developmentExpected.draftAmounts
       : ["$60.00", "$102.00", "$109.00", "$162.00", "$169.00"];
     check(
       text.includes("Confirm vendor DRAFT economics") &&
@@ -833,7 +907,7 @@ async function audit(client) {
       text.includes("stage: PACKET_BUILT") &&
         text.includes("Synthetic Southern — DRAFT") &&
         text.includes("Synthetic Western Acceptance — DRAFT") &&
-        text.includes(`internal DRAFT total $${developmentMode ? "199.00" : "169.00"}`),
+        text.includes(`internal DRAFT total $${developmentMode ? developmentExpected.total : "169.00"}`),
       "exactly two participating vendor DRAFTs reach PACKET_BUILT",
     );
     check(text.includes("Captured Available") && text.includes("Captured at"), "built line output displays frozen stock evidence");
@@ -873,6 +947,8 @@ async function audit(client) {
       finalTiers,
       developmentForecasts,
       developmentMode,
+      developmentContract,
+      developmentExpectedTotal: developmentMode ? developmentExpected.total : "169.00",
       originalRecommendations,
       artifactUrls: linksAfterReplay,
       artifactDownloads,
@@ -891,32 +967,28 @@ async function audit(client) {
       text.includes("stage: PACKET_BUILT") &&
         text.includes("Synthetic Southern — DRAFT") &&
         text.includes("Synthetic Western Acceptance — DRAFT") &&
-        text.includes(`internal DRAFT total $${state.developmentMode ? "199.00" : "169.00"}`),
+        text.includes(`internal DRAFT total $${state.developmentExpectedTotal || "169.00"}`),
       `${phase} retains exact two-vendor economics`,
     );
     const replayedDevelopmentForecasts = await evaluate(`[
       ...document.querySelectorAll("pre.development-forecast-evidence-json")
     ].map((node) => JSON.parse(node.textContent))`);
     check(
-      JSON.stringify(replayedDevelopmentForecasts.map((item) => item.sha256)) ===
+      replayedDevelopmentForecasts.every(
+        (item) => item.contract === state.developmentContract,
+      ) && JSON.stringify(replayedDevelopmentForecasts.map((item) => item.sha256)) ===
         JSON.stringify((state.developmentForecasts || []).map((item) => item.sha256)),
-      `${phase} retains exact forecast and protection evidence hashes`,
+      `${phase} retains the exact forecast version and protection evidence hashes`,
     );
     const links = await evaluate(`[
       ...document.querySelectorAll('a[href*="/artifacts/"]')
     ].map((anchor) => anchor.href)`);
     check(
-      JSON.stringify(links.map((url) => new URL(url).pathname)) ===
+      links.length === 3 &&
+        JSON.stringify(links.map((url) => new URL(url).pathname)) ===
         JSON.stringify(state.artifactUrls.map((url) => new URL(url).pathname)),
       `${phase} preserves immutable artifact identities`,
     );
-    const downloads = [];
-    for (let index = 0; index < links.length; index += 1) {
-      downloads.push(await downloadFromClick(
-        `document.querySelectorAll('a[href*="/artifacts/"]')[${index}].click()`,
-        {url: links[index], kind: phase},
-      ));
-    }
     const buildPath = `/monday-runs/${state.runId}/build`;
     const transitionMark = ledgerMark();
     await submit(
@@ -926,6 +998,21 @@ async function audit(client) {
       }),
     );
     await assertRedirect(transitionMark, "POST", buildPath, `/monday-runs/${state.runId}`, `${phase} terminal build replay is idempotent`);
+    const replayedLinks = await evaluate(`[
+      ...document.querySelectorAll('a[href*="/artifacts/"]')
+    ].map((anchor) => anchor.href)`);
+    check(
+      JSON.stringify(replayedLinks.map((url) => new URL(url).pathname)) ===
+        JSON.stringify(links.map((url) => new URL(url).pathname)),
+      `${phase} terminal replay preserves artifact identities before download`,
+    );
+    const downloads = [];
+    for (let index = 0; index < replayedLinks.length; index += 1) {
+      downloads.push(await downloadFromClick(
+        `document.querySelectorAll('a[href*="/artifacts/"]')[${index}].click()`,
+        {url: replayedLinks[index], kind: `${phase}-post-replay`},
+      ));
+    }
     state[`${phase}Downloads`] = downloads;
     fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2) + "\n", {mode: 0o600});
     Object.assign(results, {state, downloads});

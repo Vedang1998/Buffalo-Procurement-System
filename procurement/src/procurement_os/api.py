@@ -85,7 +85,10 @@ from .recommendations import (
     preview_monday_stale_forecast_retirement,
 )
 from .development_forecast import (
+    CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
     METHOD_VERSION as DEVELOPMENT_FORECAST_METHOD_VERSION,
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
+    V2_METHOD_VERSION as DEVELOPMENT_FORECAST_V2_METHOD_VERSION,
 )
 from .storage import get_storage
 from .synthetic_price_replacement import (
@@ -2080,7 +2083,11 @@ def _monday_run_html(
     run_id = _html_escape(run["run_id"])
     current_v2 = (
         run.get("model_version")
-        in {CURRENT_METHOD_VERSION, DEVELOPMENT_FORECAST_METHOD_VERSION}
+        in {
+            CURRENT_METHOD_VERSION,
+            DEVELOPMENT_FORECAST_METHOD_VERSION,
+            DEVELOPMENT_FORECAST_V2_METHOD_VERSION,
+        }
         and run.get("status") == "RUNNING"
     )
     retired_v1 = run.get("model_version") == RETIRED_METHOD_VERSION
@@ -2185,7 +2192,10 @@ def _monday_run_html(
         if (
             isinstance(development_forecast_evidence, dict)
             and development_forecast_evidence.get("contract")
-            == "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1"
+            in {
+                DEVELOPMENT_FORECAST_CONTRACT,
+                DEVELOPMENT_FORECAST_V2_CONTRACT,
+            }
         ):
             development_json = json.dumps(
                 development_forecast_evidence,
@@ -2194,7 +2204,7 @@ def _monday_run_html(
                 default=str,
             )
             development_forecast_row = f"""
-<tr><th>Development forecast / protection</th><td><section class='development-forecast-evidence' data-contract='BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1'>
+<tr><th>Development forecast / protection</th><td><section class='development-forecast-evidence' data-contract='{_html_escape(development_forecast_evidence.get('contract'))}'>
 <p><b>LOCAL SYNTHETIC DEVELOPMENT ONLY — NO COMMERCIAL AUTHORITY.</b> Method {_html_escape(development_forecast_evidence.get('method_version'))}; selected model {_html_escape(development_forecast_evidence.get('selected_model'))}; regime {_html_escape(development_forecast_evidence.get('demand_regime'))}; XYZ {_html_escape(development_forecast_evidence.get('xyz_class'))}; ABC {_html_escape(development_forecast_evidence.get('abc_class'))} ({_html_escape(development_forecast_evidence.get('abc_status'))}).</p>
 <p>Point forecast {_html_escape(development_forecast_evidence.get('point_forecast_units'))}; empirical full-horizon protection {_html_escape(development_forecast_evidence.get('protection_units'))}; target {_html_escape(development_forecast_evidence.get('target_units'))}; horizon {_html_escape(development_forecast_evidence.get('horizon_days'))} day(s).</p>
 <p>Protection status {_html_escape((development_forecast_evidence.get('protection') or {}).get('status'))}; availability qualification {_html_escape((development_forecast_evidence.get('availability') or {}).get('protection_qualification'))}; confidence {_html_escape(development_forecast_evidence.get('confidence'))}; evaluation {_html_escape(development_forecast_evidence.get('evaluation_status'))}.</p>

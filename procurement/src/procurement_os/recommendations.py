@@ -31,9 +31,14 @@ from .forecasting import (
 from .development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
     METHOD_VERSION as DEVELOPMENT_FORECAST_METHOD_VERSION,
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
     DevelopmentForecastError,
+    build_development_baseline_need_binding,
+    calculate_anchored_schedule_horizon,
     calculate_calendar_protection_horizon,
     development_forecast_contract_for_run,
+    development_forecast_definition,
+    development_forecast_definition_for_run,
     load_development_forecast_policy,
     plan_development_forecast,
 )
@@ -596,7 +601,10 @@ def _load_context_unfinalized(
 ) -> dict[str, Any]:
     context: dict[str, Any] = {"variant_id": str(variant_id), "blockers": []}
     if development_forecast_contract is not None:
-        if development_forecast_contract != DEVELOPMENT_FORECAST_CONTRACT:
+        if development_forecast_contract not in {
+            DEVELOPMENT_FORECAST_CONTRACT,
+            DEVELOPMENT_FORECAST_V2_CONTRACT,
+        }:
             raise MondayRecommendationError(
                 "DEVELOPMENT_FORECAST_CONTRACT_INVALID"
             )
@@ -748,7 +756,10 @@ def _load_context_unfinalized(
     order_weekday = business_date.strftime("%A").upper()
     if (
         local_evaluation.date() != business_date
-        or order_weekday not in confirmed_rules.order_days
+        or (
+            development_forecast_contract != DEVELOPMENT_FORECAST_V2_CONTRACT
+            and order_weekday not in confirmed_rules.order_days
+        )
         or local_evaluation.timetz().replace(tzinfo=None) >= confirmed_rules.order_cutoff_local
     ):
         context["blockers"].append("VENDOR_ORDER_CALENDAR_NOT_OPEN_FOR_RUN")
@@ -966,8 +977,10 @@ def _load_context_unfinalized(
 
     try:
         development_policy = (
-            load_development_forecast_policy()
-            if development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT
+            load_development_forecast_policy(
+                evidence_contract=development_forecast_contract
+            )
+            if development_forecast_contract is not None
             else None
         )
     except DevelopmentForecastError as exc:
@@ -993,6 +1006,16 @@ def _load_context_unfinalized(
         return context
     context["sales_authority"] = sales_authority
     context["sales_rows"] = [list(row) for row in sales_rows]
+    if development_forecast_contract == DEVELOPMENT_FORECAST_V2_CONTRACT:
+        expected_dates = [
+            history_start + timedelta(days=offset) for offset in range(history_days)
+        ]
+        if (
+            len(sales_rows) != history_days
+            or [row[0] for row in sales_rows] != expected_dates
+        ):
+            context["blockers"].append("CURRENT_SALES_COVERAGE_UNPROVEN")
+            return context
     inventory_history_rows = conn.execute(
         """SELECT d.snapshot_date,d.location_gid,d.available_quantity,d.incoming_quantity,
                   d.inventory_snapshot_run_id::text,d.source,r.source,r.source_hash,
@@ -1084,25 +1107,37 @@ def _load_context_unfinalized(
             loose_unit_fee=vendor[9],
             open_po_blocked=bool(position["blocks_reorder"]),
         )
-    elif development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT:
+    elif development_forecast_contract in {
+        DEVELOPMENT_FORECAST_CONTRACT,
+        DEVELOPMENT_FORECAST_V2_CONTRACT,
+    }:
         try:
-            protection_calendar = calculate_calendar_protection_horizon(
-                evaluation_at=evaluation_at,
-                timezone_name=confirmed_rules.timezone_name,
-                order_days=confirmed_rules.order_days,
-                order_cutoff_local=confirmed_rules.order_cutoff_local,
-                expected_delivery_days=confirmed_rules.expected_delivery_days,
-                order_cycle_days=confirmed_rules.order_cycle_days,
-                lead_time_days=confirmed_rules.lead_time_days,
-                lead_time_variability_days=(
-                    confirmed_rules.lead_time_variability_days
-                ),
-            )
+            if development_forecast_contract == DEVELOPMENT_FORECAST_V2_CONTRACT:
+                protection_calendar = calculate_anchored_schedule_horizon(
+                    evaluation_at=evaluation_at,
+                    business_date=business_date,
+                    vendor_id=context["vendor_id"],
+                    vendor_rules=vendor_rule_input,
+                )
+            else:
+                protection_calendar = calculate_calendar_protection_horizon(
+                    evaluation_at=evaluation_at,
+                    timezone_name=confirmed_rules.timezone_name,
+                    order_days=confirmed_rules.order_days,
+                    order_cutoff_local=confirmed_rules.order_cutoff_local,
+                    expected_delivery_days=confirmed_rules.expected_delivery_days,
+                    order_cycle_days=confirmed_rules.order_cycle_days,
+                    lead_time_days=confirmed_rules.lead_time_days,
+                    lead_time_variability_days=(
+                        confirmed_rules.lead_time_variability_days
+                    ),
+                )
             protection_days = int(protection_calendar["horizon_days"])
             forecast = plan_development_forecast(
                 observations,
                 horizon_days=protection_days,
                 protection_calendar=protection_calendar,
+                policy=development_policy,
             )
         except DevelopmentForecastError as exc:
             raise MondayRecommendationError(
@@ -1135,6 +1170,12 @@ def _load_context_unfinalized(
             open_po_blocked=bool(position["blocks_reorder"]),
             protection_days_override=protection_days,
         )
+        if development_forecast_contract == DEVELOPMENT_FORECAST_V2_CONTRACT:
+            context["forecast"] = forecast
+            context["need"] = need
+            context["development_baseline_need_binding"] = (
+                build_development_baseline_need_binding(context, need)
+            )
     else:
         raise MondayRecommendationError(
             "DEVELOPMENT_FORECAST_CONTRACT_INVALID"
@@ -1278,12 +1319,20 @@ def _prepare_monday_run_impl(
         if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
             conn = _DeadlineConnection(conn, _operation_deadline or 0)
         development_forecast_contract: str | None = None
+        development_forecast_definition_value = None
         try:
             if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
                 require_attested_selected_mode(conn)
-                development_forecast_contract = development_forecast_contract_for_run(
-                    conn,
-                    offer_resolution_contract=offer_resolution_contract,
+                development_forecast_definition_value = (
+                    development_forecast_definition_for_run(
+                        conn,
+                        offer_resolution_contract=offer_resolution_contract,
+                    )
+                )
+                development_forecast_contract = (
+                    None
+                    if development_forecast_definition_value is None
+                    else development_forecast_definition_value.evidence_contract
                 )
             verify_monday_forecast_v2_retirement_contract(conn)
             material_edit_policy = load_material_edit_policy().evidence()
@@ -1407,8 +1456,8 @@ def _prepare_monday_run_impl(
             for variant_id in normalized_ids
         ]
         run_method_version = (
-            DEVELOPMENT_FORECAST_METHOD_VERSION
-            if development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT
+            development_forecast_definition_value.method_version
+            if development_forecast_definition_value is not None
             else METHOD_VERSION
         )
         frozen_manifest = {
@@ -1426,6 +1475,20 @@ def _prepare_monday_run_impl(
                 development_forecast_contract
             )
         input_manifest = _canonical_json(frozen_manifest)
+        if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
+            try:
+                classified_contract, classified_ids = classify_frozen_manifest(
+                    input_manifest
+                )
+            except SyntheticSelectedOfferError as exc:
+                raise MondayRecommendationError(str(exc)) from exc
+            if (
+                classified_contract != offer_resolution_contract
+                or classified_ids != normalized_ids
+            ):
+                raise MondayRecommendationError(
+                    "run has an invalid frozen input manifest"
+                )
         input_fingerprint = hashlib.sha256(input_manifest.encode()).hexdigest()
         if existing is not None:
             if existing[1] != input_fingerprint:
@@ -1677,7 +1740,7 @@ def _prepare_monday_run_impl(
             if isinstance(development_evidence, dict):
                 metrics.update(
                     {
-                        "development_forecast_contract": DEVELOPMENT_FORECAST_CONTRACT,
+                        "development_forecast_contract": development_forecast_contract,
                         "development_forecast_evidence": development_evidence,
                         "development_forecast_evidence_sha256": context[
                             "development_forecast_evidence_sha256"
@@ -1930,13 +1993,15 @@ def validate_monday_run_inputs(
     if offer_resolution_contract not in {None, SYNTHETIC_SELECTED_OFFER_CONTRACT}:
         return base
     development_forecast_contract = manifest.get("development_forecast_contract")
-    if development_forecast_contract not in {None, DEVELOPMENT_FORECAST_CONTRACT}:
-        return base
-    expected_method_version = (
-        DEVELOPMENT_FORECAST_METHOD_VERSION
-        if development_forecast_contract == DEVELOPMENT_FORECAST_CONTRACT
-        else CURRENT_METHOD_VERSION
-    )
+    if development_forecast_contract is None:
+        expected_method_version = CURRENT_METHOD_VERSION
+    else:
+        try:
+            expected_method_version = development_forecast_definition(
+                str(development_forecast_contract)
+            ).method_version
+        except DevelopmentForecastError:
+            return base
     if (
         run[1] != expected_method_version
         or manifest.get("method_version") != expected_method_version

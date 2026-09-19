@@ -22,6 +22,11 @@ import psycopg
 
 from procurement_os.development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
+    V2_METHOD_VERSION as DEVELOPMENT_FORECAST_V2_METHOD_VERSION,
+    canonical_evidence_sha256,
+    validate_development_baseline_need_context,
+    validate_connected_development_forecast_context_evidence,
     validate_development_forecast_evidence,
 )
 from audit_local_purchasing_browser import (
@@ -50,6 +55,34 @@ SAFETY_LABEL = "TEST DATA — NOT FOR ORDERING"
 DATABASE = "buffalo_multivendor_acceptance_demo"
 DEVELOPMENT_DATABASE = "buffalo_development_forecast_acceptance_demo"
 DEVELOPMENT_PROFILE = "development-forecast-v1"
+DEVELOPMENT_V2_DATABASE = "buffalo_development_forecast_v2_acceptance_demo"
+DEVELOPMENT_V2_PROFILE = "development-forecast-v2"
+
+
+def _forecast_expectations(profile: str) -> dict[str, Any] | None:
+    if profile == DEVELOPMENT_PROFILE:
+        return {
+            "contract": DEVELOPMENT_FORECAST_CONTRACT,
+            "method_version": "DEVELOPMENT_ROLLING_ORIGIN_V1",
+            "history_days": 84,
+            "southern_horizon": 10,
+            "southern_cases": 3,
+            "southern_total": "90.00",
+            "merchandise_total": "192.00",
+            "draft_total": "199.00",
+        }
+    if profile == DEVELOPMENT_V2_PROFILE:
+        return {
+            "contract": DEVELOPMENT_FORECAST_V2_CONTRACT,
+            "method_version": DEVELOPMENT_FORECAST_V2_METHOD_VERSION,
+            "history_days": 138,
+            "southern_horizon": 17,
+            "southern_cases": 6,
+            "southern_total": "180.00",
+            "merchandise_total": "282.00",
+            "draft_total": "289.00",
+        }
+    return None
 
 
 def _sha256(path: Path) -> str:
@@ -96,8 +129,9 @@ def _validate_initial_downloads(
     downloads: Path,
     state: dict[str, Any],
     *,
-    development_forecast: bool,
+    fixture_profile: str,
 ) -> dict[str, Any]:
+    forecast = _forecast_expectations(fixture_profile)
     initial = _artifact_group(state, "artifactDownloads")
     files = [downloads / str(item["name"]) for item in initial]
     if not all(path.is_file() and _sha256(path) == item["sha256"] for path, item in zip(files, initial, strict=True)):
@@ -134,11 +168,16 @@ def _validate_initial_downloads(
         raise BrowserAcceptanceError("vendor CSV partition differs")
     expected_lines = (
         {
-            "1001": ("3", "0", "30.0000", "90.00"),
+            "1001": (
+                str(forecast["southern_cases"]),
+                "0",
+                "30.0000",
+                forecast["southern_total"],
+            ),
             "4001": ("2", "0", "42.0000", "84.00"),
             "4002": ("1", "0", "18.0000", "18.00"),
         }
-        if development_forecast
+        if forecast is not None
         else {
             "1001": ("2", "0", "30.0000", "60.00"),
             "4001": ("2", "0", "42.0000", "84.00"),
@@ -169,14 +208,14 @@ def _validate_initial_downloads(
     ):
         raise BrowserAcceptanceError("Western vendor-scoped fee economics differ")
     if southern[0]["vendor_po_total"] != (
-        "90.00" if development_forecast else "60.00"
+        forecast["southern_total"] if forecast is not None else "60.00"
     ):
         raise BrowserAcceptanceError("Southern uploaded-price total differs")
 
     with zipfile.ZipFile(zip_files[0]) as archive:
         names = archive.namelist()
         embedded = sorted(name for name in names if name.endswith(".internal.csv"))
-        expected_member_count = 14 if development_forecast else 13
+        expected_member_count = 14 if forecast is not None else 13
         if len(names) != expected_member_count or len(embedded) != 2:
             raise BrowserAcceptanceError("two-vendor packet member inventory differs")
         manifest = json.loads(archive.read("manifest.json"))
@@ -194,8 +233,31 @@ def _validate_initial_downloads(
         economics = summary.get("vendor_draft_economics")
         if not isinstance(economics, list) or len(economics) != 2:
             raise BrowserAcceptanceError("packet vendor economics differ")
+        expected_merchandise = (
+            forecast["merchandise_total"] if forecast is not None else "162.00"
+        )
+        expected_total = forecast["draft_total"] if forecast is not None else "169.00"
+        economics_by_name = {str(item.get("vendor_name")): item for item in economics}
+        southern_economics = economics_by_name.get("Synthetic Southern", {})
+        western_economics = economics_by_name.get(
+            "Synthetic Western Acceptance", {}
+        )
+        expected_southern = (
+            forecast["southern_total"] if forecast is not None else "60.00"
+        )
+        if (
+            str(summary.get("merchandise_total")) != expected_merchandise
+            or str(summary.get("po_total")) != expected_total
+            or str(southern_economics.get("merchandise_total"))
+            != expected_southern
+            or str(southern_economics.get("po_total")) != expected_southern
+            or str(western_economics.get("merchandise_total")) != "102.00"
+            or str(western_economics.get("delivery_fee")) != "7.00"
+            or str(western_economics.get("po_total")) != "109.00"
+        ):
+            raise BrowserAcceptanceError("packet summary economics differ")
         forecast_member = None
-        if development_forecast:
+        if forecast is not None:
             if "forecast-and-protection-evidence.json" not in names:
                 raise BrowserAcceptanceError(
                     "development packet member is missing"
@@ -204,24 +266,141 @@ def _validate_initial_downloads(
                 archive.read("forecast-and-protection-evidence.json")
             )
             items = forecast_member.get("items")
+            frozen_member = json.loads(archive.read("frozen-input-manifest.json"))
+            frozen_manifest = frozen_member.get("input_manifest")
+            if isinstance(frozen_manifest, str):
+                frozen_manifest = json.loads(frozen_manifest)
             if (
-                forecast_member.get("contract") != DEVELOPMENT_FORECAST_CONTRACT
+                forecast_member.get("contract") != forecast["contract"]
                 or forecast_member.get("commercial_authority") is not False
                 or forecast_member.get("production_activation") is not False
                 or not isinstance(items, list)
                 or len(items) != 6
+                or not isinstance(frozen_manifest, dict)
+                or frozen_manifest.get("development_forecast_contract")
+                != forecast["contract"]
+                or frozen_manifest.get("method_version")
+                != forecast["method_version"]
             ):
                 raise BrowserAcceptanceError(
                     "development packet evidence shape differs"
                 )
-            for item in items:
-                if item.get("status") in {"READY", "BLOCKED"} and (
-                    not validate_development_forecast_evidence(item.get("evidence"))
-                    or item.get("evidence_sha256")
-                    != item["evidence"].get("sha256")
+            contexts = frozen_manifest.get("contexts")
+            if not isinstance(contexts, list) or len(contexts) != 6:
+                raise BrowserAcceptanceError(
+                    "development packet frozen context inventory differs"
+                )
+            context_by_variant = {
+                str(context.get("variant_id")): context
+                for context in contexts
+                if isinstance(context, dict)
+            }
+            item_by_variant = {
+                str(item.get("variant_id")): item
+                for item in items
+                if isinstance(item, dict)
+            }
+            expected_variants = {"1001", "4001", "4002", "4003", "4004", "4005"}
+            if (
+                set(context_by_variant) != expected_variants
+                or set(item_by_variant) != expected_variants
+            ):
+                raise BrowserAcceptanceError(
+                    "development packet Variant inventory differs"
+                )
+            for variant_id in sorted(expected_variants):
+                context = context_by_variant[variant_id]
+                item = item_by_variant[variant_id]
+                status = context.get("development_forecast_status")
+                if (
+                    item.get("status") != status
+                    or item.get("blockers") != context.get("blockers")
                 ):
                     raise BrowserAcceptanceError(
-                        "development packet evidence hash differs"
+                        f"development packet status differs for Variant {variant_id}"
+                    )
+                if status in {"READY", "BLOCKED"}:
+                    evidence = context.get("development_forecast_evidence")
+                    if (
+                        not isinstance(evidence, dict)
+                        or evidence.get("contract") != forecast["contract"]
+                        or evidence.get("method_version")
+                        != forecast["method_version"]
+                        or item.get("evidence") != evidence
+                        or item.get("evidence_sha256")
+                        != context.get("development_forecast_evidence_sha256")
+                        or not validate_connected_development_forecast_context_evidence(
+                            evidence,
+                            context.get("demand_observations"),
+                            expected_contract=forecast["contract"],
+                        )
+                    ):
+                        raise BrowserAcceptanceError(
+                            f"development packet evidence differs for Variant {variant_id}"
+                        )
+                if status == "READY":
+                    if (
+                        item.get("calculated_need") != context.get("need")
+                        or not validate_development_baseline_need_context(
+                            context,
+                            manifest_contract=forecast["contract"],
+                        )
+                    ):
+                        raise BrowserAcceptanceError(
+                            f"development packet need differs for Variant {variant_id}"
+                        )
+                    if fixture_profile == DEVELOPMENT_V2_PROFILE and (
+                        item.get("calculated_need_binding")
+                        != context.get("development_baseline_need_binding")
+                    ):
+                        raise BrowserAcceptanceError(
+                            f"V2 packet need binding differs for Variant {variant_id}"
+                        )
+                elif status == "BLOCKED":
+                    if (
+                        item.get("calculated_need") is not None
+                        or (
+                            fixture_profile == DEVELOPMENT_V2_PROFILE
+                            and item.get("calculated_need_binding") is not None
+                        )
+                    ):
+                        raise BrowserAcceptanceError(
+                            f"blocked packet need differs for Variant {variant_id}"
+                        )
+                elif status != "NOT_REACHED":
+                    raise BrowserAcceptanceError(
+                        f"development packet status is unknown for Variant {variant_id}"
+                    )
+            if fixture_profile == DEVELOPMENT_V2_PROFILE:
+                southern_item = next(
+                    (item for item in items if str(item.get("variant_id")) == "1001"),
+                    None,
+                )
+                if not isinstance(southern_item, dict):
+                    raise BrowserAcceptanceError(
+                        "V2 Southern packet evidence is missing"
+                    )
+                evidence = southern_item.get("evidence")
+                need = southern_item.get("calculated_need")
+                binding = southern_item.get("calculated_need_binding")
+                if (
+                    not isinstance(evidence, dict)
+                    or not isinstance(need, dict)
+                    or not isinstance(binding, dict)
+                    or evidence.get("point_forecast_units") != "34.0000"
+                    or evidence.get("protection_units") != "0.0000"
+                    or need.get("raw_need_units") != 34
+                    or need.get("cases") != 6
+                    or need.get("ordered_units") != 36
+                    or need.get("pack_rounding_units") != 2
+                    or binding.get("variant_id") != "1001"
+                    or binding.get("forecast_evidence_sha256")
+                    != evidence.get("sha256")
+                    or binding.get("need_sha256")
+                    != canonical_evidence_sha256(need)
+                ):
+                    raise BrowserAcceptanceError(
+                        "V2 Southern forecast-to-need packet evidence differs"
                     )
     return {
         "files": [
@@ -229,11 +408,26 @@ def _validate_initial_downloads(
             for path in files
         ],
         "packet_members": sorted(names),
+        "input_fingerprint": (
+            hashlib.sha256(
+                json.dumps(
+                    frozen_manifest,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            if forecast is not None
+            else None
+        ),
         "forecast_and_protection": forecast_member,
         "vendor_rows": by_vendor,
         "totals": (
-            {"merchandise": "192.00", "fees": "7.00", "total": "199.00"}
-            if development_forecast
+            {
+                "merchandise": forecast["merchandise_total"],
+                "fees": "7.00",
+                "total": forecast["draft_total"],
+            }
+            if forecast is not None
             else {"merchandise": "162.00", "fees": "7.00", "total": "169.00"}
         ),
     }
@@ -243,8 +437,9 @@ def _database_acceptance(
     database_url: str,
     run_id: str,
     *,
-    development_forecast: bool,
+    fixture_profile: str,
 ) -> dict[str, Any]:
+    forecast = _forecast_expectations(fixture_profile)
     with psycopg.connect(database_url) as conn:
         conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
         counts = conn.execute(
@@ -264,16 +459,37 @@ def _database_acceptance(
         if tuple(int(value) for value in counts) != (3, 7, 7, 5, 5, 4, 2, 3, 3):
             raise BrowserAcceptanceError(f"durable workflow counts differ: {counts}")
         stage = conn.execute(
-            "SELECT workflow_stage,model_version FROM runs WHERE run_id=%s", (run_id,)
+            """SELECT workflow_stage,model_version,procurement_input_manifest,
+                      input_fingerprint
+                 FROM runs WHERE run_id=%s""",
+            (run_id,),
         ).fetchone()
         if stage is None or stage[0] != "PACKET_BUILT":
             raise BrowserAcceptanceError("workflow stage differs")
         if stage[1] != (
-            "DEVELOPMENT_ROLLING_ORIGIN_V1"
-            if development_forecast
+            forecast["method_version"]
+            if forecast is not None
             else "EMERGENCY_TRANSPARENT_V2"
         ):
             raise BrowserAcceptanceError("run method version differs")
+        raw_manifest = stage[2]
+        if (
+            not isinstance(raw_manifest, str)
+            or hashlib.sha256(raw_manifest.encode("utf-8")).hexdigest() != stage[3]
+        ):
+            raise BrowserAcceptanceError("run input manifest differs")
+        try:
+            manifest = json.loads(raw_manifest)
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise BrowserAcceptanceError("run input manifest differs") from exc
+        if not isinstance(manifest, dict):
+            raise BrowserAcceptanceError("run input manifest differs")
+        manifest_contract = manifest.get("development_forecast_contract")
+        manifest_contexts = {
+            str(context.get("variant_id")): context
+            for context in manifest.get("contexts", [])
+            if isinstance(context, dict)
+        }
         pos = conn.execute(
             """SELECT p.vendor_id::text,v.vendor_name,p.merchandise_total,
                       p.delivery_fee,p.po_total,count(l.po_line_id)
@@ -289,10 +505,16 @@ def _database_acceptance(
         ]
         expected_pos = (
             [
-                ("Synthetic Southern", "90.00", "0.00", "90.00", 1),
+                (
+                    "Synthetic Southern",
+                    forecast["southern_total"],
+                    "0.00",
+                    forecast["southern_total"],
+                    1,
+                ),
                 ("Synthetic Western Acceptance", "102.00", "7.00", "109.00", 2),
             ]
-            if development_forecast
+            if forecast is not None
             else [
                 ("Synthetic Southern", "60.00", "0.00", "60.00", 1),
                 ("Synthetic Western Acceptance", "102.00", "7.00", "109.00", 2),
@@ -307,8 +529,17 @@ def _database_acceptance(
             (run_id,),
         ).fetchall()
         expected_variants = (
-            [("1001", 3, 0, "90.00"), ("4001", 2, 0, "84.00"), ("4002", 1, 0, "18.00")]
-            if development_forecast
+            [
+                (
+                    "1001",
+                    int(forecast["southern_cases"]),
+                    0,
+                    forecast["southern_total"],
+                ),
+                ("4001", 2, 0, "84.00"),
+                ("4002", 1, 0, "18.00"),
+            ]
+            if forecast is not None
             else [("1001", 2, 0, "60.00"), ("4001", 2, 0, "84.00"), ("4002", 1, 0, "18.00")]
         )
         if [(str(v), int(c), int(loose), str(total)) for v,c,loose,total in variants] != expected_variants:
@@ -331,7 +562,7 @@ def _database_acceptance(
             (run_id,),
         ).fetchall()
         expected_reviews = [
-            ("1001", "ACCEPT" if development_forecast else "EDIT_QUANTITY"),
+            ("1001", "ACCEPT" if forecast is not None else "EDIT_QUANTITY"),
             ("4001", "EDIT_QUANTITY"), ("4002", "ACCEPT"), ("4005", "REJECT"),
         ]
         if [(str(a), str(b)) for a,b in rejected] != expected_reviews:
@@ -354,13 +585,19 @@ def _database_acceptance(
                 WHERE f.run_id=%s ORDER BY f.variant_id""",
             (run_id,),
         ).fetchall()
-        if development_forecast:
+        if forecast is not None:
+            if (
+                manifest_contract != forecast["contract"]
+                or manifest.get("method_version") != forecast["method_version"]
+            ):
+                raise BrowserAcceptanceError("run forecast contract differs")
             if len(forecast_rows) != 4:
                 raise BrowserAcceptanceError(
                     "development forecast result population differs"
                 )
             for row in forecast_rows:
                 evidence = row[9].get("development_forecast_evidence")
+                frozen_context = manifest_contexts.get(str(row[0]))
                 forecast_target = Decimal(evidence.get("point_forecast_units")) + Decimal(
                     evidence.get("protection_units")
                 ) if isinstance(evidence, dict) else None
@@ -395,10 +632,19 @@ def _database_acceptance(
                 )
                 if str(row[0]) == "4005":
                     expected_cases, expected_loose = 0, 0
-                expected_horizon = 10 if str(row[0]) == "1001" else 3
+                expected_horizon = (
+                    int(forecast["southern_horizon"])
+                    if str(row[0]) == "1001"
+                    else 3
+                )
                 if (
-                    row[7] != "DEVELOPMENT_ROLLING_ORIGIN_V1"
+                    row[7] != forecast["method_version"]
                     or not validate_development_forecast_evidence(evidence)
+                    or not isinstance(frozen_context, dict)
+                    or not validate_development_baseline_need_context(
+                        frozen_context,
+                        manifest_contract=str(manifest_contract),
+                    )
                     or row[1] != evidence.get("selected_model")
                     or row[2] != evidence.get("demand_regime")
                     or row[3] != evidence.get("xyz_class")
@@ -412,7 +658,7 @@ def _database_acceptance(
                     )
                     != 0
                     or evidence.get("availability", {}).get("unknown_days")
-                    != 84
+                    != forecast["history_days"]
                     or evidence.get("availability", {}).get(
                         "protection_qualification"
                     )
@@ -442,6 +688,7 @@ def _database_acceptance(
         return {
             "counts": [int(value) for value in counts],
             "stage": stage[0],
+            "input_fingerprint": stage[3],
             "vendor_economics": exact_pos,
             "lines": [[str(value) for value in row] for row in variants],
             "blockers": [[str(value) for value in row] for row in blockers],
@@ -494,8 +741,14 @@ def _start_chromium(chromium: str, profile: Path, port: int, log: Path) -> tuple
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     source_identity = _source_identity()
-    development_forecast = args.fixture_profile == DEVELOPMENT_PROFILE
-    database = DEVELOPMENT_DATABASE if development_forecast else DATABASE
+    forecast = _forecast_expectations(args.fixture_profile)
+    database = (
+        DEVELOPMENT_V2_DATABASE
+        if args.fixture_profile == DEVELOPMENT_V2_PROFILE
+        else DEVELOPMENT_DATABASE
+        if args.fixture_profile == DEVELOPMENT_PROFILE
+        else DATABASE
+    )
     os.umask(0o077)
     if args.work_root.exists() or args.evidence_root.exists():
         raise BrowserAcceptanceError("work and evidence roots must both be new")
@@ -588,13 +841,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             initial_downloads = _validate_initial_downloads(
                 downloads,
                 browser_state,
-                development_forecast=development_forecast,
+                fixture_profile=args.fixture_profile,
             )
             source_acceptance = _database_acceptance(
                 source_url,
                 str(browser_state["runId"]),
-                development_forecast=development_forecast,
+                fixture_profile=args.fixture_profile,
             )
+            if (
+                forecast is not None
+                and initial_downloads["input_fingerprint"]
+                != source_acceptance["input_fingerprint"]
+            ):
+                raise BrowserAcceptanceError(
+                    "packet and database frozen manifests differ"
+                )
             source_storage = _storage_inventory(source_runtime / "storage")
             v1_manifest = backup(source_url, source_runtime)
             target_init = initialize_local_database(
@@ -650,14 +911,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             target_acceptance = _database_acceptance(
                 target_url,
                 str(final_state["runId"]),
-                development_forecast=development_forecast,
+                fixture_profile=args.fixture_profile,
             )
             if target_acceptance["state"] != source_acceptance["state"]:
                 raise BrowserAcceptanceError("recovery replay changed durable state")
+            final_target_storage = _storage_inventory(target_runtime / "storage")
+            if final_target_storage != source_storage:
+                raise BrowserAcceptanceError(
+                    "post-replay recovery artifact storage differs from source"
+                )
             result = {
                 "contract": (
-                    "BUFFALO_DEVELOPMENT_FORECAST_TO_DRAFT_ACCEPTANCE_V1"
-                    if development_forecast
+                    "BUFFALO_DEVELOPMENT_FORECAST_V2_TO_DRAFT_ACCEPTANCE_V1"
+                    if args.fixture_profile == DEVELOPMENT_V2_PROFILE
+                    else "BUFFALO_DEVELOPMENT_FORECAST_TO_DRAFT_ACCEPTANCE_V1"
+                    if args.fixture_profile == DEVELOPMENT_PROFILE
                     else "BUFFALO_MULTIVENDOR_PRICE_TO_DRAFT_ACCEPTANCE_V1"
                 ),
                 "fixture_profile": args.fixture_profile,
@@ -686,8 +954,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 ],
             }
             summary_name = (
-                "DEVELOPMENT_FORECAST_ACCEPTANCE_SUMMARY.json"
-                if development_forecast
+                "DEVELOPMENT_FORECAST_V2_ACCEPTANCE_SUMMARY.json"
+                if args.fixture_profile == DEVELOPMENT_V2_PROFILE
+                else "DEVELOPMENT_FORECAST_ACCEPTANCE_SUMMARY.json"
+                if args.fixture_profile == DEVELOPMENT_PROFILE
                 else "MULTIVENDOR_ACCEPTANCE_SUMMARY.json"
             )
             _write_json(args.evidence_root / summary_name, result)
@@ -728,7 +998,7 @@ def main() -> int:
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument(
         "--fixture-profile",
-        choices=("multivendor-v2", DEVELOPMENT_PROFILE),
+        choices=("multivendor-v2", DEVELOPMENT_PROFILE, DEVELOPMENT_V2_PROFILE),
         default="multivendor-v2",
     )
     args = parser.parse_args()

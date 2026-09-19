@@ -24,24 +24,69 @@ from .forecasting import (
     canonical_evidence_json,
     canonical_evidence_sha256,
 )
+from .replenishment import BaselineNeed, calculate_development_baseline_need
 
 
 CONTRACT = "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V1"
 POLICY_CONTRACT = "BUFFALO_DEVELOPMENT_FORECAST_POLICY_V1"
 METHOD_VERSION = "DEVELOPMENT_ROLLING_ORIGIN_V1"
+V2_CONTRACT = "BUFFALO_DEVELOPMENT_FORECAST_EVIDENCE_V2"
+V2_POLICY_CONTRACT = "BUFFALO_DEVELOPMENT_FORECAST_POLICY_V2"
+V2_METHOD_VERSION = "DEVELOPMENT_ROLLING_ORIGIN_V2"
 CAPABILITY_ENV = "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST"
 FIXTURE_META_KEY = "synthetic_development_forecast_contract"
 FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_DEVELOPMENT_FORECAST_V1"
+V2_FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_DEVELOPMENT_FORECAST_V2"
+V2_SCHEDULE_CONTRACT = "BUFFALO_SYNTHETIC_DEVELOPMENT_SCHEDULE_V2"
+FIXTURE_PROFILE_META_KEY = "synthetic_owner_demo_profile"
+POLICY_SOURCE_SHA_META_KEY = "synthetic_development_forecast_policy_source_sha256"
+POLICY_CANONICAL_SHA_META_KEY = (
+    "synthetic_development_forecast_policy_canonical_sha256"
+)
+SCHEDULE_CONTRACT_META_KEY = "synthetic_development_forecast_schedule_contract"
+SCHEDULE_SOURCE_SHA_META_KEY = (
+    "synthetic_development_forecast_schedule_source_sha256"
+)
+SCHEDULE_CANONICAL_SHA_META_KEY = (
+    "synthetic_development_forecast_schedule_canonical_sha256"
+)
+REGISTRATION_META_KEY = "synthetic_development_forecast_registration"
+V2_REGISTRATION_CONTRACT = "BUFFALO_SYNTHETIC_DEVELOPMENT_FORECAST_REGISTRATION_V2"
 POLICY_PATH = (
     Path(__file__).resolve().parents[2]
     / "config"
     / "development_forecast_policy_v1.json"
+)
+V2_POLICY_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "config"
+    / "development_forecast_policy_v2.json"
+)
+V2_SCHEDULE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "config"
+    / "development_forecast_schedule_v2.json"
 )
 
 UNITS = Decimal("0.0001")
 VELOCITY = Decimal("0.000001")
 METRIC = Decimal("0.000001")
 _SHA256_LENGTH = 64
+BASELINE_NEED_BINDING_CONTRACT = "BUFFALO_DEVELOPMENT_BASELINE_NEED_BINDING_V2"
+_BASELINE_NEED_KEYS = {
+    "status",
+    "policy_mode",
+    "protection_days",
+    "target_units",
+    "effective_inventory_units",
+    "raw_need_units",
+    "cases",
+    "loose_units",
+    "ordered_units",
+    "pack_rounding_units",
+    "loose_fee",
+    "reason_codes",
+}
 
 
 class DevelopmentForecastError(ValueError):
@@ -57,17 +102,135 @@ class DevelopmentForecastPolicy:
     values: Mapping[str, Any]
     source_sha256: str
     canonical_sha256: str
+    contract: str
+    method_version: str
+    source_file: str
+    evidence_contract: str
 
     def evidence(self) -> dict[str, Any]:
         return {
-            "contract": POLICY_CONTRACT,
-            "method_version": METHOD_VERSION,
-            "source_file": POLICY_PATH.name,
+            "contract": self.contract,
+            "method_version": self.method_version,
+            "source_file": self.source_file,
             "source_sha256": self.source_sha256,
             "canonical_sha256": self.canonical_sha256,
             "commercial_authority": False,
             "production_activation": False,
         }
+
+
+@dataclass(frozen=True)
+class DevelopmentForecastDefinition:
+    evidence_contract: str
+    policy_contract: str
+    method_version: str
+    fixture_contract: str
+    profile: str
+    policy_path: Path
+    policy_source_sha256: str
+    policy_canonical_sha256: str
+    schedule_contract: str | None = None
+    schedule_path: Path | None = None
+    schedule_source_sha256: str | None = None
+    schedule_canonical_sha256: str | None = None
+
+
+@dataclass(frozen=True)
+class DevelopmentForecastSchedule:
+    values: Mapping[str, Any]
+    source_sha256: str
+    canonical_sha256: str
+    source_file: str
+
+    def evidence(self) -> dict[str, Any]:
+        return {
+            "contract": str(self.values["contract"]),
+            "profile": str(self.values["profile"]),
+            "source_file": self.source_file,
+            "source_sha256": self.source_sha256,
+            "canonical_sha256": self.canonical_sha256,
+            "commercial_authority": False,
+            "production_activation": False,
+        }
+
+
+DEVELOPMENT_FORECAST_DEFINITIONS = (
+    DevelopmentForecastDefinition(
+        evidence_contract=CONTRACT,
+        policy_contract=POLICY_CONTRACT,
+        method_version=METHOD_VERSION,
+        fixture_contract=FIXTURE_CONTRACT,
+        profile="development-forecast-v1",
+        policy_path=POLICY_PATH,
+        policy_source_sha256=(
+            "a44a9760b9f9a348cf2c99ab769f9f042ee9873c4938f18e54e2ffb41d3cf6fc"
+        ),
+        policy_canonical_sha256=(
+            "75d5e57423c306ebed4b9ba039a784df8e26d55a3fc6ca4716e4b92a5fd64edf"
+        ),
+    ),
+    DevelopmentForecastDefinition(
+        evidence_contract=V2_CONTRACT,
+        policy_contract=V2_POLICY_CONTRACT,
+        method_version=V2_METHOD_VERSION,
+        fixture_contract=V2_FIXTURE_CONTRACT,
+        profile="development-forecast-v2",
+        policy_path=V2_POLICY_PATH,
+        policy_source_sha256=(
+            "fee2e91e14565a835f1d69c27ff547ccdda5c22c6bc43a2bb003c2b78f190b52"
+        ),
+        policy_canonical_sha256=(
+            "ff62b1d313a18a907e811e8722431efee2349fc95a31e08ea5843ca2664ca858"
+        ),
+        schedule_contract=V2_SCHEDULE_CONTRACT,
+        schedule_path=V2_SCHEDULE_PATH,
+        schedule_source_sha256=(
+            "1cb3edf5e82f2f01cb0a4c972d6140f97e767df67468373b245d6dd414ad8640"
+        ),
+        schedule_canonical_sha256=(
+            "2c8b09152d3005b227a93ba700a8c08eec68433bf8f39e44c85353af34639c39"
+        ),
+    ),
+)
+
+
+def development_forecast_definition(
+    evidence_contract: str,
+) -> DevelopmentForecastDefinition:
+    matches = tuple(
+        definition
+        for definition in DEVELOPMENT_FORECAST_DEFINITIONS
+        if definition.evidence_contract == evidence_contract
+    )
+    if len(matches) != 1:
+        raise DevelopmentForecastError("development forecast contract is unregistered")
+    return matches[0]
+
+
+def _definition_for_policy_contract(
+    policy_contract: str,
+) -> DevelopmentForecastDefinition:
+    matches = tuple(
+        definition
+        for definition in DEVELOPMENT_FORECAST_DEFINITIONS
+        if definition.policy_contract == policy_contract
+    )
+    if len(matches) != 1:
+        raise DevelopmentForecastError("development forecast policy is unregistered")
+    return matches[0]
+
+
+def _definition_for_fixture_contract(
+    fixture_contract: str,
+) -> DevelopmentForecastDefinition:
+    matches = tuple(
+        definition
+        for definition in DEVELOPMENT_FORECAST_DEFINITIONS
+        if definition.fixture_contract == fixture_contract
+    )
+    if len(matches) != 1:
+        raise DevelopmentForecastError("development forecast fixture is unregistered")
+    return matches[0]
 
 
 @dataclass(frozen=True)
@@ -331,13 +494,447 @@ def _require_exact_keys(value: Mapping[str, Any], expected: set[str], field: str
         raise DevelopmentForecastError(f"{field} key inventory differs")
 
 
+def _schedule_date(value: Any, field: str) -> date:
+    try:
+        parsed = date.fromisoformat(str(value))
+    except (TypeError, ValueError) as exc:
+        raise DevelopmentForecastError(f"{field} must be an ISO date") from exc
+    return parsed
+
+
+def _validate_opportunity_set(
+    raw: Any,
+    *,
+    field: str,
+    valid_from: date,
+    valid_through: date,
+) -> None:
+    if not isinstance(raw, dict):
+        raise DevelopmentForecastError(f"{field} must be an object")
+    _require_exact_keys(
+        raw,
+        {"series", "added_dates", "removed_dates"},
+        field,
+    )
+    series = raw["series"]
+    if not isinstance(series, list) or not series:
+        raise DevelopmentForecastError(f"{field} requires recurrence series")
+    series_ids: list[str] = []
+    for index, item in enumerate(series):
+        if not isinstance(item, dict):
+            raise DevelopmentForecastError(f"{field} series must be objects")
+        _require_exact_keys(
+            item,
+            {"series_id", "anchor_date", "cadence_weeks", "weekday"},
+            f"{field}.series[{index}]",
+        )
+        series_id = str(item["series_id"]).strip()
+        anchor = _schedule_date(item["anchor_date"], f"{field}.anchor_date")
+        weekday = str(item["weekday"]).strip().upper()
+        cadence = item["cadence_weeks"]
+        if (
+            not series_id
+            or weekday not in _WEEKDAY_INDEX
+            or anchor.weekday() != _WEEKDAY_INDEX[weekday]
+            or not isinstance(cadence, int)
+            or isinstance(cadence, bool)
+            or cadence not in {1, 2}
+            or not (valid_from <= anchor <= valid_through)
+        ):
+            raise DevelopmentForecastError(f"{field} recurrence differs")
+        series_ids.append(series_id)
+    if series_ids != sorted(set(series_ids)):
+        raise DevelopmentForecastError(f"{field} series IDs differ")
+    parsed_exceptions: dict[str, list[date]] = {}
+    for key in ("added_dates", "removed_dates"):
+        values = raw[key]
+        if not isinstance(values, list):
+            raise DevelopmentForecastError(f"{field}.{key} must be a list")
+        parsed = [_schedule_date(value, f"{field}.{key}") for value in values]
+        if (
+            parsed != sorted(set(parsed))
+            or any(not (valid_from <= value <= valid_through) for value in parsed)
+        ):
+            raise DevelopmentForecastError(f"{field}.{key} differs")
+        parsed_exceptions[key] = parsed
+    if set(parsed_exceptions["added_dates"]).intersection(
+        parsed_exceptions["removed_dates"]
+    ):
+        raise DevelopmentForecastError(f"{field} exception dates conflict")
+
+
+def load_development_forecast_schedule(
+    path: Path | None = None,
+) -> DevelopmentForecastSchedule:
+    """Load the exact synthetic V2 recurrence overlay."""
+
+    definition = development_forecast_definition(V2_CONTRACT)
+    resolved_path = definition.schedule_path if path is None else Path(path)
+    if resolved_path is None:
+        raise DevelopmentForecastError("registered forecast schedule is absent")
+    try:
+        raw = resolved_path.read_bytes()
+        values = json.loads(raw)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise DevelopmentForecastError("development schedule is unreadable") from exc
+    if not isinstance(values, dict):
+        raise DevelopmentForecastError("development schedule must be an object")
+    _require_exact_keys(
+        values,
+        {
+            "contract",
+            "version",
+            "profile",
+            "valid_from",
+            "valid_through",
+            "provenance",
+            "vendors",
+            "commercial_authority",
+            "production_activation",
+        },
+        "development schedule",
+    )
+    valid_from = _schedule_date(values["valid_from"], "schedule.valid_from")
+    valid_through = _schedule_date(values["valid_through"], "schedule.valid_through")
+    provenance = values["provenance"]
+    vendors = values["vendors"]
+    if not isinstance(provenance, dict):
+        raise DevelopmentForecastError("schedule provenance must be an object")
+    _require_exact_keys(
+        provenance,
+        {"kind", "evidence_ref", "real_supplier_confirmation"},
+        "schedule provenance",
+    )
+    if (
+        values.get("contract") != definition.schedule_contract
+        or values.get("version") != 2
+        or values.get("profile") != definition.profile
+        or values.get("commercial_authority") is not False
+        or values.get("production_activation") is not False
+        or valid_from > valid_through
+        or provenance.get("kind") != "FABRICATED_SYNTHETIC_TEST_DATA"
+        or not str(provenance.get("evidence_ref") or "").strip()
+        or provenance.get("real_supplier_confirmation") is not False
+        or not isinstance(vendors, list)
+        or not vendors
+    ):
+        raise DevelopmentForecastError("development schedule identity differs")
+    vendor_ids: list[str] = []
+    schedule_ids: list[str] = []
+    for vendor in vendors:
+        if not isinstance(vendor, dict):
+            raise DevelopmentForecastError("schedule vendors must be objects")
+        _require_exact_keys(
+            vendor,
+            {
+                "vendor_id",
+                "schedule_id",
+                "timezone_name",
+                "submission_cutoff_local",
+                "receipt_available_local",
+                "lead_time_days",
+                "lead_time_variability_days",
+                "vendor_rule_order_cycle_days",
+                "review_opportunities",
+                "submission_opportunities",
+                "delivery_opportunities",
+            },
+            "schedule vendor",
+        )
+        vendor_id = str(vendor["vendor_id"]).strip()
+        schedule_id = str(vendor["schedule_id"]).strip()
+        try:
+            ZoneInfo(str(vendor["timezone_name"]))
+            cutoff = time.fromisoformat(str(vendor["submission_cutoff_local"]))
+            receipt_time = time.fromisoformat(str(vendor["receipt_available_local"]))
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise DevelopmentForecastError("schedule local time differs") from exc
+        lead_time = vendor["lead_time_days"]
+        projected_cycle = vendor["vendor_rule_order_cycle_days"]
+        variability = _decimal(
+            vendor["lead_time_variability_days"],
+            "schedule lead_time_variability_days",
+        )
+        if (
+            not vendor_id
+            or not schedule_id
+            or cutoff.tzinfo is not None
+            or receipt_time.tzinfo is not None
+            or receipt_time != time(0, 0)
+            or not isinstance(lead_time, int)
+            or isinstance(lead_time, bool)
+            or lead_time < 0
+            or not isinstance(projected_cycle, int)
+            or isinstance(projected_cycle, bool)
+            or not 1 <= projected_cycle <= 31
+            or variability != 0
+        ):
+            raise DevelopmentForecastError("schedule vendor terms differ")
+        vendor_ids.append(vendor_id)
+        schedule_ids.append(schedule_id)
+        for key in (
+            "review_opportunities",
+            "submission_opportunities",
+            "delivery_opportunities",
+        ):
+            _validate_opportunity_set(
+                vendor[key],
+                field=f"schedule vendor {vendor_id} {key}",
+                valid_from=valid_from,
+                valid_through=valid_through,
+            )
+    if vendor_ids != sorted(set(vendor_ids)) or len(schedule_ids) != len(
+        set(schedule_ids)
+    ):
+        raise DevelopmentForecastError("schedule vendor identities differ")
+    source_sha256 = hashlib.sha256(raw).hexdigest()
+    canonical_sha256 = canonical_evidence_sha256(values)
+    if path is None and (
+        source_sha256 != definition.schedule_source_sha256
+        or canonical_sha256 != definition.schedule_canonical_sha256
+    ):
+        raise DevelopmentForecastError("registered forecast schedule bytes differ")
+    return DevelopmentForecastSchedule(
+        values=values,
+        source_sha256=source_sha256,
+        canonical_sha256=canonical_sha256,
+        source_file=definition.schedule_path.name,
+    )
+
+
+def _opportunity_trace(raw: Mapping[str, Any], candidate: date) -> dict[str, Any]:
+    candidate_text = candidate.isoformat()
+    removed = candidate_text in raw["removed_dates"]
+    added = candidate_text in raw["added_dates"]
+    matching_series = [
+        str(item["series_id"])
+        for item in raw["series"]
+        if candidate.weekday() == _WEEKDAY_INDEX[str(item["weekday"])]
+        and (
+            (candidate - date.fromisoformat(str(item["anchor_date"]))).days
+            % (int(item["cadence_weeks"]) * 7)
+            == 0
+        )
+    ]
+    occurs = False if removed else added or bool(matching_series)
+    return {
+        "date": candidate_text,
+        "occurs": occurs,
+        "source": (
+            "REMOVED"
+            if removed
+            else "ADDED"
+            if added
+            else "RECURRENCE"
+            if matching_series
+            else "NONE"
+        ),
+        "matching_series_ids": matching_series,
+    }
+
+
+def _first_schedule_occurrence(
+    raw: Mapping[str, Any],
+    *,
+    start: date,
+    valid_through: date,
+    strictly_after: bool,
+) -> tuple[date, dict[str, Any]]:
+    first = start + timedelta(days=1) if strictly_after else start
+    for offset in range((valid_through - first).days + 1):
+        candidate = first + timedelta(days=offset)
+        trace = _opportunity_trace(raw, candidate)
+        if trace["occurs"]:
+            return candidate, trace
+    raise DevelopmentForecastError("registered schedule opportunity is unavailable")
+
+
+def calculate_anchored_schedule_horizon(
+    *,
+    evaluation_at: datetime,
+    business_date: date,
+    vendor_id: str,
+    vendor_rules: Mapping[str, Any],
+    schedule: DevelopmentForecastSchedule | None = None,
+) -> dict[str, Any]:
+    """Resolve one server-owned V2 schedule into a frozen half-open horizon."""
+
+    if evaluation_at.tzinfo is None:
+        raise DevelopmentForecastError("evaluation_at must be timezone-aware")
+    if not isinstance(business_date, date) or isinstance(business_date, datetime):
+        raise DevelopmentForecastError("business_date must be a date")
+    active_schedule = schedule or load_development_forecast_schedule()
+    values = active_schedule.values
+    matching = [
+        item for item in values["vendors"] if item["vendor_id"] == str(vendor_id)
+    ]
+    if len(matching) != 1:
+        raise DevelopmentForecastError("vendor schedule is not registered")
+    vendor = matching[0]
+    valid_from = date.fromisoformat(str(values["valid_from"]))
+    valid_through = date.fromisoformat(str(values["valid_through"]))
+    zone = ZoneInfo(str(vendor["timezone_name"]))
+    local_evaluation = evaluation_at.astimezone(zone)
+    cutoff = time.fromisoformat(str(vendor["submission_cutoff_local"]))
+    if (
+        local_evaluation.date() != business_date
+        or not (valid_from <= business_date <= valid_through)
+        or local_evaluation.timetz().replace(tzinfo=None) >= cutoff
+    ):
+        raise DevelopmentForecastError("evaluation is not an open registered schedule")
+    current_review_trace = _opportunity_trace(
+        vendor["review_opportunities"], business_date
+    )
+    current_submission_trace = _opportunity_trace(
+        vendor["submission_opportunities"], business_date
+    )
+    if not current_review_trace["occurs"] or not current_submission_trace["occurs"]:
+        raise DevelopmentForecastError("evaluation is off the registered schedule")
+    lead_time = int(vendor["lead_time_days"])
+    current_receipt, current_receipt_trace = _first_schedule_occurrence(
+        vendor["delivery_opportunities"],
+        start=business_date + timedelta(days=lead_time),
+        valid_through=valid_through,
+        strictly_after=False,
+    )
+    next_review, next_review_trace = _first_schedule_occurrence(
+        vendor["review_opportunities"],
+        start=business_date,
+        valid_through=valid_through,
+        strictly_after=True,
+    )
+    next_submission, next_submission_trace = _first_schedule_occurrence(
+        vendor["submission_opportunities"],
+        start=business_date,
+        valid_through=valid_through,
+        strictly_after=True,
+    )
+    next_receipt, next_receipt_trace = _first_schedule_occurrence(
+        vendor["delivery_opportunities"],
+        start=next_submission + timedelta(days=lead_time),
+        valid_through=valid_through,
+        strictly_after=False,
+    )
+    horizon_days = (next_receipt - business_date).days
+    submission_weekdays = sorted(
+        {str(item["weekday"]) for item in vendor["submission_opportunities"]["series"]},
+        key=lambda item: _WEEKDAY_INDEX[item],
+    )
+    delivery_weekdays = sorted(
+        {str(item["weekday"]) for item in vendor["delivery_opportunities"]["series"]},
+        key=lambda item: _WEEKDAY_INDEX[item],
+    )
+    normalized_rules = {
+        "timezone_name": str(vendor_rules.get("timezone_name")),
+        "order_days": [str(item).strip().upper() for item in vendor_rules.get("order_days", [])],
+        "order_cutoff_local": (
+            vendor_rules.get("order_cutoff_local").isoformat()
+            if isinstance(vendor_rules.get("order_cutoff_local"), time)
+            else str(vendor_rules.get("order_cutoff_local"))
+        ),
+        "expected_delivery_days": [
+            str(item).strip().upper()
+            for item in vendor_rules.get("expected_delivery_days", [])
+        ],
+        "order_cycle_days": vendor_rules.get("order_cycle_days"),
+        "lead_time_days": vendor_rules.get("lead_time_days"),
+        "lead_time_variability_days": (
+            "0"
+            if _decimal(
+                vendor_rules.get("lead_time_variability_days"),
+                "vendor lead_time_variability_days",
+            )
+            == 0
+            else str(
+                _decimal(
+                    vendor_rules.get("lead_time_variability_days"),
+                    "vendor lead_time_variability_days",
+                ).normalize()
+            )
+        ),
+    }
+    expected_rules = {
+        "timezone_name": str(vendor["timezone_name"]),
+        "order_days": submission_weekdays,
+        "order_cutoff_local": cutoff.isoformat(),
+        "expected_delivery_days": delivery_weekdays,
+        "order_cycle_days": int(vendor["vendor_rule_order_cycle_days"]),
+        "lead_time_days": lead_time,
+        "lead_time_variability_days": "0",
+    }
+    if normalized_rules != expected_rules:
+        raise DevelopmentForecastError("vendor rules differ from registered schedule")
+    if horizon_days < 1 or horizon_days > 31:
+        raise DevelopmentForecastError("registered schedule horizon is outside bounds")
+    return {
+        "basis": "ANCHORED_REVIEW_SUBMISSION_DELIVERY_SCHEDULE_V2",
+        "schedule": active_schedule.evidence(),
+        "schedule_id": str(vendor["schedule_id"]),
+        "vendor_id": str(vendor_id),
+        "timezone_name": str(vendor["timezone_name"]),
+        "valid_from": valid_from.isoformat(),
+        "valid_through": valid_through.isoformat(),
+        "evaluation_at": local_evaluation.isoformat(),
+        "business_date": business_date.isoformat(),
+        "submission_cutoff_local": cutoff.isoformat(),
+        "receipt_available_local": str(vendor["receipt_available_local"]),
+        "current_review_date": business_date.isoformat(),
+        "current_submission_date": business_date.isoformat(),
+        "current_order_receipt_date": current_receipt.isoformat(),
+        "next_review_date": next_review.isoformat(),
+        "next_submission_date": next_submission.isoformat(),
+        "next_order_receipt_date": next_receipt.isoformat(),
+        "lead_time_days": lead_time,
+        "lead_time_variability_days": "0",
+        "interval_semantics": (
+            "HALF_OPEN_[EVALUATION_DATE,NEXT_RECEIPT)_RECEIPT_START_OF_DAY"
+        ),
+        "target_start_date": business_date.isoformat(),
+        "target_end_exclusive": next_receipt.isoformat(),
+        "horizon_days": horizon_days,
+        "vendor_rules_projection": expected_rules,
+        "opportunity_sets": {
+            "review": vendor["review_opportunities"],
+            "submission": vendor["submission_opportunities"],
+            "delivery": vendor["delivery_opportunities"],
+        },
+        "resolved_occurrences": {
+            "current_review": current_review_trace,
+            "current_submission": current_submission_trace,
+            "current_order_receipt": current_receipt_trace,
+            "next_review": next_review_trace,
+            "next_submission": next_submission_trace,
+            "next_order_receipt": next_receipt_trace,
+        },
+    }
+
+
+def validate_anchored_schedule_evidence(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    try:
+        expected = calculate_anchored_schedule_horizon(
+            evaluation_at=datetime.fromisoformat(str(value["evaluation_at"])),
+            business_date=date.fromisoformat(str(value["business_date"])),
+            vendor_id=str(value["vendor_id"]),
+            vendor_rules=value["vendor_rules_projection"],
+        )
+        return canonical_evidence_json(expected) == canonical_evidence_json(value)
+    except (DevelopmentForecastError, KeyError, TypeError, ValueError):
+        return False
+
+
 def load_development_forecast_policy(
-    path: Path = POLICY_PATH,
+    path: Path | None = None,
+    *,
+    evidence_contract: str = CONTRACT,
 ) -> DevelopmentForecastPolicy:
     """Load and deeply validate the checked-in development policy."""
 
+    definition = development_forecast_definition(evidence_contract)
+    resolved_path = definition.policy_path if path is None else Path(path)
     try:
-        raw = path.read_bytes()
+        raw = resolved_path.read_bytes()
         values = json.loads(raw)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise DevelopmentForecastError(
@@ -345,9 +942,7 @@ def load_development_forecast_policy(
         ) from exc
     if not isinstance(values, dict):
         raise DevelopmentForecastError("development forecast policy must be an object")
-    _require_exact_keys(
-        values,
-        {
+    expected_policy_keys = {
             "abc",
             "availability",
             "candidate_order",
@@ -369,13 +964,14 @@ def load_development_forecast_policy(
             "tie_break_rule",
             "windows",
             "xyz",
-        },
-        "development forecast policy",
-    )
+    }
+    if definition.evidence_contract == V2_CONTRACT:
+        expected_policy_keys.add("confidence")
+    _require_exact_keys(values, expected_policy_keys, "development forecast policy")
     candidate_order = values.get("candidate_order")
     if (
-        values.get("contract") != POLICY_CONTRACT
-        or values.get("method_version") != METHOD_VERSION
+        values.get("contract") != definition.policy_contract
+        or values.get("method_version") != definition.method_version
         or values.get("commercial_authority") is not False
         or values.get("production_activation") is not False
         or values.get("selection_metric") != "WAPE_WHEN_DEFINED_ELSE_MAE"
@@ -390,7 +986,7 @@ def load_development_forecast_policy(
         ]
     ):
         raise DevelopmentForecastError("development forecast policy identity differs")
-    for field in (
+    required_objects = [
         "abc",
         "availability",
         "category_shrinkage",
@@ -405,7 +1001,10 @@ def load_development_forecast_policy(
         "tsb",
         "windows",
         "xyz",
-    ):
+    ]
+    if definition.evidence_contract == V2_CONTRACT:
+        required_objects.append("confidence")
+    for field in required_objects:
         if not isinstance(values.get(field), dict):
             raise DevelopmentForecastError(f"policy {field} must be an object")
     nested_key_inventory = {
@@ -443,6 +1042,34 @@ def load_development_forecast_policy(
     }
     for field, keys in nested_key_inventory.items():
         _require_exact_keys(values[field], keys, f"policy {field}")
+    if definition.evidence_contract == V2_CONTRACT:
+        confidence = values["confidence"]
+        _require_exact_keys(
+            confidence,
+            {
+                "boundary_rule",
+                "high_max_inclusive",
+                "medium_max_inclusive",
+                "metric",
+            },
+            "policy confidence",
+        )
+        high = _decimal(
+            confidence.get("high_max_inclusive"),
+            "confidence.high_max_inclusive",
+        )
+        medium = _decimal(
+            confidence.get("medium_max_inclusive"),
+            "confidence.medium_max_inclusive",
+        )
+        if not (
+            confidence.get("boundary_rule") == "UPPER_BOUNDS_INCLUSIVE"
+            and confidence.get("metric") == "EVALUATION_WAPE"
+            and high >= 0
+            and medium >= 0
+            and high < medium
+        ):
+            raise DevelopmentForecastError("policy confidence thresholds differ")
     windows = values["windows"]
     _require_exact_keys(
         windows,
@@ -474,6 +1101,20 @@ def load_development_forecast_policy(
     )
     if connected_history_days > maximum_history_days:
         raise DevelopmentForecastError("connected forecast history exceeds its cap")
+    if definition.evidence_contract == V2_CONTRACT and (
+        connected_history_days != 138
+        or maximum_history_days != 138
+        or windows
+        != {
+            "calibration_days": 38,
+            "evaluation_days": 34,
+            "minimum_evaluation_origins": 4,
+            "minimum_selection_origins": 8,
+            "minimum_training_days": 28,
+            "selection_origin_days": 38,
+        }
+    ):
+        raise DevelopmentForecastError("V2 chronological policy differs")
     availability = values["availability"]
     _require_exact_keys(
         availability,
@@ -538,39 +1179,80 @@ def load_development_forecast_policy(
         parsed = _decimal(obj.get(key), key)
         if parsed <= lower or parsed > upper:
             raise DevelopmentForecastError(f"policy {key} is outside its bound")
+    source_sha256 = hashlib.sha256(raw).hexdigest()
+    canonical_sha256 = canonical_evidence_sha256(values)
+    if path is None and (
+        source_sha256 != definition.policy_source_sha256
+        or canonical_sha256 != definition.policy_canonical_sha256
+    ):
+        raise DevelopmentForecastError("registered forecast policy bytes differ")
     return DevelopmentForecastPolicy(
         values=values,
-        source_sha256=hashlib.sha256(raw).hexdigest(),
-        canonical_sha256=canonical_evidence_sha256(values),
+        source_sha256=source_sha256,
+        canonical_sha256=canonical_sha256,
+        contract=definition.policy_contract,
+        method_version=definition.method_version,
+        source_file=definition.policy_path.name,
+        evidence_contract=definition.evidence_contract,
     )
 
 
-def development_forecast_contract_for_run(
+def development_forecast_v2_registration() -> dict[str, Any]:
+    """Return the exact self-hashed registration published by the V2 fixture."""
+
+    definition = development_forecast_definition(V2_CONTRACT)
+    policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
+    schedule = load_development_forecast_schedule()
+    unsigned = {
+        "contract": V2_REGISTRATION_CONTRACT,
+        "profile": definition.profile,
+        "fixture_contract": definition.fixture_contract,
+        "evidence_contract": definition.evidence_contract,
+        "method_version": definition.method_version,
+        "policy_contract": definition.policy_contract,
+        "policy_source_sha256": policy.source_sha256,
+        "policy_canonical_sha256": policy.canonical_sha256,
+        "schedule_contract": definition.schedule_contract,
+        "schedule_source_sha256": schedule.source_sha256,
+        "schedule_canonical_sha256": schedule.canonical_sha256,
+        "commercial_authority": False,
+        "production_activation": False,
+    }
+    return {**unsigned, "sha256": canonical_evidence_sha256(unsigned)}
+
+
+def development_forecast_definition_for_run(
     conn: Any, *, offer_resolution_contract: str | None
-) -> str | None:
-    """Resolve the server-owned synthetic development capability.
+) -> DevelopmentForecastDefinition | None:
+    """Resolve the indivisible server-owned synthetic forecast tuple."""
 
-    The exact fixture marker is authoritative.  A registered fixture cannot
-    silently fall back when its process capability is missing or malformed.
-    """
-
+    requested_keys = [
+        FIXTURE_META_KEY,
+        FIXTURE_PROFILE_META_KEY,
+        REGISTRATION_META_KEY,
+        "synthetic_multivendor_acceptance_contract",
+    ]
     rows = conn.execute(
         "SELECT key,value FROM meta WHERE key=ANY(%s) ORDER BY key",
-        (
-            [
-                FIXTURE_META_KEY,
-                "synthetic_multivendor_acceptance_contract",
-            ],
-        ),
+        (requested_keys,),
     ).fetchall()
     metadata = {str(key): str(value) for key, value in rows}
     marker = metadata.get(FIXTURE_META_KEY)
+    related = {
+        key for key in (FIXTURE_PROFILE_META_KEY, REGISTRATION_META_KEY) if key in metadata
+    }
     if marker is None:
+        if related:
+            raise DevelopmentForecastError(
+                "synthetic development forecast registration is partial"
+            )
         return None
-    if marker != FIXTURE_CONTRACT:
+    try:
+        definition = _definition_for_fixture_contract(marker)
+    except DevelopmentForecastError as exc:
         raise DevelopmentForecastError(
             "synthetic development forecast fixture marker differs"
-        )
+        ) from exc
     if (
         metadata.get("synthetic_multivendor_acceptance_contract")
         != "BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2"
@@ -584,7 +1266,50 @@ def development_forecast_contract_for_run(
         raise DevelopmentForecastError(
             "synthetic development forecast is not authorized"
         )
-    return CONTRACT
+    if definition.evidence_contract == CONTRACT:
+        if related:
+            raise DevelopmentForecastError(
+                "V1 development forecast registration contains V2 identity"
+            )
+        return definition
+    if (
+        metadata.get(FIXTURE_PROFILE_META_KEY) != definition.profile
+        or REGISTRATION_META_KEY not in metadata
+    ):
+        raise DevelopmentForecastError(
+            "V2 development forecast registration is incomplete"
+        )
+    try:
+        registration = json.loads(metadata[REGISTRATION_META_KEY])
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise DevelopmentForecastError(
+            "V2 development forecast registration is malformed"
+        ) from exc
+    expected = development_forecast_v2_registration()
+    if (
+        not isinstance(registration, dict)
+        or canonical_evidence_json(registration) != canonical_evidence_json(expected)
+        or registration.get("sha256")
+        != canonical_evidence_sha256(
+            {key: value for key, value in registration.items() if key != "sha256"}
+        )
+    ):
+        raise DevelopmentForecastError(
+            "V2 development forecast registration differs"
+        )
+    return definition
+
+
+def development_forecast_contract_for_run(
+    conn: Any, *, offer_resolution_contract: str | None
+) -> str | None:
+    """Compatibility wrapper returning the registered evidence contract."""
+
+    definition = development_forecast_definition_for_run(
+        conn,
+        offer_resolution_contract=offer_resolution_contract,
+    )
+    return None if definition is None else definition.evidence_contract
 
 
 def _validated_observations(
@@ -929,6 +1654,188 @@ def _quantile(values: Sequence[Decimal], quantile: Decimal) -> Decimal:
     return ordered[max(1, rank) - 1]
 
 
+def _confidence_thresholds(
+    policy: DevelopmentForecastPolicy,
+) -> tuple[Decimal, Decimal]:
+    if policy.evidence_contract == V2_CONTRACT:
+        confidence = policy.values["confidence"]
+        return (
+            _decimal(
+                confidence["high_max_inclusive"],
+                "confidence.high_max_inclusive",
+            ).quantize(METRIC, rounding=ROUND_HALF_UP),
+            _decimal(
+                confidence["medium_max_inclusive"],
+                "confidence.medium_max_inclusive",
+            ).quantize(METRIC, rounding=ROUND_HALF_UP),
+        )
+    return Decimal("0.20"), Decimal("0.50")
+
+
+def _confidence_policy_evidence(
+    policy: DevelopmentForecastPolicy,
+) -> dict[str, Any]:
+    high, medium = _confidence_thresholds(policy)
+    return {
+        "metric": "EVALUATION_WAPE",
+        "boundary_rule": "UPPER_BOUNDS_INCLUSIVE",
+        "high_max_inclusive": str(high),
+        "medium_max_inclusive": str(medium),
+    }
+
+
+def _classify_confidence(
+    *,
+    evaluation_status: str,
+    availability_limited: bool,
+    evaluation_wape: Decimal | None,
+    policy: DevelopmentForecastPolicy,
+) -> str:
+    high, medium = _confidence_thresholds(policy)
+    if (
+        evaluation_status != "SUFFICIENT"
+        or availability_limited
+        or evaluation_wape is None
+    ):
+        return "LOW"
+    if evaluation_wape <= high:
+        return "HIGH"
+    if evaluation_wape <= medium:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _origin_window_evidence(
+    *,
+    ordered: Sequence[DemandObservation],
+    origins: Sequence[int],
+    horizon: int,
+    usable_origin_dates: Sequence[str],
+    censored_origin_dates: Sequence[str],
+    model_applicability: Mapping[str, Sequence[str]],
+) -> dict[str, Any]:
+    planned_dates = [ordered[index].business_date.isoformat() for index in origins]
+    intervals = [
+        {
+            "origin_date": ordered[index].business_date.isoformat(),
+            "target_start_date": ordered[index].business_date.isoformat(),
+            "target_end_exclusive": (
+                ordered[index].business_date + timedelta(days=horizon)
+            ).isoformat(),
+        }
+        for index in origins
+    ]
+    return {
+        "planned_origin_count": len(planned_dates),
+        "planned_origin_dates": planned_dates,
+        "usable_origin_count": len(usable_origin_dates),
+        "usable_origin_dates": list(usable_origin_dates),
+        "censored_origin_count": len(censored_origin_dates),
+        "censored_origin_dates": list(censored_origin_dates),
+        "model_applicability": {
+            str(name): {
+                "origin_count": len(dates),
+                "origin_dates": list(dates),
+            }
+            for name, dates in model_applicability.items()
+        },
+        "target_intervals": intervals,
+        "target_interval_semantics": "HALF_OPEN_[ORIGIN,ORIGIN_PLUS_HORIZON)",
+        "overlapping_targets": horizon > 1 and len(planned_dates) > 1,
+        "independent_samples": False,
+    }
+
+
+def _v2_origin_windows(
+    *,
+    ordered: Sequence[DemandObservation],
+    horizon: int,
+    selection_start: int,
+    calibration_start: int,
+    evaluation_start: int,
+    candidate_records: Sequence[Mapping[str, Any]],
+    selection_usable_origin_dates: Sequence[str],
+    selected_model: str | None,
+    calibration_usable_origin_dates: Sequence[str] = (),
+    evaluation_usable_origin_dates: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Freeze all planned V2 origins, including fail-closed blocked paths."""
+
+    selection_indices = list(
+        range(
+            selection_start,
+            max(selection_start, calibration_start - horizon + 1),
+        )
+    )
+    calibration_indices = list(
+        range(
+            calibration_start,
+            max(calibration_start, evaluation_start - horizon + 1),
+        )
+    )
+    evaluation_indices = list(
+        range(
+            evaluation_start,
+            max(evaluation_start, len(ordered) - horizon + 1),
+        )
+    )
+
+    def censored(indices: Sequence[int]) -> list[str]:
+        return [
+            ordered[index].business_date.isoformat()
+            for index in indices
+            if any(
+                item.inventory_state == "STOCKOUT"
+                for item in ordered[index : index + horizon]
+            )
+        ]
+
+    model_name = selected_model or "UNSELECTED"
+    selection_applicability = {
+        str(record["name"]): list(record.get("selection_origin_dates", []))
+        for record in candidate_records
+        if isinstance(record, Mapping) and isinstance(record.get("name"), str)
+    }
+    if not selection_applicability:
+        selection_applicability = {model_name: []}
+    return {
+        "selection": _origin_window_evidence(
+            ordered=ordered,
+            origins=selection_indices,
+            horizon=horizon,
+            usable_origin_dates=selection_usable_origin_dates,
+            censored_origin_dates=censored(selection_indices),
+            model_applicability=selection_applicability,
+        ),
+        "calibration": _origin_window_evidence(
+            ordered=ordered,
+            origins=calibration_indices,
+            horizon=horizon,
+            usable_origin_dates=calibration_usable_origin_dates,
+            censored_origin_dates=censored(calibration_indices),
+            model_applicability={model_name: list(calibration_usable_origin_dates)},
+        ),
+        "evaluation": _origin_window_evidence(
+            ordered=ordered,
+            origins=evaluation_indices,
+            horizon=horizon,
+            usable_origin_dates=evaluation_usable_origin_dates,
+            censored_origin_dates=censored(evaluation_indices),
+            model_applicability={model_name: list(evaluation_usable_origin_dates)},
+        ),
+        "partition": {
+            "training_start_index": 0,
+            "training_end_exclusive": selection_start,
+            "selection_start_index": selection_start,
+            "selection_end_exclusive": calibration_start,
+            "calibration_start_index": calibration_start,
+            "calibration_end_exclusive": evaluation_start,
+            "evaluation_start_index": evaluation_start,
+            "evaluation_end_exclusive": len(ordered),
+        },
+    }
+
+
 def _finalize_evidence(payload: dict[str, Any]) -> DevelopmentForecastPlan:
     unsigned = json.loads(canonical_evidence_json(payload))
     unsigned["sha256"] = canonical_evidence_sha256(unsigned)
@@ -948,9 +1855,19 @@ def plan_development_forecast(
     if horizon > 31:
         raise DevelopmentForecastError("horizon_days exceeds the development bound")
     active_policy = policy or load_development_forecast_policy()
+    definition = development_forecast_definition(active_policy.evidence_contract)
+    if (
+        active_policy.contract != definition.policy_contract
+        or active_policy.method_version != definition.method_version
+    ):
+        raise DevelopmentForecastError("development forecast policy tuple differs")
     ordered, normalized = _validated_observations(observations)
     if len(ordered) > int(active_policy.values["history"]["maximum_history_days"]):
         raise DevelopmentForecastError("forecast history exceeds the policy cap")
+    if definition.evidence_contract == V2_CONTRACT and len(ordered) != int(
+        active_policy.values["history"]["connected_history_days"]
+    ):
+        raise DevelopmentForecastError("V2 forecast history must contain exactly 138 days")
     # A final-cutoff category scalar cannot be used at earlier rolling origins
     # without leaking future information.  No independently frozen causal
     # category history exists in this bounded slice, so the category model is
@@ -984,9 +1901,34 @@ def plan_development_forecast(
         raise DevelopmentForecastError(
             "protection calendar horizon differs from the forecast horizon"
         )
+    if (
+        definition.evidence_contract == V2_CONTRACT
+        and calendar_evidence.get("basis")
+        == "ANCHORED_REVIEW_SUBMISSION_DELIVERY_SCHEDULE_V2"
+    ):
+        try:
+            target_start = date.fromisoformat(
+                str(calendar_evidence["target_start_date"])
+            )
+            target_end = date.fromisoformat(
+                str(calendar_evidence["target_end_exclusive"])
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DevelopmentForecastError(
+                "anchored protection calendar target dates differ"
+            ) from exc
+        if (
+            target_start != ordered[-1].business_date + timedelta(days=1)
+            or target_end != target_start + timedelta(days=horizon)
+            or str(calendar_evidence.get("business_date"))
+            != target_start.isoformat()
+        ):
+            raise DevelopmentForecastError(
+                "anchored protection calendar is not adjacent to forecast history"
+            )
     base_payload: dict[str, Any] = {
-        "contract": CONTRACT,
-        "method_version": METHOD_VERSION,
+        "contract": definition.evidence_contract,
+        "method_version": definition.method_version,
         "policy": active_policy.evidence(),
         "history_start": ordered[0].business_date,
         "history_end": ordered[-1].business_date,
@@ -1018,6 +1960,10 @@ def plan_development_forecast(
         "commercial_authority": False,
         "production_activation": False,
     }
+    if definition.evidence_contract == V2_CONTRACT:
+        base_payload["confidence_policy"] = _confidence_policy_evidence(
+            active_policy
+        )
     if calibration_start <= minimum_training or selection_start >= calibration_start:
         return _finalize_evidence(
             {
@@ -1076,35 +2022,57 @@ def plan_development_forecast(
     baseline_name = str(active_policy.values["fva"]["simple_baseline"])
     baseline = candidate_metrics.get(baseline_name)
     if baseline is None:
-        return _finalize_evidence(
-            {
-                **base_payload,
-                "status": "BLOCKED",
-                "selected_model": None,
-                "demand_regime": "UNCLASSIFIED",
-                "xyz_class": "NOT_CONFIGURED",
-                "xyz_coefficient_of_variation": None,
-                "abc_class": "NOT_CONFIGURED",
-                "forecast_daily_velocity": "0.000000",
-                "point_forecast_units": "0.0000",
-                "protection_units": None,
-                "target_units": None,
-                "confidence": "LOW",
-                "reason_codes": ["SIMPLE_BASELINE_UNAVAILABLE"],
-                "split": {
-                    "selection_start_index": selection_start,
-                    "calibration_start_index": calibration_start,
-                    "evaluation_start_index": evaluation_start,
-                },
-                "candidates": candidate_records,
-                "protection": {
-                    "status": "UNAVAILABLE",
-                    "full_horizon_origin_count": 0,
-                    "shortfalls": [],
-                },
-                "caps": {"daily_rate_cap_hits": 0},
-            }
-        )
+        blocked_payload = {
+            **base_payload,
+            "status": "BLOCKED",
+            "selected_model": None,
+            "demand_regime": "UNCLASSIFIED",
+            "xyz_class": "NOT_CONFIGURED",
+            "xyz_coefficient_of_variation": None,
+            "abc_class": "NOT_CONFIGURED",
+            "forecast_daily_velocity": "0.000000",
+            "point_forecast_units": "0.0000",
+            "protection_units": None,
+            "target_units": None,
+            "confidence": "LOW",
+            "reason_codes": ["SIMPLE_BASELINE_UNAVAILABLE"],
+            "split": {
+                "selection_start_index": selection_start,
+                "calibration_start_index": calibration_start,
+                "evaluation_start_index": evaluation_start,
+            },
+            "candidates": candidate_records,
+            "protection": {
+                "status": "UNAVAILABLE",
+                "full_horizon_origin_count": 0,
+                "shortfalls": [],
+            },
+            "caps": {"daily_rate_cap_hits": 0},
+        }
+        if definition.evidence_contract == V2_CONTRACT:
+            baseline_record = next(
+                (
+                    record
+                    for record in candidate_records
+                    if record.get("name") == baseline_name
+                ),
+                None,
+            )
+            blocked_payload["origin_windows"] = _v2_origin_windows(
+                ordered=ordered,
+                horizon=horizon,
+                selection_start=selection_start,
+                calibration_start=calibration_start,
+                evaluation_start=evaluation_start,
+                candidate_records=candidate_records,
+                selection_usable_origin_dates=(
+                    []
+                    if baseline_record is None
+                    else baseline_record.get("selection_origin_dates", [])
+                ),
+                selected_model=None,
+            )
+        return _finalize_evidence(blocked_payload)
     comparable_origin_sets = {
         tuple(record["selection_origin_dates"])
         for record in candidate_records
@@ -1145,11 +2113,16 @@ def plan_development_forecast(
             record["selected"] = False
     evaluation_actuals: list[Decimal] = []
     evaluation_forecasts: list[Decimal] = []
+    evaluation_origin_dates: list[str] = []
+    censored_evaluation_origin_dates: list[str] = []
     evaluation_cap_hits = 0
     last_evaluation_origin = len(ordered) - horizon
     for origin in range(evaluation_start, last_evaluation_origin + 1):
         target_window = ordered[origin : origin + horizon]
         if any(item.inventory_state == "STOCKOUT" for item in target_window):
+            censored_evaluation_origin_dates.append(
+                ordered[origin].business_date.isoformat()
+            )
             continue
         try:
             bounded, cap_hit, _rate_cap = _postprocess_predictions(
@@ -1173,7 +2146,57 @@ def plan_development_forecast(
             sum(normalized[origin : origin + horizon], Decimal("0"))
         )
         evaluation_forecasts.append(predicted)
+        evaluation_origin_dates.append(ordered[origin].business_date.isoformat())
     if not evaluation_actuals:
+        if definition.evidence_contract == V2_CONTRACT:
+            for record in candidate_records:
+                record["selected"] = False
+            selected_record = next(
+                record
+                for record in candidate_records
+                if record.get("name") == selected_name
+            )
+            return _finalize_evidence(
+                {
+                    **base_payload,
+                    "status": "BLOCKED",
+                    "selected_model": None,
+                    "demand_regime": "UNCLASSIFIED",
+                    "xyz_class": "NOT_CONFIGURED",
+                    "xyz_coefficient_of_variation": None,
+                    "abc_class": "NOT_CONFIGURED",
+                    "forecast_daily_velocity": "0.000000",
+                    "point_forecast_units": "0.0000",
+                    "protection_units": None,
+                    "target_units": None,
+                    "confidence": "LOW",
+                    "reason_codes": ["EVALUATION_ORIGINS_UNAVAILABLE"],
+                    "split": {
+                        "selection_start_index": selection_start,
+                        "calibration_start_index": calibration_start,
+                        "evaluation_start_index": evaluation_start,
+                    },
+                    "candidates": candidate_records,
+                    "protection": {
+                        "status": "UNAVAILABLE",
+                        "full_horizon_origin_count": 0,
+                        "shortfalls": [],
+                    },
+                    "caps": {"daily_rate_cap_hits": 0},
+                    "origin_windows": _v2_origin_windows(
+                        ordered=ordered,
+                        horizon=horizon,
+                        selection_start=selection_start,
+                        calibration_start=calibration_start,
+                        evaluation_start=evaluation_start,
+                        candidate_records=candidate_records,
+                        selection_usable_origin_dates=selected_record.get(
+                            "selection_origin_dates", []
+                        ),
+                        selected_model=None,
+                    ),
+                }
+            )
         raise DevelopmentForecastError(
             "no uncensored purchase-horizon evaluation origins remain"
         )
@@ -1192,7 +2215,11 @@ def plan_development_forecast(
     evaluation_status = (
         "SUFFICIENT"
         if len(evaluation_actuals) >= minimum_evaluation
-        else "INSUFFICIENT_FOR_CONFIDENCE"
+        else (
+            "INSUFFICIENT_FOR_READINESS"
+            if definition.evidence_contract == V2_CONTRACT
+            else "INSUFFICIENT_FOR_CONFIDENCE"
+        )
     )
     shortfalls: list[Decimal] = []
     calibration_origin_dates: list[str] = []
@@ -1332,6 +2359,59 @@ def plan_development_forecast(
             "negative_net_days": sum(1 for item in ordered if item.net_units < 0),
         },
     }
+    if definition.evidence_contract == V2_CONTRACT:
+        common_payload["origin_windows"] = _v2_origin_windows(
+            ordered=ordered,
+            horizon=horizon,
+            selection_start=selection_start,
+            calibration_start=calibration_start,
+            evaluation_start=evaluation_start,
+            candidate_records=candidate_records,
+            selection_usable_origin_dates=next(
+                record["selection_origin_dates"]
+                for record in candidate_records
+                if record["name"] == selected_name
+            ),
+            selected_model=selected_name,
+            calibration_usable_origin_dates=calibration_origin_dates,
+            evaluation_usable_origin_dates=evaluation_origin_dates,
+        )
+    if (
+        definition.evidence_contract == V2_CONTRACT
+        and len(evaluation_actuals) < minimum_evaluation
+    ):
+        return _finalize_evidence(
+            {
+                **common_payload,
+                "status": "BLOCKED",
+                "protection_units": None,
+                "target_units": None,
+                "confidence": "LOW",
+                "reason_codes": [
+                    fva_reason,
+                    *xyz_reasons,
+                    "EVALUATION_ORIGINS_INSUFFICIENT_FOR_READINESS",
+                ],
+                "protection": {
+                    "status": "WITHHELD_EVALUATION_ORIGINS_INSUFFICIENT",
+                    "method": "FULL_HORIZON_SHORTFALL_EMPIRICAL_QUANTILE",
+                    "quantile": active_policy.values["protection"]["quantile"],
+                    "minimum_origin_count": minimum_calibration,
+                    "full_horizon_origin_count": len(shortfalls),
+                    "censored_stockout_origin_count": len(
+                        censored_calibration_origin_dates
+                    ),
+                    "censored_stockout_origin_dates": (
+                        censored_calibration_origin_dates
+                    ),
+                    "origin_dates": calibration_origin_dates,
+                    "shortfalls": [str(item.quantize(UNITS)) for item in shortfalls],
+                    "availability_qualification": (
+                        "LIMITED" if availability_limited else "FULL"
+                    ),
+                },
+            }
+        )
     if len(shortfalls) < minimum_calibration:
         return _finalize_evidence(
             {
@@ -1375,18 +2455,11 @@ def plan_development_forecast(
         if evaluation.wape is None
         else evaluation.wape.quantize(METRIC, rounding=ROUND_HALF_UP)
     )
-    confidence = (
-        "HIGH"
-        if evaluation_status == "SUFFICIENT"
-        and not availability_limited
-        and evaluation_wape is not None
-        and evaluation_wape <= Decimal("0.20")
-        else "MEDIUM"
-        if evaluation_status == "SUFFICIENT"
-        and not availability_limited
-        and evaluation_wape is not None
-        and evaluation_wape <= Decimal("0.50")
-        else "LOW"
+    confidence = _classify_confidence(
+        evaluation_status=evaluation_status,
+        availability_limited=availability_limited,
+        evaluation_wape=evaluation_wape,
+        policy=active_policy,
     )
     reasons = [fva_reason, *xyz_reasons]
     if any(item.inventory_state == "STOCKOUT" for item in ordered):
@@ -1438,9 +2511,274 @@ def plan_development_forecast(
     )
 
 
+def _validate_v2_origin_window(
+    raw: Any,
+    *,
+    history_start: date,
+    start_index: int,
+    end_exclusive: int,
+    horizon: int,
+) -> bool:
+    if not isinstance(raw, dict):
+        return False
+    expected_keys = {
+        "planned_origin_count",
+        "planned_origin_dates",
+        "usable_origin_count",
+        "usable_origin_dates",
+        "censored_origin_count",
+        "censored_origin_dates",
+        "model_applicability",
+        "target_intervals",
+        "target_interval_semantics",
+        "overlapping_targets",
+        "independent_samples",
+    }
+    last_origin = end_exclusive - horizon
+    indices = list(range(start_index, max(start_index, last_origin + 1)))
+    planned = [
+        (history_start + timedelta(days=index)).isoformat() for index in indices
+    ]
+    intervals = [
+        {
+            "origin_date": origin,
+            "target_start_date": origin,
+            "target_end_exclusive": (
+                date.fromisoformat(origin) + timedelta(days=horizon)
+            ).isoformat(),
+        }
+        for origin in planned
+    ]
+    usable = raw.get("usable_origin_dates")
+    censored = raw.get("censored_origin_dates")
+    applicability = raw.get("model_applicability")
+    if not (
+        set(raw) == expected_keys
+        and raw.get("planned_origin_count") == len(planned)
+        and raw.get("planned_origin_dates") == planned
+        and isinstance(usable, list)
+        and usable == sorted(set(usable))
+        and isinstance(censored, list)
+        and censored == sorted(set(censored))
+        and raw.get("usable_origin_count") == len(usable)
+        and raw.get("censored_origin_count") == len(censored)
+        and set(usable).issubset(planned)
+        and set(censored).issubset(planned)
+        and not set(usable).intersection(censored)
+        and isinstance(applicability, dict)
+        and applicability
+        and raw.get("target_intervals") == intervals
+        and raw.get("target_interval_semantics")
+        == "HALF_OPEN_[ORIGIN,ORIGIN_PLUS_HORIZON)"
+        and raw.get("overlapping_targets") == (horizon > 1 and len(planned) > 1)
+        and raw.get("independent_samples") is False
+    ):
+        return False
+    for model, evidence in applicability.items():
+        if not isinstance(model, str) or not model or not isinstance(evidence, dict):
+            return False
+        dates = evidence.get("origin_dates")
+        if not (
+            set(evidence) == {"origin_count", "origin_dates"}
+            and isinstance(dates, list)
+            and dates == sorted(set(dates))
+            and set(dates).issubset(planned)
+            and evidence.get("origin_count") == len(dates)
+        ):
+            return False
+    return True
+
+
+def _validate_v2_development_forecast_evidence(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    try:
+        policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
+        unsigned = {key: item for key, item in value.items() if key != "sha256"}
+        history_start = date.fromisoformat(str(value["history_start"]))
+        history_end = date.fromisoformat(str(value["history_end"]))
+        horizon = int(value["horizon_days"])
+        base_keys = {
+            "contract",
+            "method_version",
+            "policy",
+            "history_start",
+            "history_end",
+            "cutoff_date",
+            "history_days",
+            "horizon_days",
+            "protection_calendar",
+            "calendar_velocity",
+            "in_stock_velocity",
+            "input_sha256",
+            "category_prior",
+            "commercial_authority",
+            "production_activation",
+            "status",
+            "selected_model",
+            "demand_regime",
+            "xyz_class",
+            "xyz_coefficient_of_variation",
+            "abc_class",
+            "forecast_daily_velocity",
+            "point_forecast_units",
+            "protection_units",
+            "target_units",
+            "confidence",
+            "confidence_policy",
+            "reason_codes",
+            "split",
+            "candidates",
+            "protection",
+            "caps",
+            "origin_windows",
+            "sha256",
+        }
+        selected_keys = {
+            "abc_status",
+            "selection_metrics",
+            "evaluation_metrics",
+            "evaluation_origin_count",
+            "minimum_evaluation_origin_count",
+            "evaluation_status",
+            "availability",
+        }
+        expected_keys = base_keys | (
+            selected_keys if value.get("selected_model") is not None else set()
+        )
+        if not (
+            set(value) == expected_keys
+            and value.get("contract") == V2_CONTRACT
+            and value.get("method_version") == V2_METHOD_VERSION
+            and value.get("policy") == policy.evidence()
+            and value.get("history_days") == 138
+            and history_end == history_start + timedelta(days=137)
+            and str(value.get("cutoff_date")) == history_end.isoformat()
+            and 1 <= horizon <= 31
+            and value.get("commercial_authority") is False
+            and value.get("production_activation") is False
+            and value.get("status") in {"READY", "BLOCKED"}
+            and value.get("confidence") in {"HIGH", "MEDIUM", "LOW"}
+            and value.get("confidence_policy")
+            == _confidence_policy_evidence(policy)
+            and isinstance(value.get("sha256"), str)
+            and value["sha256"] == canonical_evidence_sha256(unsigned)
+            and isinstance(value.get("input_sha256"), str)
+            and len(value["input_sha256"]) == _SHA256_LENGTH
+            and bytes.fromhex(value["input_sha256"])
+            and isinstance(value.get("reason_codes"), list)
+            and len(value["reason_codes"]) == len(set(value["reason_codes"]))
+            and all(isinstance(item, str) and item for item in value["reason_codes"])
+        ):
+            return False
+        calendar = value.get("protection_calendar")
+        if not isinstance(calendar, dict) or calendar.get("horizon_days") != horizon:
+            return False
+        if calendar.get("basis") == "CALLER_VALIDATED_HORIZON":
+            if set(calendar) != {"basis", "horizon_days"}:
+                return False
+        elif not validate_anchored_schedule_evidence(calendar):
+            return False
+        elif (
+            date.fromisoformat(str(calendar.get("target_start_date")))
+            != history_end + timedelta(days=1)
+            or date.fromisoformat(str(calendar.get("target_end_exclusive")))
+            != history_end + timedelta(days=1 + horizon)
+        ):
+            return False
+        partition = value["origin_windows"].get("partition")
+        if partition != {
+            "training_start_index": 0,
+            "training_end_exclusive": 28,
+            "selection_start_index": 28,
+            "selection_end_exclusive": 66,
+            "calibration_start_index": 66,
+            "calibration_end_exclusive": 104,
+            "evaluation_start_index": 104,
+            "evaluation_end_exclusive": 138,
+        }:
+            return False
+        if set(value["origin_windows"]) != {
+            "selection",
+            "calibration",
+            "evaluation",
+            "partition",
+        }:
+            return False
+        for name, start, end in (
+            ("selection", 28, 66),
+            ("calibration", 66, 104),
+            ("evaluation", 104, 138),
+        ):
+            if not _validate_v2_origin_window(
+                value["origin_windows"][name],
+                history_start=history_start,
+                start_index=start,
+                end_exclusive=end,
+                horizon=horizon,
+            ):
+                return False
+        point = _decimal(value.get("point_forecast_units"), "point forecast")
+        velocity = _decimal(
+            value.get("forecast_daily_velocity"), "forecast velocity"
+        )
+        if point < 0 or velocity != (point / Decimal(horizon)).quantize(
+            VELOCITY, rounding=ROUND_HALF_UP
+        ):
+            return False
+        if value["status"] == "READY":
+            protection = _decimal(value.get("protection_units"), "protection")
+            target = _decimal(value.get("target_units"), "target")
+            availability = value.get("availability")
+            metrics = value.get("evaluation_metrics")
+            if not isinstance(availability, dict) or not isinstance(metrics, dict):
+                return False
+            availability_limited = (
+                int(availability.get("unknown_days", -1)) > 0
+                or int(availability.get("proven_in_stock_days", -1))
+                < int(
+                    policy.values["availability"][
+                        "minimum_proven_in_stock_days_for_full_protection"
+                    ]
+                )
+            )
+            wape_raw = metrics.get("wape")
+            wape = None if wape_raw is None else _decimal(wape_raw, "evaluation wape")
+            expected_confidence = _classify_confidence(
+                evaluation_status=str(value.get("evaluation_status")),
+                availability_limited=availability_limited,
+                evaluation_wape=wape,
+                policy=policy,
+            )
+            if not (
+                protection >= 0
+                and target == point + protection
+                and value.get("confidence") == expected_confidence
+            ):
+                return False
+        elif not (
+            value.get("protection_units") is None
+            and value.get("target_units") is None
+            and value.get("confidence") == "LOW"
+        ):
+            return False
+        return True
+    except (
+        DevelopmentForecastError,
+        InvalidOperation,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+    ):
+        return False
+
+
 def validate_development_forecast_evidence(value: Any) -> bool:
     """Deeply validate the immutable shape and self-hash of V1 evidence."""
 
+    if isinstance(value, dict) and value.get("contract") == V2_CONTRACT:
+        return _validate_v2_development_forecast_evidence(value)
     if not isinstance(value, dict):
         return False
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
@@ -2227,7 +3565,8 @@ def validate_development_forecast_context_evidence(
     The detached evidence object contains only an input digest, so structural
     validation alone cannot prove model-derived values.  Monday manifests and
     packets already freeze the complete observation projection; this boundary
-    reconstructs it, verifies the digest, and deterministically reruns V1.
+    reconstructs it, verifies the digest, and deterministically reruns the
+    exact recorded registry entry.
     """
 
     if not validate_development_forecast_evidence(value):
@@ -2259,85 +3598,486 @@ def validate_development_forecast_context_evidence(
             )
         if canonical_evidence_sha256(input_rows) != value.get("input_sha256"):
             return False
+        evidence_contract = str(value["contract"])
+        active_policy = load_development_forecast_policy(
+            evidence_contract=evidence_contract
+        )
         replanned = plan_development_forecast(
             parsed,
             horizon_days=int(value["horizon_days"]),
             protection_calendar=value["protection_calendar"],
+            policy=active_policy,
         ).to_json_dict()
         return canonical_evidence_json(replanned) == canonical_evidence_json(value)
     except (DevelopmentForecastError, KeyError, TypeError, ValueError):
         return False
 
 
+def validate_connected_development_forecast_context_evidence(
+    value: Any,
+    frozen_observations: Any,
+    *,
+    expected_contract: str,
+) -> bool:
+    """Require the exact registered connected calendar for a stored context."""
+
+    calendar = value.get("protection_calendar") if isinstance(value, dict) else None
+    if (
+        expected_contract not in {CONTRACT, V2_CONTRACT}
+        or not isinstance(value, dict)
+        or value.get("contract") != expected_contract
+        or (
+            expected_contract == V2_CONTRACT
+            and (
+                not isinstance(calendar, dict)
+                or calendar.get("basis")
+                != "ANCHORED_REVIEW_SUBMISSION_DELIVERY_SCHEDULE_V2"
+            )
+        )
+    ):
+        return False
+    return validate_development_forecast_context_evidence(
+        value,
+        frozen_observations,
+    )
+
+
+def serialize_baseline_need(value: BaselineNeed | Mapping[str, Any]) -> dict[str, Any]:
+    """Return the exact immutable JSON contract for one calculated need."""
+
+    if isinstance(value, BaselineNeed):
+        payload: dict[str, Any] = {
+            "status": value.status,
+            "policy_mode": value.policy_mode,
+            "protection_days": value.protection_days,
+            "target_units": str(value.target_units),
+            "effective_inventory_units": str(value.effective_inventory_units),
+            "raw_need_units": value.raw_need_units,
+            "cases": value.cases,
+            "loose_units": value.loose_units,
+            "ordered_units": value.ordered_units,
+            "pack_rounding_units": value.pack_rounding_units,
+            "loose_fee": str(value.loose_fee),
+            "reason_codes": list(value.reason_codes),
+        }
+    elif isinstance(value, Mapping):
+        payload = dict(value)
+    else:
+        raise DevelopmentForecastError("baseline need has the wrong type")
+    _require_exact_keys(payload, _BASELINE_NEED_KEYS, "baseline need")
+    if (
+        not isinstance(payload["status"], str)
+        or not payload["status"]
+        or (
+            payload["policy_mode"] is not None
+            and not isinstance(payload["policy_mode"], str)
+        )
+        or (
+            payload["protection_days"] is not None
+            and (
+                not isinstance(payload["protection_days"], int)
+                or isinstance(payload["protection_days"], bool)
+                or payload["protection_days"] < 1
+            )
+        )
+        or any(
+            not isinstance(payload[key], int)
+            or isinstance(payload[key], bool)
+            or payload[key] < 0
+            for key in (
+                "raw_need_units",
+                "cases",
+                "loose_units",
+                "ordered_units",
+                "pack_rounding_units",
+            )
+        )
+        or not isinstance(payload["reason_codes"], (list, tuple))
+        or not all(
+            isinstance(item, str) and item for item in payload["reason_codes"]
+        )
+        or len(payload["reason_codes"]) != len(set(payload["reason_codes"]))
+    ):
+        raise DevelopmentForecastError("baseline need shape differs")
+    for key in ("target_units", "effective_inventory_units", "loose_fee"):
+        if _decimal(payload[key], f"baseline need {key}") < 0:
+            raise DevelopmentForecastError("baseline need decimal differs")
+        if not isinstance(payload[key], str):
+            raise DevelopmentForecastError("baseline need decimals must be strings")
+    return {
+        **payload,
+        "reason_codes": list(payload["reason_codes"]),
+    }
+
+
+def _development_need_calculation_inputs(context: Mapping[str, Any]) -> dict[str, Any]:
+    evidence = context.get("development_forecast_evidence")
+    if not isinstance(evidence, dict):
+        raise DevelopmentForecastError("development evidence is absent")
+    projection = {
+        "variant_id": context.get("variant_id"),
+        "development_forecast_contract": context.get(
+            "development_forecast_contract"
+        ),
+        "development_forecast_evidence_sha256": context.get(
+            "development_forecast_evidence_sha256"
+        ),
+        "policy_identity": evidence.get("policy"),
+        "schedule_identity": evidence.get("protection_calendar"),
+        "available_units": context.get("available_units"),
+        "trusted_incoming_units": context.get("trusted_incoming_units"),
+        "inventory_capture": context.get("inventory_capture"),
+        "inventory_rows": context.get("inventory_rows"),
+        "open_po_position": context.get("open_po_position"),
+        "policy_mode": context.get("policy_mode"),
+        "policies": context.get("policies"),
+        "units_per_case": context.get("units_per_case"),
+        "qualifying_units_per_case": context.get("qualifying_units_per_case"),
+        "offer_id": context.get("offer_id"),
+        "offer_evidence": context.get("offer_evidence"),
+        "vendor_id": context.get("vendor_id"),
+        "vendor_rules": context.get("vendor_rules"),
+    }
+    if (
+        not isinstance(projection["variant_id"], str)
+        or not projection["variant_id"]
+        or projection["available_units"] is None
+        or projection["trusted_incoming_units"] is None
+        or not isinstance(projection["vendor_rules"], (list, tuple))
+        or len(projection["vendor_rules"]) < 22
+    ):
+        raise DevelopmentForecastError("development need inputs are incomplete")
+    # Bind the exact primitive projection that the historical Monday manifest
+    # serializer persists.  That serializer intentionally uses ``str`` for
+    # datetime/time/Decimal values; normalizing here avoids a false mismatch
+    # between an in-memory context and its byte-identical parsed manifest while
+    # leaving the long-standing V1 serializer untouched.
+    return json.loads(
+        json.dumps(
+            projection,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    )
+
+
+def build_development_baseline_need_binding(
+    context: Mapping[str, Any],
+    need: BaselineNeed | Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind a V2 need to its exact enclosing frozen calculation context."""
+
+    if context.get("development_forecast_contract") != V2_CONTRACT:
+        raise DevelopmentForecastError("baseline need binding requires V2")
+    need_payload = serialize_baseline_need(need)
+    inputs = _development_need_calculation_inputs(context)
+    unsigned = {
+        "contract": BASELINE_NEED_BINDING_CONTRACT,
+        "variant_id": str(context["variant_id"]),
+        "forecast_evidence_sha256": str(
+            context["development_forecast_evidence_sha256"]
+        ),
+        "need_sha256": canonical_evidence_sha256(need_payload),
+        "calculation_inputs_sha256": canonical_evidence_sha256(inputs),
+    }
+    return {**unsigned, "sha256": canonical_evidence_sha256(unsigned)}
+
+
+def validate_development_baseline_need_context(
+    context: Mapping[str, Any],
+    *,
+    manifest_contract: str,
+) -> bool:
+    """Recalculate and bind a stored baseline need under its recorded version."""
+
+    try:
+        if manifest_contract not in {CONTRACT, V2_CONTRACT}:
+            return False
+        evidence = context.get("development_forecast_evidence")
+        if (
+            not isinstance(evidence, dict)
+            or context.get("development_forecast_contract") != manifest_contract
+            or evidence.get("contract") != manifest_contract
+            or evidence.get("method_version")
+            != development_forecast_definition(manifest_contract).method_version
+            or evidence.get("sha256")
+            != context.get("development_forecast_evidence_sha256")
+        ):
+            return False
+        if not validate_connected_development_forecast_context_evidence(
+            evidence,
+            context.get("demand_observations"),
+            expected_contract=manifest_contract,
+        ):
+            return False
+        if evidence.get("status") != "READY":
+            return context.get("need") is None
+        raw_need = context.get("need")
+        if raw_need is None:
+            allowed_v1_missing = {
+                "OPEN_PO_RECONCILIATION_BLOCKED",
+                "INCOMING_EVIDENCE_MISMATCH",
+                "LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED",
+                "VERIFIED_CURRENT_PRICE_LADDER_INVALID",
+                "ONE_BOTTLE_REQUIRES_CONFIRMED_LOOSE_ORDER",
+                "MISSING_OR_INVALID_REPLENISHMENT_POLICY",
+            }
+            return (
+                manifest_contract == CONTRACT
+                and isinstance(context.get("blockers"), list)
+                and bool(set(context["blockers"]).intersection(allowed_v1_missing))
+            )
+        stored_need = serialize_baseline_need(raw_need)
+        vendor = context.get("vendor_rules")
+        position = context.get("open_po_position")
+        if not isinstance(vendor, (list, tuple)) or len(vendor) < 22:
+            return False
+        if not isinstance(position, dict):
+            return False
+        plan = DevelopmentForecastPlan(evidence)
+        expected = calculate_development_baseline_need(
+            forecast_daily_velocity=plan.forecast_daily_velocity,
+            point_forecast_units=plan.point_forecast_units,
+            empirical_protection_units=plan.protection_units,
+            forecast_horizon_days=plan.horizon_days,
+            available_units=context.get("available_units"),
+            trusted_incoming_units=context.get("trusted_incoming_units"),
+            order_cycle_days=int(vendor[2]),
+            lead_time_days=int(vendor[3]),
+            lead_time_variability_days=vendor[4],
+            policy_mode=context.get("policy_mode"),
+            units_per_case=int(context.get("units_per_case")),
+            loose_order_allowed=bool(vendor[8]),
+            loose_unit_fee=vendor[9],
+            open_po_blocked=bool(position.get("blocks_reorder")),
+            protection_days_override=plan.horizon_days,
+        )
+        expected_need = serialize_baseline_need(expected)
+        if canonical_evidence_json(stored_need) != canonical_evidence_json(
+            expected_need
+        ):
+            return False
+        binding_present = "development_baseline_need_binding" in context
+        if manifest_contract == CONTRACT:
+            return not binding_present
+        binding = context.get("development_baseline_need_binding")
+        if not isinstance(binding, dict):
+            return False
+        expected_binding = build_development_baseline_need_binding(
+            context,
+            stored_need,
+        )
+        return canonical_evidence_json(binding) == canonical_evidence_json(
+            expected_binding
+        )
+    except (
+        DevelopmentForecastError,
+        InvalidOperation,
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        return False
+
+
 def assign_gp_dollar_abc(
-    rows: Iterable[Mapping[str, Any]],
+    cohort: Mapping[str, Any],
     *,
     policy: DevelopmentForecastPolicy | None = None,
-) -> dict[str, dict[str, Any]]:
-    """Assign ABC only from independent historical revenue and COGS."""
+) -> dict[str, Any]:
+    """Classify an explicit complete cohort from historical revenue and COGS."""
 
     active_policy = policy or load_development_forecast_policy()
-    parsed: list[tuple[str, Decimal]] = []
-    result: dict[str, dict[str, Any]] = {}
-    seen: set[str] = set()
+    if not isinstance(cohort, dict):
+        raise DevelopmentForecastError("ABC requires an explicit cohort envelope")
+    _require_exact_keys(
+        cohort,
+        {"contract", "scope", "eligible_variant_ids", "exclusions", "rows"},
+        "ABC cohort",
+    )
+    scope = cohort["scope"]
+    eligible = cohort["eligible_variant_ids"]
+    exclusions = cohort["exclusions"]
+    rows = cohort["rows"]
+    if not isinstance(scope, dict):
+        raise DevelopmentForecastError("ABC cohort scope must be an object")
+    _require_exact_keys(
+        scope,
+        {"scope_id", "lookback_start", "lookback_end", "classification_period_days"},
+        "ABC cohort scope",
+    )
+    period_days = int(active_policy.values["abc"]["classification_period_days"])
+    lookback_start = _schedule_date(scope["lookback_start"], "ABC lookback_start")
+    lookback_end = _schedule_date(scope["lookback_end"], "ABC lookback_end")
+    if (
+        cohort.get("contract") != "BUFFALO_DEVELOPMENT_ABC_COHORT_V2"
+        or not str(scope.get("scope_id") or "").strip()
+        or scope.get("classification_period_days") != period_days
+        or (lookback_end - lookback_start).days + 1 != period_days
+        or not isinstance(eligible, list)
+        or not eligible
+        or any(not isinstance(item, str) or not item.strip() for item in eligible)
+        or eligible != sorted(set(eligible))
+        or not isinstance(exclusions, list)
+        or not isinstance(rows, list)
+    ):
+        raise DevelopmentForecastError("ABC cohort identity differs")
+    exclusion_ids: list[str] = []
+    normalized_exclusions: list[dict[str, str]] = []
+    for exclusion in exclusions:
+        if not isinstance(exclusion, dict):
+            raise DevelopmentForecastError("ABC exclusions must be objects")
+        _require_exact_keys(
+            exclusion,
+            {"variant_id", "reason_code"},
+            "ABC exclusion",
+        )
+        variant_id = str(exclusion["variant_id"]).strip()
+        reason = str(exclusion["reason_code"]).strip()
+        if not variant_id or not reason:
+            raise DevelopmentForecastError("ABC exclusion identity differs")
+        exclusion_ids.append(variant_id)
+        normalized_exclusions.append(
+            {"variant_id": variant_id, "reason_code": reason}
+        )
+    if (
+        exclusion_ids != sorted(set(exclusion_ids))
+        or set(exclusion_ids).intersection(eligible)
+    ):
+        raise DevelopmentForecastError("ABC cohort membership conflicts")
+    observed: dict[str, Mapping[str, Any]] = {}
     for row in rows:
-        variant_id = str(row.get("variant_id") or "").strip()
-        if not variant_id or variant_id in seen:
-            raise DevelopmentForecastError("ABC rows require unique Variant IDs")
-        seen.add(variant_id)
-        revenue_raw = row.get("historical_revenue")
-        cogs_raw = row.get("historical_cogs")
-        if revenue_raw is None or cogs_raw is None:
-            result[variant_id] = {
-                "abc_class": "NOT_CONFIGURED",
-                "status": "MISSING_HISTORICAL_COGS",
-                "gross_profit_dollars": None,
-                "classification_period_days": int(
-                    active_policy.values["abc"]["classification_period_days"]
-                ),
-            }
+        if not isinstance(row, dict):
+            raise DevelopmentForecastError("ABC rows must be objects")
+        _require_exact_keys(
+            row,
+            {"variant_id", "historical_revenue", "historical_cogs"},
+            "ABC row",
+        )
+        variant_id = str(row["variant_id"]).strip()
+        if not variant_id or variant_id not in eligible or variant_id in observed:
+            raise DevelopmentForecastError("ABC rows differ from cohort membership")
+        observed[variant_id] = row
+
+    missing_ids = sorted(set(eligible) - set(observed))
+    invalid_ids: list[str] = []
+    parsed: dict[str, Decimal] = {}
+    for variant_id in eligible:
+        row = observed.get(variant_id)
+        if row is None:
             continue
-        revenue = _decimal(revenue_raw, "historical_revenue")
-        cogs = _decimal(cogs_raw, "historical_cogs")
-        if revenue < 0 or cogs < 0:
-            raise DevelopmentForecastError("historical revenue and COGS cannot be negative")
-        gp = revenue - cogs
-        parsed.append((variant_id, gp))
-    positive_total = sum((max(gp, Decimal("0")) for _, gp in parsed), Decimal("0"))
-    if parsed and positive_total == 0:
-        for variant_id, gp in parsed:
-            result[variant_id] = {
-                "abc_class": "NOT_CONFIGURED",
-                "status": "NONPOSITIVE_HISTORICAL_GROSS_PROFIT",
-                "gross_profit_dollars": str(
-                    gp.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                ),
-                "classification_period_days": int(
-                    active_policy.values["abc"]["classification_period_days"]
-                ),
-                "basis": "HISTORICAL_GROSS_PROFIT_DOLLARS",
-            }
-        return result
-    a_share = _decimal(active_policy.values["abc"]["a_cumulative_share"], "abc.a_share")
-    b_share = _decimal(active_policy.values["abc"]["b_incremental_share"], "abc.b_share")
+        try:
+            revenue = _decimal(row.get("historical_revenue"), "historical_revenue")
+            cogs = _decimal(row.get("historical_cogs"), "historical_cogs")
+            if revenue < 0 or cogs < 0:
+                raise DevelopmentForecastError("historical cost evidence is negative")
+        except DevelopmentForecastError:
+            invalid_ids.append(variant_id)
+            continue
+        parsed[variant_id] = revenue - cogs
+
+    coverage = {
+        "expected_count": len(eligible),
+        "observed_count": len(observed),
+        "calculable_count": len(parsed),
+        "missing_variant_ids": missing_ids,
+        "invalid_variant_ids": sorted(invalid_ids),
+        "excluded_count": len(normalized_exclusions),
+    }
+    common = {
+        "contract": "BUFFALO_DEVELOPMENT_ABC_COHORT_RESULT_V2",
+        "scope": json.loads(canonical_evidence_json(scope)),
+        "basis": "HISTORICAL_GROSS_PROFIT_DOLLARS",
+        "coverage": coverage,
+        "exclusions": normalized_exclusions,
+        "commercial_authority": False,
+        "production_activation": False,
+    }
+    if missing_ids or invalid_ids:
+        members = []
+        for variant_id in eligible:
+            gp = parsed.get(variant_id)
+            members.append(
+                {
+                    "variant_id": variant_id,
+                    "abc_class": "NOT_CONFIGURED",
+                    "status": (
+                        "MISSING_COHORT_MEMBER"
+                        if variant_id in missing_ids
+                        else "INVALID_HISTORICAL_COST_EVIDENCE"
+                        if variant_id in invalid_ids
+                        else "COHORT_INCOMPLETE_KNOWN_GP_DIAGNOSTIC"
+                    ),
+                    "gross_profit_dollars": (
+                        None
+                        if gp is None
+                        else str(gp.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                    ),
+                }
+            )
+        return {
+            **common,
+            "cohort_status": "INCOMPLETE",
+            "classification_status": "NOT_CONFIGURED",
+            "members": members,
+        }
+
+    positive_total = sum(
+        (max(gp, Decimal("0")) for gp in parsed.values()), Decimal("0")
+    )
+    if positive_total == 0:
+        return {
+            **common,
+            "cohort_status": "COMPLETE",
+            "classification_status": "NOT_CONFIGURED",
+            "members": [
+                {
+                    "variant_id": variant_id,
+                    "abc_class": "NOT_CONFIGURED",
+                    "status": "NONPOSITIVE_HISTORICAL_GROSS_PROFIT",
+                    "gross_profit_dollars": str(
+                        parsed[variant_id].quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                }
+                for variant_id in eligible
+            ],
+        }
+    a_share = _decimal(
+        active_policy.values["abc"]["a_cumulative_share"], "abc.a_share"
+    )
+    b_share = _decimal(
+        active_policy.values["abc"]["b_incremental_share"], "abc.b_share"
+    )
     cumulative = Decimal("0")
-    for variant_id, gp in sorted(parsed, key=lambda item: (-item[1], item[0])):
-        share_before = Decimal("0") if positive_total == 0 else cumulative / positive_total
-        abc_class = "A" if share_before < a_share else "B" if share_before < a_share + b_share else "C"
-        contribution = max(gp, Decimal("0"))
-        cumulative += contribution
-        result[variant_id] = {
+    classified: dict[str, dict[str, Any]] = {}
+    for variant_id, gp in sorted(parsed.items(), key=lambda item: (-item[1], item[0])):
+        share_before = cumulative / positive_total
+        abc_class = (
+            "A"
+            if share_before < a_share
+            else "B"
+            if share_before < a_share + b_share
+            else "C"
+        )
+        cumulative += max(gp, Decimal("0"))
+        classified[variant_id] = {
+            "variant_id": variant_id,
             "abc_class": abc_class,
             "status": "CALCULATED",
-            "gross_profit_dollars": str(gp.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
-            "cumulative_share_after": (
-                "0.000000"
-                if positive_total == 0
-                else str((cumulative / positive_total).quantize(METRIC, rounding=ROUND_HALF_UP))
+            "gross_profit_dollars": str(
+                gp.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             ),
-            "basis": "HISTORICAL_GROSS_PROFIT_DOLLARS",
-            "classification_period_days": int(
-                active_policy.values["abc"]["classification_period_days"]
+            "cumulative_share_after": str(
+                (cumulative / positive_total).quantize(METRIC, rounding=ROUND_HALF_UP)
             ),
         }
-    return result
+    return {
+        **common,
+        "cohort_status": "COMPLETE",
+        "classification_status": "CALCULATED",
+        "members": [classified[variant_id] for variant_id in eligible],
+    }

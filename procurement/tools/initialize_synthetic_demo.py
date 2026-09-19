@@ -35,6 +35,10 @@ from procurement_os.synthetic_price_replacement_contract import (
 from procurement_os.development_forecast import (
     FIXTURE_CONTRACT as DEVELOPMENT_FORECAST_DEMO_CONTRACT,
     FIXTURE_META_KEY as DEVELOPMENT_FORECAST_META_KEY,
+    FIXTURE_PROFILE_META_KEY as DEVELOPMENT_FORECAST_PROFILE_META_KEY,
+    REGISTRATION_META_KEY as DEVELOPMENT_FORECAST_REGISTRATION_META_KEY,
+    V2_FIXTURE_CONTRACT as DEVELOPMENT_FORECAST_V2_DEMO_CONTRACT,
+    development_forecast_v2_registration,
 )
 
 
@@ -50,6 +54,7 @@ DEMO_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 MULTIVENDOR_DEMO_CONTRACT = "BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2"
 MULTIVENDOR_PROFILE = "multivendor-v2"
 DEVELOPMENT_FORECAST_PROFILE = "development-forecast-v1"
+DEVELOPMENT_FORECAST_V2_PROFILE = "development-forecast-v2"
 BASELINE_PROFILE = "baseline-v1"
 WESTERN_VENDOR_ID = "00000000-0000-4000-8000-000000000003"
 WESTERN_VARIANT_IDS = ("4001", "4002", "4003", "4004", "4005")
@@ -419,30 +424,36 @@ def _seed_multivendor_pre_price(
 
 
 def _configure_development_forecast_vendor_calendars(
-    conn: psycopg.Connection, business_date: date
+    conn: psycopg.Connection, business_date: date, *, profile: str
 ) -> None:
     """Install unequal, code-pinned calendars for the development profile only."""
 
     if business_date.strftime("%A").upper() != "MONDAY":
         raise RuntimeError("development forecast fixture must evaluate on Monday")
+    if profile not in {DEVELOPMENT_FORECAST_PROFILE, DEVELOPMENT_FORECAST_V2_PROFILE}:
+        raise RuntimeError("development forecast calendar profile is unregistered")
+    southern_cycle = 14 if profile == DEVELOPMENT_FORECAST_V2_PROFILE else 7
+    cutoff = "17:00:00" if profile == DEVELOPMENT_FORECAST_V2_PROFILE else "23:59:59"
     with conn.transaction():
         southern = conn.execute(
             """UPDATE vendor_operating_rules
                   SET order_days=ARRAY['MONDAY'],
                       expected_delivery_days=ARRAY['THURSDAY'],
-                      order_cycle_days=7,lead_time_days=1,
+                      order_cutoff_local=%s,
+                      order_cycle_days=%s,lead_time_days=1,
                       lead_time_variability_days=0
                 WHERE vendor_id=%s""",
-            (VENDOR_ID,),
+            (cutoff, southern_cycle, VENDOR_ID),
         )
         western = conn.execute(
             """UPDATE vendor_operating_rules
                   SET order_days=ARRAY['MONDAY','WEDNESDAY'],
                       expected_delivery_days=ARRAY['THURSDAY'],
+                      order_cutoff_local=%s,
                       order_cycle_days=2,lead_time_days=1,
                       lead_time_variability_days=0
                 WHERE vendor_id=%s""",
-            (WESTERN_VENDOR_ID,),
+            (cutoff, WESTERN_VENDOR_ID),
         )
         if southern.rowcount != 1 or western.rowcount != 1:
             raise RuntimeError("development forecast vendor calendars are incomplete")
@@ -547,6 +558,7 @@ def _seed_evidence(
     canonical_sales_end_date: date | None = None,
     include_control: bool = True,
     include_multivendor: bool = False,
+    development_profile: str | None = None,
 ) -> str:
     from procurement_os.catalog import recompute_catalog_gate
     from procurement_os.historical_sales import (
@@ -639,6 +651,8 @@ def _seed_evidence(
         business_date,
         include_control=include_control,
         include_multivendor=include_multivendor,
+        history_days=(138 if development_profile == DEVELOPMENT_FORECAST_V2_PROFILE else 84),
+        development_profile=development_profile,
     )
     totals = ControlTotals(
         net_items_sold=sum((row.net_items_sold for row in sales_rows), Decimal("0")),
@@ -778,15 +792,36 @@ def _synthetic_sales_rows(
     *,
     include_control: bool = True,
     include_multivendor: bool = False,
+    history_days: int = 84,
+    development_profile: str | None = None,
 ) -> list[object]:
     """Return the exact fabricated corpus consumed by the real backfill service."""
 
     from procurement_os.sales import SalesSourceRow
 
     rows: list[SalesSourceRow] = []
-    for offset in range(84):
-        sale_date = business_date - timedelta(days=84 - offset)
-        target_units = Decimal("1") if offset < 70 else Decimal("2")
+    if history_days not in {84, 138}:
+        raise RuntimeError("synthetic sales history length is unregistered")
+    if development_profile not in {
+        None,
+        DEVELOPMENT_FORECAST_PROFILE,
+        DEVELOPMENT_FORECAST_V2_PROFILE,
+    }:
+        raise RuntimeError("synthetic sales profile is unregistered")
+    expected_history_days = (
+        138 if development_profile == DEVELOPMENT_FORECAST_V2_PROFILE else 84
+    )
+    if history_days != expected_history_days:
+        raise RuntimeError(
+            "synthetic sales history length differs from the registered profile"
+        )
+    for offset in range(history_days):
+        sale_date = business_date - timedelta(days=history_days - offset)
+        target_units = (
+            Decimal("2")
+            if development_profile == DEVELOPMENT_FORECAST_V2_PROFILE
+            else Decimal("1") if offset < history_days - 14 else Decimal("2")
+        )
         rows.append(
             SalesSourceRow(
                 sale_date=sale_date,
@@ -857,6 +892,7 @@ def _verify_synthetic_sales_corpus(
     business_date: date,
     sales_backfill_id: UUID,
     include_multivendor: bool = False,
+    development_profile: str | None = None,
 ) -> None:
     """Bind replay acceptance to the exact raw and canonical fabricated facts."""
 
@@ -874,7 +910,10 @@ def _verify_synthetic_sales_corpus(
     if started_at != (expected_started_at, expected_started_at + timedelta(minutes=4)):
         raise RuntimeError("synthetic demo sales fixture clock differs")
     expected_rows = _synthetic_sales_rows(
-        business_date, include_multivendor=include_multivendor
+        business_date,
+        include_multivendor=include_multivendor,
+        history_days=(138 if development_profile == DEVELOPMENT_FORECAST_V2_PROFILE else 84),
+        development_profile=development_profile,
     )
     actual_raw = conn.execute(
         """SELECT r.sale_date,r.source_variant_id,r.source_sku,
@@ -1132,7 +1171,11 @@ def _publish_demo_marker(
             "INSERT INTO meta(key,value) VALUES (%s,%s)",
             ("synthetic_owner_demo_contract", DEMO_CONTRACT),
         )
-        if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
+        if profile in {
+            MULTIVENDOR_PROFILE,
+            DEVELOPMENT_FORECAST_PROFILE,
+            DEVELOPMENT_FORECAST_V2_PROFILE,
+        }:
             conn.execute(
                 "INSERT INTO meta(key,value) VALUES (%s,%s)",
                 ("synthetic_multivendor_acceptance_contract", MULTIVENDOR_DEMO_CONTRACT),
@@ -1141,6 +1184,23 @@ def _publish_demo_marker(
             conn.execute(
                 "INSERT INTO meta(key,value) VALUES (%s,%s)",
                 (DEVELOPMENT_FORECAST_META_KEY, DEVELOPMENT_FORECAST_DEMO_CONTRACT),
+            )
+        if profile == DEVELOPMENT_FORECAST_V2_PROFILE:
+            registration = development_forecast_v2_registration()
+            conn.execute(
+                "INSERT INTO meta(key,value) VALUES (%s,%s),(%s,%s),(%s,%s)",
+                (
+                    DEVELOPMENT_FORECAST_META_KEY,
+                    DEVELOPMENT_FORECAST_V2_DEMO_CONTRACT,
+                    DEVELOPMENT_FORECAST_PROFILE_META_KEY,
+                    DEVELOPMENT_FORECAST_V2_PROFILE,
+                    DEVELOPMENT_FORECAST_REGISTRATION_META_KEY,
+                    json.dumps(
+                        registration,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
             )
 
 
@@ -1176,6 +1236,8 @@ def _verify_initialized_demo(
                     "synthetic_owner_demo_sales_backfill_id",
                     "synthetic_multivendor_acceptance_contract",
                     DEVELOPMENT_FORECAST_META_KEY,
+                    DEVELOPMENT_FORECAST_PROFILE_META_KEY,
+                    DEVELOPMENT_FORECAST_REGISTRATION_META_KEY,
                 ],
             ),
         ).fetchall()
@@ -1186,7 +1248,11 @@ def _verify_initialized_demo(
         != business_date.isoformat()
         or not metadata.get("synthetic_owner_demo_sales_backfill_id")
         or (
-            profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}
+            profile in {
+                MULTIVENDOR_PROFILE,
+                DEVELOPMENT_FORECAST_PROFILE,
+                DEVELOPMENT_FORECAST_V2_PROFILE,
+            }
             and metadata.get("synthetic_multivendor_acceptance_contract")
             != MULTIVENDOR_DEMO_CONTRACT
         )
@@ -1200,8 +1266,31 @@ def _verify_initialized_demo(
             != DEVELOPMENT_FORECAST_DEMO_CONTRACT
         )
         or (
-            profile != DEVELOPMENT_FORECAST_PROFILE
+            profile
+            not in {DEVELOPMENT_FORECAST_PROFILE, DEVELOPMENT_FORECAST_V2_PROFILE}
             and DEVELOPMENT_FORECAST_META_KEY in metadata
+        )
+        or (
+            profile == DEVELOPMENT_FORECAST_V2_PROFILE
+            and (
+                metadata.get(DEVELOPMENT_FORECAST_META_KEY)
+                != DEVELOPMENT_FORECAST_V2_DEMO_CONTRACT
+                or metadata.get(DEVELOPMENT_FORECAST_PROFILE_META_KEY)
+                != DEVELOPMENT_FORECAST_V2_PROFILE
+                or metadata.get(DEVELOPMENT_FORECAST_REGISTRATION_META_KEY)
+                != json.dumps(
+                    development_forecast_v2_registration(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+        )
+        or (
+            profile != DEVELOPMENT_FORECAST_V2_PROFILE
+            and (
+                DEVELOPMENT_FORECAST_PROFILE_META_KEY in metadata
+                or DEVELOPMENT_FORECAST_REGISTRATION_META_KEY in metadata
+            )
         )
     ):
         raise RuntimeError("synthetic demo metadata differs")
@@ -1358,15 +1447,35 @@ def _verify_initialized_demo(
         business_date=business_date,
         sales_backfill_id=sales_backfill_uuid,
         include_multivendor=profile
-        in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE},
+        in {
+            MULTIVENDOR_PROFILE,
+            DEVELOPMENT_FORECAST_PROFILE,
+            DEVELOPMENT_FORECAST_V2_PROFILE,
+        },
+        development_profile=(
+            profile
+            if profile in {
+                DEVELOPMENT_FORECAST_PROFILE,
+                DEVELOPMENT_FORECAST_V2_PROFILE,
+            }
+            else None
+        ),
     )
     _verify_synthetic_inventory_corpus(
         conn,
         business_date=business_date,
         include_multivendor=profile
-        in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE},
+        in {
+            MULTIVENDOR_PROFILE,
+            DEVELOPMENT_FORECAST_PROFILE,
+            DEVELOPMENT_FORECAST_V2_PROFILE,
+        },
     )
-    if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
+    if profile in {
+        MULTIVENDOR_PROFILE,
+        DEVELOPMENT_FORECAST_PROFILE,
+        DEVELOPMENT_FORECAST_V2_PROFILE,
+    }:
         western_rows = conn.execute(
             """SELECT v.variant_id,o.supplier_sku,o.raw_pack,
                       o.shopify_units_per_case,o.qualifying_units_per_case,
@@ -1407,18 +1516,45 @@ def _verify_initialized_demo(
             True,Decimal("3"),"FABRICATED MULTIVENDOR ACCEPTANCE",
         ):
             raise RuntimeError("synthetic multivendor vendor terms differ")
-    if profile == DEVELOPMENT_FORECAST_PROFILE:
+    if profile in {DEVELOPMENT_FORECAST_PROFILE, DEVELOPMENT_FORECAST_V2_PROFILE}:
         forecast_calendars = conn.execute(
             """SELECT vendor_id::text,order_days,expected_delivery_days,
+                      order_cutoff_local::text,timezone_name,
                       order_cycle_days,lead_time_days,lead_time_variability_days
                  FROM vendor_operating_rules
                 WHERE vendor_id=ANY(%s)
                 ORDER BY vendor_id""",
             ([VENDOR_ID, WESTERN_VENDOR_ID],),
         ).fetchall()
+        expected_southern_cycle = (
+            14 if profile == DEVELOPMENT_FORECAST_V2_PROFILE else 7
+        )
+        expected_cutoff = (
+            "17:00:00"
+            if profile == DEVELOPMENT_FORECAST_V2_PROFILE
+            else "23:59:59"
+        )
         if forecast_calendars != [
-            (VENDOR_ID,["MONDAY"],["THURSDAY"],7,1,Decimal("0")),
-            (WESTERN_VENDOR_ID,["MONDAY","WEDNESDAY"],["THURSDAY"],2,1,Decimal("0")),
+            (
+                VENDOR_ID,
+                ["MONDAY"],
+                ["THURSDAY"],
+                expected_cutoff,
+                "America/New_York",
+                expected_southern_cycle,
+                1,
+                Decimal("0"),
+            ),
+            (
+                WESTERN_VENDOR_ID,
+                ["MONDAY", "WEDNESDAY"],
+                ["THURSDAY"],
+                expected_cutoff,
+                "America/New_York",
+                2,
+                1,
+                Decimal("0"),
+            ),
         ]:
             raise RuntimeError("development forecast vendor calendars differ")
     expected = _stale_v1_fixture_values(business_date)
@@ -1499,6 +1635,7 @@ def initialize(
         BASELINE_PROFILE,
         MULTIVENDOR_PROFILE,
         DEVELOPMENT_FORECAST_PROFILE,
+        DEVELOPMENT_FORECAST_V2_PROFILE,
     }:
         raise RuntimeError("synthetic demo profile is not registered")
     if business_date != _registered_business_date():
@@ -1536,10 +1673,16 @@ def initialize(
         for name in legacy_names[:11]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
         _seed_pre_price(conn, business_date)
-        if profile in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE}:
+        if profile in {
+            MULTIVENDOR_PROFILE,
+            DEVELOPMENT_FORECAST_PROFILE,
+            DEVELOPMENT_FORECAST_V2_PROFILE,
+        }:
             _seed_multivendor_pre_price(conn, business_date)
-        if profile == DEVELOPMENT_FORECAST_PROFILE:
-            _configure_development_forecast_vendor_calendars(conn, business_date)
+        if profile in {DEVELOPMENT_FORECAST_PROFILE, DEVELOPMENT_FORECAST_V2_PROFILE}:
+            _configure_development_forecast_vendor_calendars(
+                conn, business_date, profile=profile
+            )
         for name in legacy_names[11:]:
             _apply_legacy(conn, name, schema_oid=schema_oid)
         with conn.transaction():
@@ -1549,7 +1692,19 @@ def initialize(
             conn,
             business_date,
             include_multivendor=profile
-            in {MULTIVENDOR_PROFILE, DEVELOPMENT_FORECAST_PROFILE},
+            in {
+                MULTIVENDOR_PROFILE,
+                DEVELOPMENT_FORECAST_PROFILE,
+                DEVELOPMENT_FORECAST_V2_PROFILE,
+            },
+            development_profile=(
+                profile
+                if profile in {
+                    DEVELOPMENT_FORECAST_PROFILE,
+                    DEVELOPMENT_FORECAST_V2_PROFILE,
+                }
+                else None
+            ),
         )
         _seed_stale_v1_fixture(conn, business_date)
         with conn.transaction():
@@ -1592,6 +1747,7 @@ def main() -> None:
             BASELINE_PROFILE,
             MULTIVENDOR_PROFILE,
             DEVELOPMENT_FORECAST_PROFILE,
+            DEVELOPMENT_FORECAST_V2_PROFILE,
         ),
         default=BASELINE_PROFILE,
     )

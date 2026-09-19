@@ -22,6 +22,10 @@ from procurement_os import recommendations
 from procurement_os.draft_po import build_vendor_drafts, preview_vendor_drafts
 from procurement_os.development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
+    V2_METHOD_VERSION as DEVELOPMENT_FORECAST_V2_METHOD_VERSION,
+    development_forecast_v2_registration,
+    validate_development_baseline_need_context,
     validate_development_forecast_evidence,
 )
 from procurement_os.emergency_packet import build_emergency_review_packet
@@ -278,6 +282,79 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             (json.dumps(evidence, sort_keys=True),),
         ).fetchall()
         self.assertEqual(updated, [("PASS",)])
+
+    def _activate_v2_forecast_fixture(self, conn) -> None:
+        initializer._configure_development_forecast_vendor_calendars(
+            conn,
+            BUSINESS_DATE,
+            profile=initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+        )
+        variant_ids = (
+            initializer.VARIANT_ID,
+            initializer.CONTROL_VARIANT_ID,
+            *initializer.WESTERN_VARIANT_IDS,
+        )
+        history_start = BUSINESS_DATE - timedelta(days=138)
+        history_end = BUSINESS_DATE - timedelta(days=1)
+        with conn.transaction():
+            conn.execute("DELETE FROM sales_daily WHERE source='SYNTHETIC_TEST'")
+            for offset in range(138):
+                sale_date = history_start + timedelta(days=offset)
+                for variant_id in variant_ids:
+                    if variant_id in {"4001", "4002"}:
+                        units = Decimal("2") if offset % 3 in {0, 1} else Decimal("0")
+                    else:
+                        units = Decimal("2")
+                    conn.execute(
+                        """INSERT INTO sales_daily(
+                                   sale_date,variant_id,units_sold,net_sales,source)
+                            VALUES (%s,%s,%s,%s,'SYNTHETIC_TEST')""",
+                        (sale_date, variant_id, units, units * Decimal("4.99")),
+                    )
+            coverage = {}
+            for variant_id in variant_ids:
+                rows = conn.execute(
+                    """SELECT sale_date,units_sold,net_sales,distinct_orders,source,
+                              run_id::text
+                         FROM sales_daily
+                        WHERE variant_id=%s AND source='SYNTHETIC_TEST'
+                          AND sale_date BETWEEN %s AND %s
+                        ORDER BY sale_date,source""",
+                    (variant_id, history_start, history_end),
+                ).fetchall()
+                self.assertEqual(len(rows), 138)
+                coverage[str(variant_id)] = {
+                    "row_count": 138,
+                    "sha256": recommendations._sales_coverage_digest(rows),
+                }
+            evidence = {
+                "coverage_contract": "DISPOSABLE_SYNTHETIC_DAILY_VARIANT_COVERAGE_V1",
+                "source": "SYNTHETIC_TEST",
+                "sales_rows": 138 * len(variant_ids),
+                "variant_count": len(variant_ids),
+                "history_start": history_start.isoformat(),
+                "history_end": history_end.isoformat(),
+                "variant_coverage": coverage,
+            }
+            conn.execute(
+                """UPDATE readiness_gates
+                      SET evidence_json=%s::jsonb,checked_at=transaction_timestamp()
+                    WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL'
+                      AND scope_id=''""",
+                (json.dumps(evidence, sort_keys=True),),
+            )
+            registration = development_forecast_v2_registration()
+            conn.execute(
+                """INSERT INTO meta(key,value) VALUES (%s,%s),(%s,%s),(%s,%s)""",
+                (
+                    initializer.DEVELOPMENT_FORECAST_META_KEY,
+                    initializer.DEVELOPMENT_FORECAST_V2_DEMO_CONTRACT,
+                    initializer.DEVELOPMENT_FORECAST_PROFILE_META_KEY,
+                    initializer.DEVELOPMENT_FORECAST_V2_PROFILE,
+                    initializer.DEVELOPMENT_FORECAST_REGISTRATION_META_KEY,
+                    json.dumps(registration, sort_keys=True, separators=(",", ":")),
+                ),
+            )
 
     def _connection(self):
         return psycopg.connect(self.mapping_url)
@@ -691,7 +768,9 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
     def test_development_forecast_calculation_drives_recommendation_and_packet(self):
         with self._connection() as conn:
             initializer._configure_development_forecast_vendor_calendars(
-                conn, BUSINESS_DATE
+                conn,
+                BUSINESS_DATE,
+                profile=initializer.DEVELOPMENT_FORECAST_PROFILE,
             )
         batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
         self._apply(batch_id, key="focused-development-price-apply-v1")
@@ -823,6 +902,13 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                 "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID",
             ):
                 classify_frozen_manifest(json.dumps(malformed, sort_keys=True))
+            mixed_method = json.loads(manifest)
+            mixed_method["method_version"] = DEVELOPMENT_FORECAST_V2_METHOD_VERSION
+            with self.assertRaisesRegex(
+                SyntheticSelectedOfferError,
+                "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID",
+            ):
+                classify_frozen_manifest(json.dumps(mixed_method, sort_keys=True))
             conn.rollback()
             review_preview = preview_recommendation_review(
                 conn,
@@ -879,6 +965,253 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
         self.assertEqual(
             forecast_member["items"][0]["evidence_sha256"],
             evidence["sha256"],
+        )
+
+    def test_v2_h17_forecast_drives_selected_price_draft_and_bound_packet_need(self):
+        with self._connection() as conn:
+            self._activate_v2_forecast_fixture(conn)
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        self._apply(batch_id, key="focused-development-v2-price-apply")
+        self._select_fixture_offer()
+        with self._connection() as conn:
+            run = recommendations.prepare_monday_run(
+                conn,
+                business_date=BUSINESS_DATE,
+                idempotency_key="focused-development-forecast-monday-v2",
+                variant_ids=("1001",),
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(run["blockers"], [])
+        self.assertEqual(run["model_version"], DEVELOPMENT_FORECAST_V2_METHOD_VERSION)
+        recommendation = run["recommendations"][0]
+        metrics = recommendation["metrics"]
+        evidence = metrics["development_forecast_evidence"]
+        self.assertEqual(metrics["development_forecast_contract"], DEVELOPMENT_FORECAST_V2_CONTRACT)
+        self.assertEqual(
+            (
+                evidence["protection_calendar"]["current_order_receipt_date"],
+                evidence["protection_calendar"]["next_submission_date"],
+                evidence["protection_calendar"]["next_order_receipt_date"],
+                evidence["horizon_days"],
+                Decimal(evidence["point_forecast_units"]),
+                Decimal(evidence["protection_units"]),
+            ),
+            (
+                "2026-10-08",
+                "2026-10-19",
+                "2026-10-22",
+                17,
+                Decimal("34.0000"),
+                Decimal("0.0000"),
+            ),
+        )
+        self.assertEqual(
+            (
+                int(metrics["raw_need_units"]),
+                recommendation["recommended_cases"],
+                recommendation["recommended_units"],
+                Decimal(recommendation["unit_cost"]),
+            ),
+            (34, 6, 36, Decimal("5.0000000000")),
+        )
+        with self._connection() as conn:
+            manifest_text = conn.execute(
+                "SELECT procurement_input_manifest FROM runs WHERE run_id=%s",
+                (run["run_id"],),
+            ).fetchone()[0]
+            manifest = json.loads(manifest_text)
+            context = manifest["contexts"][0]
+            self.assertTrue(
+                validate_development_baseline_need_context(
+                    context,
+                    manifest_contract=DEVELOPMENT_FORECAST_V2_CONTRACT,
+                )
+            )
+            forged = json.loads(manifest_text)
+            forged["contexts"][0]["need"]["cases"] = 99
+            with self.assertRaisesRegex(
+                SyntheticSelectedOfferError,
+                "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID",
+            ):
+                classify_frozen_manifest(json.dumps(forged, sort_keys=True))
+            copied = json.loads(manifest_text)
+            copied["contexts"][0]["variant_id"] = "4001"
+            with self.assertRaisesRegex(
+                SyntheticSelectedOfferError,
+                "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID",
+            ):
+                classify_frozen_manifest(json.dumps(copied, sort_keys=True))
+            mixed_method = json.loads(manifest_text)
+            mixed_method["method_version"] = "DEVELOPMENT_ROLLING_ORIGIN_V1"
+            with self.assertRaisesRegex(
+                SyntheticSelectedOfferError,
+                "SYNTHETIC_SELECTED_OFFER_FROZEN_MANIFEST_INVALID",
+            ):
+                classify_frozen_manifest(json.dumps(mixed_method, sort_keys=True))
+            conn.rollback()
+            preview = preview_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=6,
+                approved_loose_units=0,
+                comment="",
+            )
+            review = record_recommendation_review(
+                conn,
+                recommendation_id=recommendation["recommendation_id"],
+                action="ACCEPT",
+                actor="synthetic:matrix-owner:01",
+                expected_input_fingerprint=run["input_fingerprint"],
+                approved_cases=6,
+                approved_loose_units=0,
+                comment="",
+                expected_review_preview_fingerprint=preview["preview_fingerprint"],
+            )
+            draft_preview = preview_vendor_drafts(
+                conn, run_id=run["run_id"], actor="synthetic:matrix-owner:01"
+            )
+            drafts = build_vendor_drafts(
+                conn,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+                expected_preview_fingerprint=draft_preview["preview_fingerprint"],
+                minimum_disposition=draft_preview["minimum_disposition"],
+            )
+            packet = build_emergency_review_packet(
+                conn,
+                storage=self.storage,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertEqual(review["approved_cases"], 6)
+        self.assertEqual(
+            (
+                drafts["drafts"][0]["lines"][0]["cases"],
+                Decimal(drafts["drafts"][0]["merchandise_total"]),
+                Decimal(drafts["drafts"][0]["po_total"]),
+            ),
+            (6, Decimal("180"), Decimal("180")),
+        )
+        with zipfile.ZipFile(
+            io.BytesIO(self.storage.get_bytes(packet["storage_key"]))
+        ) as archive:
+            self.assertEqual(len(archive.namelist()), 13)
+            forecast_member = json.loads(
+                archive.read("forecast-and-protection-evidence.json")
+            )
+        self.assertEqual(forecast_member["contract"], DEVELOPMENT_FORECAST_V2_CONTRACT)
+        self.assertEqual(
+            forecast_member["items"][0]["calculated_need_binding"],
+            context["development_baseline_need_binding"],
+        )
+
+    def test_v2_registration_history_and_schedule_drift_refuse_without_partial_run(self):
+        with self._connection() as conn:
+            self._activate_v2_forecast_fixture(conn)
+            registration = json.loads(
+                conn.execute(
+                    "SELECT value FROM meta WHERE key=%s",
+                    (initializer.DEVELOPMENT_FORECAST_REGISTRATION_META_KEY,),
+                ).fetchone()[0]
+            )
+            registration["policy_canonical_sha256"] = "0" * 64
+            conn.execute(
+                "UPDATE meta SET value=%s WHERE key=%s",
+                (
+                    json.dumps(registration, sort_keys=True, separators=(",", ":")),
+                    initializer.DEVELOPMENT_FORECAST_REGISTRATION_META_KEY,
+                ),
+            )
+            conn.commit()
+            with self.assertRaisesRegex(
+                recommendations.MondayRecommendationError,
+                "registration differs",
+            ):
+                recommendations.prepare_monday_run(
+                    conn,
+                    business_date=BUSINESS_DATE,
+                    idempotency_key="v2-registration-drift-refuses",
+                    variant_ids=("1001",),
+                    actor="synthetic:matrix-owner:01",
+                )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM runs WHERE idempotency_key=%s",
+                    ("v2-registration-drift-refuses",),
+                ).fetchone()[0],
+                0,
+            )
+            conn.rollback()
+
+    def test_v2_actual_service_context_changes_need_when_history_changes(self):
+        with self._connection() as conn:
+            self._activate_v2_forecast_fixture(conn)
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        self._apply(batch_id, key="focused-development-v2-history-price-apply")
+        self._select_fixture_offer()
+        with self._connection() as conn:
+            evaluation_at = recommendations._database_evaluation_at(conn)
+            conn.rollback()
+            first = recommendations._load_context(
+                conn,
+                business_date=BUSINESS_DATE,
+                variant_id="1001",
+                evaluation_at=evaluation_at,
+                offer_resolution_contract="SYNTHETIC_CONFIRMED_SELECTION_V1",
+                development_forecast_contract=DEVELOPMENT_FORECAST_V2_CONTRACT,
+            )
+            conn.rollback()
+            self.assertEqual((first["need"].raw_need_units, first["need"].cases), (34, 6))
+            evidence = conn.execute(
+                """SELECT evidence_json FROM readiness_gates
+                    WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL'
+                      AND scope_id=''"""
+            ).fetchone()[0]
+            conn.execute(
+                """UPDATE sales_daily SET units_sold=1,net_sales=4.99
+                    WHERE variant_id='1001' AND source='SYNTHETIC_TEST'
+                      AND sale_date BETWEEN %s AND %s""",
+                (BUSINESS_DATE - timedelta(days=138), BUSINESS_DATE - timedelta(days=1)),
+            )
+            rows = conn.execute(
+                """SELECT sale_date,units_sold,net_sales,distinct_orders,source,
+                          run_id::text
+                     FROM sales_daily
+                    WHERE variant_id='1001' AND source='SYNTHETIC_TEST'
+                      AND sale_date BETWEEN %s AND %s
+                    ORDER BY sale_date,source""",
+                (BUSINESS_DATE - timedelta(days=138), BUSINESS_DATE - timedelta(days=1)),
+            ).fetchall()
+            evidence["variant_coverage"]["1001"] = {
+                "row_count": 138,
+                "sha256": recommendations._sales_coverage_digest(rows),
+            }
+            conn.execute(
+                """UPDATE readiness_gates SET evidence_json=%s::jsonb
+                    WHERE gate_name='SALES_BACKFILL' AND scope_type='GLOBAL'
+                      AND scope_id=''""",
+                (json.dumps(evidence, sort_keys=True),),
+            )
+            conn.commit()
+            second = recommendations._load_context(
+                conn,
+                business_date=BUSINESS_DATE,
+                variant_id="1001",
+                evaluation_at=evaluation_at,
+                offer_resolution_contract="SYNTHETIC_CONFIRMED_SELECTION_V1",
+                development_forecast_contract=DEVELOPMENT_FORECAST_V2_CONTRACT,
+            )
+        self.assertEqual((second["need"].raw_need_units, second["need"].cases), (17, 3))
+        self.assertNotEqual(
+            first["development_forecast_evidence_sha256"],
+            second["development_forecast_evidence_sha256"],
+        )
+        self.assertNotEqual(
+            first["development_baseline_need_binding"]["sha256"],
+            second["development_baseline_need_binding"]["sha256"],
         )
 
     def test_review_rejects_authority_envelope_when_snapshot_lineage_is_missing(self):
