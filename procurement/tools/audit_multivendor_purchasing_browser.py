@@ -423,7 +423,7 @@ def _validate_initial_downloads(
                     or loose_need.get("cases") != 0
                     or loose_need.get("loose_units") != 4
                     or loose_need.get("ordered_units") != 4
-                    or loose_need.get("loose_fee") != "3"
+                    or loose_need.get("loose_fee") != "3.00"
                     or loose_blockers != [
                         "LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"
                     ]
