@@ -101,6 +101,22 @@ JSON types. Every derived field must match the recalculation:
 - loose fee; and
 - ordered reason codes.
 
+V2 also freezes a sibling `development_baseline_need_binding` with an exact
+contract, Variant ID, forecast-evidence SHA, need SHA, and a canonical digest
+over the frozen inputs used by the calculation: inventory and trusted
+incoming evidence, open-PO position, pack conversion, replenishment policy,
+vendor rules, and schedule/policy identities. The binding has its own outer
+SHA. Copying only the need fails its need SHA; copying the need and binding
+from another context fails the Variant ID and context-input digest. Missing,
+partial, or explicitly null V2 binding evidence refuses.
+
+V1 output remains byte-compatible and receives semantic recomputation from
+its historical context shape. The only historical missing-need shape retained
+is a context that stopped at an exact recognized blocker before emitting a
+recommendation; an actionable unblocked V1 context must contain and validate
+its need. V2 freezes the binding once need has been calculated even when a
+subsequent blocker prevents a recommendation.
+
 The validator is used by manifest classification, current-input validation,
 review, and packet assembly before `calculated_need` is emitted. Newly built
 manifests are also classified before persistence.
@@ -109,10 +125,6 @@ An owner review decision is a separate append-only layer. A valid confirmed
 `EDIT_QUANTITY` may differ from baseline need; its preview, material-risk
 confirmation where required, final tier, and run-snapshot lineage remain the
 authority for the approved DRAFT quantity.
-
-A byte-identical need from another context with identical authoritative inputs
-is semantically identical. A copied need whose forecast, inventory, pack,
-policy, or horizon differs is rejected.
 
 ## 5. Finding 4: complete ABC cohort
 
@@ -178,35 +190,44 @@ adapter. It contains exact contract/version, profile, timezone, validity,
 fabricated provenance, vendor identity, source/canonical hashes, and separate
 schedule components:
 
-- review opportunity recurrence;
-- submission opportunity recurrence;
+- review opportunity recurrence set;
+- submission opportunity recurrence set;
 - local submission cutoff;
-- delivery opportunity recurrence;
+- delivery opportunity recurrence set;
 - lead time and zero variability; and
 - explicit added and removed dates for each recurrence.
 
-Each recurrence has an anchor date, cadence in weeks, and weekday. Membership
-uses the signed whole-day distance from the anchor modulo `cadence_weeks * 7`.
-Parity is never inferred from the current date or weekday alone. Added and
-removed dates must be valid, disjoint, in scope, and use only the supported
-explicit exception form.
+Each opportunity set is a deterministic nonempty union of recurrence series.
+Each series has its own anchor date, cadence in weeks, and weekday. Membership
+uses the signed whole-day distance from that series' anchor modulo
+`cadence_weeks * 7`. This permits Western's explicit Monday and Wednesday
+weekly submission series without treating a weekday list as one ambiguous
+cycle. Duplicate occurrences coalesce; series IDs are unique; per-set added
+and removed dates are valid, disjoint, and in scope. Parity is never inferred
+from the current date or weekday alone.
 
 The V2 resolver:
 
 1. converts the server-owned evaluation instant into the declared timezone;
 2. requires the business date and evaluation local date to agree;
-3. requires a current review and submission occurrence before the explicit
-   cutoff;
+3. independently requires a current review occurrence and a current
+   submission occurrence before the explicit cutoff;
 4. resolves the receipt associated with the current submission;
-5. resolves the next review and submission occurrence;
-6. applies lead time and selects the first permitted delivery associated with
-   the next submission; and
-7. sets the protection horizon to the whole local-date interval from the
-   evaluation business date through the next-order receipt date.
+5. resolves the next review occurrence for frozen review-cycle evidence;
+6. independently resolves the next submission strictly after the current
+   submission; it need not also be a review occurrence;
+7. applies lead time and selects the first permitted delivery associated with
+   that next submission; and
+8. sets the protection horizon to the half-open whole-local-date interval
+   from the evaluation business date up to the next-order receipt date.
 
-The start date is day zero and demand targets contain the next `H` complete
-calendar dates after each forecast origin, matching the existing planner's
-half-open index slices. No demand day is omitted or counted twice.
+The schedule includes an exact local receipt-availability time. This bounded
+date-level engine accepts only start-of-day receipt availability; a later or
+missing time refuses because no intraday demand allocation is approved. The
+evaluation date is day zero and demand targets use the half-open local-date
+interval `[evaluation_date, next_order_receipt_date)`, matching the planner's
+index slices. The receipt is available at the start of the excluded boundary
+date, so no demand day is omitted or counted twice.
 
 For the fabricated Southern example:
 
@@ -214,7 +235,7 @@ For the fabricated Southern example:
 - current-order receipt: 2026-10-08;
 - next eligible submission: 2026-10-19;
 - next-order receipt: 2026-10-22; and
-- horizon: 17 days from 2026-10-05 to 2026-10-22.
+- horizon: `[2026-10-05, 2026-10-22)`, the 17 demand dates October 5-21.
 
 Review/submission are every other Monday anchored on 2026-10-05. Delivery is
 independently every other Thursday anchored on 2026-10-08. The evidence does
@@ -222,6 +243,11 @@ not claim that 2026-10-22 is the earliest receipt for the current order.
 
 The weekly Western control retains its Monday/Wednesday review/submission and
 Thursday delivery behavior, yielding H3 at the fixture evaluation instant.
+It uses two separately anchored weekly submission series, not one recurrence
+with interchangeable weekdays. Review eligibility and submission opportunity
+remain distinct: its evaluation is a Monday review, while Wednesday may be the
+next coverage-defining submission without being inferred from a next-review
+shortcut.
 
 Evidence freezes evaluation instant/business date, current submission and
 receipt, next submission and receipt, horizon, timezone, cutoff, validity,
@@ -245,6 +271,14 @@ The required input is the full 138 dated days. The theoretical adaptive lower
 bound `3H + 45` is documented only as derivation; it never admits shorter V2
 input while the fixed 38/38/34 partition is claimed.
 
+For the 2026-10-05 fixture, rows index `0..137` cover 2026-05-20 through
+2026-10-04. The exact fixed partitions are:
+
+- initial training `[0,28)`: May 20 through June 16;
+- selection `[28,66)`: June 17 through July 24;
+- calibration `[66,104)`: July 25 through August 31; and
+- evaluation `[104,138)`: September 1 through October 4.
+
 For a complete uncensored history, origin counts are:
 
 ```text
@@ -260,6 +294,17 @@ Required boundary counts are:
 | 3 | 36 | 36 | 32 |
 | 17 | 22 | 22 | 18 |
 | 31 | 8 | 8 | 4 |
+
+The corresponding complete-data origin indices are:
+
+- H3: selection `28..63`, calibration `66..101`, evaluation `104..135`;
+- H17: selection `28..49`, calibration `66..87`, evaluation `104..121`; and
+- H31: selection `28..35`, calibration `66..73`, evaluation `104..107`.
+
+Every target is the half-open interval `[origin, origin + H)`. The final H17
+forecast originates on October 5 and targets October 5-21, ending at the
+start-of-day October 22 receipt boundary. Tests derive counts and dates from
+the actual origin records rather than merely asserting these constants.
 
 At each origin, training is strictly the observations before the origin;
 the complete target interval is `[origin, origin + H)`. Selection,
