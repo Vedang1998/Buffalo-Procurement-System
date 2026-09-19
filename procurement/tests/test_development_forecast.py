@@ -11,6 +11,7 @@ from procurement_os.development_forecast import (
     calculate_calendar_protection_horizon,
     load_development_forecast_policy,
     plan_development_forecast,
+    validate_development_forecast_context_evidence,
     validate_development_forecast_evidence,
 )
 from procurement_os.forecasting import DemandObservation
@@ -124,6 +125,67 @@ class DevelopmentForecastTests(unittest.TestCase):
                 forecast_horizon_days=14,
                 protection_days_override=14,
             )
+        with self.assertRaisesRegex(
+            ValueError, "nonzero lead-time variability requires"
+        ):
+            calculate_development_baseline_need(
+                forecast_daily_velocity=plan.forecast_daily_velocity,
+                point_forecast_units=plan.point_forecast_units,
+                empirical_protection_units=plan.protection_units,
+                available_units="8",
+                trusted_incoming_units="2",
+                order_cycle_days=7,
+                lead_time_days=7,
+                lead_time_variability_days="2.5",
+                policy_mode="ROUTINE",
+                units_per_case=6,
+                loose_order_allowed=False,
+                loose_unit_fee=None,
+                forecast_horizon_days=17,
+            )
+        covered_one_bottle = calculate_development_baseline_need(
+            forecast_daily_velocity=plan.forecast_daily_velocity,
+            point_forecast_units=plan.point_forecast_units,
+            empirical_protection_units=plan.protection_units,
+            available_units="1",
+            trusted_incoming_units="0",
+            order_cycle_days=7,
+            lead_time_days=7,
+            lead_time_variability_days="0",
+            policy_mode="ONE_BOTTLE",
+            units_per_case=6,
+            loose_order_allowed=True,
+            loose_unit_fee="3",
+            forecast_horizon_days=14,
+        )
+        self.assertEqual(
+            (covered_one_bottle.status, covered_one_bottle.target_units, covered_one_bottle.ordered_units),
+            ("NO_ORDER_NEEDED", Decimal("0"), 0),
+        )
+        empty_one_bottle = calculate_development_baseline_need(
+            forecast_daily_velocity=plan.forecast_daily_velocity,
+            point_forecast_units=plan.point_forecast_units,
+            empirical_protection_units=plan.protection_units,
+            available_units="0",
+            trusted_incoming_units="0",
+            order_cycle_days=7,
+            lead_time_days=7,
+            lead_time_variability_days="0",
+            policy_mode="ONE_BOTTLE",
+            units_per_case=6,
+            loose_order_allowed=True,
+            loose_unit_fee="3",
+            forecast_horizon_days=14,
+        )
+        self.assertEqual(
+            (
+                empty_one_bottle.status,
+                empty_one_bottle.target_units,
+                empty_one_bottle.ordered_units,
+                empty_one_bottle.loose_fee,
+            ),
+            ("READY_FOR_REVIEW", Decimal("1"), 1, Decimal("3")),
+        )
 
     def test_changed_history_changes_the_calculated_purchase_quantity(self):
         needs = []
@@ -255,6 +317,24 @@ class DevelopmentForecastTests(unittest.TestCase):
         self.assertIn("INSUFFICIENT_CHRONOLOGICAL_WINDOWS", thin.evidence["reason_codes"])
 
     def test_returns_stockouts_and_unknown_availability_never_invent_state(self):
+        partitioned = plan_development_forecast(
+            observations([2] * 28, inventory_state="IN_STOCK")
+            + [
+                DemandObservation(
+                    START + timedelta(days=index), Decimal("2"), "UNKNOWN"
+                )
+                for index in range(28, 84)
+            ],
+            horizon_days=3,
+        )
+        self.assertEqual(partitioned.evidence["availability"]["proven_in_stock_days"], 28)
+        self.assertEqual(partitioned.evidence["availability"]["unknown_days"], 56)
+        self.assertEqual(
+            partitioned.evidence["protection"]["status"],
+            "CALCULATED_LIMITED_AVAILABILITY",
+        )
+        self.assertEqual(partitioned.confidence, "LOW")
+
         series = observations([2] * 84)
         series[10] = DemandObservation(series[10].business_date, Decimal("-8"), "UNKNOWN")
         series[20] = DemandObservation(series[20].business_date, Decimal("0"), "STOCKOUT")
@@ -375,9 +455,23 @@ class DevelopmentForecastTests(unittest.TestCase):
         )
 
     def test_evidence_hash_and_new_contract_fail_closed_on_tamper(self):
-        plan = plan_development_forecast(observations([2] * 84), horizon_days=14)
+        source_observations = observations([2] * 84)
+        plan = plan_development_forecast(source_observations, horizon_days=14)
         frozen = plan.to_json_dict()
         self.assertTrue(validate_development_forecast_evidence(frozen))
+        frozen_observations = [
+            {
+                "business_date": item.business_date.isoformat(),
+                "net_units": str(item.net_units),
+                "inventory_state": item.inventory_state,
+            }
+            for item in source_observations
+        ]
+        self.assertTrue(
+            validate_development_forecast_context_evidence(
+                frozen, frozen_observations
+            )
+        )
         for mutation in (
             lambda value: value.pop("policy"),
             lambda value: value.pop("protection_calendar"),
@@ -454,6 +548,21 @@ class DevelopmentForecastTests(unittest.TestCase):
         blocked["candidates"] = [{"name": "not-a-candidate"}]
         rehash(blocked)
         self.assertFalse(validate_development_forecast_evidence(blocked))
+
+        derived_tamper = plan.to_json_dict()
+        derived_tamper["point_forecast_units"] = "42.0000"
+        derived_tamper["forecast_daily_velocity"] = "3.000000"
+        derived_tamper["target_units"] = str(
+            Decimal("42.0000")
+            + Decimal(derived_tamper["protection_units"])
+        )
+        rehash(derived_tamper)
+        self.assertTrue(validate_development_forecast_evidence(derived_tamper))
+        self.assertFalse(
+            validate_development_forecast_context_evidence(
+                derived_tamper, frozen_observations
+            )
+        )
 
 
 if __name__ == "__main__":

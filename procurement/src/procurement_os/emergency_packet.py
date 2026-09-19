@@ -14,7 +14,7 @@ import zipfile
 
 from .development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
-    validate_development_forecast_evidence,
+    validate_development_forecast_context_evidence,
 )
 from .draft_po import SAFETY_LABEL, get_vendor_drafts
 from .po_csv import FORMAT_WARNING, write_vendor_draft_csvs
@@ -444,7 +444,10 @@ def build_emergency_review_packet(
             if status in {"READY", "BLOCKED"}:
                 evidence = context.get("development_forecast_evidence")
                 if (
-                    not validate_development_forecast_evidence(evidence)
+                    not validate_development_forecast_context_evidence(
+                        evidence,
+                        context.get("demand_observations"),
+                    )
                     or evidence.get("status") != status
                     or evidence.get("sha256")
                     != context.get("development_forecast_evidence_sha256")

@@ -795,7 +795,8 @@ def _metrics(
 
 
 def _objective(metrics: _Metrics) -> Decimal:
-    return metrics.wape if metrics.wape is not None else metrics.mae
+    value = metrics.wape if metrics.wape is not None else metrics.mae
+    return value.quantize(METRIC, rounding=ROUND_HALF_UP)
 
 
 def _rolling_candidate(
@@ -1255,7 +1256,10 @@ def plan_development_forecast(
             "minimum_proven_in_stock_days_for_full_protection"
         ]
     )
-    availability_limited = proven_in_stock_days < minimum_proven_in_stock_days
+    availability_limited = (
+        unknown_days > 0
+        or proven_in_stock_days < minimum_proven_in_stock_days
+    )
     intermittent_threshold = _decimal(
         active_policy.values["tsb"]["intermittent_zero_share"],
         "tsb.intermittent_zero_share",
@@ -1362,7 +1366,11 @@ def plan_development_forecast(
         UNITS, rounding=ROUND_HALF_UP
     )
     target = (point_forecast + protection).quantize(UNITS, rounding=ROUND_HALF_UP)
-    evaluation_wape = evaluation.wape
+    evaluation_wape = (
+        None
+        if evaluation.wape is None
+        else evaluation.wape.quantize(METRIC, rounding=ROUND_HALF_UP)
+    )
     confidence = (
         "HIGH"
         if evaluation_status == "SUFFICIENT"
@@ -1625,6 +1633,24 @@ def validate_development_forecast_evidence(value: Any) -> bool:
         else:
             return False
 
+        windows = active_policy.values["windows"]
+        selection_evaluation_start = history_days - int(
+            windows["evaluation_days"]
+        )
+        selection_calibration_start = selection_evaluation_start - int(
+            windows["calibration_days"]
+        )
+        selection_start = max(
+            int(windows["minimum_training_days"]),
+            selection_calibration_start - int(windows["selection_origin_days"]),
+        )
+        last_selection_origin = (
+            selection_calibration_start - int(value["horizon_days"])
+        )
+        selection_date_min = history_start + timedelta(days=selection_start)
+        selection_date_max = history_start + timedelta(
+            days=last_selection_origin
+        )
         expected_candidates = list(active_policy.values["candidate_order"])
         if candidates and [item.get("name") for item in candidates] != expected_candidates:
             return False
@@ -1647,6 +1673,11 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             reasons = item.get("reason_codes")
             origins = item.get("selection_origin_dates")
             metrics = item.get("selection_metrics")
+            parsed_origins = (
+                [date.fromisoformat(str(origin)) for origin in origins]
+                if isinstance(origins, list)
+                else []
+            )
             if not (
                 set(item) == expected_candidate_keys
                 and item.get("name") in expected_candidates
@@ -1656,7 +1687,13 @@ def validate_development_forecast_evidence(value: Any) -> bool:
                 and len(reasons) == len(set(reasons))
                 and isinstance(origins, list)
                 and len(origins) == len(set(origins))
-                and all(date.fromisoformat(str(origin)) for origin in origins)
+                and parsed_origins == sorted(parsed_origins)
+                and all(
+                    selection_date_min <= origin <= selection_date_max
+                    for origin in parsed_origins
+                )
+                and len(parsed_origins)
+                <= max(0, last_selection_origin - selection_start + 1)
                 and item.get("forecast_horizon_days") == value["horizon_days"]
                 and isinstance(item.get("postprocessing_cap_hits"), int)
                 and item["postprocessing_cap_hits"] >= 0
@@ -1674,15 +1711,15 @@ def validate_development_forecast_evidence(value: Any) -> bool:
                     and metrics.get("observation_count") == len(origins)
                     and len(origins)
                     >= int(active_policy.values["windows"]["minimum_selection_origins"])
-                    and Decimal(str(metrics.get("bias"))).is_finite()
-                    and Decimal(str(metrics.get("mae"))) >= 0
+                    and _decimal(metrics.get("bias"), "selection bias").is_finite()
+                    and _decimal(metrics.get("mae"), "selection mae") >= 0
                     and (
                         metrics.get("wape") is None
-                        or Decimal(str(metrics.get("wape"))) >= 0
+                        or _decimal(metrics.get("wape"), "selection wape") >= 0
                     )
                     and (
                         metrics.get("mase") is None
-                        or Decimal(str(metrics.get("mase"))) >= 0
+                        or _decimal(metrics.get("mase"), "selection mase") >= 0
                     )
                 ):
                     return False
@@ -1700,7 +1737,10 @@ def validate_development_forecast_evidence(value: Any) -> bool:
 
         def metric_objective(metrics: Mapping[str, Any]) -> Decimal:
             raw = metrics.get("wape")
-            return Decimal(str(metrics.get("mae") if raw is None else raw))
+            return _decimal(
+                metrics.get("mae") if raw is None else raw,
+                "selection objective",
+            )
 
         expected_selected_model: str | None = None
         expected_fva_reason: str | None = None
@@ -1781,8 +1821,8 @@ def validate_development_forecast_evidence(value: Any) -> bool:
                 and baseline_metrics is None
             )
             if not (
-                Decimal(str(value.get("forecast_daily_velocity"))) == 0
-                and Decimal(str(value.get("point_forecast_units"))) == 0
+                _decimal(value.get("forecast_daily_velocity"), "forecast velocity") == 0
+                and _decimal(value.get("point_forecast_units"), "point forecast") == 0
                 and value.get("protection_units") is None
                 and value.get("target_units") is None
                 and value.get("confidence") == "LOW"
@@ -1820,7 +1860,7 @@ def validate_development_forecast_evidence(value: Any) -> bool:
         evaluation_count = value.get("evaluation_origin_count")
         minimum_evaluation = value.get("minimum_evaluation_origin_count")
         evaluation_status = value.get("evaluation_status")
-        point = Decimal(str(value.get("point_forecast_units")))
+        point = _decimal(value.get("point_forecast_units"), "point forecast")
         availability = value.get("availability")
         if not isinstance(availability, dict):
             return False
@@ -1890,15 +1930,15 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             and isinstance(evaluation_metrics, dict)
             and set(evaluation_metrics)
             == {"observation_count", "bias", "mae", "wape", "mase"}
-            and Decimal(str(evaluation_metrics.get("bias"))).is_finite()
-            and Decimal(str(evaluation_metrics.get("mae"))) >= 0
+            and _decimal(evaluation_metrics.get("bias"), "evaluation bias").is_finite()
+            and _decimal(evaluation_metrics.get("mae"), "evaluation mae") >= 0
             and (
                 evaluation_metrics.get("wape") is None
-                or Decimal(str(evaluation_metrics.get("wape"))) >= 0
+                or _decimal(evaluation_metrics.get("wape"), "evaluation wape") >= 0
             )
             and (
                 evaluation_metrics.get("mase") is None
-                or Decimal(str(evaluation_metrics.get("mase"))) >= 0
+                or _decimal(evaluation_metrics.get("mase"), "evaluation mase") >= 0
             )
             and set(availability)
             == {
@@ -1934,13 +1974,16 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             == minimum_in_stock_days
         ):
             return False
-        availability_limited = proven_in_stock_days < minimum_in_stock_days
+        availability_limited = (
+            unknown_days > 0 or proven_in_stock_days < minimum_in_stock_days
+        )
         if availability.get("protection_qualification") != (
             "LIMITED" if availability_limited else "FULL"
         ):
             return False
         shortfalls = [
-            Decimal(str(item)) for item in protection.get("shortfalls", [])
+            _decimal(item, "protection shortfall")
+            for item in protection.get("shortfalls", [])
         ]
         quantile = _decimal(protection.get("quantile"), "protection.quantile")
         protection_keys = {
@@ -1959,6 +2002,23 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             protection_keys.add("units")
         origin_dates = protection.get("origin_dates")
         censored_dates = protection.get("censored_stockout_origin_dates")
+        last_calibration_origin = (
+            expected_evaluation_start - int(value["horizon_days"])
+        )
+        expected_calibration_dates = [
+            history_date(index)
+            for index in range(
+                expected_calibration_start,
+                last_calibration_origin + 1,
+            )
+        ]
+        maximum_evaluation_origins = max(
+            0,
+            history_days
+            - int(value["horizon_days"])
+            - expected_evaluation_start
+            + 1,
+        )
         if not (
             set(protection) == protection_keys
             and quantile
@@ -1974,17 +2034,21 @@ def validate_development_forecast_evidence(value: Any) -> bool:
             )
             and isinstance(origin_dates, list)
             and len(origin_dates) == len(set(origin_dates)) == len(shortfalls)
+            and origin_dates == sorted(origin_dates)
             and all(
                 history_start <= date.fromisoformat(str(item)) <= history_end
                 for item in origin_dates
             )
             and isinstance(censored_dates, list)
             and len(censored_dates) == len(set(censored_dates))
+            and censored_dates == sorted(censored_dates)
             and all(
                 history_start <= date.fromisoformat(str(item)) <= history_end
                 for item in censored_dates
             )
             and not set(origin_dates).intersection(censored_dates)
+            and sorted(origin_dates + censored_dates)
+            == expected_calibration_dates
             and protection.get("censored_stockout_origin_count")
             == len(censored_dates)
         ):
@@ -1992,6 +2056,7 @@ def validate_development_forecast_evidence(value: Any) -> bool:
         if not (
             isinstance(evaluation_count, int)
             and evaluation_count > 0
+            and evaluation_count <= maximum_evaluation_origins
             and isinstance(minimum_evaluation, int)
             and minimum_evaluation
             == int(active_policy.values["windows"]["minimum_evaluation_origins"])
@@ -2070,13 +2135,15 @@ def validate_development_forecast_evidence(value: Any) -> bool:
                 return False
             return True
 
-        protection_units = Decimal(str(value.get("protection_units")))
-        target = Decimal(str(value.get("target_units")))
+        protection_units = _decimal(
+            value.get("protection_units"), "protection units"
+        )
+        target = _decimal(value.get("target_units"), "target units")
         evaluation_wape_raw = value["evaluation_metrics"].get("wape")
         evaluation_wape = (
             None
             if evaluation_wape_raw is None
-            else Decimal(str(evaluation_wape_raw))
+            else _decimal(evaluation_wape_raw, "evaluation wape")
         )
         expected_confidence = (
             "HIGH"
@@ -2146,6 +2213,57 @@ def validate_development_forecast_evidence(value: Any) -> bool:
         TypeError,
         ValueError,
     ):
+        return False
+
+
+def validate_development_forecast_context_evidence(
+    value: Any,
+    frozen_observations: Any,
+) -> bool:
+    """Replan one frozen context and require byte-equivalent forecast evidence.
+
+    The detached evidence object contains only an input digest, so structural
+    validation alone cannot prove model-derived values.  Monday manifests and
+    packets already freeze the complete observation projection; this boundary
+    reconstructs it, verifies the digest, and deterministically reruns V1.
+    """
+
+    if not validate_development_forecast_evidence(value):
+        return False
+    if not isinstance(value, dict) or not isinstance(frozen_observations, list):
+        return False
+    try:
+        parsed: list[DemandObservation] = []
+        input_rows: list[dict[str, Any]] = []
+        for raw in frozen_observations:
+            if not isinstance(raw, dict) or set(raw) != {
+                "business_date",
+                "net_units",
+                "inventory_state",
+            }:
+                return False
+            business_date = date.fromisoformat(str(raw["business_date"]))
+            net_units = _decimal(raw["net_units"], "net_units")
+            inventory_state = str(raw["inventory_state"])
+            parsed.append(
+                DemandObservation(business_date, net_units, inventory_state)
+            )
+            input_rows.append(
+                {
+                    "business_date": business_date,
+                    "net_units": net_units,
+                    "inventory_state": inventory_state,
+                }
+            )
+        if canonical_evidence_sha256(input_rows) != value.get("input_sha256"):
+            return False
+        replanned = plan_development_forecast(
+            parsed,
+            horizon_days=int(value["horizon_days"]),
+            protection_calendar=value["protection_calendar"],
+        ).to_json_dict()
+        return canonical_evidence_json(replanned) == canonical_evidence_json(value)
+    except (DevelopmentForecastError, KeyError, TypeError, ValueError):
         return False
 
 

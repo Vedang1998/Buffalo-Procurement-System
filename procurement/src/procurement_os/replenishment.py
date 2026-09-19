@@ -193,7 +193,7 @@ def calculate_development_baseline_need(
     )
     assert point is not None and protection is not None
     assert variability is not None
-    if protection_days_override is not None and variability != 0:
+    if variability != 0:
         raise ValueError(
             "nonzero lead-time variability requires a validated delivery-delay model"
         )
@@ -214,6 +214,9 @@ def calculate_development_baseline_need(
         open_po_blocked=open_po_blocked,
         protection_days_override=protection_days_override,
     )
+    normalized_mode = (policy_mode or "").strip().upper()
+    if normalized_mode == "ONE_BOTTLE":
+        return result
     if result.status not in {"READY_FOR_REVIEW", "NO_ORDER_NEEDED"}:
         return result
     if result.target_units != target:

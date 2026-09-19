@@ -22,7 +22,7 @@ from psycopg.rows import dict_row
 
 from .development_forecast import (
     CONTRACT as DEVELOPMENT_FORECAST_CONTRACT,
-    validate_development_forecast_evidence,
+    validate_development_forecast_context_evidence,
 )
 from .monday_forecast_retirement import (
     RETIRED_METHOD_VERSION,
@@ -784,7 +784,10 @@ def _valid_frozen_development_forecast_context(
     evidence = context.get("development_forecast_evidence")
     evidence_sha256 = context.get("development_forecast_evidence_sha256")
     if (
-        not validate_development_forecast_evidence(evidence)
+        not validate_development_forecast_context_evidence(
+            evidence,
+            context.get("demand_observations"),
+        )
         or not isinstance(evidence, dict)
         or evidence.get("status") != status
         or evidence.get("sha256") != evidence_sha256
