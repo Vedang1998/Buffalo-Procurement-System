@@ -228,8 +228,10 @@ def calculate_calendar_protection_horizon(
 
     The current order opportunity is already being evaluated.  Protection
     therefore runs until the first permitted receipt following the *next*
-    confirmed order opportunity, plus the explicit whole-day variability
-    allowance.  No request date or caller-selected horizon participates.
+    confirmed order opportunity.  Lead-time variability remains explicit
+    evidence but is not converted into a second demand allowance; empirical
+    full-horizon shortfalls provide the only protection addition.  No request
+    date or caller-selected horizon participates.
     """
 
     if evaluation_at.tzinfo is None:
@@ -294,7 +296,7 @@ def calculate_calendar_protection_horizon(
         raise DevelopmentForecastError("next delivery opportunity is unavailable")
     calendar_days = (next_receipt - local_evaluation.date()).days
     variability_days = int(variability.to_integral_value(rounding=ROUND_CEILING))
-    horizon_days = calendar_days + variability_days
+    horizon_days = calendar_days
     if horizon_days < 1 or horizon_days > 31:
         raise DevelopmentForecastError("calendar protection horizon is outside bounds")
     return {
@@ -315,6 +317,7 @@ def calculate_calendar_protection_horizon(
         "calendar_days_until_receipt": calendar_days,
         "lead_time_variability_days": str(variability),
         "variability_days_ceiling": variability_days,
+        "variability_treatment": "EVIDENCE_ONLY_NOT_DEMAND_HORIZON",
         "horizon_days": horizon_days,
     }
 
@@ -399,6 +402,7 @@ def load_development_forecast_policy(
         {
             "calibration_days",
             "evaluation_days",
+            "minimum_evaluation_origins",
             "minimum_selection_origins",
             "minimum_training_days",
             "selection_origin_days",
@@ -711,8 +715,8 @@ def _rolling_candidate(
 ) -> tuple[dict[str, Any], _Metrics | None]:
     actuals: list[Decimal] = []
     forecasts: list[Decimal] = []
+    origin_dates: list[str] = []
     cap_hits = 0
-    inapplicable_reasons: set[str] = set()
     try:
         for origin in origins:
             target_window = ordered[origin : origin + horizon]
@@ -727,8 +731,15 @@ def _rolling_candidate(
                     category_daily_velocity,
                 )
             except _InapplicableModel as exc:
-                inapplicable_reasons.add(str(exc))
-                continue
+                return {
+                    "name": name,
+                    "status": "INAPPLICABLE",
+                    "reason_codes": [str(exc)],
+                    "selection_metrics": None,
+                    "selection_origin_dates": origin_dates,
+                    "postprocessing_cap_hits": cap_hits,
+                    "forecast_horizon_days": horizon,
+                }, None
             bounded, cap_hit, _rate_cap = _postprocess_predictions(
                 predictions,
                 origin_history=normalized[:origin],
@@ -740,12 +751,14 @@ def _rolling_candidate(
                 sum(normalized[origin : origin + horizon], Decimal("0"))
             )
             forecasts.append(prediction)
+            origin_dates.append(ordered[origin].business_date.isoformat())
     except Exception as exc:
         return {
             "name": name,
             "status": "FAILED",
             "reason_codes": [f"MODEL_EXECUTION_FAILED:{type(exc).__name__}"],
             "selection_metrics": None,
+            "selection_origin_dates": origin_dates,
             "postprocessing_cap_hits": cap_hits,
             "forecast_horizon_days": horizon,
         }, None
@@ -754,11 +767,9 @@ def _rolling_candidate(
         return {
             "name": name,
             "status": "INAPPLICABLE",
-            "reason_codes": [
-                "INSUFFICIENT_SELECTION_ORIGINS",
-                *sorted(inapplicable_reasons),
-            ],
+            "reason_codes": ["INSUFFICIENT_SELECTION_ORIGINS"],
             "selection_metrics": None,
+            "selection_origin_dates": origin_dates,
             "postprocessing_cap_hits": cap_hits,
             "forecast_horizon_days": horizon,
         }, None
@@ -768,6 +779,7 @@ def _rolling_candidate(
         "status": "ELIGIBLE",
         "reason_codes": [],
         "selection_metrics": result.to_json_dict(),
+        "selection_origin_dates": origin_dates,
         "postprocessing_cap_hits": cap_hits,
         "forecast_horizon_days": horizon,
     }, result
@@ -827,7 +839,6 @@ def plan_development_forecast(
     *,
     horizon_days: int,
     protection_calendar: Mapping[str, Any] | None = None,
-    category_daily_velocity: object | None = None,
     policy: DevelopmentForecastPolicy | None = None,
 ) -> DevelopmentForecastPlan:
     """Build a leak-free development forecast and empirical protection plan."""
@@ -837,13 +848,11 @@ def plan_development_forecast(
         raise DevelopmentForecastError("horizon_days exceeds the development bound")
     active_policy = policy or load_development_forecast_policy()
     ordered, normalized = _validated_observations(observations)
-    category_prior = (
-        None
-        if category_daily_velocity is None
-        else _decimal(category_daily_velocity, "category_daily_velocity")
-    )
-    if category_prior is not None and category_prior < 0:
-        raise DevelopmentForecastError("category_daily_velocity cannot be negative")
+    # A final-cutoff category scalar cannot be used at earlier rolling origins
+    # without leaking future information.  No independently frozen causal
+    # category history exists in this bounded slice, so the category model is
+    # deliberately and explicitly inapplicable.
+    category_prior: Decimal | None = None
     windows = active_policy.values["windows"]
     evaluation_days = int(windows["evaluation_days"])
     calibration_days = int(windows["calibration_days"])
@@ -899,6 +908,10 @@ def plan_development_forecast(
             else None
         ),
         "input_sha256": canonical_evidence_sha256(input_rows),
+        "category_prior": {
+            "status": "NOT_CONFIGURED",
+            "reason_code": "CATEGORY_PRIOR_NOT_FROZEN",
+        },
         "commercial_authority": False,
         "production_activation": False,
     }
@@ -989,6 +1002,15 @@ def plan_development_forecast(
                 "caps": {"daily_rate_cap_hits": 0},
             }
         )
+    comparable_origin_sets = {
+        tuple(record["selection_origin_dates"])
+        for record in candidate_records
+        if record.get("status") == "ELIGIBLE"
+    }
+    if len(comparable_origin_sets) != 1:
+        raise DevelopmentForecastError(
+            "eligible forecast candidates used different rolling origins"
+        )
     ordered_names = list(active_policy.values["candidate_order"])
     best_name = min(
         candidate_metrics,
@@ -1060,6 +1082,14 @@ def plan_development_forecast(
         evaluation_actuals,
         evaluation_forecasts,
         evaluation_scale_history,
+    )
+    minimum_evaluation = int(
+        active_policy.values["windows"]["minimum_evaluation_origins"]
+    )
+    evaluation_status = (
+        "SUFFICIENT"
+        if len(evaluation_actuals) >= minimum_evaluation
+        else "INSUFFICIENT_FOR_CONFIDENCE"
     )
     shortfalls: list[Decimal] = []
     calibration_origin_dates: list[str] = []
@@ -1141,6 +1171,8 @@ def plan_development_forecast(
         "selection_metrics": candidate_metrics[selected_name].to_json_dict(),
         "evaluation_metrics": evaluation.to_json_dict(),
         "evaluation_origin_count": len(evaluation_actuals),
+        "minimum_evaluation_origin_count": minimum_evaluation,
+        "evaluation_status": evaluation_status,
         "split": {
             "selection_start_date": ordered[selection_start].business_date,
             "selection_end_date": ordered[calibration_start - 1].business_date,
@@ -1220,9 +1252,13 @@ def plan_development_forecast(
     evaluation_wape = evaluation.wape
     confidence = (
         "HIGH"
-        if evaluation_wape is not None and evaluation_wape <= Decimal("0.20")
+        if evaluation_status == "SUFFICIENT"
+        and evaluation_wape is not None
+        and evaluation_wape <= Decimal("0.20")
         else "MEDIUM"
-        if evaluation_wape is not None and evaluation_wape <= Decimal("0.50")
+        if evaluation_status == "SUFFICIENT"
+        and evaluation_wape is not None
+        and evaluation_wape <= Decimal("0.50")
         else "LOW"
     )
     reasons = [fva_reason, *xyz_reasons]
@@ -1234,6 +1270,8 @@ def plan_development_forecast(
         reasons.append("NEGATIVE_NET_DAYS_FLOORED_FOR_DEMAND_ONLY")
     if common_payload["caps"]["daily_rate_cap_hits"]:
         reasons.append("DEVELOPMENT_RATE_CAP_APPLIED")
+    if evaluation_status != "SUFFICIENT":
+        reasons.append("EVALUATION_ORIGINS_INSUFFICIENT_FOR_CONFIDENCE")
     reasons.append("EMPIRICAL_FULL_HORIZON_PROTECTION_BOUND")
     return _finalize_evidence(
         {
@@ -1275,54 +1313,206 @@ def validate_development_forecast_evidence(value: Any) -> bool:
     candidates = value.get("candidates")
     protection_calendar = value.get("protection_calendar")
     try:
-        return bool(
+        sha256 = value.get("sha256")
+        if not (
             value.get("contract") == CONTRACT
             and value.get("method_version") == METHOD_VERSION
             and value.get("commercial_authority") is False
             and value.get("production_activation") is False
-            and isinstance(value.get("sha256"), str)
-            and len(value["sha256"]) == _SHA256_LENGTH
-            and value["sha256"] == canonical_evidence_sha256(unsigned)
-            and isinstance(policy, dict)
-            and policy.get("contract") == POLICY_CONTRACT
-            and policy.get("method_version") == METHOD_VERSION
-            and policy.get("commercial_authority") is False
-            and policy.get("production_activation") is False
-            and all(
-                isinstance(policy.get(key), str)
-                and len(policy[key]) == _SHA256_LENGTH
-                for key in ("source_sha256", "canonical_sha256")
-            )
+            and isinstance(sha256, str)
+            and len(sha256) == _SHA256_LENGTH
+            and bytes.fromhex(sha256)
+            and sha256 == canonical_evidence_sha256(unsigned)
+            and policy == load_development_forecast_policy().evidence()
             and value.get("status") in {"READY", "BLOCKED"}
             and isinstance(value.get("history_days"), int)
             and value["history_days"] > 0
             and isinstance(value.get("horizon_days"), int)
-            and value["horizon_days"] > 0
-            and isinstance(protection_calendar, dict)
-            and protection_calendar.get("basis")
-            in {
-                "CALLER_VALIDATED_HORIZON",
-                "NEXT_CONFIRMED_ORDER_TO_FIRST_PERMITTED_RECEIPT_V1",
+            and 0 < value["horizon_days"] <= 31
+            and date.fromisoformat(str(value.get("history_start")))
+            <= date.fromisoformat(str(value.get("history_end")))
+            == date.fromisoformat(str(value.get("cutoff_date")))
+            and isinstance(value.get("input_sha256"), str)
+            and len(value["input_sha256"]) == _SHA256_LENGTH
+            and bytes.fromhex(value["input_sha256"])
+            and value.get("category_prior")
+            == {
+                "status": "NOT_CONFIGURED",
+                "reason_code": "CATEGORY_PRIOR_NOT_FROZEN",
             }
+            and isinstance(value.get("reason_codes"), list)
+            and all(
+                isinstance(item, str) and bool(item)
+                for item in value["reason_codes"]
+            )
+            and len(value["reason_codes"]) == len(set(value["reason_codes"]))
+            and isinstance(protection_calendar, dict)
             and protection_calendar.get("horizon_days") == value["horizon_days"]
             and isinstance(candidates, list)
             and isinstance(protection, dict)
             and protection.get("status")
             == ("CALCULATED" if value.get("status") == "READY" else "UNAVAILABLE")
-            and (
-                value.get("status") != "READY"
-                or (
-                    value.get("selected_model")
-                    in {"NAIVE", "SEASONAL_NAIVE", "DAMPED_ETS", "TSB", "CATEGORY_SHRINKAGE"}
-                    and Decimal(str(value.get("point_forecast_units"))) >= 0
-                    and Decimal(str(value.get("protection_units"))) >= 0
-                    and Decimal(str(value.get("target_units")))
-                    == Decimal(str(value.get("point_forecast_units")))
-                    + Decimal(str(value.get("protection_units")))
-                )
+        ):
+            return False
+
+        basis = protection_calendar.get("basis")
+        if basis == "CALLER_VALIDATED_HORIZON":
+            if set(protection_calendar) != {"basis", "horizon_days"}:
+                return False
+        elif basis == "NEXT_CONFIRMED_ORDER_TO_FIRST_PERMITTED_RECEIPT_V1":
+            required_calendar_keys = {
+                "basis",
+                "timezone_name",
+                "evaluation_at",
+                "order_days",
+                "order_cutoff_local",
+                "expected_delivery_days",
+                "order_cycle_days",
+                "next_order_date",
+                "lead_time_days",
+                "next_receipt_date",
+                "calendar_days_until_receipt",
+                "lead_time_variability_days",
+                "variability_days_ceiling",
+                "variability_treatment",
+                "horizon_days",
+            }
+            evaluation = datetime.fromisoformat(
+                str(protection_calendar.get("evaluation_at"))
             )
+            if evaluation.tzinfo is None:
+                return False
+            evaluation_date = evaluation.date()
+            next_order = date.fromisoformat(
+                str(protection_calendar.get("next_order_date"))
+            )
+            next_receipt = date.fromisoformat(
+                str(protection_calendar.get("next_receipt_date"))
+            )
+            order_cycle = int(protection_calendar.get("order_cycle_days"))
+            lead_time = int(protection_calendar.get("lead_time_days"))
+            variability = _decimal(
+                protection_calendar.get("lead_time_variability_days"),
+                "lead_time_variability_days",
+            )
+            order_days = protection_calendar.get("order_days")
+            delivery_days = protection_calendar.get("expected_delivery_days")
+            if not (
+                set(protection_calendar) == required_calendar_keys
+                and isinstance(order_days, list)
+                and order_days
+                and len(order_days) == len(set(order_days))
+                and all(day in _WEEKDAY_INDEX for day in order_days)
+                and isinstance(delivery_days, list)
+                and delivery_days
+                and len(delivery_days) == len(set(delivery_days))
+                and all(day in _WEEKDAY_INDEX for day in delivery_days)
+                and time.fromisoformat(
+                    str(protection_calendar.get("order_cutoff_local"))
+                ).tzinfo
+                is None
+                and order_cycle > 0
+                and lead_time >= 0
+                and next_order > evaluation_date
+                and (next_order - evaluation_date).days == order_cycle
+                and next_order.strftime("%A").upper() in order_days
+                and next_receipt >= next_order + timedelta(days=lead_time)
+                and next_receipt.strftime("%A").upper() in delivery_days
+                and (next_receipt - evaluation_date).days
+                == protection_calendar.get("calendar_days_until_receipt")
+                == value["horizon_days"]
+                and variability >= 0
+                and int(
+                    variability.to_integral_value(rounding=ROUND_CEILING)
+                )
+                == protection_calendar.get("variability_days_ceiling")
+                and protection_calendar.get("variability_treatment")
+                == "EVIDENCE_ONLY_NOT_DEMAND_HORIZON"
+            ):
+                return False
+        else:
+            return False
+
+        if value.get("status") != "READY":
+            return True
+
+        expected_candidates = list(
+            load_development_forecast_policy().values["candidate_order"]
         )
-    except (InvalidOperation, KeyError, TypeError, ValueError):
+        if [item.get("name") for item in candidates] != expected_candidates:
+            return False
+        selected_model = value.get("selected_model")
+        selected_rows = [
+            item for item in candidates if item.get("selected") is True
+        ]
+        eligible_counts = {
+            item["selection_metrics"]["observation_count"]
+            for item in candidates
+            if item.get("status") == "ELIGIBLE"
+            and isinstance(item.get("selection_metrics"), dict)
+        }
+        eligible_origin_sets = {
+            tuple(item.get("selection_origin_dates", []))
+            for item in candidates
+            if item.get("status") == "ELIGIBLE"
+        }
+        evaluation_count = value.get("evaluation_origin_count")
+        minimum_evaluation = value.get("minimum_evaluation_origin_count")
+        evaluation_status = value.get("evaluation_status")
+        point = Decimal(str(value.get("point_forecast_units")))
+        protection_units = Decimal(str(value.get("protection_units")))
+        target = Decimal(str(value.get("target_units")))
+        shortfalls = [
+            Decimal(str(item)) for item in protection.get("shortfalls", [])
+        ]
+        quantile = _decimal(protection.get("quantile"), "protection.quantile")
+        if not (
+            selected_model in expected_candidates
+            and len(selected_rows) == 1
+            and selected_rows[0].get("name") == selected_model
+            and len(eligible_counts) == 1
+            and len(eligible_origin_sets) == 1
+            and next(iter(eligible_counts)) > 0
+            and len(next(iter(eligible_origin_sets)))
+            == next(iter(eligible_counts))
+            and isinstance(evaluation_count, int)
+            and evaluation_count > 0
+            and isinstance(minimum_evaluation, int)
+            and minimum_evaluation > 0
+            and evaluation_status
+            == (
+                "SUFFICIENT"
+                if evaluation_count >= minimum_evaluation
+                else "INSUFFICIENT_FOR_CONFIDENCE"
+            )
+            and (
+                evaluation_status == "SUFFICIENT" or value.get("confidence") == "LOW"
+            )
+            and point >= 0
+            and protection_units >= 0
+            and target == point + protection_units
+            and protection.get("method")
+            == "FULL_HORIZON_SHORTFALL_EMPIRICAL_QUANTILE"
+            and isinstance(protection.get("minimum_origin_count"), int)
+            and isinstance(protection.get("full_horizon_origin_count"), int)
+            and protection["full_horizon_origin_count"] == len(shortfalls)
+            and len(shortfalls) >= protection["minimum_origin_count"] > 0
+            and all(item >= 0 for item in shortfalls)
+            and protection_units
+            == _quantile(shortfalls, quantile).quantize(
+                UNITS, rounding=ROUND_HALF_UP
+            )
+        ):
+            return False
+        return True
+    except (
+        DevelopmentForecastError,
+        InvalidOperation,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+    ):
         return False
 
 

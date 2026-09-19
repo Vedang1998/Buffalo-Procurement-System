@@ -55,11 +55,12 @@
     "minimum_positive_days": 2
   },
   "windows": {
-    "calibration_days": 28,
+    "calibration_days": 21,
     "evaluation_days": 14,
+    "minimum_evaluation_origins": 4,
     "minimum_selection_origins": 8,
-    "minimum_training_days": 21,
-    "selection_origin_days": 28
+    "minimum_training_days": 28,
+    "selection_origin_days": 21
   },
   "xyz": {
     "minimum_week_buckets": 4,
