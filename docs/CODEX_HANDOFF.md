@@ -85,13 +85,14 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   Claude/external review. The exact-target machine evidence above is the
   execution authority; owner acceptance and external independent review remain
   pending.
-- The first browser attempt failed before database startup because the chosen
-  private path made PostgreSQL's Unix-socket pathname 124 bytes. Its raw
-  failure was preserved, no listener was created, and only that exact temporary
-  runtime was removed. The accepted retry used a shorter isolated path without
-  changing source. Final independent evidence checks found no leaked secret;
-  both databases, app servers and Chromium were stopped, and the exact
-  temporary runtime was removed after verification.
+- The first browser attempt failed during PostgreSQL startup on a 124-byte
+  Unix-socket path and never reached readiness. Its raw `pg_ctl` failure was
+  preserved; the direct server diagnostic was not retained. Cleanup checks
+  proved that no listener or owned process remained afterward. The accepted
+  retry changed only the private work-root path, not source. Final independent
+  evidence checks found no leaked secret; both databases, app servers and
+  Chromium were stopped, and the exact temporary runtime was removed after
+  verification.
 - This is fabricated loopback-Linux, internal-DRAFT evidence only. It adds no
   migration/table, real price/mapping/forecast authority, deployment, Shopify
   action, PO release or order. Default/real paths remain inactive; a request

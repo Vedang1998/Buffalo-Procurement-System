@@ -70,10 +70,12 @@ evidence SHA-256 is
 
 Earlier browser3/browser5 and pre-final suite logs are superseded historical
 evidence tied to earlier commits. They are preserved but are not used as proof
-for `49c7b334...`. A failed exact-target browser start caused solely by a
-124-byte Unix-socket path is also preserved as a failed diagnostic, not a test
-failure or pass; it created no listener and the accepted retry changed only the
-private runtime path.
+for `49c7b334...`. A failed exact-target attempt stopped during PostgreSQL
+startup on a 124-byte Unix-socket path and never reached readiness. The raw
+`pg_ctl` failure is preserved, but the direct server diagnostic is not. Cleanup
+proved no listener or owned process remained; the accepted retry changed only
+the private runtime path. The attempt is not counted as a product failure or a
+passing acceptance run.
 
 ## Connected known answers
 
