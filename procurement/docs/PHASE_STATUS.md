@@ -5,6 +5,44 @@
 
 This file is the executive roadmap/status view. It is updated when a phase/program milestone changes. It does not replace the canonical system specification or the verified current-state handoff.
 
+## Wednesday development forecast-to-DRAFT candidate
+
+**BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS — OWNER/EXTERNAL REVIEW,
+REAL POLICY AND PRODUCTION USE BLOCKED**
+
+The isolated child from prerequisite `fac9d55...` has an exact tested material
+commit `49c7b334ec958e6a03ca898e45aedf3163a9a3db`, tree
+`ffdbe27d1283c5f6da03dea259d914d3094fdd5c`. It adds a server-attested,
+development-fixture-only rolling-origin forecast/protection contract that
+actually drives the existing selected-offer recommendation, human review,
+two-vendor internal DRAFT and frozen packet path. It adds no migration or
+table, and the default/real path remains inactive and byte-compatible.
+
+Exact-target focused validation passed 19/19, startup passed 10/10, and the
+authoritative suite passed **837/837** in 1157.416s with every abnormal counter
+zero. Fresh Chromium passed **165 assertions** through declared price
+application, mapping/selection, a six-input Monday run, forecast evidence,
+review, two DRAFTs/three lines, a 14-member packet, source restart, same-name
+restore to a physically distinct PostgreSQL 16 cluster, recovered restart and
+terminal replay. The accepted economics are $192 merchandise + one $7 fee =
+$199. Source/target durable state SHA-256 is
+`31cca9cc6075a477718bf4a09c87d7a75e45dabd3a1c4ad8ed0d404cb33ffc8b`.
+
+All fixture histories have UNKNOWN availability, so the engine correctly marks
+protection LIMITED and confidence LOW. Category shrinkage is NOT_CONFIGURED
+without a frozen causal prior; connected ABC is NOT_CONFIGURED without
+historical COGS; nonzero lead-time variability refuses until a delivery-delay
+model exists. These facts are not forecast-accuracy defects hidden as zeros.
+Two read-only same-model reviewers found no remaining P0-P2 issue at the exact
+material commit, but this is not external/Claude review or owner acceptance.
+
+This candidate does not change the official production phase. Real historical
+COGS/availability, backtesting, service/XYZ/FVA policy approval, direct-SQL
+cutover enforcement, production identity/IdP, owner remote access, native
+Shopify CSV validation, PO release and orders remain blocked. See
+`docs/WEDNESDAY_DEMAND_TO_DRAFT_CLOSEOUT.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact evidence, limitations and the next boundary.
+
 ## Synthetic price-to-DRAFT acceptance follow-up
 
 **BOUNDED SYNTHETIC MACHINE PASS — EXTERNAL REVIEW PENDING / REAL AND

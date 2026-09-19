@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-17T01:36:28Z (UTC)
+**Updated:** 2026-09-19T15:47:22Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,107 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Wednesday development forecast-to-DRAFT — BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS / OWNER AND REAL USE BLOCKED
+
+- The protected prerequisite remains commit
+  `fac9d55cb91728dba36207ffe93f2c93da369cf4`, tree
+  `4def364ace5e438767413aff817278091ac93f69`. The isolated child is
+  `codex/wednesday-demand-to-draft`. The exact tested implementation is commit
+  `49c7b334ec958e6a03ca898e45aedf3163a9a3db`, tree
+  `ffdbe27d1283c5f6da03dea259d914d3094fdd5c`. The prerequisite checkout and
+  all remote refs were left unchanged. Any later closeout commit is
+  documentation-only and is identified separately in the additive review
+  transport.
+- The original causal test failed at the actual missing connection on design
+  child `de050824...`: importing `procurement_os.development_forecast` raised
+  `ModuleNotFoundError`, so the frozen parent could not compute the required
+  forecast -> protection -> need oracle. The retained raw causal-red SHA-256 is
+  `d98fb64fab534e9d6744f359e656676e4c1b0c17333d02cb5bb5446d06a337f3`.
+- The development-only engine now evaluates NAIVE, weekly seasonal-naive,
+  damped ETS and TSB candidates with chronological, purchase-horizon rolling
+  origins. CATEGORY_SHRINKAGE is explicitly `NOT_CONFIGURED` without a frozen
+  causal category prior. GP-dollar ABC is implemented as a pure classifier,
+  while the connected fixture reports `MISSING_HISTORICAL_COGS` and never uses
+  current supplier price as historical cost. The policy, model evidence and
+  exact frozen daily observations are hash-bound; manifest and packet
+  validation deterministically rerun the planner.
+- The synthetic policy uses an 84-day connected history, independent
+  selection/calibration/evaluation regions, a 0.90 empirical full-horizon
+  shortfall quantile and at least eight calibration origins. Protection is
+  added exactly once. Any UNKNOWN availability makes protection
+  `CALCULATED_LIMITED_AVAILABILITY` and confidence LOW. Nonzero lead-time
+  variability refuses until a validated delivery-delay model exists.
+  ONE_BOTTLE and ALLOCATED policies remain authoritative over forecast target
+  arithmetic. These are fabricated development values, not approved Buffalo
+  operating policy.
+- Exact-target focused validation passed **19/19** in 36.618s (log SHA-256
+  `82d999558709ac501a94031dfdbedd9dd8cf4d54701e8f2a0bf24e04418c0485`).
+  The authoritative wrapper then passed **837 discovered / 837 executed / 837
+  passed** in 1157.416s, with zero failures, errors, skips, expected failures or
+  unexpected successes (log SHA-256
+  `ecbb731fac57193e2c734d9df2229a1dbee73779cb6ecbbc15a73b276f1c519d`).
+  Startup hardening passed **10/10** in 0.004s (log SHA-256
+  `8cbc2321289aad482131291f1375331b42ef87afbd8e2b0aeabd20b734d71193`).
+- Fresh real Chromium acceptance on exact `49c7b334...` passed **165
+  assertions**: 19 price, 83 complete workflow, and 21 each for source restart,
+  distinct-cluster recovery and recovered restart. Browser actions created the
+  price confirmation/application, seven mapping decisions, five offer
+  selections, four immutable review decisions and two blocker exclusions.
+  The run reached `PACKET_BUILT` with two DRAFTs, three lines and three
+  artifacts. Southern total was $90; Western merchandise was $102 plus one $7
+  below-minimum fee for $109; grand merchandise was **$192**, fees **$7**, and
+  DRAFT total **$199**. The packet has 14 members including
+  `forecast-and-protection-evidence.json`.
+- The connected forecast evidence contains four recommendation results with
+  actual vendor-calendar horizons: Southern Variant 1001 uses 10 days and the
+  three Western results use 3 days. Original model recommendations are frozen
+  separately from owner review: 1001 was accepted at 3 cases; 4001 was edited
+  from 1 to 2 cases; 4002 was accepted at 1 case; allocated 4005 was rejected
+  at zero. Variant 4003 remained blocked for missing selected-offer head with no
+  legacy fallback; 4004 remained blocked for unconfirmed positive loose-unit
+  fee semantics. No model-accuracy or FVA uplift claim is made from this
+  fabricated run.
+- The populated V1 backup restored into a separate PostgreSQL 16 cluster with
+  the same logical database name. Source and target system identifiers are
+  distinct (`7687272298707398797` and `7687272544110264867`) while full durable
+  state SHA-256 is identical:
+  `31cca9cc6075a477718bf4a09c87d7a75e45dabd3a1c4ad8ed0d404cb33ffc8b`.
+  Both vendor CSVs and the packet remained byte-identical through source
+  restart, recovery, recovered restart and terminal replay. The exact-target
+  acceptance summary SHA-256 is
+  `325fffc5f135e25eacfc55d6e8c56e7d4937f810992a7f303e02f441ea3d7e25`.
+- Two independent read-only same-model reviewers inspected exact
+  `49c7b334...` after the final numerical/evidence corrections and reported no
+  remaining P0, P1 or P2 finding. They did not execute tests or claim to be
+  Claude/external review. The exact-target machine evidence above is the
+  execution authority; owner acceptance and external independent review remain
+  pending.
+- The first browser attempt failed before database startup because the chosen
+  private path made PostgreSQL's Unix-socket pathname 124 bytes. Its raw
+  failure was preserved, no listener was created, and only that exact temporary
+  runtime was removed. The accepted retry used a shorter isolated path without
+  changing source. Final independent evidence checks found no leaked secret;
+  both databases, app servers and Chromium were stopped, and the exact
+  temporary runtime was removed after verification.
+- This is fabricated loopback-Linux, internal-DRAFT evidence only. It adds no
+  migration/table, real price/mapping/forecast authority, deployment, Shopify
+  action, PO release or order. Default/real paths remain inactive; a request
+  cannot activate the feature. Direct-SQL enforcement, real historical COGS,
+  real availability and forecast backtesting, approved service/XYZ/FVA policy,
+  production identity/IdP, owner remote access, native Shopify CSV validation
+  and every operational ordering gate remain blocked. The secondary real-input
+  readiness analysis was **NOT RUN**.
+- The original engineering window was observed at
+  `2026-09-17T03:35:33.373323Z`; its validation reserve began
+  `2026-09-17T09:35:33.373323Z` and hard stop was
+  `2026-09-17T11:35:33.373323Z`. Later remediation/validation is reported at
+  its actual time and is not represented as in-window work or an extension.
+- Exact next boundary: preserve the tested material commit and its
+  documentation-only closeout, expose the additive review package, and stop.
+  Any real/default activation, real-data evaluation, policy approval, remote
+  integration, deployment, Shopify write, PO release or order requires a new
+  reviewed authorization and owner acceptance.
 
 ### Price-to-DRAFT acceptance follow-up — BOUNDED SYNTHETIC MACHINE + INDEPENDENT REVIEW PASS / OWNER USABILITY + REAL USE BLOCKED
 
