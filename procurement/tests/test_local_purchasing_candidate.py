@@ -795,10 +795,76 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
         )
         southern = [row for row in rows if row.source_variant_id == "1001"]
         western = [row for row in rows if row.source_variant_id == "4001"]
+        loose = [row for row in rows if row.source_variant_id == "4004"]
         self.assertTrue(all(row.net_items_sold == 2 for row in southern))
         self.assertEqual(
             [row.net_items_sold for row in western[:6]],
             [2, 2, 0, 2, 2, 0],
+        )
+        self.assertEqual(
+            [row.net_items_sold for row in loose[:6]],
+            [2, 2, 0, 2, 2, 0],
+        )
+        from procurement_os.development_forecast import (
+            V2_CONTRACT,
+            load_development_forecast_policy,
+            plan_development_forecast,
+        )
+        from decimal import Decimal
+        from procurement_os.forecasting import DemandObservation
+        from procurement_os.replenishment import calculate_development_baseline_need
+
+        loose_plan = plan_development_forecast(
+            [
+                DemandObservation(row.sale_date, row.net_items_sold, "UNKNOWN")
+                for row in loose
+            ],
+            horizon_days=3,
+            policy=load_development_forecast_policy(
+                evidence_contract=V2_CONTRACT
+            ),
+        )
+        self.assertEqual(
+            (
+                loose_plan.status,
+                loose_plan.selected_model,
+                loose_plan.protection_units,
+            ),
+            ("READY", "SEASONAL_NAIVE", Decimal("0.0000")),
+        )
+        self.assertEqual(
+            tuple(
+                loose_plan.evidence["origin_windows"][stage][
+                    "usable_origin_count"
+                ]
+                for stage in ("selection", "calibration", "evaluation")
+            ),
+            (36, 36, 32),
+        )
+        loose_need = calculate_development_baseline_need(
+            forecast_daily_velocity=loose_plan.forecast_daily_velocity,
+            point_forecast_units=loose_plan.point_forecast_units,
+            empirical_protection_units=loose_plan.protection_units,
+            available_units=Decimal("0"),
+            trusted_incoming_units=Decimal("0"),
+            order_cycle_days=2,
+            lead_time_days=1,
+            lead_time_variability_days=Decimal("0"),
+            policy_mode="ROUTINE",
+            units_per_case=6,
+            loose_order_allowed=True,
+            loose_unit_fee=Decimal("3"),
+            forecast_horizon_days=3,
+            protection_days_override=3,
+        )
+        self.assertEqual(
+            (
+                loose_plan.point_forecast_units,
+                loose_need.raw_need_units,
+                loose_need.cases,
+                loose_need.loose_units,
+            ),
+            (Decimal("4.0000"), 4, 0, 4),
         )
         with self.assertRaisesRegex(RuntimeError, "registered profile"):
             initializer._synthetic_sales_rows(

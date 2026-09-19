@@ -850,14 +850,32 @@ def _synthetic_sales_rows(
                 # Keep the two accepted Western lines at an independently
                 # reproducible four-unit baseline need.  A 2/2/0 cadence has
                 # no robust-outlier adjustment and forecasts 3.9286 units
-                # over the registered three-day protection period.  The
-                # dedicated loose-unit control deliberately retains the
-                # original three-unit need below.
+                # under V1 and exactly four units under the registered V2
+                # three-day horizon.  V2 uses that same cadence for the
+                # dedicated loose-unit control so its positive loose-order
+                # fee remains an explicit blocker instead of becoming an
+                # accidental full-case recommendation.  V1 retains its
+                # original three-unit loose need.
                 western_units = (
                     Decimal("2")
-                    if variant_id in {"4001", "4002"} and offset % 3 in {0, 1}
+                    if (
+                        variant_id in {"4001", "4002"}
+                        or (
+                            variant_id == "4004"
+                            and development_profile
+                            == DEVELOPMENT_FORECAST_V2_PROFILE
+                        )
+                    )
+                    and offset % 3 in {0, 1}
                     else Decimal("0")
-                    if variant_id in {"4001", "4002"}
+                    if (
+                        variant_id in {"4001", "4002"}
+                        or (
+                            variant_id == "4004"
+                            and development_profile
+                            == DEVELOPMENT_FORECAST_V2_PROFILE
+                        )
+                    )
                     else target_units
                 )
                 rows.append(

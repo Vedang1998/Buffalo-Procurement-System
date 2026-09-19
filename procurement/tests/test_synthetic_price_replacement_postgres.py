@@ -301,7 +301,7 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             for offset in range(138):
                 sale_date = history_start + timedelta(days=offset)
                 for variant_id in variant_ids:
-                    if variant_id in {"4001", "4002"}:
+                    if variant_id in {"4001", "4002", "4004"}:
                         units = Decimal("2") if offset % 3 in {0, 1} else Decimal("0")
                     else:
                         units = Decimal("2")

@@ -376,9 +376,17 @@ def _validate_initial_downloads(
                     (item for item in items if str(item.get("variant_id")) == "1001"),
                     None,
                 )
+                loose_item = next(
+                    (item for item in items if str(item.get("variant_id")) == "4004"),
+                    None,
+                )
                 if not isinstance(southern_item, dict):
                     raise BrowserAcceptanceError(
                         "V2 Southern packet evidence is missing"
+                    )
+                if not isinstance(loose_item, dict):
+                    raise BrowserAcceptanceError(
+                        "V2 loose-unit packet evidence is missing"
                     )
                 evidence = southern_item.get("evidence")
                 need = southern_item.get("calculated_need")
@@ -401,6 +409,27 @@ def _validate_initial_downloads(
                 ):
                     raise BrowserAcceptanceError(
                         "V2 Southern forecast-to-need packet evidence differs"
+                    )
+                loose_evidence = loose_item.get("evidence")
+                loose_need = loose_item.get("calculated_need")
+                loose_blockers = loose_item.get("blockers")
+                if (
+                    not isinstance(loose_evidence, dict)
+                    or not isinstance(loose_need, dict)
+                    or loose_evidence.get("point_forecast_units") != "4.0000"
+                    or loose_evidence.get("protection_units") != "0.0000"
+                    or loose_evidence.get("target_units") != "4.0000"
+                    or loose_need.get("raw_need_units") != 4
+                    or loose_need.get("cases") != 0
+                    or loose_need.get("loose_units") != 4
+                    or loose_need.get("ordered_units") != 4
+                    or loose_need.get("loose_fee") != "3"
+                    or loose_blockers != [
+                        "LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED"
+                    ]
+                ):
+                    raise BrowserAcceptanceError(
+                        "V2 loose-unit blocker evidence differs"
                     )
     return {
         "files": [
