@@ -5,7 +5,9 @@ from __future__ import annotations
 import ast
 import copy
 import csv
+import hashlib
 import io
+import json
 from pathlib import Path
 import unittest
 
@@ -49,6 +51,21 @@ ZERO_AUTHORITY = {
 }
 
 
+def readdress_intake(value: dict[str, object]) -> dict[str, object]:
+    value["intake_id"] = None
+    value["intake_id"] = hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        + b"\n"
+    ).hexdigest()
+    return value
+
+
 def export_intake(*, formula_values: bool = False) -> dict[str, object]:
     supplier_names = (
         ["=CMD()", "  +SUM(1,1)", "-1+1", "@IMPORTDATA(x)"]
@@ -72,16 +89,26 @@ def export_intake(*, formula_values: bool = False) -> dict[str, object]:
             "current_unit_cost": "8.00",
             "allocated_excluded": False,
             "combo_excluded": True,
+            "unapproved_price_ladder_evidence": [
+                {
+                    "level_type": "BREAK",
+                    "break_quantity": 24,
+                    "break_unit": "BT",
+                    "case_price": "96.00",
+                    "unit_price": "8.00",
+                    "source_tier_id": f"OPER-TIER-{index}",
+                }
+            ],
             "offer_id": f"OPER-OFFER-{index}",
             "source_price_id": f"OPER-PRICE-{index}",
         }
         for index, supplier_name in enumerate(supplier_names, start=1)
     ]
-    return {
+    result: dict[str, object] = {
         "contract": "BUFFALO_PRIVATE_RESEARCH_INTAKE_V1",
         "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
         "authority": dict(INTAKE_AUTHORITY),
-        "intake_id": "private-export-fixture",
+        "intake_id": None,
         "sources": {
             "private_catalog": {
                 "source_name": "<source & evidence>",
@@ -111,11 +138,43 @@ def export_intake(*, formula_values: bool = False) -> dict[str, object]:
                 "barcode": "BAR-100",
                 "current_retail_price": "20.00",
                 "current_inventory_item_cost": "9.00",
+                "current_inventory_item_cost_currency": "USD",
                 "target_margin_pct": "0.25",
                 "historical_revenue": "100.00",
                 "historical_cogs": "50.00",
                 "available": "2",
                 "incoming": "1",
+                "on_hand": "5",
+                "committed": "3",
+                "raw_incoming": "7",
+                "raw_incoming_trust": "UNTRUSTED_CAPTURE_ONLY",
+                "inventory_evidence": {
+                    "variant_updated_at": "2026-09-19T12:00:00Z",
+                    "locations": [
+                        {
+                            "location_id": "OPER-LOCATION-1",
+                            "inventory_level_id": "OPER-LEVEL-1",
+                            "location_name": "Main",
+                            "available": "2",
+                            "on_hand": "5",
+                            "committed": "3",
+                            "raw_incoming": "7",
+                        }
+                    ],
+                },
+                "sales_history": {
+                    "start_date": "2026-09-18",
+                    "end_date": "2026-09-19",
+                    "day_count": 2,
+                    "coverage_complete": True,
+                    "observation_basis": "ATTESTED_COMPLETE_DAYS",
+                    "net_units_series": ["1", "0"],
+                    "net_revenue_series": ["20", "0"],
+                    "historical_cogs_series": ["9", "0"],
+                    "gross_sales_series": ["20", "0"],
+                    "returns_series": ["0", "0"],
+                    "source_gross_profit_series": ["11", "0"],
+                },
                 "raw_pack": "6x4",
                 "units_per_case": 24,
                 "qualifying_units_per_case": 6,
@@ -134,6 +193,7 @@ def export_intake(*, formula_values: bool = False) -> dict[str, object]:
         ],
         "zero_authority": dict(ZERO_AUTHORITY),
     }
+    return readdress_intake(result)
 
 
 class PrivateResearchExportTests(unittest.TestCase):
@@ -179,11 +239,63 @@ class PrivateResearchExportTests(unittest.TestCase):
             ),
             ("6x4", "24", "6", "CS", "FALSE", "TRUE"),
         )
+        self.assertEqual(
+            (
+                research["catalog_available"],
+                research["catalog_on_hand"],
+                research["catalog_committed"],
+                research["catalog_incoming"],
+                research["catalog_raw_incoming"],
+                research["catalog_raw_incoming_trust"],
+                research["catalog_raw_incoming_operational_use"],
+                research["current_inventory_item_cost_currency"],
+                research["economics_scope"],
+            ),
+            (
+                "2",
+                "5",
+                "3",
+                "1",
+                "7",
+                "UNTRUSTED_CAPTURE_ONLY",
+                "PROHIBITED_UNTRUSTED_CAPTURE_ONLY",
+                "USD",
+                "UNIT_MARGIN_DIAGNOSTIC_ONLY",
+            ),
+        )
+        self.assertIn(
+            '"case_price":"96.00"',
+            research["unapproved_price_ladder_evidence"],
+        )
+        self.assertNotIn("source_tier_id", research["unapproved_price_ladder_evidence"])
+        inventory = json.loads(research["catalog_inventory_evidence"])
+        self.assertEqual(inventory["locations"][0]["location_name"], "Main")
+        self.assertNotIn("location_id", inventory["locations"][0])
+        coverage_row = next(row for row in parsed if row["row_type"] == "COVERAGE")
+        sales_evidence = json.loads(
+            coverage_row["catalog_historical_sales_evidence"]
+        )
+        self.assertEqual(sales_evidence["net_units_series"], ["1", "0"])
+        self.assertEqual(sales_evidence["gross_sales_series"], ["20", "0"])
+        self.assertRegex(
+            coverage_row["catalog_historical_sales_evidence_sha256"],
+            r"^[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            research["catalog_historical_sales_evidence_sha256"],
+            coverage_row["catalog_historical_sales_evidence_sha256"],
+        )
         for header in (
             "Hypothesis raw pack",
             "Hypothesis allocated excluded",
             "Catalog raw pack",
             "Catalog allocated excluded",
+            "Raw incoming (untrusted capture only)",
+            "Raw incoming operational use",
+            "Unapproved source ladder evidence",
+            "Economics scope",
+            "Historical daily sales evidence SHA-256",
+            "Historical daily sales evidence",
         ):
             self.assertIn(header, rendered_html)
 
@@ -269,6 +381,9 @@ class PrivateResearchExportTests(unittest.TestCase):
                 "OPER-VENDOR",
                 "OPER-BATCH",
                 "OPER-EVENT",
+                "OPER-TIER",
+                "OPER-LOCATION",
+                "OPER-LEVEL",
             ):
                 self.assertNotIn(marker, output)
 
@@ -276,6 +391,7 @@ class PrivateResearchExportTests(unittest.TestCase):
         source = export_intake()
         source["variants"] = []
         source["coverage"]["current_catalog_population"] = 0
+        readdress_intake(source)
         projection = build_private_research_projection(source)
         csv_rows = list(
             csv.DictReader(io.StringIO(render_private_research_csv(projection)))

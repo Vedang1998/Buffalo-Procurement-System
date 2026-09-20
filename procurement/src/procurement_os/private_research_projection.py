@@ -22,6 +22,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from .development_forecast import assign_gp_dollar_abc, plan_development_forecast
 from .economics import gross_margin_pct, incremental_gp_per_unit, target_cost
 from .forecasting import DemandObservation
+from .private_research_intake import ABC_COHORT_EVIDENCE_CONTRACT
 
 
 PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1"
@@ -29,7 +30,6 @@ AUTHORITY_LABEL = "ZERO_AUTHORITY_RESEARCH_ONLY"
 DATA_MODE = "PRIVATE_REAL_DATA_RESEARCH_ONLY"
 INTAKE_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_INTAKE_V1"
 INTAKE_DATA_MODE = "PRIVATE_REAL_SOURCE_REVIEW"
-ABC_COHORT_EVIDENCE_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_ABC_COHORT_EVIDENCE_V1"
 REAL_NUMERICAL_EVALUATION_NOT_RUN = "REAL_NUMERICAL_EVALUATION_NOT_RUN"
 CALCULATED_RESEARCH_ONLY = "CALCULATED_RESEARCH_ONLY"
 
@@ -197,6 +197,26 @@ def _canonical_json_bytes(value: Any) -> bytes:
         separators=(",", ":"),
         ensure_ascii=True,
     ).encode("utf-8")
+
+
+def _canonical_intake_json_bytes(value: Any) -> bytes:
+    """Match the intake producer's content-addressing representation exactly."""
+
+    try:
+        return (
+            json.dumps(
+                value,
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+            + b"\n"
+        )
+    except (TypeError, ValueError) as exc:
+        raise PrivateResearchProjectionError(
+            "private research intake is not canonical JSON data"
+        ) from exc
 
 
 def _is_forbidden_operational_key(key: str) -> bool:
@@ -547,9 +567,63 @@ def _abc_projection(
         or (lookback_end - lookback_start).days + 1 != 84
     ):
         reasons.append("ABC_SCOPE_NOT_EXACT_84_DAYS")
+
+    raw_eligible = raw_scope.get("eligible_variant_ids")
+    if (
+        not isinstance(raw_eligible, (list, tuple))
+        or any(
+            not isinstance(item, str) or not item or item != item.strip()
+            for item in raw_eligible
+        )
+    ):
+        eligible: list[str] = []
+        reasons.append("ABC_ELIGIBLE_MEMBERSHIP_MISSING_OR_INVALID")
+    else:
+        eligible = list(raw_eligible)
+        if eligible != sorted(set(eligible)) or not eligible:
+            reasons.append("ABC_ELIGIBLE_MEMBERSHIP_MISSING_OR_INVALID")
+
+    raw_exclusions = raw_scope.get("excluded_variants")
+    exclusions: list[dict[str, str]] = []
+    if not isinstance(raw_exclusions, (list, tuple)):
+        reasons.append("ABC_EXCLUSION_MEMBERSHIP_MISSING_OR_INVALID")
+    else:
+        for item in raw_exclusions:
+            if (
+                not isinstance(item, Mapping)
+                or set(item) != {"variant_id", "reason_code"}
+                or not isinstance(item.get("variant_id"), str)
+                or not item["variant_id"]
+                or item["variant_id"] != item["variant_id"].strip()
+                or not isinstance(item.get("reason_code"), str)
+                or not item["reason_code"].strip()
+            ):
+                reasons.append("ABC_EXCLUSION_MEMBERSHIP_MISSING_OR_INVALID")
+                continue
+            exclusions.append(
+                {
+                    "variant_id": item["variant_id"],
+                    "reason_code": item["reason_code"],
+                }
+            )
+    exclusions.sort(key=lambda item: item["variant_id"])
+    excluded_ids = [item["variant_id"] for item in exclusions]
+    if (
+        excluded_ids != sorted(set(excluded_ids))
+        or set(eligible).intersection(excluded_ids)
+        or sorted([*eligible, *excluded_ids]) != variant_ids
+    ):
+        reasons.append("ABC_COHORT_PARTITION_DIFFERS_FROM_CURRENT_CATALOG")
+
     rows: list[dict[str, str]] = []
-    for variant in variants:
-        variant_id = str(variant["shopify_variant_id"])
+    variants_by_id = {
+        str(item["shopify_variant_id"]): item for item in variants
+    }
+    for variant_id in eligible:
+        variant = variants_by_id.get(variant_id)
+        if variant is None:
+            reasons.append("ABC_ELIGIBLE_MEMBER_NOT_IN_CURRENT_CATALOG")
+            continue
         revenue = _decimal(variant.get("historical_revenue"))
         cogs = _decimal(variant.get("historical_cogs"))
         if revenue is None or revenue < 0:
@@ -564,25 +638,13 @@ def _abc_projection(
                     "historical_cogs": format(cogs, "f"),
                 }
             )
-    if not variant_ids:
+    if not variant_ids or not eligible:
         reasons.append("ABC_COHORT_EMPTY")
-    if len(rows) != len(variant_ids):
+    if len(rows) != len(eligible):
         reasons.append("ABC_COHORT_MEMBER_EVIDENCE_INCOMPLETE")
-
-    raw_eligible = raw_scope.get("eligible_variant_ids")
-    if (
-        not isinstance(raw_eligible, (list, tuple))
-        or any(not isinstance(item, str) or not item or item != item.strip() for item in raw_eligible)
-    ):
-        eligible: list[str] | None = None
-        reasons.append("ABC_ELIGIBLE_MEMBERSHIP_MISSING_OR_INVALID")
-    else:
-        eligible = list(raw_eligible)
-        if eligible != sorted(set(eligible)) or eligible != variant_ids:
-            reasons.append("ABC_ELIGIBLE_MEMBERSHIP_NOT_EXACT_CURRENT_CATALOG")
     eligible_sha = raw_scope.get("eligible_variant_ids_sha256")
     expected_eligible_sha = hashlib.sha256(
-        _canonical_json_bytes(variant_ids)
+        _canonical_json_bytes(eligible)
     ).hexdigest()
     if (
         not isinstance(eligible_sha, str)
@@ -590,6 +652,26 @@ def _abc_projection(
         or eligible_sha != expected_eligible_sha
     ):
         reasons.append("ABC_ELIGIBLE_MEMBERSHIP_SHA256_DIFFERS")
+    exclusion_sha = raw_scope.get("excluded_variants_sha256")
+    expected_exclusion_sha = hashlib.sha256(
+        _canonical_json_bytes(exclusions)
+    ).hexdigest()
+    if (
+        not isinstance(exclusion_sha, str)
+        or not _SHA256.fullmatch(exclusion_sha)
+        or exclusion_sha != expected_exclusion_sha
+    ):
+        reasons.append("ABC_EXCLUSION_MEMBERSHIP_SHA256_DIFFERS")
+    catalog_sha = raw_scope.get("catalog_variant_ids_sha256")
+    expected_catalog_sha = hashlib.sha256(
+        _canonical_json_bytes(variant_ids)
+    ).hexdigest()
+    if (
+        not isinstance(catalog_sha, str)
+        or not _SHA256.fullmatch(catalog_sha)
+        or catalog_sha != expected_catalog_sha
+    ):
+        reasons.append("ABC_CATALOG_MEMBERSHIP_SHA256_DIFFERS")
 
     rows.sort(key=lambda item: item["variant_id"])
     historical_sha = raw_scope.get("historical_evidence_sha256")
@@ -610,8 +692,8 @@ def _abc_projection(
             "lookback_end": lookback_end.isoformat(),
             "classification_period_days": period,
         },
-        "eligible_variant_ids": variant_ids,
-        "exclusions": [],
+        "eligible_variant_ids": eligible,
+        "exclusions": exclusions,
         "rows": rows,
     }
     try:
@@ -633,6 +715,16 @@ def _abc_projection(
         }
         for item in result["members"]
     }
+    for exclusion in exclusions:
+        members[exclusion["variant_id"]] = {
+            "authority": AUTHORITY_LABEL,
+            "status": REAL_NUMERICAL_EVALUATION_NOT_RUN,
+            "abc_class": "NOT_CONFIGURED",
+            "gross_profit_dollars": None,
+            "reason_codes": [
+                f"ABC_COHORT_EXCLUDED:{exclusion['reason_code']}"
+            ],
+        }
     return {
         "summary": {
             "authority": AUTHORITY_LABEL,
@@ -674,6 +766,9 @@ def _economics_projection(
         "commercial_authority": False,
         "production_activation": False,
         "historical_cogs_used": False,
+        "calculation_scope": "UNIT_MARGIN_DIAGNOSTIC_ONLY",
+        "source_ladder_used": False,
+        "pack_break_economics_status": REAL_NUMERICAL_EVALUATION_NOT_RUN,
     }
     if reasons:
         return {
@@ -732,6 +827,11 @@ def _catalog_structural_reasons(variant: Mapping[str, Any]) -> list[str]:
         reasons.append("ALLOCATED_EXCLUSION_STATUS_MISSING")
     if not isinstance(variant.get("combo_excluded"), bool):
         reasons.append("COMBO_EXCLUSION_STATUS_MISSING")
+    if variant.get("raw_incoming") is not None:
+        if _decimal(variant.get("raw_incoming")) is None:
+            reasons.append("RAW_INCOMING_CAPTURE_MISSING_OR_INVALID")
+        if variant.get("raw_incoming_trust") != "UNTRUSTED_CAPTURE_ONLY":
+            reasons.append("RAW_INCOMING_TRUST_LABEL_MISSING_OR_INVALID")
     return reasons
 
 
@@ -813,6 +913,9 @@ def _hypothesis_fields(hypothesis: Mapping[str, Any]) -> dict[str, Any]:
             if isinstance(hypothesis.get("combo_excluded"), bool)
             else None
         ),
+        "unapproved_price_ladder_evidence": _sanitized_metadata(
+            hypothesis.get("unapproved_price_ladder_evidence", [])
+        ),
     }
 
 
@@ -866,6 +969,9 @@ def _public_hypothesis_fields(fields: Mapping[str, Any]) -> dict[str, Any]:
         "hypothesis_assortment_group": fields["assortment_group"],
         "hypothesis_allocated_excluded": fields["allocated_excluded"],
         "hypothesis_combo_excluded": fields["combo_excluded"],
+        "unapproved_price_ladder_evidence": fields[
+            "unapproved_price_ladder_evidence"
+        ],
     }
 
 
@@ -953,6 +1059,26 @@ def _normalize_variants(
 
 
 def _variant_public_fields(variant: Mapping[str, Any]) -> dict[str, Any]:
+    raw_inventory_evidence = variant.get("inventory_evidence")
+    inventory_evidence = (
+        _sanitized_metadata(raw_inventory_evidence)
+        if isinstance(raw_inventory_evidence, Mapping)
+        else None
+    )
+    raw_sales_evidence = variant.get("sales_history")
+    historical_sales_evidence = (
+        _sanitized_metadata(raw_sales_evidence)
+        if isinstance(raw_sales_evidence, Mapping)
+        else None
+    )
+    historical_sales_evidence_sha256 = (
+        hashlib.sha256(
+            _canonical_json_bytes(historical_sales_evidence)
+        ).hexdigest()
+        if historical_sales_evidence is not None
+        else None
+    )
+    raw_incoming = _decimal_text(variant.get("raw_incoming"))
     return {
         "shopify_variant_id": str(variant["shopify_variant_id"]),
         "product_title": _optional_text(variant.get("product_title")),
@@ -963,10 +1089,27 @@ def _variant_public_fields(variant: Mapping[str, Any]) -> dict[str, Any]:
         "current_inventory_item_cost": _decimal_text(
             variant.get("current_inventory_item_cost")
         ),
+        "current_inventory_item_cost_currency": _optional_text(
+            variant.get("current_inventory_item_cost_currency")
+        ),
         "historical_revenue": _decimal_text(variant.get("historical_revenue")),
         "historical_cogs": _decimal_text(variant.get("historical_cogs")),
         "available": _decimal_text(variant.get("available")),
         "incoming": _decimal_text(variant.get("incoming")),
+        "on_hand": _decimal_text(variant.get("on_hand")),
+        "committed": _decimal_text(variant.get("committed")),
+        "raw_incoming": raw_incoming,
+        "raw_incoming_trust": _optional_text(
+            variant.get("raw_incoming_trust")
+        ),
+        "raw_incoming_operational_use": (
+            "PROHIBITED_UNTRUSTED_CAPTURE_ONLY"
+            if raw_incoming is not None
+            else None
+        ),
+        "inventory_evidence": inventory_evidence,
+        "historical_sales_evidence": historical_sales_evidence,
+        "historical_sales_evidence_sha256": historical_sales_evidence_sha256,
         "raw_pack": _json_value(variant.get("raw_pack")),
         "shopify_sellable_units_per_case": _json_value(
             _first(
@@ -1011,6 +1154,15 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
     intake_contract = INTAKE_CONTRACT
     intake_data_mode = INTAKE_DATA_MODE
     intake_id = _exact_identity(source.get("intake_id"), "intake.intake_id")
+    identity_basis = dict(source)
+    identity_basis["intake_id"] = None
+    expected_intake_id = hashlib.sha256(
+        _canonical_intake_json_bytes(identity_basis)
+    ).hexdigest()
+    if not _SHA256.fullmatch(intake_id) or intake_id != expected_intake_id:
+        raise PrivateResearchProjectionError(
+            "private research intake identity differs from its canonical content"
+        )
     coverage = _mapping(source.get("coverage", {}), "coverage")
     variants, unjoined = _normalize_variants(source.get("variants"))
     _validate_declared_coverage(coverage, variant_count=len(variants))
@@ -1031,7 +1183,11 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
         if forecast["status"] == CALCULATED_RESEARCH_ONLY:
             forecast_count += 1
         abc_member = abc["members"][variant_id]
-        missing = _variant_missing_reasons(variant, len(hypotheses))
+        missing = sorted(
+            set(_variant_missing_reasons(variant, len(hypotheses)))
+            .union(str(item) for item in forecast.get("reason_codes", []))
+            .union(str(item) for item in abc_member.get("reason_codes", []))
+        )
         coverage_rows.append(
             {
                 "authority": AUTHORITY_LABEL,
@@ -1063,6 +1219,7 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
                     "assortment_group": None,
                     "allocated_excluded": None,
                     "combo_excluded": None,
+                    "unapproved_price_ladder_evidence": [],
                 }
                 if hypothesis is None
                 else _hypothesis_fields(hypothesis)
@@ -1103,6 +1260,26 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
                     "catalog_combo_excluded": public["combo_excluded"],
                     "shopify_current_unit_cost_reference": public[
                         "current_inventory_item_cost"
+                    ],
+                    "current_inventory_item_cost_currency": public[
+                        "current_inventory_item_cost_currency"
+                    ],
+                    "catalog_available": public["available"],
+                    "catalog_incoming": public["incoming"],
+                    "catalog_on_hand": public["on_hand"],
+                    "catalog_committed": public["committed"],
+                    "catalog_raw_incoming": public["raw_incoming"],
+                    "catalog_raw_incoming_trust": public[
+                        "raw_incoming_trust"
+                    ],
+                    "catalog_raw_incoming_operational_use": public[
+                        "raw_incoming_operational_use"
+                    ],
+                    "catalog_inventory_evidence": public[
+                        "inventory_evidence"
+                    ],
+                    "catalog_historical_sales_evidence_sha256": public[
+                        "historical_sales_evidence_sha256"
                     ],
                     "historical_cogs": public["historical_cogs"],
                     "forecast": forecast,
@@ -1378,6 +1555,17 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 "Forecast",
                 "ABC",
                 "Missing-data reasons",
+                "Available",
+                "On hand",
+                "Committed",
+                "Trusted incoming",
+                "Raw incoming (untrusted capture only)",
+                "Raw incoming trust",
+                "Raw incoming operational use",
+                "Current cost currency",
+                "Inventory evidence (operational IDs removed)",
+                "Historical daily sales evidence SHA-256",
+                "Historical daily sales evidence",
                 "Allocated excluded",
                 "Combo excluded",
             ),
@@ -1390,6 +1578,17 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                     row["forecast_status"],
                     row["abc_status"],
                     row["missing_data_reasons"],
+                    row["available"],
+                    row["on_hand"],
+                    row["committed"],
+                    row["incoming"],
+                    row["raw_incoming"],
+                    row["raw_incoming_trust"],
+                    row["raw_incoming_operational_use"],
+                    row["current_inventory_item_cost_currency"],
+                    row["inventory_evidence"],
+                    row["historical_sales_evidence_sha256"],
+                    row["historical_sales_evidence"],
                     row["allocated_excluded"],
                     row["combo_excluded"],
                 )
@@ -1410,6 +1609,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 "Hypothesis break",
                 "Hypothesis allocated excluded",
                 "Hypothesis combo excluded",
+                "Unapproved source ladder evidence",
                 "Catalog raw pack",
                 "Catalog sellable units/case",
                 "Catalog qualifying units/case",
@@ -1418,10 +1618,12 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 "Catalog combo excluded",
                 "Hypothesis current unit cost",
                 "Shopify current unit cost reference",
+                "Current cost currency",
                 "Historical COGS (separate)",
                 "Forecast",
                 "ABC",
                 "Economics",
+                "Economics scope",
                 "Selection",
             ),
             (
@@ -1438,6 +1640,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                     f"{row['hypothesis_break_unit'] or ''}".strip(),
                     row["hypothesis_allocated_excluded"],
                     row["hypothesis_combo_excluded"],
+                    row["unapproved_price_ladder_evidence"],
                     row["catalog_raw_pack"],
                     row["catalog_shopify_sellable_units_per_case"],
                     row["catalog_qualifying_units_per_case"],
@@ -1446,10 +1649,12 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                     row["catalog_combo_excluded"],
                     row["hypothesis_current_unit_cost"],
                     row["shopify_current_unit_cost_reference"],
+                    row["current_inventory_item_cost_currency"],
                     row["historical_cogs"],
                     row["forecast"]["status"],
                     row["abc"]["abc_class"],
                     row["economics"]["status"],
+                    row["economics"]["calculation_scope"],
                     row["selection_status"],
                 )
                 for row in research
@@ -1468,6 +1673,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 "Hypothesis break",
                 "Hypothesis allocated excluded",
                 "Hypothesis combo excluded",
+                "Unapproved source ladder evidence",
                 "Reason",
             ),
             (
@@ -1483,6 +1689,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                     f"{row['hypothesis_break_unit'] or ''}".strip(),
                     row["hypothesis_allocated_excluded"],
                     row["hypothesis_combo_excluded"],
+                    row["unapproved_price_ladder_evidence"],
                     row["reason_code"],
                 )
                 for row in unjoined
@@ -1550,18 +1757,31 @@ _CSV_FIELDS = (
     "hypothesis_current_unit_cost",
     "hypothesis_allocated_excluded",
     "hypothesis_combo_excluded",
+    "unapproved_price_ladder_evidence",
     "catalog_raw_pack",
     "catalog_shopify_sellable_units_per_case",
     "catalog_qualifying_units_per_case",
     "catalog_break_unit",
     "catalog_allocated_excluded",
     "catalog_combo_excluded",
+    "catalog_available",
+    "catalog_on_hand",
+    "catalog_committed",
+    "catalog_incoming",
+    "catalog_raw_incoming",
+    "catalog_raw_incoming_trust",
+    "catalog_raw_incoming_operational_use",
+    "catalog_inventory_evidence",
+    "catalog_historical_sales_evidence_sha256",
+    "catalog_historical_sales_evidence",
     "shopify_current_unit_cost_reference",
+    "current_inventory_item_cost_currency",
     "historical_cogs",
     "forecast_status",
     "abc_status",
     "abc_class",
     "economics_status",
+    "economics_scope",
     "missing_data_reasons",
     "owner_question",
     "details",
@@ -1606,6 +1826,28 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "catalog_break_unit": item["break_unit"],
                 "catalog_allocated_excluded": item["allocated_excluded"],
                 "catalog_combo_excluded": item["combo_excluded"],
+                "catalog_available": item["available"],
+                "catalog_on_hand": item["on_hand"],
+                "catalog_committed": item["committed"],
+                "catalog_incoming": item["incoming"],
+                "catalog_raw_incoming": item["raw_incoming"],
+                "catalog_raw_incoming_trust": item["raw_incoming_trust"],
+                "catalog_raw_incoming_operational_use": item[
+                    "raw_incoming_operational_use"
+                ],
+                "catalog_inventory_evidence": item["inventory_evidence"],
+                "catalog_historical_sales_evidence_sha256": item[
+                    "historical_sales_evidence_sha256"
+                ],
+                "catalog_historical_sales_evidence": item[
+                    "historical_sales_evidence"
+                ],
+                "shopify_current_unit_cost_reference": item[
+                    "current_inventory_item_cost"
+                ],
+                "current_inventory_item_cost_currency": item[
+                    "current_inventory_item_cost_currency"
+                ],
                 "forecast_status": item["forecast_status"],
                 "abc_status": item["abc_status"],
                 "missing_data_reasons": item["missing_data_reasons"],
@@ -1649,6 +1891,9 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "hypothesis_combo_excluded": item[
                     "hypothesis_combo_excluded"
                 ],
+                "unapproved_price_ladder_evidence": item[
+                    "unapproved_price_ladder_evidence"
+                ],
                 "catalog_raw_pack": item["catalog_raw_pack"],
                 "catalog_shopify_sellable_units_per_case": item[
                     "catalog_shopify_sellable_units_per_case"
@@ -1661,14 +1906,35 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                     "catalog_allocated_excluded"
                 ],
                 "catalog_combo_excluded": item["catalog_combo_excluded"],
+                "catalog_available": item["catalog_available"],
+                "catalog_on_hand": item["catalog_on_hand"],
+                "catalog_committed": item["catalog_committed"],
+                "catalog_incoming": item["catalog_incoming"],
+                "catalog_raw_incoming": item["catalog_raw_incoming"],
+                "catalog_raw_incoming_trust": item[
+                    "catalog_raw_incoming_trust"
+                ],
+                "catalog_raw_incoming_operational_use": item[
+                    "catalog_raw_incoming_operational_use"
+                ],
+                "catalog_inventory_evidence": item[
+                    "catalog_inventory_evidence"
+                ],
+                "catalog_historical_sales_evidence_sha256": item[
+                    "catalog_historical_sales_evidence_sha256"
+                ],
                 "shopify_current_unit_cost_reference": item[
                     "shopify_current_unit_cost_reference"
+                ],
+                "current_inventory_item_cost_currency": item[
+                    "current_inventory_item_cost_currency"
                 ],
                 "historical_cogs": item["historical_cogs"],
                 "forecast_status": item["forecast"]["status"],
                 "abc_status": item["abc"]["status"],
                 "abc_class": item["abc"]["abc_class"],
                 "economics_status": item["economics"]["status"],
+                "economics_scope": item["economics"]["calculation_scope"],
                 "missing_data_reasons": item["missing_data_reasons"],
                 "details": {
                     "source_ref": item["source_ref"],
@@ -1715,6 +1981,9 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 ],
                 "hypothesis_combo_excluded": item[
                     "hypothesis_combo_excluded"
+                ],
+                "unapproved_price_ladder_evidence": item[
+                    "unapproved_price_ladder_evidence"
                 ],
                 "forecast_status": REAL_NUMERICAL_EVALUATION_NOT_RUN,
                 "abc_status": REAL_NUMERICAL_EVALUATION_NOT_RUN,

@@ -58,6 +58,21 @@ def canonical_sha256(value: object) -> str:
     ).hexdigest()
 
 
+def readdress_intake(value: dict[str, object]) -> dict[str, object]:
+    value["intake_id"] = None
+    value["intake_id"] = hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        + b"\n"
+    ).hexdigest()
+    return value
+
+
 def abc_evidence(rows: list[dict[str, object]]) -> dict[str, object]:
     variant_ids = sorted(str(row["shopify_variant_id"]) for row in rows)
     historical_rows: list[dict[str, str]] = []
@@ -76,6 +91,7 @@ def abc_evidence(rows: list[dict[str, object]]) -> dict[str, object]:
                 }
             )
     historical_rows.sort(key=lambda item: item["variant_id"])
+    exclusions: list[dict[str, str]] = []
     return {
         "contract": ABC_COHORT_EVIDENCE_CONTRACT,
         "coverage_complete": True,
@@ -85,6 +101,9 @@ def abc_evidence(rows: list[dict[str, object]]) -> dict[str, object]:
         "classification_period_days": 84,
         "eligible_variant_ids": variant_ids,
         "eligible_variant_ids_sha256": canonical_sha256(variant_ids),
+        "excluded_variants": exclusions,
+        "excluded_variants_sha256": canonical_sha256(exclusions),
+        "catalog_variant_ids_sha256": canonical_sha256(variant_ids),
         "historical_evidence_sha256": canonical_sha256(historical_rows),
     }
 
@@ -180,7 +199,7 @@ def intake(rows: list[dict[str, object]], **changes: object) -> dict[str, object
         "contract": "BUFFALO_PRIVATE_RESEARCH_INTAKE_V1",
         "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
         "authority": dict(INTAKE_AUTHORITY),
-        "intake_id": "private-intake-fixture",
+        "intake_id": None,
         "sources": {
             "private_catalog": {
                 "source_name": "private catalog",
@@ -203,7 +222,7 @@ def intake(rows: list[dict[str, object]], **changes: object) -> dict[str, object
         "zero_authority": dict(ZERO_AUTHORITY),
     }
     result.update(changes)
-    return result
+    return readdress_intake(result)
 
 
 def nested_keys(value: object) -> set[str]:
@@ -293,6 +312,7 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         }
         source = intake([sparse])
         source["coverage"]["abc_cohort"]["coverage_complete"] = False
+        readdress_intake(source)
         with (
             patch(
                 "procurement_os.private_research_projection.plan_development_forecast"
@@ -485,9 +505,21 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         b["variants"].reverse()
         b["variants"][1]["supplier_hypotheses"].reverse()
         b["variants"][0]["forecast_evidence"]["observations"].reverse()
+        readdress_intake(b)
         projection_a = build_private_research_projection(a)
         projection_b = build_private_research_projection(b)
-        self.assertEqual(projection_a, projection_b)
+        for field in (
+            "coverage_rows",
+            "research_rows",
+            "owner_worksheet",
+            "abc_evaluation",
+            "coverage_summary",
+        ):
+            self.assertEqual(projection_a[field], projection_b[field])
+        self.assertNotEqual(
+            projection_a["intake"]["intake_id"],
+            projection_b["intake"]["intake_id"],
+        )
         self.assertEqual(
             [row["shopify_variant_id"] for row in projection_a["owner_worksheet"]],
             ["100", "200"],
@@ -506,11 +538,13 @@ class PrivateResearchProjectionTests(unittest.TestCase):
 
         numeric = intake([variant("100")])
         numeric["variants"][0]["shopify_variant_id"] = 100
+        readdress_intake(numeric)
         with self.assertRaisesRegex(PrivateResearchProjectionError, "exact string"):
             build_private_research_projection(numeric)
 
         authority = intake([variant("100")])
         authority["zero_authority"]["po_actions"] = 1
+        readdress_intake(authority)
         with self.assertRaisesRegex(PrivateResearchProjectionError, "integer zero"):
             build_private_research_projection(authority)
 
@@ -528,12 +562,218 @@ class PrivateResearchProjectionTests(unittest.TestCase):
                 with self.assertRaisesRegex(PrivateResearchProjectionError, message):
                     build_private_research_projection(changed)
 
+    def test_content_address_rejects_tampering_that_retains_the_prior_id(self):
+        source = intake([variant("100")])
+        retained_id = source["intake_id"]
+        source["variants"][0]["product_title"] = "Tampered after addressing"
+        self.assertEqual(source["intake_id"], retained_id)
+        with self.assertRaisesRegex(
+            PrivateResearchProjectionError, "identity differs from its canonical content"
+        ):
+            build_private_research_projection(source)
+
+    def test_nested_forecast_and_abc_reasons_reach_rows_filters_and_counts(self):
+        source = intake(
+            [
+                variant(
+                    "100",
+                    hypotheses=[hypothesis("100", "Alpha", "A-1", "7")],
+                    with_forecast=True,
+                )
+            ]
+        )
+        with (
+            patch(
+                "procurement_os.private_research_projection.plan_development_forecast",
+                side_effect=ValueError("synthetic rejection"),
+            ),
+            patch(
+                "procurement_os.private_research_projection.assign_gp_dollar_abc",
+                return_value={"classification_status": "NOT_CONFIGURED"},
+            ),
+        ):
+            projection = build_private_research_projection(source)
+
+        expected = {
+            "FORECAST_EVIDENCE_REJECTED_BY_DEVELOPMENT_CALCULATOR",
+            "ABC_CLASSIFICATION_NOT_CALCULATED",
+        }
+        self.assertTrue(
+            expected.issubset(projection["coverage_rows"][0]["missing_data_reasons"])
+        )
+        self.assertTrue(
+            expected.issubset(projection["research_rows"][0]["missing_data_reasons"])
+        )
+        self.assertTrue(
+            expected.issubset(projection["owner_worksheet"][0]["reason_codes"])
+        )
+        self.assertEqual(
+            projection["coverage_summary"]["variants_with_missing_data"], 1
+        )
+        for reason in expected:
+            self.assertEqual(
+                [
+                    row["shopify_variant_id"]
+                    for row in filter_private_research_rows(
+                        projection, status=reason
+                    )
+                ],
+                ["100"],
+            )
+
+    def test_unapproved_price_ladder_is_preserved_but_never_used_as_economics(self):
+        ladder = [
+            {
+                "level_type": "BREAK",
+                "break_quantity": 24,
+                "break_unit": "BT",
+                "case_price": "168.00",
+                "unit_price": "7.00",
+                "source_tier_id": "OPER-TIER-1",
+            }
+        ]
+        projection = build_private_research_projection(
+            intake(
+                [
+                    variant(
+                        "100",
+                        hypotheses=[
+                            hypothesis(
+                                "100",
+                                "Alpha",
+                                "A-1",
+                                "7.00",
+                                unapproved_price_ladder_evidence=ladder,
+                            )
+                        ],
+                    )
+                ]
+            )
+        )
+        row = projection["research_rows"][0]
+        self.assertEqual(
+            row["unapproved_price_ladder_evidence"],
+            [
+                {
+                    "break_quantity": 24,
+                    "break_unit": "BT",
+                    "case_price": "168.00",
+                    "level_type": "BREAK",
+                    "unit_price": "7.00",
+                }
+            ],
+        )
+        self.assertEqual(
+            row["economics"]["calculation_scope"],
+            "UNIT_MARGIN_DIAGNOSTIC_ONLY",
+        )
+        self.assertFalse(row["economics"]["source_ladder_used"])
+        self.assertEqual(
+            row["economics"]["pack_break_economics_status"],
+            REAL_NUMERICAL_EVALUATION_NOT_RUN,
+        )
+        self.assertNotIn(
+            "OPER-TIER-1",
+            canonical_private_research_projection_bytes(projection).decode(),
+        )
+
+    def test_native_raw_inventory_is_preserved_and_explicitly_untrusted(self):
+        native = variant(
+            "100",
+            available="9",
+            incoming=None,
+            on_hand="13",
+            committed="4",
+            raw_incoming="6",
+            raw_incoming_trust="UNTRUSTED_CAPTURE_ONLY",
+            current_inventory_item_cost_currency="USD",
+            inventory_evidence={
+                "product_updated_at": "2026-09-19T12:00:00Z",
+                "locations": [
+                    {
+                        "location_id": "gid://shopify/Location/501",
+                        "location_name": "Main",
+                        "available": "9",
+                        "on_hand": "13",
+                        "committed": "4",
+                        "raw_incoming": "6",
+                    }
+                ],
+            },
+            sales_history={
+                "start_date": "2026-07-12",
+                "end_date": "2026-07-13",
+                "day_count": 2,
+                "coverage_complete": True,
+                "observation_basis": "ATTESTED_COMPLETE_DAYS",
+                "net_units_series": ["1", "0"],
+                "net_revenue_series": ["20", "0"],
+                "historical_cogs_series": ["9", "0"],
+                "gross_sales_series": ["20", "0"],
+                "returns_series": ["0", "0"],
+                "source_gross_profit_series": ["11", "0"],
+            },
+        )
+        projection = build_private_research_projection(intake([native]))
+        coverage = projection["coverage_rows"][0]
+        self.assertEqual(
+            (
+                coverage["available"],
+                coverage["on_hand"],
+                coverage["committed"],
+                coverage["incoming"],
+                coverage["raw_incoming"],
+                coverage["raw_incoming_trust"],
+                coverage["raw_incoming_operational_use"],
+                coverage["current_inventory_item_cost_currency"],
+            ),
+            (
+                "9",
+                "13",
+                "4",
+                None,
+                "6",
+                "UNTRUSTED_CAPTURE_ONLY",
+                "PROHIBITED_UNTRUSTED_CAPTURE_ONLY",
+                "USD",
+            ),
+        )
+        self.assertEqual(
+            coverage["inventory_evidence"]["locations"][0]["location_name"],
+            "Main",
+        )
+        self.assertNotIn(
+            "location_id", coverage["inventory_evidence"]["locations"][0]
+        )
+        self.assertEqual(
+            coverage["historical_sales_evidence"]["net_units_series"],
+            ["1", "0"],
+        )
+        self.assertEqual(
+            coverage["historical_sales_evidence"]["gross_sales_series"],
+            ["20", "0"],
+        )
+        self.assertRegex(
+            coverage["historical_sales_evidence_sha256"], r"^[0-9a-f]{64}$"
+        )
+        research = projection["research_rows"][0]
+        self.assertEqual(research["catalog_raw_incoming"], "6")
+        self.assertEqual(
+            research["catalog_raw_incoming_operational_use"],
+            "PROHIBITED_UNTRUSTED_CAPTURE_ONLY",
+        )
+        self.assertEqual(
+            research["catalog_historical_sales_evidence_sha256"],
+            coverage["historical_sales_evidence_sha256"],
+        )
+
     def test_abc_requires_exact_membership_and_hash_proof(self):
         rows = [variant("100"), variant("200")]
         source = intake(rows)
         scope = source["coverage"]["abc_cohort"]
         scope["eligible_variant_ids"] = ["100"]
         scope["eligible_variant_ids_sha256"] = canonical_sha256(["100"])
+        readdress_intake(source)
         with patch(
             "procurement_os.private_research_projection.assign_gp_dollar_abc"
         ) as calculator:
@@ -544,12 +784,13 @@ class PrivateResearchProjectionTests(unittest.TestCase):
             REAL_NUMERICAL_EVALUATION_NOT_RUN,
         )
         self.assertIn(
-            "ABC_ELIGIBLE_MEMBERSHIP_NOT_EXACT_CURRENT_CATALOG",
+            "ABC_COHORT_PARTITION_DIFFERS_FROM_CURRENT_CATALOG",
             projection["abc_evaluation"]["reason_codes"],
         )
 
         source = intake(rows)
         source["coverage"]["abc_cohort"]["historical_evidence_sha256"] = "0" * 64
+        readdress_intake(source)
         with patch(
             "procurement_os.private_research_projection.assign_gp_dollar_abc"
         ) as calculator:
@@ -558,6 +799,50 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         self.assertIn(
             "ABC_HISTORICAL_EVIDENCE_SHA256_DIFFERS",
             projection["abc_evaluation"]["reason_codes"],
+        )
+
+    def test_abc_exact_eligible_and_excluded_partition_matches_producer(self):
+        rows = [variant("100"), variant("200")]
+        source = intake(rows)
+        eligible = ["100"]
+        exclusions = [
+            {"variant_id": "200", "reason_code": "PRODUCT_STATUS_ARCHIVED"}
+        ]
+        historical = [
+            {
+                "variant_id": "100",
+                "historical_revenue": "100.00",
+                "historical_cogs": "10.00",
+            }
+        ]
+        source["coverage"]["abc_cohort"].update(
+            {
+                "eligible_variant_ids": eligible,
+                "eligible_variant_ids_sha256": canonical_sha256(eligible),
+                "excluded_variants": exclusions,
+                "excluded_variants_sha256": canonical_sha256(exclusions),
+                "catalog_variant_ids_sha256": canonical_sha256(["100", "200"]),
+                "historical_evidence_sha256": canonical_sha256(historical),
+            }
+        )
+        readdress_intake(source)
+        projection = build_private_research_projection(source)
+        by_id = {row["shopify_variant_id"]: row for row in projection["coverage_rows"]}
+        self.assertEqual(by_id["100"]["abc_status"], CALCULATED_RESEARCH_ONLY)
+        excluded = next(
+            row for row in projection["research_rows"]
+            if row["shopify_variant_id"] == "200"
+        )
+        self.assertEqual(
+            excluded["abc"]["status"], REAL_NUMERICAL_EVALUATION_NOT_RUN
+        )
+        self.assertEqual(
+            excluded["abc"]["reason_codes"],
+            ["ABC_COHORT_EXCLUDED:PRODUCT_STATUS_ARCHIVED"],
+        )
+        self.assertIn(
+            "ABC_COHORT_EXCLUDED:PRODUCT_STATUS_ARCHIVED",
+            excluded["missing_data_reasons"],
         )
 
     def test_invalid_structural_and_zero_cost_evidence_never_runs_economics(self):
@@ -615,7 +900,11 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         b = build_private_research_projection(
             intake([variant("100", hypotheses=[second, first])])
         )
-        self.assertEqual(a, b)
+        self.assertEqual(
+            a["unjoined_supplier_hypotheses"],
+            b["unjoined_supplier_hypotheses"],
+        )
+        self.assertEqual(a["owner_worksheet"], b["owner_worksheet"])
         self.assertEqual(
             [item["source_ref"] for item in a["unjoined_supplier_hypotheses"]],
             ["page-a", "page-b"],
@@ -631,6 +920,7 @@ class PrivateResearchProjectionTests(unittest.TestCase):
                 "current_catalog_variants_without_a1_review": 0,
             }
         )
+        readdress_intake(source)
         projection = build_private_research_projection(source)
         self.assertEqual(
             projection["declared_coverage"]["a1_variants_not_in_current_catalog"],
@@ -638,6 +928,7 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         )
         drifted = copy.deepcopy(source)
         drifted["coverage"]["current_catalog_variants_without_a1_review"] = 1
+        readdress_intake(drifted)
         with self.assertRaisesRegex(
             PrivateResearchProjectionError,
             "current catalog population does not reconcile",
@@ -645,6 +936,7 @@ class PrivateResearchProjectionTests(unittest.TestCase):
             build_private_research_projection(drifted)
         drifted = copy.deepcopy(source)
         drifted["coverage"]["a1_variants_not_in_current_catalog"] = 4
+        readdress_intake(drifted)
         with self.assertRaisesRegex(
             PrivateResearchProjectionError, "A1 review population does not reconcile"
         ):
