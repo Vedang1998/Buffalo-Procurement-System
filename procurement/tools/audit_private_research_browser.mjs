@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Real Chromium/CDP acceptance for one sealed private-research workspace.
+// Browser-level, all-target CDP acceptance for one sealed private workspace.
 
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import {fileURLToPath} from "node:url";
 
 const [PHASE, BASE, CDP, EVIDENCE, DOWNLOADS, SECRET_PATH, EXPECTATIONS_PATH, STATE_PATH] =
   process.argv.slice(2);
@@ -15,11 +16,53 @@ if (
   throw new Error("private-research browser audit arguments are incomplete");
 }
 
-const CONTRACT = "BUFFALO_PRIVATE_RESEARCH_BROWSER_ACCEPTANCE_V1";
+const CONTRACT = "BUFFALO_PRIVATE_RESEARCH_BROWSER_ACCEPTANCE_V2";
 const ALLOWED_ORIGIN = new URL(BASE).origin;
+const SELF_PATH = fileURLToPath(import.meta.url);
+const SCRIPT_SHA256 = crypto.createHash("sha256").update(fs.readFileSync(SELF_PATH)).digest("hex");
 const SECRET = fs.readFileSync(SECRET_PATH).toString("utf8").replace(/\n$/, "");
 const AUTHORIZATION = `Basic ${Buffer.from(`private:${SECRET}`, "utf8").toString("base64")}`;
+const WRONG_AUTHORIZATION = `Basic ${Buffer.from(
+  "private:deliberately-wrong-browser-audit-credential",
+  "utf8",
+).toString("base64")}`;
 const EXPECTED = JSON.parse(fs.readFileSync(EXPECTATIONS_PATH, "utf8"));
+const AUTH_MODE_HEADER = "x-buffalo-browser-audit-auth-mode";
+const GUARDED_TARGET_TYPES = new Set([
+  "page",
+  "iframe",
+  "worker",
+  "shared_worker",
+  "service_worker",
+  "webview",
+  "background_page",
+  "browser_ui",
+]);
+const FETCH_TARGET_TYPES = new Set([
+  "page",
+  "iframe",
+  "webview",
+  "background_page",
+  "browser_ui",
+]);
+const WORKER_TARGET_TYPES = new Set(["worker", "shared_worker", "service_worker"]);
+const APPLICATION_TARGET_TYPES = new Set(["page", "iframe", "worker", "shared_worker", "service_worker", "webview"]);
+const SOCKET_GUARD_BINDING = "__buffaloPrivateBrowserSocketAttempt";
+const SOCKET_GUARD_SOURCE = `(() => {
+  const report = globalThis[${JSON.stringify(SOCKET_GUARD_BINDING)}];
+  if (typeof report !== "function") return false;
+  const BlockedWebSocket = function(rawUrl) {
+    report(String(rawUrl));
+    throw new Error("WebSocket is disabled by the private browser audit");
+  };
+  Object.defineProperties(BlockedWebSocket, {
+    CONNECTING: {value: 0}, OPEN: {value: 1}, CLOSING: {value: 2}, CLOSED: {value: 3}
+  });
+  Object.defineProperty(globalThis, "WebSocket", {
+    value: BlockedWebSocket, configurable: false, writable: false
+  });
+  return globalThis.WebSocket === BlockedWebSocket;
+})()`;
 const ARTIFACT_NAMES = [
   "owner-preview.html",
   "owner-worksheet.csv",
@@ -35,154 +78,6 @@ function safeUrl(raw) {
   } catch {
     return "unparseable-url";
   }
-}
-
-class CdpClient {
-  constructor(url) {
-    this.socket = new WebSocket(url);
-    this.nextId = 1;
-    this.pending = new Map();
-    this.waiters = new Map();
-    this.inflight = new Map();
-    this.requests = [];
-    this.responses = [];
-    this.externalRequests = [];
-    this.blockedExternalRequests = [];
-    this.runtimeExceptions = [];
-    this.consoleErrors = [];
-    this.eventErrors = [];
-  }
-
-  async open() {
-    await new Promise((resolve, reject) => {
-      this.socket.onopen = resolve;
-      this.socket.onerror = reject;
-    });
-    this.socket.onmessage = (event) => this.onMessage(event);
-  }
-
-  onMessage(event) {
-    const message = JSON.parse(event.data);
-    if (message.id) {
-      const pending = this.pending.get(message.id);
-      if (!pending) return;
-      this.pending.delete(message.id);
-      if (message.error) pending.reject(new Error(message.error.message));
-      else pending.resolve(message.result);
-      return;
-    }
-    if (message.method === "Network.requestWillBeSent") {
-      const request = message.params.request;
-      if (/^https?:/i.test(request.url)) {
-        const record = {
-          requestId: message.params.requestId,
-          method: request.method,
-          url: safeUrl(request.url),
-          origin: new URL(request.url).origin,
-        };
-        this.inflight.set(message.params.requestId, record);
-        this.requests.push(record);
-        if (record.origin !== ALLOWED_ORIGIN) this.externalRequests.push(record);
-      }
-    }
-    if (message.method === "Fetch.requestPaused") {
-      const request = message.params.request;
-      let target;
-      try {
-        target = new URL(request.url);
-      } catch {
-        target = null;
-      }
-      if (target && ["http:", "https:"].includes(target.protocol) && target.origin !== ALLOWED_ORIGIN) {
-        this.blockedExternalRequests.push({method: request.method, url: safeUrl(request.url)});
-        void this.send("Fetch.failRequest", {
-          requestId: message.params.requestId,
-          errorReason: "BlockedByClient",
-        }).catch((error) => this.eventErrors.push(String(error)));
-      } else {
-        void this.send("Fetch.continueRequest", {requestId: message.params.requestId})
-          .catch((error) => this.eventErrors.push(String(error)));
-      }
-    }
-    if (message.method === "Network.responseReceived") {
-      const response = message.params.response;
-      if (/^https?:/i.test(response.url)) {
-        const headers = Object.fromEntries(
-          Object.entries(response.headers || {}).map(([key, value]) => [key.toLowerCase(), value]),
-        );
-        this.responses.push({
-          requestId: message.params.requestId,
-          method: this.inflight.get(message.params.requestId)?.method || null,
-          url: safeUrl(response.url),
-          origin: new URL(response.url).origin,
-          status: response.status,
-          cacheControl: headers["cache-control"] || null,
-          contentDisposition: headers["content-disposition"] || null,
-          mimeType: response.mimeType,
-        });
-      }
-    }
-    if (message.method === "Runtime.exceptionThrown") {
-      this.runtimeExceptions.push(message.params.exceptionDetails.text || "runtime exception");
-    }
-    if (
-      message.method === "Runtime.consoleAPICalled" &&
-      ["error", "assert"].includes(message.params.type)
-    ) {
-      this.consoleErrors.push(message.params.type);
-    }
-    const queue = this.waiters.get(message.method) || [];
-    if (queue.length) {
-      const waiter = queue.shift();
-      clearTimeout(waiter.timer);
-      waiter.resolve(message.params);
-    }
-  }
-
-  send(method, params = {}) {
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, {resolve, reject});
-      this.socket.send(JSON.stringify({id, method, params}));
-    });
-  }
-
-  waitEvent(method, timeoutMs = 30000) {
-    return new Promise((resolve, reject) => {
-      const queue = this.waiters.get(method) || [];
-      const timer = setTimeout(() => {
-        const current = this.waiters.get(method) || [];
-        this.waiters.set(method, current.filter((entry) => entry.resolve !== resolve));
-        reject(new Error(`timed out waiting for ${method}`));
-      }, timeoutMs);
-      queue.push({resolve, reject, timer});
-      this.waiters.set(method, queue);
-    });
-  }
-
-  close() {
-    this.socket.close();
-  }
-}
-
-const results = {
-  contract: CONTRACT,
-  phase: PHASE,
-  base_url: BASE,
-  passed: false,
-  assertions: [],
-  semantic_hashes: null,
-  counts: null,
-  artifact_hashes: null,
-  external_requests: [],
-  blocked_external_requests: [],
-};
-
-function check(condition, name, detail = null) {
-  if (!condition) {
-    throw new Error(`ASSERTION FAILED: ${name}: ${JSON.stringify(detail)}`);
-  }
-  results.assertions.push({name, passed: true, detail});
 }
 
 function stable(value) {
@@ -201,25 +96,505 @@ function semanticSha256(value) {
   return sha256Bytes(Buffer.from(stable(value), "utf8"));
 }
 
+function uniquePush(items, record) {
+  const key = stable(record);
+  if (!items.some((item) => stable(item) === key)) items.push(record);
+}
+
+class BrowserCdpClient {
+  constructor(url) {
+    this.socket = new WebSocket(url);
+    this.nextId = 1;
+    this.pending = new Map();
+    this.waiters = new Map();
+    this.inflight = new Map();
+    this.sessions = new Map();
+    this.guardTasks = new Set();
+    this.mainSessionId = null;
+    this.browserVersion = null;
+    this.autoAttachEnabled = false;
+    this.requests = [];
+    this.responses = [];
+    this.externalRequests = [];
+    this.blockedExternalRequests = [];
+    this.externalWebSocketRequests = [];
+    this.unexpectedSchemeRequests = [];
+    this.runtimeExceptions = [];
+    this.consoleErrors = [];
+    this.eventErrors = [];
+  }
+
+  async open() {
+    await new Promise((resolve, reject) => {
+      this.socket.onopen = resolve;
+      this.socket.onerror = reject;
+    });
+    this.socket.onmessage = (event) => this.onMessage(event);
+    this.socket.onclose = () => {
+      for (const pending of this.pending.values()) {
+        pending.reject(new Error("Chromium CDP socket closed"));
+      }
+      this.pending.clear();
+      for (const queue of this.waiters.values()) {
+        for (const waiter of queue) {
+          clearTimeout(waiter.timer);
+          waiter.reject(new Error("Chromium CDP socket closed"));
+        }
+      }
+      this.waiters.clear();
+    };
+  }
+
+  onMessage(event) {
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch (error) {
+      this.eventErrors.push(`malformed CDP message: ${String(error)}`);
+      return;
+    }
+    if (message.id) {
+      const pending = this.pending.get(message.id);
+      if (!pending) return;
+      this.pending.delete(message.id);
+      if (message.error) pending.reject(new Error(message.error.message));
+      else pending.resolve(message.result);
+      return;
+    }
+
+    const sessionId = message.sessionId || null;
+    const params = message.params || {};
+    if (message.method === "Target.attachedToTarget") {
+      const task = this.guardTarget(params);
+      this.guardTasks.add(task);
+      void task
+        .catch((error) => this.eventErrors.push(`target guard task failed: ${String(error)}`))
+        .finally(() => this.guardTasks.delete(task));
+    }
+    if (message.method === "Fetch.requestPaused") {
+      const task = this.handlePausedRequest(sessionId, params);
+      this.guardTasks.add(task);
+      void task
+        .catch((error) => this.eventErrors.push(`request guard task failed: ${String(error)}`))
+        .finally(() => this.guardTasks.delete(task));
+    }
+    if (message.method === "Fetch.authRequired") {
+      const task = this.send(
+        "Fetch.continueWithAuth",
+        {
+          requestId: params.requestId,
+          authChallengeResponse: {response: "CancelAuth"},
+        },
+        sessionId,
+      );
+      this.guardTasks.add(task);
+      void task
+        .catch((error) => this.eventErrors.push(`auth challenge cancellation failed: ${String(error)}`))
+        .finally(() => this.guardTasks.delete(task));
+    }
+    if (message.method === "Network.requestWillBeSent") {
+      this.recordRequest(sessionId, params);
+    }
+    if (message.method === "Network.responseReceived") {
+      this.recordResponse(sessionId, params);
+    }
+    if (message.method === "Network.webSocketCreated") {
+      uniquePush(this.externalWebSocketRequests, {
+        targetType: this.sessions.get(sessionId)?.type || "unknown",
+        url: safeUrl(params.url),
+      });
+    }
+    if (
+      message.method === "Runtime.bindingCalled" &&
+      params.name === SOCKET_GUARD_BINDING
+    ) {
+      const record = {
+        method: "WEBSOCKET",
+        targetType: this.sessions.get(sessionId)?.type || "unknown",
+        url: safeUrl(params.payload),
+      };
+      uniquePush(this.externalWebSocketRequests, record);
+      uniquePush(this.blockedExternalRequests, record);
+    }
+    if (
+      message.method === "Network.webTransportCreated" ||
+      message.method === "Network.directTCPSocketCreated"
+    ) {
+      uniquePush(this.unexpectedSchemeRequests, {
+        targetType: this.sessions.get(sessionId)?.type || "unknown",
+        scheme: message.method,
+        url: params.url ? safeUrl(params.url) : null,
+      });
+    }
+    if (message.method === "Runtime.exceptionThrown") {
+      this.runtimeExceptions.push(params.exceptionDetails?.text || "runtime exception");
+    }
+    if (
+      message.method === "Runtime.consoleAPICalled" &&
+      ["error", "assert"].includes(params.type)
+    ) {
+      this.consoleErrors.push(params.type);
+    }
+
+    const key = `${sessionId || "browser"}:${message.method}`;
+    const queue = this.waiters.get(key) || [];
+    if (queue.length) {
+      const waiter = queue.shift();
+      clearTimeout(waiter.timer);
+      waiter.resolve(params);
+    }
+  }
+
+  send(method, params = {}, sessionId = null) {
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, {resolve, reject});
+      const message = {id, method, params};
+      if (sessionId) message.sessionId = sessionId;
+      this.socket.send(JSON.stringify(message));
+    });
+  }
+
+  waitEvent(method, sessionId, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+      const key = `${sessionId || "browser"}:${method}`;
+      const queue = this.waiters.get(key) || [];
+      const timer = setTimeout(() => {
+        const current = this.waiters.get(key) || [];
+        this.waiters.set(key, current.filter((entry) => entry.resolve !== resolve));
+        reject(new Error(`timed out waiting for ${method}`));
+      }, timeoutMs);
+      queue.push({resolve, reject, timer});
+      this.waiters.set(key, queue);
+    });
+  }
+
+  async initialize() {
+    const version = await this.send("Browser.getVersion");
+    this.browserVersion = {
+      product: version.product,
+      protocol_version: version.protocolVersion,
+      js_version: version.jsVersion,
+    };
+    await this.send("Target.setDiscoverTargets", {discover: true});
+    await this.send("Target.setAutoAttach", {
+      autoAttach: true,
+      waitForDebuggerOnStart: true,
+      flatten: true,
+    });
+    this.autoAttachEnabled = true;
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      await this.flushGuardTasks();
+      const main = this.sessions.get(this.mainSessionId);
+      if (main?.guarded && main?.resumed) return;
+      await sleep(25);
+    }
+    throw new Error("no guarded Chromium page target became available");
+  }
+
+  async guardTarget(params) {
+    const sessionId = params.sessionId;
+    const targetInfo = params.targetInfo || {};
+    if (!sessionId || !targetInfo.targetId) {
+      this.eventErrors.push("CDP attached target identity is incomplete");
+      return;
+    }
+    const session = {
+      targetId: targetInfo.targetId,
+      type: targetInfo.type || "unknown",
+      guarded: false,
+      resumed: false,
+    };
+    this.sessions.set(sessionId, session);
+    if (!GUARDED_TARGET_TYPES.has(session.type)) {
+      this.eventErrors.push(`unexpected attached target type: ${session.type}`);
+      try {
+        await this.send("Target.closeTarget", {targetId: session.targetId});
+      } catch (error) {
+        this.eventErrors.push(`could not close unexpected target: ${String(error)}`);
+      }
+      return;
+    }
+    try {
+      await this.send("Network.enable", {}, sessionId);
+      const blockedSchemes = WORKER_TARGET_TYPES.has(session.type)
+        ? ["http", "https", "ws", "wss", "ftp"]
+        : ["ws", "wss", "ftp"];
+      await this.send(
+        "Network.setBlockedURLs",
+        {
+          urlPatterns: blockedSchemes.map((scheme) => ({
+            urlPattern: `${scheme}://*:*/*`,
+            block: true,
+          })),
+        },
+        sessionId,
+      );
+      if (FETCH_TARGET_TYPES.has(session.type)) {
+        await this.send(
+          "Fetch.enable",
+          {patterns: [{urlPattern: "*", requestStage: "Request"}], handleAuthRequests: true},
+          sessionId,
+        );
+      }
+      await this.send("Runtime.enable", {}, sessionId);
+      if (APPLICATION_TARGET_TYPES.has(session.type)) {
+        await this.send("Runtime.addBinding", {name: SOCKET_GUARD_BINDING}, sessionId);
+        if (FETCH_TARGET_TYPES.has(session.type)) {
+          await this.send(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {source: SOCKET_GUARD_SOURCE},
+            sessionId,
+          );
+        }
+        const installed = await this.send(
+          "Runtime.evaluate",
+          {expression: SOCKET_GUARD_SOURCE, returnByValue: true},
+          sessionId,
+        );
+        if (installed.exceptionDetails || installed.result?.value !== true) {
+          throw new Error("WebSocket pre-network guard installation failed");
+        }
+      }
+      if (FETCH_TARGET_TYPES.has(session.type)) {
+        await this.send("Page.enable", {}, sessionId);
+        await this.send(
+          "Target.setAutoAttach",
+          {autoAttach: true, waitForDebuggerOnStart: true, flatten: true},
+          sessionId,
+        );
+      }
+      session.guarded = true;
+      if (session.type === "page" && this.mainSessionId === null) {
+        this.mainSessionId = sessionId;
+      }
+      await this.send("Runtime.runIfWaitingForDebugger", {}, sessionId);
+      session.resumed = true;
+    } catch (error) {
+      this.eventErrors.push(`target guard failed (${session.type}): ${String(error)}`);
+      try {
+        await this.send("Target.closeTarget", {targetId: session.targetId});
+      } catch (closeError) {
+        this.eventErrors.push(`guard-failed target close failed: ${String(closeError)}`);
+      }
+    }
+  }
+
+  async handlePausedRequest(sessionId, params) {
+    const request = params.request || {};
+    let target;
+    try {
+      target = new URL(request.url);
+    } catch {
+      target = null;
+    }
+    const record = {
+      method: request.method || null,
+      targetType: this.sessions.get(sessionId)?.type || "unknown",
+      url: safeUrl(request.url),
+    };
+    if (!target) {
+      uniquePush(this.unexpectedSchemeRequests, {...record, scheme: "unparseable"});
+      await this.send(
+        "Fetch.failRequest",
+        {requestId: params.requestId, errorReason: "BlockedByClient"},
+        sessionId,
+      );
+      return;
+    }
+    if (["ws:", "wss:"].includes(target.protocol)) {
+      uniquePush(this.externalWebSocketRequests, record);
+      uniquePush(this.blockedExternalRequests, record);
+      await this.send(
+        "Fetch.failRequest",
+        {requestId: params.requestId, errorReason: "BlockedByClient"},
+        sessionId,
+      );
+      return;
+    }
+    if (!["http:", "https:"].includes(target.protocol)) {
+      uniquePush(this.unexpectedSchemeRequests, {...record, scheme: target.protocol});
+      await this.send(
+        "Fetch.failRequest",
+        {requestId: params.requestId, errorReason: "BlockedByClient"},
+        sessionId,
+      );
+      return;
+    }
+    if (target.origin !== ALLOWED_ORIGIN) {
+      uniquePush(this.externalRequests, record);
+      uniquePush(this.blockedExternalRequests, record);
+      await this.send(
+        "Fetch.failRequest",
+        {requestId: params.requestId, errorReason: "BlockedByClient"},
+        sessionId,
+      );
+      return;
+    }
+
+    const sourceHeaders = Object.entries(request.headers || {});
+    const modeEntry = sourceHeaders.find(([name]) => name.toLowerCase() === AUTH_MODE_HEADER);
+    const mode = modeEntry ? String(modeEntry[1]).toLowerCase() : "normal";
+    if (!["normal", "missing", "wrong"].includes(mode)) {
+      uniquePush(this.unexpectedSchemeRequests, {...record, scheme: "invalid-auth-mode"});
+      await this.send(
+        "Fetch.failRequest",
+        {requestId: params.requestId, errorReason: "BlockedByClient"},
+        sessionId,
+      );
+      return;
+    }
+    const headers = sourceHeaders
+      .filter(([name]) => !["authorization", AUTH_MODE_HEADER].includes(name.toLowerCase()))
+      .map(([name, value]) => ({name, value: String(value)}));
+    if (mode === "normal") headers.push({name: "Authorization", value: AUTHORIZATION});
+    if (mode === "wrong") headers.push({name: "Authorization", value: WRONG_AUTHORIZATION});
+    await this.send(
+      "Fetch.continueRequest",
+      {requestId: params.requestId, headers},
+      sessionId,
+    );
+  }
+
+  recordRequest(sessionId, params) {
+    const request = params.request || {};
+    let target;
+    try {
+      target = new URL(request.url);
+    } catch {
+      return;
+    }
+    const targetType = this.sessions.get(sessionId)?.type || "unknown";
+    const record = {
+      requestId: params.requestId,
+      method: request.method,
+      targetType,
+      url: safeUrl(request.url),
+      origin: target.origin,
+    };
+    if (["http:", "https:"].includes(target.protocol)) {
+      this.inflight.set(`${sessionId}:${params.requestId}`, record);
+      this.requests.push(record);
+      if (target.origin !== ALLOWED_ORIGIN) uniquePush(this.externalRequests, record);
+      if (WORKER_TARGET_TYPES.has(targetType)) {
+        uniquePush(this.unexpectedSchemeRequests, {...record, scheme: "worker-network"});
+      }
+    } else if (
+      !["about:", "data:", "blob:"].includes(target.protocol) &&
+      !(
+        ["browser_ui", "background_page"].includes(targetType) &&
+        ["chrome:", "chrome-extension:"].includes(target.protocol)
+      )
+    ) {
+      uniquePush(this.unexpectedSchemeRequests, {...record, scheme: target.protocol});
+    }
+  }
+
+  recordResponse(sessionId, params) {
+    const response = params.response || {};
+    if (!/^https?:/i.test(response.url || "")) return;
+    const headers = Object.fromEntries(
+      Object.entries(response.headers || {}).map(([key, value]) => [key.toLowerCase(), value]),
+    );
+    const request = this.inflight.get(`${sessionId}:${params.requestId}`);
+    this.responses.push({
+      requestId: params.requestId,
+      method: request?.method || null,
+      url: safeUrl(response.url),
+      origin: new URL(response.url).origin,
+      status: response.status,
+      cacheControl: headers["cache-control"] || null,
+      contentDisposition: headers["content-disposition"] || null,
+      contentType: headers["content-type"] || null,
+      mimeType: response.mimeType,
+    });
+  }
+
+  async flushGuardTasks() {
+    while (this.guardTasks.size) {
+      await Promise.allSettled([...this.guardTasks]);
+    }
+  }
+
+  targetSummary() {
+    const sessions = [...this.sessions.values()];
+    const byType = {};
+    for (const session of sessions) {
+      byType[session.type] = (byType[session.type] || 0) + 1;
+    }
+    return {
+      observed_types: Object.keys(byType).sort(),
+      by_type: Object.fromEntries(Object.entries(byType).sort(([left], [right]) => left.localeCompare(right))),
+      attached: sessions.length,
+      guarded: sessions.filter((session) => session.guarded).length,
+      resumed: sessions.filter((session) => session.resumed).length,
+    };
+  }
+
+  allTargetsGuarded() {
+    const sessions = [...this.sessions.values()];
+    return (
+      this.autoAttachEnabled &&
+      sessions.length > 0 &&
+      sessions.every(
+        (session) =>
+          GUARDED_TARGET_TYPES.has(session.type) && session.guarded === true && session.resumed === true,
+      )
+    );
+  }
+
+  async closeBrowser() {
+    try {
+      await Promise.race([this.send("Browser.close"), sleep(500)]);
+    } catch {
+      // Python independently terminates and verifies the entire Chromium session.
+    }
+    try {
+      this.socket.close();
+    } catch {
+      // The Browser.close command may already have closed the socket.
+    }
+  }
+}
+
+const results = {
+  contract: CONTRACT,
+  phase: PHASE,
+  base_url: BASE,
+  passed: false,
+  assertions: [],
+  semantic_hashes: null,
+  workspace_hashes: null,
+  counts: null,
+  artifact_hashes: null,
+  tooling: null,
+  target_summary: null,
+  external_requests: [],
+  blocked_external_requests: [],
+  external_websocket_requests: [],
+  unexpected_scheme_requests: [],
+};
+
+function check(condition, id, detail = null) {
+  if (results.assertions.some((item) => item.id === id)) {
+    throw new Error(`duplicate assertion identifier: ${id}`);
+  }
+  if (!condition) {
+    throw new Error(`ASSERTION FAILED [${id}]: ${JSON.stringify(detail)}`);
+  }
+  results.assertions.push({id, passed: true});
+}
+
 async function connect() {
-  const listResponse = await fetch(`${CDP}/json/list`);
-  const targets = await listResponse.json();
-  const target = targets.find((item) => item.type === "page");
-  if (!target) throw new Error("no Chromium page target is available");
-  const client = new CdpClient(target.webSocketDebuggerUrl);
+  const versionResponse = await fetch(`${CDP}/json/version`);
+  const version = await versionResponse.json();
+  if (typeof version.webSocketDebuggerUrl !== "string") {
+    throw new Error("Chromium browser CDP websocket is unavailable");
+  }
+  const client = new BrowserCdpClient(version.webSocketDebuggerUrl);
   await client.open();
-  await client.send("Page.enable");
-  await client.send("Runtime.enable");
-  await client.send("Network.enable");
-  await client.send("Network.setExtraHTTPHeaders", {
-    headers: {Authorization: AUTHORIZATION},
-  });
-  await client.send("Fetch.enable", {
-    patterns: [
-      {urlPattern: "http://*/*", requestStage: "Request"},
-      {urlPattern: "https://*/*", requestStage: "Request"},
-    ],
-  });
+  await client.initialize();
   await client.send("Browser.setDownloadBehavior", {
     behavior: "allow",
     downloadPath: DOWNLOADS,
@@ -229,12 +604,18 @@ async function connect() {
 }
 
 async function audit(client) {
-  const evaluate = async (expression) => {
-    const response = await client.send("Runtime.evaluate", {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
+  const sessionId = client.mainSessionId;
+  const evaluate = async (expression, options = {}) => {
+    const response = await client.send(
+      "Runtime.evaluate",
+      {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+        ...options,
+      },
+      sessionId,
+    );
     if (response.exceptionDetails) {
       throw new Error(
         response.exceptionDetails.exception?.description ||
@@ -246,26 +627,30 @@ async function audit(client) {
   };
 
   const navigate = async (url) => {
-    const loaded = client.waitEvent("Page.loadEventFired");
-    const response = await client.send("Page.navigate", {url});
+    const loaded = client.waitEvent("Page.loadEventFired", sessionId);
+    const response = await client.send("Page.navigate", {url}, sessionId);
     if (response.errorText) throw new Error(`navigation failed: ${response.errorText}`);
     await loaded;
     await sleep(80);
   };
 
-  const fetchPayload = (requestPath) =>
-    evaluate(`fetch(${JSON.stringify(requestPath)}, {cache:"no-store"}).then(async (response) => ({
+  const fetchPayload = (requestPath, authMode = "normal", method = "GET") =>
+    evaluate(`fetch(${JSON.stringify(requestPath)}, {
+      cache:"no-store",
+      method:${JSON.stringify(method)},
+      headers:{${JSON.stringify(AUTH_MODE_HEADER)}:${JSON.stringify(authMode)}}
+    }).then(async (response) => ({
       status: response.status,
       body: await response.text(),
       cacheControl: response.headers.get("cache-control"),
-      contentType: response.headers.get("content-type")
+      contentType: response.headers.get("content-type"),
+      authenticate: response.headers.get("www-authenticate")
     }))`);
 
   const pageSnapshot = () => evaluate(`(() => ({
     url: location.href,
     text: document.body.innerText,
     articles: [...document.querySelectorAll("article.record")].map((article) => ({
-      variantId: article.getAttribute("data-variant-id"),
       hasDetails: Boolean(article.querySelector("details")),
       detail: JSON.parse(article.querySelector("pre").textContent)
     })),
@@ -276,27 +661,47 @@ async function audit(client) {
     links: [...document.querySelectorAll("a[href]")].map((anchor) => anchor.href)
   }))()`);
 
-  const assertRows = async (expected, label) => {
+  const readOnlySnapshot = (snapshot) => {
+    const forbiddenPath = /(monday-runs|price-books|supplier-mapping|pricing|reconciliation|vendor-rules|economics|draft|purchase|orders|po)/i;
+    return (
+      snapshot.forms.length === 1 &&
+      snapshot.forms[0].method === "GET" &&
+      new URL(snapshot.forms[0].action).pathname === "/private-research" &&
+      stable(snapshot.buttons) === stable([{text: "Filter", type: "submit"}]) &&
+      snapshot.links.every((raw) => {
+        const value = new URL(raw);
+        return value.origin === ALLOWED_ORIGIN && !forbiddenPath.test(value.pathname);
+      })
+    );
+  };
+
+  const assertRows = async (expected, prefix) => {
     const snapshot = await pageSnapshot();
     check(
       stable(snapshot.articles.map((article) => article.detail)) === stable(expected.first_page_rows),
-      `${label} renders the exact expected first-page rows`,
+      `${prefix}.rows`,
       {expected: expected.first_page_rows.length, actual: snapshot.articles.length},
     );
     check(
       snapshot.articles.every((article) => article.hasDetails),
-      `${label} retains evidence detail controls`,
+      `${prefix}.details`,
+      {articles: snapshot.articles.length},
     );
     check(
       snapshot.text.includes(`Showing ${expected.first_page_rows.length} of ${expected.total} matched rows`),
-      `${label} reports the exact result count`,
+      `${prefix}.count`,
       {total: expected.total, displayed: expected.first_page_rows.length},
     );
+    check(readOnlySnapshot(snapshot), `${prefix}.read_only`, {
+      forms: snapshot.forms.length,
+      buttons: snapshot.buttons.length,
+      links: snapshot.links.length,
+    });
     return snapshot;
   };
 
   const submitFilter = async (parameters) => {
-    const loaded = client.waitEvent("Page.loadEventFired");
+    const loaded = client.waitEvent("Page.loadEventFired", sessionId);
     try {
       await evaluate(`(() => {
         const form = document.querySelector('form[action="/private-research"]');
@@ -334,6 +739,7 @@ async function audit(client) {
   };
 
   const downloadArtifact = async (expected) => {
+    const slug = expected.name.replaceAll(".", "_").replaceAll("-", "_");
     const before = new Set(fs.readdirSync(DOWNLOADS));
     const responseMark = client.responses.length;
     await evaluate(`(() => {
@@ -346,8 +752,7 @@ async function audit(client) {
       return true;
     })()`);
     const receivedName = await waitForDownload(before);
-    const receivedPath = path.join(DOWNLOADS, receivedName);
-    const data = fs.readFileSync(receivedPath);
+    const data = fs.readFileSync(path.join(DOWNLOADS, receivedName));
     const deadline = Date.now() + 10000;
     let response = null;
     while (Date.now() < deadline && !response) {
@@ -356,38 +761,72 @@ async function audit(client) {
       );
       if (!response) await sleep(25);
     }
-    check(receivedName === expected.name, "artifact download filename is exact", {
+    check(receivedName === expected.name, `v2.artifact.${slug}.filename`, {
       expected: expected.name,
       received: receivedName,
     });
     check(
       data.length === expected.bytes && sha256Bytes(data) === expected.sha256,
-      "artifact download bytes and SHA-256 match the sealed workspace",
+      `v2.artifact.${slug}.bytes`,
       {name: expected.name, bytes: data.length, sha256: sha256Bytes(data)},
     );
+    const headerMime = String(response?.contentType || "").split(";", 1)[0].trim().toLowerCase();
     check(
       response?.status === 200 &&
         response.cacheControl === "no-store" &&
-        String(response.contentDisposition).toLowerCase().includes("attachment"),
-      "artifact response is a no-store attachment",
-      {name: expected.name, response},
+        String(response.contentDisposition).toLowerCase().includes("attachment") &&
+        String(response.mimeType).toLowerCase() === expected.browser_mime_type &&
+        headerMime === expected.browser_mime_type,
+      `v2.artifact.${slug}.response`,
+      {
+        name: expected.name,
+        status: response?.status || null,
+        mimeType: response?.mimeType || null,
+        contentType: headerMime || null,
+      },
     );
     return expected.sha256;
   };
 
+  check(
+    Number(process.versions.node.split(".", 1)[0]) >= 22 &&
+      typeof fetch === "function" &&
+      typeof WebSocket === "function" &&
+      SCRIPT_SHA256 === EXPECTED.tooling.script_sha256,
+    "v2.cdp.node_prerequisites",
+    {version: process.version, scriptSha256: SCRIPT_SHA256},
+  );
+  check(
+    client.browserVersion && Object.values(client.browserVersion).every((value) => typeof value === "string" && value),
+    "v2.cdp.browser_version",
+    client.browserVersion,
+  );
+
   await navigate(`${BASE}/private-research`);
-  const initialSnapshot = await assertRows(EXPECTED.initial, "unfiltered workspace");
+  const initialSnapshot = await pageSnapshot();
   check(
-    stable(initialSnapshot.articles[0]?.detail) === stable(EXPECTED.initial.detail_row),
-    "first evidence detail is the exact canonical research row",
+    stable(initialSnapshot.articles.map((article) => article.detail)) ===
+      stable(EXPECTED.initial.first_page_rows),
+    "v2.page.initial.rows",
+    {expected: EXPECTED.initial.first_page_rows.length, actual: initialSnapshot.articles.length},
   );
-  const detail = initialSnapshot.articles[0]?.detail || {};
   check(
-    ["source_ref", "forecast", "abc", "economics", "missing_data_reasons"].every(
-      (field) => Object.hasOwn(detail, field),
+    initialSnapshot.articles.every((article) => article.hasDetails),
+    "v2.page.initial.details",
+    {articles: initialSnapshot.articles.length},
+  );
+  check(
+    initialSnapshot.text.includes(
+      `Showing ${EXPECTED.initial.first_page_rows.length} of ${EXPECTED.initial.total} matched rows`,
     ),
-    "detail exposes source, forecast, ABC, economics, and missing-evidence fields",
+    "v2.page.initial.count",
+    {total: EXPECTED.initial.total, displayed: EXPECTED.initial.first_page_rows.length},
   );
+  check(readOnlySnapshot(initialSnapshot), "v2.page.initial.read_only", {
+    forms: initialSnapshot.forms.length,
+    buttons: initialSnapshot.buttons.length,
+    links: initialSnapshot.links.length,
+  });
 
   const healthResponse = await fetchPayload("/health");
   const health = JSON.parse(healthResponse.body);
@@ -398,13 +837,10 @@ async function audit(client) {
         stable(["mode", "ok", "operational_authority", "service"].sort()) &&
       health.ok === true &&
       health.operational_authority === false,
-    "health is ready, bounded, and non-operational",
+    "v2.health.contract",
     {status: healthResponse.status, keys: Object.keys(health).sort()},
   );
-  check(
-    !/\b[0-9a-f]{64}\b/i.test(healthResponse.body),
-    "health exposes no content hashes",
-  );
+  check(!/\b[0-9a-f]{64}\b/i.test(healthResponse.body), "v2.health.no_hashes");
 
   const manifestResponse = await fetchPayload("/private-research/manifest");
   const projectionResponse = await fetchPayload("/private-research/projection");
@@ -412,12 +848,12 @@ async function audit(client) {
   const projection = JSON.parse(projectionResponse.body);
   check(
     manifestResponse.status === 200 && stable(manifest) === stable(EXPECTED.manifest),
-    "manifest endpoint exactly reads back the canonical manifest",
+    "v2.readback.manifest",
     {expectedSha256: EXPECTED.semantic_hashes.manifest_sha256, actualSha256: semanticSha256(manifest)},
   );
   check(
     projectionResponse.status === 200 && stable(projection) === stable(EXPECTED.projection),
-    "projection endpoint exactly reads back the canonical projection",
+    "v2.readback.projection",
     {expectedSha256: EXPECTED.semantic_hashes.projection_sha256, actualSha256: semanticSha256(projection)},
   );
   const actualCounts = {
@@ -427,29 +863,43 @@ async function audit(client) {
     unjoined_supplier_hypotheses: projection.unjoined_supplier_hypotheses.length,
     vendor_names: projection.vendor_names.length,
   };
-  check(stable(actualCounts) === stable(EXPECTED.counts), "workspace counts match canonical replay", actualCounts);
+  check(
+    stable(actualCounts) === stable(EXPECTED.counts),
+    "v2.readback.counts",
+    actualCounts,
+  );
 
-  check(
-    initialSnapshot.forms.length === 1 &&
-      initialSnapshot.forms[0].method === "GET" &&
-      new URL(initialSnapshot.forms[0].action).pathname === "/private-research",
-    "viewer exposes only the read-only filter form",
-    initialSnapshot.forms,
-  );
-  check(
-    stable(initialSnapshot.buttons) === stable([{text: "Filter", type: "submit"}]),
-    "viewer exposes no operational action buttons",
-    initialSnapshot.buttons,
-  );
-  const forbiddenPath = /(monday-runs|price-books|supplier-mapping|pricing|reconciliation|vendor-rules|economics|draft|purchase|orders|po)/i;
-  check(
-    initialSnapshot.links.every((raw) => {
-      const value = new URL(raw);
-      return value.origin === ALLOWED_ORIGIN && !forbiddenPath.test(value.pathname);
-    }),
-    "viewer links remain exact-origin and non-operational",
-    initialSnapshot.links.map(safeUrl),
-  );
+  const authSurfaces = [
+    ["index", "/private-research"],
+    ["manifest", "/private-research/manifest"],
+    ["projection", "/private-research/projection"],
+    ["artifact", `/private-research/artifacts/${EXPECTED.artifacts[0].name}`],
+  ];
+  const privateMarkers = [
+    EXPECTED.workspace_hashes.workspace_id,
+    EXPECTED.workspace_hashes.projection_sha256,
+    EXPECTED.evidence.source_occurrence_ref,
+  ];
+  for (const mode of ["missing", "wrong"]) {
+    for (const [surface, requestPath] of authSurfaces) {
+      const response = await fetchPayload(requestPath, mode);
+      check(
+          response.status === 401 &&
+          response.cacheControl === "no-store" &&
+          response.authenticate === 'Basic realm="Buffalo private research", charset="UTF-8"' &&
+          response.body === "Private review authentication failed" &&
+          privateMarkers.every((marker) => !response.body.includes(marker)),
+        `v2.auth.${mode}.${surface}`,
+        {
+          path: requestPath,
+          status: response.status,
+          challengePresent:
+            response.authenticate === 'Basic realm="Buffalo private research", charset="UTF-8"',
+        },
+      );
+    }
+  }
+
   const operationalProbes = [
     "/openapi.json",
     "/monday-runs",
@@ -467,21 +917,72 @@ async function audit(client) {
   }
   check(
     probeStatuses.every((item) => item.status === 404),
-    "operational route probes are absent from the private composition",
+    "v2.routes.operational_absent",
     probeStatuses,
   );
+  const writeProbeStatuses = [];
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    const response = await fetchPayload("/__browser-audit-write-probe__", "normal", method);
+    writeProbeStatuses.push({method, status: response.status});
+    if (
+      response.body !== "Route is not authorized" ||
+      response.cacheControl !== "no-store"
+    ) {
+      writeProbeStatuses.push({method, responseContractDiffers: true});
+    }
+  }
+  check(
+    writeProbeStatuses.length === 4 &&
+      writeProbeStatuses.every((item) => item.status === 403),
+    "v2.routes.write_methods_denied",
+    writeProbeStatuses,
+  );
 
+  let evidenceDetail = null;
   for (const filter of EXPECTED.filters) {
     await navigate(`${BASE}/private-research`);
     await submitFilter(filter.parameters);
     const current = new URL(await evaluate("location.href"));
     check(
       Object.entries(filter.parameters).every(([key, value]) => current.searchParams.get(key) === value),
-      `${filter.name} filter submits through the browser form`,
-      {url: safeUrl(current.href), parameters: filter.parameters},
+      `v2.filter.${filter.name}.submit`,
+      {url: safeUrl(current.href), parameterCount: Object.keys(filter.parameters).length},
     );
-    await assertRows(filter, `${filter.name} filter`);
+    const snapshot = await assertRows(filter, `v2.filter.${filter.name}`);
+    if (filter.name === "search") {
+      evidenceDetail = snapshot.articles.find(
+        (article) => article.detail.source_occurrence_ref === EXPECTED.evidence.source_occurrence_ref,
+      )?.detail;
+    }
   }
+  check(
+    stable(evidenceDetail) === stable(EXPECTED.initial.detail_row),
+    "v2.detail.exact",
+    {present: Boolean(evidenceDetail)},
+  );
+  check(
+    ["source_ref", "forecast", "abc", "economics", "missing_data_reasons"].every(
+      (field) => Object.hasOwn(evidenceDetail || {}, field),
+    ),
+    "v2.detail.core_evidence",
+  );
+  check(
+    evidenceDetail?.source_occurrence_ref === EXPECTED.evidence.source_occurrence_ref,
+    "v2.detail.source_occurrence",
+  );
+  check(
+    stable(evidenceDetail?.unapproved_mapping_evidence) === stable(EXPECTED.evidence.mapping_evidence),
+    "v2.detail.mapping_evidence",
+  );
+  check(
+    stable(evidenceDetail?.unapproved_mapping_blocker_reasons) ===
+      stable(EXPECTED.evidence.mapping_blocker_reasons) &&
+      EXPECTED.evidence.mapping_blocker_reasons.every((reason) =>
+        evidenceDetail?.missing_data_reasons?.includes(reason),
+      ),
+    "v2.detail.mapping_blockers",
+  );
+  check(Boolean(evidenceDetail), "v2.search.source_occurrence");
 
   await navigate(`${BASE}/private-research`);
   const artifactHashes = {};
@@ -490,14 +991,14 @@ async function audit(client) {
   }
   check(
     stable(Object.keys(artifactHashes).sort()) === stable([...ARTIFACT_NAMES].sort()),
-    "all four bounded artifacts download through Chromium",
-    Object.keys(artifactHashes).sort(),
+    "v2.artifacts.complete",
+    {count: Object.keys(artifactHashes).length},
   );
 
-  const cookies = (await client.send("Network.getAllCookies")).cookies;
+  const cookies = (await client.send("Network.getAllCookies", {}, sessionId)).cookies;
   check(
     !cookies.some((cookie) => cookie.name === "buffalo_local_session"),
-    "private viewer authentication creates no ambient local-session cookie",
+    "v2.auth.no_ambient_cookie",
   );
 
   const semanticHashes = {
@@ -507,7 +1008,7 @@ async function audit(client) {
   const restartState = {
     contract: CONTRACT,
     base_url: BASE,
-    workspace_id: manifest.workspace_id,
+    workspace_hashes: EXPECTED.workspace_hashes,
     semantic_hashes: semanticHashes,
     counts: actualCounts,
     artifact_hashes: artifactHashes,
@@ -518,52 +1019,89 @@ async function audit(client) {
       mode: 0o600,
       flag: "wx",
     });
-    check(true, "initial workspace identity is sealed for restart comparison");
+    check(true, "v2.restart.identity");
   } else {
     const prior = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
-    check(
-      stable(prior) === stable(restartState),
-      "same-origin restart preserves workspace, counts, and all artifact hashes",
-      {workspaceId: restartState.workspace_id},
-    );
+    check(stable(prior) === stable(restartState), "v2.restart.identity", {
+      workspaceMatches: prior.workspace_hashes?.workspace_id === restartState.workspace_hashes.workspace_id,
+    });
   }
 
-  await sleep(100);
-  check(client.externalRequests.length === 0, "no browser request escaped the exact loopback origin", client.externalRequests);
-  check(client.blockedExternalRequests.length === 0, "no external browser request was attempted", client.blockedExternalRequests);
-  check(client.runtimeExceptions.length === 0, "browser raised no runtime exceptions", client.runtimeExceptions);
-  check(client.consoleErrors.length === 0, "browser raised no console errors", client.consoleErrors);
-  check(client.eventErrors.length === 0, "CDP interception raised no event errors", client.eventErrors);
+  await sleep(500);
+  await client.flushGuardTasks();
+  check(client.allTargetsGuarded(), "v2.cdp.all_targets_guarded", {
+    ...client.targetSummary(),
+    guardErrors: client.eventErrors.slice(0, 5),
+  });
+  check(client.externalRequests.length === 0, "v2.network.no_external_http", {
+    count: client.externalRequests.length,
+  });
+  check(client.externalWebSocketRequests.length === 0, "v2.network.no_external_websocket", {
+    count: client.externalWebSocketRequests.length,
+  });
+  check(client.unexpectedSchemeRequests.length === 0, "v2.network.no_unexpected_scheme", {
+    count: client.unexpectedSchemeRequests.length,
+    schemes: [...new Set(client.unexpectedSchemeRequests.map((item) => item.scheme))].sort(),
+  });
+  check(client.runtimeExceptions.length === 0, "v2.browser.no_runtime_exceptions", {
+    count: client.runtimeExceptions.length,
+  });
+  check(client.consoleErrors.length === 0, "v2.browser.no_console_errors", {
+    count: client.consoleErrors.length,
+  });
+  check(client.eventErrors.length === 0, "v2.cdp.no_event_errors", {
+    count: client.eventErrors.length,
+  });
   const applicationResponses = client.responses.filter((response) => response.origin === ALLOWED_ORIGIN);
   check(
     applicationResponses.length > 0 && applicationResponses.every((response) => response.cacheControl === "no-store"),
-    "every observed viewer response is no-store",
-    applicationResponses.filter((response) => response.cacheControl !== "no-store"),
+    "v2.responses.no_store",
+    {responses: applicationResponses.length},
   );
 
+  const actualAssertionIds = results.assertions.map((item) => item.id).sort();
+  const expectedAssertionIds = [...EXPECTED.assertion_ids].sort();
+  if (stable(actualAssertionIds) !== stable(expectedAssertionIds)) {
+    throw new Error("versioned browser assertion catalog differs");
+  }
   results.semantic_hashes = semanticHashes;
+  results.workspace_hashes = EXPECTED.workspace_hashes;
   results.counts = actualCounts;
   results.artifact_hashes = artifactHashes;
+  results.tooling = {
+    node_version: process.version,
+    script_sha256: SCRIPT_SHA256,
+    browser: client.browserVersion,
+  };
+  results.target_summary = client.targetSummary();
   results.external_requests = client.externalRequests;
   results.blocked_external_requests = client.blockedExternalRequests;
+  results.external_websocket_requests = client.externalWebSocketRequests;
+  results.unexpected_scheme_requests = client.unexpectedSchemeRequests;
   results.request_count = client.requests.length;
   results.response_count = client.responses.length;
   results.passed = true;
 }
 
-const client = await connect();
+let client = null;
+let failure = null;
 try {
+  client = await connect();
   await audit(client);
-  const resultPath = path.join(EVIDENCE, `${PHASE}-browser-results.json`);
-  fs.writeFileSync(resultPath, `${JSON.stringify(results, null, 2)}\n`, {mode: 0o600, flag: "wx"});
-  console.log(JSON.stringify({phase: PHASE, assertionCount: results.assertions.length, passed: true}));
 } catch (error) {
+  failure = error;
+  if (client) {
+    results.external_requests = client.externalRequests;
+    results.blocked_external_requests = client.blockedExternalRequests;
+    results.external_websocket_requests = client.externalWebSocketRequests;
+    results.unexpected_scheme_requests = client.unexpectedSchemeRequests;
+    results.target_summary = client.targetSummary();
+  }
   results.error = String(error?.stack || error);
-  results.external_requests = client.externalRequests;
-  results.blocked_external_requests = client.blockedExternalRequests;
-  const resultPath = path.join(EVIDENCE, `${PHASE}-browser-results.json`);
-  fs.writeFileSync(resultPath, `${JSON.stringify(results, null, 2)}\n`, {mode: 0o600, flag: "wx"});
-  throw error;
-} finally {
-  client.close();
 }
+
+const resultPath = path.join(EVIDENCE, `${PHASE}-browser-results.json`);
+fs.writeFileSync(resultPath, `${JSON.stringify(results, null, 2)}\n`, {mode: 0o600, flag: "wx"});
+if (client) await client.closeBrowser();
+if (failure) throw failure;
+console.log(JSON.stringify({phase: PHASE, assertionCount: results.assertions.length, passed: true}));

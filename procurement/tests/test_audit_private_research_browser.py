@@ -15,6 +15,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import threading
+import time
 import unittest
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
@@ -46,13 +47,32 @@ def _load_tool():
 
 
 def _synthetic_workspace() -> dict[str, object]:
+    mapping_evidence = {
+        "candidate_disposition": "REVIEW_REQUIRED",
+        "blockers": {
+            "identity": ["SOURCE_IDENTITY_UNRESOLVED"],
+            "program_price": ["NO_CURRENT_PRICE_OR_TIER_AUTHORITY"],
+        },
+        "relationship_record_sha256": "d" * 64,
+    }
     projection = build_private_research_projection(
         intake(
             [
                 variant(
                     "100",
                     hypotheses=[
-                        hypothesis("100", "Alpha", "ALPHA-100", "8.00")
+                        hypothesis(
+                            "100",
+                            "Alpha",
+                            "ALPHA-100",
+                            "8.00",
+                            source_occurrence_id="source-occurrence-browser-100",
+                            mapping_confidence={
+                                "status": "UNAPPROVED",
+                                "basis": "SYNTHETIC_BROWSER_REVIEW",
+                            },
+                            mapping_evidence=mapping_evidence,
+                        )
                     ],
                 ),
                 variant(
@@ -89,6 +109,7 @@ def _synthetic_workspace() -> dict[str, object]:
             "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
             "operational_authority": False,
             "workspace_id": "f" * 64,
+            "intake_sha256": "e" * 64,
             "projection_sha256": projection["projection_sha256"],
             "artifacts": records,
         },
@@ -98,31 +119,76 @@ def _synthetic_workspace() -> dict[str, object]:
 
 
 def _phase_result(tool, expectations, phase: str, base_url: str) -> dict[str, object]:
+    if "tooling" not in expectations:
+        expectations["tooling"] = {
+            "node_version": process_version(),
+            "script_sha256": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(),
+        }
     return {
         "contract": tool.CONTRACT,
         "phase": phase,
         "base_url": base_url,
         "passed": True,
-        "assertions": [{"passed": True}] * 24,
+        "assertions": [
+            {"id": identifier, "passed": True}
+            for identifier in expectations["assertion_ids"]
+        ],
         "semantic_hashes": expectations["semantic_hashes"],
+        "workspace_hashes": expectations["workspace_hashes"],
         "counts": expectations["counts"],
         "artifact_hashes": {
             item["name"]: item["sha256"] for item in expectations["artifacts"]
         },
         "external_requests": [],
         "blocked_external_requests": [],
+        "external_websocket_requests": [],
+        "unexpected_scheme_requests": [],
+        "tooling": {
+            **expectations["tooling"],
+            "browser": {
+                "product": "Chrome/fixture",
+                "protocol_version": "1.3",
+                "js_version": "fixture",
+            },
+        },
+        "target_summary": {
+            "observed_types": ["page"],
+            "by_type": {"page": 1},
+            "attached": 1,
+            "guarded": 1,
+            "resumed": 1,
+        },
         "request_count": 18,
         "response_count": 18,
     }
 
 
-def _start_synthetic_viewer(port, workspace, secret, tool):
+def process_version() -> str:
+    completed = subprocess.run(
+        [shutil.which("node") or "node", "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return completed.stdout.strip()
+
+
+def _start_synthetic_viewer(
+    port,
+    workspace,
+    secret,
+    tool,
+    *,
+    auth_required=True,
+    attack_origin=None,
+):
     projection = workspace["projection"]
     manifest = workspace["manifest"]
     artifacts = workspace["artifacts"]
     expected_auth = "Basic " + base64.b64encode(
         b"private:" + secret
     ).decode("ascii")
+    attack_pages_remaining = [1]
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -144,12 +210,42 @@ def _start_synthetic_viewer(port, workspace, secret, tool):
 
         def do_GET(self):
             parsed = urlsplit(self.path)
-            if parsed.path != "/health" and self.headers.get("Authorization") != expected_auth:
+            if (
+                auth_required
+                and parsed.path != "/health"
+                and self.headers.get("Authorization") != expected_auth
+            ):
                 self._send(
                     401,
                     b"Private review authentication failed",
-                    extra={"WWW-Authenticate": 'Basic realm="synthetic private review"'},
+                    extra={
+                        "WWW-Authenticate": (
+                            'Basic realm="Buffalo private research", charset="UTF-8"'
+                        )
+                    },
                 )
+                return
+            if parsed.path == "/worker.js" and attack_origin:
+                script = (
+                    "setTimeout(() => fetch("
+                    + json.dumps(f"{attack_origin}/worker-timer")
+                    + ").catch(() => {}), 25);"
+                    + "setTimeout(() => { try { new WebSocket("
+                    + json.dumps(
+                        f"{str(attack_origin).replace('http://', 'ws://')}/worker-socket"
+                    )
+                    + "); } catch (_) {} }, 30);"
+                    + "setInterval(() => {}, 1000);"
+                ).encode("utf-8")
+                self._send(200, script, "text/javascript; charset=utf-8")
+                return
+            if parsed.path == "/popup" and attack_origin:
+                page = (
+                    "<!doctype html><script>setTimeout(() => fetch("
+                    + json.dumps(f"{attack_origin}/popup-timer")
+                    + ").catch(() => {}), 25)</script>"
+                ).encode("utf-8")
+                self._send(200, page, "text/html; charset=utf-8")
                 return
             if parsed.path == "/health":
                 self._send(
@@ -209,6 +305,9 @@ def _start_synthetic_viewer(port, workspace, secret, tool):
             if stockout:
                 rows = [row for row in rows if tool._stockout_status(row) == stockout]
             selected = rows[:50]
+            inject_attack = bool(attack_origin and attack_pages_remaining[0])
+            if inject_attack:
+                attack_pages_remaining[0] -= 1
             cards = "".join(
                 "<article class='record' data-variant-id='"
                 + html.escape(str(row["shopify_variant_id"]), quote=True)
@@ -235,6 +334,22 @@ def _start_synthetic_viewer(port, workspace, secret, tool):
             )
             page = (
                 "<!doctype html><html><body>"
+                + (
+                    "<script>"
+                    "setTimeout(() => fetch("
+                    + json.dumps(f"{attack_origin}/page-timer")
+                    + ").catch(() => {}), 50);"
+                    "setTimeout(() => { try { new WebSocket("
+                    + json.dumps(
+                        f"{str(attack_origin).replace('http://', 'ws://')}/page-socket"
+                    )
+                    + "); } catch (_) {} }, 30);"
+                    "new Worker('/worker.js');"
+                    "setTimeout(() => window.open('/popup'), 20);"
+                    "</script>"
+                    if inject_attack
+                    else ""
+                )
                 + artifact_links
                 + "<form method='get' action='/private-research'>"
                 + f"<input name='q' value='{html.escape(query, quote=True)}'>"
@@ -250,6 +365,45 @@ def _start_synthetic_viewer(port, workspace, secret, tool):
                 + "</body></html>"
             ).encode("utf-8")
             self._send(200, page, "text/html; charset=utf-8")
+
+        def _deny_write(self):
+            self._send(403, b"Route is not authorized")
+
+        do_POST = _deny_write
+        do_PUT = _deny_write
+        do_PATCH = _deny_write
+        do_DELETE = _deny_write
+
+    class ReusableServer(ThreadingHTTPServer):
+        allow_reuse_address = True
+
+    server = ReusableServer(("127.0.0.1", port), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def _start_capture_listener(port, received):
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_args):
+            return
+
+        def do_GET(self):
+            received.append(
+                {
+                    "path": urlsplit(self.path).path,
+                    "authorization": self.headers.get("Authorization"),
+                }
+            )
+            body = b"unexpected external listener contact"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
 
     class ReusableServer(ThreadingHTTPServer):
         allow_reuse_address = True
@@ -293,7 +447,7 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             base_url=base_url,
             expectations=expectations,
         )
-        self.assertEqual(summary["assertions"], 24)
+        self.assertEqual(summary["assertions"], len(tool.ASSERTION_IDS))
         changed = dict(result)
         changed["external_requests"] = [
             {"method": "GET", "url": "https://external.invalid/"}
@@ -307,11 +461,48 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                 base_url=base_url,
                 expectations=expectations,
             )
+        duplicate = json.loads(json.dumps(result))
+        duplicate["assertions"][-1] = dict(duplicate["assertions"][0])
+        with self.assertRaisesRegex(
+            tool.PrivateResearchBrowserAuditError, "result differs"
+        ):
+            tool._validate_phase_result(
+                duplicate,
+                phase="initial",
+                base_url=base_url,
+                expectations=expectations,
+            )
+        failed_assertion = json.loads(json.dumps(result))
+        failed_assertion["assertions"][0]["passed"] = False
+        with self.assertRaisesRegex(
+            tool.PrivateResearchBrowserAuditError, "result differs"
+        ):
+            tool._validate_phase_result(
+                failed_assertion,
+                phase="initial",
+                base_url=base_url,
+                expectations=expectations,
+            )
+        wrong_script = json.loads(json.dumps(result))
+        wrong_script["tooling"]["script_sha256"] = "0" * 64
+        with self.assertRaisesRegex(
+            tool.PrivateResearchBrowserAuditError, "result differs"
+        ):
+            tool._validate_phase_result(
+                wrong_script,
+                phase="initial",
+                base_url=base_url,
+                expectations=expectations,
+            )
 
     def test_two_phase_orchestration_reuses_origin_and_removes_runtime_secret(self):
         tool = _load_tool()
         workspace = _synthetic_workspace()
         expectations = tool._build_expectations(workspace)
+        expectations["tooling"] = {
+            "node_version": process_version(),
+            "script_sha256": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(),
+        }
         with TemporaryDirectory(prefix="buffalo-private-browser-test-") as temporary:
             parent = Path(temporary).resolve()
             workspace_root = (
@@ -350,6 +541,7 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
 
             fake_process = mock.Mock()
             fake_handle = mock.Mock()
+            source_identity = {"commit": "a" * 40, "tree": "b" * 40}
             previous_umask = os.umask(0o077)
             os.umask(previous_umask)
             try:
@@ -368,12 +560,17 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                     mock.patch.object(
                         tool,
                         "_start_server",
-                        return_value=(fake_process, fake_handle),
+                        return_value=(fake_process, fake_handle, source_identity),
                     ) as start_server,
                     mock.patch.object(tool, "_wait_cdp", return_value="http://127.0.0.1:19999"),
                     mock.patch.object(tool, "_run_cdp_phase", side_effect=run_phase),
                     mock.patch.object(tool, "_stop_server") as stop_server,
                     mock.patch.object(tool, "_stop_browser") as stop_browser,
+                    mock.patch.object(
+                        tool,
+                        "_node_runtime_info",
+                        return_value={"version": process_version(), "major": "22"},
+                    ),
                     mock.patch.object(tool, "_assert_port_free"),
                     mock.patch.object(
                         tool.shutil,
@@ -394,9 +591,10 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             )
             self.assertEqual(start_server.call_count, 2)
             self.assertEqual(stop_server.call_count, 2)
-            stop_browser.assert_called_once()
+            self.assertEqual(stop_browser.call_count, 2)
             self.assertFalse(runtime_root.exists())
-            self.assertFalse(result["runtime_secret_retained"])
+            self.assertTrue(result["cleanup"]["runtime_root_removed"])
+            self.assertEqual(result["source"], source_identity)
             retained = b"".join(
                 path.read_bytes()
                 for path in evidence_root.rglob("*")
@@ -429,13 +627,68 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             tool._cleanup_runtime(runtime)
             self.assertFalse(runtime.exists())
 
+            evidence = parent / "evidence"
+            evidence.mkdir(mode=0o700)
+            nested = evidence / "nested"
+            nested.mkdir(mode=0o700)
+            secret = b"synthetic-secret-that-must-not-survive"
+            (nested / "contaminated.json").write_bytes(b'{"value":"' + secret + b'"}')
+            (evidence / "otherwise-safe.json").write_text(
+                "{}\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError,
+                "fresh evidence root was removed",
+            ):
+                tool._assert_no_auth_material(evidence, secret)
+            self.assertFalse(evidence.exists())
+
+    def test_process_cleanup_kills_session_child_after_leader_exits(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-browser-process-") as temporary:
+            marker = Path(temporary) / "child.pid"
+            code = """
+import os
+from pathlib import Path
+import sys
+import time
+
+child = os.fork()
+if child:
+    Path(sys.argv[1]).write_text(str(child), encoding="ascii")
+    os._exit(0)
+os.setpgid(0, 0)
+time.sleep(60)
+"""
+            process = subprocess.Popen(
+                [sys.executable, "-c", code, str(marker)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            try:
+                process.wait(timeout=5)
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and not marker.exists():
+                    time.sleep(0.01)
+                child_pid = int(marker.read_text(encoding="ascii"))
+                self.assertIn(child_pid, tool._live_session_pids(process.pid))
+                tool._stop_process_group(process, timeout=1)
+                self.assertEqual(tool._live_session_pids(process.pid), set())
+            finally:
+                tool._stop_process_group(process, timeout=1)
+
     def test_node_script_is_dependency_free_and_syntax_valid(self):
         source = SCRIPT.read_text(encoding="utf-8")
         for required in (
-            "Network.setExtraHTTPHeaders",
+            "Target.setAutoAttach",
+            "waitForDebuggerOnStart: true",
+            "Fetch.continueRequest",
             "Fetch.failRequest",
             "Browser.setDownloadBehavior",
             "blocked_external_requests",
+            "external_websocket_requests",
             "owner-preview.html",
             "owner-worksheet.csv",
             "coverage.json",
@@ -443,6 +696,7 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, source)
+        self.assertNotIn("Network.setExtraHTTPHeaders", source)
         self.assertNotIn("node_modules", source)
         completed = subprocess.run(
             [sys.executable, "-c", "import shutil; print(shutil.which('node') or '')"],
@@ -459,6 +713,8 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             text=True,
             check=True,
         )
+        runtime = _load_tool()._node_runtime_info(node)
+        self.assertGreaterEqual(int(runtime["major"]), 22)
 
     def test_harness_import_excludes_operational_services_and_database_driver(self):
         probe = """
@@ -509,6 +765,10 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
             self.skipTest("Chromium and Node.js are unavailable")
         workspace = _synthetic_workspace()
         expectations = tool._build_expectations(workspace)
+        expectations["tooling"] = {
+            "node_version": process_version(),
+            "script_sha256": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(),
+        }
         secret = b"synthetic-private-browser-secret-value"
         with TemporaryDirectory(prefix="buffalo-private-browser-cdp-") as temporary:
             root = Path(temporary).resolve()
@@ -528,14 +788,11 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
             cdp_port = tool._free_port()
             while cdp_port == app_port:
                 cdp_port = tool._free_port()
-            profile = root / "profile"
-            browser, browser_handle = tool._start_browser(
-                chromium, profile, cdp_port, root / "chromium.stderr"
-            )
             server = None
             thread = None
+            browser = None
+            browser_handle = None
             try:
-                cdp = tool._wait_cdp(browser, cdp_port)
                 for phase, phase_downloads in (
                     ("initial", initial_downloads),
                     ("restart", restart_downloads),
@@ -543,37 +800,211 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                     server, thread = _start_synthetic_viewer(
                         app_port, workspace, secret, tool
                     )
-                    raw = tool._run_cdp_phase(
-                        node=node,
-                        phase=phase,
-                        base_url=f"http://127.0.0.1:{app_port}",
-                        cdp_endpoint=cdp,
-                        evidence_root=evidence,
-                        downloads=phase_downloads,
-                        secret_path=secret_path,
-                        expectations_path=expectations_path,
-                        state_path=state_path,
-                    )
-                    checked = tool._validate_phase_result(
-                        raw,
-                        phase=phase,
-                        base_url=f"http://127.0.0.1:{app_port}",
-                        expectations=expectations,
-                    )
-                    self.assertGreaterEqual(checked["assertions"], 20)
-                    server.shutdown()
-                    server.server_close()
-                    thread.join(timeout=5)
-                    server = None
-                    thread = None
+                    try:
+                        browser, browser_handle = tool._start_browser(
+                            chromium,
+                            root / f"profile-{phase}",
+                            cdp_port,
+                            root / f"chromium-{phase}.stderr",
+                        )
+                        cdp = tool._wait_cdp(browser, cdp_port)
+                        raw = tool._run_cdp_phase(
+                            node=node,
+                            phase=phase,
+                            base_url=f"http://127.0.0.1:{app_port}",
+                            cdp_endpoint=cdp,
+                            evidence_root=evidence,
+                            downloads=phase_downloads,
+                            secret_path=secret_path,
+                            expectations_path=expectations_path,
+                            state_path=state_path,
+                        )
+                        checked = tool._validate_phase_result(
+                            raw,
+                            phase=phase,
+                            base_url=f"http://127.0.0.1:{app_port}",
+                            expectations=expectations,
+                        )
+                        self.assertEqual(
+                            checked["assertions"], len(tool.ASSERTION_IDS)
+                        )
+                    finally:
+                        if browser is not None and browser_handle is not None:
+                            tool._stop_browser(browser, browser_handle)
+                            browser = None
+                            browser_handle = None
+                            tool._assert_port_free(cdp_port, label="test CDP")
+                        server.shutdown()
+                        server.server_close()
+                        thread.join(timeout=5)
+                        server = None
+                        thread = None
+                        tool._assert_port_free(app_port, label="test viewer")
                 tool._assert_no_auth_material(evidence, secret)
             finally:
+                if browser is not None and browser_handle is not None:
+                    tool._stop_browser(browser, browser_handle)
                 if server is not None:
                     server.shutdown()
                     server.server_close()
                 if thread is not None:
                     thread.join(timeout=5)
+
+    def test_real_browser_rejects_auth_disabled_private_fixture(self):
+        tool = _load_tool()
+        chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+        node = shutil.which("node")
+        if chromium is None or node is None:
+            self.skipTest("Chromium and Node.js are unavailable")
+        workspace = _synthetic_workspace()
+        expectations = tool._build_expectations(workspace)
+        expectations["tooling"] = {
+            "node_version": process_version(),
+            "script_sha256": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(),
+        }
+        secret = b"synthetic-private-browser-secret-value"
+        with TemporaryDirectory(prefix="buffalo-private-browser-noauth-") as temporary:
+            root = Path(temporary).resolve()
+            evidence = root / "evidence"
+            downloads = root / "downloads"
+            evidence.mkdir(mode=0o700)
+            downloads.mkdir(mode=0o700)
+            secret_path = root / "private-viewer.secret"
+            secret_path.write_bytes(secret + b"\n")
+            secret_path.chmod(0o600)
+            expectations_path = root / "expectations.json"
+            tool._write_private_json(expectations_path, expectations)
+            app_port = tool._free_port()
+            cdp_port = tool._free_port()
+            while cdp_port == app_port:
+                cdp_port = tool._free_port()
+            server, thread = _start_synthetic_viewer(
+                app_port,
+                workspace,
+                secret,
+                tool,
+                auth_required=False,
+            )
+            browser, browser_handle = tool._start_browser(
+                chromium, root / "profile", cdp_port, root / "chromium.stderr"
+            )
+            try:
+                cdp = tool._wait_cdp(browser, cdp_port)
+                with self.assertRaisesRegex(
+                    tool.PrivateResearchBrowserAuditError,
+                    r"v2\.auth\.missing\.index",
+                ):
+                    tool._run_cdp_phase(
+                        node=node,
+                        phase="initial",
+                        base_url=f"http://127.0.0.1:{app_port}",
+                        cdp_endpoint=cdp,
+                        evidence_root=evidence,
+                        downloads=downloads,
+                        secret_path=secret_path,
+                        expectations_path=expectations_path,
+                        state_path=root / "restart-state.json",
+                    )
+                failed = json.loads(
+                    (evidence / "initial-browser-results.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertFalse(failed["passed"])
+                tool._assert_no_auth_material(evidence, secret)
+            finally:
                 tool._stop_browser(browser, browser_handle)
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
+    def test_all_target_guard_blocks_second_listener_worker_popup_and_timers(self):
+        tool = _load_tool()
+        chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+        node = shutil.which("node")
+        if chromium is None or node is None:
+            self.skipTest("Chromium and Node.js are unavailable")
+        workspace = _synthetic_workspace()
+        expectations = tool._build_expectations(workspace)
+        expectations["tooling"] = {
+            "node_version": process_version(),
+            "script_sha256": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(),
+        }
+        secret = b"synthetic-private-browser-secret-value"
+        with TemporaryDirectory(prefix="buffalo-private-browser-attack-") as temporary:
+            root = Path(temporary).resolve()
+            evidence = root / "evidence"
+            downloads = root / "downloads"
+            evidence.mkdir(mode=0o700)
+            downloads.mkdir(mode=0o700)
+            secret_path = root / "private-viewer.secret"
+            secret_path.write_bytes(secret + b"\n")
+            secret_path.chmod(0o600)
+            expectations_path = root / "expectations.json"
+            tool._write_private_json(expectations_path, expectations)
+            app_port = tool._free_port()
+            external_port = tool._free_port()
+            cdp_port = tool._free_port()
+            while len({app_port, external_port, cdp_port}) != 3:
+                external_port = tool._free_port()
+                cdp_port = tool._free_port()
+            received: list[dict[str, object]] = []
+            capture, capture_thread = _start_capture_listener(
+                external_port, received
+            )
+            server, thread = _start_synthetic_viewer(
+                app_port,
+                workspace,
+                secret,
+                tool,
+                attack_origin=f"http://127.0.0.1:{external_port}",
+            )
+            browser, browser_handle = tool._start_browser(
+                chromium, root / "profile", cdp_port, root / "chromium.stderr"
+            )
+            try:
+                cdp = tool._wait_cdp(browser, cdp_port)
+                with self.assertRaisesRegex(
+                    tool.PrivateResearchBrowserAuditError,
+                    r"v2\.network\.no_external_http",
+                ):
+                    tool._run_cdp_phase(
+                        node=node,
+                        phase="initial",
+                        base_url=f"http://127.0.0.1:{app_port}",
+                        cdp_endpoint=cdp,
+                        evidence_root=evidence,
+                        downloads=downloads,
+                        secret_path=secret_path,
+                        expectations_path=expectations_path,
+                        state_path=root / "restart-state.json",
+                    )
+                failed = json.loads(
+                    (evidence / "initial-browser-results.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertTrue(failed["external_requests"])
+                self.assertTrue(failed["blocked_external_requests"])
+                self.assertTrue(failed["external_websocket_requests"])
+                summary = failed["target_summary"]
+                self.assertEqual(summary["attached"], summary["guarded"])
+                self.assertEqual(summary["attached"], summary["resumed"])
+                self.assertIn("worker", summary["observed_types"])
+                self.assertIn(
+                    "v2.cdp.all_targets_guarded",
+                    {item["id"] for item in failed["assertions"]},
+                )
+                self.assertEqual(received, [])
+                tool._assert_no_auth_material(evidence, secret)
+            finally:
+                tool._stop_browser(browser, browser_handle)
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+                capture.shutdown()
+                capture.server_close()
+                capture_thread.join(timeout=5)
 
 
 if __name__ == "__main__":

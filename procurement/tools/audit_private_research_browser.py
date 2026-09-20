@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import socket
@@ -32,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "procurement" / "src"
 SCRIPT = Path(__file__).with_suffix(".mjs")
 LAUNCHER = Path(__file__).with_name("serve_private_research.py")
-CONTRACT = "BUFFALO_PRIVATE_RESEARCH_BROWSER_ACCEPTANCE_V1"
+CONTRACT = "BUFFALO_PRIVATE_RESEARCH_BROWSER_ACCEPTANCE_V2"
 ARTIFACT_NAMES = (
     "owner-preview.html",
     "owner-worksheet.csv",
@@ -43,6 +44,63 @@ ARTIFACT_NAMES = (
 # app performs its own startup replay under the launcher's 600-second window.
 SERVER_READY_SECONDS = 21 * 60
 CDP_READY_SECONDS = 30
+_HEX40 = re.compile(r"[0-9a-f]{40}")
+
+
+def _expected_assertion_ids() -> tuple[str, ...]:
+    identifiers = [
+        "v2.cdp.node_prerequisites",
+        "v2.cdp.browser_version",
+        "v2.page.initial.rows",
+        "v2.page.initial.details",
+        "v2.page.initial.count",
+        "v2.page.initial.read_only",
+        "v2.detail.exact",
+        "v2.detail.core_evidence",
+        "v2.detail.source_occurrence",
+        "v2.detail.mapping_evidence",
+        "v2.detail.mapping_blockers",
+        "v2.health.contract",
+        "v2.health.no_hashes",
+        "v2.readback.manifest",
+        "v2.readback.projection",
+        "v2.readback.counts",
+    ]
+    for mode in ("missing", "wrong"):
+        for surface in ("index", "manifest", "projection", "artifact"):
+            identifiers.append(f"v2.auth.{mode}.{surface}")
+    identifiers.extend(
+        ("v2.routes.operational_absent", "v2.routes.write_methods_denied")
+    )
+    for name in ("search", "vendor", "status", "stockout"):
+        for check in ("submit", "rows", "details", "count", "read_only"):
+            identifiers.append(f"v2.filter.{name}.{check}")
+    identifiers.append("v2.search.source_occurrence")
+    for name in ARTIFACT_NAMES:
+        slug = name.replace(".", "_").replace("-", "_")
+        for check in ("filename", "bytes", "response"):
+            identifiers.append(f"v2.artifact.{slug}.{check}")
+    identifiers.extend(
+        (
+            "v2.artifacts.complete",
+            "v2.auth.no_ambient_cookie",
+            "v2.restart.identity",
+            "v2.cdp.all_targets_guarded",
+            "v2.network.no_external_http",
+            "v2.network.no_external_websocket",
+            "v2.network.no_unexpected_scheme",
+            "v2.browser.no_runtime_exceptions",
+            "v2.browser.no_console_errors",
+            "v2.cdp.no_event_errors",
+            "v2.responses.no_store",
+        )
+    )
+    if len(identifiers) != len(set(identifiers)):
+        raise AssertionError("browser assertion identifiers must be unique")
+    return tuple(identifiers)
+
+
+ASSERTION_IDS = _expected_assertion_ids()
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
@@ -215,11 +273,30 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         raise PrivateResearchBrowserAuditError(
             "browser vendor filtering requires one named supplier"
         )
-    detail_row = dict(rows[0])
-    query = str(detail_row.get("shopify_variant_id") or "")
-    if not query:
-        raise PrivateResearchBrowserAuditError("browser search fixture is absent")
+    evidence_row = next(
+        (
+            row
+            for row in rows
+            if isinstance(row.get("source_occurrence_ref"), str)
+            and row["source_occurrence_ref"]
+            and isinstance(row.get("unapproved_mapping_evidence"), dict)
+            and row["unapproved_mapping_evidence"]
+            and isinstance(row.get("unapproved_mapping_blocker_reasons"), list)
+            and row["unapproved_mapping_blocker_reasons"]
+        ),
+        None,
+    )
+    if evidence_row is None:
+        raise PrivateResearchBrowserAuditError(
+            "browser evidence requires occurrence, mapping, and blocker detail"
+        )
+    detail_row = dict(evidence_row)
+    query = str(detail_row["source_occurrence_ref"])
     query_rows = filter_private_research_rows(projection, query=query)
+    if detail_row not in query_rows:
+        raise PrivateResearchBrowserAuditError(
+            "source occurrence is not live-searchable"
+        )
     vendor = str(named_row["supplier_name"])
     vendor_rows = filter_private_research_rows(projection, vendor=vendor)
     raw_reasons = detail_row.get("missing_data_reasons")
@@ -266,6 +343,10 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                 "bytes": len(data),
                 "sha256": digest,
                 "media_type": record.get("media_type"),
+                "browser_mime_type": str(record.get("media_type") or "")
+                .split(";", 1)[0]
+                .strip()
+                .lower(),
             }
         )
 
@@ -283,6 +364,24 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
     }
     if set(counts) != set(count_fields):
         raise PrivateResearchBrowserAuditError("workspace projection counts are incomplete")
+    workspace_id = manifest.get("workspace_id")
+    projection_sha256 = manifest.get("projection_sha256")
+    intake_sha256 = manifest.get("intake_sha256")
+    if (
+        not isinstance(workspace_id, str)
+        or len(workspace_id) != 64
+        or not isinstance(projection_sha256, str)
+        or len(projection_sha256) != 64
+    ):
+        raise PrivateResearchBrowserAuditError("workspace identity hashes differ")
+    workspace_hashes = {
+        "workspace_id": workspace_id,
+        "projection_sha256": projection_sha256,
+        "manifest_semantic_sha256": _json_sha256(manifest),
+        "projection_semantic_sha256": _json_sha256(projection),
+    }
+    if isinstance(intake_sha256, str) and len(intake_sha256) == 64:
+        workspace_hashes["intake_sha256"] = intake_sha256
     return {
         "contract": CONTRACT,
         "manifest": manifest,
@@ -291,11 +390,20 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             "manifest_sha256": _json_sha256(manifest),
             "projection_sha256": _json_sha256(projection),
         },
+        "workspace_hashes": workspace_hashes,
+        "assertion_ids": list(ASSERTION_IDS),
         "counts": counts,
         "initial": {
             "total": len(rows),
             "first_page_rows": [dict(row) for row in rows[:50]],
             "detail_row": detail_row,
+        },
+        "evidence": {
+            "source_occurrence_ref": detail_row["source_occurrence_ref"],
+            "mapping_evidence": detail_row["unapproved_mapping_evidence"],
+            "mapping_blocker_reasons": detail_row[
+                "unapproved_mapping_blocker_reasons"
+            ],
         },
         "filters": [
             _filter_expectation("search", {"q": query}, query_rows),
@@ -326,6 +434,48 @@ def _minimal_environment(*, path: str, home: Path | None = None) -> dict[str, st
     if home is not None:
         result["HOME"] = str(home)
     return result
+
+
+def _node_runtime_info(node: str) -> dict[str, str]:
+    probe = (
+        "const out={version:process.version,fetch:typeof fetch,"
+        "websocket:typeof WebSocket,structuredClone:typeof structuredClone};"
+        "process.stdout.write(JSON.stringify(out));"
+    )
+    try:
+        completed = subprocess.run(
+            (node, "-e", probe),
+            cwd=REPO_ROOT,
+            env=_minimal_environment(path=str(Path(node).parent)),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        major = int(str(result.get("version", "")).removeprefix("v").split(".", 1)[0])
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        AttributeError,
+        json.JSONDecodeError,
+        subprocess.TimeoutExpired,
+    ) as exc:
+        raise PrivateResearchBrowserAuditError(
+            "Node.js browser prerequisites are unavailable"
+        ) from exc
+    if (
+        completed.returncode != 0
+        or major < 22
+        or result.get("fetch") != "function"
+        or result.get("websocket") != "function"
+        or result.get("structuredClone") != "function"
+    ):
+        raise PrivateResearchBrowserAuditError(
+            "Node.js 22+ with fetch and WebSocket is required"
+        )
+    return {"version": str(result["version"]), "major": str(major)}
 
 
 def _initialize_runtime(runtime_root: Path) -> Path:
@@ -390,32 +540,48 @@ def _start_server(
     runtime_root: Path,
     port: int,
     log_path: Path,
-) -> tuple[subprocess.Popen[bytes], Any]:
+) -> tuple[subprocess.Popen[bytes], Any, dict[str, str]]:
     log_handle = log_path.open("ab", buffering=0)
-    process = subprocess.Popen(
-        (
-            sys.executable,
-            str(LAUNCHER),
-            "serve",
-            "--runtime-root",
-            str(runtime_root),
-            "--workspace-root",
-            str(workspace_root),
-            "--port",
-            str(port),
-        ),
-        cwd=REPO_ROOT,
-        env=_minimal_environment(path=os.environ.get("PATH", "")),
-        stdout=log_handle,
-        stderr=log_handle,
-        start_new_session=True,
-    )
+    try:
+        process = subprocess.Popen(
+            (
+                sys.executable,
+                str(LAUNCHER),
+                "serve",
+                "--runtime-root",
+                str(runtime_root),
+                "--workspace-root",
+                str(workspace_root),
+                "--port",
+                str(port),
+            ),
+            cwd=REPO_ROOT,
+            env=_minimal_environment(path=os.environ.get("PATH", "")),
+            stdout=log_handle,
+            stderr=log_handle,
+            start_new_session=True,
+        )
+    except BaseException:
+        log_handle.close()
+        raise
     try:
         _wait_health(process, port)
+        record = _viewer_pid_record(runtime_root)
+        if record is None:
+            raise PrivateResearchBrowserAuditError(
+                "private viewer process identity is unavailable"
+            )
     except BaseException:
         _stop_server(process, log_handle, runtime_root)
         raise
-    return process, log_handle
+    return (
+        process,
+        log_handle,
+        {
+            "commit": str(record["source_commit"]),
+            "tree": str(record["source_tree"]),
+        },
+    )
 
 
 def _signal_process_group(pid: int, signum: int) -> None:
@@ -425,15 +591,7 @@ def _signal_process_group(pid: int, signum: int) -> None:
         pass
 
 
-def _process_group_exists(pid: int) -> bool:
-    try:
-        os.killpg(pid, 0)
-    except ProcessLookupError:
-        return False
-    return True
-
-
-def _viewer_child_pid(runtime_root: Path) -> int | None:
+def _viewer_pid_record(runtime_root: Path) -> dict[str, Any] | None:
     pid_path = runtime_root / "private-viewer.pid"
     try:
         info = pid_path.stat(follow_symlinks=False)
@@ -458,6 +616,13 @@ def _viewer_child_pid(runtime_root: Path) -> int | None:
         pid = record["pid"]
         if type(pid) is not int or pid <= 1 or pid > (1 << 31) - 1:
             return None
+        if (
+            not isinstance(record["source_commit"], str)
+            or _HEX40.fullmatch(record["source_commit"]) is None
+            or not isinstance(record["source_tree"], str)
+            or _HEX40.fullmatch(record["source_tree"]) is None
+        ):
+            return None
         stat_value = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         command = Path(f"/proc/{pid}/cmdline").read_bytes()
         remainder = stat_value[stat_value.rindex(") ") + 2 :].split()
@@ -468,19 +633,72 @@ def _viewer_child_pid(runtime_root: Path) -> int | None:
             or b"procurement_os.private_research_app:app" not in command.split(b"\0")
         ):
             return None
-        return pid
+        return record
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError, IndexError):
         return None
 
 
+def _viewer_child_pid(runtime_root: Path) -> int | None:
+    record = _viewer_pid_record(runtime_root)
+    return int(record["pid"]) if record is not None else None
+
+
+def _live_session_pids(session_id: int) -> set[int]:
+    result: set[int] = set()
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "stat").read_text(encoding="utf-8")
+            remainder = raw[raw.rindex(") ") + 2 :].split()
+            state = remainder[0]
+            process_session = int(remainder[3])
+        except (OSError, ValueError, IndexError):
+            continue
+        if process_session == session_id and state != "Z":
+            result.add(int(entry.name))
+    return result
+
+
+def _signal_process_session(session_id: int, signum: int) -> None:
+    members = _live_session_pids(session_id)
+    if not members:
+        return
+    _signal_process_group(session_id, signum)
+    for pid in members:
+        try:
+            os.kill(pid, signum)
+        except ProcessLookupError:
+            pass
+
+
+def _stop_process_session(session_id: int, *, timeout: float) -> None:
+    _signal_process_session(session_id, signal.SIGTERM)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and _live_session_pids(session_id):
+        time.sleep(0.05)
+    if _live_session_pids(session_id):
+        _signal_process_session(session_id, signal.SIGKILL)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and _live_session_pids(session_id):
+            time.sleep(0.05)
+    if _live_session_pids(session_id):
+        raise PrivateResearchBrowserAuditError(
+            "browser audit process descendants survived cleanup"
+        )
+
+
 def _stop_process_group(process: subprocess.Popen[bytes], *, timeout: float) -> None:
+    # The session is terminated even when its leader has already exited.  Chromium
+    # and the launcher can leave children alive after an early leader failure.
+    _stop_process_session(process.pid, timeout=timeout)
     if process.poll() is None:
-        _signal_process_group(process.pid, signal.SIGTERM)
-    try:
-        process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _signal_process_group(process.pid, signal.SIGKILL)
-        process.wait(timeout=10)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired as exc:
+            raise PrivateResearchBrowserAuditError(
+                "browser audit process leader survived cleanup"
+            ) from exc
 
 
 def _stop_server(
@@ -492,23 +710,7 @@ def _stop_server(
     finally:
         handle.close()
     if child_pid is not None:
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and _process_group_exists(child_pid):
-            time.sleep(0.05)
-        if _process_group_exists(child_pid):
-            _signal_process_group(child_pid, signal.SIGTERM)
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and _process_group_exists(child_pid):
-                time.sleep(0.05)
-        if _process_group_exists(child_pid):
-            _signal_process_group(child_pid, signal.SIGKILL)
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and _process_group_exists(child_pid):
-                time.sleep(0.05)
-        if _process_group_exists(child_pid):
-            raise PrivateResearchBrowserAuditError(
-                "private viewer child process survived launcher stop"
-            )
+        _stop_process_session(child_pid, timeout=10)
     if process.returncode not in {0, -signal.SIGTERM}:
         raise PrivateResearchBrowserAuditError(
             f"private viewer launcher exited unexpectedly ({process.returncode})"
@@ -522,30 +724,34 @@ def _start_browser(
     log_path: Path,
 ) -> tuple[subprocess.Popen[bytes], Any]:
     handle = log_path.open("wb", buffering=0)
-    process = subprocess.Popen(
-        (
-            chromium,
-            "--headless=new",
-            "--no-sandbox",
-            "--disable-gpu",
-            "--disable-background-networking",
-            "--disable-component-update",
-            "--disable-default-apps",
-            "--disable-sync",
-            "--metrics-recording-only",
-            "--no-first-run",
-            "--no-default-browser-check",
-            "--host-resolver-rules=MAP * 0.0.0.0, EXCLUDE 127.0.0.1",
-            "--remote-debugging-address=127.0.0.1",
-            f"--remote-debugging-port={cdp_port}",
-            f"--user-data-dir={profile}",
-            "about:blank",
-        ),
-        env=_minimal_environment(path=str(Path(chromium).parent), home=profile.parent),
-        stdout=subprocess.DEVNULL,
-        stderr=handle,
-        start_new_session=True,
-    )
+    try:
+        process = subprocess.Popen(
+            (
+                chromium,
+                "--headless=new",
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-background-networking",
+                "--disable-component-update",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--metrics-recording-only",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--host-resolver-rules=MAP * 0.0.0.0, EXCLUDE 127.0.0.1",
+                "--remote-debugging-address=127.0.0.1",
+                f"--remote-debugging-port={cdp_port}",
+                f"--user-data-dir={profile}",
+                "about:blank",
+            ),
+            env=_minimal_environment(path=str(Path(chromium).parent), home=profile.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=handle,
+            start_new_session=True,
+        )
+    except BaseException:
+        handle.close()
+        raise
     return process, handle
 
 
@@ -636,28 +842,136 @@ def _validate_phase_result(
     expected_hashes = {
         item["name"]: item["sha256"] for item in expectations["artifacts"]
     }
+    assertions = result.get("assertions")
+    assertion_shape = isinstance(assertions, list) and all(
+        isinstance(item, dict)
+        and set(item) == {"id", "passed"}
+        and isinstance(item.get("id"), str)
+        and item.get("passed") is True
+        for item in assertions
+    )
+    assertion_ids = [item["id"] for item in assertions] if assertion_shape else []
+    tooling = result.get("tooling")
+    browser = tooling.get("browser") if isinstance(tooling, dict) else None
+    expected_tooling = expectations.get("tooling")
+    target_summary = result.get("target_summary")
+    target_shape = (
+        isinstance(target_summary, dict)
+        and set(target_summary)
+        == {"observed_types", "by_type", "attached", "guarded", "resumed"}
+        and isinstance(target_summary.get("observed_types"), list)
+        and isinstance(target_summary.get("by_type"), dict)
+        and all(
+            isinstance(name, str) and name
+            for name in target_summary["observed_types"]
+        )
+        and target_summary["observed_types"]
+        == sorted(set(target_summary["observed_types"]))
+        and set(target_summary["observed_types"]) == set(target_summary["by_type"])
+        and all(
+            isinstance(name, str)
+            and name
+            and type(count) is int
+            and count >= 1
+            for name, count in target_summary["by_type"].items()
+        )
+        and type(target_summary.get("attached")) is int
+        and target_summary["attached"] >= 1
+        and sum(target_summary["by_type"].values()) == target_summary["attached"]
+        and target_summary.get("guarded") == target_summary["attached"]
+        and target_summary.get("resumed") == target_summary["attached"]
+    )
+    expected_result_keys = {
+        "contract",
+        "phase",
+        "base_url",
+        "passed",
+        "assertions",
+        "semantic_hashes",
+        "workspace_hashes",
+        "counts",
+        "artifact_hashes",
+        "tooling",
+        "target_summary",
+        "external_requests",
+        "blocked_external_requests",
+        "external_websocket_requests",
+        "unexpected_scheme_requests",
+        "request_count",
+        "response_count",
+    }
     if (
-        result.get("contract") != CONTRACT
+        set(result) != expected_result_keys
+        or result.get("contract") != CONTRACT
         or result.get("phase") != phase
         or result.get("base_url") != base_url
         or result.get("passed") is not True
-        or not isinstance(result.get("assertions"), list)
-        or len(result["assertions"]) < 20
+        or not assertion_shape
+        or sorted(assertion_ids) != sorted(expectations["assertion_ids"])
+        or len(assertion_ids) != len(set(assertion_ids))
         or result.get("external_requests") != []
         or result.get("blocked_external_requests") != []
+        or result.get("external_websocket_requests") != []
+        or result.get("unexpected_scheme_requests") != []
         or result.get("artifact_hashes") != expected_hashes
         or result.get("semantic_hashes") != expectations["semantic_hashes"]
+        or result.get("workspace_hashes") != expectations["workspace_hashes"]
         or result.get("counts") != expectations["counts"]
+        or not isinstance(expected_tooling, dict)
+        or not isinstance(tooling, dict)
+        or set(tooling) != {"node_version", "script_sha256", "browser"}
+        or tooling.get("script_sha256") != expected_tooling.get("script_sha256")
+        or tooling.get("node_version") != expected_tooling.get("node_version")
+        or not isinstance(browser, dict)
+        or set(browser) != {"product", "protocol_version", "js_version"}
+        or not all(isinstance(value, str) and value for value in browser.values())
+        or not target_shape
+        or type(result.get("request_count")) is not int
+        or result["request_count"] < 1
+        or type(result.get("response_count")) is not int
+        or result["response_count"] < 1
     ):
         raise PrivateResearchBrowserAuditError(
             f"{phase} browser acceptance result differs"
         )
     return {
-        "assertions": len(result["assertions"]),
+        "assertions": len(assertions),
         "request_count": result.get("request_count"),
         "response_count": result.get("response_count"),
         "artifact_hashes": expected_hashes,
+        "browser": browser,
+        "target_summary": target_summary,
     }
+
+
+def _purge_evidence_root(evidence_root: Path) -> None:
+    if not evidence_root.exists() and not evidence_root.is_symlink():
+        return
+    try:
+        info = evidence_root.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise PrivateResearchBrowserAuditError(
+            "contaminated evidence root is unavailable"
+        ) from exc
+    if (
+        evidence_root.is_symlink()
+        or not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or stat.S_IMODE(info.st_mode) != 0o700
+    ):
+        raise PrivateResearchBrowserAuditError(
+            "contaminated evidence root identity differs"
+        )
+    try:
+        shutil.rmtree(evidence_root)
+    except OSError as exc:
+        raise PrivateResearchBrowserAuditError(
+            "contaminated evidence could not be removed"
+        ) from exc
+    if evidence_root.exists() or evidence_root.is_symlink():
+        raise PrivateResearchBrowserAuditError(
+            "contaminated evidence survived removal"
+        )
 
 
 def _assert_no_auth_material(evidence_root: Path, secret: bytes) -> None:
@@ -669,14 +983,23 @@ def _assert_no_auth_material(evidence_root: Path, secret: bytes) -> None:
         _sha256(secret).encode("ascii"),
         _sha256(b"private:" + secret).encode("ascii"),
     )
-    for path in evidence_root.rglob("*"):
-        if not path.is_file() or path.is_symlink():
-            continue
-        data = path.read_bytes()
-        if any(value in data for value in forbidden):
-            raise PrivateResearchBrowserAuditError(
-                "authentication material reached retained browser evidence"
-            )
+    contaminated = False
+    try:
+        for path in evidence_root.rglob("*"):
+            if not path.is_file() or path.is_symlink():
+                continue
+            data = path.read_bytes()
+            if any(value in data for value in forbidden):
+                contaminated = True
+                break
+    except OSError:
+        contaminated = True
+    if contaminated:
+        _purge_evidence_root(evidence_root)
+        raise PrivateResearchBrowserAuditError(
+            "authentication material reached retained browser evidence; "
+            "the fresh evidence root was removed"
+        )
 
 
 def _cleanup_runtime(runtime_root: Path) -> None:
@@ -731,6 +1054,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise PrivateResearchBrowserAuditError("Chromium and Node.js are required")
     if not SCRIPT.is_file() or not LAUNCHER.is_file():
         raise PrivateResearchBrowserAuditError("browser audit composition is incomplete")
+    node_runtime = _node_runtime_info(node)
+    expectations["tooling"] = {
+        "node_version": node_runtime["version"],
+        "script_sha256": _sha256(SCRIPT.read_bytes()),
+    }
 
     _prepare_empty_root(evidence_root, label="evidence root")
     _prepare_empty_root(runtime_root, label="runtime root")
@@ -740,9 +1068,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     restart_downloads = downloads_root / "restart"
     initial_downloads.mkdir(mode=0o700)
     restart_downloads.mkdir(mode=0o700)
-    server_log = evidence_root / "viewer.log"
-    server_log.touch(mode=0o600)
-    chromium_log = evidence_root / "chromium.stderr"
     app_port = args.port if args.port is not None else _free_port()
     _assert_port_free(app_port, label="private viewer")
     cdp_port = _free_port()
@@ -759,6 +1084,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     browser_handle: Any = None
     temporary_context: tempfile.TemporaryDirectory[str] | None = None
     phase_results: dict[str, dict[str, Any]] = {}
+    source_identities: list[dict[str, str]] = []
+    stopped_servers = 0
+    stopped_browsers = 0
     cleanup_error: BaseException | None = None
     try:
         secret_path = _initialize_runtime(runtime_root)
@@ -771,49 +1099,69 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         temporary_root = Path(temporary_context.name)
         expectations_path = temporary_root / "expectations.json"
         _write_private_json(expectations_path, expectations)
-        state_path = evidence_root / "restart-state.json"
-        profile = temporary_root / "chromium-profile"
-        browser, browser_handle = _start_browser(
-            chromium, profile, cdp_port, chromium_log
-        )
-        cdp_endpoint = _wait_cdp(browser, cdp_port)
+        state_path = temporary_root / "restart-state.json"
+        server_log = temporary_root / "viewer.log"
+        server_log.touch(mode=0o600)
         for phase, downloads in (
             ("initial", initial_downloads),
             ("restart", restart_downloads),
         ):
-            server, server_handle = _start_server(
+            server, server_handle, source_identity = _start_server(
                 workspace_root, runtime_root, app_port, server_log
             )
-            raw_result = _run_cdp_phase(
-                node=node,
-                phase=phase,
-                base_url=base_url,
-                cdp_endpoint=cdp_endpoint,
-                evidence_root=evidence_root,
-                downloads=downloads,
-                secret_path=secret_path,
-                expectations_path=expectations_path,
-                state_path=state_path,
-            )
-            phase_results[phase] = _validate_phase_result(
-                raw_result,
-                phase=phase,
-                base_url=base_url,
-                expectations=expectations,
-            )
-            _stop_server(server, server_handle, runtime_root)
-            server = None
-            server_handle = None
-            _assert_port_free(app_port, label="private viewer")
-    finally:
-        if server is not None and server_handle is not None:
+            source_identities.append(source_identity)
             try:
-                _stop_server(server, server_handle, runtime_root)
-            except BaseException as exc:
-                cleanup_error = exc
+                profile = temporary_root / f"chromium-profile-{phase}"
+                chromium_log = temporary_root / f"chromium-{phase}.stderr"
+                browser, browser_handle = _start_browser(
+                    chromium, profile, cdp_port, chromium_log
+                )
+                try:
+                    cdp_endpoint = _wait_cdp(browser, cdp_port)
+                    raw_result = _run_cdp_phase(
+                        node=node,
+                        phase=phase,
+                        base_url=base_url,
+                        cdp_endpoint=cdp_endpoint,
+                        evidence_root=evidence_root,
+                        downloads=downloads,
+                        secret_path=secret_path,
+                        expectations_path=expectations_path,
+                        state_path=state_path,
+                    )
+                    phase_results[phase] = _validate_phase_result(
+                        raw_result,
+                        phase=phase,
+                        base_url=base_url,
+                        expectations=expectations,
+                    )
+                finally:
+                    if browser is not None and browser_handle is not None:
+                        try:
+                            _stop_browser(browser, browser_handle)
+                            stopped_browsers += 1
+                        finally:
+                            browser = None
+                            browser_handle = None
+                    _assert_port_free(cdp_port, label="Chromium CDP")
+            finally:
+                if server is not None and server_handle is not None:
+                    try:
+                        _stop_server(server, server_handle, runtime_root)
+                        stopped_servers += 1
+                    finally:
+                        server = None
+                        server_handle = None
+                _assert_port_free(app_port, label="private viewer")
+    finally:
         if browser is not None and browser_handle is not None:
             try:
                 _stop_browser(browser, browser_handle)
+            except BaseException as exc:
+                cleanup_error = exc
+        if server is not None and server_handle is not None:
+            try:
+                _stop_server(server, server_handle, runtime_root)
             except BaseException as exc:
                 cleanup_error = cleanup_error or exc
         if temporary_context is not None:
@@ -842,20 +1190,44 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     if set(phase_results) != {"initial", "restart"}:
         raise PrivateResearchBrowserAuditError("browser acceptance phases are incomplete")
-    if phase_results["initial"]["artifact_hashes"] != phase_results["restart"]["artifact_hashes"]:
+    if (
+        phase_results["initial"]["artifact_hashes"]
+        != phase_results["restart"]["artifact_hashes"]
+        or phase_results["initial"]["browser"]
+        != phase_results["restart"]["browser"]
+    ):
         raise PrivateResearchBrowserAuditError("artifact hashes changed across restart")
+    if (
+        len(source_identities) != 2
+        or source_identities[0] != source_identities[1]
+    ):
+        raise PrivateResearchBrowserAuditError("viewer source identity changed across restart")
+    if stopped_servers != 2 or stopped_browsers != 2:
+        raise PrivateResearchBrowserAuditError("process cleanup proof is incomplete")
     result = {
         "contract": CONTRACT,
         "workspace_root": str(workspace_root),
         "workspace_id": expectations["manifest"]["workspace_id"],
         "origin": base_url,
         "evidence_root": str(evidence_root),
+        "source": source_identities[0],
+        "workspace_hashes": expectations["workspace_hashes"],
         "semantic_hashes": expectations["semantic_hashes"],
         "counts": expectations["counts"],
         "artifact_hashes": phase_results["initial"]["artifact_hashes"],
+        "tooling": {
+            **expectations["tooling"],
+            "browser": phase_results["initial"]["browser"],
+        },
         "phases": phase_results,
-        "runtime_secret_retained": False,
-        "listeners_stopped": True,
+        "cleanup": {
+            "server_process_sessions_stopped": stopped_servers,
+            "browser_process_sessions_stopped": stopped_browsers,
+            "private_listener_stopped": True,
+            "cdp_listener_stopped": True,
+            "runtime_root_removed": not runtime_root.exists(),
+            "authentication_material_absent": True,
+        },
         "operational_authority": False,
     }
     _write_private_json(evidence_root / "acceptance-result.json", result)
