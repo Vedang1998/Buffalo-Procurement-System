@@ -1,9 +1,11 @@
 """Fail-closed, offline intake for private real-source research evidence.
 
 The intake is deliberately outside every operational authority boundary.  It
-accepts two code-owned snapshot contracts plus the one exact sealed A1 review
-package, preserves their raw bytes in private content-addressed storage, and
-publishes one immutable canonical manifest only after all validation succeeds.
+accepts either two code-owned normalized snapshot contracts or the frozen
+native Shopify catalog/sales capture contracts plus the one exact sealed A1
+review package. It preserves raw and normalized bytes in private
+content-addressed storage and publishes one immutable canonical manifest only
+after all validation succeeds.
 
 There is no database or network access here.  Supplier evidence is attached to
 the current catalog solely through an exact Shopify Variant ID.  Supplier SKU,
@@ -44,6 +46,13 @@ CATALOG_SNAPSHOT_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_CATALOG_SNAPSHOT_V1"
 DAILY_SALES_SNAPSHOT_CONTRACT = (
     "BUFFALO_PRIVATE_RESEARCH_DAILY_SALES_SNAPSHOT_V1"
 )
+SHOPIFY_CATALOG_CAPTURE_CONTRACT = "BUFFALO_PRIVATE_SHOPIFY_CATALOG_SNAPSHOT_V1"
+SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT = (
+    "BUFFALO_PRIVATE_SHOPIFY_DAILY_VARIANT_SALES_V1"
+)
+SHOPIFY_CAPTURE_AUTHORITY = "PRIVATE_REAL_SOURCE_REVIEW_ONLY"
+SHOPIFY_CAPTURE_APPROVAL_STATE = "PROPOSED_UNAPPROVED_REVIEW_ONLY"
+SHOPIFY_CAPTURE_ADAPTER = "BUFFALO_PRIVATE_SHOPIFY_CAPTURE_ADAPTER_V1"
 PRIVATE_RESEARCH_INTAKE_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_INTAKE_V1"
 PRIVATE_REAL_SOURCE_REVIEW = "PRIVATE_REAL_SOURCE_REVIEW"
 SOURCE_AUTHORITY = {
@@ -171,6 +180,166 @@ _MAX_JSONL_LINE_BYTES = 8_000_000
 _MAX_ROWS = 2_500_000
 _ABC_DAYS = 84
 
+_CAPTURE_CATALOG_MANIFEST_FIELDS = frozenset(
+    {
+        "contract",
+        "authority",
+        "approval_state",
+        "captured_at_utc",
+        "capture_timing_note",
+        "source",
+        "population",
+        "parts",
+        "limitations",
+    }
+)
+_CAPTURE_CATALOG_SOURCE_FIELDS = frozenset(
+    {
+        "connector",
+        "shop",
+        "query_path",
+        "query_bytes",
+        "query_sha256",
+        "page_size",
+        "page_count",
+        "pagination_complete",
+        "nested_variant_pagination_complete",
+        "nested_inventory_location_pagination_complete",
+        "omitted_current_day_demand",
+    }
+)
+_CAPTURE_CATALOG_SHOP_FIELDS = frozenset(
+    {"name", "domain", "currency_code", "timezone", "country"}
+)
+_CAPTURE_CATALOG_POPULATION_FIELDS = frozenset({"products", "variants"})
+_CAPTURE_SALES_MANIFEST_FIELDS = frozenset(
+    {
+        "contract",
+        "authority",
+        "approval_state",
+        "captured_at_utc",
+        "source",
+        "columns",
+        "day_queries",
+        "totals",
+        "parts",
+        "limitations",
+    }
+)
+_CAPTURE_SALES_SOURCE_FIELDS = frozenset(
+    {
+        "connector",
+        "shop",
+        "query_template_path",
+        "query_template_bytes",
+        "query_template_sha256",
+        "first_complete_business_date",
+        "last_complete_business_date",
+        "business_days",
+        "local_capture_day_omitted_as_partial",
+        "one_query_per_business_date",
+        "connector_row_ceiling",
+        "every_query_below_row_ceiling",
+        "population",
+        "absent_variant_day_semantics",
+    }
+)
+_CAPTURE_SALES_SHOP_FIELDS = frozenset({"domain", "currency_code", "timezone"})
+_CAPTURE_PART_FIELDS = frozenset({"path", "bytes", "sha256", "rows"})
+_CAPTURE_SALES_PART_FIELDS = _CAPTURE_PART_FIELDS | {"start_date", "end_date"}
+_CAPTURE_DAY_QUERY_FIELDS = frozenset({"business_date", "row_count"})
+_CAPTURE_TOTAL_FIELDS = frozenset({"rows"})
+_CAPTURE_CATALOG_ROW_FIELDS = frozenset(
+    {
+        "id",
+        "title",
+        "handle",
+        "vendor",
+        "productType",
+        "status",
+        "tags",
+        "updatedAt",
+        "variants",
+    }
+)
+_CAPTURE_VARIANTS_FIELDS = frozenset({"pageInfo", "nodes"})
+_CAPTURE_PAGE_INFO_FIELDS = frozenset({"hasNextPage", "endCursor"})
+_CAPTURE_VARIANT_FIELDS = frozenset(
+    {
+        "id",
+        "title",
+        "sku",
+        "barcode",
+        "price",
+        "compareAtPrice",
+        "inventoryQuantity",
+        "updatedAt",
+        "selectedOptions",
+        "inventoryItem",
+    }
+)
+_CAPTURE_OPTION_FIELDS = frozenset({"name", "value"})
+_CAPTURE_INVENTORY_ITEM_FIELDS = frozenset(
+    {"id", "tracked", "updatedAt", "unitCost", "inventoryLevels"}
+)
+_CAPTURE_UNIT_COST_FIELDS = frozenset({"amount", "currencyCode"})
+_CAPTURE_INVENTORY_LEVELS_FIELDS = frozenset({"pageInfo", "nodes"})
+_CAPTURE_INVENTORY_LEVEL_FIELDS = frozenset(
+    {"id", "updatedAt", "location", "quantities"}
+)
+_CAPTURE_LOCATION_FIELDS = frozenset({"id", "name", "isActive"})
+_CAPTURE_QUANTITY_FIELDS = frozenset({"name", "quantity", "updatedAt"})
+_CAPTURE_SALES_ROW_FIELDS = frozenset(
+    {
+        "day",
+        "product_id",
+        "product_variant_id",
+        "product_title",
+        "product_variant_title",
+        "net_items_sold",
+        "gross_sales",
+        "returns",
+        "net_sales",
+        "cost_of_goods_sold",
+        "gross_profit",
+    }
+)
+_CAPTURE_SALES_COLUMNS = (
+    ("day", "DAY_TIMESTAMP"),
+    ("product_id", "IDENTITY"),
+    ("product_variant_id", "IDENTITY"),
+    ("product_title", "STRING"),
+    ("product_variant_title", "STRING"),
+    ("net_items_sold", "INTEGER"),
+    ("gross_sales", "MONEY"),
+    ("returns", "MONEY"),
+    ("net_sales", "MONEY"),
+    ("cost_of_goods_sold", "MONEY"),
+    ("gross_profit", "MONEY"),
+)
+_CAPTURE_QUANTITY_NAMES = frozenset({"available", "on_hand", "committed", "incoming"})
+_PRODUCT_GID = re.compile(r"^gid://shopify/Product/([1-9][0-9]*)$")
+_VARIANT_GID = re.compile(r"^gid://shopify/ProductVariant/([1-9][0-9]*)$")
+_INVENTORY_ITEM_GID = re.compile(r"^gid://shopify/InventoryItem/[1-9][0-9]*$")
+_LOCATION_GID = re.compile(r"^gid://shopify/Location/[1-9][0-9]*$")
+_CAPTURE_DESCRIPTOR_FIELDS = frozenset(
+    {"adapter", "contract", "manifest_blob", "files", "unjoined_sales_blob"}
+)
+_CAPTURE_FILE_DESCRIPTOR_FIELDS = frozenset({"path", "blob"})
+_UNJOINED_SALES_ROW_FIELDS = (
+    "business_date",
+    "source_product_id",
+    "source_shopify_variant_id",
+    "historical_product_title",
+    "historical_variant_title",
+    "net_units",
+    "gross_sales",
+    "returns",
+    "net_revenue",
+    "historical_cogs",
+    "gross_profit",
+)
+
 
 class PrivateResearchIntakeError(ValueError):
     """Stable fail-closed validation error for private research intake."""
@@ -188,6 +357,22 @@ class _Snapshot:
     manifest_bytes: bytes
     data_bytes: bytes
     rows: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class _CaptureFile:
+    path: str
+    data: bytes
+    media_type: str
+
+
+@dataclass(frozen=True)
+class _NativeCapture:
+    contract: str
+    manifest_bytes: bytes
+    files: tuple[_CaptureFile, ...]
+    facts: Mapping[str, Any]
+    unjoined_sales_bytes: bytes | None = None
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -216,7 +401,7 @@ def _duplicate_rejecting_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _parse_canonical_json(raw: bytes, *, path: str) -> dict[str, Any]:
+def _parse_json_document(raw: bytes, *, path: str) -> dict[str, Any]:
     try:
         decoded = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -235,6 +420,11 @@ def _parse_canonical_json(raw: bytes, *, path: str) -> dict[str, Any]:
         raise PrivateResearchIntakeError(
             "SCHEMA_MISMATCH", "JSON document must be an object", path=path
         )
+    return value
+
+
+def _parse_canonical_json(raw: bytes, *, path: str) -> dict[str, Any]:
+    value = _parse_json_document(raw, path=path)
     try:
         expected = canonical_json_bytes(value)
     except (TypeError, ValueError) as exc:
@@ -348,6 +538,73 @@ def _decimal_output(value: Decimal) -> str:
     return format(value.normalize(), "f")
 
 
+def _gid_decimal(value: Any, pattern: re.Pattern[str], *, context: str) -> str:
+    if not isinstance(value, str):
+        raise PrivateResearchIntakeError(
+            "INVALID_SHOPIFY_GID", f"{context} must be a Shopify GID"
+        )
+    match = pattern.fullmatch(value)
+    if match is None:
+        raise PrivateResearchIntakeError(
+            "INVALID_SHOPIFY_GID", f"{context} has the wrong Shopify GID type"
+        )
+    return match.group(1)
+
+
+def _capture_jsonl(raw: bytes, *, path: str) -> tuple[dict[str, Any], ...]:
+    lines = raw.splitlines(keepends=True)
+    if not lines or len(lines) > _MAX_ROWS:
+        raise PrivateResearchIntakeError(
+            "INVALID_CAPTURE_JSONL", "capture JSONL must contain bounded rows", path=path
+        )
+    rows: list[dict[str, Any]] = []
+    for row_number, line in enumerate(lines, start=1):
+        if (
+            len(line) > _MAX_JSONL_LINE_BYTES
+            or not line.endswith(b"\n")
+            or line.endswith(b"\r\n")
+            or line == b"\n"
+        ):
+            raise PrivateResearchIntakeError(
+                "INVALID_CAPTURE_JSONL",
+                f"capture row {row_number} must be nonblank LF-terminated JSON",
+                path=path,
+            )
+        rows.append(_parse_json_document(line, path=f"{path}:{row_number}"))
+    return tuple(rows)
+
+
+def _normalized_pagination(lines: Sequence[bytes]) -> dict[str, Any]:
+    page_size = 1_000
+    page_count = max(1, math.ceil(len(lines) / page_size))
+    pages: list[dict[str, Any]] = []
+    for index in range(page_count):
+        first = index * page_size
+        selected = lines[first : first + page_size]
+        pages.append(
+            {
+                "page_index": index,
+                "first_row_index": first,
+                "row_count": len(selected),
+                "sha256": hashlib.sha256(b"".join(selected)).hexdigest(),
+                "terminal": index == page_count - 1,
+            }
+        )
+    return {
+        "page_size": page_size,
+        "expected_pages": page_count,
+        "completed_pages": page_count,
+        "pages": pages,
+        "terminal_page_seen": True,
+        "truncated": False,
+    }
+
+
+def _canonical_jsonl(rows: Sequence[Mapping[str, Any]]) -> tuple[bytes, list[bytes]]:
+    lines = [canonical_json_bytes(dict(row)) for row in rows]
+    return b"".join(lines), lines
+
+
 def _utc_datetime(value: Any, *, context: str) -> datetime:
     if not isinstance(value, str) or not value.endswith("Z"):
         raise PrivateResearchIntakeError(
@@ -394,6 +651,17 @@ def _timezone(value: Any, *, context: str) -> ZoneInfo:
         ) from exc
 
 
+def _capture_timezone(value: Any, *, context: str) -> tuple[str, ZoneInfo]:
+    """Normalize the frozen Shopify shop abbreviation without guessing offsets."""
+
+    name = _text(value, context=context)
+    if name == "EDT":
+        normalized = "America/New_York"
+    else:
+        normalized = name
+    return normalized, _timezone(normalized, context=context)
+
+
 def validate_private_root(root: str | Path) -> Path:
     """Require one absolute, owned, non-symlink directory with exact mode 0700."""
 
@@ -429,6 +697,10 @@ def validate_private_root(root: str | Path) -> Path:
 
 
 def _safe_key(value: str | Path, *, context: str) -> str:
+    if not isinstance(value, (str, Path)):
+        raise PrivateResearchIntakeError(
+            "UNSAFE_PATH", f"{context} must be a relative path string"
+        )
     text = str(value)
     if (
         not text
@@ -896,15 +1168,1025 @@ def _sales_snapshot(manifest_bytes: bytes, data_bytes: bytes) -> _Snapshot:
     return _Snapshot(manifest, manifest_bytes, data_bytes, rows)
 
 
+def _capture_limitations(value: Any, *, context: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() or item != item.strip()
+        for item in value
+    ):
+        raise PrivateResearchIntakeError(
+            "SCHEMA_MISMATCH", f"{context} must be an array of trimmed text"
+        )
+    return tuple(value)
+
+
+def _capture_child(
+    root: Path,
+    manifest_path: Path,
+    value: Any,
+    *,
+    context: str,
+    maximum: int,
+) -> tuple[str, bytes]:
+    key = _safe_key(value, context=context)
+    _, path = _private_entry(root, manifest_path.parent / key, context=context)
+    return key, _read_file(path, maximum=maximum, context=context)
+
+
+def _capture_file(
+    root: Path,
+    manifest_path: Path,
+    value: Any,
+    *,
+    expected_bytes: Any,
+    expected_sha256: Any,
+    context: str,
+    media_type: str,
+    maximum: int,
+    provided_files: Mapping[str, bytes] | None = None,
+) -> _CaptureFile:
+    key = _safe_key(value, context=context)
+    if provided_files is None:
+        key, data = _capture_child(
+            root, manifest_path, key, context=context, maximum=maximum
+        )
+    else:
+        if key not in provided_files:
+            raise PrivateResearchIntakeError(
+                "MISSING_CAPTURE_BLOB", f"{context} is absent from immutable capture blobs"
+            )
+        data = provided_files[key]
+        if len(data) > maximum:
+            raise PrivateResearchIntakeError(
+                "SOURCE_SIZE_INVALID", f"{context} exceeds its byte limit"
+            )
+    byte_count = _integer(expected_bytes, context=f"{context} bytes", minimum=1)
+    digest = _sha256(expected_sha256, context=f"{context} SHA-256")
+    if len(data) != byte_count or hashlib.sha256(data).hexdigest() != digest:
+        raise PrivateResearchIntakeError(
+            "CONTENT_HASH_MISMATCH", f"{context} bytes differ from the manifest", path=key
+        )
+    return _CaptureFile(key, data, media_type)
+
+
+def _capture_page_info(value: Any, *, context: str) -> None:
+    page_info = _exact_fields(value, _CAPTURE_PAGE_INFO_FIELDS, context=context)
+    if page_info.get("hasNextPage") is not False:
+        raise PrivateResearchIntakeError(
+            "PAGINATION_INCOMPLETE", f"{context} reports an unconsumed next page"
+        )
+    _text(page_info.get("endCursor"), context=f"{context} end cursor", nullable=True)
+
+
+def _native_catalog_capture(
+    root: Path,
+    manifest_path: Path,
+    manifest_bytes: bytes,
+    manifest: Mapping[str, Any],
+    *,
+    provided_files: Mapping[str, bytes] | None = None,
+) -> tuple[_Snapshot, _NativeCapture]:
+    _exact_fields(
+        manifest, _CAPTURE_CATALOG_MANIFEST_FIELDS, context="Shopify catalog capture"
+    )
+    if (
+        manifest.get("contract") != SHOPIFY_CATALOG_CAPTURE_CONTRACT
+        or manifest.get("authority") != SHOPIFY_CAPTURE_AUTHORITY
+        or manifest.get("approval_state") != SHOPIFY_CAPTURE_APPROVAL_STATE
+    ):
+        raise PrivateResearchIntakeError(
+            "SOURCE_CONTRACT_MISMATCH", "Shopify catalog capture envelope differs"
+        )
+    captured = _utc_datetime(
+        manifest.get("captured_at_utc"), context="catalog captured-at time"
+    )
+    _text(manifest.get("capture_timing_note"), context="catalog timing note")
+    limitations = _capture_limitations(
+        manifest.get("limitations"), context="catalog limitations"
+    )
+
+    source = _exact_fields(
+        manifest.get("source"),
+        _CAPTURE_CATALOG_SOURCE_FIELDS,
+        context="Shopify catalog capture source",
+    )
+    if source.get("connector") != "ALREADY_CONNECTED_SHOPIFY_READ_ONLY":
+        raise PrivateResearchIntakeError(
+            "SOURCE_CONTRACT_MISMATCH", "catalog connector identity differs"
+        )
+    shop = _exact_fields(
+        source.get("shop"), _CAPTURE_CATALOG_SHOP_FIELDS, context="catalog shop"
+    )
+    for key in _CAPTURE_CATALOG_SHOP_FIELDS:
+        _text(shop.get(key), context=f"catalog shop {key}")
+    normalized_timezone, _ = _capture_timezone(
+        shop.get("timezone"), context="catalog shop timezone"
+    )
+    query_file = _capture_file(
+        root,
+        manifest_path,
+        source.get("query_path"),
+        expected_bytes=source.get("query_bytes"),
+        expected_sha256=source.get("query_sha256"),
+        context="catalog query",
+        media_type="application/graphql",
+        maximum=_MAX_MANIFEST_BYTES,
+        provided_files=provided_files,
+    )
+    page_size = _integer(source.get("page_size"), context="catalog page size", minimum=1)
+    page_count = _integer(
+        source.get("page_count"), context="catalog page count", minimum=1
+    )
+    if (
+        source.get("pagination_complete") is not True
+        or source.get("nested_variant_pagination_complete") is not True
+        or source.get("nested_inventory_location_pagination_complete") is not True
+        or source.get("omitted_current_day_demand") is not True
+    ):
+        raise PrivateResearchIntakeError(
+            "PAGINATION_INCOMPLETE",
+            "catalog top-level or nested pagination is not attested complete",
+        )
+
+    population = _exact_fields(
+        manifest.get("population"),
+        _CAPTURE_CATALOG_POPULATION_FIELDS,
+        context="catalog capture population",
+    )
+    product_count = _integer(
+        population.get("products"), context="catalog product count", minimum=1
+    )
+    variant_count = _integer(
+        population.get("variants"), context="catalog variant count", minimum=1
+    )
+    if product_count > _MAX_ROWS or variant_count > _MAX_ROWS:
+        raise PrivateResearchIntakeError(
+            "TOO_MANY_ROWS", "catalog capture population exceeds the intake limit"
+        )
+    if page_count != math.ceil(product_count / page_size):
+        raise PrivateResearchIntakeError(
+            "PAGINATION_INCOMPLETE", "catalog page count does not cover products"
+        )
+
+    parts_value = manifest.get("parts")
+    if not isinstance(parts_value, list) or not parts_value:
+        raise PrivateResearchIntakeError(
+            "SCHEMA_MISMATCH", "catalog parts must be a nonempty array"
+        )
+    capture_files: list[_CaptureFile] = [query_file]
+    raw_products: list[dict[str, Any]] = []
+    seen_paths = {query_file.path}
+    declared_rows = 0
+    for index, raw_part in enumerate(parts_value):
+        part = _exact_fields(
+            raw_part, _CAPTURE_PART_FIELDS, context=f"catalog part {index}"
+        )
+        capture_file = _capture_file(
+            root,
+            manifest_path,
+            part.get("path"),
+            expected_bytes=part.get("bytes"),
+            expected_sha256=part.get("sha256"),
+            context=f"catalog part {index}",
+            media_type="application/x-ndjson",
+            maximum=_MAX_BLOB_BYTES,
+            provided_files=provided_files,
+        )
+        if capture_file.path in seen_paths:
+            raise PrivateResearchIntakeError(
+                "DUPLICATE_CAPTURE_PATH", "catalog capture path is duplicated"
+            )
+        seen_paths.add(capture_file.path)
+        capture_files.append(capture_file)
+        rows = _capture_jsonl(capture_file.data, path=capture_file.path)
+        expected_rows = _integer(
+            part.get("rows"), context=f"catalog part {index} rows", minimum=1
+        )
+        if len(rows) != expected_rows:
+            raise PrivateResearchIntakeError(
+                "ROW_COUNT_MISMATCH", "catalog part row count differs"
+            )
+        declared_rows += expected_rows
+        if declared_rows > product_count:
+            raise PrivateResearchIntakeError(
+                "ROW_COUNT_MISMATCH", "catalog parts exceed the declared population"
+            )
+        raw_products.extend(rows)
+    if declared_rows != product_count or len(raw_products) != product_count:
+        raise PrivateResearchIntakeError(
+            "ROW_COUNT_MISMATCH", "catalog parts do not preserve the product population"
+        )
+
+    product_ids: set[str] = set()
+    variant_ids: set[str] = set()
+    normalized_rows: list[dict[str, Any]] = []
+    inventory_by_variant: dict[str, dict[str, Any]] = {}
+    for product_index, product in enumerate(raw_products):
+        _exact_fields(
+            product,
+            _CAPTURE_CATALOG_ROW_FIELDS,
+            context=f"catalog product {product_index}",
+        )
+        product_id = _gid_decimal(
+            product.get("id"), _PRODUCT_GID, context="catalog product ID"
+        )
+        if product_id in product_ids:
+            raise PrivateResearchIntakeError(
+                "DUPLICATE_PRODUCT_ID", "catalog product ID is duplicated"
+            )
+        product_ids.add(product_id)
+        product_text: dict[str, str] = {}
+        for field in ("title", "handle", "vendor", "productType"):
+            raw_text = product.get(field)
+            if not isinstance(raw_text, str):
+                raise PrivateResearchIntakeError(
+                    "INVALID_TEXT", f"catalog product {field} must be text"
+                )
+            product_text[field] = _text(
+                raw_text.strip(), context=f"catalog product {field}"
+            )
+        status_value = _text(product.get("status"), context="catalog product status")
+        if status_value not in {"ACTIVE", "ARCHIVED", "DRAFT"}:
+            raise PrivateResearchIntakeError(
+                "INVALID_CATALOG_STATUS", "catalog product status is unsupported"
+            )
+        tags = product.get("tags")
+        if not isinstance(tags, list) or any(
+            not isinstance(item, str) or item != item.strip() for item in tags
+        ):
+            raise PrivateResearchIntakeError(
+                "SCHEMA_MISMATCH", "catalog product tags must be trimmed strings"
+            )
+        product_updated_at = _text(
+            product.get("updatedAt"), context="catalog product updated-at"
+        )
+        _utc_datetime(product_updated_at, context="catalog product updated-at")
+        variants = _exact_fields(
+            product.get("variants"),
+            _CAPTURE_VARIANTS_FIELDS,
+            context="catalog nested variants",
+        )
+        _capture_page_info(variants.get("pageInfo"), context="catalog variant page")
+        nodes = variants.get("nodes")
+        if not isinstance(nodes, list):
+            raise PrivateResearchIntakeError(
+                "SCHEMA_MISMATCH", "catalog variant nodes must be an array"
+            )
+        for raw_variant in nodes:
+            variant = _exact_fields(
+                raw_variant, _CAPTURE_VARIANT_FIELDS, context="catalog variant"
+            )
+            variant_id = _gid_decimal(
+                variant.get("id"), _VARIANT_GID, context="catalog Variant ID"
+            )
+            if variant_id in variant_ids:
+                raise PrivateResearchIntakeError(
+                    "DUPLICATE_VARIANT_ID", "catalog Shopify Variant ID is duplicated"
+                )
+            variant_ids.add(variant_id)
+            raw_variant_title = variant.get("title")
+            if not isinstance(raw_variant_title, str):
+                raise PrivateResearchIntakeError(
+                    "INVALID_TEXT", "catalog variant title must be text"
+                )
+            variant_title = _text(
+                raw_variant_title.strip(), context="catalog variant title"
+            )
+            cleaned_optional: dict[str, str | None] = {}
+            for field in ("sku", "barcode"):
+                raw_optional = variant.get(field)
+                if raw_optional is None:
+                    cleaned_optional[field] = None
+                elif isinstance(raw_optional, str):
+                    cleaned_optional[field] = _text(
+                        raw_optional.strip(), context=f"catalog variant {field}"
+                    )
+                else:
+                    raise PrivateResearchIntakeError(
+                        "INVALID_TEXT", f"catalog variant {field} must be text or null"
+                    )
+            price = _decimal_text(
+                variant.get("price"), context="catalog current price", nonnegative=True
+            )
+            _decimal_text(
+                variant.get("compareAtPrice"),
+                context="catalog compare-at price",
+                nullable=True,
+                nonnegative=True,
+            )
+            inventory_quantity = variant.get("inventoryQuantity")
+            if type(inventory_quantity) is not int:
+                raise PrivateResearchIntakeError(
+                    "INVALID_COUNT", "catalog inventoryQuantity must be an integer"
+                )
+            variant_updated_at = _text(
+                variant.get("updatedAt"), context="catalog variant updated-at"
+            )
+            _utc_datetime(variant_updated_at, context="catalog variant updated-at")
+            options = variant.get("selectedOptions")
+            if not isinstance(options, list):
+                raise PrivateResearchIntakeError(
+                    "SCHEMA_MISMATCH", "selected options must be an array"
+                )
+            for option in options:
+                option = _exact_fields(
+                    option, _CAPTURE_OPTION_FIELDS, context="selected option"
+                )
+                _text(option.get("name"), context="selected option name")
+                _text(option.get("value"), context="selected option value")
+
+            inventory_item = _exact_fields(
+                variant.get("inventoryItem"),
+                _CAPTURE_INVENTORY_ITEM_FIELDS,
+                context="catalog inventory item",
+            )
+            inventory_item_id = _text(
+                inventory_item.get("id"), context="catalog inventory item ID"
+            )
+            if not _INVENTORY_ITEM_GID.fullmatch(inventory_item_id):
+                raise PrivateResearchIntakeError(
+                    "INVALID_SHOPIFY_GID", "inventory item has the wrong GID type"
+                )
+            if type(inventory_item.get("tracked")) is not bool:
+                raise PrivateResearchIntakeError(
+                    "SCHEMA_MISMATCH", "inventory item tracked must be boolean"
+                )
+            item_updated_at = _text(
+                inventory_item.get("updatedAt"), context="inventory item updated-at"
+            )
+            _utc_datetime(item_updated_at, context="inventory item updated-at")
+            unit_cost = inventory_item.get("unitCost")
+            current_cost: str | None = None
+            if unit_cost is not None:
+                unit_cost = _exact_fields(
+                    unit_cost, _CAPTURE_UNIT_COST_FIELDS, context="inventory unit cost"
+                )
+                current_cost_value = _decimal_text(
+                    unit_cost.get("amount"),
+                    context="current inventory item cost",
+                    nonnegative=True,
+                )
+                current_cost = _decimal_output(current_cost_value)
+                if unit_cost.get("currencyCode") != shop.get("currency_code"):
+                    raise PrivateResearchIntakeError(
+                        "CURRENCY_MISMATCH", "inventory unit cost currency differs"
+                    )
+
+            inventory_levels = _exact_fields(
+                inventory_item.get("inventoryLevels"),
+                _CAPTURE_INVENTORY_LEVELS_FIELDS,
+                context="catalog inventory levels",
+            )
+            _capture_page_info(
+                inventory_levels.get("pageInfo"), context="catalog inventory-level page"
+            )
+            level_nodes = inventory_levels.get("nodes")
+            if not isinstance(level_nodes, list) or not level_nodes:
+                raise PrivateResearchIntakeError(
+                    "SCHEMA_MISMATCH", "inventory-level nodes must be nonempty"
+                )
+            location_ids: set[str] = set()
+            locations: list[dict[str, Any]] = []
+            aggregate = {name: Decimal("0") for name in _CAPTURE_QUANTITY_NAMES}
+            for raw_level in level_nodes:
+                level = _exact_fields(
+                    raw_level,
+                    _CAPTURE_INVENTORY_LEVEL_FIELDS,
+                    context="catalog inventory level",
+                )
+                level_id = _text(level.get("id"), context="inventory level ID")
+                if not level_id.startswith("gid://shopify/InventoryLevel/"):
+                    raise PrivateResearchIntakeError(
+                        "INVALID_SHOPIFY_GID", "inventory level has the wrong GID type"
+                    )
+                level_updated_at = _text(
+                    level.get("updatedAt"), context="inventory level updated-at"
+                )
+                _utc_datetime(level_updated_at, context="inventory level updated-at")
+                location = _exact_fields(
+                    level.get("location"),
+                    _CAPTURE_LOCATION_FIELDS,
+                    context="inventory location",
+                )
+                location_id = _text(
+                    location.get("id"), context="inventory location ID"
+                )
+                if not _LOCATION_GID.fullmatch(location_id):
+                    raise PrivateResearchIntakeError(
+                        "INVALID_SHOPIFY_GID", "location has the wrong GID type"
+                    )
+                if location_id in location_ids:
+                    raise PrivateResearchIntakeError(
+                        "DUPLICATE_LOCATION", "variant inventory location is duplicated"
+                    )
+                location_ids.add(location_id)
+                location_name = _text(
+                    location.get("name"), context="inventory location name"
+                )
+                if type(location.get("isActive")) is not bool:
+                    raise PrivateResearchIntakeError(
+                        "SCHEMA_MISMATCH", "inventory location isActive must be boolean"
+                    )
+                quantities_value = level.get("quantities")
+                if not isinstance(quantities_value, list):
+                    raise PrivateResearchIntakeError(
+                        "SCHEMA_MISMATCH", "inventory quantities must be an array"
+                    )
+                quantities: dict[str, str] = {}
+                quantity_timestamps: dict[str, str | None] = {}
+                for raw_quantity in quantities_value:
+                    quantity = _exact_fields(
+                        raw_quantity,
+                        _CAPTURE_QUANTITY_FIELDS,
+                        context="inventory quantity",
+                    )
+                    name = _text(quantity.get("name"), context="inventory quantity name")
+                    if name not in _CAPTURE_QUANTITY_NAMES or name in quantities:
+                        raise PrivateResearchIntakeError(
+                            "INVENTORY_QUANTITY_MISMATCH",
+                            "inventory quantities must contain each expected state once",
+                        )
+                    number = quantity.get("quantity")
+                    if type(number) is not int:
+                        raise PrivateResearchIntakeError(
+                            "INVALID_NUMBER", "inventory quantity must be an integer"
+                        )
+                    parsed_number = Decimal(number)
+                    quantities[name] = _decimal_output(parsed_number)
+                    aggregate[name] += parsed_number
+                    updated = quantity.get("updatedAt")
+                    if updated is not None:
+                        updated = _text(updated, context="inventory quantity updated-at")
+                        _utc_datetime(updated, context="inventory quantity updated-at")
+                    quantity_timestamps[name] = updated
+                if set(quantities) != _CAPTURE_QUANTITY_NAMES:
+                    raise PrivateResearchIntakeError(
+                        "INVENTORY_QUANTITY_MISMATCH",
+                        "inventory quantities do not cover all requested states",
+                    )
+                locations.append(
+                    {
+                        "inventory_level_id": level_id,
+                        "inventory_level_updated_at": level_updated_at,
+                        "location_id": location_id,
+                        "location_name": location_name,
+                        "location_active": location["isActive"],
+                        "available": quantities["available"],
+                        "on_hand": quantities["on_hand"],
+                        "committed": quantities["committed"],
+                        "raw_incoming": quantities["incoming"],
+                        "quantity_updated_at": quantity_timestamps,
+                    }
+                )
+            if aggregate["available"] != Decimal(inventory_quantity):
+                raise PrivateResearchIntakeError(
+                    "INVENTORY_QUANTITY_MISMATCH",
+                    "variant inventoryQuantity differs from complete location Available",
+                )
+            locations.sort(key=lambda item: item["location_id"])
+            inventory_by_variant[variant_id] = {
+                "available": _decimal_output(aggregate["available"]),
+                "on_hand": _decimal_output(aggregate["on_hand"]),
+                "committed": _decimal_output(aggregate["committed"]),
+                "raw_incoming": _decimal_output(aggregate["incoming"]),
+                "raw_incoming_trust": "UNTRUSTED_CAPTURE_ONLY",
+                "trusted_incoming": None,
+                "current_inventory_item_cost_currency": shop["currency_code"],
+                "product_updated_at": product_updated_at,
+                "variant_updated_at": variant_updated_at,
+                "inventory_item_updated_at": item_updated_at,
+                "locations": locations,
+            }
+            normalized_rows.append(
+                {
+                    "shopify_variant_id": variant_id,
+                    "product_title": product_text["title"],
+                    "variant_title": variant_title,
+                    "shopify_sku": cleaned_optional["sku"],
+                    "barcode": cleaned_optional["barcode"],
+                    "current_retail_price": _decimal_output(price),
+                    "current_inventory_item_cost": current_cost,
+                    "product_status": status_value,
+                    "shopify_vendor": product_text["vendor"],
+                    "product_type": product_text["productType"],
+                    "inventory_item_id": inventory_item_id,
+                    "inventory_tracked": inventory_item["tracked"],
+                }
+            )
+    if len(variant_ids) != variant_count or len(normalized_rows) != variant_count:
+        raise PrivateResearchIntakeError(
+            "ROW_COUNT_MISMATCH", "catalog capture variant population differs"
+        )
+    normalized_rows.sort(key=lambda item: (len(item["shopify_variant_id"]), item["shopify_variant_id"]))
+    data_bytes, lines = _canonical_jsonl(normalized_rows)
+    raw_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    normalized_manifest = {
+        "contract": CATALOG_SNAPSHOT_CONTRACT,
+        "data_mode": PRIVATE_REAL_SOURCE_REVIEW,
+        "authority": dict(SOURCE_AUTHORITY),
+        "snapshot_id": f"shopify-catalog-{raw_digest}",
+        "source": {
+            "system": "SHOPIFY_ADMIN_GRAPHQL",
+            "store_identity": shop["domain"],
+            "store_timezone": normalized_timezone,
+        },
+        "extraction": {
+            "started_at_utc": manifest["captured_at_utc"],
+            "completed_at_utc": manifest["captured_at_utc"],
+            "snapshot_at_utc": manifest["captured_at_utc"],
+        },
+        "population": {
+            "row_count": len(normalized_rows),
+            "reported_row_count": variant_count,
+        },
+        "query": {
+            "identity": f"{SHOPIFY_CATALOG_CAPTURE_CONTRACT}:{query_file.path}",
+            "sha256": hashlib.sha256(query_file.data).hexdigest(),
+        },
+        "pagination": _normalized_pagination(lines),
+        "blob": {
+            "path": "derived/shopify-catalog-variants.jsonl",
+            "bytes": len(data_bytes),
+            "sha256": hashlib.sha256(data_bytes).hexdigest(),
+            "format": JSONL_FORMAT,
+            "schema": list(CATALOG_ROW_FIELDS),
+        },
+    }
+    normalized_manifest_bytes = canonical_json_bytes(normalized_manifest)
+    snapshot = _catalog_snapshot(normalized_manifest_bytes, data_bytes)
+    capture = _NativeCapture(
+        SHOPIFY_CATALOG_CAPTURE_CONTRACT,
+        manifest_bytes,
+        tuple(capture_files),
+        {
+            "inventory_by_variant": inventory_by_variant,
+            "source_limitations": list(limitations),
+            "raw_product_count": product_count,
+            "raw_variant_count": variant_count,
+            "shop_currency_code": shop["currency_code"],
+            "raw_shop_timezone": shop["timezone"],
+        },
+    )
+    return snapshot, capture
+
+
+def _source_sales_identity(value: Any, *, context: str) -> str:
+    if not isinstance(value, str) or (
+        value not in {"", "0"} and not _VARIANT_ID.fullmatch(value)
+    ):
+        raise PrivateResearchIntakeError(
+            "INVALID_HISTORICAL_IDENTITY",
+            f"{context} must be blank, zero, or a canonical positive decimal ID",
+        )
+    return value
+
+
+def _native_sales_capture(
+    root: Path,
+    manifest_path: Path,
+    manifest_bytes: bytes,
+    manifest: Mapping[str, Any],
+    *,
+    current_variant_ids: set[str],
+    provided_files: Mapping[str, bytes] | None = None,
+) -> tuple[_Snapshot, _NativeCapture]:
+    _exact_fields(
+        manifest, _CAPTURE_SALES_MANIFEST_FIELDS, context="Shopify sales capture"
+    )
+    if (
+        manifest.get("contract") != SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT
+        or manifest.get("authority") != SHOPIFY_CAPTURE_AUTHORITY
+        or manifest.get("approval_state") != SHOPIFY_CAPTURE_APPROVAL_STATE
+    ):
+        raise PrivateResearchIntakeError(
+            "SOURCE_CONTRACT_MISMATCH", "Shopify sales capture envelope differs"
+        )
+    captured = _utc_datetime(
+        manifest.get("captured_at_utc"), context="sales captured-at time"
+    )
+    limitations = _capture_limitations(
+        manifest.get("limitations"), context="sales limitations"
+    )
+    source = _exact_fields(
+        manifest.get("source"),
+        _CAPTURE_SALES_SOURCE_FIELDS,
+        context="Shopify sales capture source",
+    )
+    if source.get("connector") != "ALREADY_CONNECTED_SHOPIFY_READ_ONLY_ANALYTICS":
+        raise PrivateResearchIntakeError(
+            "SOURCE_CONTRACT_MISMATCH", "sales connector identity differs"
+        )
+    shop = _exact_fields(
+        source.get("shop"), _CAPTURE_SALES_SHOP_FIELDS, context="sales shop"
+    )
+    for key in _CAPTURE_SALES_SHOP_FIELDS:
+        _text(shop.get(key), context=f"sales shop {key}")
+    normalized_timezone, zone = _capture_timezone(
+        shop.get("timezone"), context="sales shop timezone"
+    )
+    query_file = _capture_file(
+        root,
+        manifest_path,
+        source.get("query_template_path"),
+        expected_bytes=source.get("query_template_bytes"),
+        expected_sha256=source.get("query_template_sha256"),
+        context="sales query template",
+        media_type="text/plain",
+        maximum=_MAX_MANIFEST_BYTES,
+        provided_files=provided_files,
+    )
+    start = _iso_date(
+        source.get("first_complete_business_date"), context="sales first complete date"
+    )
+    end = _iso_date(
+        source.get("last_complete_business_date"), context="sales last complete date"
+    )
+    if end < start:
+        raise PrivateResearchIntakeError(
+            "DATE_COVERAGE_INCOMPLETE", "sales complete range is reversed"
+        )
+    day_count = (end - start).days + 1
+    omitted_day = _iso_date(
+        source.get("local_capture_day_omitted_as_partial"),
+        context="sales omitted partial day",
+    )
+    ceiling = _integer(
+        source.get("connector_row_ceiling"), context="sales row ceiling", minimum=1
+    )
+    if (
+        _integer(source.get("business_days"), context="sales business days", minimum=1)
+        != day_count
+        or omitted_day != end + timedelta(days=1)
+        or captured.astimezone(zone).date() != omitted_day
+        or source.get("one_query_per_business_date") is not True
+        or source.get("every_query_below_row_ceiling") is not True
+        or source.get("population")
+        != "ALL_VARIANT_GROUPS_RETURNED_BY_UNFILTERED_DAILY_SALES_QUERY"
+        or source.get("absent_variant_day_semantics")
+        != (
+            "OBSERVED_ZERO_ONLY_FOR_DAYS_WITH_A_RECORDED_COMPLETE_QUERY; "
+            "NEVER IMPUTE AN UNQUERIED DAY"
+        )
+    ):
+        raise PrivateResearchIntakeError(
+            "DATE_COVERAGE_INCOMPLETE",
+            "sales daily query completeness contract differs",
+        )
+
+    columns = manifest.get("columns")
+    if not isinstance(columns, list) or len(columns) != len(_CAPTURE_SALES_COLUMNS):
+        raise PrivateResearchIntakeError(
+            "SCHEMA_MISMATCH", "sales columns differ from the frozen query schema"
+        )
+    for raw_column, expected in zip(columns, _CAPTURE_SALES_COLUMNS):
+        column = _exact_fields(
+            raw_column, frozenset({"name", "dataType"}), context="sales column"
+        )
+        if (column.get("name"), column.get("dataType")) != expected:
+            raise PrivateResearchIntakeError(
+                "SCHEMA_MISMATCH", "sales columns differ from the frozen query schema"
+            )
+
+    day_queries_value = manifest.get("day_queries")
+    if not isinstance(day_queries_value, list) or len(day_queries_value) != day_count:
+        raise PrivateResearchIntakeError(
+            "DATE_COVERAGE_INCOMPLETE", "sales day-query count differs"
+        )
+    declared_by_date: dict[str, int] = {}
+    for index, raw_query in enumerate(day_queries_value):
+        query = _exact_fields(
+            raw_query, _CAPTURE_DAY_QUERY_FIELDS, context="sales day query"
+        )
+        business_date = _iso_date(
+            query.get("business_date"), context="sales query business date"
+        )
+        expected_date = start + timedelta(days=index)
+        row_count = _integer(
+            query.get("row_count"), context="sales daily row count", minimum=0
+        )
+        if business_date != expected_date or row_count >= ceiling:
+            raise PrivateResearchIntakeError(
+                "DATE_COVERAGE_INCOMPLETE",
+                "sales day queries must be contiguous and below the row ceiling",
+            )
+        declared_by_date[business_date.isoformat()] = row_count
+
+    totals = _exact_fields(
+        manifest.get("totals"), _CAPTURE_TOTAL_FIELDS, context="sales totals"
+    )
+    total_rows = _integer(totals.get("rows"), context="sales total rows", minimum=1)
+    if total_rows > _MAX_ROWS:
+        raise PrivateResearchIntakeError(
+            "TOO_MANY_ROWS", "sales capture population exceeds the intake limit"
+        )
+    if sum(declared_by_date.values()) != total_rows:
+        raise PrivateResearchIntakeError(
+            "ROW_COUNT_MISMATCH", "sales daily row counts differ from total rows"
+        )
+
+    parts_value = manifest.get("parts")
+    if not isinstance(parts_value, list) or not parts_value:
+        raise PrivateResearchIntakeError(
+            "SCHEMA_MISMATCH", "sales parts must be a nonempty array"
+        )
+    capture_files: list[_CaptureFile] = [query_file]
+    seen_paths = {query_file.path}
+    raw_rows: list[dict[str, Any]] = []
+    declared_part_rows = 0
+    next_start = start
+    for index, raw_part in enumerate(parts_value):
+        part = _exact_fields(
+            raw_part, _CAPTURE_SALES_PART_FIELDS, context=f"sales part {index}"
+        )
+        part_start = _iso_date(part.get("start_date"), context="sales part start")
+        part_end = _iso_date(part.get("end_date"), context="sales part end")
+        if part_start != next_start or part_end < part_start or part_end > end:
+            raise PrivateResearchIntakeError(
+                "DATE_COVERAGE_INCOMPLETE", "sales part date ranges are not contiguous"
+            )
+        next_start = part_end + timedelta(days=1)
+        capture_file = _capture_file(
+            root,
+            manifest_path,
+            part.get("path"),
+            expected_bytes=part.get("bytes"),
+            expected_sha256=part.get("sha256"),
+            context=f"sales part {index}",
+            media_type="application/x-ndjson",
+            maximum=_MAX_BLOB_BYTES,
+            provided_files=provided_files,
+        )
+        if capture_file.path in seen_paths:
+            raise PrivateResearchIntakeError(
+                "DUPLICATE_CAPTURE_PATH", "sales capture path is duplicated"
+            )
+        seen_paths.add(capture_file.path)
+        capture_files.append(capture_file)
+        rows = _capture_jsonl(capture_file.data, path=capture_file.path)
+        expected_rows = _integer(
+            part.get("rows"), context=f"sales part {index} rows", minimum=1
+        )
+        if len(rows) != expected_rows:
+            raise PrivateResearchIntakeError(
+                "ROW_COUNT_MISMATCH", "sales part row count differs"
+            )
+        for row in rows:
+            row_date = _iso_date(row.get("day"), context="sales row day")
+            if row_date < part_start or row_date > part_end:
+                raise PrivateResearchIntakeError(
+                    "DATE_OUT_OF_RANGE", "sales row is outside its part range"
+                )
+        declared_part_rows += expected_rows
+        if declared_part_rows > total_rows:
+            raise PrivateResearchIntakeError(
+                "ROW_COUNT_MISMATCH", "sales parts exceed the declared population"
+            )
+        raw_rows.extend(rows)
+    if next_start != end + timedelta(days=1):
+        raise PrivateResearchIntakeError(
+            "DATE_COVERAGE_INCOMPLETE", "sales parts do not cover the complete range"
+        )
+    if declared_part_rows != total_rows or len(raw_rows) != total_rows:
+        raise PrivateResearchIntakeError(
+            "ROW_COUNT_MISMATCH", "sales parts do not preserve the row population"
+        )
+
+    actual_by_date: defaultdict[str, int] = defaultdict(int)
+    seen_facts: set[tuple[str, str]] = set()
+    raw_identity_ids: set[str] = set()
+    joined_ids: set[str] = set()
+    unjoined_ids: set[str] = set()
+    normalized_rows: list[dict[str, Any]] = []
+    unjoined_rows: list[dict[str, Any]] = []
+    current_sales_details: dict[tuple[str, str], dict[str, str]] = {}
+    for row_index, row in enumerate(raw_rows):
+        _exact_fields(
+            row, _CAPTURE_SALES_ROW_FIELDS, context=f"sales capture row {row_index}"
+        )
+        business_date = _iso_date(row.get("day"), context="sales row business date")
+        if business_date < start or business_date > end:
+            raise PrivateResearchIntakeError(
+                "DATE_OUT_OF_RANGE", "sales row is outside the complete range"
+            )
+        day_text = business_date.isoformat()
+        actual_by_date[day_text] += 1
+        product_id = _source_sales_identity(
+            row.get("product_id"), context="historical product ID"
+        )
+        source_variant_id = _source_sales_identity(
+            row.get("product_variant_id"), context="historical Variant ID"
+        )
+        if (
+            (source_variant_id == "" and product_id != "")
+            or (source_variant_id == "0" and product_id != "0")
+            or (
+                _VARIANT_ID.fullmatch(source_variant_id) is not None
+                and _VARIANT_ID.fullmatch(product_id) is None
+            )
+        ):
+            raise PrivateResearchIntakeError(
+                "INVALID_HISTORICAL_IDENTITY", "sales product and Variant IDs disagree"
+            )
+        for title_field in ("product_title", "product_variant_title"):
+            if not isinstance(row.get(title_field), str):
+                raise PrivateResearchIntakeError(
+                    "SCHEMA_MISMATCH", f"sales {title_field} must be text"
+                )
+        net_units = _decimal_text(row.get("net_items_sold"), context="sales net units")
+        if net_units != net_units.to_integral_value():
+            raise PrivateResearchIntakeError(
+                "INVALID_DECIMAL", "sales net units must be an integer string"
+            )
+        gross_sales = _decimal_text(row.get("gross_sales"), context="sales gross sales")
+        returns = _decimal_text(row.get("returns"), context="sales returns")
+        net_revenue = _decimal_text(row.get("net_sales"), context="sales net revenue")
+        historical_cogs = _decimal_text(
+            row.get("cost_of_goods_sold"), context="sales historical COGS"
+        )
+        gross_profit = _decimal_text(row.get("gross_profit"), context="sales gross profit")
+        fact_key = (day_text, source_variant_id)
+        if fact_key in seen_facts:
+            raise PrivateResearchIntakeError(
+                "DUPLICATE_SALES_FACT",
+                "sales capture must be unique by date and source Variant identity",
+            )
+        seen_facts.add(fact_key)
+        raw_identity_ids.add(source_variant_id)
+        if source_variant_id in current_variant_ids:
+            joined_ids.add(source_variant_id)
+            current_sales_details[(source_variant_id, day_text)] = {
+                "gross_sales": _decimal_output(gross_sales),
+                "returns": _decimal_output(returns),
+                "source_gross_profit": _decimal_output(gross_profit),
+            }
+            normalized_rows.append(
+                {
+                    "business_date": day_text,
+                    "shopify_variant_id": source_variant_id,
+                    "net_units": _decimal_output(net_units),
+                    "net_revenue": _decimal_output(net_revenue),
+                    "historical_cogs": _decimal_output(historical_cogs),
+                }
+            )
+        else:
+            unjoined_ids.add(source_variant_id)
+            unjoined_rows.append(
+                {
+                    "business_date": day_text,
+                    "source_product_id": product_id,
+                    "source_shopify_variant_id": source_variant_id,
+                    "historical_product_title": row["product_title"],
+                    "historical_variant_title": row["product_variant_title"],
+                    "net_units": _decimal_output(net_units),
+                    "gross_sales": _decimal_output(gross_sales),
+                    "returns": _decimal_output(returns),
+                    "net_revenue": _decimal_output(net_revenue),
+                    "historical_cogs": _decimal_output(historical_cogs),
+                    "gross_profit": _decimal_output(gross_profit),
+                }
+            )
+    if any(
+        actual_by_date[business_date] != row_count
+        for business_date, row_count in declared_by_date.items()
+    ) or any(business_date not in declared_by_date for business_date in actual_by_date):
+        raise PrivateResearchIntakeError(
+            "DATE_COVERAGE_INCOMPLETE", "sales rows differ from daily query counts"
+        )
+
+    normalized_rows.sort(
+        key=lambda item: (
+            item["business_date"],
+            len(item["shopify_variant_id"]),
+            item["shopify_variant_id"],
+        )
+    )
+    unjoined_rows.sort(
+        key=lambda item: (
+            item["business_date"],
+            item["source_shopify_variant_id"],
+            item["source_product_id"],
+        )
+    )
+    data_bytes, lines = _canonical_jsonl(normalized_rows)
+    unjoined_bytes, _ = _canonical_jsonl(unjoined_rows)
+    raw_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    normalized_manifest = {
+        "contract": DAILY_SALES_SNAPSHOT_CONTRACT,
+        "data_mode": PRIVATE_REAL_SOURCE_REVIEW,
+        "authority": dict(SOURCE_AUTHORITY),
+        "snapshot_id": f"shopify-daily-sales-{raw_digest}",
+        "source": {
+            "system": "SHOPIFYQL_SALES",
+            "store_identity": shop["domain"],
+            "store_timezone": normalized_timezone,
+        },
+        "extraction": {
+            "started_at_utc": manifest["captured_at_utc"],
+            "completed_at_utc": manifest["captured_at_utc"],
+            "snapshot_at_utc": manifest["captured_at_utc"],
+        },
+        "date_range": {
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "complete_through_date": end.isoformat(),
+            "store_timezone": normalized_timezone,
+            "complete_day_count": day_count,
+            "missing_dates": [],
+        },
+        "population": {
+            "row_count": len(normalized_rows),
+            "distinct_variant_count": len(joined_ids),
+        },
+        "query": {
+            "identity": f"{SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT}:{query_file.path}",
+            "sha256": hashlib.sha256(query_file.data).hexdigest(),
+        },
+        "pagination": _normalized_pagination(lines),
+        "blob": {
+            "path": "derived/shopify-current-variant-sales.jsonl",
+            "bytes": len(data_bytes),
+            "sha256": hashlib.sha256(data_bytes).hexdigest(),
+            "format": JSONL_FORMAT,
+            "schema": list(DAILY_SALES_ROW_FIELDS),
+        },
+    }
+    normalized_manifest_bytes = canonical_json_bytes(normalized_manifest)
+    snapshot = _sales_snapshot(normalized_manifest_bytes, data_bytes)
+    identity_sha = hashlib.sha256(
+        canonical_json_bytes(sorted(unjoined_ids, key=lambda item: (len(item), item)))
+    ).hexdigest()
+    capture = _NativeCapture(
+        SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT,
+        manifest_bytes,
+        tuple(capture_files),
+        {
+            "source_limitations": list(limitations),
+            "shop_currency_code": shop["currency_code"],
+            "raw_shop_timezone": shop["timezone"],
+            "current_sales_details": current_sales_details,
+            "raw_row_count": total_rows,
+            "raw_distinct_source_variant_identity_count": len(raw_identity_ids),
+            "joined_current_variant_count": len(joined_ids),
+            "unjoined_source_variant_identity_count": len(unjoined_ids),
+            "unjoined_source_row_count": len(unjoined_rows),
+            "unjoined_source_variant_identities_sha256": identity_sha,
+            "current_catalog_variants_observed_zero_all_days": len(
+                current_variant_ids - joined_ids
+            ),
+            "abc_eligible_cohort_evidence": "NOT_CONFIGURED_IN_CAPTURE",
+        },
+        unjoined_sales_bytes=unjoined_bytes,
+    )
+    return snapshot, capture
+
+
 def _load_snapshot_from_path(
-    root: Path, manifest_value: str | Path, *, kind: str
-) -> tuple[str, _Snapshot]:
+    root: Path,
+    manifest_value: str | Path,
+    *,
+    kind: str,
+    current_variant_ids: set[str] | None = None,
+) -> tuple[str, _Snapshot, _NativeCapture | None]:
     manifest_key, manifest_path = _private_entry(
         root, manifest_value, context=f"{kind} manifest"
     )
     manifest_bytes = _read_file(
         manifest_path, maximum=_MAX_MANIFEST_BYTES, context=f"{kind} manifest"
     )
+    parsed = _parse_json_document(manifest_bytes, path=f"{kind} manifest")
+    contract = parsed.get("contract")
+    native_contract = (
+        SHOPIFY_CATALOG_CAPTURE_CONTRACT
+        if kind == "catalog"
+        else SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT
+    )
+    normalized_contract = (
+        CATALOG_SNAPSHOT_CONTRACT
+        if kind == "catalog"
+        else DAILY_SALES_SNAPSHOT_CONTRACT
+    )
+    if contract == native_contract:
+        if kind == "catalog":
+            snapshot, capture = _native_catalog_capture(
+                root, manifest_path, manifest_bytes, parsed
+            )
+        else:
+            if current_variant_ids is None:
+                raise PrivateResearchIntakeError(
+                    "ADAPTER_INPUT_MISSING",
+                    "native daily sales require the validated current catalog identity set",
+                )
+            snapshot, capture = _native_sales_capture(
+                root,
+                manifest_path,
+                manifest_bytes,
+                parsed,
+                current_variant_ids=current_variant_ids,
+            )
+        return manifest_key, snapshot, capture
+    if contract != normalized_contract:
+        raise PrivateResearchIntakeError(
+            "SOURCE_CONTRACT_MISMATCH", f"unsupported {kind} manifest contract"
+        )
     parsed = _parse_canonical_json(manifest_bytes, path=f"{kind} manifest")
     blob_value = parsed.get("blob")
     if not isinstance(blob_value, dict) or "path" not in blob_value:
@@ -922,7 +2204,7 @@ def _load_snapshot_from_path(
         if kind == "catalog"
         else _sales_snapshot(manifest_bytes, data_bytes)
     )
-    return manifest_key, snapshot
+    return manifest_key, snapshot, None
 
 
 def _blob_key(digest: str) -> str:
@@ -938,6 +2220,40 @@ def _blob_ref(data: bytes, *, media_type: str) -> dict[str, Any]:
         "sha256": digest,
         "media_type": media_type,
     }
+
+
+def _native_capture_descriptor(
+    capture: _NativeCapture,
+) -> tuple[dict[str, Any], list[tuple[dict[str, Any], bytes]]]:
+    manifest_ref = _blob_ref(capture.manifest_bytes, media_type="application/json")
+    publications: list[tuple[dict[str, Any], bytes]] = [
+        (manifest_ref, capture.manifest_bytes)
+    ]
+    files: list[dict[str, Any]] = []
+    for item in capture.files:
+        reference = _blob_ref(item.data, media_type=item.media_type)
+        publications.append((reference, item.data))
+        files.append({"path": item.path, "blob": reference})
+    unjoined_ref: dict[str, Any] | None = None
+    if capture.unjoined_sales_bytes is not None:
+        raw_unjoined_ref = _blob_ref(
+            capture.unjoined_sales_bytes, media_type="application/x-ndjson"
+        )
+        unjoined_ref = {
+            **raw_unjoined_ref,
+            "schema": list(_UNJOINED_SALES_ROW_FIELDS),
+        }
+        publications.append((raw_unjoined_ref, capture.unjoined_sales_bytes))
+    return (
+        {
+            "adapter": SHOPIFY_CAPTURE_ADAPTER,
+            "contract": capture.contract,
+            "manifest_blob": manifest_ref,
+            "files": files,
+            "unjoined_sales_blob": unjoined_ref,
+        },
+        publications,
+    )
 
 
 def _publish_once(
@@ -1217,8 +2533,9 @@ def _source_descriptor(
     manifest_ref: Mapping[str, Any],
     data_ref: Mapping[str, Any],
     schema: tuple[str, ...],
+    native_capture: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    descriptor = {
         "contract": snapshot.manifest["contract"],
         "snapshot_id": snapshot.manifest["snapshot_id"],
         "manifest_blob": dict(manifest_ref),
@@ -1228,6 +2545,9 @@ def _source_descriptor(
         "query": _json_ready(snapshot.manifest["query"]),
         "pagination": _json_ready(snapshot.manifest["pagination"]),
     }
+    if native_capture is not None:
+        descriptor["native_capture"] = _json_ready(native_capture)
+    return descriptor
 
 
 def _a1_descriptor(
@@ -1278,15 +2598,37 @@ def _assemble_intake(
     sales_data_ref: Mapping[str, Any],
     a1_private_path: str,
     a1_external_evidence_path: str | None,
+    catalog_capture: _NativeCapture | None = None,
+    sales_capture: _NativeCapture | None = None,
+    catalog_capture_descriptor: Mapping[str, Any] | None = None,
+    sales_capture_descriptor: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     catalog_source = catalog.manifest["source"]
     sales_source = sales.manifest["source"]
+    if (catalog_capture is None) != (sales_capture is None):
+        raise PrivateResearchIntakeError(
+            "MIXED_SOURCE_CONTRACTS",
+            "catalog and daily sales must both be native captures or both normalized",
+        )
     if (
         catalog_source["store_identity"] != sales_source["store_identity"]
         or catalog_source["store_timezone"] != sales_source["store_timezone"]
     ):
         raise PrivateResearchIntakeError(
             "SOURCE_SCOPE_MISMATCH", "catalog and sales store identity/timezone differ"
+        )
+    if (
+        catalog_capture is not None
+        and sales_capture is not None
+        and (
+            catalog_capture.facts.get("shop_currency_code")
+            != sales_capture.facts.get("shop_currency_code")
+            or catalog_capture.facts.get("raw_shop_timezone")
+            != sales_capture.facts.get("raw_shop_timezone")
+        )
+    ):
+        raise PrivateResearchIntakeError(
+            "SOURCE_SCOPE_MISMATCH", "catalog and sales currency/timezone differ"
         )
     catalog_snapshot_at = _utc_datetime(
         catalog.manifest["extraction"]["snapshot_at_utc"],
@@ -1338,11 +2680,19 @@ def _assemble_intake(
     variants: list[dict[str, Any]] = []
     vendor_variant_ids: defaultdict[str, set[str]] = defaultdict(set)
     vendor_hypotheses: defaultdict[str, int] = defaultdict(int)
+    native_sales_details = (
+        sales_capture.facts.get("current_sales_details", {})
+        if sales_capture is not None
+        else {}
+    )
     for variant in sorted(current_ids, key=lambda item: (len(item), item)):
         catalog_row = catalog_by_id[variant]
         unit_series: list[str] = []
         revenue_series: list[str] = []
         cogs_series: list[str | None] = []
+        gross_sales_series: list[str] = []
+        returns_series: list[str] = []
+        source_gross_profit_series: list[str] = []
         lookback_revenue = Decimal("0")
         lookback_cogs = Decimal("0")
         variant_cogs_complete = bool(lookback_dates)
@@ -1366,6 +2716,24 @@ def _assemble_intake(
             unit_series.append(_decimal_output(units))
             revenue_series.append(_decimal_output(revenue))
             cogs_series.append(None if cogs is None else _decimal_output(cogs))
+            if sales_capture is not None:
+                detail = native_sales_details.get(
+                    (variant, business_date.isoformat())
+                )
+                if source_row is None:
+                    detail = {
+                        "gross_sales": "0",
+                        "returns": "0",
+                        "source_gross_profit": "0",
+                    }
+                if not isinstance(detail, Mapping):
+                    raise PrivateResearchIntakeError(
+                        "ADAPTER_REDERIVATION_MISMATCH",
+                        "native current sales detail is missing for a captured fact",
+                    )
+                gross_sales_series.append(str(detail["gross_sales"]))
+                returns_series.append(str(detail["returns"]))
+                source_gross_profit_series.append(str(detail["source_gross_profit"]))
             if business_date in lookback_set:
                 lookback_revenue += revenue
                 if cogs is None:
@@ -1378,9 +2746,17 @@ def _assemble_intake(
             vendor = str(hypothesis["vendor_name"])
             vendor_variant_ids[vendor].add(variant)
             vendor_hypotheses[vendor] += 1
-        history_complete_for_abc = (
-            cogs_complete and variant in active_ids and variant_cogs_complete
+        history_values_complete = bool(lookback_dates) and variant_cogs_complete
+        inventory = (
+            catalog_capture.facts.get("inventory_by_variant", {}).get(variant)
+            if catalog_capture is not None
+            else None
         )
+        if catalog_capture is not None and not isinstance(inventory, Mapping):
+            raise PrivateResearchIntakeError(
+                "ADAPTER_REDERIVATION_MISMATCH",
+                "native catalog inventory evidence is missing for a current Variant ID",
+            )
         variants.append(
             {
                 "shopify_variant_id": variant,
@@ -1392,12 +2768,17 @@ def _assemble_intake(
                 "current_inventory_item_cost": catalog_row[
                     "current_inventory_item_cost"
                 ],
+                "current_inventory_item_cost_currency": (
+                    inventory.get("current_inventory_item_cost_currency")
+                    if inventory
+                    else None
+                ),
                 "historical_revenue": (
                     _decimal_output(lookback_revenue) if lookback_dates else None
                 ),
                 "historical_cogs": (
                     _decimal_output(lookback_cogs)
-                    if history_complete_for_abc
+                    if history_values_complete
                     else None
                 ),
                 "sales_history": {
@@ -1411,9 +2792,29 @@ def _assemble_intake(
                     "net_units_series": unit_series,
                     "net_revenue_series": revenue_series,
                     "historical_cogs_series": cogs_series,
+                    "gross_sales_series": (
+                        gross_sales_series if sales_capture is not None else None
+                    ),
+                    "returns_series": (
+                        returns_series if sales_capture is not None else None
+                    ),
+                    "source_gross_profit_series": (
+                        source_gross_profit_series
+                        if sales_capture is not None
+                        else None
+                    ),
                 },
-                "available": None,
+                "available": inventory.get("available") if inventory else None,
                 "incoming": None,
+                "on_hand": inventory.get("on_hand") if inventory else None,
+                "committed": inventory.get("committed") if inventory else None,
+                "raw_incoming": inventory.get("raw_incoming") if inventory else None,
+                "raw_incoming_trust": (
+                    inventory.get("raw_incoming_trust") if inventory else None
+                ),
+                "inventory_evidence": (
+                    _json_ready(inventory) if inventory is not None else None
+                ),
                 "units_per_case": None,
                 "qualifying_units_per_case": None,
                 "break_unit": None,
@@ -1422,7 +2823,7 @@ def _assemble_intake(
                 "one_bottle_policy": None,
                 "gross_profit_dollars": (
                     _decimal_output(lookback_revenue - lookback_cogs)
-                    if history_complete_for_abc
+                    if history_values_complete
                     else None
                 ),
                 "forecast_evidence": {
@@ -1438,7 +2839,8 @@ def _assemble_intake(
     abc_scope = None
     lookback_start = lookback_dates[0].isoformat() if lookback_dates else None
     lookback_end = lookback_dates[-1].isoformat() if lookback_dates else None
-    if cogs_complete:
+    abc_coverage_complete = cogs_complete and sales_capture is None
+    if abc_coverage_complete:
         abc_scope = hashlib.sha256(
             canonical_json_bytes(
                 {
@@ -1463,6 +2865,7 @@ def _assemble_intake(
         for vendor in sorted(vendor_variant_ids)
     ]
 
+    sales_facts = sales_capture.facts if sales_capture is not None else {}
     coverage = {
         "current_catalog_population": len(current_ids),
         "a1_original_review_population": package.cohorts["original_cohort_count"],
@@ -1483,23 +2886,42 @@ def _assemble_intake(
         "sales_start_date": sales_dates[0].isoformat(),
         "sales_end_date": sales_dates[-1].isoformat(),
         "sales_complete_day_count": len(sales_dates),
-        "sales_source_row_count": len(sales.rows),
-        "sales_distinct_variant_count": sales.manifest["population"][
-            "distinct_variant_count"
-        ],
-        "sales_variants_joined_to_current_catalog": len(
-            {row["shopify_variant_id"] for row in sales.rows}
+        "sales_source_row_count": sales_facts.get("raw_row_count", len(sales.rows)),
+        "sales_normalized_current_row_count": len(sales.rows),
+        "sales_distinct_variant_count": sales_facts.get(
+            "raw_distinct_source_variant_identity_count",
+            sales.manifest["population"]["distinct_variant_count"],
         ),
-        "sales_variants_not_in_current_catalog": 0,
+        "sales_variants_joined_to_current_catalog": sales_facts.get(
+            "joined_current_variant_count",
+            len({row["shopify_variant_id"] for row in sales.rows}),
+        ),
+        "sales_variants_not_in_current_catalog": sales_facts.get(
+            "unjoined_source_variant_identity_count", 0
+        ),
+        "sales_historical_unjoined_source_row_count": sales_facts.get(
+            "unjoined_source_row_count", 0
+        ),
+        "sales_historical_unjoined_variant_identities_sha256": sales_facts.get(
+            "unjoined_source_variant_identities_sha256"
+        ),
+        "sales_current_catalog_variants_observed_zero_all_days": sales_facts.get(
+            "current_catalog_variants_observed_zero_all_days",
+            len(current_ids - {row["shopify_variant_id"] for row in sales.rows}),
+        ),
         "abc_cohort": {
-            "coverage_complete": cogs_complete,
+            "coverage_complete": abc_coverage_complete,
             "scope_id": abc_scope,
             "lookback_start": lookback_start,
             "lookback_end": lookback_end,
             "classification_period_days": _ABC_DAYS,
             "eligible_variant_count": len(active_ids),
             "excluded_variant_count": len(current_ids - active_ids),
-            "basis": "HISTORICAL_REVENUE_AND_HISTORICAL_COGS_ONLY",
+            "basis": (
+                "HISTORICAL_REVENUE_AND_HISTORICAL_COGS_ONLY"
+                if sales_capture is None
+                else "NOT_CONFIGURED; CAPTURE_LACKS_EXACT_ELIGIBLE_MEMBERSHIP_AND_EXCLUSIONS"
+            ),
         },
     }
 
@@ -1519,6 +2941,23 @@ def _assemble_intake(
     )
     if not cogs_complete:
         limitations.append("ABC_COHORT_INCOMPLETE_WITHOUT_EXACT_84_DAY_HISTORICAL_COGS")
+    if sales_capture is not None:
+        limitations.extend(
+            [
+                "RAW_SHOPIFY_INCOMING_IS_UNTRUSTED_CAPTURE_EVIDENCE; TRUSTED_INCOMING_REMAINS_UNKNOWN",
+                "HISTORICAL_SALES_IDENTITIES_NOT_IN_CURRENT_CATALOG_ARE_PRESERVED_UNJOINED",
+                "ACTUAL_CAPTURE_LACKS_EXACT_ABC_ELIGIBLE_COHORT_AND_EXCLUSION_EVIDENCE",
+                "NATIVE_DESCRIPTIVE_TEXT_IS_TRIMMED_ONLY_IN_THE_NORMALIZED_VIEW; RAW_BYTES_ARE_PRESERVED",
+            ]
+        )
+        limitations.extend(
+            f"CATALOG_CAPTURE_LIMITATION:{item}"
+            for item in catalog_capture.facts.get("source_limitations", [])
+        )
+        limitations.extend(
+            f"SALES_CAPTURE_LIMITATION:{item}"
+            for item in sales_capture.facts.get("source_limitations", [])
+        )
 
     payload: dict[str, Any] = {
         "contract": PRIVATE_RESEARCH_INTAKE_CONTRACT,
@@ -1531,6 +2970,7 @@ def _assemble_intake(
                 manifest_ref=catalog_manifest_ref,
                 data_ref=catalog_data_ref,
                 schema=CATALOG_ROW_FIELDS,
+                native_capture=catalog_capture_descriptor,
             ),
             "daily_sales": {
                 **_source_descriptor(
@@ -1538,6 +2978,7 @@ def _assemble_intake(
                     manifest_ref=sales_manifest_ref,
                     data_ref=sales_data_ref,
                     schema=DAILY_SALES_ROW_FIELDS,
+                    native_capture=sales_capture_descriptor,
                 ),
                 "date_range": _json_ready(sales.manifest["date_range"]),
             },
@@ -1591,13 +3032,156 @@ def _read_blob(root: Path, reference: Mapping[str, Any], *, context: str) -> byt
     return data
 
 
+def _read_native_capture(
+    root: Path,
+    value: Any,
+    *,
+    kind: str,
+    current_variant_ids: set[str] | None = None,
+) -> tuple[_NativeCapture, dict[str, Any]]:
+    descriptor = _exact_fields(
+        value, _CAPTURE_DESCRIPTOR_FIELDS, context=f"{kind} native capture"
+    )
+    expected_contract = (
+        SHOPIFY_CATALOG_CAPTURE_CONTRACT
+        if kind == "catalog"
+        else SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT
+    )
+    if (
+        descriptor.get("adapter") != SHOPIFY_CAPTURE_ADAPTER
+        or descriptor.get("contract") != expected_contract
+    ):
+        raise PrivateResearchIntakeError(
+            "SOURCE_CONTRACT_MISMATCH", f"{kind} native capture adapter differs"
+        )
+    manifest_ref = _validate_blob_reference(
+        descriptor.get("manifest_blob"), context=f"{kind} native manifest blob"
+    )
+    manifest_bytes = _read_blob(
+        root, manifest_ref, context=f"{kind} native immutable manifest"
+    )
+    manifest = _parse_json_document(
+        manifest_bytes, path=f"{kind} native immutable manifest"
+    )
+    files_value = descriptor.get("files")
+    if not isinstance(files_value, list) or not files_value:
+        raise PrivateResearchIntakeError(
+            "SCHEMA_MISMATCH", f"{kind} native capture files must be nonempty"
+        )
+    provided_files: dict[str, bytes] = {}
+    for index, raw_file in enumerate(files_value):
+        file_descriptor = _exact_fields(
+            raw_file,
+            _CAPTURE_FILE_DESCRIPTOR_FIELDS,
+            context=f"{kind} native capture file {index}",
+        )
+        path = _safe_key(
+            file_descriptor.get("path"), context=f"{kind} native capture source path"
+        )
+        if path in provided_files:
+            raise PrivateResearchIntakeError(
+                "DUPLICATE_CAPTURE_PATH", f"{kind} native capture path is duplicated"
+            )
+        reference = _validate_blob_reference(
+            file_descriptor.get("blob"), context=f"{kind} native file blob"
+        )
+        provided_files[path] = _read_blob(
+            root, reference, context=f"{kind} native immutable file"
+        )
+    placeholder = root / "private-research" / "native-capture-manifest.json"
+    if kind == "catalog":
+        snapshot, capture = _native_catalog_capture(
+            root,
+            placeholder,
+            manifest_bytes,
+            manifest,
+            provided_files=provided_files,
+        )
+    else:
+        if current_variant_ids is None:
+            raise PrivateResearchIntakeError(
+                "ADAPTER_INPUT_MISSING", "native sales readback requires catalog IDs"
+            )
+        snapshot, capture = _native_sales_capture(
+            root,
+            placeholder,
+            manifest_bytes,
+            manifest,
+            current_variant_ids=current_variant_ids,
+            provided_files=provided_files,
+        )
+    if [item.path for item in capture.files] != list(provided_files):
+        raise PrivateResearchIntakeError(
+            "ADAPTER_REDERIVATION_MISMATCH",
+            f"{kind} native capture file set or order differs",
+        )
+    unjoined_value = descriptor.get("unjoined_sales_blob")
+    if kind == "catalog":
+        if unjoined_value is not None or capture.unjoined_sales_bytes is not None:
+            raise PrivateResearchIntakeError(
+                "SCHEMA_MISMATCH", "catalog capture cannot carry unjoined sales"
+            )
+    else:
+        if (
+            not isinstance(unjoined_value, Mapping)
+            or unjoined_value.get("schema") != list(_UNJOINED_SALES_ROW_FIELDS)
+        ):
+            raise PrivateResearchIntakeError(
+                "BLOB_CONTRACT_MISMATCH", "unjoined historical sales schema differs"
+            )
+        unjoined_ref = _validate_blob_reference(
+            {key: unjoined_value.get(key) for key in _BLOB_REF_FIELDS},
+            context="unjoined historical sales blob",
+        )
+        unjoined_bytes = _read_blob(
+            root, unjoined_ref, context="unjoined historical sales immutable blob"
+        )
+        if unjoined_bytes != capture.unjoined_sales_bytes:
+            raise PrivateResearchIntakeError(
+                "ADAPTER_REDERIVATION_MISMATCH",
+                "unjoined historical sales differ from native capture derivation",
+            )
+    expected_descriptor, _ = _native_capture_descriptor(capture)
+    if canonical_json_bytes(expected_descriptor) != canonical_json_bytes(descriptor):
+        raise PrivateResearchIntakeError(
+            "ADAPTER_REDERIVATION_MISMATCH", f"{kind} native descriptor differs"
+        )
+    return capture, expected_descriptor
+
+
 def _read_source_blobs(
-    root: Path, source: Any, *, kind: str
-) -> tuple[_Snapshot, dict[str, Any], dict[str, Any]]:
+    root: Path,
+    source: Any,
+    *,
+    kind: str,
+    current_variant_ids: set[str] | None = None,
+) -> tuple[
+    _Snapshot,
+    dict[str, Any],
+    dict[str, Any],
+    _NativeCapture | None,
+    dict[str, Any] | None,
+]:
     if not isinstance(source, Mapping):
         raise PrivateResearchIntakeError(
             "SCHEMA_MISMATCH", f"{kind} source descriptor must be an object"
         )
+    native_value = source.get("native_capture")
+    expected_fields = {
+        "contract",
+        "snapshot_id",
+        "manifest_blob",
+        "data_blob",
+        "source",
+        "extraction",
+        "query",
+        "pagination",
+    }
+    if kind == "daily-sales":
+        expected_fields.add("date_range")
+    if native_value is not None:
+        expected_fields.add("native_capture")
+    _exact_fields(source, frozenset(expected_fields), context=f"{kind} source descriptor")
     manifest_ref = _validate_blob_reference(
         source.get("manifest_blob"), context=f"{kind} manifest blob"
     )
@@ -1624,7 +3208,57 @@ def _read_source_blobs(
         if kind == "catalog"
         else _sales_snapshot(manifest_bytes, data_bytes)
     )
-    return snapshot, manifest_ref, data_ref
+    capture: _NativeCapture | None = None
+    capture_descriptor: dict[str, Any] | None = None
+    if native_value is not None:
+        capture, capture_descriptor = _read_native_capture(
+            root,
+            native_value,
+            kind=kind,
+            current_variant_ids=current_variant_ids,
+        )
+        if (
+            capture.contract
+            != (
+                SHOPIFY_CATALOG_CAPTURE_CONTRACT
+                if kind == "catalog"
+                else SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT
+            )
+        ):
+            raise PrivateResearchIntakeError(
+                "SOURCE_CONTRACT_MISMATCH", f"{kind} native contract differs"
+            )
+        adapted_snapshot = (
+            _native_catalog_capture(
+                root,
+                root / "unused-native-manifest.json",
+                capture.manifest_bytes,
+                _parse_json_document(
+                    capture.manifest_bytes, path=f"{kind} native manifest"
+                ),
+                provided_files={item.path: item.data for item in capture.files},
+            )[0]
+            if kind == "catalog"
+            else _native_sales_capture(
+                root,
+                root / "unused-native-manifest.json",
+                capture.manifest_bytes,
+                _parse_json_document(
+                    capture.manifest_bytes, path=f"{kind} native manifest"
+                ),
+                current_variant_ids=current_variant_ids or set(),
+                provided_files={item.path: item.data for item in capture.files},
+            )[0]
+        )
+        if (
+            adapted_snapshot.manifest_bytes != snapshot.manifest_bytes
+            or adapted_snapshot.data_bytes != snapshot.data_bytes
+        ):
+            raise PrivateResearchIntakeError(
+                "ADAPTER_REDERIVATION_MISMATCH",
+                f"stored normalized {kind} differs from native capture",
+            )
+    return snapshot, manifest_ref, data_ref, capture, capture_descriptor
 
 
 def _read_exact_a1_from_descriptor(
@@ -1667,11 +3301,14 @@ def build_private_research_intake(
     """Validate, immutably publish, and read back one private research intake."""
 
     root = validate_private_root(private_root)
-    _, catalog = _load_snapshot_from_path(
+    _, catalog, catalog_capture = _load_snapshot_from_path(
         root, catalog_manifest_path, kind="catalog"
     )
-    _, sales = _load_snapshot_from_path(
-        root, daily_sales_manifest_path, kind="daily-sales"
+    _, sales, sales_capture = _load_snapshot_from_path(
+        root,
+        daily_sales_manifest_path,
+        kind="daily-sales",
+        current_variant_ids={row["shopify_variant_id"] for row in catalog.rows},
     )
     a1_key, a1_path = _private_entry(
         root, a1_package_path, context="A1 package", directory=True
@@ -1700,16 +3337,29 @@ def build_private_research_intake(
     sales_data_ref = _blob_ref(
         sales.data_bytes, media_type="application/x-ndjson"
     )
+    catalog_capture_descriptor: dict[str, Any] | None = None
+    sales_capture_descriptor: dict[str, Any] | None = None
+    native_publications: list[tuple[dict[str, Any], bytes]] = []
+    if catalog_capture is not None:
+        catalog_capture_descriptor, publications = _native_capture_descriptor(
+            catalog_capture
+        )
+        native_publications.extend(publications)
+    if sales_capture is not None:
+        sales_capture_descriptor, publications = _native_capture_descriptor(sales_capture)
+        native_publications.extend(publications)
     storage = LocalFilesystemStorage(root)
     # Immutable source blobs are published first.  A failed validation or blob
     # conflict can leave only harmless content-addressed orphans, never an
     # intake that appears complete.
-    for reference, data in (
+    publications = [
         (catalog_manifest_ref, catalog.manifest_bytes),
         (catalog_data_ref, catalog.data_bytes),
         (sales_manifest_ref, sales.manifest_bytes),
         (sales_data_ref, sales.data_bytes),
-    ):
+        *native_publications,
+    ]
+    for reference, data in publications:
         _publish_once(storage, reference, data)
 
     payload = _assemble_intake(
@@ -1722,6 +3372,10 @@ def build_private_research_intake(
         sales_data_ref=sales_data_ref,
         a1_private_path=a1_key,
         a1_external_evidence_path=external_key,
+        catalog_capture=catalog_capture,
+        sales_capture=sales_capture,
+        catalog_capture_descriptor=catalog_capture_descriptor,
+        sales_capture_descriptor=sales_capture_descriptor,
     )
     manifest_bytes = canonical_json_bytes(payload)
     manifest_reference = {
@@ -1779,11 +3433,26 @@ def read_private_research_intake(
         raise PrivateResearchIntakeError(
             "SCHEMA_MISMATCH", "intake source set differs"
         )
-    catalog, catalog_manifest_ref, catalog_data_ref = _read_source_blobs(
+    (
+        catalog,
+        catalog_manifest_ref,
+        catalog_data_ref,
+        catalog_capture,
+        catalog_capture_descriptor,
+    ) = _read_source_blobs(
         root, sources["catalog"], kind="catalog"
     )
-    sales, sales_manifest_ref, sales_data_ref = _read_source_blobs(
-        root, sources["daily_sales"], kind="daily-sales"
+    (
+        sales,
+        sales_manifest_ref,
+        sales_data_ref,
+        sales_capture,
+        sales_capture_descriptor,
+    ) = _read_source_blobs(
+        root,
+        sources["daily_sales"],
+        kind="daily-sales",
+        current_variant_ids={row["shopify_variant_id"] for row in catalog.rows},
     )
     package, a1_key, external_key = _read_exact_a1_from_descriptor(
         root, sources["a1_review_package"]
@@ -1798,6 +3467,10 @@ def read_private_research_intake(
         sales_data_ref=sales_data_ref,
         a1_private_path=a1_key,
         a1_external_evidence_path=external_key,
+        catalog_capture=catalog_capture,
+        sales_capture=sales_capture,
+        catalog_capture_descriptor=catalog_capture_descriptor,
+        sales_capture_descriptor=sales_capture_descriptor,
     )
     if canonical_json_bytes(expected) != raw:
         raise PrivateResearchIntakeError(

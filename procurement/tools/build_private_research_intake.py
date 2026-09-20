@@ -22,8 +22,9 @@ from procurement_os.private_research_intake import (  # noqa: E402
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate private catalog, daily-sales, and exact A1 review evidence; "
-            "publish a REVIEW_ONLY content-addressed intake."
+            "Validate normalized or frozen native Shopify catalog/daily-sales "
+            "manifests plus exact A1 review evidence; publish a REVIEW_ONLY "
+            "content-addressed intake."
         )
     )
     parser.add_argument("--private-root", type=Path, required=True)
@@ -53,6 +54,9 @@ def main(argv: list[str] | None = None) -> int:
         "manifest_key": intake_manifest_key(intake["intake_id"]),
         "variant_count": len(intake["variants"]),
         "vendor_count": len(intake["vendors"]),
+        "historical_unjoined_variant_count": intake["coverage"][
+            "sales_variants_not_in_current_catalog"
+        ],
         "zero_authority": intake["zero_authority"],
     }
     print(

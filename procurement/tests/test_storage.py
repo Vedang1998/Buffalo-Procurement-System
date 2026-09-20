@@ -37,6 +37,14 @@ class TestLocalFilesystemStorage(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.put_bytes("a/../../escape.txt", b"x")
 
+    def test_rejects_internal_symlink_components(self):
+        self.store.put_bytes("target/existing.txt", b"safe")
+        root = Path(self.tmp.name) / "root"
+        (root / "alias").symlink_to(root / "target", target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlinked"):
+            self.store.put_bytes_once("alias/new.txt", b"unsafe alias write")
+        self.assertFalse((root / "target" / "new.txt").exists())
+
     def test_construction_and_read_paths_do_not_create_storage_root(self):
         root = Path(self.tmp.name) / "read-only-root"
         store = LocalFilesystemStorage(root)

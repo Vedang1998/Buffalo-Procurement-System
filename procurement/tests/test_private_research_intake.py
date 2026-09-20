@@ -21,6 +21,8 @@ from procurement_os.private_research_intake import (
     JSONL_FORMAT,
     PRIVATE_REAL_SOURCE_REVIEW,
     PRIVATE_RESEARCH_INTAKE_CONTRACT,
+    SHOPIFY_CATALOG_CAPTURE_CONTRACT,
+    SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT,
     SOURCE_AUTHORITY,
     ZERO_AUTHORITY,
     PrivateResearchIntakeError,
@@ -369,6 +371,297 @@ class PrivateResearchIntakeTests(unittest.TestCase):
             a1_package_path="a1",
         )
 
+    def _write_native_captures(self) -> None:
+        catalog_dir = self.root / "native-catalog"
+        sales_dir = self.root / "native-sales"
+        (catalog_dir / "parts").mkdir(parents=True, exist_ok=True)
+        (sales_dir / "parts").mkdir(parents=True, exist_ok=True)
+
+        catalog_query = b"query NativeCatalog { products(first: 20) { nodes { id } } }\n"
+        (catalog_dir / "query.graphql").write_bytes(catalog_query)
+
+        def variant(
+            variant_id: str,
+            item_id: str,
+            level_id: str,
+            *,
+            sku: str,
+            price: str,
+            cost: str | None,
+            available: int,
+            on_hand: int,
+            committed: int,
+            incoming: int,
+        ) -> dict[str, object]:
+            unit_cost = None if cost is None else {"amount": cost, "currencyCode": "USD"}
+            return {
+                "id": f"gid://shopify/ProductVariant/{variant_id}",
+                "title": "750 mL",
+                "sku": sku,
+                "barcode": None,
+                "price": price,
+                "compareAtPrice": None,
+                "inventoryQuantity": available,
+                "updatedAt": "2026-08-25T12:00:00Z",
+                "selectedOptions": [{"name": "Size", "value": "750 mL"}],
+                "inventoryItem": {
+                    "id": f"gid://shopify/InventoryItem/{item_id}",
+                    "tracked": True,
+                    "updatedAt": "2026-08-25T12:00:00Z",
+                    "unitCost": unit_cost,
+                    "inventoryLevels": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": "level-end"},
+                        "nodes": [
+                            {
+                                "id": f"gid://shopify/InventoryLevel/{level_id}",
+                                "updatedAt": "2026-08-25T12:00:00Z",
+                                "location": {
+                                    "id": "gid://shopify/Location/501",
+                                    "name": "Fixture Location",
+                                    "isActive": True,
+                                },
+                                "quantities": [
+                                    {
+                                        "name": "available",
+                                        "quantity": available,
+                                        "updatedAt": "2026-08-25T12:00:00Z",
+                                    },
+                                    {
+                                        "name": "on_hand",
+                                        "quantity": on_hand,
+                                        "updatedAt": "2026-08-25T12:00:00Z",
+                                    },
+                                    {
+                                        "name": "committed",
+                                        "quantity": committed,
+                                        "updatedAt": None,
+                                    },
+                                    {
+                                        "name": "incoming",
+                                        "quantity": incoming,
+                                        "updatedAt": None,
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                },
+            }
+
+        catalog_products = [
+            {
+                "id": "gid://shopify/Product/71",
+                "title": " Fixture Native Product ",
+                "handle": "fixture-native-product",
+                "vendor": "Fixture Brand",
+                "productType": "Wine",
+                "status": "ACTIVE",
+                "tags": ["fixture"],
+                "updatedAt": "2026-08-25T12:00:00Z",
+                "variants": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": "variant-end"},
+                    "nodes": [
+                        variant(
+                            "1001",
+                            "91",
+                            "191",
+                            sku=" SKU-1 ",
+                            price="15.00",
+                            cost="5.00",
+                            available=2,
+                            on_hand=3,
+                            committed=1,
+                            incoming=4,
+                        ),
+                        variant(
+                            "1002",
+                            "92",
+                            "192",
+                            sku="SKU-2",
+                            price="20.00",
+                            cost="8.00",
+                            available=0,
+                            on_hand=0,
+                            committed=0,
+                            incoming=0,
+                        ),
+                    ],
+                },
+            }
+        ]
+        catalog_part = b"".join(
+            json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            + b"\n"
+            for row in catalog_products
+        )
+        (catalog_dir / "parts" / "catalog.jsonl").write_bytes(catalog_part)
+        catalog_manifest = {
+            "contract": SHOPIFY_CATALOG_CAPTURE_CONTRACT,
+            "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
+            "approval_state": "PROPOSED_UNAPPROVED_REVIEW_ONLY",
+            "captured_at_utc": "2026-08-25T12:00:00Z",
+            "capture_timing_note": "Synthetic complete capture",
+            "source": {
+                "connector": "ALREADY_CONNECTED_SHOPIFY_READ_ONLY",
+                "shop": {
+                    "name": "Fixture Shop",
+                    "domain": "fixture.example",
+                    "currency_code": "USD",
+                    "timezone": "EDT",
+                    "country": "US",
+                },
+                "query_path": "query.graphql",
+                "query_bytes": len(catalog_query),
+                "query_sha256": hashlib.sha256(catalog_query).hexdigest(),
+                "page_size": 20,
+                "page_count": 1,
+                "pagination_complete": True,
+                "nested_variant_pagination_complete": True,
+                "nested_inventory_location_pagination_complete": True,
+                "omitted_current_day_demand": True,
+            },
+            "population": {"products": 1, "variants": 2},
+            "parts": [
+                {
+                    "path": "parts/catalog.jsonl",
+                    "bytes": len(catalog_part),
+                    "sha256": hashlib.sha256(catalog_part).hexdigest(),
+                    "rows": 1,
+                }
+            ],
+            "limitations": ["SYNTHETIC_FIXTURE_ONLY"],
+        }
+        (catalog_dir / "manifest.json").write_bytes(
+            (json.dumps(catalog_manifest, indent=2) + "\n").encode("utf-8")
+        )
+
+        sales_query = b"FROM sales SHOW net_items_sold GROUP BY day, product_variant_id\n"
+        (sales_dir / "query-template.shopifyql").write_bytes(sales_query)
+        start = date(2026, 6, 1)
+        end = start + timedelta(days=83)
+        sales_rows = [
+            {
+                "day": start.isoformat(),
+                "product_id": "71",
+                "product_variant_id": "1001",
+                "product_title": "Fixture Native Product",
+                "product_variant_title": "750 mL",
+                "net_items_sold": "2",
+                "gross_sales": "30.00",
+                "returns": "0.00",
+                "net_sales": "30.00",
+                "cost_of_goods_sold": "5.00",
+                "gross_profit": "25.00",
+            },
+            {
+                "day": start.isoformat(),
+                "product_id": "79",
+                "product_variant_id": "9999",
+                "product_title": "Historical Fixture",
+                "product_variant_title": "Old",
+                "net_items_sold": "1",
+                "gross_sales": "10.00",
+                "returns": "0.00",
+                "net_sales": "10.00",
+                "cost_of_goods_sold": "3.00",
+                "gross_profit": "7.00",
+            },
+            {
+                "day": start.isoformat(),
+                "product_id": "",
+                "product_variant_id": "",
+                "product_title": "",
+                "product_variant_title": "",
+                "net_items_sold": "-1",
+                "gross_sales": "0.00",
+                "returns": "-4.00",
+                "net_sales": "-4.00",
+                "cost_of_goods_sold": "0.00",
+                "gross_profit": "-4.00",
+            },
+        ]
+        sales_part = b"".join(
+            json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            + b"\n"
+            for row in sales_rows
+        )
+        (sales_dir / "parts" / "sales.jsonl").write_bytes(sales_part)
+        columns = [
+            ("day", "DAY_TIMESTAMP"),
+            ("product_id", "IDENTITY"),
+            ("product_variant_id", "IDENTITY"),
+            ("product_title", "STRING"),
+            ("product_variant_title", "STRING"),
+            ("net_items_sold", "INTEGER"),
+            ("gross_sales", "MONEY"),
+            ("returns", "MONEY"),
+            ("net_sales", "MONEY"),
+            ("cost_of_goods_sold", "MONEY"),
+            ("gross_profit", "MONEY"),
+        ]
+        sales_manifest = {
+            "contract": SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT,
+            "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
+            "approval_state": "PROPOSED_UNAPPROVED_REVIEW_ONLY",
+            "captured_at_utc": "2026-08-24T12:00:00Z",
+            "source": {
+                "connector": "ALREADY_CONNECTED_SHOPIFY_READ_ONLY_ANALYTICS",
+                "shop": {
+                    "domain": "fixture.example",
+                    "currency_code": "USD",
+                    "timezone": "EDT",
+                },
+                "query_template_path": "query-template.shopifyql",
+                "query_template_bytes": len(sales_query),
+                "query_template_sha256": hashlib.sha256(sales_query).hexdigest(),
+                "first_complete_business_date": start.isoformat(),
+                "last_complete_business_date": end.isoformat(),
+                "business_days": 84,
+                "local_capture_day_omitted_as_partial": (end + timedelta(days=1)).isoformat(),
+                "one_query_per_business_date": True,
+                "connector_row_ceiling": 1000,
+                "every_query_below_row_ceiling": True,
+                "population": "ALL_VARIANT_GROUPS_RETURNED_BY_UNFILTERED_DAILY_SALES_QUERY",
+                "absent_variant_day_semantics": (
+                    "OBSERVED_ZERO_ONLY_FOR_DAYS_WITH_A_RECORDED_COMPLETE_QUERY; "
+                    "NEVER IMPUTE AN UNQUERIED DAY"
+                ),
+            },
+            "columns": [
+                {"name": name, "dataType": data_type} for name, data_type in columns
+            ],
+            "day_queries": [
+                {
+                    "business_date": (start + timedelta(days=index)).isoformat(),
+                    "row_count": 3 if index == 0 else 0,
+                }
+                for index in range(84)
+            ],
+            "totals": {"rows": 3},
+            "parts": [
+                {
+                    "path": "parts/sales.jsonl",
+                    "bytes": len(sales_part),
+                    "sha256": hashlib.sha256(sales_part).hexdigest(),
+                    "rows": 3,
+                    "start_date": start.isoformat(),
+                    "end_date": end.isoformat(),
+                }
+            ],
+            "limitations": ["SYNTHETIC_FIXTURE_ONLY"],
+        }
+        (sales_dir / "manifest.json").write_bytes(
+            (json.dumps(sales_manifest, indent=2) + "\n").encode("utf-8")
+        )
+
+    def _build_native(self) -> dict[str, object]:
+        return build_private_research_intake(
+            self.root,
+            catalog_manifest_path="native-catalog/manifest.json",
+            daily_sales_manifest_path="native-sales/manifest.json",
+            a1_package_path="a1",
+        )
+
     def test_builds_current_catalog_only_intake_and_exact_readback(self):
         intake = self._build()
         self.assertEqual(
@@ -603,6 +896,170 @@ class PrivateResearchIntakeTests(unittest.TestCase):
         changed["zero_authority"]["database_writes"] = False
         path.write_bytes(canonical_json_bytes(changed))
         with self.assertRaisesRegex(PrivateResearchIntakeError, "AUTHORITY_MISMATCH"):
+            read_private_research_intake(self.root, intake["intake_id"])
+
+    def test_native_shopify_captures_preserve_unjoined_history_and_inventory_evidence(self):
+        self._write_native_captures()
+        intake = self._build_native()
+        coverage = intake["coverage"]
+        self.assertEqual(coverage["current_catalog_population"], 2)
+        self.assertEqual(coverage["sales_source_row_count"], 3)
+        self.assertEqual(coverage["sales_normalized_current_row_count"], 1)
+        self.assertEqual(coverage["sales_distinct_variant_count"], 3)
+        self.assertEqual(coverage["sales_variants_joined_to_current_catalog"], 1)
+        self.assertEqual(coverage["sales_variants_not_in_current_catalog"], 2)
+        self.assertEqual(coverage["sales_historical_unjoined_source_row_count"], 2)
+        self.assertEqual(
+            coverage["sales_current_catalog_variants_observed_zero_all_days"], 1
+        )
+        self.assertRegex(
+            coverage["sales_historical_unjoined_variant_identities_sha256"],
+            r"^[0-9a-f]{64}$",
+        )
+        self.assertFalse(coverage["abc_cohort"]["coverage_complete"])
+        self.assertEqual(coverage["abc_cohort"]["scope_id"], None)
+        self.assertIn("NOT_CONFIGURED", coverage["abc_cohort"]["basis"])
+
+        variants = {row["shopify_variant_id"]: row for row in intake["variants"]}
+        self.assertEqual(set(variants), {"1001", "1002"})
+        first = variants["1001"]
+        self.assertEqual(first["product_title"], "Fixture Native Product")
+        self.assertEqual(first["shopify_sku"], "SKU-1")
+        self.assertEqual(first["available"], "2")
+        self.assertEqual(first["on_hand"], "3")
+        self.assertEqual(first["committed"], "1")
+        self.assertEqual(first["raw_incoming"], "4")
+        self.assertIsNone(first["incoming"])
+        self.assertEqual(first["raw_incoming_trust"], "UNTRUSTED_CAPTURE_ONLY")
+        self.assertEqual(first["current_inventory_item_cost"], "5")
+        self.assertEqual(first["current_inventory_item_cost_currency"], "USD")
+        self.assertEqual(first["historical_cogs"], "5")
+        self.assertEqual(first["historical_revenue"], "30")
+        self.assertEqual(first["sales_history"]["gross_sales_series"][0], "30")
+        self.assertEqual(first["sales_history"]["returns_series"][0], "0")
+        self.assertEqual(
+            first["sales_history"]["source_gross_profit_series"][0], "25"
+        )
+        self.assertEqual(
+            first["inventory_evidence"]["locations"][0]["location_id"],
+            "gid://shopify/Location/501",
+        )
+
+        catalog_capture = intake["sources"]["catalog"]["native_capture"]
+        sales_capture = intake["sources"]["daily_sales"]["native_capture"]
+        self.assertEqual(catalog_capture["contract"], SHOPIFY_CATALOG_CAPTURE_CONTRACT)
+        self.assertEqual(
+            sales_capture["contract"], SHOPIFY_DAILY_SALES_CAPTURE_CONTRACT
+        )
+        self.assertIsNone(catalog_capture["unjoined_sales_blob"])
+        self.assertIsNotNone(sales_capture["unjoined_sales_blob"])
+        self.assertEqual(
+            read_private_research_intake(self.root, intake["intake_id"]), intake
+        )
+        manifest_path = self.root / intake_manifest_key(intake["intake_id"])
+        prior_mtime = manifest_path.stat().st_mtime_ns
+        self.assertEqual(self._build_native(), intake)
+        self.assertEqual(manifest_path.stat().st_mtime_ns, prior_mtime)
+
+    def test_native_capture_rejects_manifest_part_and_daily_completeness_drift(self):
+        self._write_native_captures()
+        catalog_manifest_path = self.root / "native-catalog" / "manifest.json"
+        manifest = json.loads(catalog_manifest_path.read_text())
+        manifest["unexpected"] = True
+        catalog_manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "SCHEMA_MISMATCH"):
+            self._build_native()
+
+        self._write_native_captures()
+        (self.root / "native-catalog" / "parts" / "catalog.jsonl").write_bytes(
+            b"tampered\n"
+        )
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "CONTENT_HASH_MISMATCH"):
+            self._build_native()
+
+        self._write_native_captures()
+        sales_manifest_path = self.root / "native-sales" / "manifest.json"
+        manifest = json.loads(sales_manifest_path.read_text())
+        manifest["day_queries"].pop()
+        sales_manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        with self.assertRaisesRegex(
+            PrivateResearchIntakeError, "DATE_COVERAGE_INCOMPLETE"
+        ):
+            self._build_native()
+
+        self._write_native_captures()
+        manifest = json.loads(catalog_manifest_path.read_text())
+        manifest["source"]["nested_inventory_location_pagination_complete"] = False
+        catalog_manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "PAGINATION_INCOMPLETE"):
+            self._build_native()
+
+    def test_native_capture_rejects_unsafe_paths_duplicate_facts_and_mixed_contracts(self):
+        self._write_native_captures()
+        catalog_manifest_path = self.root / "native-catalog" / "manifest.json"
+        manifest = json.loads(catalog_manifest_path.read_text())
+        manifest["parts"][0]["path"] = "../input/catalog.jsonl"
+        catalog_manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "UNSAFE_PATH"):
+            self._build_native()
+
+        self._write_native_captures()
+        sales_part_path = self.root / "native-sales" / "parts" / "sales.jsonl"
+        lines = sales_part_path.read_bytes().splitlines(keepends=True)
+        changed = b"".join([*lines, lines[0]])
+        sales_part_path.write_bytes(changed)
+        sales_manifest_path = self.root / "native-sales" / "manifest.json"
+        manifest = json.loads(sales_manifest_path.read_text())
+        manifest["parts"][0].update(
+            {
+                "bytes": len(changed),
+                "sha256": hashlib.sha256(changed).hexdigest(),
+                "rows": 4,
+            }
+        )
+        manifest["totals"]["rows"] = 4
+        manifest["day_queries"][0]["row_count"] = 4
+        sales_manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "DUPLICATE_SALES_FACT"):
+            self._build_native()
+
+        self._write_native_captures()
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "MIXED_SOURCE_CONTRACTS"):
+            build_private_research_intake(
+                self.root,
+                catalog_manifest_path="native-catalog/manifest.json",
+                daily_sales_manifest_path="input/sales-manifest.json",
+                a1_package_path="a1",
+            )
+
+    def test_native_readback_rehashes_raw_part_and_unjoined_evidence_blobs(self):
+        self._write_native_captures()
+        intake = self._build_native()
+        sales_capture = intake["sources"]["daily_sales"]["native_capture"]
+        raw_part = next(
+            item["blob"]["key"]
+            for item in sales_capture["files"]
+            if item["path"].endswith("sales.jsonl")
+        )
+        (self.root / raw_part).write_bytes(b"tampered raw capture\n")
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "CONTENT_HASH_MISMATCH"):
+            read_private_research_intake(self.root, intake["intake_id"])
+
+        self.temporary.cleanup()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        os.chmod(self.root, 0o700)
+        (self.root / "input").mkdir()
+        (self.root / "a1").mkdir()
+        self._write_catalog(self.catalog_rows)
+        self._write_sales(self.sales_rows)
+        self._write_native_captures()
+        intake = self._build_native()
+        unjoined = intake["sources"]["daily_sales"]["native_capture"][
+            "unjoined_sales_blob"
+        ]["key"]
+        (self.root / unjoined).write_bytes(b"tampered unjoined evidence\n")
+        with self.assertRaisesRegex(PrivateResearchIntakeError, "CONTENT_HASH_MISMATCH"):
             read_private_research_intake(self.root, intake["intake_id"])
 
     def test_complete_84_day_historical_cogs_can_prove_abc_without_current_cost(self):

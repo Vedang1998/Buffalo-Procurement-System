@@ -46,9 +46,12 @@ class LocalFilesystemStorage(StorageAdapter):
         if Path(key).is_absolute():
             raise ValueError("absolute storage keys are not permitted")
         root = self._root.resolve()
-        p = (root / key).resolve()
+        candidate = root / key
+        p = candidate.resolve()
         if not p.is_relative_to(root):
             raise ValueError("storage key escapes storage root")
+        if p != candidate:
+            raise ValueError("storage key uses traversal or a symlinked path")
         return p
 
     def put_bytes(self, key: str, data: bytes) -> None:
