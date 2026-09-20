@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
+import stat
 import tempfile
 
 
@@ -84,8 +85,21 @@ class LocalFilesystemStorage(StorageAdapter):
 
         p = self._path(key)
         p.parent.mkdir(parents=True, exist_ok=True)
+        # Stage outside the final object's directory. A hard kill can leave a
+        # temporary inode behind, but it must never poison an exact-inventory
+        # content-addressed directory that has already been published.
+        staging = self._root.resolve() / ".immutable-staging"
+        staging.mkdir(mode=0o700, parents=True, exist_ok=True)
+        staging_info = staging.stat(follow_symlinks=False)
+        if (
+            staging.is_symlink()
+            or not stat.S_ISDIR(staging_info.st_mode)
+            or staging_info.st_uid != os.getuid()
+            or stat.S_IMODE(staging_info.st_mode) != 0o700
+        ):
+            raise PermissionError("immutable staging directory is unsafe")
         descriptor, temporary_name = tempfile.mkstemp(
-            prefix=f".{p.name}.", suffix=".tmp", dir=p.parent
+            prefix=f".{p.name}.", suffix=".tmp", dir=staging
         )
         temporary_path = Path(temporary_name)
         try:
@@ -113,7 +127,9 @@ class LocalFilesystemStorage(StorageAdapter):
         return sorted(
             str(p.relative_to(base))
             for p in base.rglob("*")
-            if p.is_file() and str(p.relative_to(base)).startswith(prefix)
+            if p.is_file()
+            and p.relative_to(base).parts[0] != ".immutable-staging"
+            and str(p.relative_to(base)).startswith(prefix)
         )
 
 

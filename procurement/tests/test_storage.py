@@ -78,6 +78,38 @@ class TestLocalFilesystemStorage(unittest.TestCase):
         self.assertFalse(self.store.exists("intakes/blob"))
         self.assertEqual(self.store.list_keys("intakes/"), [])
 
+    def test_put_bytes_once_stages_outside_the_published_object_directory(self):
+        observed: dict[str, Path] = {}
+        original = __import__("os").link
+
+        def inspect_link(source, target, **kwargs):
+            observed["source"] = Path(source)
+            observed["target"] = Path(target)
+            return original(source, target, **kwargs)
+
+        with patch("procurement_os.storage.os.link", side_effect=inspect_link):
+            self.store.put_bytes_once("sealed/workspace/object.json", b"sealed\n")
+        self.assertEqual(observed["source"].parent.name, ".immutable-staging")
+        self.assertEqual(observed["target"].parent.name, "workspace")
+        self.assertNotEqual(observed["source"].parent, observed["target"].parent)
+
+    def test_put_bytes_once_refuses_symlinked_staging_and_hides_orphans(self):
+        root = Path(self.tmp.name) / "unsafe-root"
+        root.mkdir(mode=0o700)
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir(mode=0o700)
+        (root / ".immutable-staging").symlink_to(outside, target_is_directory=True)
+        store = LocalFilesystemStorage(root)
+        with self.assertRaisesRegex(PermissionError, "staging directory is unsafe"):
+            store.put_bytes_once("sealed/object", b"private")
+        self.assertEqual(list(outside.iterdir()), [])
+
+        (root / ".immutable-staging").unlink()
+        staging = root / ".immutable-staging"
+        staging.mkdir(mode=0o700)
+        (staging / "orphan.tmp").write_bytes(b"orphan")
+        self.assertEqual(store.list_keys(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

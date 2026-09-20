@@ -144,12 +144,30 @@ class LocalAccessTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"BUFFALO_RUNTIME_MODE": "PRIVATE_REAL_SOURCE_REVIEW"}):
             client = self._client()
             self.assertEqual(self._login(client).status_code, 303)
+            config = local_access.runtime_config()
+            self.assertIn("procurement.private_research.read", config.capabilities)
+            self.assertIn("procurement.private_research.download", config.capabilities)
+            self.assertEqual(
+                local_access.required_capability("GET", "/private-research"),
+                "procurement.private_research.read",
+            )
+            self.assertEqual(
+                local_access.required_capability(
+                    "GET", "/private-research/artifacts/owner-worksheet.csv"
+                ),
+                "procurement.private_research.download",
+            )
             response = client.post(
                 "/supplier-mapping/intake",
                 headers={"Origin": ORIGIN},
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 403)
+
+    def test_synthetic_mode_cannot_read_private_research(self):
+        client = self._client()
+        self.assertEqual(self._login(client).status_code, 303)
+        self.assertEqual(client.get("/private-research").status_code, 403)
 
     def test_logout_deletes_and_invalidates_cookie(self):
         client = self._client()

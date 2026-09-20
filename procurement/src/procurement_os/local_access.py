@@ -23,7 +23,7 @@ from typing import Any
 
 from starlette.responses import Response
 
-from .persistent_mapping import Principal, authentication_context_sha256
+from .local_identity import Principal, authentication_context_sha256
 
 
 SESSION_COOKIE = "buffalo_local_session"
@@ -44,7 +44,12 @@ _FULL_CAPABILITIES = frozenset(
     }
 )
 _READ_ONLY_CAPABILITIES = frozenset(
-    {"procurement.review.read", "procurement.evidence.download"}
+    {
+        "procurement.review.read",
+        "procurement.evidence.download",
+        "procurement.private_research.read",
+        "procurement.private_research.download",
+    }
 )
 
 
@@ -273,6 +278,10 @@ def required_capability(method: str, path: str) -> str | None:
     if path == "/auth/logout" and method == "POST":
         return "procurement.review.read"
     if method in {"GET", "HEAD"}:
+        if re.fullmatch(r"/private-research/artifacts/[^/]+", path):
+            return "procurement.private_research.download"
+        if path == "/private-research" or path.startswith("/private-research/"):
+            return "procurement.private_research.read"
         if path in {"/docs", "/redoc", "/openapi.json"}:
             return None
         if any(pattern.fullmatch(path) for pattern in _DOWNLOAD_PATHS):

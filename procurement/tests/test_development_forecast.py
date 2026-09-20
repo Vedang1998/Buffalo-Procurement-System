@@ -953,11 +953,43 @@ class DevelopmentForecastTests(unittest.TestCase):
             "offer_id": 1,
             "offer_evidence": {
                 "supplier_sku": "SUP-001",
+                "package_type": "STANDARD",
+                "size_text": "750ML",
+                "raw_pack": "6x750ML",
                 "shopify_units_per_case": Decimal("6"),
                 "qualifying_units_per_case": Decimal("6"),
+                "assortment_scope": "SINGLE",
+                "assortment_group": None,
+                "assortable": False,
+                "confidence": "VERIFIED",
+                "valid_from": date(2026, 10, 1),
+                "valid_to": date(2026, 10, 31),
             },
             "vendor_id": "00000000-0000-4000-8000-000000000001",
             "vendor_rules": vendor,
+            "selected_offer_input_evidence": {
+                "selected_offer": {
+                    "offer_id": 1,
+                    "variant_id": "1001",
+                    "vendor_id": "00000000-0000-4000-8000-000000000001",
+                    "supplier_sku": "SUP-001",
+                    "package_type": "STANDARD",
+                    "size_text": "750ML",
+                    "raw_pack": "6x750ML",
+                    "shopify_units_per_case": Decimal("6"),
+                    "qualifying_units_per_case": Decimal("6"),
+                    "assortment_scope": "SINGLE",
+                    "assortment_group": None,
+                    "assortable": False,
+                    "confidence": "VERIFIED",
+                    "valid_from": date(2026, 10, 1),
+                    "valid_to": date(2026, 10, 31),
+                },
+                "applicable_vendor_terms": {
+                    "vendor_id": "00000000-0000-4000-8000-000000000001",
+                    "vendor_rules": vendor,
+                },
+            },
             "need": serialize_baseline_need(need),
             "blockers": [],
         }
@@ -1071,7 +1103,10 @@ class DevelopmentForecastTests(unittest.TestCase):
 
         changed = copy.deepcopy(context)
         changed["open_po_position"]["blocks_reorder"] = True
-        changed["open_po_position"]["blockers"] = [{"reason": "unresolved"}]
+        changed["open_po_position"]["open_line_count"] = 1
+        changed["open_po_position"]["blockers"] = [
+            {"po_line_id": 1, "reason": "unresolved"}
+        ]
         recalculate_and_rebind(changed)
         scalar_substitutions.append(changed)
 
@@ -1086,6 +1121,31 @@ class DevelopmentForecastTests(unittest.TestCase):
                     changed, manifest_contract=V2_CONTRACT
                 )
             )
+
+        legitimate_incoming_mismatch = copy.deepcopy(context)
+        legitimate_incoming_mismatch["inventory_rows"][0][2] = Decimal("6")
+        legitimate_incoming_mismatch["blockers"].append(
+            "INCOMING_EVIDENCE_MISMATCH"
+        )
+        recalculate_and_rebind(legitimate_incoming_mismatch)
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                legitimate_incoming_mismatch, manifest_contract=V2_CONTRACT
+            )
+        )
+
+        unproven_incoming = copy.deepcopy(context)
+        unproven_incoming["trusted_incoming_units"] = Decimal("6")
+        unproven_incoming["inventory_rows"][0][2] = Decimal("6")
+        unproven_incoming["open_po_position"]["trusted_incoming_units"] = Decimal(
+            "6"
+        )
+        recalculate_and_rebind(unproven_incoming)
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                unproven_incoming, manifest_contract=V2_CONTRACT
+            )
+        )
 
         malformed_calendar = caller_plan.to_json_dict()
         malformed_calendar["protection_calendar"] = []

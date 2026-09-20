@@ -3814,6 +3814,36 @@ def _validate_v2_development_need_sources(
     offer = context.get("offer_evidence")
     if not isinstance(offer, dict):
         return False
+    selected_input = context.get("selected_offer_input_evidence")
+    selected_offer = (
+        selected_input.get("selected_offer")
+        if isinstance(selected_input, dict)
+        else None
+    )
+    if (
+        not isinstance(selected_offer, dict)
+        or selected_offer.get("offer_id") != context.get("offer_id")
+        or selected_offer.get("variant_id") != context.get("variant_id")
+        or str(selected_offer.get("vendor_id")) != str(context.get("vendor_id"))
+        or any(
+            selected_offer.get(field) != offer.get(field)
+            for field in (
+                "supplier_sku",
+                "package_type",
+                "size_text",
+                "raw_pack",
+                "shopify_units_per_case",
+                "qualifying_units_per_case",
+                "assortment_scope",
+                "assortment_group",
+                "assortable",
+                "confidence",
+                "valid_from",
+                "valid_to",
+            )
+        )
+    ):
+        return False
     for field, expected in (
         ("shopify_units_per_case", units_per_case),
         ("qualifying_units_per_case", qualifying_units_per_case),
@@ -3845,7 +3875,7 @@ def _validate_v2_development_need_sources(
             return False
         inventory_available += strict_decimal(row[1], "inventory available")
         inventory_incoming += strict_decimal(row[2], "inventory incoming")
-    if inventory_available != available or inventory_incoming != trusted_incoming:
+    if inventory_available != available:
         return False
 
     if (
@@ -3862,7 +3892,43 @@ def _validate_v2_development_need_sources(
         != trusted_incoming
         or not isinstance(position.get("blockers"), list)
         or bool(position["blockers"]) != position["blocks_reorder"]
+        or not isinstance(position.get("trusted_sources"), list)
+        or position["open_line_count"]
+        != len(position["trusted_sources"]) + len(position["blockers"])
     ):
+        return False
+    trusted_source_units = Decimal("0")
+    line_ids: set[int] = set()
+    for source in position["trusted_sources"]:
+        if (
+            not isinstance(source, dict)
+            or isinstance(source.get("po_line_id"), bool)
+            or not isinstance(source.get("po_line_id"), int)
+            or source["po_line_id"] < 1
+            or not isinstance(source.get("source_vendor_id"), str)
+            or not source["source_vendor_id"]
+        ):
+            return False
+        open_units = strict_decimal(
+            source.get("open_units"), "trusted source open units"
+        )
+        if open_units <= 0 or source["po_line_id"] in line_ids:
+            return False
+        line_ids.add(source["po_line_id"])
+        trusted_source_units += open_units
+    for item in position["blockers"]:
+        if (
+            not isinstance(item, dict)
+            or isinstance(item.get("po_line_id"), bool)
+            or not isinstance(item.get("po_line_id"), int)
+            or item["po_line_id"] <= 0
+            or item["po_line_id"] in line_ids
+            or not isinstance(item.get("reason"), str)
+            or not item["reason"]
+        ):
+            return False
+        line_ids.add(item["po_line_id"])
+    if trusted_source_units != trusted_incoming:
         return False
     blockers = context.get("blockers")
     if not isinstance(blockers, list) or not all(
@@ -3872,6 +3938,8 @@ def _validate_v2_development_need_sources(
     if (
         ("OPEN_PO_RECONCILIATION_BLOCKED" in blockers)
         != position["blocks_reorder"]
+        or ("INCOMING_EVIDENCE_MISMATCH" in blockers)
+        != (inventory_incoming != trusted_incoming)
     ):
         return False
 
@@ -3914,6 +3982,14 @@ def _validate_v2_development_need_sources(
         return False
     calendar = evidence.get("protection_calendar")
     if not isinstance(calendar, dict):
+        return False
+    selected_terms = selected_input.get("applicable_vendor_terms")
+    if (
+        not isinstance(selected_terms, dict)
+        or str(selected_terms.get("vendor_id")) != str(context.get("vendor_id"))
+        or canonical_evidence_json(selected_terms.get("vendor_rules"))
+        != canonical_evidence_json(list(vendor))
+    ):
         return False
     expected_vendor_projection = {
         "timezone_name": vendor[15],
