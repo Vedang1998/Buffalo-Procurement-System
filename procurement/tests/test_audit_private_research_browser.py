@@ -25,7 +25,7 @@ from procurement_os.private_research_projection import (
     build_private_research_projection,
     filter_private_research_rows,
 )
-from procurement.tests.test_private_research_projection import (
+from test_private_research_projection import (
     hypothesis,
     intake,
     variant,
