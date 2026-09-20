@@ -92,13 +92,34 @@ def abc_evidence(rows: list[dict[str, object]]) -> dict[str, object]:
             )
     historical_rows.sort(key=lambda item: item["variant_id"])
     exclusions: list[dict[str, str]] = []
+    lookback_start = "2026-07-13"
+    lookback_end = "2026-10-04"
+    scope_id = hashlib.sha256(
+        (
+            json.dumps(
+                {
+                    "eligible_shopify_variant_ids": variant_ids,
+                    "lookback_start": lookback_start,
+                    "lookback_end": lookback_end,
+                    "classification_period_days": 84,
+                },
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+    ).hexdigest()
     return {
         "contract": ABC_COHORT_EVIDENCE_CONTRACT,
         "coverage_complete": True,
-        "scope_id": "private-84-day-cohort",
-        "lookback_start": "2026-07-13",
-        "lookback_end": "2026-10-04",
+        "scope_id": scope_id,
+        "lookback_start": lookback_start,
+        "lookback_end": lookback_end,
         "classification_period_days": 84,
+        "eligible_variant_count": len(variant_ids),
+        "excluded_variant_count": 0,
         "eligible_variant_ids": variant_ids,
         "eligible_variant_ids_sha256": canonical_sha256(variant_ids),
         "excluded_variants": exclusions,
@@ -801,6 +822,28 @@ class PrivateResearchProjectionTests(unittest.TestCase):
             projection["abc_evaluation"]["reason_codes"],
         )
 
+        source = intake(rows)
+        source["coverage"]["abc_cohort"].update(
+            {
+                "scope_id": "forged-scope",
+                "eligible_variant_count": 999,
+                "excluded_variant_count": 999,
+            }
+        )
+        readdress_intake(source)
+        projection = build_private_research_projection(source)
+        self.assertEqual(
+            projection["abc_evaluation"]["status"],
+            REAL_NUMERICAL_EVALUATION_NOT_RUN,
+        )
+        self.assertTrue(
+            {
+                "ABC_SCOPE_ID_DIFFERS",
+                "ABC_ELIGIBLE_COUNT_DIFFERS",
+                "ABC_EXCLUDED_COUNT_DIFFERS",
+            }.issubset(projection["abc_evaluation"]["reason_codes"])
+        )
+
     def test_abc_exact_eligible_and_excluded_partition_matches_producer(self):
         rows = [variant("100"), variant("200")]
         source = intake(rows)
@@ -817,6 +860,24 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         ]
         source["coverage"]["abc_cohort"].update(
             {
+                "scope_id": hashlib.sha256(
+                    (
+                        json.dumps(
+                            {
+                                "eligible_shopify_variant_ids": eligible,
+                                "lookback_start": "2026-07-13",
+                                "lookback_end": "2026-10-04",
+                                "classification_period_days": 84,
+                            },
+                            sort_keys=True,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                        + "\n"
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "eligible_variant_count": 1,
+                "excluded_variant_count": 1,
                 "eligible_variant_ids": eligible,
                 "eligible_variant_ids_sha256": canonical_sha256(eligible),
                 "excluded_variants": exclusions,

@@ -22,7 +22,10 @@ from typing import Any, Iterable, Mapping, Sequence
 from .development_forecast import assign_gp_dollar_abc, plan_development_forecast
 from .economics import gross_margin_pct, incremental_gp_per_unit, target_cost
 from .forecasting import DemandObservation
-from .private_research_intake import ABC_COHORT_EVIDENCE_CONTRACT
+from .private_research_intake import (
+    ABC_COHORT_EVIDENCE_CONTRACT,
+    canonical_json_bytes as canonical_intake_json_bytes,
+)
 
 
 PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1"
@@ -614,6 +617,33 @@ def _abc_projection(
         or sorted([*eligible, *excluded_ids]) != variant_ids
     ):
         reasons.append("ABC_COHORT_PARTITION_DIFFERS_FROM_CURRENT_CATALOG")
+    eligible_count = raw_scope.get("eligible_variant_count")
+    excluded_count = raw_scope.get("excluded_variant_count")
+    if (
+        isinstance(eligible_count, bool)
+        or not isinstance(eligible_count, int)
+        or eligible_count != len(eligible)
+    ):
+        reasons.append("ABC_ELIGIBLE_COUNT_DIFFERS")
+    if (
+        isinstance(excluded_count, bool)
+        or not isinstance(excluded_count, int)
+        or excluded_count != len(exclusions)
+    ):
+        reasons.append("ABC_EXCLUDED_COUNT_DIFFERS")
+    if lookback_start is not None and lookback_end is not None and period == 84:
+        expected_scope_id = hashlib.sha256(
+            canonical_intake_json_bytes(
+                {
+                    "eligible_shopify_variant_ids": eligible,
+                    "lookback_start": lookback_start.isoformat(),
+                    "lookback_end": lookback_end.isoformat(),
+                    "classification_period_days": period,
+                }
+            )
+        ).hexdigest()
+        if scope_id != expected_scope_id:
+            reasons.append("ABC_SCOPE_ID_DIFFERS")
 
     rows: list[dict[str, str]] = []
     variants_by_id = {
