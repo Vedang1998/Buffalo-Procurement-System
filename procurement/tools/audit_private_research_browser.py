@@ -1255,14 +1255,21 @@ def _reap_owned_processes(
 
 
 def _signal_owned_processes(
-    registry: _OwnedProcessRegistry, signum: int
+    registry: _OwnedProcessRegistry,
+    signum: int,
+    *,
+    signalled: set[tuple[int, int]],
 ) -> None:
     for pid, (start_ticks, state) in _discover_owned_processes(registry).items():
+        process_identity = (pid, start_ticks)
+        if process_identity in signalled:
+            continue
         current = _process_identity(pid)
         if state == "Z" or current is None or current[0] != start_ticks:
             continue
         try:
             os.kill(pid, signum)
+            signalled.add(process_identity)
         except ProcessLookupError:
             pass
 
@@ -1318,24 +1325,26 @@ def _stop_process_group(process: subprocess.Popen[bytes], *, timeout: float) -> 
     # The environment token survives setsid()/double-fork.  Repeated discovery
     # closes the fork-vs-scan race, while start ticks prevent signalling PID reuse.
     registry = _owned_registry(process)
-    _signal_owned_processes(registry, signal.SIGTERM)
+    terminated: set[tuple[int, int]] = set()
+    _signal_owned_processes(registry, signal.SIGTERM, signalled=terminated)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         _reap_owned_processes(process, registry)
         live = _discover_owned_processes(registry)
         if not live:
             break
-        _signal_owned_processes(registry, signal.SIGTERM)
+        _signal_owned_processes(registry, signal.SIGTERM, signalled=terminated)
         time.sleep(0.05)
     if _discover_owned_processes(registry):
-        _signal_owned_processes(registry, signal.SIGKILL)
+        killed: set[tuple[int, int]] = set()
+        _signal_owned_processes(registry, signal.SIGKILL, signalled=killed)
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             _reap_owned_processes(process, registry)
             live = _discover_owned_processes(registry)
             if not live:
                 break
-            _signal_owned_processes(registry, signal.SIGKILL)
+            _signal_owned_processes(registry, signal.SIGKILL, signalled=killed)
             time.sleep(0.05)
     _reap_owned_processes(process, registry)
     survivors = _discover_owned_processes(registry)

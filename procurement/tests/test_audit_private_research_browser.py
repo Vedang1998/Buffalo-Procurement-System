@@ -1019,6 +1019,46 @@ while time.monotonic() < deadline and not marker.exists():
             finally:
                 tool._stop_process_group(process, timeout=1)
 
+            graceful_marker = Path(temporary) / "graceful-ready"
+            graceful_code = """
+import signal
+from pathlib import Path
+import sys
+import time
+
+def stop_requested(_signum, _frame):
+    raise KeyboardInterrupt
+
+signal.signal(signal.SIGTERM, stop_requested)
+Path(sys.argv[1]).write_text("ready", encoding="ascii")
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    time.sleep(0.2)
+"""
+            graceful_token = tool._new_process_token("graceful-test")
+            graceful = subprocess.Popen(
+                [sys.executable, "-c", graceful_code, str(graceful_marker)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=tool._minimal_environment(
+                    path=os.environ.get("PATH", ""),
+                    process_token=graceful_token,
+                ),
+                start_new_session=True,
+            )
+            tool._register_owned_process(
+                graceful, token=graceful_token, label="graceful fixture"
+            )
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not graceful_marker.exists():
+                time.sleep(0.01)
+            self.assertTrue(graceful_marker.exists())
+            tool._stop_process_group(graceful, timeout=2)
+            self.assertEqual(graceful.returncode, 0)
+
     def test_registration_failure_cleanup_kills_real_detached_listener(self):
         tool = _load_tool()
         with TemporaryDirectory(prefix="buffalo-private-browser-register-") as temporary:
