@@ -254,7 +254,27 @@ def root() -> RedirectResponse:
 
 def _stockout_evidence_status(row: dict[str, object]) -> str:
     forecast = row.get("forecast")
-    reasons = forecast.get("reason_codes", []) if isinstance(forecast, dict) else []
+    if isinstance(forecast, dict):
+        reasons = forecast.get("reason_codes", [])
+        calculated = forecast.get("status") == "CALCULATED_RESEARCH_ONLY"
+    else:
+        scenarios = row.get("scenario_results")
+        scenario_values = (
+            scenarios.values() if isinstance(scenarios, dict) else ()
+        )
+        reasons = [
+            reason
+            for scenario in scenario_values
+            if isinstance(scenario, dict)
+            for reason in scenario.get("reason_codes", [])
+        ]
+        calculated = any(
+            isinstance(scenario, dict)
+            and scenario.get("status") == "CALCULATED_RESEARCH_ONLY"
+            for scenario in (
+                scenarios.values() if isinstance(scenarios, dict) else ()
+            )
+        )
     if any(
         isinstance(reason, str)
         and (
@@ -265,9 +285,52 @@ def _stockout_evidence_status(row: dict[str, object]) -> str:
         for reason in reasons
     ):
         return "NOT_CAPTURED"
-    if isinstance(forecast, dict) and forecast.get("status") == "CALCULATED_RESEARCH_ONLY":
+    if calculated:
         return "CAPTURED_IN_RESEARCH_INPUT"
     return "INCOMPLETE_OR_UNKNOWN"
+
+
+def _v2_research_provenance(projection: dict[str, object]) -> dict[str, object]:
+    research = projection.get("forecast_research")
+    if not isinstance(research, dict):
+        return {}
+    history = research.get("history")
+    identity = research.get("source_identity")
+    return {
+        "input_id": research.get("input_id"),
+        "policy": research.get("policy"),
+        "source_identity": (
+            {
+                "verdict": identity.get("verdict"),
+                "identity_id": identity.get("identity_id"),
+                "evidence_sha256": identity.get("evidence_sha256"),
+                "shop": identity.get("shop"),
+            }
+            if isinstance(identity, dict)
+            else None
+        ),
+        "history": (
+            {
+                key: history.get(key)
+                for key in (
+                    "contract",
+                    "composite_id",
+                    "start_date",
+                    "end_date",
+                    "complete_day_count",
+                    "availability_basis",
+                    "signed_sales_transform",
+                    "partitions",
+                    "identity_authority",
+                    "allocation_controls",
+                )
+            }
+            if isinstance(history, dict)
+            else None
+        ),
+        "scenarios": research.get("scenarios"),
+        "sidecars_sha256": research.get("sidecars_sha256"),
+    }
 
 
 def _json_html(value: object) -> str:
@@ -294,6 +357,11 @@ def private_research_index(
         raise HTTPException(status_code=422, detail="Private research filter is too long")
     if stockout not in {"", "NOT_CAPTURED", "CAPTURED_IN_RESEARCH_INPUT", "INCOMPLETE_OR_UNKNOWN"}:
         raise HTTPException(status_code=422, detail="Stockout evidence filter differs")
+    development_v2 = (
+        projection.get("contract") == "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+        and projection.get("data_mode")
+        == "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
+    )
     try:
         rows = filter_private_research_rows(
             projection, query=q, vendor=vendor, status=status
@@ -322,7 +390,6 @@ def private_research_index(
     cards = []
     for row in selected:
         variant_id = html.escape(str(row.get("shopify_variant_id", "")))
-        supplier = html.escape(str(row.get("supplier_name") or "No named supplier"))
         title = html.escape(
             " — ".join(
                 value
@@ -333,7 +400,76 @@ def private_research_index(
                 if value
             )
         )
-        reasons = row.get("missing_data_reasons", [])
+        if development_v2:
+            suppliers = row.get("supplier_names", [])
+            supplier = html.escape(
+                ", ".join(str(item) for item in suppliers)
+                if isinstance(suppliers, list) and suppliers
+                else "No named supplier"
+            )
+            reasons = row.get("reason_codes", [])
+            scenarios = row.get("scenario_results", {})
+            stage_status = row.get("stage_status", {})
+            recorded_coverage = row.get("recorded_sales_coverage", {})
+            captured_stock = row.get("captured_stock_provenance", {})
+            result_summary = "".join(
+                "<li><strong>"
+                + html.escape(scenario_id)
+                + ":</strong> model "
+                + html.escape(str(result.get("selected_model") or "not calculated"))
+                + " · point "
+                + html.escape(str(result.get("point_forecast_units") or "—"))
+                + " · target "
+                + html.escape(str(result.get("target_units") or "—"))
+                + " · confidence "
+                + html.escape(str(result.get("confidence") or "—"))
+                + " · status "
+                + html.escape(str(result.get("status") or ""))
+                + "</li>"
+                for scenario_id, result in (
+                    scenarios.items() if isinstance(scenarios, dict) else ()
+                )
+                if isinstance(result, dict)
+            )
+            summary = (
+                "</h2><p><strong>Named suppliers:</strong> "
+                + supplier
+                + " · <strong>Stockout evidence:</strong> "
+                + _stockout_evidence_status(row)
+                + "</p><ul>"
+                + result_summary
+                + "</ul><p><strong>Stage status:</strong> "
+                + html.escape(
+                    json.dumps(stage_status, sort_keys=True, separators=(",", ":"))
+                )
+                + "</p><p><strong>Recorded sales coverage:</strong> "
+                + html.escape(
+                    json.dumps(
+                        recorded_coverage, sort_keys=True, separators=(",", ":")
+                    )
+                )
+                + "</p><p><strong>Captured stock provenance:</strong> "
+                + html.escape(
+                    json.dumps(
+                        captured_stock, sort_keys=True, separators=(",", ":")
+                    )
+                )
+                + "</p>"
+            )
+        else:
+            supplier = html.escape(
+                str(row.get("supplier_name") or "No named supplier")
+            )
+            reasons = row.get("missing_data_reasons", [])
+            summary = (
+                "</h2><p><strong>Named hypothesis:</strong> "
+                + supplier
+                + " · <strong>Join:</strong> "
+                + html.escape(str(row.get("join_status", "")))
+                + " · <strong>Stockout evidence:</strong> "
+                + _stockout_evidence_status(row)
+                + "</p>"
+            )
         cards.append(
             "<article class='record' data-variant-id='"
             + variant_id
@@ -341,13 +477,8 @@ def private_research_index(
             + variant_id
             + " — "
             + title
-            + "</h2><p><strong>Named hypothesis:</strong> "
-            + supplier
-            + " · <strong>Join:</strong> "
-            + html.escape(str(row.get("join_status", "")))
-            + " · <strong>Stockout evidence:</strong> "
-            + _stockout_evidence_status(row)
-            + "</p><p><strong>Missing/pending:</strong> "
+            + summary
+            + "<p><strong>Missing/pending:</strong> "
             + html.escape(", ".join(str(item) for item in reasons) or "none")
             + "</p><details><summary>Evidence and research diagnostics</summary><pre>"
             + _json_html(row)
@@ -364,6 +495,11 @@ def private_research_index(
             f"<a href='/private-research?{html.escape(urlencode({**base_params, 'page': page + 1}), quote=True)}'>Next</a>"
         )
     declared = projection.get("declared_coverage", {})
+    mode_badge = (
+        "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY · H3/H10/H17 ASSUMPTIONS"
+        if development_v2
+        else "PRIVATE_REAL_SOURCE_REVIEW"
+    )
     return HTMLResponse(
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='robots' content='noindex,nofollow'><title>Private real-source research</title>"
@@ -376,12 +512,21 @@ def private_research_index(
         "<h1>Private real-source procurement research</h1>"
         "<p class='warning'>REVIEW ONLY · UNAPPROVED · ZERO OPERATIONAL AUTHORITY. "
         "No mapping, price, selection, forecast policy, DRAFT, PO, Shopify write, supplier contact, or order is authorized.</p>"
-        "<p class='badges'><span>PRIVATE_REAL_SOURCE_REVIEW</span><span>immutable workspace</span>"
+        "<p class='badges'><span>"
+        + html.escape(mode_badge)
+        + "</span><span>immutable workspace</span>"
         f"<span>projection {html.escape(str(manifest.get('projection_sha256', '')))}</span></p>"
         "<details><summary>Source and scope coverage</summary><pre>"
         + _json_html(declared)
         + "</pre></details>"
-        "<p><a href='/private-research/artifacts/owner-preview.html'>Offline HTML preview</a> · "
+        + (
+            "<section><h2>V2 research source, policy, and 138-day coverage</h2><pre>"
+            + _json_html(_v2_research_provenance(projection))
+            + "</pre></section>"
+            if development_v2
+            else ""
+        )
+        + "<p><a href='/private-research/artifacts/owner-preview.html'>Offline HTML preview</a> · "
         "<a href='/private-research/artifacts/owner-worksheet.csv'>Owner worksheet CSV</a> · "
         "<a href='/private-research/artifacts/coverage.json'>Coverage JSON</a> · "
         "<a href='/private-research/artifacts/projection.json'>Projection JSON</a></p>"

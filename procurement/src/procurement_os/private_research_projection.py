@@ -19,7 +19,13 @@ import json
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from .development_forecast import assign_gp_dollar_abc, plan_development_forecast
+from .development_forecast import (
+    V2_CONTRACT as DEVELOPMENT_FORECAST_V2_CONTRACT,
+    assign_gp_dollar_abc,
+    development_forecast_definition,
+    plan_development_forecast,
+    validate_development_forecast_evidence,
+)
 from .economics import gross_margin_pct, incremental_gp_per_unit, target_cost
 from .forecasting import DemandObservation
 from .private_research_intake import (
@@ -29,8 +35,11 @@ from .private_research_intake import (
 
 
 PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1"
+V2_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+V2_SCENARIO_CONTRACT = "BUFFALO_PRIVATE_FORECAST_RESEARCH_SCENARIO_V1"
 AUTHORITY_LABEL = "ZERO_AUTHORITY_RESEARCH_ONLY"
 DATA_MODE = "PRIVATE_REAL_DATA_RESEARCH_ONLY"
+V2_DATA_MODE = "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
 INTAKE_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_INTAKE_V1"
 INTAKE_DATA_MODE = "PRIVATE_REAL_SOURCE_REVIEW"
 REAL_NUMERICAL_EVALUATION_NOT_RUN = "REAL_NUMERICAL_EVALUATION_NOT_RUN"
@@ -1495,11 +1504,15 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
 def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
     source = dict(_mapping(projection, "projection"))
     supplied_sha = source.pop("projection_sha256", None)
-    if source.get("contract") != PROJECTION_CONTRACT:
+    contract_modes = {
+        PROJECTION_CONTRACT: DATA_MODE,
+        V2_PROJECTION_CONTRACT: V2_DATA_MODE,
+    }
+    if source.get("contract") not in contract_modes:
         raise PrivateResearchProjectionError("private research projection contract differs")
     zero_authority = source.get("zero_authority")
     if (
-        source.get("data_mode") != DATA_MODE
+        source.get("data_mode") != contract_modes[source["contract"]]
         or source.get("status") != "RESEARCH_ONLY"
         or source.get("authority") != AUTHORITY_LABEL
         or source.get("research_only") is not True
@@ -1513,6 +1526,384 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
         )
     ):
         raise PrivateResearchProjectionError("projection is not zero-authority research")
+    if source["contract"] == V2_PROJECTION_CONTRACT:
+        required = {
+            "forecast_research",
+            "forecast_sidecars",
+            "forecast_research_counts",
+            "shared_stage_blockers",
+        }
+        forecast_research = source.get("forecast_research")
+        scenarios = (
+            forecast_research.get("scenarios")
+            if isinstance(forecast_research, Mapping)
+            else None
+        )
+        sidecars = source.get("forecast_sidecars")
+        owner_rows = source.get("owner_worksheet")
+        coverage_rows = source.get("coverage_rows")
+        if (
+            not required.issubset(source)
+            or not isinstance(scenarios, list)
+            or [item.get("scenario_id") for item in scenarios if isinstance(item, Mapping)]
+            != ["H3", "H10", "H17"]
+            or not isinstance(sidecars, Mapping)
+            or not isinstance(owner_rows, list)
+            or not isinstance(coverage_rows, list)
+            or len(owner_rows) != len(coverage_rows)
+        ):
+            raise PrivateResearchProjectionError("private V2 research projection differs")
+        input_id = forecast_research.get("input_id")
+        policy = forecast_research.get("policy")
+        definition = development_forecast_definition(
+            DEVELOPMENT_FORECAST_V2_CONTRACT
+        )
+        expected_policy = {
+            "evidence_contract": definition.evidence_contract,
+            "policy_contract": definition.policy_contract,
+            "method_version": definition.method_version,
+            "profile": definition.profile,
+            "policy_source_sha256": definition.policy_source_sha256,
+            "policy_canonical_sha256": definition.policy_canonical_sha256,
+            "commercial_authority": False,
+            "production_activation": False,
+        }
+        policy_sha = (
+            policy.get("policy_canonical_sha256")
+            if isinstance(policy, Mapping)
+            else None
+        )
+        if (
+            not isinstance(input_id, str)
+            or not _SHA256.fullmatch(input_id)
+            or policy != expected_policy
+            or not isinstance(policy_sha, str)
+            or not _SHA256.fullmatch(policy_sha)
+        ):
+            raise PrivateResearchProjectionError("private V2 identity tuple differs")
+        history = forecast_research.get("history")
+        variant_history_sha = forecast_research.get(
+            "variant_observations_sha256"
+        )
+        if (
+            not isinstance(history, Mapping)
+            or not isinstance(variant_history_sha, Mapping)
+            or any(
+                not isinstance(variant_id, str)
+                or not isinstance(digest, str)
+                or not _SHA256.fullmatch(digest)
+                for variant_id, digest in variant_history_sha.items()
+            )
+        ):
+            raise PrivateResearchProjectionError("private V2 history differs")
+        scenario_by_id: dict[str, Mapping[str, Any]] = {}
+        for expected_id, expected_horizon, scenario in zip(
+            ("H3", "H10", "H17"), (3, 10, 17), scenarios
+        ):
+            if (
+                not isinstance(scenario, Mapping)
+                or set(scenario)
+                != {
+                    "contract",
+                    "scenario_id",
+                    "horizon_days",
+                    "basis",
+                    "history_end",
+                    "forecast_origin",
+                    "target_start",
+                    "target_end_exclusive",
+                    "real_supplier_confirmation",
+                    "commercial_authority",
+                }
+                or scenario.get("scenario_id") != expected_id
+                or scenario.get("contract") != V2_SCENARIO_CONTRACT
+                or scenario.get("horizon_days") != expected_horizon
+                or scenario.get("basis")
+                != "RESEARCH_SCENARIO_ASSUMPTION_NOT_VENDOR_SCHEDULE"
+                or scenario.get("history_end") != history.get("end_date")
+                or scenario.get("forecast_origin") != scenario.get("target_start")
+                or scenario.get("real_supplier_confirmation") is not False
+                or scenario.get("commercial_authority") is not False
+            ):
+                raise PrivateResearchProjectionError(
+                    "private V2 research scenario differs"
+                )
+            try:
+                history_end = date.fromisoformat(str(history["end_date"]))
+                start = date.fromisoformat(str(scenario["target_start"]))
+                end = date.fromisoformat(str(scenario["target_end_exclusive"]))
+            except (KeyError, ValueError) as exc:
+                raise PrivateResearchProjectionError(
+                    "private V2 research scenario dates differ"
+                ) from exc
+            if (
+                start != history_end + timedelta(days=1)
+                or scenario.get("forecast_origin") != start.isoformat()
+                or scenario.get("target_start") != start.isoformat()
+                or scenario.get("target_end_exclusive") != end.isoformat()
+                or (end - start).days != expected_horizon
+            ):
+                raise PrivateResearchProjectionError(
+                    "private V2 research scenario dates differ"
+                )
+            scenario_by_id[expected_id] = scenario
+        sidecar_by_pair: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for key, raw_sidecar in sidecars.items():
+            if not isinstance(key, str) or not isinstance(raw_sidecar, Mapping):
+                raise PrivateResearchProjectionError("private V2 sidecar differs")
+            sidecar = dict(raw_sidecar)
+            supplied_sidecar_sha = sidecar.pop("sidecar_sha256", None)
+            scenario = sidecar.get("scenario")
+            scenario_id = (
+                scenario.get("scenario_id") if isinstance(scenario, Mapping) else None
+            )
+            expected_key = ":".join(
+                (
+                    str(sidecar.get("variant_id", "")),
+                    str(scenario_id or ""),
+                    input_id,
+                    policy_sha,
+                )
+            )
+            if (
+                set(raw_sidecar)
+                != {
+                    "variant_id",
+                    "scenario",
+                    "input_id",
+                    "policy",
+                    "forecast_evidence",
+                    "sidecar_sha256",
+                }
+                or key != expected_key
+                or scenario_id not in scenario_by_id
+                or scenario != scenario_by_id.get(str(scenario_id))
+                or sidecar.get("input_id") != input_id
+                or sidecar.get("policy") != policy
+                or not isinstance(sidecar.get("forecast_evidence"), Mapping)
+                or sidecar["forecast_evidence"].get("contract")
+                != policy.get("evidence_contract")
+                or sidecar["forecast_evidence"].get("method_version")
+                != policy.get("method_version")
+                or sidecar["forecast_evidence"].get("horizon_days")
+                != scenario.get("horizon_days")
+                or sidecar["forecast_evidence"].get("history_end")
+                != scenario.get("history_end")
+                or sidecar["forecast_evidence"].get("protection_calendar")
+                != {
+                    "basis": "CALLER_VALIDATED_HORIZON",
+                    "horizon_days": scenario.get("horizon_days"),
+                }
+                or not validate_development_forecast_evidence(
+                    sidecar["forecast_evidence"]
+                )
+                or not isinstance(supplied_sidecar_sha, str)
+                or supplied_sidecar_sha
+                != hashlib.sha256(_canonical_intake_json_bytes(sidecar)).hexdigest()
+            ):
+                raise PrivateResearchProjectionError("private V2 sidecar binding differs")
+            pair = (str(sidecar["variant_id"]), str(scenario_id))
+            if pair in sidecar_by_pair:
+                raise PrivateResearchProjectionError("private V2 sidecar is duplicated")
+            sidecar_by_pair[pair] = raw_sidecar
+        if forecast_research.get("sidecars_sha256") != hashlib.sha256(
+            _canonical_intake_json_bytes(sidecars)
+        ).hexdigest():
+            raise PrivateResearchProjectionError("private V2 sidecar inventory differs")
+        expected_refs = ["ABC", "NET_NEED", "CASE_QUANTITY", "ECONOMICS", "ORDER"]
+        coverage_by_id = {
+            item.get("shopify_variant_id"): item
+            for item in coverage_rows
+            if isinstance(item, Mapping)
+        }
+        owner_ids: set[str] = set()
+        derived_counts = {
+            scenario_id: {
+                "calculated": 0,
+                "blocked": 0,
+                "missing": 0,
+                "unprocessed": 0,
+                "numerical_zero": 0,
+            }
+            for scenario_id in ("H3", "H10", "H17")
+        }
+        for item in owner_rows:
+            variant_id = item.get("shopify_variant_id") if isinstance(item, Mapping) else None
+            if (
+                not isinstance(item, Mapping)
+                or not isinstance(variant_id, str)
+                or variant_id in owner_ids
+                or item.get("question") != ""
+                or item.get("stage_blocker_refs") != expected_refs
+                or not isinstance(item.get("sidecar_keys"), list)
+                or not isinstance(item.get("scenario_results"), Mapping)
+                or set(item["scenario_results"]) != {"H3", "H10", "H17"}
+                or not isinstance(item.get("recorded_sales_coverage"), Mapping)
+                or not isinstance(item.get("captured_stock_provenance"), Mapping)
+            ):
+                raise PrivateResearchProjectionError("private V2 owner row differs")
+            owner_ids.add(variant_id)
+            coverage = coverage_by_id.get(variant_id)
+            expected_history = {
+                "start_date": history.get("start_date"),
+                "end_date": history.get("end_date"),
+                "complete_day_count": history.get("complete_day_count"),
+                "availability_basis": history.get("availability_basis"),
+                "status": (
+                    "COMPLETE_138_DAY_RESEARCH_HISTORY"
+                    if variant_id in variant_history_sha
+                    else "NO_SUPPORTED_FULL_WINDOW_HISTORY"
+                ),
+                "observations_sha256": variant_history_sha.get(variant_id),
+            }
+            expected_stock = (
+                {
+                    "status": "POINT_IN_TIME_CAPTURE_ONLY_NOT_DAILY_AVAILABILITY",
+                    "available": coverage.get("available"),
+                    "on_hand": coverage.get("on_hand"),
+                    "committed": coverage.get("committed"),
+                    "trusted_incoming": coverage.get("incoming"),
+                    "raw_incoming": coverage.get("raw_incoming"),
+                    "raw_incoming_trust": coverage.get("raw_incoming_trust"),
+                    "raw_incoming_operational_use": coverage.get(
+                        "raw_incoming_operational_use"
+                    ),
+                    "inventory_evidence": coverage.get("inventory_evidence"),
+                }
+                if isinstance(coverage, Mapping)
+                else None
+            )
+            if (
+                item["recorded_sales_coverage"] != expected_history
+                or item["captured_stock_provenance"] != expected_stock
+            ):
+                raise PrivateResearchProjectionError(
+                    "private V2 owner evidence summary differs"
+                )
+            expected_sidecar_keys = sorted(
+                key
+                for key, raw_sidecar in sidecars.items()
+                if raw_sidecar.get("variant_id") == variant_id
+            )
+            if item["sidecar_keys"] != expected_sidecar_keys:
+                raise PrivateResearchProjectionError(
+                    "private V2 owner sidecar inventory differs"
+                )
+            for scenario_id, summary in item["scenario_results"].items():
+                if not isinstance(summary, Mapping):
+                    raise PrivateResearchProjectionError(
+                        "private V2 owner scenario result differs"
+                    )
+                raw_sidecar = sidecar_by_pair.get((variant_id, scenario_id))
+                evidence = (
+                    raw_sidecar.get("forecast_evidence")
+                    if isinstance(raw_sidecar, Mapping)
+                    else None
+                )
+                if evidence is None:
+                    if summary.get("evidence_sha256") is not None:
+                        raise PrivateResearchProjectionError(
+                            "private V2 owner scenario source differs"
+                        )
+                    if summary.get("status") == REAL_NUMERICAL_EVALUATION_NOT_RUN:
+                        if set(summary) != {"status", "reason_codes"}:
+                            raise PrivateResearchProjectionError(
+                                "private V2 missing scenario result differs"
+                            )
+                        derived_counts[scenario_id]["missing"] += 1
+                    elif summary.get("status") == "BLOCKED_RESEARCH_EVALUATION":
+                        if (
+                            set(summary)
+                            != {
+                                "status",
+                                "calculator_status",
+                                "selected_model",
+                                "point_forecast_units",
+                                "protection_units",
+                                "protection_status",
+                                "target_units",
+                                "confidence",
+                                "reason_codes",
+                                "evidence_sha256",
+                                "target_start",
+                                "target_end_exclusive",
+                            }
+                            or summary.get("calculator_status") != "REFUSED"
+                            or summary.get("target_start")
+                            != scenario_by_id[scenario_id].get("target_start")
+                            or summary.get("target_end_exclusive")
+                            != scenario_by_id[scenario_id].get(
+                                "target_end_exclusive"
+                            )
+                        ):
+                            raise PrivateResearchProjectionError(
+                                "private V2 blocked scenario result differs"
+                            )
+                        derived_counts[scenario_id]["blocked"] += 1
+                    else:
+                        derived_counts[scenario_id]["unprocessed"] += 1
+                    continue
+                expected_summary = {
+                    "status": (
+                        CALCULATED_RESEARCH_ONLY
+                        if evidence.get("status") in {"READY", "NO_ORDER"}
+                        else "BLOCKED_RESEARCH_EVALUATION"
+                    ),
+                    "calculator_status": evidence.get("status"),
+                    "selected_model": evidence.get("selected_model"),
+                    "point_forecast_units": evidence.get("point_forecast_units"),
+                    "protection_units": evidence.get("protection_units"),
+                    "protection_status": (
+                        evidence.get("protection", {}).get("status")
+                        if isinstance(evidence.get("protection"), Mapping)
+                        else None
+                    ),
+                    "target_units": evidence.get("target_units"),
+                    "confidence": evidence.get("confidence"),
+                    "reason_codes": evidence.get("reason_codes"),
+                    "evidence_sha256": evidence.get("sha256"),
+                    "target_start": scenario_by_id[scenario_id].get("target_start"),
+                    "target_end_exclusive": scenario_by_id[scenario_id].get(
+                        "target_end_exclusive"
+                    ),
+                }
+                if summary != expected_summary:
+                    raise PrivateResearchProjectionError(
+                        "private V2 owner scenario binding differs"
+                    )
+                bucket = (
+                    "calculated"
+                    if summary.get("status") == CALCULATED_RESEARCH_ONLY
+                    else "blocked"
+                )
+                derived_counts[scenario_id][bucket] += 1
+                point = summary.get("point_forecast_units")
+                try:
+                    if point is not None and Decimal(str(point)) == 0:
+                        derived_counts[scenario_id]["numerical_zero"] += 1
+                except InvalidOperation as exc:
+                    raise PrivateResearchProjectionError(
+                        "private V2 owner numerical result differs"
+                    ) from exc
+        coverage_ids = set(coverage_by_id)
+        if owner_ids != coverage_ids or len(coverage_ids) != len(coverage_rows):
+            raise PrivateResearchProjectionError(
+                "private V2 owner population differs"
+            )
+        allocation_controls = history.get("allocation_controls")
+        if (
+            not set(variant_history_sha).issubset(owner_ids)
+            or not isinstance(allocation_controls, Mapping)
+            or allocation_controls.get("eligible_variant_count")
+            != len(variant_history_sha)
+        ):
+            raise PrivateResearchProjectionError(
+                "private V2 eligible history inventory differs"
+            )
+        if source.get("forecast_research_counts") != derived_counts:
+            raise PrivateResearchProjectionError(
+                "private V2 forecast result controls differ"
+            )
     normalized = _json_value(source)
     calculated_sha = hashlib.sha256(_canonical_json_bytes(normalized)).hexdigest()
     if not isinstance(supplied_sha, str) or supplied_sha != calculated_sha:
@@ -1556,6 +1947,59 @@ def filter_private_research_rows(
     vendor_filter = vendor.strip()
     status_filter = status.strip()
     result: list[dict[str, Any]] = []
+    if value["contract"] == V2_PROJECTION_CONTRACT:
+        for row in value["owner_worksheet"]:
+            reasons = [str(item) for item in row["reason_codes"]]
+            scenario_values = list(row["scenario_results"].values())
+            scenario_reasons = [
+                str(reason)
+                for scenario in scenario_values
+                if isinstance(scenario, Mapping)
+                for reason in scenario.get("reason_codes", [])
+            ]
+            suppliers = [str(item) for item in row["supplier_names"]]
+            searchable = "\n".join(
+                (
+                    str(row["shopify_variant_id"]),
+                    str(row["product_title"]),
+                    str(row["variant_title"]),
+                    *suppliers,
+                    *reasons,
+                    *scenario_reasons,
+                    *[str(item) for item in row["sidecar_keys"]],
+                    _canonical_json_bytes(row["scenario_results"]).decode("ascii"),
+                    _canonical_json_bytes(row["stage_status"]).decode("ascii"),
+                )
+            ).casefold()
+            statuses = {
+                *reasons,
+                *scenario_reasons,
+                *[str(item) for item in row["stage_status"].values()],
+            }
+            for scenario in scenario_values:
+                if isinstance(scenario, Mapping):
+                    statuses.update(
+                        str(scenario.get(key))
+                        for key in (
+                            "status",
+                            "calculator_status",
+                            "selected_model",
+                            "protection_status",
+                            "confidence",
+                        )
+                        if scenario.get(key) is not None
+                    )
+            if reasons or scenario_reasons:
+                statuses.add("MISSING_DATA")
+            if needle and needle not in searchable:
+                continue
+            if vendor_filter and vendor_filter not in suppliers:
+                continue
+            if status_filter and status_filter not in statuses:
+                continue
+            result.append(dict(row))
+        return result
+
     for row in value["research_rows"]:
         reasons = [str(item) for item in row["missing_data_reasons"]]
         searchable = "\n".join(
@@ -1618,14 +2062,130 @@ def _html_table(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
+def _compact_v2_research_provenance(value: Mapping[str, Any]) -> dict[str, Any]:
+    research = _mapping(value.get("forecast_research"), "V2 forecast research")
+    history = _mapping(research.get("history"), "V2 forecast history")
+    identity = _mapping(
+        research.get("source_identity"), "V2 forecast source identity"
+    )
+    return {
+        "input_id": research.get("input_id"),
+        "policy": research.get("policy"),
+        "source_identity": {
+            "verdict": identity.get("verdict"),
+            "identity_id": identity.get("identity_id"),
+            "evidence_sha256": identity.get("evidence_sha256"),
+            "shop": identity.get("shop"),
+        },
+        "history": {
+            key: history.get(key)
+            for key in (
+                "contract",
+                "composite_id",
+                "start_date",
+                "end_date",
+                "complete_day_count",
+                "availability_basis",
+                "signed_sales_transform",
+                "partitions",
+                "identity_authority",
+                "allocation_controls",
+            )
+        },
+        "scenarios": research.get("scenarios"),
+        "sidecars_sha256": research.get("sidecars_sha256"),
+    }
+
+
 def render_private_research_html(projection: Mapping[str, Any]) -> str:
     """Render one static offline HTML worksheet from a verified projection."""
 
     value = _validated_projection(projection)
-    coverage = value["coverage_rows"]
-    research = value["research_rows"]
-    unjoined = value["unjoined_supplier_hypotheses"]
+    is_v2 = value["contract"] == V2_PROJECTION_CONTRACT
+    coverage = [] if is_v2 else value["coverage_rows"]
+    research = [] if is_v2 else value["research_rows"]
+    unjoined = [] if is_v2 else value["unjoined_supplier_hypotheses"]
     worksheet = value["owner_worksheet"]
+    owner_headers = (
+        (
+            "Shopify Variant ID",
+            "Product",
+            "Variant",
+            "Named suppliers",
+            "Recorded sales coverage",
+            "Captured stock provenance",
+            "H3 research result",
+            "H10 research result",
+            "H17 research result",
+            "Stage status",
+            "Forecast sidecar keys",
+            "Research question",
+            "Reason codes",
+            "Owner response",
+        )
+        if is_v2
+        else (
+            "Shopify Variant ID",
+            "Named suppliers",
+            "Research question",
+            "Reason codes",
+            "Owner response",
+        )
+    )
+    owner_rows = (
+        (
+            (
+                row["shopify_variant_id"],
+                row["product_title"],
+                row["variant_title"],
+                row["supplier_names"],
+                row["recorded_sales_coverage"],
+                row["captured_stock_provenance"],
+                row["scenario_results"]["H3"],
+                row["scenario_results"]["H10"],
+                row["scenario_results"]["H17"],
+                row["stage_status"],
+                row["sidecar_keys"],
+                row["question"],
+                row["reason_codes"],
+                row["owner_response"],
+            )
+            for row in worksheet
+        )
+        if is_v2
+        else (
+            (
+                row["shopify_variant_id"],
+                row["supplier_names"],
+                row["question"],
+                row["reason_codes"],
+                row["owner_response"],
+            )
+            for row in worksheet
+        )
+    )
+    shared_blockers = (
+        "<h2>Shared downstream stage blockers</h2>"
+        + _html_table(
+            ("Stage", "Blocker"),
+            sorted(value["shared_stage_blockers"].items()),
+        )
+        if is_v2
+        else ""
+    )
+    v2_notice = (
+        "<p class=\"banner\">PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY. "
+        "H3/H10/H17 are research assumptions, not supplier schedules. No production "
+        "forecast-policy approval or purchasing authority is granted. Detailed "
+        "coverage, source provenance, and evidence sidecars remain hash-bound in "
+        "projection.json.</p><h2>V2 source, policy, and 138-day coverage</h2><pre>"
+        + _html_value(_compact_v2_research_provenance(value))
+        + "</pre><h2>Forecast result controls</h2><pre>"
+        + _html_value(value["forecast_research_counts"])
+        + "</pre>"
+        if is_v2
+        else ""
+    )
     return (
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
         "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
@@ -1648,7 +2208,8 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
         f"Projection SHA-256: <code id=\"projection-sha256\">"
         f"{_html_value(value['projection_sha256'])}</code><br>"
         f"Intake: <code>{_html_value(value['intake']['intake_id'])}</code></p>"
-        "<h2>Coverage</h2>"
+        + v2_notice
+        + "<h2>Coverage</h2>"
         + _html_table(
             (
                 "Shopify Variant ID",
@@ -1815,25 +2376,8 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
             ),
         )
         + "<h2>Owner worksheet</h2>"
-        + _html_table(
-            (
-                "Shopify Variant ID",
-                "Named suppliers",
-                "Research question",
-                "Reason codes",
-                "Owner response",
-            ),
-            (
-                (
-                    row["shopify_variant_id"],
-                    row["supplier_names"],
-                    row["question"],
-                    row["reason_codes"],
-                    row["owner_response"],
-                )
-                for row in worksheet
-            ),
-        )
+        + _html_table(owner_headers, owner_rows)
+        + shared_blockers
         + "<h2>Limitations</h2><ul>"
         + "".join(f"<li>{_html_value(item)}</li>" for item in value["limitations"])
         + "</ul></body></html>"
@@ -1849,8 +2393,10 @@ def _spreadsheet_safe(value: Any) -> str:
         text = _canonical_json_bytes(value).decode("ascii")
     else:
         text = str(value)
-    stripped = text.lstrip(" \t\r\n")
-    if stripped.startswith(_DANGEROUS_FORMULA_PREFIXES) or text.startswith(("\t", "\r")):
+    stripped = text.lstrip(" \t\r\n\v\f")
+    if stripped.startswith(_DANGEROUS_FORMULA_PREFIXES) or text.startswith(
+        ("\t", "\r", "\v", "\f")
+    ):
         return "'" + text
     return text
 
@@ -1916,6 +2462,7 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
     """Render one formula-safe UTF-8 CSV from a verified projection."""
 
     value = _validated_projection(projection)
+    is_v2 = value["contract"] == V2_PROJECTION_CONTRACT
     common = {
         "projection_sha256": value["projection_sha256"],
         "projection_contract": value["contract"],
@@ -1929,10 +2476,21 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "intake": value["intake"],
                 "coverage_summary": value["coverage_summary"],
                 "zero_authority": value["zero_authority"],
+                **(
+                    {
+                        "forecast_research": _compact_v2_research_provenance(
+                            value
+                        ),
+                        "forecast_research_counts": value["forecast_research_counts"],
+                        "shared_stage_blockers": value["shared_stage_blockers"],
+                    }
+                    if is_v2
+                    else {}
+                ),
             },
         }
     ]
-    for item in value["coverage_rows"]:
+    for item in ([] if is_v2 else value["coverage_rows"]):
         rows.append(
             {
                 **common,
@@ -1978,11 +2536,11 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "details": {
                     "exact_joined_supplier_hypothesis_count": item[
                         "exact_joined_supplier_hypothesis_count"
-                    ]
+                    ],
                 },
             }
         )
-    for item in value["research_rows"]:
+    for item in ([] if is_v2 else value["research_rows"]):
         rows.append(
             {
                 **common,
@@ -2086,7 +2644,7 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 },
             }
         )
-    for item in value["unjoined_supplier_hypotheses"]:
+    for item in ([] if is_v2 else value["unjoined_supplier_hypotheses"]):
         rows.append(
             {
                 **common,
@@ -2154,7 +2712,25 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "supplier_name": item["supplier_names"],
                 "missing_data_reasons": item["reason_codes"],
                 "owner_question": item["question"],
-                "details": {"owner_response": item["owner_response"]},
+                "details": {
+                    "owner_response": item["owner_response"],
+                    **(
+                        {
+                            "scenario_results": item["scenario_results"],
+                            "recorded_sales_coverage": item[
+                                "recorded_sales_coverage"
+                            ],
+                            "captured_stock_provenance": item[
+                                "captured_stock_provenance"
+                            ],
+                            "stage_status": item["stage_status"],
+                            "stage_blocker_refs": item["stage_blocker_refs"],
+                            "sidecar_keys": item["sidecar_keys"],
+                        }
+                        if is_v2
+                        else {}
+                    ),
+                },
             }
         )
     stream = io.StringIO(newline="")

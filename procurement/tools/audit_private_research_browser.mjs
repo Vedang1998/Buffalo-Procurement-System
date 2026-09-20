@@ -1000,6 +1000,11 @@ async function audit(client) {
     "v2.page.initial.count",
     {total: EXPECTED.initial.total, displayed: EXPECTED.initial.first_page_rows.length},
   );
+  check(
+    EXPECTED.page_markers.every((marker) => initialSnapshot.text.includes(marker)),
+    "v2.page.initial.mode",
+    {markers: EXPECTED.page_markers},
+  );
   check(readOnlySnapshot(initialSnapshot), "v2.page.initial.read_only", {
     forms: initialSnapshot.forms.length,
     buttons: initialSnapshot.buttons.length,
@@ -1073,7 +1078,7 @@ async function audit(client) {
   const privateMarkers = [
     EXPECTED.workspace_hashes.workspace_id,
     EXPECTED.workspace_hashes.projection_sha256,
-    EXPECTED.evidence.source_occurrence_ref,
+    EXPECTED.evidence.marker,
   ];
   for (const mode of ["missing", "wrong"]) {
     for (const [surface, requestPath] of authSurfaces) {
@@ -1134,6 +1139,7 @@ async function audit(client) {
   );
 
   let evidenceDetail = null;
+  let evidenceSnapshot = null;
   for (const filter of EXPECTED.filters) {
     await navigate(`${BASE}/private-research`);
     await submitFilter(filter.parameters);
@@ -1145,8 +1151,11 @@ async function audit(client) {
     );
     const snapshot = await assertRows(filter, `v2.filter.${filter.name}`);
     if (filter.name === "search") {
+      evidenceSnapshot = snapshot;
       evidenceDetail = snapshot.articles.find(
-        (article) => article.detail.source_occurrence_ref === EXPECTED.evidence.source_occurrence_ref,
+        (article) =>
+          article.detail[EXPECTED.evidence.identity_field] ===
+          EXPECTED.evidence.identity_value,
       )?.detail;
     }
   }
@@ -1156,28 +1165,36 @@ async function audit(client) {
     {present: Boolean(evidenceDetail)},
   );
   check(
-    ["source_ref", "forecast", "abc", "economics", "missing_data_reasons"].every(
+    EXPECTED.evidence.required_fields.every(
       (field) => Object.hasOwn(evidenceDetail || {}, field),
     ),
     "v2.detail.core_evidence",
   );
   check(
-    evidenceDetail?.source_occurrence_ref === EXPECTED.evidence.source_occurrence_ref,
-    "v2.detail.source_occurrence",
+    evidenceDetail?.[EXPECTED.evidence.identity_field] === EXPECTED.evidence.identity_value,
+    "v2.detail.row_identity",
   );
   check(
-    stable(evidenceDetail?.unapproved_mapping_evidence) === stable(EXPECTED.evidence.mapping_evidence),
-    "v2.detail.mapping_evidence",
+    stable(evidenceDetail?.[EXPECTED.evidence.bound_field]) ===
+      stable(EXPECTED.evidence.bound_evidence),
+    "v2.detail.bound_evidence",
   );
   check(
-    stable(evidenceDetail?.unapproved_mapping_blocker_reasons) ===
-      stable(EXPECTED.evidence.mapping_blocker_reasons) &&
-      EXPECTED.evidence.mapping_blocker_reasons.every((reason) =>
-        evidenceDetail?.missing_data_reasons?.includes(reason),
+    stable(evidenceDetail?.[EXPECTED.evidence.reason_field]) ===
+      stable(EXPECTED.evidence.reason_codes) &&
+      EXPECTED.evidence.reason_codes.every((reason) =>
+        evidenceDetail?.[EXPECTED.evidence.reason_container_field]?.includes(reason),
       ),
-    "v2.detail.mapping_blockers",
+    "v2.detail.reason_binding",
   );
-  check(Boolean(evidenceDetail), "v2.search.source_occurrence");
+  check(
+    EXPECTED.evidence.visible_markers.every((marker) =>
+      evidenceSnapshot?.text.includes(marker),
+    ),
+    "v2.detail.visible_result",
+    {markers: EXPECTED.evidence.visible_markers},
+  );
+  check(Boolean(evidenceDetail), "v2.search.target");
 
   await navigate(`${BASE}/private-research`);
   const artifactHashes = {};

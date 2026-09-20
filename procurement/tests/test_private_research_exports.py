@@ -68,7 +68,14 @@ def readdress_intake(value: dict[str, object]) -> dict[str, object]:
 
 def export_intake(*, formula_values: bool = False) -> dict[str, object]:
     supplier_names = (
-        ["=CMD()", "  +SUM(1,1)", "-1+1", "@IMPORTDATA(x)"]
+        [
+            "=CMD()",
+            "  +SUM(1,1)",
+            "-1+1",
+            "@IMPORTDATA(x)",
+            "\v=VT_FORMULA()",
+            "\f@FF_FORMULA()",
+        ]
         if formula_values
         else ["Alpha <script>alert(1)</script>"]
     )
@@ -353,14 +360,14 @@ class PrivateResearchExportTests(unittest.TestCase):
         )
         rows = list(csv.DictReader(io.StringIO(render_private_research_csv(projection))))
         research = [row for row in rows if row["row_type"] == "RESEARCH"]
-        self.assertEqual(len(research), 4)
+        self.assertEqual(len(research), 6)
         for row in research:
             self.assertTrue(row["supplier_name"].startswith("'"), row)
             self.assertTrue(row["supplier_sku"].startswith("'"), row)
             self.assertTrue(row["variant_title"].startswith("'"), row)
         for row in rows:
             for value in row.values():
-                stripped = value.lstrip(" \t\r\n")
+                stripped = value.lstrip(" \t\r\n\v\f")
                 self.assertFalse(
                     stripped.startswith(("=", "+", "-", "@")),
                     (row["row_type"], value),
@@ -368,6 +375,21 @@ class PrivateResearchExportTests(unittest.TestCase):
 
     def test_renderers_are_deterministic_and_reject_projection_drift(self):
         projection = build_private_research_projection(export_intake())
+        projection_bytes = canonical_private_research_projection_bytes(projection)
+        html_bytes = render_private_research_html(projection).encode("utf-8")
+        csv_bytes = render_private_research_csv(projection).encode("utf-8")
+        self.assertEqual(
+            hashlib.sha256(projection_bytes).hexdigest(),
+            "8259e89152cbb7ed029a4567be2cdd32418a3961154aea3c60351192124749af",
+        )
+        self.assertEqual(
+            hashlib.sha256(html_bytes).hexdigest(),
+            "1e61a83128703c62c915039ebd28a390e507a36db62fda0408660288fd971eb6",
+        )
+        self.assertEqual(
+            hashlib.sha256(csv_bytes).hexdigest(),
+            "96bc514ef0b59f0dd448b86eaf250e871d5951fc48d3cf68755688dc08f5cb6f",
+        )
         self.assertEqual(
             render_private_research_html(projection),
             render_private_research_html(copy.deepcopy(projection)),

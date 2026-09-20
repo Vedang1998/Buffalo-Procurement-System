@@ -71,12 +71,14 @@ def _expected_assertion_ids() -> tuple[str, ...]:
         "v2.page.initial.rows",
         "v2.page.initial.details",
         "v2.page.initial.count",
+        "v2.page.initial.mode",
         "v2.page.initial.read_only",
         "v2.detail.exact",
         "v2.detail.core_evidence",
-        "v2.detail.source_occurrence",
-        "v2.detail.mapping_evidence",
-        "v2.detail.mapping_blockers",
+        "v2.detail.row_identity",
+        "v2.detail.bound_evidence",
+        "v2.detail.reason_binding",
+        "v2.detail.visible_result",
         "v2.health.contract",
         "v2.health.no_hashes",
         "v2.readback.manifest",
@@ -92,7 +94,7 @@ def _expected_assertion_ids() -> tuple[str, ...]:
     for name in ("search", "vendor", "status", "stockout"):
         for check in ("submit", "rows", "details", "count", "read_only"):
             identifiers.append(f"v2.filter.{name}.{check}")
-    identifiers.append("v2.search.source_occurrence")
+    identifiers.append("v2.search.target")
     for name in ARTIFACT_NAMES:
         slug = name.replace(".", "_").replace("-", "_")
         for check in ("filename", "bytes", "response"):
@@ -592,7 +594,25 @@ def _assert_port_free(port: int, *, label: str) -> None:
 
 def _stockout_status(row: Mapping[str, Any]) -> str:
     forecast = row.get("forecast")
-    reasons = forecast.get("reason_codes", []) if isinstance(forecast, Mapping) else []
+    if isinstance(forecast, Mapping):
+        reasons = forecast.get("reason_codes", [])
+        calculated = forecast.get("status") == "CALCULATED_RESEARCH_ONLY"
+    else:
+        scenarios = row.get("scenario_results")
+        values = scenarios.values() if isinstance(scenarios, Mapping) else ()
+        reasons = [
+            reason
+            for scenario in values
+            if isinstance(scenario, Mapping)
+            for reason in scenario.get("reason_codes", [])
+        ]
+        calculated = any(
+            isinstance(scenario, Mapping)
+            and scenario.get("status") == "CALCULATED_RESEARCH_ONLY"
+            for scenario in (
+                scenarios.values() if isinstance(scenarios, Mapping) else ()
+            )
+        )
     if any(
         isinstance(reason, str)
         and (
@@ -603,7 +623,7 @@ def _stockout_status(row: Mapping[str, Any]) -> str:
         for reason in reasons
     ):
         return "NOT_CAPTURED"
-    if isinstance(forecast, Mapping) and forecast.get("status") == "CALCULATED_RESEARCH_ONLY":
+    if calculated:
         return "CAPTURED_IN_RESEARCH_INPUT"
     return "INCOMPLETE_OR_UNKNOWN"
 
@@ -632,11 +652,90 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         or not isinstance(artifacts, dict)
     ):
         raise PrivateResearchBrowserAuditError("canonical workspace result is incomplete")
-    rows = projection.get("research_rows")
+    is_v2 = manifest.get("contract") == "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2"
+    rows = projection.get("owner_worksheet" if is_v2 else "research_rows")
     if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
         raise PrivateResearchBrowserAuditError(
             "browser filtering requires at least one research row"
         )
+    if is_v2:
+        research = projection.get("forecast_research")
+        counts_value = projection.get("forecast_research_counts")
+        owner_rows = projection.get("owner_worksheet")
+        scenarios = research.get("scenarios") if isinstance(research, Mapping) else None
+        allocation = (
+            research.get("history", {}).get("allocation_controls")
+            if isinstance(research, Mapping)
+            and isinstance(research.get("history"), Mapping)
+            else None
+        )
+        if (
+            projection.get("contract") != "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+            or projection.get("data_mode")
+            != "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
+            or manifest.get("data_mode")
+            != "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
+            or manifest.get("projection_contract")
+            != "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+            or not isinstance(manifest.get("base_intake_id"), str)
+            or len(manifest["base_intake_id"]) != 64
+            or not isinstance(manifest.get("base_intake_sha256"), str)
+            or len(manifest["base_intake_sha256"]) != 64
+            or not isinstance(scenarios, list)
+            or [item.get("scenario_id") for item in scenarios if isinstance(item, Mapping)]
+            != ["H3", "H10", "H17"]
+            or not isinstance(counts_value, Mapping)
+            or set(counts_value) != {"H3", "H10", "H17"}
+            or not isinstance(allocation, Mapping)
+            or not isinstance(owner_rows, list)
+            or len(owner_rows) != len(projection.get("coverage_rows", []))
+        ):
+            raise PrivateResearchBrowserAuditError(
+                "private V2 forecast workspace contract differs"
+            )
+        eligible = allocation.get("eligible_variant_count")
+        coverage_count = len(projection.get("coverage_rows", []))
+        if isinstance(eligible, bool) or not isinstance(eligible, int):
+            raise PrivateResearchBrowserAuditError(
+                "private V2 eligible population differs"
+            )
+        for horizon in ("H3", "H10", "H17"):
+            bucket = counts_value[horizon]
+            if (
+                not isinstance(bucket, Mapping)
+                or set(bucket)
+                != {"calculated", "blocked", "missing", "unprocessed", "numerical_zero"}
+                or any(
+                    isinstance(bucket.get(key), bool)
+                    or not isinstance(bucket.get(key), int)
+                    or bucket[key] < 0
+                    for key in bucket
+                )
+                or bucket["calculated"] + bucket["blocked"] + bucket["unprocessed"]
+                != eligible
+                or bucket["missing"] + eligible != coverage_count
+                or bucket["numerical_zero"] > bucket["calculated"]
+            ):
+                raise PrivateResearchBrowserAuditError(
+                    f"private V2 {horizon} result controls differ"
+                )
+        expected_stage_refs = [
+            "ABC",
+            "NET_NEED",
+            "CASE_QUANTITY",
+            "ECONOMICS",
+            "ORDER",
+        ]
+        if any(
+            not isinstance(item, Mapping)
+            or set(item.get("scenario_results", {})) != {"H3", "H10", "H17"}
+            or item.get("stage_blocker_refs") != expected_stage_refs
+            or item.get("question") != ""
+            for item in owner_rows
+        ):
+            raise PrivateResearchBrowserAuditError(
+                "private V2 owner-result inventory differs"
+            )
     vendor_values = {
         item
         for item in projection.get("vendor_names", [])
@@ -646,8 +745,15 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         (
             row
             for row in rows
-            if isinstance(row.get("supplier_name"), str)
-            and row["supplier_name"] in vendor_values
+            if (
+                any(
+                    isinstance(name, str) and name in vendor_values
+                    for name in row.get("supplier_names", [])
+                )
+                if is_v2
+                else isinstance(row.get("supplier_name"), str)
+                and row["supplier_name"] in vendor_values
+            )
         ),
         None,
     )
@@ -655,37 +761,72 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         raise PrivateResearchBrowserAuditError(
             "browser vendor filtering requires one named supplier"
         )
-    evidence_row = next(
-        (
-            row
-            for row in rows
-            if isinstance(row.get("source_occurrence_ref"), str)
-            and row["source_occurrence_ref"]
-            and isinstance(row.get("unapproved_mapping_evidence"), dict)
-            and row["unapproved_mapping_evidence"]
-            and isinstance(row.get("unapproved_mapping_blocker_reasons"), list)
-            and row["unapproved_mapping_blocker_reasons"]
-        ),
-        None,
+    evidence_row = (
+        next(
+            (
+                row
+                for row in rows
+                if isinstance(row.get("scenario_results"), dict)
+                and set(row["scenario_results"]) == {"H3", "H10", "H17"}
+                and all(
+                    isinstance(result, Mapping)
+                    and result.get("status") == "CALCULATED_RESEARCH_ONLY"
+                    and isinstance(result.get("selected_model"), str)
+                    and isinstance(result.get("confidence"), str)
+                    for result in row["scenario_results"].values()
+                )
+                and isinstance(row.get("stage_status"), dict)
+                and isinstance(row.get("sidecar_keys"), list)
+            ),
+            None,
+        )
+        if is_v2
+        else next(
+            (
+                row
+                for row in rows
+                if isinstance(row.get("source_occurrence_ref"), str)
+                and row["source_occurrence_ref"]
+                and isinstance(row.get("unapproved_mapping_evidence"), dict)
+                and row["unapproved_mapping_evidence"]
+                and isinstance(row.get("unapproved_mapping_blocker_reasons"), list)
+                and row["unapproved_mapping_blocker_reasons"]
+            ),
+            None,
+        )
     )
     if evidence_row is None:
         raise PrivateResearchBrowserAuditError(
-            "browser evidence requires occurrence, mapping, and blocker detail"
+            "browser evidence requires one exact review-result detail"
         )
     detail_row = dict(evidence_row)
-    query = str(detail_row["source_occurrence_ref"])
+    query = str(
+        detail_row["shopify_variant_id"]
+        if is_v2
+        else detail_row["source_occurrence_ref"]
+    )
     query_rows = filter_private_research_rows(projection, query=query)
     if detail_row not in query_rows:
         raise PrivateResearchBrowserAuditError(
-            "source occurrence is not live-searchable"
+            "browser evidence target is not live-searchable"
         )
-    vendor = str(named_row["supplier_name"])
+    vendor = str(
+        named_row["supplier_names"][0]
+        if is_v2
+        else named_row["supplier_name"]
+    )
     vendor_rows = filter_private_research_rows(projection, vendor=vendor)
-    raw_reasons = detail_row.get("missing_data_reasons")
+    raw_reasons = detail_row.get(
+        "reason_codes" if is_v2 else "missing_data_reasons"
+    )
     status = (
         str(raw_reasons[0])
         if isinstance(raw_reasons, list) and raw_reasons
-        else str(detail_row.get("join_status") or "")
+        else str(
+            detail_row.get("stage_status", {}).get("FORECAST", "")
+            if is_v2 and isinstance(detail_row.get("stage_status"), Mapping)
+            else detail_row.get("join_status") or ""
+        )
     )
     if not status:
         raise PrivateResearchBrowserAuditError("browser status fixture is absent")
@@ -776,18 +917,94 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         "route_table": _private_app_route_table(),
         "assertion_ids": list(ASSERTION_IDS),
         "counts": counts,
+        "page_markers": (
+            [
+                "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+                "H3/H10/H17 ASSUMPTIONS",
+                "V2 research source, policy, and 138-day coverage",
+                str(research.get("history", {}).get("start_date", "")),
+                str(research.get("history", {}).get("end_date", "")),
+            ]
+            if manifest.get("contract")
+            == "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2"
+            else []
+        ),
         "initial": {
             "total": len(rows),
             "first_page_rows": [dict(row) for row in rows[:50]],
             "detail_row": detail_row,
         },
-        "evidence": {
-            "source_occurrence_ref": detail_row["source_occurrence_ref"],
-            "mapping_evidence": detail_row["unapproved_mapping_evidence"],
-            "mapping_blocker_reasons": detail_row[
-                "unapproved_mapping_blocker_reasons"
-            ],
-        },
+        "evidence": (
+            {
+                "marker": detail_row["shopify_variant_id"],
+                "identity_field": "shopify_variant_id",
+                "identity_value": detail_row["shopify_variant_id"],
+                "required_fields": [
+                    "scenario_results",
+                    "recorded_sales_coverage",
+                    "captured_stock_provenance",
+                    "stage_status",
+                    "stage_blocker_refs",
+                    "sidecar_keys",
+                    "reason_codes",
+                ],
+                "bound_field": "scenario_results",
+                "bound_evidence": detail_row["scenario_results"],
+                "reason_field": "reason_codes",
+                "reason_container_field": "reason_codes",
+                "reason_codes": detail_row["reason_codes"],
+                "visible_markers": [
+                    "Recorded sales coverage:",
+                    "Captured stock provenance:",
+                    "Stage status:",
+                    *[
+                        marker
+                        for scenario_id in ("H3", "H10", "H17")
+                        for marker in (
+                            f"{scenario_id}:",
+                            str(
+                                detail_row["scenario_results"][scenario_id][
+                                    "selected_model"
+                                ]
+                            ),
+                            str(
+                                detail_row["scenario_results"][scenario_id][
+                                    "point_forecast_units"
+                                ]
+                            ),
+                            str(
+                                detail_row["scenario_results"][scenario_id][
+                                    "confidence"
+                                ]
+                            ),
+                        )
+                    ],
+                    str(detail_row["recorded_sales_coverage"]["status"]),
+                    str(detail_row["captured_stock_provenance"]["status"]),
+                ],
+            }
+            if is_v2
+            else {
+                "marker": detail_row["source_occurrence_ref"],
+                "identity_field": "source_occurrence_ref",
+                "identity_value": detail_row["source_occurrence_ref"],
+                "required_fields": [
+                    "source_ref",
+                    "forecast",
+                    "abc",
+                    "economics",
+                    "missing_data_reasons",
+                ],
+                "bound_field": "unapproved_mapping_evidence",
+                "bound_evidence": detail_row["unapproved_mapping_evidence"],
+                "reason_field": "unapproved_mapping_blocker_reasons",
+                "reason_container_field": "missing_data_reasons",
+                "reason_codes": detail_row[
+                    "unapproved_mapping_blocker_reasons"
+                ],
+                "visible_markers": [],
+            }
+        ),
         "filters": [
             _filter_expectation("search", {"q": query}, query_rows),
             _filter_expectation("vendor", {"vendor": vendor}, vendor_rows),

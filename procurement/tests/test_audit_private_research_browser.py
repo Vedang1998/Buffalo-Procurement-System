@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+from copy import deepcopy
+from datetime import date
 import hashlib
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,6 +32,20 @@ from test_private_research_projection import (
     intake,
     variant,
 )
+from test_private_research_v2 import (
+    ORIGINAL_AUTHORITY,
+    SEED_ALIASES,
+    TERMINAL_AUTHORITY,
+    capture as v2_capture,
+    sha as v2_sha,
+    source_identity as v2_source_identity,
+)
+from procurement_os.private_research_v2 import (
+    build_private_v2_composite_history,
+    build_private_v2_research_input,
+    build_private_v2_research_projection,
+)
+import procurement_os.private_research_v2 as private_research_v2
 
 
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "audit_private_research_browser.py"
@@ -78,9 +94,7 @@ def _synthetic_workspace() -> dict[str, object]:
                 ),
                 variant(
                     "200",
-                    hypotheses=[
-                        hypothesis("200", "Zulu", "ZULU-200", "9.00")
-                    ],
+                    hypotheses=[hypothesis("200", "Zulu", "ZULU-200", "9.00")],
                     with_forecast=True,
                 ),
             ]
@@ -112,6 +126,100 @@ def _synthetic_workspace() -> dict[str, object]:
             "workspace_id": "f" * 64,
             "intake_sha256": "e" * 64,
             "projection_sha256": projection["projection_sha256"],
+            "artifacts": records,
+        },
+        "projection": projection,
+        "artifacts": artifacts,
+    }
+
+
+def _synthetic_v2_workspace() -> dict[str, object]:
+    with TemporaryDirectory(prefix="buffalo-private-v2-browser-") as directory:
+        root = Path(directory)
+        extension = root / "extension.json"
+        replacement = root / "replacement.json"
+        for path, value in (
+            (
+                extension,
+                v2_capture(
+                    date(2026, 5, 4),
+                    54,
+                    contract="BUFFALO_PRIVATE_SHOPIFY_HISTORICAL_EXTENSION_V2",
+                ),
+            ),
+            (
+                replacement,
+                v2_capture(
+                    date(2026, 6, 27),
+                    84,
+                    contract="BUFFALO_PRIVATE_SHOPIFY_HISTORICAL_REPLACEMENT_V2",
+                ),
+            ),
+        ):
+            path.write_text(
+                json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            path.chmod(0o600)
+        identity = v2_source_identity(
+            v2_sha(extension.read_bytes()), v2_sha(replacement.read_bytes())
+        )
+        base = intake(
+            [
+                variant(
+                    "100",
+                    hypotheses=[hypothesis("100", "Alpha", "ALPHA-100", "8.00")],
+                ),
+                variant("200"),
+            ]
+        )
+        with mock.patch.object(
+            private_research_v2,
+            "_require_registered_source_identity",
+            side_effect=private_research_v2.validate_source_identity_record,
+        ):
+            composite = build_private_v2_composite_history(
+                base,
+                extension_capture_path=extension,
+                replacement_capture_path=replacement,
+                source_identity=identity,
+                seed_alias_path=SEED_ALIASES,
+                original_authority_path=ORIGINAL_AUTHORITY,
+                terminal_authority_path=TERMINAL_AUTHORITY,
+            )
+            research_input = build_private_v2_research_input(
+                base, composite_history=composite, source_identity=identity
+            )
+            projection = build_private_v2_research_projection(research_input, base)
+    artifacts = {
+        "owner-preview.html": b"<!doctype html><p>synthetic V2 review only</p>\n",
+        "owner-worksheet.csv": b"variant_id,status\r\n100,RESEARCH_ONLY\r\n",
+        "coverage.json": b'{"synthetic":true}\n',
+        "projection.json": (
+            json.dumps(projection, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8"),
+    }
+    records = [
+        {
+            "name": name,
+            "path": name,
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "media_type": "application/octet-stream",
+        }
+        for name, data in sorted(artifacts.items())
+    ]
+    return {
+        "manifest": {
+            "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2",
+            "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
+            "operational_authority": False,
+            "workspace_id": "9" * 64,
+            "projection_sha256": projection["projection_sha256"],
+            "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            "base_intake_id": research_input["base_intake"]["intake_id"],
+            "base_intake_sha256": research_input["base_intake"]["sha256"],
             "artifacts": records,
         },
         "projection": projection,
@@ -466,6 +574,31 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
         self.assertTrue(
             all(route["methods"] == ["GET"] for route in expectations["route_table"])
         )
+        malformed_v2 = deepcopy(_synthetic_workspace())
+        malformed_v2["manifest"]["contract"] = (
+            "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2"
+        )
+        with self.assertRaisesRegex(
+            tool.PrivateResearchBrowserAuditError,
+            "private V2 forecast workspace contract differs",
+        ):
+            tool._build_expectations(malformed_v2)
+
+        v2_expectations = tool._build_expectations(_synthetic_v2_workspace())
+        self.assertEqual(v2_expectations["initial"]["total"], 2)
+        self.assertEqual(
+            set(v2_expectations["initial"]["detail_row"]["scenario_results"]),
+            {"H3", "H10", "H17"},
+        )
+        self.assertIn(
+            "recorded_sales_coverage",
+            v2_expectations["evidence"]["required_fields"],
+        )
+        self.assertIn(
+            "V2 research source, policy, and 138-day coverage",
+            v2_expectations["page_markers"],
+        )
+        self.assertTrue(v2_expectations["evidence"]["visible_markers"])
 
     def test_phase_validation_rejects_external_requests(self):
         tool = _load_tool()
