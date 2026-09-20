@@ -1045,7 +1045,9 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                     if self.mutation == "missing":
                         rows = rows[1:]
                     elif self.mutation == "extra":
-                        rows = rows + rows[:1]
+                        unexpected = list(rows[0])
+                        unexpected[0] = "unexpected-variant"
+                        rows = rows + [tuple(unexpected)]
 
                     class FrozenRows:
                         def fetchall(self):
