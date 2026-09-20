@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import inspect
+import json
 from pathlib import Path
 import unittest
+from unittest import mock
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -14,6 +16,7 @@ from fastapi.routing import APIRoute
 
 from postgres_test_support import validated_test_connection
 from procurement_os import api
+from procurement_os.development_forecast import V2_CONTRACT
 from procurement_os.inventory import (
     InventoryValidationError,
     capture_daily_inventory,
@@ -22,7 +25,10 @@ from procurement_os.inventory import (
     inventory_business_date,
     latest_inventory_snapshot_status,
     normalize_inventory_levels,
+    validate_frozen_inventory_capture_projection,
+    validate_frozen_inventory_capture_projections,
 )
+from procurement_os.recommendations import validate_frozen_manifest_inventory_sources
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
@@ -59,6 +65,19 @@ class InventoryPureTests(unittest.TestCase):
                     {"variant_id": "1", "location_gid": "L"},
                 ]
             )
+        never_queried = mock.Mock()
+        self.assertFalse(
+            validate_frozen_inventory_capture_projection(
+                never_queried,
+                variant_id="1",
+                capture=[
+                    "not-a-uuid", "day", "time", "source", "f" * 64,
+                    0, 0, 0, 0,
+                ],
+                rows=[],
+            )
+        )
+        never_queried.execute.assert_not_called()
 
     def test_nonfinite_or_overprecision_quantity_is_rejected(self):
         for value in ("NaN", "Infinity", "1.00001", True):
@@ -430,6 +449,169 @@ class InventoryPostgresTests(unittest.TestCase):
             ):
                 self.conn.execute(statement)
             self.conn.rollback()
+
+    def test_frozen_projection_authenticates_complete_capture_and_blocked_rows(self):
+        for variant in ("valid", "incomplete", "invalid", "missing"):
+            self.insert_current(variant)
+        self.conn.commit()
+        captured = self.capture(
+            [
+                self.row("valid", 2, 0, location=""),
+                self.row("incomplete", 3, None, location="L-incomplete"),
+                self.row("invalid", -1, 0, location="L-invalid"),
+            ],
+            source="FROZEN_PROJECTION_TEST",
+        )
+        capture_id = captured["inventory_snapshot_run_id"]
+        header = list(
+            self.conn.execute(
+                """SELECT inventory_snapshot_run_id::text,business_date,completed_at,
+                          source,source_hash,rows_received,eligible_rows,invalid_rows,
+                          incomplete_rows
+                     FROM inventory_snapshot_runs
+                    WHERE inventory_snapshot_run_id=%s""",
+                (capture_id,),
+            ).fetchone()
+        )
+
+        def projection(variant_id: str) -> list[list[object]]:
+            return [
+                list(row)
+                for row in self.conn.execute(
+                    """SELECT location_gid,available_quantity,incoming_quantity,
+                              validation_status,inventory_snapshot_run_id::text
+                         FROM inventory_snapshot_run_rows
+                        WHERE inventory_snapshot_run_id=%s AND variant_id=%s
+                        ORDER BY location_gid""",
+                    (capture_id, variant_id),
+                ).fetchall()
+            ]
+
+        for variant in ("valid", "incomplete", "invalid", "missing"):
+            with self.subTest(variant=variant):
+                rows = projection(variant)
+                self.assertTrue(
+                    validate_frozen_inventory_capture_projection(
+                        self.conn,
+                        variant_id=variant,
+                        capture=header,
+                        rows=rows,
+                    )
+                )
+                serialized = json.loads(
+                    json.dumps({"capture": header, "rows": rows}, default=str)
+                )
+                self.assertTrue(
+                    validate_frozen_inventory_capture_projection(
+                        self.conn,
+                        variant_id=variant,
+                        capture=serialized["capture"],
+                        rows=serialized["rows"],
+                    )
+                )
+
+        self.assertTrue(
+            validate_frozen_manifest_inventory_sources(
+                self.conn,
+                {
+                    "development_forecast_contract": V2_CONTRACT,
+                    "contexts": [
+                        {
+                            "variant_id": "no-capture",
+                            "inventory_capture": None,
+                        },
+                        {
+                            "variant_id": "missing",
+                            "inventory_capture": header,
+                            "inventory_rows": [],
+                        },
+                        {
+                            "variant_id": "incomplete",
+                            "inventory_capture": header,
+                            "inventory_rows": projection("incomplete"),
+                        },
+                    ],
+                },
+            )
+        )
+
+        class CountingConnection:
+            def __init__(self, connection):
+                self.connection = connection
+                self.execute_count = 0
+
+            def execute(self, *args, **kwargs):
+                self.execute_count += 1
+                return self.connection.execute(*args, **kwargs)
+
+        counted = CountingConnection(self.conn)
+        self.assertTrue(
+            validate_frozen_inventory_capture_projections(
+                counted,
+                (
+                    ("valid", header, projection("valid")),
+                    ("incomplete", header, projection("incomplete")),
+                    ("missing", header, []),
+                ),
+            )
+        )
+        self.assertEqual(counted.execute_count, 2)
+
+        stale_id = str(uuid.uuid4())
+        stale_day = self.BUSINESS_DATE + timedelta(days=1)
+        self.conn.execute(
+            """INSERT INTO inventory_snapshot_runs(
+                       inventory_snapshot_run_id,business_date,status,source,source_hash,
+                       rows_received
+                   ) VALUES (%s,%s,'RUNNING','STALE_HEADER_TEST',%s,1)""",
+            (stale_id, stale_day, "f" * 64),
+        )
+        self.conn.execute(
+            """INSERT INTO inventory_snapshot_run_rows(
+                       inventory_snapshot_run_id,variant_id,location_gid,
+                       available_quantity,incoming_quantity,on_hand_quantity,
+                       committed_quantity,reserved_quantity,damaged_quantity,
+                       validation_status)
+                   VALUES (%s,'valid','',2,0,2,0,0,0,'VALID')""",
+            (stale_id,),
+        )
+        self.conn.execute(
+            """UPDATE inventory_snapshot_runs
+                  SET status='COMPLETED',completed_at=%s,eligible_rows=1
+                WHERE inventory_snapshot_run_id=%s""",
+            (
+                datetime(2026, 9, 8, 2, tzinfo=ZoneInfo("America/New_York")),
+                stale_id,
+            ),
+        )
+        stale_header = list(
+            self.conn.execute(
+                """SELECT inventory_snapshot_run_id::text,business_date,completed_at,
+                          source,source_hash,rows_received,eligible_rows,invalid_rows,
+                          incomplete_rows
+                     FROM inventory_snapshot_runs
+                    WHERE inventory_snapshot_run_id=%s""",
+                (stale_id,),
+            ).fetchone()
+        )
+        stale_rows = [
+            list(row)
+            for row in self.conn.execute(
+                """SELECT location_gid,available_quantity,incoming_quantity,
+                          validation_status,inventory_snapshot_run_id::text
+                     FROM inventory_snapshot_run_rows
+                    WHERE inventory_snapshot_run_id=%s AND variant_id='valid'""",
+                (stale_id,),
+            ).fetchall()
+        ]
+        self.assertFalse(
+            validate_frozen_inventory_capture_projection(
+                self.conn,
+                variant_id="valid",
+                capture=stale_header,
+                rows=stale_rows,
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """Focused PostgreSQL acceptance for the synthetic price-to-DRAFT connection."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_CEILING
 import hashlib
 import io
@@ -12,6 +12,7 @@ import time
 from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
+import uuid
 import zipfile
 
 import psycopg
@@ -1022,6 +1023,52 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             manifest = json.loads(manifest_text)
             context = manifest["contexts"][0]
             self.assertTrue(
+                recommendations.validate_frozen_run_inventory_evidence(
+                    conn,
+                    run_id=str(run["run_id"]),
+                    manifest=manifest,
+                )
+            )
+
+            class InventoryCopyMutationConnection:
+                def __init__(self, connection, *, target, mutation):
+                    self.connection = connection
+                    self.target = target
+                    self.mutation = mutation
+
+                def execute(self, statement, parameters=()):
+                    cursor = self.connection.execute(statement, parameters)
+                    normalized = " ".join(str(statement).split()).lower()
+                    if self.target not in normalized:
+                        return cursor
+                    rows = list(cursor.fetchall())
+                    if self.mutation == "missing":
+                        rows = rows[1:]
+                    elif self.mutation == "extra":
+                        rows = rows + rows[:1]
+
+                    class FrozenRows:
+                        def fetchall(self):
+                            return rows
+
+                    return FrozenRows()
+
+            for target in (
+                "from procurement_recommendations",
+                "from inventory_snapshots",
+            ):
+                for mutation in ("missing", "extra"):
+                    with self.subTest(target=target, mutation=mutation):
+                        self.assertFalse(
+                            recommendations.validate_frozen_run_inventory_evidence(
+                                InventoryCopyMutationConnection(
+                                    conn, target=target, mutation=mutation
+                                ),
+                                run_id=str(run["run_id"]),
+                                manifest=manifest,
+                            )
+                        )
+            self.assertTrue(
                 validate_development_baseline_need_context(
                     context,
                     manifest_contract=DEVELOPMENT_FORECAST_V2_CONTRACT,
@@ -1080,12 +1127,17 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                 expected_preview_fingerprint=draft_preview["preview_fingerprint"],
                 minimum_disposition=draft_preview["minimum_disposition"],
             )
-            packet = build_emergency_review_packet(
-                conn,
-                storage=self.storage,
-                run_id=run["run_id"],
-                actor="synthetic:matrix-owner:01",
-            )
+            with mock.patch(
+                "procurement_os.emergency_packet.validate_frozen_run_inventory_evidence",
+                wraps=recommendations.validate_frozen_run_inventory_evidence,
+            ) as inventory_verifier:
+                packet = build_emergency_review_packet(
+                    conn,
+                    storage=self.storage,
+                    run_id=run["run_id"],
+                    actor="synthetic:matrix-owner:01",
+                )
+            inventory_verifier.assert_called_once()
         self.assertEqual(review["approved_cases"], 6)
         self.assertEqual(
             (
@@ -1107,6 +1159,77 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             forecast_member["items"][0]["calculated_need_binding"],
             context["development_baseline_need_binding"],
         )
+        with self._connection() as conn, mock.patch(
+            "procurement_os.emergency_packet.validate_frozen_run_inventory_evidence",
+            side_effect=AssertionError("terminal replay revalidated inventory"),
+        ), mock.patch(
+            "procurement_os.emergency_packet.get_vendor_drafts",
+            side_effect=AssertionError("terminal replay rebuilt DRAFT evidence"),
+        ):
+            replay = build_emergency_review_packet(
+                conn,
+                storage=self.storage,
+                run_id=run["run_id"],
+                actor="synthetic:matrix-owner:01",
+            )
+        self.assertTrue(replay["idempotent_replay"])
+        self.assertEqual(replay["sha256"], packet["sha256"])
+
+    def test_v2_prepare_rejects_stale_inventory_capture_header_without_partial_run(self):
+        with self._connection() as conn:
+            self._activate_v2_forecast_fixture(conn)
+        batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
+        self._apply(batch_id, key="focused-development-v2-stale-inventory-price-apply")
+        self._select_fixture_offer()
+        idempotency_key = "focused-development-v2-stale-inventory"
+        stale_capture_id = str(uuid.uuid4())
+        with self._connection() as conn:
+            with conn.transaction():
+                conn.execute(
+                    """INSERT INTO inventory_snapshot_runs(
+                               inventory_snapshot_run_id,business_date,status,source,
+                               source_hash,rows_received)
+                           VALUES (%s,%s,'RUNNING','STALE_CAPTURE_HEADER_TEST',%s,1)""",
+                    (stale_capture_id, BUSINESS_DATE, "0" * 64),
+                )
+                conn.execute(
+                    """INSERT INTO inventory_snapshot_run_rows(
+                               inventory_snapshot_run_id,variant_id,location_gid,
+                               available_quantity,incoming_quantity,on_hand_quantity,
+                               committed_quantity,reserved_quantity,damaged_quantity,
+                               validation_status)
+                           VALUES (%s,'1001','synthetic-location-001',0,0,0,0,0,0,
+                                   'VALID')""",
+                    (stale_capture_id,),
+                )
+                conn.execute(
+                    """UPDATE inventory_snapshot_runs
+                          SET status='COMPLETED',completed_at=%s,eligible_rows=1
+                        WHERE inventory_snapshot_run_id=%s""",
+                    (
+                        datetime(2026, 10, 5, 13, tzinfo=timezone.utc),
+                        stale_capture_id,
+                    ),
+                )
+            with self.assertRaisesRegex(
+                recommendations.MondayRecommendationError,
+                "frozen inventory evidence differs from its immutable capture",
+            ):
+                recommendations.prepare_monday_run(
+                    conn,
+                    business_date=BUSINESS_DATE,
+                    idempotency_key=idempotency_key,
+                    variant_ids=("1001",),
+                    actor="synthetic:matrix-owner:01",
+                )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM runs WHERE idempotency_key=%s",
+                    (idempotency_key,),
+                ).fetchone()[0],
+                0,
+            )
+            conn.rollback()
 
     def test_v2_registration_history_and_schedule_drift_refuse_without_partial_run(self):
         with self._connection() as conn:

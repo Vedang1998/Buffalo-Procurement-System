@@ -20,6 +20,7 @@ from .development_forecast import (
 )
 from .draft_po import SAFETY_LABEL, get_vendor_drafts
 from .po_csv import FORMAT_WARNING, write_vendor_draft_csvs
+from .recommendations import validate_frozen_run_inventory_evidence
 from .storage import StorageAdapter
 from .synthetic_selected_offer import (
     SyntheticSelectedOfferError,
@@ -184,7 +185,11 @@ def build_emergency_review_packet(
     if not operator:
         raise EmergencyPacketError("packet actor is required")
     with conn.transaction():
-        snapshot = get_vendor_drafts(conn, run_id)
+        run_state = conn.execute(
+            """SELECT workflow_stage,procurement_output_mode
+                 FROM runs WHERE run_id=%s AND run_type='MONDAY_PROCUREMENT'""",
+            (run_id,),
+        ).fetchone()
         artifact_rows = conn.execute(
             """SELECT storage_key,sha256,size_bytes,payload,artifact_type,vendor_id,content_type,
                       packet_build_transaction_id
@@ -208,7 +213,9 @@ def build_emergency_review_packet(
             if build_event is not None
             else None
         )
-    if snapshot["workflow_stage"] == "PACKET_BUILT":
+    if run_state is None or run_state[1] != "INTERNAL_DRAFT_ONLY":
+        raise EmergencyPacketError("unknown internal DRAFT run")
+    if run_state[0] == "PACKET_BUILT":
         if existing is None or build_event is None:
             raise EmergencyPacketError("frozen packet build authority is missing")
         if (
@@ -235,8 +242,35 @@ def build_emergency_review_packet(
             ):
                 raise EmergencyPacketError("frozen run artifact hash mismatch")
         return {"run_id": run_id,"storage_key": existing[0],"sha256": existing[1],"size_bytes": existing[2],"idempotent_replay": True}
+    snapshot = get_vendor_drafts(conn, run_id)
     if snapshot["workflow_stage"] != "DRAFTS_BUILT":
         raise EmergencyPacketError("packet requires a completed DRAFT review stage")
+    with conn.transaction():
+        input_manifest_row = conn.execute(
+            """SELECT procurement_input_manifest,input_fingerprint FROM runs
+                WHERE run_id=%s AND procurement_output_mode='INTERNAL_DRAFT_ONLY'""",
+            (run_id,),
+        ).fetchone()
+        if input_manifest_row is None or not input_manifest_row[0]:
+            raise EmergencyPacketError("frozen input manifest is missing")
+        if (
+            hashlib.sha256(str(input_manifest_row[0]).encode("utf-8")).hexdigest()
+            != input_manifest_row[1]
+            or input_manifest_row[1] != snapshot["input_fingerprint"]
+        ):
+            raise EmergencyPacketError("frozen input manifest fingerprint differs")
+        try:
+            input_manifest = json.loads(input_manifest_row[0])
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise EmergencyPacketError("frozen input manifest is malformed") from exc
+        if not validate_frozen_run_inventory_evidence(
+            conn,
+            run_id=str(run_id),
+            manifest=input_manifest,
+        ):
+            raise EmergencyPacketError(
+                "frozen inventory evidence differs from its immutable capture"
+            )
     csv_artifacts = write_vendor_draft_csvs(conn, storage=storage, run_id=run_id, actor=operator)
     entries: dict[str, bytes] = {}
     for artifact in csv_artifacts:
@@ -245,17 +279,6 @@ def build_emergency_review_packet(
             raise EmergencyPacketError("vendor CSV changed before packet assembly")
         entries[f"vendor-{artifact['vendor_id']}.internal.csv"] = payload
     with conn.transaction():
-        input_manifest_text = conn.execute(
-            """SELECT procurement_input_manifest FROM runs
-                WHERE run_id=%s AND procurement_output_mode='INTERNAL_DRAFT_ONLY'""",
-            (run_id,),
-        ).fetchone()
-        if input_manifest_text is None or not input_manifest_text[0]:
-            raise EmergencyPacketError("frozen input manifest is missing")
-        try:
-            input_manifest = json.loads(input_manifest_text[0])
-        except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            raise EmergencyPacketError("frozen input manifest is malformed") from exc
         entries["human-review-decisions.csv"] = _review_csv(conn, run_id)
         exceptions = [
             {

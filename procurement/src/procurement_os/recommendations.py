@@ -12,7 +12,7 @@ import os
 from enum import StrEnum
 import re
 import time as monotonic_time
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -50,6 +50,7 @@ from .monday_forecast_retirement import (
     verify_monday_forecast_v2_retirement_contract,
 )
 from .po_ledger import open_po_position
+from .inventory import validate_frozen_inventory_capture_projections
 from .replenishment import (
     calculate_baseline_need,
     calculate_development_baseline_need,
@@ -1474,6 +1475,10 @@ def _prepare_monday_run_impl(
             frozen_manifest["development_forecast_contract"] = (
                 development_forecast_contract
             )
+        if not validate_frozen_manifest_inventory_sources(conn, frozen_manifest):
+            raise MondayRecommendationError(
+                "frozen inventory evidence differs from its immutable capture"
+            )
         input_manifest = _canonical_json(frozen_manifest)
         if offer_resolution_contract == SYNTHETIC_SELECTED_OFFER_CONTRACT:
             try:
@@ -1931,6 +1936,143 @@ def prepare_monday_run(
     )
 
 
+def validate_frozen_manifest_inventory_sources(
+    conn: Any,
+    manifest: Mapping[str, Any],
+) -> bool:
+    """Authenticate every referenced V2 inventory projection by exact UUID."""
+
+    if manifest.get("development_forecast_contract") != DEVELOPMENT_FORECAST_V2_CONTRACT:
+        return True
+    raw_contexts = manifest.get("contexts")
+    if not isinstance(raw_contexts, list):
+        return False
+    projections: list[tuple[str, Any, Any]] = []
+    seen: set[str] = set()
+    for raw_context in raw_contexts:
+        if not isinstance(raw_context, dict):
+            return False
+        variant_id = raw_context.get("variant_id")
+        if not isinstance(variant_id, str) or not variant_id or variant_id in seen:
+            return False
+        seen.add(variant_id)
+        capture = raw_context.get("inventory_capture")
+        rows = raw_context.get("inventory_rows")
+        if capture is None:
+            if rows is not None and rows != [] and rows != ():
+                return False
+            continue
+        if not isinstance(rows, (list, tuple)):
+            return False
+        projections.append((variant_id, capture, rows))
+    return validate_frozen_inventory_capture_projections(conn, projections)
+
+
+def validate_frozen_run_inventory_evidence(
+    conn: Any,
+    *,
+    run_id: str,
+    manifest: Mapping[str, Any],
+) -> bool:
+    """Bind V2 manifest inventory to immutable captures and run copies.
+
+    The pure forecast/need validator can prove that its frozen values are
+    internally consistent, but only the database can authenticate the
+    whole-capture source hash.  This verifier resolves each recorded capture
+    by UUID and also reconciles every persisted recommendation/snapshot copy.
+    It never consults the latest inventory capture.
+    """
+
+    if manifest.get("development_forecast_contract") != DEVELOPMENT_FORECAST_V2_CONTRACT:
+        return True
+    if not validate_frozen_manifest_inventory_sources(conn, manifest):
+        return False
+    raw_contexts = manifest.get("contexts")
+    if not isinstance(raw_contexts, list):
+        return False
+    contexts: dict[str, Mapping[str, Any]] = {}
+    expected_recommendations: set[str] = set()
+    for raw_context in raw_contexts:
+        if not isinstance(raw_context, dict):
+            return False
+        variant_id = raw_context.get("variant_id")
+        if (
+            not isinstance(variant_id, str)
+            or not variant_id
+            or variant_id in contexts
+        ):
+            return False
+        contexts[variant_id] = raw_context
+        blockers = raw_context.get("blockers")
+        if not isinstance(blockers, list):
+            return False
+        if not blockers:
+            expected_recommendations.add(variant_id)
+    recommendation_rows = conn.execute(
+        """SELECT variant_id,metrics
+             FROM procurement_recommendations
+            WHERE run_id=%s
+            ORDER BY variant_id,recommendation_id""",
+        (str(run_id),),
+    ).fetchall()
+    snapshot_rows = conn.execute(
+        """SELECT variant_id,available_quantity,incoming_quantity,captured_at,
+                  source_inventory_snapshot_run_id::text
+             FROM inventory_snapshots
+            WHERE run_id=%s
+            ORDER BY variant_id""",
+        (str(run_id),),
+    ).fetchall()
+    try:
+        recommendations_by_variant: dict[str, Any] = {}
+        for variant_id_value, metrics in recommendation_rows:
+            variant_id = str(variant_id_value)
+            if variant_id in recommendations_by_variant:
+                return False
+            recommendations_by_variant[variant_id] = metrics
+        snapshots_by_variant: dict[str, Any] = {}
+        for row in snapshot_rows:
+            variant_id = str(row[0])
+            if variant_id in snapshots_by_variant:
+                return False
+            snapshots_by_variant[variant_id] = row
+        if (
+            set(recommendations_by_variant) != expected_recommendations
+            or set(snapshots_by_variant) != expected_recommendations
+        ):
+            return False
+        for variant_id in sorted(expected_recommendations):
+            metrics = recommendations_by_variant[variant_id]
+            row = snapshots_by_variant[variant_id]
+            context = contexts.get(variant_id)
+            if (
+                not isinstance(metrics, dict)
+                or context is None
+                or row[1] is None
+                or row[2] is None
+                or row[3] is None
+                or row[4] is None
+                or _canonical_json(metrics.get("frozen_inventory_capture"))
+                != _canonical_json(context.get("inventory_capture"))
+                or _canonical_json(metrics.get("frozen_inventory_rows"))
+                != _canonical_json(context.get("inventory_rows"))
+                or Decimal(str(metrics.get("available_units")))
+                != Decimal(str(context.get("available_units")))
+                or Decimal(str(metrics.get("trusted_incoming_units")))
+                != Decimal(str(context.get("trusted_incoming_units")))
+                or Decimal(str(row[1]))
+                != Decimal(str(context.get("available_units")))
+                or Decimal(str(row[2]))
+                != Decimal(str(context.get("trusted_incoming_units")))
+                or str(row[3]) != str(context.get("inventory_capture")[2])
+                or str(row[4]) != str(context.get("inventory_capture")[0])
+            ):
+                return False
+    except (InvalidOperation, IndexError, TypeError, ValueError):
+        return False
+    return True
+
+
 def validate_monday_run_inputs(
     conn: Any, run_id: str, expected_fingerprint: str
 ) -> MondayRunInputValidation:
@@ -2045,6 +2187,12 @@ def validate_monday_run_inputs(
             return base
         if current_development_contract != development_forecast_contract:
             return base
+    if not validate_frozen_run_inventory_evidence(
+        conn,
+        run_id=str(run_id),
+        manifest=manifest,
+    ):
+        return base
     contexts = [
         _load_context(
             conn,

@@ -315,6 +315,7 @@ def _frozen_stock_line_evidence(
     *,
     metrics: Any,
     available_quantity: Any,
+    incoming_quantity: Any,
     captured_at: Any,
     source_inventory_snapshot_run_id: Any,
 ) -> dict[str, Any]:
@@ -325,6 +326,7 @@ def _frozen_stock_line_evidence(
     locations = values.get("frozen_inventory_rows")
     if (
         available_quantity is None
+        and incoming_quantity is None
         and captured_at is None
         and source_inventory_snapshot_run_id is None
         and capture is None
@@ -333,6 +335,7 @@ def _frozen_stock_line_evidence(
         return {}
     if (
         available_quantity is None
+        or incoming_quantity is None
         or captured_at is None
         or source_inventory_snapshot_run_id is None
         or not isinstance(capture, list)
@@ -346,6 +349,7 @@ def _frozen_stock_line_evidence(
         raise DraftPoError("frozen captured-stock source differs from its run snapshot")
     normalized_locations: list[dict[str, Any]] = []
     location_total = Decimal("0")
+    location_incoming_total = Decimal("0")
     try:
         for item in locations:
             if (
@@ -367,6 +371,7 @@ def _frozen_stock_line_evidence(
             ):
                 raise DraftPoError("frozen captured-stock quantities are invalid")
             location_total += location_available
+            location_incoming_total += location_incoming
             normalized_locations.append(
                 {
                     "location_gid": str(item[0]),
@@ -376,7 +381,9 @@ def _frozen_stock_line_evidence(
                 }
             )
         frozen_available = Decimal(str(available_quantity))
+        frozen_incoming = Decimal(str(incoming_quantity))
         metrics_available = Decimal(str(values["available_units"]))
+        metrics_incoming = Decimal(str(values["trusted_incoming_units"]))
     except (InvalidOperation, KeyError, TypeError, ValueError) as exc:
         raise DraftPoError("frozen captured-stock quantities are invalid") from exc
     if (
@@ -384,6 +391,10 @@ def _frozen_stock_line_evidence(
         or frozen_available < 0
         or location_total != frozen_available
         or metrics_available != frozen_available
+        or not frozen_incoming.is_finite()
+        or frozen_incoming < 0
+        or location_incoming_total != frozen_incoming
+        or metrics_incoming != frozen_incoming
     ):
         raise DraftPoError("frozen captured-stock aggregate does not reconcile")
     return {
@@ -610,7 +621,7 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
                           d.evidence_json #>> '{review,approved_merchandise_total}',
                           d.evidence_json #>> '{review,approved_loose_order_fee}',
                           d.evidence_json #> '{review,final_price_tier}',
-                          r.metrics,i.available_quantity,i.captured_at,
+                          r.metrics,i.available_quantity,i.incoming_quantity,i.captured_at,
                           i.source_inventory_snapshot_run_id::text
                      FROM purchase_order_lines l
                      JOIN review_decisions d ON d.decision_id=l.review_decision_id
@@ -661,8 +672,9 @@ def get_vendor_drafts(conn: Any, run_id: str) -> dict[str, Any]:
                          **_frozen_stock_line_evidence(
                              metrics=line[13],
                              available_quantity=line[14],
-                             captured_at=line[15],
-                             source_inventory_snapshot_run_id=line[16],
+                             incoming_quantity=line[15],
+                             captured_at=line[16],
+                             source_inventory_snapshot_run_id=line[17],
                          )}
                         for line in line_rows
                     ],

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -31,6 +32,7 @@ from procurement_os.catalog import recompute_catalog_gate
 from procurement_os.draft_po import (
     DRAFT_BUILD_LOCK,
     DraftPoError,
+    _frozen_stock_line_evidence,
     _vendor_economics,
     build_vendor_drafts,
     get_vendor_drafts,
@@ -43,7 +45,11 @@ from procurement_os.emergency_packet import (
     list_monday_artifacts,
     read_monday_artifact,
 )
-from procurement_os.inventory import capture_daily_inventory, recompute_inventory_history_gate
+from procurement_os.inventory import (
+    capture_daily_inventory,
+    recompute_inventory_history_gate,
+    validate_frozen_inventory_capture_projection,
+)
 from procurement_os.monday_controls import (
     MaterialEditPolicy,
     classify_material_edit,
@@ -1036,6 +1042,84 @@ class MondayWorkflowPostgresTests(unittest.TestCase):
             },
         ]
         self.assertEqual(line["inventory_location_scope"], expected_scope)
+        frozen_metrics = self.conn.execute(
+            """SELECT metrics FROM procurement_recommendations
+                WHERE run_id=%s AND variant_id=%s""",
+            (run["run_id"], self.variant_a),
+        ).fetchone()[0]
+        frozen_capture_projection = frozen_metrics["frozen_inventory_capture"]
+        frozen_row_projection = frozen_metrics["frozen_inventory_rows"]
+        self.assertTrue(
+            validate_frozen_inventory_capture_projection(
+                self.conn,
+                variant_id=self.variant_a,
+                capture=frozen_capture_projection,
+                rows=frozen_row_projection,
+            )
+        )
+        substitutions = []
+        changed_source = copy.deepcopy(frozen_capture_projection)
+        changed_source[3] = "FORGED_CAPTURE_SOURCE"
+        substitutions.append((changed_source, frozen_row_projection))
+        changed_hash = copy.deepcopy(frozen_capture_projection)
+        changed_hash[4] = "f" * 64
+        substitutions.append((changed_hash, frozen_row_projection))
+        changed_time = copy.deepcopy(frozen_capture_projection)
+        changed_time[2] = "2026-09-07 13:18:00+00:00"
+        substitutions.append((changed_time, frozen_row_projection))
+        changed_count = copy.deepcopy(frozen_capture_projection)
+        changed_count[5] += 1
+        substitutions.append((changed_count, frozen_row_projection))
+        changed_available = copy.deepcopy(frozen_row_projection)
+        changed_available[0][1] = "2.0000"
+        substitutions.append((frozen_capture_projection, changed_available))
+        changed_incoming = copy.deepcopy(frozen_row_projection)
+        changed_incoming[0][2] = "1.0000"
+        substitutions.append((frozen_capture_projection, changed_incoming))
+        changed_location = copy.deepcopy(frozen_row_projection)
+        changed_location[0][0] = "location-forged"
+        substitutions.append((frozen_capture_projection, changed_location))
+        for changed_capture, changed_rows in substitutions:
+            with self.subTest(
+                changed_capture=changed_capture,
+                changed_rows=changed_rows,
+            ):
+                self.assertFalse(
+                    validate_frozen_inventory_capture_projection(
+                        self.conn,
+                        variant_id=self.variant_a,
+                        capture=changed_capture,
+                        rows=changed_rows,
+                    )
+                )
+
+        self.assertEqual(
+            _frozen_stock_line_evidence(
+                metrics=frozen_metrics,
+                available_quantity=Decimal("2"),
+                incoming_quantity=Decimal("0"),
+                captured_at=frozen_at,
+                source_inventory_snapshot_run_id=frozen_capture[
+                    "inventory_snapshot_run_id"
+                ],
+            )["inventory_location_scope"],
+            expected_scope,
+        )
+        mismatched_incoming = copy.deepcopy(frozen_metrics)
+        mismatched_incoming["frozen_inventory_rows"][0][2] = "1.0000"
+        with self.assertRaisesRegex(
+            DraftPoError, "frozen captured-stock aggregate does not reconcile"
+        ):
+            _frozen_stock_line_evidence(
+                metrics=mismatched_incoming,
+                available_quantity=Decimal("2"),
+                incoming_quantity=Decimal("0"),
+                captured_at=frozen_at,
+                source_inventory_snapshot_run_id=frozen_capture[
+                    "inventory_snapshot_run_id"
+                ],
+            )
+        self.conn.commit()
 
         later_capture = capture_daily_inventory(
             self.conn,

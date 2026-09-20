@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 from typing import Any, Iterable
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 
@@ -122,6 +123,175 @@ def inventory_source_hash(rows: Iterable[InventoryLevel], *, business_date: date
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _load_verified_inventory_capture(
+    conn: Any, capture_id: str
+) -> tuple[Any, dict[str, tuple[Any, ...]]] | None:
+    """Load and authenticate one complete immutable capture exactly once."""
+
+    run = conn.execute(
+        """SELECT inventory_snapshot_run_id::text,business_date,completed_at,status,
+                  source,source_hash,rows_received,eligible_rows,archival_rows,
+                  invalid_rows,incomplete_rows
+             FROM inventory_snapshot_runs
+            WHERE inventory_snapshot_run_id=%s""",
+        (capture_id,),
+    ).fetchone()
+    if run is None or run[3] != "COMPLETED":
+        return None
+    persisted_rows = conn.execute(
+        """SELECT variant_id,location_gid,available_quantity,incoming_quantity,
+                  on_hand_quantity,committed_quantity,reserved_quantity,
+                  damaged_quantity,validation_status
+             FROM inventory_snapshot_run_rows
+            WHERE inventory_snapshot_run_id=%s
+            ORDER BY variant_id,location_gid""",
+        (capture_id,),
+    ).fetchall()
+    if not persisted_rows:
+        return None
+    try:
+        normalized = tuple(
+            InventoryLevel(
+                variant_id=str(row[0]),
+                location_gid=str(row[1]),
+                available_quantity=_quantity(row[2], field="available_quantity"),
+                incoming_quantity=_quantity(row[3], field="incoming_quantity"),
+                on_hand_quantity=_quantity(row[4], field="on_hand_quantity"),
+                committed_quantity=_quantity(row[5], field="committed_quantity"),
+                reserved_quantity=_quantity(row[6], field="reserved_quantity"),
+                damaged_quantity=_quantity(row[7], field="damaged_quantity"),
+            )
+            for row in persisted_rows
+        )
+        statuses = [str(row[8]) for row in persisted_rows]
+        expected_counts = {
+            state: statuses.count(state)
+            for state in ("VALID", "INCOMPLETE", "INVALID", "ARCHIVAL_ONLY")
+        }
+        if (
+            int(run[6]) != len(persisted_rows)
+            or int(run[7])
+            != (
+                expected_counts["VALID"]
+                + expected_counts["INCOMPLETE"]
+                + expected_counts["INVALID"]
+            )
+            or int(run[8]) != expected_counts["ARCHIVAL_ONLY"]
+            or int(run[9]) != expected_counts["INVALID"]
+            or int(run[10]) != expected_counts["INCOMPLETE"]
+            or inventory_source_hash(normalized, business_date=run[1]) != run[5]
+        ):
+            return None
+    except (InventoryValidationError, InvalidOperation, TypeError, ValueError):
+        return None
+    by_variant: dict[str, list[Any]] = {}
+    for row in persisted_rows:
+        by_variant.setdefault(str(row[0]), []).append(row)
+    return run, {key: tuple(value) for key, value in by_variant.items()}
+
+
+def _projection_matches_verified_capture(
+    *,
+    variant_id: str,
+    capture: Any,
+    rows: Any,
+    verified: tuple[Any, dict[str, tuple[Any, ...]]],
+) -> bool:
+    if (
+        not isinstance(variant_id, str)
+        or not variant_id
+        or not isinstance(capture, (list, tuple))
+        or len(capture) != 9
+        or not isinstance(rows, (list, tuple))
+    ):
+        return False
+    run, rows_by_variant = verified
+    try:
+        if (
+            str(capture[0]) != str(run[0])
+            or str(capture[1]) != str(run[1])
+            or str(capture[2]) != str(run[2])
+            or capture[3] != run[4]
+            or capture[4] != run[5]
+            or any(type(value) is not int for value in capture[5:9])
+            or capture[5] != int(run[6])
+            or capture[6] != int(run[7])
+            or capture[7] != int(run[9])
+            or capture[8] != int(run[10])
+        ):
+            return False
+        selected = rows_by_variant.get(variant_id, ())
+        if len(selected) != len(rows):
+            return False
+        for projected, persisted in zip(rows, selected, strict=True):
+            if (
+                not isinstance(projected, (list, tuple))
+                or len(projected) != 5
+                or not isinstance(projected[0], str)
+                or projected[0] != persisted[1]
+                or projected[3] != persisted[8]
+                or str(projected[4]) != str(run[0])
+            ):
+                return False
+            for projected_quantity, persisted_quantity in (
+                (projected[1], persisted[2]),
+                (projected[2], persisted[3]),
+            ):
+                if _quantity(
+                    projected_quantity, field="projected quantity"
+                ) != _quantity(persisted_quantity, field="persisted quantity"):
+                    return False
+    except (InventoryValidationError, InvalidOperation, TypeError, ValueError):
+        return False
+    return True
+
+
+def validate_frozen_inventory_capture_projections(
+    conn: Any,
+    projections: Iterable[tuple[str, Any, Any]],
+) -> bool:
+    """Authenticate per-Variant projections, grouping shared capture reads."""
+
+    verified_by_id: dict[str, tuple[Any, dict[str, tuple[Any, ...]]]] = {}
+    for variant_id, capture, rows in projections:
+        if not isinstance(capture, (list, tuple)) or len(capture) != 9:
+            return False
+        try:
+            capture_id = str(UUID(str(capture[0])))
+        except (AttributeError, TypeError, ValueError):
+            return False
+        if capture_id != str(capture[0]):
+            return False
+        verified = verified_by_id.get(capture_id)
+        if verified is None:
+            verified = _load_verified_inventory_capture(conn, capture_id)
+            if verified is None:
+                return False
+            verified_by_id[capture_id] = verified
+        if not _projection_matches_verified_capture(
+            variant_id=variant_id,
+            capture=capture,
+            rows=rows,
+            verified=verified,
+        ):
+            return False
+    return True
+
+
+def validate_frozen_inventory_capture_projection(
+    conn: Any,
+    *,
+    variant_id: str,
+    capture: Any,
+    rows: Any,
+) -> bool:
+    """Authenticate one frozen projection against its exact full capture."""
+
+    return validate_frozen_inventory_capture_projections(
+        conn, ((variant_id, capture, rows),)
+    )
 
 
 def _row_classification(row: InventoryLevel, identity: tuple[str, bool, str]) -> tuple[str, str | None]:
