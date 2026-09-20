@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import hashlib
+import importlib.util
 import json
+import marshal
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import signal
 import socket
@@ -45,6 +49,19 @@ ARTIFACT_NAMES = (
 SERVER_READY_SECONDS = 21 * 60
 CDP_READY_SECONDS = 30
 _HEX40 = re.compile(r"[0-9a-f]{40}")
+_PROCESS_TOKEN_ENV = "BUFFALO_PRIVATE_BROWSER_AUDIT_PROCESS_TOKEN"
+_PR_SET_CHILD_SUBREAPER = 36
+_SUBREAPER_ENABLED = False
+_TRUSTED_GIT = Path("/usr/bin/git")
+EXPECTED_APP_ROUTE_TABLE = (
+    {"path": "/", "methods": ["GET"]},
+    {"path": "/auth/login", "methods": ["GET"]},
+    {"path": "/health", "methods": ["GET"]},
+    {"path": "/private-research", "methods": ["GET"]},
+    {"path": "/private-research/artifacts/{artifact_name}", "methods": ["GET"]},
+    {"path": "/private-research/manifest", "methods": ["GET"]},
+    {"path": "/private-research/projection", "methods": ["GET"]},
+)
 
 
 def _expected_assertion_ids() -> tuple[str, ...]:
@@ -105,12 +122,49 @@ ASSERTION_IDS = _expected_assertion_ids()
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from procurement_os.private_research import read_private_research_workspace
-from procurement_os.private_research_projection import filter_private_research_rows
+
+def read_private_research_workspace(path: Path) -> dict[str, object]:
+    from procurement_os.private_research import read_private_research_workspace as reader
+
+    return reader(path)
+
+
+def filter_private_research_rows(
+    projection: Mapping[str, Any], **filters: str
+) -> list[dict[str, object]]:
+    from procurement_os.private_research_projection import (
+        filter_private_research_rows as filter_rows,
+    )
+
+    return filter_rows(projection, **filters)
 
 
 class PrivateResearchBrowserAuditError(RuntimeError):
     pass
+
+
+class _OwnedProcessRegistry:
+    """Identity-checked ownership for one launched process tree."""
+
+    def __init__(
+        self,
+        *,
+        token: str,
+        label: str,
+        leader_pid: int,
+        leader_start_ticks: int,
+        session_id: int | None = None,
+        identities: dict[int, int] | None = None,
+        baseline_owner_children: dict[int, int] | None = None,
+    ) -> None:
+        self.token = token
+        self.label = label
+        self.leader_pid = leader_pid
+        self.leader_start_ticks = leader_start_ticks
+        self.session_id = session_id
+        self.identities = dict(identities or {})
+        self.owner_pid = os.getpid()
+        self.baseline_owner_children = dict(baseline_owner_children or {})
 
 
 def _sha256(data: bytes) -> str:
@@ -129,6 +183,334 @@ def _canonical_json_bytes(value: object) -> bytes:
 
 def _json_sha256(value: object) -> str:
     return _sha256(_canonical_json_bytes(value))
+
+
+def _git_stdout(repo_root: Path, *arguments: str) -> bytes:
+    try:
+        git_info = _TRUSTED_GIT.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise PrivateResearchBrowserAuditError(
+            "trusted Git executable is unavailable"
+        ) from exc
+    if (
+        _TRUSTED_GIT.is_symlink()
+        or not stat.S_ISREG(git_info.st_mode)
+        or git_info.st_uid != 0
+        or stat.S_IMODE(git_info.st_mode) & 0o022
+        or not os.access(_TRUSTED_GIT, os.X_OK)
+    ):
+        raise PrivateResearchBrowserAuditError(
+            "trusted Git executable identity differs"
+        )
+    git_environment = _minimal_environment(path=str(_TRUSTED_GIT.parent))
+    git_environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_OPTIONAL_LOCKS": "0",
+        }
+    )
+    try:
+        completed = subprocess.run(
+            (str(_TRUSTED_GIT), "-C", str(repo_root), *arguments),
+            env=git_environment,
+            check=False,
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise PrivateResearchBrowserAuditError(
+            "repository source identity is unavailable"
+        ) from exc
+    if completed.returncode != 0:
+        raise PrivateResearchBrowserAuditError(
+            "repository source identity is unavailable"
+        )
+    return completed.stdout
+
+
+def _validate_source_object_relation(
+    repo_root: Path, *, commit: str, tree: str
+) -> dict[str, str]:
+    if _HEX40.fullmatch(commit) is None or _HEX40.fullmatch(tree) is None:
+        raise PrivateResearchBrowserAuditError("repository source object shape differs")
+    try:
+        commit_type = _git_stdout(repo_root, "cat-file", "-t", commit).decode(
+            "ascii"
+        ).strip()
+        resolved_tree = _git_stdout(
+            repo_root, "rev-parse", "--verify", f"{commit}^{{tree}}"
+        ).decode("ascii").strip()
+        tree_type = _git_stdout(repo_root, "cat-file", "-t", tree).decode(
+            "ascii"
+        ).strip()
+        commit_body = _git_stdout(repo_root, "cat-file", "-p", commit).decode(
+            "utf-8", "strict"
+        )
+    except UnicodeError as exc:
+        raise PrivateResearchBrowserAuditError(
+            "repository source object is malformed"
+        ) from exc
+    first_line = commit_body.splitlines()[0] if commit_body else ""
+    if (
+        commit_type != "commit"
+        or tree_type != "tree"
+        or resolved_tree != tree
+        or first_line != f"tree {tree}"
+    ):
+        raise PrivateResearchBrowserAuditError(
+            "repository commit and tree relation differs"
+        )
+    return {"commit": commit, "tree": tree}
+
+
+def _git_blob_oid(data: bytes) -> str:
+    header = f"blob {len(data)}\0".encode("ascii")
+    return hashlib.sha1(header + data, usedforsecurity=False).hexdigest()
+
+
+def _attest_tracked_worktree(repo_root: Path, *, commit: str) -> set[Path]:
+    try:
+        raw_tree = _git_stdout(
+            repo_root, "ls-tree", "-r", "-z", "--full-tree", commit
+        )
+        raw_index = _git_stdout(repo_root, "ls-files", "--stage", "-v", "-z")
+    except PrivateResearchBrowserAuditError:
+        raise
+
+    tree: dict[str, tuple[str, str]] = {}
+    for raw in raw_tree.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            metadata, raw_path = raw.split(b"\t", 1)
+            mode, object_type, object_id = metadata.decode("ascii").split(" ")
+            relative = raw_path.decode("utf-8", "strict")
+        except (ValueError, UnicodeError) as exc:
+            raise PrivateResearchBrowserAuditError(
+                "repository tree inventory is malformed"
+            ) from exc
+        if object_type != "blob" or mode not in {"100644", "100755", "120000"}:
+            raise PrivateResearchBrowserAuditError(
+                "repository tree contains an unsupported tracked object"
+            )
+        tree[relative] = (mode, object_id)
+
+    index: dict[str, tuple[str, str]] = {}
+    for raw in raw_index.split(b"\0"):
+        if not raw:
+            continue
+        try:
+            tagged_metadata, raw_path = raw.split(b"\t", 1)
+            tag, metadata = tagged_metadata[:1], tagged_metadata[2:]
+            mode, object_id, stage = metadata.decode("ascii").split(" ")
+            relative = raw_path.decode("utf-8", "strict")
+        except (ValueError, UnicodeError) as exc:
+            raise PrivateResearchBrowserAuditError(
+                "repository index inventory is malformed"
+            ) from exc
+        if tag != b"H" or stage != "0":
+            raise PrivateResearchBrowserAuditError(
+                "repository index contains non-normal tracked flags"
+            )
+        index[relative] = (mode, object_id)
+    if index != tree:
+        raise PrivateResearchBrowserAuditError(
+            "repository index differs from the bound commit tree"
+        )
+
+    tracked_paths: set[Path] = set()
+    for relative, (mode, expected_oid) in tree.items():
+        path = repo_root / relative
+        if not path.is_relative_to(repo_root) or any(
+            parent.is_symlink()
+            for parent in path.parents
+            if parent != repo_root and parent.is_relative_to(repo_root)
+        ):
+            raise PrivateResearchBrowserAuditError(
+                "repository tracked path leaves the repository root"
+            )
+        try:
+            info = path.stat(follow_symlinks=False)
+            if mode == "120000":
+                if not stat.S_ISLNK(info.st_mode):
+                    raise PrivateResearchBrowserAuditError(
+                        "repository tracked symlink type differs"
+                    )
+                data = os.fsencode(os.readlink(path))
+            else:
+                if not stat.S_ISREG(info.st_mode) or path.is_symlink():
+                    raise PrivateResearchBrowserAuditError(
+                        "repository tracked file type differs"
+                    )
+                executable = bool(stat.S_IMODE(info.st_mode) & 0o111)
+                if executable != (mode == "100755"):
+                    raise PrivateResearchBrowserAuditError(
+                        "repository tracked executable mode differs"
+                    )
+                data = path.read_bytes()
+        except OSError as exc:
+            raise PrivateResearchBrowserAuditError(
+                "repository tracked file is unavailable"
+            ) from exc
+        if _git_blob_oid(data) != expected_oid:
+            raise PrivateResearchBrowserAuditError(
+                "repository tracked worktree bytes differ from HEAD"
+            )
+        tracked_paths.add(path)
+    return tracked_paths
+
+
+def _attest_python_execution_surface(
+    repo_root: Path, *, tracked_paths: set[Path]
+) -> None:
+    roots = (
+        repo_root / "procurement" / "src",
+        repo_root / "procurement" / "tools",
+    )
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for candidate in root.rglob("*"):
+            if candidate.is_symlink():
+                raise PrivateResearchBrowserAuditError(
+                    "Python execution surface contains an unbound symlink"
+                )
+            if (
+                candidate.is_file()
+                and candidate.suffix.lower() in {".py", ".pyi", ".so", ".pyd"}
+                and candidate not in tracked_paths
+            ):
+                raise PrivateResearchBrowserAuditError(
+                    "Python execution surface contains untracked executable bytes"
+                )
+
+        for source in root.rglob("*.py"):
+            cache = Path(importlib.util.cache_from_source(str(source)))
+            if not cache.exists():
+                continue
+            try:
+                cache_info = cache.stat(follow_symlinks=False)
+                if (
+                    cache.is_symlink()
+                    or not stat.S_ISREG(cache_info.st_mode)
+                    or cache_info.st_size < 16
+                    or cache_info.st_size > max(1_048_576, source.stat().st_size * 20)
+                ):
+                    raise PrivateResearchBrowserAuditError(
+                        "Python bytecode cache identity differs"
+                    )
+                cached_code = marshal.loads(cache.read_bytes()[16:])
+                compiled_code = compile(
+                    source.read_bytes(),
+                    cached_code.co_filename,
+                    "exec",
+                    dont_inherit=True,
+                    optimize=sys.flags.optimize,
+                )
+            except (OSError, ValueError, EOFError, TypeError, AttributeError) as exc:
+                raise PrivateResearchBrowserAuditError(
+                    "Python bytecode cache is malformed"
+                ) from exc
+            if cached_code != compiled_code:
+                raise PrivateResearchBrowserAuditError(
+                    "Python bytecode cache differs from tracked source"
+                )
+
+        expected_caches = {
+            Path(importlib.util.cache_from_source(str(source)))
+            for source in root.rglob("*.py")
+        }
+        for cache in root.rglob("*.pyc"):
+            if cache in expected_caches:
+                continue
+            if (
+                cache.parent.name != "__pycache__"
+                or f".{sys.implementation.cache_tag}." in cache.name
+            ):
+                raise PrivateResearchBrowserAuditError(
+                    "Python execution surface contains unexpected bytecode"
+                )
+
+
+def _repository_source_identity(repo_root: Path = REPO_ROOT) -> dict[str, str]:
+    try:
+        resolved_repo = repo_root.resolve(strict=True)
+        git_root = Path(
+            _git_stdout(repo_root, "rev-parse", "--show-toplevel")
+            .decode("utf-8", "strict")
+            .strip()
+        ).resolve(strict=True)
+        status = _git_stdout(
+            repo_root, "status", "--porcelain=v1", "--untracked-files=all", "-z"
+        )
+        commit = _git_stdout(
+            repo_root, "rev-parse", "--verify", "HEAD^{commit}"
+        ).decode("ascii").strip()
+        tree = _git_stdout(
+            repo_root, "rev-parse", "--verify", "HEAD^{tree}"
+        ).decode("ascii").strip()
+    except (OSError, UnicodeError) as exc:
+        raise PrivateResearchBrowserAuditError(
+            "repository source identity is unavailable"
+        ) from exc
+    if git_root != resolved_repo:
+        raise PrivateResearchBrowserAuditError("repository root identity differs")
+    if status:
+        raise PrivateResearchBrowserAuditError(
+            "repository must be clean for browser acceptance"
+        )
+    identity = _validate_source_object_relation(
+        repo_root, commit=commit, tree=tree
+    )
+    tracked_paths = _attest_tracked_worktree(repo_root, commit=commit)
+    _attest_python_execution_surface(repo_root, tracked_paths=tracked_paths)
+    final_status = _git_stdout(
+        repo_root, "status", "--porcelain=v1", "--untracked-files=all", "-z"
+    )
+    final_commit = _git_stdout(
+        repo_root, "rev-parse", "--verify", "HEAD^{commit}"
+    ).decode("ascii").strip()
+    final_tree = _git_stdout(
+        repo_root, "rev-parse", "--verify", "HEAD^{tree}"
+    ).decode("ascii").strip()
+    if final_status or final_commit != commit or final_tree != tree:
+        raise PrivateResearchBrowserAuditError(
+            "repository changed during source attestation"
+        )
+    return identity
+
+
+def _assert_repository_source_identity(
+    expected: Mapping[str, Any], repo_root: Path = REPO_ROOT
+) -> None:
+    if _repository_source_identity(repo_root) != expected:
+        raise PrivateResearchBrowserAuditError(
+            "repository source identity changed during browser acceptance"
+        )
+
+
+def _private_app_route_table() -> list[dict[str, object]]:
+    # Lazy import keeps the audit module's base import graph operationally inert.
+    from procurement_os.private_research_app import app
+
+    actual = sorted(
+        (
+            {"path": str(route.path), "methods": sorted(route.methods or ())}
+            for route in app.routes
+        ),
+        key=lambda item: item["path"],
+    )
+    expected = [
+        {"path": item["path"], "methods": list(item["methods"])}
+        for item in EXPECTED_APP_ROUTE_TABLE
+    ]
+    if actual != expected:
+        raise PrivateResearchBrowserAuditError(
+            "private viewer route table or method inventory differs"
+        )
+    return expected
 
 
 def _reject_symlinked_components(path: Path, *, label: str) -> None:
@@ -391,6 +773,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             "projection_sha256": _json_sha256(projection),
         },
         "workspace_hashes": workspace_hashes,
+        "route_table": _private_app_route_table(),
         "assertion_ids": list(ASSERTION_IDS),
         "counts": counts,
         "initial": {
@@ -424,7 +807,12 @@ def _write_private_json(path: Path, value: object) -> None:
         handle.write(b"\n")
 
 
-def _minimal_environment(*, path: str, home: Path | None = None) -> dict[str, str]:
+def _minimal_environment(
+    *,
+    path: str,
+    home: Path | None = None,
+    process_token: str | None = None,
+) -> dict[str, str]:
     result = {
         "PATH": path,
         "LANG": "C.UTF-8",
@@ -433,6 +821,12 @@ def _minimal_environment(*, path: str, home: Path | None = None) -> dict[str, st
     }
     if home is not None:
         result["HOME"] = str(home)
+    if process_token is not None:
+        if not process_token or "\x00" in process_token or "=" in process_token:
+            raise PrivateResearchBrowserAuditError(
+                "owned process token shape differs"
+            )
+        result[_PROCESS_TOKEN_ENV] = process_token
     return result
 
 
@@ -540,8 +934,23 @@ def _start_server(
     runtime_root: Path,
     port: int,
     log_path: Path,
+    expected_source: Mapping[str, str],
 ) -> tuple[subprocess.Popen[bytes], Any, dict[str, str]]:
     log_handle = log_path.open("ab", buffering=0)
+    process_token = _new_process_token("viewer")
+    server_environment = _minimal_environment(
+        path=str(_TRUSTED_GIT.parent), process_token=process_token
+    )
+    server_environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_OPTIONAL_LOCKS": "0",
+        }
+    )
+    process: subprocess.Popen[bytes] | None = None
+    baseline_owner_children = _direct_child_identities(os.getpid())
     try:
         process = subprocess.Popen(
             (
@@ -556,13 +965,27 @@ def _start_server(
                 str(port),
             ),
             cwd=REPO_ROOT,
-            env=_minimal_environment(path=os.environ.get("PATH", "")),
+            env=server_environment,
             stdout=log_handle,
             stderr=log_handle,
             start_new_session=True,
         )
+        _register_owned_process(
+            process,
+            token=process_token,
+            label="viewer",
+            baseline_owner_children=baseline_owner_children,
+        )
     except BaseException:
-        log_handle.close()
+        if process is None:
+            log_handle.close()
+        else:
+            _cleanup_failed_owned_launch(
+                process,
+                log_handle,
+                token=process_token,
+                label="viewer",
+            )
         raise
     try:
         _wait_health(process, port)
@@ -571,24 +994,277 @@ def _start_server(
             raise PrivateResearchBrowserAuditError(
                 "private viewer process identity is unavailable"
             )
+        source_identity = {
+            "commit": str(record["source_commit"]),
+            "tree": str(record["source_tree"]),
+        }
+        if source_identity != expected_source:
+            raise PrivateResearchBrowserAuditError(
+                "private viewer launcher source identity differs"
+            )
+        _register_owned_identity(
+            _owned_registry(process),
+            pid=int(record["pid"]),
+            start_ticks=int(record["process_start_ticks"]),
+        )
     except BaseException:
         _stop_server(process, log_handle, runtime_root)
         raise
     return (
         process,
         log_handle,
-        {
-            "commit": str(record["source_commit"]),
-            "tree": str(record["source_tree"]),
-        },
+        source_identity,
     )
 
 
-def _signal_process_group(pid: int, signum: int) -> None:
+def _new_process_token(label: str) -> str:
+    return f"buffalo-private-browser:{label}:{os.getpid()}:{secrets.token_hex(16)}"
+
+
+def _enable_child_subreaper() -> None:
+    global _SUBREAPER_ENABLED
+    if _SUBREAPER_ENABLED:
+        return
     try:
-        os.killpg(pid, signum)
-    except ProcessLookupError:
-        pass
+        libc = ctypes.CDLL(None, use_errno=True)
+        result = libc.prctl(_PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0)
+    except (AttributeError, OSError) as exc:
+        raise PrivateResearchBrowserAuditError(
+            "owned process subreaper is unavailable"
+        ) from exc
+    if result != 0:
+        errno_value = ctypes.get_errno()
+        raise PrivateResearchBrowserAuditError(
+            f"owned process subreaper failed with errno {errno_value}"
+        )
+    _SUBREAPER_ENABLED = True
+
+
+def _process_identity(pid: int) -> tuple[int, str] | None:
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        remainder = raw[raw.rindex(") ") + 2 :].split()
+        return int(remainder[19]), remainder[0]
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _process_session_id(pid: int) -> int | None:
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        remainder = raw[raw.rindex(") ") + 2 :].split()
+        return int(remainder[3])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _process_parent_id(pid: int) -> int | None:
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        remainder = raw[raw.rindex(") ") + 2 :].split()
+        return int(remainder[1])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _direct_child_identities(parent_pid: int) -> dict[int, int]:
+    children: dict[int, int] = {}
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat(follow_symlinks=False).st_uid != os.getuid():
+                continue
+            pid = int(entry.name)
+            if _process_parent_id(pid) != parent_pid:
+                continue
+            identity = _process_identity(pid)
+        except (OSError, ValueError):
+            continue
+        if identity is not None:
+            children[pid] = identity[0]
+    return children
+
+
+def _register_owned_identity(
+    registry: _OwnedProcessRegistry, *, pid: int, start_ticks: int
+) -> None:
+    identity = _process_identity(pid)
+    if identity is None or identity[0] != start_ticks:
+        raise PrivateResearchBrowserAuditError(
+            f"{registry.label} child process identity differs"
+        )
+    registry.identities[pid] = start_ticks
+
+
+def _register_owned_process(
+    process: subprocess.Popen[bytes],
+    *,
+    token: str,
+    label: str,
+    baseline_owner_children: dict[int, int] | None = None,
+) -> _OwnedProcessRegistry:
+    identity = _process_identity(process.pid)
+    if identity is None:
+        raise PrivateResearchBrowserAuditError(
+            f"{label} process identity is unavailable"
+        )
+    registry = _OwnedProcessRegistry(
+        token=token,
+        label=label,
+        leader_pid=process.pid,
+        leader_start_ticks=identity[0],
+        session_id=process.pid,
+        identities={process.pid: identity[0]},
+        baseline_owner_children=baseline_owner_children,
+    )
+    setattr(process, "_buffalo_private_browser_registry", registry)
+    _discover_owned_processes(registry)
+    return registry
+
+
+def _fallback_owned_registry(
+    process: subprocess.Popen[bytes], *, token: str, label: str
+) -> _OwnedProcessRegistry:
+    identity = _process_identity(process.pid)
+    registry = _OwnedProcessRegistry(
+        token=token,
+        label=label,
+        leader_pid=process.pid,
+        leader_start_ticks=identity[0] if identity is not None else -1,
+        session_id=process.pid,
+        identities={process.pid: identity[0]} if identity is not None else {},
+        baseline_owner_children={},
+    )
+    setattr(process, "_buffalo_private_browser_registry", registry)
+    _discover_owned_processes(registry)
+    return registry
+
+
+def _cleanup_failed_owned_launch(
+    process: subprocess.Popen[bytes],
+    handle: Any,
+    *,
+    token: str,
+    label: str,
+) -> None:
+    try:
+        registry = getattr(process, "_buffalo_private_browser_registry", None)
+        if not isinstance(registry, _OwnedProcessRegistry):
+            _fallback_owned_registry(process, token=token, label=label)
+        _stop_process_group(process, timeout=5)
+    finally:
+        handle.close()
+
+
+def _owned_registry(process: subprocess.Popen[bytes]) -> _OwnedProcessRegistry:
+    registry = getattr(process, "_buffalo_private_browser_registry", None)
+    if not isinstance(registry, _OwnedProcessRegistry):
+        raise PrivateResearchBrowserAuditError(
+            "owned process registry is unavailable"
+        )
+    return registry
+
+
+def _discover_owned_processes(
+    registry: _OwnedProcessRegistry,
+) -> dict[int, tuple[int, str]]:
+    marker = f"{_PROCESS_TOKEN_ENV}={registry.token}".encode("utf-8")
+    snapshots: dict[int, tuple[int, str, int | None, int | None, bool]] = {}
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            info = entry.stat(follow_symlinks=False)
+            if info.st_uid != os.getuid():
+                continue
+            pid = int(entry.name)
+            before = _process_identity(pid)
+            if before is None:
+                continue
+            session_id = _process_session_id(pid)
+            parent_id = _process_parent_id(pid)
+            has_marker = False
+            if session_id != registry.session_id:
+                environment = (entry / "environ").read_bytes().split(b"\0")
+                has_marker = marker in environment
+            identity = _process_identity(pid)
+        except (OSError, ValueError):
+            continue
+        if identity is not None and identity[0] == before[0]:
+            snapshots[pid] = (
+                identity[0],
+                identity[1],
+                parent_id,
+                session_id,
+                has_marker,
+            )
+
+    owned = {
+        pid
+        for pid, snapshot in snapshots.items()
+        if (
+            pid in registry.identities
+            or snapshot[3] == registry.session_id
+            or snapshot[4]
+        )
+    }
+    # Tokenless descendants are still owned through process ancestry. If an
+    # owned parent exits, PR_SET_CHILD_SUBREAPER reparents its descendants to
+    # this harness; new direct children created after the leader are included,
+    # while the pre-launch baseline excludes unrelated pre-existing children.
+    changed = True
+    while changed:
+        changed = False
+        for pid, snapshot in snapshots.items():
+            if pid not in owned and snapshot[2] in owned:
+                owned.add(pid)
+                changed = True
+    for pid, snapshot in snapshots.items():
+        if (
+            pid not in owned
+            and snapshot[2] == registry.owner_pid
+            and pid not in registry.baseline_owner_children
+            and snapshot[0] >= registry.leader_start_ticks
+        ):
+            owned.add(pid)
+    for pid in owned:
+        registry.identities[pid] = snapshots[pid][0]
+
+    live: dict[int, tuple[int, str]] = {}
+    for pid, expected_start in tuple(registry.identities.items()):
+        identity = _process_identity(pid)
+        if identity is None or identity[0] != expected_start:
+            registry.identities.pop(pid, None)
+            continue
+        live[pid] = identity
+    return live
+
+
+def _reap_owned_processes(
+    process: subprocess.Popen[bytes], registry: _OwnedProcessRegistry
+) -> None:
+    process.poll()
+    for pid in tuple(registry.identities):
+        if pid == process.pid:
+            continue
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except (ChildProcessError, ProcessLookupError):
+            pass
+
+
+def _signal_owned_processes(
+    registry: _OwnedProcessRegistry, signum: int
+) -> None:
+    for pid, (start_ticks, state) in _discover_owned_processes(registry).items():
+        current = _process_identity(pid)
+        if state == "Z" or current is None or current[0] != start_ticks:
+            continue
+        try:
+            os.kill(pid, signum)
+        except ProcessLookupError:
+            pass
 
 
 def _viewer_pid_record(runtime_root: Path) -> dict[str, Any] | None:
@@ -638,79 +1314,51 @@ def _viewer_pid_record(runtime_root: Path) -> dict[str, Any] | None:
         return None
 
 
-def _viewer_child_pid(runtime_root: Path) -> int | None:
-    record = _viewer_pid_record(runtime_root)
-    return int(record["pid"]) if record is not None else None
-
-
-def _live_session_pids(session_id: int) -> set[int]:
-    result: set[int] = set()
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            raw = (entry / "stat").read_text(encoding="utf-8")
-            remainder = raw[raw.rindex(") ") + 2 :].split()
-            state = remainder[0]
-            process_session = int(remainder[3])
-        except (OSError, ValueError, IndexError):
-            continue
-        if process_session == session_id and state != "Z":
-            result.add(int(entry.name))
-    return result
-
-
-def _signal_process_session(session_id: int, signum: int) -> None:
-    members = _live_session_pids(session_id)
-    if not members:
-        return
-    _signal_process_group(session_id, signum)
-    for pid in members:
-        try:
-            os.kill(pid, signum)
-        except ProcessLookupError:
-            pass
-
-
-def _stop_process_session(session_id: int, *, timeout: float) -> None:
-    _signal_process_session(session_id, signal.SIGTERM)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline and _live_session_pids(session_id):
-        time.sleep(0.05)
-    if _live_session_pids(session_id):
-        _signal_process_session(session_id, signal.SIGKILL)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and _live_session_pids(session_id):
-            time.sleep(0.05)
-    if _live_session_pids(session_id):
-        raise PrivateResearchBrowserAuditError(
-            "browser audit process descendants survived cleanup"
-        )
-
-
 def _stop_process_group(process: subprocess.Popen[bytes], *, timeout: float) -> None:
-    # The session is terminated even when its leader has already exited.  Chromium
-    # and the launcher can leave children alive after an early leader failure.
-    _stop_process_session(process.pid, timeout=timeout)
+    # The environment token survives setsid()/double-fork.  Repeated discovery
+    # closes the fork-vs-scan race, while start ticks prevent signalling PID reuse.
+    registry = _owned_registry(process)
+    _signal_owned_processes(registry, signal.SIGTERM)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        _reap_owned_processes(process, registry)
+        live = _discover_owned_processes(registry)
+        if not live:
+            break
+        _signal_owned_processes(registry, signal.SIGTERM)
+        time.sleep(0.05)
+    if _discover_owned_processes(registry):
+        _signal_owned_processes(registry, signal.SIGKILL)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            _reap_owned_processes(process, registry)
+            live = _discover_owned_processes(registry)
+            if not live:
+                break
+            _signal_owned_processes(registry, signal.SIGKILL)
+            time.sleep(0.05)
+    _reap_owned_processes(process, registry)
+    survivors = _discover_owned_processes(registry)
+    if survivors:
+        raise PrivateResearchBrowserAuditError(
+            f"{registry.label} owned process descendants survived cleanup"
+        )
     if process.poll() is None:
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired as exc:
             raise PrivateResearchBrowserAuditError(
-                "browser audit process leader survived cleanup"
+                f"{registry.label} process leader survived cleanup"
             ) from exc
 
 
 def _stop_server(
     process: subprocess.Popen[bytes], handle: Any, runtime_root: Path
 ) -> None:
-    child_pid = _viewer_child_pid(runtime_root)
     try:
         _stop_process_group(process, timeout=30)
     finally:
         handle.close()
-    if child_pid is not None:
-        _stop_process_session(child_pid, timeout=10)
     if process.returncode not in {0, -signal.SIGTERM}:
         raise PrivateResearchBrowserAuditError(
             f"private viewer launcher exited unexpectedly ({process.returncode})"
@@ -724,6 +1372,9 @@ def _start_browser(
     log_path: Path,
 ) -> tuple[subprocess.Popen[bytes], Any]:
     handle = log_path.open("wb", buffering=0)
+    process_token = _new_process_token("chromium")
+    process: subprocess.Popen[bytes] | None = None
+    baseline_owner_children = _direct_child_identities(os.getpid())
     try:
         process = subprocess.Popen(
             (
@@ -744,13 +1395,31 @@ def _start_browser(
                 f"--user-data-dir={profile}",
                 "about:blank",
             ),
-            env=_minimal_environment(path=str(Path(chromium).parent), home=profile.parent),
+            env=_minimal_environment(
+                path=str(Path(chromium).parent),
+                home=profile.parent,
+                process_token=process_token,
+            ),
             stdout=subprocess.DEVNULL,
             stderr=handle,
             start_new_session=True,
         )
+        _register_owned_process(
+            process,
+            token=process_token,
+            label="Chromium",
+            baseline_owner_children=baseline_owner_children,
+        )
     except BaseException:
-        handle.close()
+        if process is None:
+            handle.close()
+        else:
+            _cleanup_failed_owned_launch(
+                process,
+                handle,
+                token=process_token,
+                label="Chromium",
+            )
         raise
     return process, handle
 
@@ -858,15 +1527,43 @@ def _validate_phase_result(
     target_shape = (
         isinstance(target_summary, dict)
         and set(target_summary)
-        == {"observed_types", "by_type", "attached", "guarded", "resumed"}
+        == {
+            "all_observed_types",
+            "observed_types",
+            "by_type",
+            "inert",
+            "unsupported",
+            "tracked",
+            "created",
+            "destroyed",
+            "detached",
+            "active_guarded",
+            "live_detached",
+            "attached",
+            "guarded",
+            "resumed",
+            "uncreated",
+            "unattached",
+            "unguarded",
+            "unresumed",
+        }
+        and isinstance(target_summary.get("all_observed_types"), list)
         and isinstance(target_summary.get("observed_types"), list)
         and isinstance(target_summary.get("by_type"), dict)
         and all(
             isinstance(name, str) and name
-            for name in target_summary["observed_types"]
+            for name in (
+                target_summary["observed_types"]
+                + target_summary["all_observed_types"]
+            )
         )
         and target_summary["observed_types"]
         == sorted(set(target_summary["observed_types"]))
+        and target_summary["all_observed_types"]
+        == sorted(set(target_summary["all_observed_types"]))
+        and set(target_summary["observed_types"]).issubset(
+            target_summary["all_observed_types"]
+        )
         and set(target_summary["observed_types"]) == set(target_summary["by_type"])
         and all(
             isinstance(name, str)
@@ -875,11 +1572,43 @@ def _validate_phase_result(
             and count >= 1
             for name, count in target_summary["by_type"].items()
         )
-        and type(target_summary.get("attached")) is int
-        and target_summary["attached"] >= 1
-        and sum(target_summary["by_type"].values()) == target_summary["attached"]
-        and target_summary.get("guarded") == target_summary["attached"]
-        and target_summary.get("resumed") == target_summary["attached"]
+        and all(
+            type(target_summary.get(field)) is int
+            and target_summary[field] >= 0
+            for field in (
+                "tracked",
+                "created",
+                "destroyed",
+                "detached",
+                "active_guarded",
+                "live_detached",
+                "inert",
+                "unsupported",
+                "attached",
+                "guarded",
+                "resumed",
+                "uncreated",
+                "unattached",
+                "unguarded",
+                "unresumed",
+            )
+        )
+        and target_summary["tracked"] >= 1
+        and sum(target_summary["by_type"].values()) == target_summary["tracked"]
+        and target_summary["created"] == target_summary["tracked"]
+        and target_summary["attached"] == target_summary["tracked"]
+        and target_summary["guarded"] == target_summary["tracked"]
+        and target_summary["resumed"] == target_summary["tracked"]
+        and target_summary["destroyed"] <= target_summary["tracked"]
+        and target_summary["detached"] <= target_summary["tracked"]
+        and target_summary["active_guarded"] + target_summary["destroyed"]
+        == target_summary["tracked"]
+        and target_summary["live_detached"] == 0
+        and target_summary["unsupported"] == 0
+        and target_summary["uncreated"] == 0
+        and target_summary["unattached"] == 0
+        and target_summary["unguarded"] == 0
+        and target_summary["unresumed"] == 0
     )
     expected_result_keys = {
         "contract",
@@ -1002,6 +1731,24 @@ def _assert_no_auth_material(evidence_root: Path, secret: bytes) -> None:
         )
 
 
+def _finalize_acceptance_evidence(
+    *,
+    evidence_root: Path,
+    result: Mapping[str, Any],
+    secret: bytes,
+    expected_source: Mapping[str, Any],
+) -> None:
+    try:
+        _write_private_json(evidence_root / "acceptance-result.json", result)
+        if secret:
+            _assert_no_auth_material(evidence_root, secret)
+        _assert_repository_source_identity(expected_source)
+    except BaseException:
+        if evidence_root.exists() or evidence_root.is_symlink():
+            _purge_evidence_root(evidence_root)
+        raise
+
+
 def _cleanup_runtime(runtime_root: Path) -> None:
     for name in ("private-viewer.pid", "private-viewer.secret"):
         path = runtime_root / name
@@ -1028,6 +1775,8 @@ def _cleanup_runtime(runtime_root: Path) -> None:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     os.umask(0o077)
+    _enable_child_subreaper()
+    expected_source = _repository_source_identity()
     workspace_root = args.workspace_root
     runtime_root = args.runtime_root
     evidence_root = args.evidence_root
@@ -1059,6 +1808,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "node_version": node_runtime["version"],
         "script_sha256": _sha256(SCRIPT.read_bytes()),
     }
+    _assert_repository_source_identity(expected_source)
 
     _prepare_empty_root(evidence_root, label="evidence root")
     _prepare_empty_root(runtime_root, label="runtime root")
@@ -1106,8 +1856,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             ("initial", initial_downloads),
             ("restart", restart_downloads),
         ):
+            _assert_repository_source_identity(expected_source)
             server, server_handle, source_identity = _start_server(
-                workspace_root, runtime_root, app_port, server_log
+                workspace_root,
+                runtime_root,
+                app_port,
+                server_log,
+                expected_source,
             )
             source_identities.append(source_identity)
             try:
@@ -1188,6 +1943,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "browser acceptance cleanup failed"
             ) from cleanup_error
 
+    _assert_repository_source_identity(expected_source)
+
     if set(phase_results) != {"initial", "restart"}:
         raise PrivateResearchBrowserAuditError("browser acceptance phases are incomplete")
     if (
@@ -1210,7 +1967,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "workspace_id": expectations["manifest"]["workspace_id"],
         "origin": base_url,
         "evidence_root": str(evidence_root),
-        "source": source_identities[0],
+        "source": expected_source,
+        "route_table": expectations["route_table"],
         "workspace_hashes": expectations["workspace_hashes"],
         "semantic_hashes": expectations["semantic_hashes"],
         "counts": expectations["counts"],
@@ -1223,16 +1981,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "cleanup": {
             "server_process_sessions_stopped": stopped_servers,
             "browser_process_sessions_stopped": stopped_browsers,
+            "server_owned_process_trees_verified_empty": stopped_servers,
+            "browser_owned_process_trees_verified_empty": stopped_browsers,
             "private_listener_stopped": True,
             "cdp_listener_stopped": True,
             "runtime_root_removed": not runtime_root.exists(),
             "authentication_material_absent": True,
+            "source_revalidated_after_cleanup": True,
         },
         "operational_authority": False,
     }
-    _write_private_json(evidence_root / "acceptance-result.json", result)
-    if secret:
-        _assert_no_auth_material(evidence_root, secret)
+    _finalize_acceptance_evidence(
+        evidence_root=evidence_root,
+        result=result,
+        secret=secret,
+        expected_source=expected_source,
+    )
     return result
 
 

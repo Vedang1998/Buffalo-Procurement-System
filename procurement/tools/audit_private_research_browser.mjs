@@ -46,7 +46,9 @@ const FETCH_TARGET_TYPES = new Set([
   "browser_ui",
 ]);
 const WORKER_TARGET_TYPES = new Set(["worker", "shared_worker", "service_worker"]);
-const APPLICATION_TARGET_TYPES = new Set(["page", "iframe", "worker", "shared_worker", "service_worker", "webview"]);
+const APPLICATION_TARGET_TYPES = new Set(GUARDED_TARGET_TYPES);
+const CHILD_CAPABLE_TARGET_TYPES = new Set(GUARDED_TARGET_TYPES);
+const INERT_TARGET_TYPES = new Set(["browser", "tab"]);
 const SOCKET_GUARD_BINDING = "__buffaloPrivateBrowserSocketAttempt";
 const SOCKET_GUARD_SOURCE = `(() => {
   const report = globalThis[${JSON.stringify(SOCKET_GUARD_BINDING)}];
@@ -109,9 +111,12 @@ class BrowserCdpClient {
     this.waiters = new Map();
     this.inflight = new Map();
     this.sessions = new Map();
+    this.targets = new Map();
+    this.targetEventSequence = 0;
     this.guardTasks = new Set();
     this.mainSessionId = null;
     this.browserVersion = null;
+    this.discoveryEnabled = false;
     this.autoAttachEnabled = false;
     this.requests = [];
     this.responses = [];
@@ -164,6 +169,18 @@ class BrowserCdpClient {
 
     const sessionId = message.sessionId || null;
     const params = message.params || {};
+    if (message.method === "Target.targetCreated") {
+      this.recordTargetCreated(params.targetInfo || {});
+    }
+    if (message.method === "Target.targetDestroyed") {
+      this.recordTargetDestroyed(params.targetId);
+    }
+    if (message.method === "Target.targetInfoChanged") {
+      this.recordTargetInfo(params.targetInfo || {});
+    }
+    if (message.method === "Target.detachedFromTarget") {
+      this.recordTargetDetached(params.targetId, params.sessionId);
+    }
     if (message.method === "Target.attachedToTarget") {
       const task = this.guardTarget(params);
       this.guardTasks.add(task);
@@ -269,6 +286,84 @@ class BrowserCdpClient {
     });
   }
 
+  ensureTarget(targetInfo) {
+    const targetId = targetInfo?.targetId;
+    if (!targetId) return null;
+    let target = this.targets.get(targetId);
+    if (!target) {
+      target = {
+        targetId,
+        type: targetInfo.type || "unknown",
+        created: false,
+        destroyed: false,
+        attached: false,
+        guarded: false,
+        resumed: false,
+        detached: false,
+        sessionIds: new Set(),
+        activeSessionIds: new Set(),
+      };
+      this.targets.set(targetId, target);
+    } else if (
+      targetInfo.type &&
+      target.type !== "unknown" &&
+      target.type !== targetInfo.type
+    ) {
+      this.eventErrors.push(`target type changed (${target.targetId})`);
+    } else if (targetInfo.type) {
+      target.type = targetInfo.type;
+    }
+    return target;
+  }
+
+  recordTargetCreated(targetInfo) {
+    const target = this.ensureTarget(targetInfo);
+    if (!target) {
+      this.eventErrors.push("created target identity is incomplete");
+      return;
+    }
+    if (target.created) {
+      this.eventErrors.push(`duplicate targetCreated event (${target.targetId})`);
+      return;
+    }
+    target.created = true;
+    target.createdSequence = ++this.targetEventSequence;
+    if (!GUARDED_TARGET_TYPES.has(target.type) && !INERT_TARGET_TYPES.has(target.type)) {
+      this.eventErrors.push(`unsupported discovered target type: ${target.type}`);
+    }
+  }
+
+  recordTargetInfo(targetInfo) {
+    const target = this.ensureTarget(targetInfo);
+    if (!target) this.eventErrors.push("changed target identity is incomplete");
+  }
+
+  recordTargetDestroyed(targetId) {
+    if (!targetId) {
+      this.eventErrors.push("destroyed target identity is incomplete");
+      return;
+    }
+    const target = this.targets.get(targetId) || this.ensureTarget({targetId});
+    target.destroyed = true;
+    target.activeSessionIds.clear();
+    target.destroyedSequence = ++this.targetEventSequence;
+  }
+
+  recordTargetDetached(targetId, sessionId) {
+    const session = sessionId ? this.sessions.get(sessionId) : null;
+    const effectiveTargetId = targetId || session?.targetId;
+    const target = effectiveTargetId ? this.targets.get(effectiveTargetId) : null;
+    if (target) {
+      target.detached = true;
+      if (sessionId) target.activeSessionIds.delete(sessionId);
+    } else {
+      this.eventErrors.push("detached target ledger identity is unavailable");
+    }
+    if (sessionId) {
+      if (session) session.detached = true;
+    }
+  }
+
   async initialize() {
     const version = await this.send("Browser.getVersion");
     this.browserVersion = {
@@ -277,6 +372,7 @@ class BrowserCdpClient {
       js_version: version.jsVersion,
     };
     await this.send("Target.setDiscoverTargets", {discover: true});
+    this.discoveryEnabled = true;
     await this.send("Target.setAutoAttach", {
       autoAttach: true,
       waitForDebuggerOnStart: true,
@@ -300,11 +396,25 @@ class BrowserCdpClient {
       this.eventErrors.push("CDP attached target identity is incomplete");
       return;
     }
+    if (this.sessions.has(sessionId)) {
+      this.eventErrors.push(`duplicate attached session (${sessionId})`);
+      return;
+    }
+    const target = this.ensureTarget(targetInfo);
+    if (!target) {
+      this.eventErrors.push("attached target ledger identity is incomplete");
+      return;
+    }
+    target.attached = true;
+    target.sessionIds.add(sessionId);
+    target.activeSessionIds.add(sessionId);
+    target.detached = false;
     const session = {
       targetId: targetInfo.targetId,
       type: targetInfo.type || "unknown",
       guarded: false,
       resumed: false,
+      detached: false,
     };
     this.sessions.set(sessionId, session);
     if (!GUARDED_TARGET_TYPES.has(session.type)) {
@@ -359,6 +469,8 @@ class BrowserCdpClient {
       }
       if (FETCH_TARGET_TYPES.has(session.type)) {
         await this.send("Page.enable", {}, sessionId);
+      }
+      if (CHILD_CAPABLE_TARGET_TYPES.has(session.type)) {
         await this.send(
           "Target.setAutoAttach",
           {autoAttach: true, waitForDebuggerOnStart: true, flatten: true},
@@ -366,11 +478,13 @@ class BrowserCdpClient {
         );
       }
       session.guarded = true;
+      target.guarded = true;
       if (session.type === "page" && this.mainSessionId === null) {
         this.mainSessionId = sessionId;
       }
       await this.send("Runtime.runIfWaitingForDebugger", {}, sessionId);
       session.resumed = true;
+      target.resumed = true;
     } catch (error) {
       this.eventErrors.push(`target guard failed (${session.type}): ${String(error)}`);
       try {
@@ -517,25 +631,89 @@ class BrowserCdpClient {
     }
   }
 
+  async settleTargets(stableMilliseconds = 500, timeoutMilliseconds = 5000) {
+    const deadline = Date.now() + timeoutMilliseconds;
+    let observedSequence = this.targetEventSequence;
+    let stableSince = Date.now();
+    while (Date.now() < deadline) {
+      await this.flushGuardTasks();
+      if (this.targetEventSequence !== observedSequence) {
+        observedSequence = this.targetEventSequence;
+        stableSince = Date.now();
+      }
+      if (Date.now() - stableSince >= stableMilliseconds) return;
+      await sleep(25);
+    }
+    throw new Error("target lifecycle did not become stable");
+  }
+
+  targetHasActiveGuard(target) {
+    return [...target.activeSessionIds].some((sessionId) => {
+      const session = this.sessions.get(sessionId);
+      return session && !session.detached && session.guarded && session.resumed;
+    });
+  }
+
   targetSummary() {
-    const sessions = [...this.sessions.values()];
+    const discoveredTargets = [...this.targets.values()].filter((target) => target.created);
+    const targets = [...this.targets.values()].filter((target) =>
+      GUARDED_TARGET_TYPES.has(target.type),
+    );
     const byType = {};
-    for (const session of sessions) {
-      byType[session.type] = (byType[session.type] || 0) + 1;
+    for (const target of targets) {
+      byType[target.type] = (byType[target.type] || 0) + 1;
     }
     return {
+      all_observed_types: [...new Set(discoveredTargets.map((target) => target.type))].sort(),
       observed_types: Object.keys(byType).sort(),
       by_type: Object.fromEntries(Object.entries(byType).sort(([left], [right]) => left.localeCompare(right))),
-      attached: sessions.length,
-      guarded: sessions.filter((session) => session.guarded).length,
-      resumed: sessions.filter((session) => session.resumed).length,
+      inert: discoveredTargets.filter((target) => INERT_TARGET_TYPES.has(target.type)).length,
+      unsupported: discoveredTargets.filter(
+        (target) => !GUARDED_TARGET_TYPES.has(target.type) && !INERT_TARGET_TYPES.has(target.type),
+      ).length,
+      tracked: targets.length,
+      created: targets.filter((target) => target.created).length,
+      destroyed: targets.filter((target) => target.destroyed).length,
+      detached: targets.filter((target) => target.detached).length,
+      active_guarded: targets.filter(
+        (target) => !target.destroyed && this.targetHasActiveGuard(target),
+      ).length,
+      live_detached: targets.filter(
+        (target) => !target.destroyed && !this.targetHasActiveGuard(target),
+      ).length,
+      attached: targets.filter((target) => target.attached).length,
+      guarded: targets.filter((target) => target.guarded).length,
+      resumed: targets.filter((target) => target.resumed).length,
+      uncreated: targets.filter((target) => !target.created).length,
+      unattached: targets.filter((target) => !target.attached).length,
+      unguarded: targets.filter((target) => !target.guarded).length,
+      unresumed: targets.filter((target) => !target.resumed).length,
     };
   }
 
   allTargetsGuarded() {
+    const targets = [...this.targets.values()].filter((target) =>
+      GUARDED_TARGET_TYPES.has(target.type),
+    );
     const sessions = [...this.sessions.values()];
     return (
+      this.discoveryEnabled &&
       this.autoAttachEnabled &&
+      [...this.targets.values()]
+        .filter((target) => target.created)
+        .every(
+          (target) =>
+            GUARDED_TARGET_TYPES.has(target.type) || INERT_TARGET_TYPES.has(target.type),
+        ) &&
+      targets.length > 0 &&
+      targets.every(
+        (target) =>
+          target.created === true &&
+          target.attached === true &&
+          target.guarded === true &&
+          target.resumed === true &&
+          (target.destroyed === true || this.targetHasActiveGuard(target)),
+      ) &&
       sessions.length > 0 &&
       sessions.every(
         (session) =>
@@ -827,6 +1005,23 @@ async function audit(client) {
     buttons: initialSnapshot.buttons.length,
     links: initialSnapshot.links.length,
   });
+  if (EXPECTED.adversarial?.popup_path) {
+    const popupUrl = new URL(EXPECTED.adversarial.popup_path, BASE);
+    if (popupUrl.origin !== ALLOWED_ORIGIN) {
+      throw new Error("adversarial popup path left the allowed origin");
+    }
+    // Browser-level creation returns before waitForDebuggerOnStart resumes the
+    // target. Runtime.evaluate(window.open(...)) would wait on that paused
+    // target and deadlock the acceptance phase.
+    const opened = await client.send("Target.createTarget", {
+      url: popupUrl.href,
+      newWindow: true,
+    });
+    if (!opened?.targetId) throw new Error("adversarial popup could not be created");
+    await client.settleTargets(150, 5000);
+    await sleep(500);
+    await client.settleTargets(150, 5000);
+  }
 
   const healthResponse = await fetchPayload("/health");
   const health = JSON.parse(healthResponse.body);
@@ -1027,8 +1222,11 @@ async function audit(client) {
     });
   }
 
-  await sleep(500);
-  await client.flushGuardTasks();
+  if (EXPECTED.adversarial?.detach_live_target === true) {
+    await client.send("Target.detachFromTarget", {sessionId});
+    await sleep(100);
+  }
+  await client.settleTargets();
   check(client.allTargetsGuarded(), "v2.cdp.all_targets_guarded", {
     ...client.targetSummary(),
     guardErrors: client.eventErrors.slice(0, 5),

@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -152,11 +153,24 @@ def _phase_result(tool, expectations, phase: str, base_url: str) -> dict[str, ob
             },
         },
         "target_summary": {
+            "all_observed_types": ["page"],
             "observed_types": ["page"],
             "by_type": {"page": 1},
+            "inert": 0,
+            "unsupported": 0,
+            "tracked": 1,
+            "created": 1,
+            "destroyed": 0,
+            "detached": 0,
+            "active_guarded": 1,
+            "live_detached": 0,
             "attached": 1,
             "guarded": 1,
             "resumed": 1,
+            "uncreated": 0,
+            "unattached": 0,
+            "unguarded": 0,
+            "unresumed": 0,
         },
         "request_count": 18,
         "response_count": 18,
@@ -226,15 +240,22 @@ def _start_synthetic_viewer(
                 )
                 return
             if parsed.path == "/worker.js" and attack_origin:
-                script = (
+                nested_source = (
                     "setTimeout(() => fetch("
-                    + json.dumps(f"{attack_origin}/worker-timer")
+                    + json.dumps(f"{attack_origin}/nested-worker-timer")
                     + ").catch(() => {}), 25);"
                     + "setTimeout(() => { try { new WebSocket("
                     + json.dumps(
-                        f"{str(attack_origin).replace('http://', 'ws://')}/worker-socket"
+                        f"{str(attack_origin).replace('http://', 'ws://')}/nested-worker-socket"
                     )
                     + "); } catch (_) {} }, 30);"
+                    + "setTimeout(() => close(), 100);"
+                )
+                script = (
+                    "const nestedSource="
+                    + json.dumps(nested_source)
+                    + ";const nestedUrl=URL.createObjectURL(new Blob([nestedSource],"
+                    + "{type:'text/javascript'}));new Worker(nestedUrl);"
                     + "setInterval(() => {}, 1000);"
                 ).encode("utf-8")
                 self._send(200, script, "text/javascript; charset=utf-8")
@@ -435,6 +456,16 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             {item["name"] for item in expectations["artifacts"]},
             set(tool.ARTIFACT_NAMES),
         )
+        self.assertEqual(
+            expectations["route_table"],
+            [
+                {"path": item["path"], "methods": list(item["methods"])}
+                for item in tool.EXPECTED_APP_ROUTE_TABLE
+            ],
+        )
+        self.assertTrue(
+            all(route["methods"] == ["GET"] for route in expectations["route_table"])
+        )
 
     def test_phase_validation_rejects_external_requests(self):
         tool = _load_tool()
@@ -494,6 +525,157 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                 base_url=base_url,
                 expectations=expectations,
             )
+        incomplete_target = json.loads(json.dumps(result))
+        incomplete_target["target_summary"]["created"] = 0
+        incomplete_target["target_summary"]["uncreated"] = 1
+        with self.assertRaisesRegex(
+            tool.PrivateResearchBrowserAuditError, "result differs"
+        ):
+            tool._validate_phase_result(
+                incomplete_target,
+                phase="initial",
+                base_url=base_url,
+                expectations=expectations,
+            )
+
+    def test_source_binding_rejects_missing_mismatched_dirty_and_changed_repo(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-browser-git-") as temporary:
+            repo = Path(temporary).resolve()
+
+            def git(*arguments):
+                return subprocess.run(
+                    ["git", "-C", str(repo), *arguments],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+
+            git("init", "-q")
+            git("config", "user.name", "Browser Audit Test")
+            git("config", "user.email", "browser-audit@example.invalid")
+            source = repo / "source.txt"
+            source.write_text("first\n", encoding="utf-8")
+            git("add", "source.txt")
+            git("commit", "-q", "-m", "first")
+            first = tool._repository_source_identity(repo)
+            self.assertEqual(
+                tool._validate_source_object_relation(
+                    repo, commit=first["commit"], tree=first["tree"]
+                ),
+                first,
+            )
+            with TemporaryDirectory(
+                prefix="buffalo-private-browser-git-shim-"
+            ) as shim_temporary:
+                shim_root = Path(shim_temporary)
+                shim = shim_root / "git"
+                shim.write_text("#!/bin/sh\necho spoofed-git\n", encoding="utf-8")
+                shim.chmod(0o700)
+                with mock.patch.dict(os.environ, {"PATH": str(shim_root)}):
+                    self.assertEqual(tool._repository_source_identity(repo), first)
+
+            git("update-index", "--assume-unchanged", "source.txt")
+            source.write_text("evil!\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError, "non-normal tracked flags"
+            ):
+                tool._repository_source_identity(repo)
+            git("update-index", "--no-assume-unchanged", "source.txt")
+            source.write_text("first\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError, "unavailable"
+            ):
+                tool._validate_source_object_relation(
+                    repo, commit="0" * 40, tree=first["tree"]
+                )
+
+            source.write_text("dirty\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError, "must be clean"
+            ):
+                tool._repository_source_identity(repo)
+
+            git("add", "source.txt")
+            git("commit", "-q", "-m", "second")
+            second = tool._repository_source_identity(repo)
+            self.assertNotEqual(first, second)
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError, "relation differs"
+            ):
+                tool._validate_source_object_relation(
+                    repo, commit=first["commit"], tree=second["tree"]
+                )
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError, "changed during"
+            ):
+                tool._assert_repository_source_identity(first, repo)
+
+    def test_route_inventory_rejects_added_write_surface(self):
+        tool = _load_tool()
+        from procurement_os.private_research_app import app
+
+        added = mock.Mock(path="/private-research/write", methods={"POST"})
+        with mock.patch.object(app.router, "routes", [*app.routes, added]):
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError,
+                "route table or method inventory differs",
+            ):
+                tool._private_app_route_table()
+
+    def test_source_binding_rejects_ignored_stale_bytecode(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-browser-pyc-") as temporary:
+            repo = Path(temporary).resolve()
+
+            def git(*arguments):
+                subprocess.run(
+                    ["git", "-C", str(repo), *arguments],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            git("init", "-q")
+            git("config", "user.name", "Browser Audit Test")
+            git("config", "user.email", "browser-audit@example.invalid")
+            source = repo / "procurement" / "src" / "fixture.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("VALUE = 1\n", encoding="utf-8")
+            (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+            git("add", ".gitignore", "procurement/src/fixture.py")
+            git("commit", "-q", "-m", "fixture")
+            cache = Path(tool.importlib.util.cache_from_source(str(source)))
+            cache.parent.mkdir()
+            subprocess.run(
+                [sys.executable, "-m", "py_compile", str(source)],
+                check=True,
+                capture_output=True,
+            )
+            self.assertEqual(
+                tool._repository_source_identity(repo)["commit"],
+                subprocess.run(
+                    ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip(),
+            )
+            raw = cache.read_bytes()
+            cached = tool.marshal.loads(raw[16:])
+            malicious = compile(
+                "raise RuntimeError('ignored bytecode executed')\n",
+                cached.co_filename,
+                "exec",
+                dont_inherit=True,
+                optimize=sys.flags.optimize,
+            )
+            cache.write_bytes(raw[:16] + tool.marshal.dumps(malicious))
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError, "bytecode cache differs"
+            ):
+                tool._repository_source_identity(repo)
 
     def test_two_phase_orchestration_reuses_origin_and_removes_runtime_secret(self):
         tool = _load_tool()
@@ -552,6 +734,15 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                         return_value=workspace,
                     ),
                     mock.patch.object(tool, "_initialize_runtime", side_effect=initialize),
+                    mock.patch.object(tool, "_enable_child_subreaper"),
+                    mock.patch.object(
+                        tool,
+                        "_repository_source_identity",
+                        return_value=source_identity,
+                    ),
+                    mock.patch.object(
+                        tool, "_assert_repository_source_identity"
+                    ) as assert_source,
                     mock.patch.object(
                         tool,
                         "_start_browser",
@@ -592,9 +783,11 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             self.assertEqual(start_server.call_count, 2)
             self.assertEqual(stop_server.call_count, 2)
             self.assertEqual(stop_browser.call_count, 2)
+            self.assertEqual(assert_source.call_count, 5)
             self.assertFalse(runtime_root.exists())
             self.assertTrue(result["cleanup"]["runtime_root_removed"])
             self.assertEqual(result["source"], source_identity)
+            self.assertEqual(result["route_table"], expectations["route_table"])
             retained = b"".join(
                 path.read_bytes()
                 for path in evidence_root.rglob("*")
@@ -643,29 +836,160 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                 tool._assert_no_auth_material(evidence, secret)
             self.assertFalse(evidence.exists())
 
-    def test_process_cleanup_kills_session_child_after_leader_exits(self):
+            raced = parent / "raced-evidence"
+            raced.mkdir(mode=0o700)
+            with mock.patch.object(
+                tool,
+                "_assert_repository_source_identity",
+                side_effect=tool.PrivateResearchBrowserAuditError(
+                    "repository source identity changed during browser acceptance"
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    tool.PrivateResearchBrowserAuditError, "changed during"
+                ):
+                    tool._finalize_acceptance_evidence(
+                        evidence_root=raced,
+                        result={"source": {"commit": "a" * 40, "tree": "b" * 40}},
+                        secret=b"",
+                        expected_source={"commit": "a" * 40, "tree": "b" * 40},
+                    )
+            self.assertFalse(raced.exists())
+
+    def test_server_launch_rejects_launcher_source_identity_mismatch(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-browser-launch-") as temporary:
+            root = Path(temporary).resolve()
+            workspace = root / "workspace"
+            runtime = root / "runtime"
+            workspace.mkdir()
+            runtime.mkdir()
+            log_path = root / "viewer.log"
+            fake_process = mock.Mock(pid=os.getpid(), returncode=0)
+            expected = {"commit": "a" * 40, "tree": "b" * 40}
+            observed = {
+                "pid": os.getpid(),
+                "source_commit": "c" * 40,
+                "source_tree": "d" * 40,
+            }
+            with (
+                mock.patch.object(tool.subprocess, "Popen", return_value=fake_process),
+                mock.patch.object(tool, "_register_owned_process"),
+                mock.patch.object(tool, "_wait_health"),
+                mock.patch.object(tool, "_viewer_pid_record", return_value=observed),
+                mock.patch.object(
+                    tool, "_stop_server", side_effect=lambda _p, handle, _r: handle.close()
+                ) as stop_server,
+            ):
+                with self.assertRaisesRegex(
+                    tool.PrivateResearchBrowserAuditError,
+                    "launcher source identity differs",
+                ):
+                    tool._start_server(
+                        workspace,
+                        runtime,
+                        18876,
+                        log_path,
+                        expected,
+                    )
+            stop_server.assert_called_once()
+
+            matching = {
+                "pid": 424242,
+                "source_commit": expected["commit"],
+                "source_tree": expected["tree"],
+                "process_start_ticks": 12345,
+            }
+            fake_registry = object()
+            with (
+                mock.patch.object(tool.subprocess, "Popen", return_value=fake_process),
+                mock.patch.object(tool, "_register_owned_process"),
+                mock.patch.object(tool, "_wait_health"),
+                mock.patch.object(tool, "_viewer_pid_record", return_value=matching),
+                mock.patch.object(
+                    tool, "_owned_registry", return_value=fake_registry
+                ),
+                mock.patch.object(tool, "_register_owned_identity") as register_child,
+            ):
+                returned_process, returned_handle, returned_source = tool._start_server(
+                    workspace,
+                    runtime,
+                    18876,
+                    log_path,
+                    expected,
+                )
+            returned_handle.close()
+            self.assertIs(returned_process, fake_process)
+            self.assertEqual(returned_source, expected)
+            register_child.assert_called_once_with(
+                fake_registry, pid=424242, start_ticks=12345
+            )
+
+    def test_process_cleanup_kills_detached_setsid_listener_after_leader_exits(self):
         tool = _load_tool()
         with TemporaryDirectory(prefix="buffalo-private-browser-process-") as temporary:
             marker = Path(temporary) / "child.pid"
-            code = """
+            port = tool._free_port()
+            token = tool._new_process_token("detached-test")
+            child_code = """
 import os
 from pathlib import Path
+import socket
 import sys
 import time
 
-child = os.fork()
-if child:
-    Path(sys.argv[1]).write_text(str(child), encoding="ascii")
-    os._exit(0)
-os.setpgid(0, 0)
+listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(("127.0.0.1", int(sys.argv[2])))
+listener.listen()
+Path(sys.argv[1]).write_text(str(os.getpid()), encoding="ascii")
 time.sleep(60)
 """
+            parent_code = """
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+child_env = {
+    "PATH": os.environ.get("PATH", ""),
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+}
+subprocess.Popen(
+    [sys.executable, "-c", sys.argv[3], sys.argv[1], sys.argv[2]],
+    env=child_env,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    start_new_session=True,
+)
+marker = Path(sys.argv[1])
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline and not marker.exists():
+    time.sleep(0.01)
+"""
+            tool._enable_child_subreaper()
             process = subprocess.Popen(
-                [sys.executable, "-c", code, str(marker)],
+                [
+                    sys.executable,
+                    "-c",
+                    parent_code,
+                    str(marker),
+                    str(port),
+                    child_code,
+                ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                env=tool._minimal_environment(
+                    path=os.environ.get("PATH", ""), process_token=token
+                ),
                 start_new_session=True,
+            )
+            tool._register_owned_process(
+                process, token=token, label="detached fixture"
             )
             try:
                 process.wait(timeout=5)
@@ -673,16 +997,92 @@ time.sleep(60)
                 while time.monotonic() < deadline and not marker.exists():
                     time.sleep(0.01)
                 child_pid = int(marker.read_text(encoding="ascii"))
-                self.assertIn(child_pid, tool._live_session_pids(process.pid))
+                token_marker = (
+                    f"{tool._PROCESS_TOKEN_ENV}={token}".encode("utf-8")
+                )
+                self.assertNotIn(
+                    token_marker,
+                    Path(f"/proc/{child_pid}/environ").read_bytes().split(b"\0"),
+                )
+                owned = tool._discover_owned_processes(
+                    tool._owned_registry(process)
+                )
+                self.assertIn(child_pid, owned)
+                with socket.create_connection(("127.0.0.1", port), timeout=1):
+                    pass
                 tool._stop_process_group(process, timeout=1)
-                self.assertEqual(tool._live_session_pids(process.pid), set())
+                self.assertEqual(
+                    tool._discover_owned_processes(tool._owned_registry(process)),
+                    {},
+                )
+                tool._assert_port_free(port, label="detached fixture")
             finally:
                 tool._stop_process_group(process, timeout=1)
+
+    def test_registration_failure_cleanup_kills_real_detached_listener(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-browser-register-") as temporary:
+            root = Path(temporary).resolve()
+            marker = root / "child.pid"
+            log_path = root / "child.log"
+            port = tool._free_port()
+            token = tool._new_process_token("registration-failure")
+            code = """
+import os
+from pathlib import Path
+import socket
+import sys
+import time
+
+child = os.fork()
+if child == 0:
+    os.setsid()
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", int(sys.argv[2])))
+    listener.listen()
+    Path(sys.argv[1]).write_text(str(os.getpid()), encoding="ascii")
+    time.sleep(60)
+    raise SystemExit(0)
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline and not Path(sys.argv[1]).exists():
+    time.sleep(0.01)
+time.sleep(60)
+"""
+            tool._enable_child_subreaper()
+            handle = log_path.open("wb", buffering=0)
+            process = subprocess.Popen(
+                [sys.executable, "-c", code, str(marker), str(port)],
+                env=tool._minimal_environment(
+                    path=os.environ.get("PATH", ""), process_token=token
+                ),
+                stdin=subprocess.DEVNULL,
+                stdout=handle,
+                stderr=handle,
+                start_new_session=True,
+            )
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not marker.exists():
+                time.sleep(0.01)
+            self.assertTrue(marker.exists())
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                pass
+            tool._cleanup_failed_owned_launch(
+                process,
+                handle,
+                token=token,
+                label="registration failure fixture",
+            )
+            self.assertTrue(handle.closed)
+            tool._assert_port_free(port, label="registration failure fixture")
 
     def test_node_script_is_dependency_free_and_syntax_valid(self):
         source = SCRIPT.read_text(encoding="utf-8")
         for required in (
             "Target.setAutoAttach",
+            "Target.targetCreated",
+            "Target.targetDestroyed",
+            "const APPLICATION_TARGET_TYPES = new Set(GUARDED_TARGET_TYPES)",
             "waitForDebuggerOnStart: true",
             "Fetch.continueRequest",
             "Fetch.failRequest",
@@ -918,7 +1318,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                 server.server_close()
                 thread.join(timeout=5)
 
-    def test_all_target_guard_blocks_second_listener_worker_popup_and_timers(self):
+    def test_all_target_guard_blocks_nested_worker_second_listener_popup_and_timers(self):
         tool = _load_tool()
         chromium = shutil.which("chromium") or shutil.which("chromium-browser")
         node = shutil.which("node")
@@ -929,6 +1329,10 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
         expectations["tooling"] = {
             "node_version": process_version(),
             "script_sha256": hashlib.sha256(SCRIPT.read_bytes()).hexdigest(),
+        }
+        expectations["adversarial"] = {
+            "popup_path": "/popup",
+            "detach_live_target": True,
         }
         secret = b"synthetic-private-browser-secret-value"
         with TemporaryDirectory(prefix="buffalo-private-browser-attack-") as temporary:
@@ -966,7 +1370,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                 cdp = tool._wait_cdp(browser, cdp_port)
                 with self.assertRaisesRegex(
                     tool.PrivateResearchBrowserAuditError,
-                    r"v2\.network\.no_external_http",
+                    r"v2\.cdp\.all_targets_guarded",
                 ):
                     tool._run_cdp_phase(
                         node=node,
@@ -990,8 +1394,29 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                 summary = failed["target_summary"]
                 self.assertEqual(summary["attached"], summary["guarded"])
                 self.assertEqual(summary["attached"], summary["resumed"])
+                self.assertEqual(summary["tracked"], summary["created"])
+                self.assertEqual(summary["tracked"], summary["attached"])
+                self.assertEqual(summary["uncreated"], 0)
+                self.assertEqual(summary["unattached"], 0)
+                self.assertGreaterEqual(summary["detached"], 1)
+                self.assertGreaterEqual(summary["live_detached"], 1)
                 self.assertIn("worker", summary["observed_types"])
-                self.assertIn(
+                self.assertGreaterEqual(summary["by_type"]["worker"], 2)
+                self.assertGreaterEqual(summary["by_type"]["page"], 2)
+                self.assertGreaterEqual(summary["destroyed"], 1)
+                self.assertTrue(
+                    any(
+                        item["url"].endswith("/nested-worker-timer")
+                        for item in failed["external_requests"]
+                    )
+                )
+                self.assertTrue(
+                    any(
+                        item["url"].endswith("/nested-worker-socket")
+                        for item in failed["external_websocket_requests"]
+                    )
+                )
+                self.assertNotIn(
                     "v2.cdp.all_targets_guarded",
                     {item["id"] for item in failed["assertions"]},
                 )
