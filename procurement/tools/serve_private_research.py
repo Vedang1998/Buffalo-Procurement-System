@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import signal
 import socket
@@ -23,6 +24,11 @@ SRC_ROOT = REPO_ROOT / "procurement" / "src"
 RUNTIME_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_VIEWER_RUNTIME_V1"
 SECRET_NAME = "private-viewer.secret"
 PID_NAME = "private-viewer.pid"
+READINESS_TIMEOUT_SECONDS = 10 * 60
+_HEX40 = re.compile(r"^[0-9a-f]{40}$")
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_MAX_PID = (1 << 31) - 1
+_MAX_PID_RECORD_BYTES = 4_096
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
@@ -34,7 +40,30 @@ class PrivateResearchServeError(RuntimeError):
     pass
 
 
-def _owned_mode(path: Path, expected_mode: int, *, regular: bool = False) -> None:
+def _reject_symlinked_components(path: Path) -> None:
+    if not path.is_absolute():
+        raise PrivateResearchServeError(f"required path must be absolute: {path}")
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current /= part
+        try:
+            info = current.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise PrivateResearchServeError(
+                f"required path component is unavailable: {current}"
+            ) from exc
+        if stat.S_ISLNK(info.st_mode):
+            raise PrivateResearchServeError(
+                f"required path has a symlinked component: {current}"
+            )
+
+
+def _owned_mode(
+    path: Path, expected_mode: int, *, regular: bool = False
+) -> os.stat_result:
+    _reject_symlinked_components(path)
     try:
         info = path.stat(follow_symlinks=False)
     except OSError as exc:
@@ -44,6 +73,7 @@ def _owned_mode(path: Path, expected_mode: int, *, regular: bool = False) -> Non
         raise PrivateResearchServeError(f"required path type differs: {path}")
     if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != expected_mode:
         raise PrivateResearchServeError(f"required path ownership or mode differs: {path}")
+    return info
 
 
 def _inside_workspace_layout(path: Path) -> bool:
@@ -56,6 +86,8 @@ def _inside_workspace_layout(path: Path) -> bool:
 
 
 def _require_disjoint_paths(runtime_root: Path, workspace_root: Path) -> None:
+    _reject_symlinked_components(runtime_root)
+    _reject_symlinked_components(workspace_root)
     runtime = runtime_root.resolve(strict=False)
     workspace = workspace_root.resolve(strict=False)
     if (
@@ -71,6 +103,7 @@ def _require_disjoint_paths(runtime_root: Path, workspace_root: Path) -> None:
 def initialize_runtime(root: Path) -> dict[str, object]:
     if not root.is_absolute():
         raise PrivateResearchServeError("runtime root must be absolute")
+    _reject_symlinked_components(root)
     if _inside_workspace_layout(root):
         raise PrivateResearchServeError(
             "runtime root must not be inside a private research workspace"
@@ -157,16 +190,25 @@ def _process_identity(pid: int) -> dict[str, object]:
     }
 
 
+def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("JSON object has duplicate fields")
+        result[key] = value
+    return result
+
+
 def serve(root: Path, workspace: Path, port: int) -> None:
     if not root.is_absolute() or not workspace.is_absolute():
         raise PrivateResearchServeError("runtime and workspace roots must be absolute")
-    _require_disjoint_paths(root, workspace)
     _owned_mode(root, 0o700)
     _owned_mode(workspace, 0o700)
+    _require_disjoint_paths(root, workspace)
     secret_path = root / SECRET_NAME
     _owned_mode(secret_path, 0o600, regular=True)
     pid_path = root / PID_NAME
-    if pid_path.exists():
+    if pid_path.exists() or pid_path.is_symlink():
         raise PrivateResearchServeError("private viewer runtime is already reserved")
     read_private_research_workspace(workspace)
     commit, tree = _source_identity()
@@ -226,7 +268,7 @@ def serve(root: Path, workspace: Path, port: int) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + READINESS_TIMEOUT_SECONDS
         ready = False
         while time.monotonic() < deadline:
             if process.poll() is not None:
@@ -278,11 +320,16 @@ def serve(root: Path, workspace: Path, port: int) -> None:
 def status(root: Path) -> dict[str, object]:
     _owned_mode(root, 0o700)
     pid_path = root / PID_NAME
-    if not pid_path.is_file():
+    if not pid_path.exists() and not pid_path.is_symlink():
         return {"contract": RUNTIME_CONTRACT, "running": False}
     try:
-        _owned_mode(pid_path, 0o600, regular=True)
-        record = json.loads(pid_path.read_text(encoding="utf-8"))
+        info = _owned_mode(pid_path, 0o600, regular=True)
+        if info.st_size < 2 or info.st_size > _MAX_PID_RECORD_BYTES:
+            raise ValueError("PID record size differs")
+        record = json.loads(
+            pid_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_unique_json_object,
+        )
         if not isinstance(record, dict) or set(record) != {
             "pid",
             "source_commit",
@@ -291,18 +338,24 @@ def status(root: Path) -> dict[str, object]:
             "cmdline_sha256",
         }:
             raise ValueError("PID record shape differs")
-        pid = int(record["pid"])
+        pid = record["pid"]
+        if type(pid) is not int or pid <= 0 or pid > _MAX_PID:
+            raise ValueError("PID record process identifier differs")
+        if (
+            type(record["process_start_ticks"]) is not int
+            or record["process_start_ticks"] <= 0
+            or not isinstance(record["source_commit"], str)
+            or _HEX40.fullmatch(record["source_commit"]) is None
+            or not isinstance(record["source_tree"], str)
+            or _HEX40.fullmatch(record["source_tree"]) is None
+            or not isinstance(record["cmdline_sha256"], str)
+            or _HEX64.fullmatch(record["cmdline_sha256"]) is None
+        ):
+            raise ValueError("PID record identity shape differs")
         os.kill(pid, 0)
         actual_identity = _process_identity(pid)
         if (
-            not isinstance(record["source_commit"], str)
-            or len(record["source_commit"]) != 40
-            or not isinstance(record["source_tree"], str)
-            or len(record["source_tree"]) != 40
-            or type(record["process_start_ticks"]) is not int
-            or not isinstance(record["cmdline_sha256"], str)
-            or len(record["cmdline_sha256"]) != 64
-            or actual_identity["process_start_ticks"]
+            actual_identity["process_start_ticks"]
             != record["process_start_ticks"]
             or actual_identity["cmdline_sha256"] != record["cmdline_sha256"]
         ):

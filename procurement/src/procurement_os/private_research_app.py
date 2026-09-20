@@ -5,21 +5,21 @@ API.  It exposes only authentication, health, and immutable research artifacts.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import html
+import hmac
 import json
 import math
 import os
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from .local_access import (
-    LocalAccessMiddleware,
-    SESSION_COOKIE,
-    create_local_session,
-    destroy_local_session,
+    _read_secret,
     runtime_config,
 )
 from .private_research import PrivateResearchError, read_private_research_workspace
@@ -36,10 +36,159 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
-app.add_middleware(LocalAccessMiddleware)
 
 _CACHED_WORKSPACE_PATH: str | None = None
 _CACHED_WORKSPACE: dict[str, object] | None = None
+_BASIC_USERNAME = "private"
+_BASIC_CHALLENGE = 'Basic realm="Buffalo private research", charset="UTF-8"'
+
+
+def _private_review_auth_material():
+    config = runtime_config()
+    if config.mode != "PRIVATE_REAL_SOURCE_REVIEW":
+        raise PermissionError("private review authentication is unavailable")
+    try:
+        secret = _read_secret(config)
+    except OSError as exc:
+        raise PermissionError("private review authentication is unavailable") from exc
+    return config, secret
+
+
+def _authorization_password(raw: bytes | None) -> bytes | None:
+    if raw is None:
+        return None
+    try:
+        scheme, encoded = raw.decode("ascii").split(" ", 1)
+        if scheme.lower() != "basic" or not encoded or encoded != encoded.strip():
+            return None
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (UnicodeDecodeError, UnicodeEncodeError, ValueError, binascii.Error):
+        return None
+    username, separator, password = decoded.partition(":")
+    if separator != ":" or username != _BASIC_USERNAME or "\x00" in password:
+        return None
+    return password.encode("utf-8")
+
+
+class PrivateResearchBasicAccessMiddleware:
+    """Exact-loopback Basic protection space for only this private viewer."""
+
+    def __init__(self, application):
+        self.application = application
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.application(scope, receive, send)
+            return
+        config = runtime_config()
+        method = str(scope.get("method", "")).upper()
+        path = str(scope.get("path", ""))
+        raw_headers = [
+            (key.lower(), value) for key, value in scope.get("headers", ())
+        ]
+        if any(
+            sum(1 for key, _ in raw_headers if key == protected) != 1
+            for protected in (b"host",)
+        ) or any(
+            sum(1 for key, _ in raw_headers if key == protected) > 1
+            for protected in (b"authorization", b"origin", b"cookie")
+        ):
+            await self._response(send, 403, b"Duplicate security header refused")
+            return
+        headers = dict(raw_headers)
+        host = headers.get(b"host", b"").decode("latin-1")
+        forwarded = any(
+            key == b"forwarded" or key.startswith(b"x-forwarded-")
+            for key, _ in raw_headers
+        )
+        client_host = str((scope.get("client") or ("", 0))[0])
+        allowed_client = client_host in {"127.0.0.1", "::1"}
+        if forwarded or host != f"127.0.0.1:{config.port}" or not allowed_client:
+            await self._response(send, 403, b"Exact loopback origin required")
+            return
+        if method not in {"GET", "HEAD", "OPTIONS"}:
+            origin = headers.get(b"origin", b"").decode("latin-1")
+            if origin != config.origin:
+                await self._response(send, 403, b"Exact same-origin request required")
+                return
+            await self._response(send, 403, b"Route is not authorized")
+            return
+        if path != "/health":
+            try:
+                current_config, expected = _private_review_auth_material()
+            except PermissionError:
+                await self._response(
+                    send, 503, b"Private review authentication is unavailable"
+                )
+                return
+            supplied = _authorization_password(headers.get(b"authorization"))
+            if (
+                current_config.origin != config.origin
+                or supplied is None
+                or not hmac.compare_digest(supplied, expected)
+            ):
+                await self._response(
+                    send,
+                    401,
+                    b"Private review authentication failed",
+                    challenge=True,
+                )
+                return
+
+        async def protected_send(message):
+            if message.get("type") == "http.response.start":
+                protected_names = {
+                    b"cache-control",
+                    b"pragma",
+                    b"x-content-type-options",
+                    b"referrer-policy",
+                    b"content-security-policy",
+                }
+                response_headers = [
+                    (key, value)
+                    for key, value in message.get("headers", ())
+                    if key.lower() not in protected_names
+                ]
+                response_headers.extend(self._security_headers())
+                message["headers"] = response_headers
+            await send(message)
+
+        await self.application(scope, receive, protected_send)
+
+    @staticmethod
+    def _security_headers():
+        return (
+            (b"cache-control", b"no-store"),
+            (b"pragma", b"no-cache"),
+            (b"x-content-type-options", b"nosniff"),
+            (b"referrer-policy", b"same-origin"),
+            (
+                b"content-security-policy",
+                b"default-src 'self'; script-src 'self'; "
+                b"style-src 'self' 'unsafe-inline'; object-src 'none'; "
+                b"frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            ),
+        )
+
+    async def _response(
+        self, send, status: int, body: bytes, *, challenge: bool = False
+    ) -> None:
+        headers = dict(self._security_headers())
+        if challenge:
+            headers[b"www-authenticate"] = _BASIC_CHALLENGE.encode("ascii")
+        response = Response(
+            body,
+            status_code=status,
+            media_type="text/plain",
+            headers={
+                key.decode("ascii"): value.decode("ascii")
+                for key, value in headers.items()
+            },
+        )
+        await response({"type": "http"}, None, send)
+
+
+app.add_middleware(PrivateResearchBasicAccessMiddleware)
 
 
 def _workspace() -> dict[str, object]:
@@ -65,11 +214,21 @@ def validate_workspace_at_startup() -> None:
     _workspace()
 
 
+def _private_review_config():
+    """Return usable private-review auth config without exposing secret data."""
+
+    try:
+        config, _ = _private_review_auth_material()
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=503, detail="Private review authentication is unavailable"
+        ) from exc
+    return config
+
+
 @app.get("/health")
 def health() -> dict[str, object]:
-    configured = runtime_config().mode == "PRIVATE_REAL_SOURCE_REVIEW"
-    if not configured:
-        raise HTTPException(status_code=503, detail="Private review mode is unavailable")
+    config = _private_review_config()
     workspace = _workspace()
     manifest = workspace.get("manifest")
     if not isinstance(manifest, dict):
@@ -77,56 +236,15 @@ def health() -> dict[str, object]:
     return {
         "ok": True,
         "service": "buffalo-private-research-review",
-        "mode": runtime_config().mode,
+        "mode": config.mode,
         "operational_authority": False,
     }
 
 
-@app.get("/auth/login", response_class=HTMLResponse)
-def login_page() -> HTMLResponse:
-    config = runtime_config()
-    available = config.mode == "PRIVATE_REAL_SOURCE_REVIEW"
-    form = (
-        "<form method='post'><label>Private local access secret "
-        "<input type='password' name='secret' autocomplete='current-password' required>"
-        "</label><button type='submit'>Sign in</button></form>"
-        if available
-        else "<p>Private review authentication is unavailable.</p>"
-    )
-    return HTMLResponse(
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<title>Buffalo private research sign in</title></head><body>"
-        "<h1>Buffalo private research — local sign in</h1>"
-        f"<p>Mode: {html.escape(config.mode)}</p>{form}</body></html>"
-    )
-
-
-@app.post("/auth/login")
-def login(secret: str = Form(...)) -> RedirectResponse:
-    if runtime_config().mode != "PRIVATE_REAL_SOURCE_REVIEW":
-        raise HTTPException(status_code=503, detail="Private review mode is unavailable")
-    try:
-        token, _ = create_local_session(secret)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="Local sign-in failed") from exc
-    response = RedirectResponse(url="/private-research", status_code=303)
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        max_age=8 * 60 * 60,
-        httponly=True,
-        samesite="strict",
-        path="/",
-    )
-    return response
-
-
-@app.post("/auth/logout")
-def logout(request: Request) -> RedirectResponse:
-    destroy_local_session(request.cookies.get(SESSION_COOKIE))
-    response = RedirectResponse(url="/auth/login", status_code=303)
-    response.delete_cookie(SESSION_COOKIE, path="/")
-    return response
+@app.get("/auth/login")
+def login_page() -> RedirectResponse:
+    _private_review_config()
+    return RedirectResponse(url="/private-research", status_code=303)
 
 
 @app.get("/")
@@ -285,7 +403,7 @@ def private_research_index(
         f"<p>Showing {len(selected)} of {len(rows)} matched rows · page {page} of {total_pages}.</p>"
         + "".join(cards)
         + f"<nav>{' · '.join(navigation)}</nav>"
-        "<form method='post' action='/auth/logout'><button type='submit'>Sign out</button></form>"
+        "<p>Quit the private browser process when finished to clear its local HTTP Basic credential cache.</p>"
         "</body></html>"
     )
 

@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import ast
+import base64
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -29,6 +32,7 @@ class PrivateResearchAppTests(unittest.TestCase):
         secret = root / "viewer.secret"
         secret.write_text(SECRET + "\n", encoding="utf-8")
         secret.chmod(0o600)
+        self.secret_path = secret
         self.environment = mock.patch.dict(
             os.environ,
             {
@@ -111,17 +115,43 @@ class PrivateResearchAppTests(unittest.TestCase):
         return client
 
     def _login(self, client: TestClient) -> None:
-        response = client.post(
-            "/auth/login",
-            data={"secret": SECRET},
-            headers={"Origin": ORIGIN},
-            follow_redirects=False,
+        client.headers["Authorization"] = self._authorization(SECRET)
+
+    def _authorization(self, secret: str) -> str:
+        credential = base64.b64encode(
+            f"private:{secret}".encode("utf-8")
+        ).decode("ascii")
+        return f"Basic {credential}"
+
+    def test_basic_protection_space_rejects_ambient_cookie_and_wrong_port(self):
+        client = self._client()
+        token, _ = local_access.create_local_session(SECRET)
+        client.cookies.set(local_access.SESSION_COOKIE, token)
+        cookie_only = client.get("/private-research")
+        self.assertEqual(cookie_only.status_code, 401)
+        self.assertIn("Basic", cookie_only.headers["www-authenticate"])
+
+        authorized = client.get(
+            "/private-research",
+            headers={"Authorization": self._authorization(SECRET)},
         )
-        self.assertEqual(response.status_code, 303)
+        self.assertEqual(authorized.status_code, 200)
+        self.assertNotIn("set-cookie", authorized.headers)
+
+        wrong_port = client.get(
+            "/private-research",
+            headers={
+                "Authorization": self._authorization(SECRET),
+                "Host": "127.0.0.1:18877",
+            },
+        )
+        self.assertEqual(wrong_port.status_code, 403)
 
     def test_authenticated_view_and_exact_artifacts_are_read_only(self):
         client = self._client()
-        self.assertEqual(client.get("/private-research").status_code, 401)
+        challenge = client.get("/private-research")
+        self.assertEqual(challenge.status_code, 401)
+        self.assertIn("Basic", challenge.headers["www-authenticate"])
         self._login(client)
         page = client.get("/private-research")
         self.assertEqual(page.status_code, 200)
@@ -161,6 +191,60 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertNotEqual(response.json().get("ok"), True)
 
+    def _assert_server_secret_unavailable(self, client: TestClient) -> None:
+        responses = (
+            client.get("/health"),
+            client.get("/auth/login"),
+            client.get(
+                "/private-research",
+                headers={"Authorization": self._authorization(SECRET)},
+            ),
+        )
+        for response in responses:
+            with self.subTest(path=response.request.url.path):
+                self.assertEqual(response.status_code, 503)
+                self.assertIn(
+                    "Private review authentication is unavailable", response.text
+                )
+                self.assertNotIn(SECRET, response.text)
+                self.assertNotIn("sha256", response.text.lower())
+                self.assertIsNone(re.search(r"\b[0-9a-f]{64}\b", response.text))
+        self.assertEqual(self.read_workspace_mock.call_count, 0)
+
+    def test_health_and_auth_fail_closed_when_server_secret_is_missing(self):
+        client = self._client()
+        self.secret_path.unlink()
+        self._assert_server_secret_unavailable(client)
+
+    def test_health_and_auth_fail_closed_when_server_secret_is_invalid(self):
+        client = self._client()
+        self.secret_path.chmod(0o644)
+        self._assert_server_secret_unavailable(client)
+
+    def test_health_and_auth_normalize_server_secret_read_failure(self):
+        client = self._client()
+        with mock.patch.object(
+            private_research_app,
+            "_read_secret",
+            side_effect=OSError("simulated read race"),
+        ):
+            self._assert_server_secret_unavailable(client)
+
+    def test_wrong_supplied_secret_remains_forbidden_when_server_secret_is_valid(self):
+        client = self._client()
+        response = client.get(
+            "/private-research",
+            headers={
+                "Authorization": self._authorization(
+                    "wrong-private-research-secret"
+                )
+            },
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Basic", response.headers["www-authenticate"])
+        self.assertNotIn(SECRET, response.text)
+        self.assertNotEqual(response.status_code, 503)
+
     def test_viewer_composition_has_no_operational_service_imports(self):
         source = Path(private_research_app.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -189,9 +273,16 @@ class PrivateResearchAppTests(unittest.TestCase):
                 sys.executable,
                 "-c",
                 (
-                    "import sys; import procurement_os.private_research_app; "
-                    "print(int('procurement_os.persistent_mapping' in sys.modules), "
-                    "int('psycopg' in sys.modules))"
+                    "import json, sys; import procurement_os.private_research_app; "
+                    "forbidden={'procurement_os.api','procurement_os.draft_po',"
+                    "'procurement_os.emergency_packet','procurement_os.monday_run',"
+                    "'procurement_os.persistent_mapping','procurement_os.po_csv',"
+                    "'procurement_os.price_book','procurement_os.procurement_review',"
+                    "'procurement_os.recommendations','procurement_os.synthetic_price_replacement',"
+                    "'psycopg'}; "
+                    "print(json.dumps({'forbidden': sorted(forbidden & set(sys.modules)), "
+                    "'contract_loaded': 'procurement_os.price_book_contract' in sys.modules}, "
+                    "sort_keys=True))"
                 ),
             ],
             cwd=Path(private_research_app.__file__).resolve().parents[3],
@@ -201,7 +292,11 @@ class PrivateResearchAppTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             check=True,
         )
-        self.assertEqual(result.stdout.strip(), "0 0", result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {"contract_loaded": True, "forbidden": []},
+            result.stderr,
+        )
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from typing import Any, BinaryIO, Callable, Iterator, Mapping, Sequence
 import unicodedata
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
-from .price_book import PRICE_BOOK_HEADERS
+from .price_book_contract import PRICE_BOOK_HEADERS
 
 
 REVIEW_LABEL = "REVIEW ONLY / NOT_IMPORT_READY"

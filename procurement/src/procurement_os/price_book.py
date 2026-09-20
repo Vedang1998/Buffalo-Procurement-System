@@ -17,6 +17,7 @@ import re
 from typing import Any
 
 from .config import load_rules
+from .price_book_contract import PRICE_BOOK_HEADERS
 from .storage import StorageAdapter
 
 
@@ -25,35 +26,6 @@ class PriceBookError(ValueError):
 
 
 MAX_PRICE_BOOK_BYTES = 5_000_000
-PRICE_BOOK_HEADERS = (
-    "batch_ref",
-    "target_price_state",
-    "effective_from",
-    "effective_through",
-    "vendor_name",
-    "supplier_sku",
-    "supplier_description",
-    "canonical_variant_id",
-    "package_type",
-    "size_text",
-    "raw_pack",
-    "shopify_units_per_case",
-    "qualifying_units_per_case",
-    "assortment_scope",
-    "assortment_group",
-    "assortable",
-    "assortment_evidence",
-    "level_type",
-    "break_quantity",
-    "break_unit",
-    "case_price",
-    "unit_price",
-    "source_file",
-    "source_page",
-    "source_evidence",
-    "extraction_confidence",
-    "review_note",
-)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _LOCK_ID = 71_140_004
 _MAX_QUANTITY = Decimal("99999999.9999")  # NUMERIC(12,4)

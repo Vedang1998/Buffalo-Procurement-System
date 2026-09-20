@@ -15,7 +15,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .price_book import PRICE_BOOK_HEADERS
+from .price_book_contract import PRICE_BOOK_HEADERS
 from .supplier_review_package import (
     CANONICAL_JSONL_HASH,
     RAW_HASH,

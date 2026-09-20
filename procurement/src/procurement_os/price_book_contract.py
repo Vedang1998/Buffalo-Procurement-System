@@ -1,0 +1,37 @@
+"""Dependency-free normalized price-book field contract.
+
+Review-only readers share these field names with the operational price-book
+service, but importing the contract must not compose that service or storage.
+"""
+from __future__ import annotations
+
+
+PRICE_BOOK_HEADERS = (
+    "batch_ref",
+    "target_price_state",
+    "effective_from",
+    "effective_through",
+    "vendor_name",
+    "supplier_sku",
+    "supplier_description",
+    "canonical_variant_id",
+    "package_type",
+    "size_text",
+    "raw_pack",
+    "shopify_units_per_case",
+    "qualifying_units_per_case",
+    "assortment_scope",
+    "assortment_group",
+    "assortable",
+    "assortment_evidence",
+    "level_type",
+    "break_quantity",
+    "break_unit",
+    "case_price",
+    "unit_price",
+    "source_file",
+    "source_page",
+    "source_evidence",
+    "extraction_confidence",
+    "review_note",
+)
