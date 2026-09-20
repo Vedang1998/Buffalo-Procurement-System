@@ -32,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--daily-sales-manifest", type=Path, required=True)
     parser.add_argument("--a1-package", type=Path, required=True)
     parser.add_argument("--a1-external-evidence-root", type=Path)
+    parser.add_argument("--catalog-manifest-sha256")
+    parser.add_argument("--daily-sales-manifest-sha256")
     args = parser.parse_args(argv)
 
     try:
@@ -41,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
             daily_sales_manifest_path=args.daily_sales_manifest,
             a1_package_path=args.a1_package,
             a1_external_evidence_root=args.a1_external_evidence_root,
+            expected_catalog_manifest_sha256=args.catalog_manifest_sha256,
+            expected_daily_sales_manifest_sha256=args.daily_sales_manifest_sha256,
         )
     except (PrivateResearchIntakeError, OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

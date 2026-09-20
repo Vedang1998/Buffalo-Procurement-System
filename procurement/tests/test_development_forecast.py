@@ -3,6 +3,7 @@
 import copy
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+import json
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from procurement_os.development_forecast import (
     V2_CONTRACT,
     _classify_confidence,
     _predict,
+    _validate_v2_development_need_sources,
     assign_gp_dollar_abc,
     build_development_baseline_need_binding,
     calculate_anchored_schedule_horizon,
@@ -933,9 +935,25 @@ class DevelopmentForecastTests(unittest.TestCase):
             ],
             "available_units": Decimal("0"),
             "trusted_incoming_units": Decimal("0"),
-            "inventory_capture": ["capture"],
+            "inventory_capture": [
+                "00000000-0000-4000-8000-000000000099",
+                date(2026, 10, 5),
+                datetime(2026, 10, 5, 12, tzinfo=timezone.utc),
+                "SYNTHETIC_DEMO",
+                "a" * 64,
+                1,
+                1,
+                0,
+                0,
+            ],
             "inventory_rows": [
-                ["location", Decimal("0"), Decimal("0"), "VALID", "capture"]
+                [
+                    "location",
+                    Decimal("0"),
+                    Decimal("0"),
+                    "VALID",
+                    "00000000-0000-4000-8000-000000000099",
+                ]
             ],
             "open_po_position": {
                 "variant_id": "1001",
@@ -1079,7 +1097,201 @@ class DevelopmentForecastTests(unittest.TestCase):
                 build_development_baseline_need_binding(changed, changed_need)
             )
 
+        source_bound = copy.deepcopy(context)
+        source_bound["trusted_incoming_units"] = Decimal("6")
+        source_bound["inventory_rows"][0][2] = Decimal("6")
+        source_bound["open_po_position"] = {
+            "variant_id": "1001",
+            "vendor_id": "00000000-0000-4000-8000-000000000001",
+            "trusted_incoming_units": Decimal("6"),
+            "open_line_count": 2,
+            "blocks_reorder": True,
+            "trusted_sources": [
+                {
+                    "po_line_id": 10,
+                    "source_vendor_id": "00000000-0000-4000-8000-000000000001",
+                    "open_units": Decimal("6"),
+                    "expected_receipt_at": datetime(
+                        2026, 10, 6, 14, tzinfo=timezone.utc
+                    ),
+                    "reconciliation_status": "OPEN",
+                    "line_status": "ORDERED",
+                    "shopify_import_status": "IMPORTED",
+                    "last_reconciled_at": datetime(
+                        2026, 10, 5, 13, tzinfo=timezone.utc
+                    ),
+                    "last_reconciled_by": "synthetic:owner",
+                    "reconciliation_evidence": {
+                        "source": "FABRICATED_ACCEPTANCE",
+                        "reference": "PO-LINE-10",
+                    },
+                }
+            ],
+            "blockers": [
+                {
+                    "po_line_id": 11,
+                    "source_vendor_id": "00000000-0000-4000-8000-000000000001",
+                    "reason": "OPEN_PO_RECEIPT_OR_BACKORDER_STATE_UNRESOLVED",
+                    "reconciliation_status": "AMBIGUOUS",
+                    "line_status": "ORDERED",
+                    "shopify_import_status": "IMPORTED",
+                    "expected_receipt_present": False,
+                    "expected_receipt_overdue": False,
+                    "direct_evidence_present": False,
+                    "last_reconciled_at": None,
+                    "last_reconciled_by": None,
+                    "reconciliation_evidence": None,
+                }
+            ],
+        }
+        source_bound["blockers"] = ["OPEN_PO_RECONCILIATION_BLOCKED"]
+        recalculate_and_rebind(source_bound)
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                source_bound, manifest_contract=V2_CONTRACT
+            )
+        )
+        persisted_source_bound = json.loads(
+            json.dumps(source_bound, default=str, allow_nan=False)
+        )
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                persisted_source_bound, manifest_contract=V2_CONTRACT
+            )
+        )
+        aggregate_location = copy.deepcopy(context)
+        aggregate_location["inventory_rows"][0][0] = ""
+        recalculate_and_rebind(aggregate_location)
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                aggregate_location, manifest_contract=V2_CONTRACT
+            )
+        )
+        self.assertTrue(
+            validate_development_baseline_need_context(
+                json.loads(json.dumps(aggregate_location, default=str)),
+                manifest_contract=V2_CONTRACT,
+            )
+        )
+
+        capture_substitution = copy.deepcopy(context)
+        capture_substitution["inventory_rows"][0][4] = (
+            "00000000-0000-4000-8000-000000000098"
+        )
+        recalculate_and_rebind(capture_substitution)
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                capture_substitution, manifest_contract=V2_CONTRACT
+            )
+        )
+        duplicate_location = copy.deepcopy(context)
+        duplicate_location["inventory_rows"].append(
+            [
+                "location",
+                Decimal("0"),
+                Decimal("0"),
+                "VALID",
+                "00000000-0000-4000-8000-000000000099",
+            ]
+        )
+        duplicate_location["inventory_capture"][5] = 2
+        duplicate_location["inventory_capture"][6] = 2
+        recalculate_and_rebind(duplicate_location)
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                duplicate_location, manifest_contract=V2_CONTRACT
+            )
+        )
+
+        fabricated_source = copy.deepcopy(context)
+        fabricated_source["trusted_incoming_units"] = Decimal("6")
+        fabricated_source["inventory_rows"][0][2] = Decimal("6")
+        fabricated_source["open_po_position"].update(
+            {
+                "trusted_incoming_units": Decimal("6"),
+                "open_line_count": 1,
+                "trusted_sources": [
+                    {
+                        "po_line_id": 999,
+                        "source_vendor_id": "fabricated",
+                        "open_units": Decimal("6"),
+                    }
+                ],
+            }
+        )
+        recalculate_and_rebind(fabricated_source)
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                fabricated_source, manifest_contract=V2_CONTRACT
+            )
+        )
+
+        demoted_blocker = copy.deepcopy(source_bound)
+        blocker = demoted_blocker["open_po_position"]["blockers"].pop()
+        demoted_blocker["open_po_position"]["trusted_sources"].append(
+            {
+                "po_line_id": blocker["po_line_id"],
+                "source_vendor_id": blocker["source_vendor_id"],
+                "open_units": Decimal("1"),
+                "expected_receipt_at": datetime(
+                    2026, 10, 6, 14, tzinfo=timezone.utc
+                ),
+                "reconciliation_status": "OPEN",
+                "line_status": "ORDERED",
+                "shopify_import_status": "IMPORTED",
+                "last_reconciled_at": datetime(
+                    2026, 10, 5, 13, tzinfo=timezone.utc
+                ),
+                "last_reconciled_by": "synthetic:owner",
+                "reconciliation_evidence": None,
+            }
+        )
+        demoted_blocker["open_po_position"]["trusted_incoming_units"] = Decimal(
+            "7"
+        )
+        demoted_blocker["trusted_incoming_units"] = Decimal("7")
+        demoted_blocker["inventory_rows"][0][2] = Decimal("7")
+        demoted_blocker["open_po_position"]["blocks_reorder"] = False
+        demoted_blocker["blockers"] = []
+        recalculate_and_rebind(demoted_blocker)
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                demoted_blocker, manifest_contract=V2_CONTRACT
+            )
+        )
+
         scalar_substitutions = []
+
+        copied_offer_pack = copy.deepcopy(context)
+        copied_offer_pack["units_per_case"] = 1
+        copied_offer_pack["qualifying_units_per_case"] = 1
+        copied_offer_pack["offer_evidence"]["shopify_units_per_case"] = Decimal(
+            "1"
+        )
+        copied_offer_pack["offer_evidence"]["qualifying_units_per_case"] = (
+            Decimal("1")
+        )
+        recalculate_and_rebind(copied_offer_pack)
+        self.assertFalse(
+            validate_development_baseline_need_context(
+                copied_offer_pack, manifest_contract=V2_CONTRACT
+            )
+        )
+
+        copied_vendor_terms = copy.deepcopy(context)
+        copied_vendor_terms["vendor_rules"] = copy.deepcopy(context["vendor_rules"])
+        copied_vendor_terms["vendor_rules"][2] = 7
+        copied_vendor_terms["development_forecast_evidence"][
+            "protection_calendar"
+        ]["vendor_rules_projection"]["order_cycle_days"] = 7
+        self.assertFalse(
+            _validate_v2_development_need_sources(
+                copied_vendor_terms,
+                evidence=copied_vendor_terms["development_forecast_evidence"],
+                vendor=copied_vendor_terms["vendor_rules"],
+                position=copied_vendor_terms["open_po_position"],
+            )
+        )
 
         changed = copy.deepcopy(context)
         changed["units_per_case"] = True

@@ -655,12 +655,52 @@ class PrivateResearchIntakeTests(unittest.TestCase):
         )
 
     def _build_native(self) -> dict[str, object]:
+        catalog_manifest = self.root / "native-catalog" / "manifest.json"
+        sales_manifest = self.root / "native-sales" / "manifest.json"
         return build_private_research_intake(
             self.root,
             catalog_manifest_path="native-catalog/manifest.json",
             daily_sales_manifest_path="native-sales/manifest.json",
             a1_package_path="a1",
+            expected_catalog_manifest_sha256=hashlib.sha256(
+                catalog_manifest.read_bytes()
+            ).hexdigest(),
+            expected_daily_sales_manifest_sha256=hashlib.sha256(
+                sales_manifest.read_bytes()
+            ).hexdigest(),
         )
+
+    def test_native_capture_requires_caller_pinned_manifest_identities(self):
+        self._write_native_captures()
+        catalog_manifest = self.root / "native-catalog" / "manifest.json"
+        sales_manifest = self.root / "native-sales" / "manifest.json"
+        catalog_sha = hashlib.sha256(catalog_manifest.read_bytes()).hexdigest()
+        sales_sha = hashlib.sha256(sales_manifest.read_bytes()).hexdigest()
+        with self.assertRaisesRegex(
+            PrivateResearchIntakeError, "CAPTURE_AUTHORIZATION_MISMATCH"
+        ):
+            build_private_research_intake(
+                self.root,
+                catalog_manifest_path="native-catalog/manifest.json",
+                daily_sales_manifest_path="native-sales/manifest.json",
+                a1_package_path="a1",
+            )
+        changed = json.loads(catalog_manifest.read_text())
+        changed["capture_timing_note"] = (
+            str(changed["capture_timing_note"]) + " self-consistent filtered retry"
+        )
+        catalog_manifest.write_text(json.dumps(changed, indent=2) + "\n")
+        with self.assertRaisesRegex(
+            PrivateResearchIntakeError, "CAPTURE_AUTHORIZATION_MISMATCH"
+        ):
+            build_private_research_intake(
+                self.root,
+                catalog_manifest_path="native-catalog/manifest.json",
+                daily_sales_manifest_path="native-sales/manifest.json",
+                a1_package_path="a1",
+                expected_catalog_manifest_sha256=catalog_sha,
+                expected_daily_sales_manifest_sha256=sales_sha,
+            )
 
     def test_builds_current_catalog_only_intake_and_exact_readback(self):
         intake = self._build()
@@ -1117,8 +1157,18 @@ class PrivateResearchIntakeTests(unittest.TestCase):
         (self.root / "input" / "sales-manifest.json").write_bytes(
             canonical_json_bytes(manifest)
         )
+        catalog_rows = [dict(row) for row in self.catalog_rows]
+        catalog_rows[1]["product_status"] = "ARCHIVED"
+        self._write_catalog(catalog_rows)
         intake = self._build()
         self.assertTrue(intake["coverage"]["abc_cohort"]["coverage_complete"])
+        self.assertEqual(
+            intake["coverage"]["abc_cohort"]["eligible_variant_ids"], ["1001"]
+        )
+        self.assertEqual(
+            intake["coverage"]["abc_cohort"]["excluded_variants"],
+            [{"variant_id": "1002", "reason_code": "PRODUCT_STATUS_ARCHIVED"}],
+        )
         variants = {row["shopify_variant_id"]: row for row in intake["variants"]}
         self.assertEqual(variants["1001"]["historical_revenue"], "1260")
         self.assertEqual(variants["1001"]["historical_cogs"], "588")
@@ -1127,6 +1177,28 @@ class PrivateResearchIntakeTests(unittest.TestCase):
         # never substituted for historical COGS.
         self.assertEqual(variants["1002"]["historical_cogs"], "0")
         self.assertEqual(variants["1002"]["current_inventory_item_cost"], "8.00")
+        from procurement_os.private_research_projection import (
+            CALCULATED_RESEARCH_ONLY,
+            REAL_NUMERICAL_EVALUATION_NOT_RUN,
+            build_private_research_projection,
+        )
+
+        projection = build_private_research_projection(intake)
+        self.assertEqual(
+            projection["abc_evaluation"]["status"], CALCULATED_RESEARCH_ONLY
+        )
+        members = {
+            row["shopify_variant_id"]: row for row in projection["coverage_rows"]
+        }
+        self.assertEqual(members["1001"]["abc_status"], CALCULATED_RESEARCH_ONLY)
+        self.assertEqual(
+            members["1002"]["abc_status"],
+            REAL_NUMERICAL_EVALUATION_NOT_RUN,
+        )
+        self.assertIn(
+            "ABC_COHORT_EXCLUDED:PRODUCT_STATUS_ARCHIVED",
+            members["1002"]["missing_data_reasons"],
+        )
 
 
 if __name__ == "__main__":

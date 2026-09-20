@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .forecasting import (
@@ -24,6 +25,7 @@ from .forecasting import (
     canonical_evidence_json,
     canonical_evidence_sha256,
 )
+from .incoming_evidence import trusted_incoming_state
 from .replenishment import BaselineNeed, calculate_development_baseline_need
 
 
@@ -3804,6 +3806,29 @@ def _validate_v2_development_need_sources(
             raise DevelopmentForecastError(f"{field} has the wrong type")
         return value
 
+    def aware_datetime(value: Any, field: str) -> datetime:
+        try:
+            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+        except (TypeError, ValueError) as exc:
+            raise DevelopmentForecastError(f"{field} has the wrong type") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise DevelopmentForecastError(f"{field} must be timezone-aware")
+        return parsed
+
+    def optional_aware_datetime(value: Any, field: str) -> datetime | None:
+        return None if value is None else aware_datetime(value, field)
+
+    def nonblank(value: Any) -> bool:
+        return isinstance(value, str) and bool(value.strip())
+
+    def canonical_uuid(value: Any) -> bool:
+        if not nonblank(value):
+            return False
+        try:
+            return str(UUID(value)) == value
+        except (ValueError, AttributeError):
+            return False
+
     units_per_case = strict_positive_int(
         context.get("units_per_case"), "units_per_case"
     )
@@ -3862,17 +3887,52 @@ def _validate_v2_development_need_sources(
     inventory_rows = context.get("inventory_rows")
     if not isinstance(inventory_rows, (list, tuple)) or not inventory_rows:
         return False
+    calendar = evidence.get("protection_calendar")
+    capture = context.get("inventory_capture")
+    if not isinstance(calendar, dict) or not isinstance(capture, (list, tuple)):
+        return False
+    if len(capture) != 9 or not canonical_uuid(capture[0]):
+        return False
+    try:
+        capture_date = (
+            capture[1] if isinstance(capture[1], date) else date.fromisoformat(str(capture[1]))
+        )
+        evaluated_at = aware_datetime(calendar.get("evaluation_at"), "evaluation_at")
+        captured_at = aware_datetime(capture[2], "inventory captured_at")
+        business_date = date.fromisoformat(str(calendar.get("business_date")))
+    except (DevelopmentForecastError, TypeError, ValueError):
+        return False
+    source_hash = capture[4]
+    count_values = capture[5:9]
+    if (
+        capture_date != business_date
+        or captured_at > evaluated_at
+        or not nonblank(capture[3])
+        or not isinstance(source_hash, str)
+        or len(source_hash) != _SHA256_LENGTH
+        or any(character not in "0123456789abcdef" for character in source_hash)
+        or any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in count_values)
+        or capture[5] < capture[6]
+        or capture[6] < len(inventory_rows)
+        or capture[7] != 0
+        or capture[8] != 0
+    ):
+        return False
     inventory_available = Decimal("0")
     inventory_incoming = Decimal("0")
+    location_ids: set[str] = set()
     for row in inventory_rows:
         if (
             not isinstance(row, (list, tuple))
-            or len(row) < 5
+            or len(row) != 5
             or row[3] != "VALID"
             or not isinstance(row[0], str)
-            or not row[0]
+            or row[0] != row[0].strip()
+            or row[0] in location_ids
+            or row[4] != capture[0]
         ):
             return False
+        location_ids.add(row[0])
         inventory_available += strict_decimal(row[1], "inventory available")
         inventory_incoming += strict_decimal(row[2], "inventory incoming")
     if inventory_available != available:
@@ -3881,6 +3941,8 @@ def _validate_v2_development_need_sources(
     if (
         position.get("variant_id") != context.get("variant_id")
         or position.get("vendor_id") != context.get("vendor_id")
+        or not canonical_uuid(context.get("vendor_id"))
+        or not canonical_uuid(position.get("vendor_id"))
         or not isinstance(position.get("blocks_reorder"), bool)
         or isinstance(position.get("open_line_count"), bool)
         or not isinstance(position.get("open_line_count"), int)
@@ -3899,14 +3961,26 @@ def _validate_v2_development_need_sources(
         return False
     trusted_source_units = Decimal("0")
     line_ids: set[int] = set()
+    trusted_source_keys = {
+        "po_line_id",
+        "source_vendor_id",
+        "open_units",
+        "expected_receipt_at",
+        "reconciliation_status",
+        "line_status",
+        "shopify_import_status",
+        "last_reconciled_at",
+        "last_reconciled_by",
+        "reconciliation_evidence",
+    }
     for source in position["trusted_sources"]:
         if (
             not isinstance(source, dict)
+            or set(source) != trusted_source_keys
             or isinstance(source.get("po_line_id"), bool)
             or not isinstance(source.get("po_line_id"), int)
             or source["po_line_id"] < 1
-            or not isinstance(source.get("source_vendor_id"), str)
-            or not source["source_vendor_id"]
+            or not canonical_uuid(source.get("source_vendor_id"))
         ):
             return False
         open_units = strict_decimal(
@@ -3914,17 +3988,88 @@ def _validate_v2_development_need_sources(
         )
         if open_units <= 0 or source["po_line_id"] in line_ids:
             return False
+        try:
+            expected_receipt = aware_datetime(
+                source.get("expected_receipt_at"), "trusted source expected receipt"
+            )
+            reconciled_at = aware_datetime(
+                source.get("last_reconciled_at"), "trusted source reconciled_at"
+            )
+        except DevelopmentForecastError:
+            return False
+        if not trusted_incoming_state(
+            reconciliation=source.get("reconciliation_status"),
+            line_status=source.get("line_status"),
+            import_status=source.get("shopify_import_status"),
+            expected_receipt_at=expected_receipt,
+            evaluated_at=evaluated_at,
+            reconciled_at=reconciled_at,
+            reconciled_by=source.get("last_reconciled_by"),
+            evidence=source.get("reconciliation_evidence"),
+        ):
+            return False
         line_ids.add(source["po_line_id"])
         trusted_source_units += open_units
+    blocker_keys = {
+        "po_line_id",
+        "source_vendor_id",
+        "reason",
+        "reconciliation_status",
+        "line_status",
+        "shopify_import_status",
+        "expected_receipt_present",
+        "expected_receipt_overdue",
+        "direct_evidence_present",
+        "last_reconciled_at",
+        "last_reconciled_by",
+        "reconciliation_evidence",
+    }
     for item in position["blockers"]:
         if (
             not isinstance(item, dict)
+            or set(item) != blocker_keys
             or isinstance(item.get("po_line_id"), bool)
             or not isinstance(item.get("po_line_id"), int)
             or item["po_line_id"] <= 0
             or item["po_line_id"] in line_ids
-            or not isinstance(item.get("reason"), str)
-            or not item["reason"]
+            or not canonical_uuid(item.get("source_vendor_id"))
+            or item.get("reason") != "OPEN_PO_RECEIPT_OR_BACKORDER_STATE_UNRESOLVED"
+            or not isinstance(item.get("expected_receipt_present"), bool)
+            or not isinstance(item.get("expected_receipt_overdue"), bool)
+            or not isinstance(item.get("direct_evidence_present"), bool)
+            or (item["expected_receipt_overdue"] and not item["expected_receipt_present"])
+        ):
+            return False
+        try:
+            reconciled_at = optional_aware_datetime(
+                item.get("last_reconciled_at"), "blocker reconciled_at"
+            )
+        except DevelopmentForecastError:
+            return False
+        reconciled_by = item.get("last_reconciled_by")
+        reconciliation_evidence = item.get("reconciliation_evidence")
+        direct_evidence = (
+            isinstance(reconciliation_evidence, dict)
+            and bool(reconciliation_evidence)
+            and reconciled_at is not None
+            and nonblank(reconciled_by)
+        )
+        if item["direct_evidence_present"] != direct_evidence:
+            return False
+        expected_receipt = None
+        if item["expected_receipt_present"]:
+            expected_receipt = evaluated_at + timedelta(days=1)
+            if item["expected_receipt_overdue"]:
+                expected_receipt = evaluated_at - timedelta(microseconds=1)
+        if trusted_incoming_state(
+            reconciliation=item.get("reconciliation_status"),
+            line_status=item.get("line_status"),
+            import_status=item.get("shopify_import_status"),
+            expected_receipt_at=expected_receipt,
+            evaluated_at=evaluated_at,
+            reconciled_at=reconciled_at,
+            reconciled_by=reconciled_by,
+            evidence=reconciliation_evidence,
         ):
             return False
         line_ids.add(item["po_line_id"])
@@ -3979,9 +4124,6 @@ def _validate_v2_development_need_sources(
             )
         )
     ):
-        return False
-    calendar = evidence.get("protection_calendar")
-    if not isinstance(calendar, dict):
         return False
     selected_terms = selected_input.get("applicable_vendor_terms")
     if (

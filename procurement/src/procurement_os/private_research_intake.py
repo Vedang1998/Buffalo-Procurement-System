@@ -54,6 +54,7 @@ SHOPIFY_CAPTURE_AUTHORITY = "PRIVATE_REAL_SOURCE_REVIEW_ONLY"
 SHOPIFY_CAPTURE_APPROVAL_STATE = "PROPOSED_UNAPPROVED_REVIEW_ONLY"
 SHOPIFY_CAPTURE_ADAPTER = "BUFFALO_PRIVATE_SHOPIFY_CAPTURE_ADAPTER_V1"
 PRIVATE_RESEARCH_INTAKE_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_INTAKE_V1"
+ABC_COHORT_EVIDENCE_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_ABC_COHORT_EVIDENCE_V1"
 PRIVATE_REAL_SOURCE_REVIEW = "PRIVATE_REAL_SOURCE_REVIEW"
 SOURCE_AUTHORITY = {
     "status": "REVIEW_ONLY",
@@ -388,6 +389,20 @@ def canonical_json_bytes(value: Any) -> bytes:
         ).encode("utf-8")
         + b"\n"
     )
+
+
+def _projection_evidence_sha256(value: Any) -> str:
+    """Hash projection evidence with its newline-free, ASCII JSON contract."""
+
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _duplicate_rejecting_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -2840,13 +2855,40 @@ def _assemble_intake(
     lookback_start = lookback_dates[0].isoformat() if lookback_dates else None
     lookback_end = lookback_dates[-1].isoformat() if lookback_dates else None
     abc_coverage_complete = cogs_complete and sales_capture is None
+    catalog_variant_ids = sorted(current_ids)
+    eligible_variant_ids = sorted(active_ids) if abc_coverage_complete else []
+    excluded_variants = (
+        [
+            {
+                "variant_id": variant_id,
+                "reason_code": (
+                    "PRODUCT_STATUS_"
+                    + str(catalog_by_id[variant_id]["product_status"]).upper()
+                ),
+            }
+            for variant_id in sorted(current_ids - active_ids)
+        ]
+        if abc_coverage_complete
+        else []
+    )
+    variants_by_id = {
+        str(item["shopify_variant_id"]): item for item in variants
+    }
+    abc_historical_rows = [
+        {
+            "variant_id": variant_id,
+            "historical_revenue": str(
+                variants_by_id[variant_id]["historical_revenue"]
+            ),
+            "historical_cogs": str(variants_by_id[variant_id]["historical_cogs"]),
+        }
+        for variant_id in eligible_variant_ids
+    ]
     if abc_coverage_complete:
         abc_scope = hashlib.sha256(
             canonical_json_bytes(
                 {
-                    "eligible_shopify_variant_ids": sorted(
-                        active_ids, key=lambda item: (len(item), item)
-                    ),
+                    "eligible_shopify_variant_ids": eligible_variant_ids,
                     "lookback_start": lookback_start,
                     "lookback_end": lookback_end,
                     "classification_period_days": _ABC_DAYS,
@@ -2910,6 +2952,7 @@ def _assemble_intake(
             len(current_ids - {row["shopify_variant_id"] for row in sales.rows}),
         ),
         "abc_cohort": {
+            "contract": ABC_COHORT_EVIDENCE_CONTRACT,
             "coverage_complete": abc_coverage_complete,
             "scope_id": abc_scope,
             "lookback_start": lookback_start,
@@ -2917,6 +2960,20 @@ def _assemble_intake(
             "classification_period_days": _ABC_DAYS,
             "eligible_variant_count": len(active_ids),
             "excluded_variant_count": len(current_ids - active_ids),
+            "eligible_variant_ids": eligible_variant_ids,
+            "eligible_variant_ids_sha256": _projection_evidence_sha256(
+                eligible_variant_ids
+            ),
+            "excluded_variants": excluded_variants,
+            "excluded_variants_sha256": _projection_evidence_sha256(
+                excluded_variants
+            ),
+            "catalog_variant_ids_sha256": _projection_evidence_sha256(
+                catalog_variant_ids
+            ),
+            "historical_evidence_sha256": _projection_evidence_sha256(
+                abc_historical_rows
+            ),
             "basis": (
                 "HISTORICAL_REVENUE_AND_HISTORICAL_COGS_ONLY"
                 if sales_capture is None
@@ -3297,6 +3354,8 @@ def build_private_research_intake(
     daily_sales_manifest_path: str | Path,
     a1_package_path: str | Path,
     a1_external_evidence_root: str | Path | None = None,
+    expected_catalog_manifest_sha256: str | None = None,
+    expected_daily_sales_manifest_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Validate, immutably publish, and read back one private research intake."""
 
@@ -3310,6 +3369,36 @@ def build_private_research_intake(
         kind="daily-sales",
         current_variant_ids={row["shopify_variant_id"] for row in catalog.rows},
     )
+    expected_native_hashes = (
+        expected_catalog_manifest_sha256,
+        expected_daily_sales_manifest_sha256,
+    )
+    if (catalog_capture is None) != (sales_capture is None):
+        raise PrivateResearchIntakeError(
+            "MIXED_SOURCE_CONTRACTS",
+            "catalog and daily sales must both be native captures or both normalized",
+        )
+    if catalog_capture is None and sales_capture is None:
+        if any(value is not None for value in expected_native_hashes):
+            raise PrivateResearchIntakeError(
+                "SOURCE_CONTRACT_MISMATCH",
+                "native manifest authorization hashes were supplied for normalized inputs",
+            )
+    else:
+        for value, capture, label in (
+            (expected_catalog_manifest_sha256, catalog_capture, "catalog"),
+            (expected_daily_sales_manifest_sha256, sales_capture, "daily sales"),
+        ):
+            if (
+                not isinstance(value, str)
+                or not _SHA256.fullmatch(value)
+                or capture is None
+                or hashlib.sha256(capture.manifest_bytes).hexdigest() != value
+            ):
+                raise PrivateResearchIntakeError(
+                    "CAPTURE_AUTHORIZATION_MISMATCH",
+                    f"{label} native manifest differs from its caller-pinned identity",
+                )
     a1_key, a1_path = _private_entry(
         root, a1_package_path, context="A1 package", directory=True
     )
