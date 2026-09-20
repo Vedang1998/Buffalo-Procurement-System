@@ -902,6 +902,18 @@ def _hypothesis_fields(hypothesis: Mapping[str, Any]) -> dict[str, Any]:
         source_ref: Any = _sanitized_metadata(raw_source_ref)
     else:
         source_ref = _optional_text(raw_source_ref)
+    raw_mapping_evidence = hypothesis.get("mapping_evidence")
+    mapping_evidence = (
+        _sanitized_metadata(raw_mapping_evidence)
+        if isinstance(raw_mapping_evidence, Mapping)
+        else None
+    )
+    raw_mapping_confidence = hypothesis.get("mapping_confidence")
+    mapping_confidence = (
+        _sanitized_metadata(raw_mapping_confidence)
+        if raw_mapping_confidence is not None
+        else None
+    )
     return {
         "supplier_name": _optional_text(
             _first(hypothesis, "supplier_name", "vendor_name")
@@ -911,9 +923,18 @@ def _hypothesis_fields(hypothesis: Mapping[str, Any]) -> dict[str, Any]:
             _first(hypothesis, "supplier_description", "description")
         ),
         "source_ref": source_ref,
+        # A1 source occurrences are evidence records, not operational IDs.  The
+        # projection deliberately renames the value to a reference so the
+        # generic operational-ID scrubber cannot erase the distinction between
+        # otherwise identical printed supplier rows.
+        "source_occurrence_ref": _optional_text(
+            hypothesis.get("source_occurrence_id")
+        ),
         "source_hypothesis_label": _optional_text(
             _first(hypothesis, "hypothesis_label", "mapping_status", "confidence")
         ),
+        "unapproved_mapping_confidence": mapping_confidence,
+        "unapproved_mapping_evidence": mapping_evidence,
         "package_type": _optional_text(hypothesis.get("package_type")),
         "raw_pack": _json_value(hypothesis.get("raw_pack")),
         "shopify_sellable_units_per_case": _json_value(
@@ -949,6 +970,30 @@ def _hypothesis_fields(hypothesis: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _mapping_blocker_reason_codes(fields: Mapping[str, Any]) -> list[str]:
+    evidence = fields.get("unapproved_mapping_evidence")
+    if evidence is None:
+        return []
+    if not isinstance(evidence, Mapping):
+        return ["A1_MAPPING_EVIDENCE_MISSING_OR_INVALID"]
+    blockers = evidence.get("blockers")
+    if blockers is None:
+        return []
+    if not isinstance(blockers, Mapping):
+        return ["A1_MAPPING_BLOCKERS_MISSING_OR_INVALID"]
+    reasons: list[str] = []
+    for category, values in sorted(blockers.items()):
+        if not isinstance(category, str) or not isinstance(values, list):
+            reasons.append("A1_MAPPING_BLOCKERS_MISSING_OR_INVALID")
+            continue
+        for value in values:
+            if not isinstance(value, str) or not value.strip():
+                reasons.append("A1_MAPPING_BLOCKERS_MISSING_OR_INVALID")
+                continue
+            reasons.append(f"A1_MAPPING_BLOCKER:{category}:{value}")
+    return sorted(set(reasons))
+
+
 def _hypothesis_missing_reasons(fields: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
     if not fields["supplier_name"]:
@@ -972,6 +1017,7 @@ def _hypothesis_missing_reasons(fields: Mapping[str, Any]) -> list[str]:
         reasons.append("HYPOTHESIS_ALLOCATED_EXCLUSION_STATUS_MISSING")
     if fields["combo_excluded"] is None:
         reasons.append("HYPOTHESIS_COMBO_EXCLUSION_STATUS_MISSING")
+    reasons.extend(_mapping_blocker_reason_codes(fields))
     return sorted(reasons)
 
 
@@ -983,7 +1029,15 @@ def _public_hypothesis_fields(fields: Mapping[str, Any]) -> dict[str, Any]:
         "supplier_sku": fields["supplier_sku"],
         "supplier_description": fields["supplier_description"],
         "source_ref": fields["source_ref"],
+        "source_occurrence_ref": fields["source_occurrence_ref"],
         "source_hypothesis_label": fields["source_hypothesis_label"],
+        "unapproved_mapping_confidence": fields[
+            "unapproved_mapping_confidence"
+        ],
+        "unapproved_mapping_evidence": fields["unapproved_mapping_evidence"],
+        "unapproved_mapping_blocker_reasons": _mapping_blocker_reason_codes(
+            fields
+        ),
         "hypothesis_package_type": fields["package_type"],
         "hypothesis_raw_pack": fields["raw_pack"],
         "hypothesis_shopify_sellable_units_per_case": fields[
@@ -1010,6 +1064,7 @@ def _hypothesis_sort_key(hypothesis: Mapping[str, Any]) -> tuple[str, ...]:
     return (
         str(fields["supplier_name"] or ""),
         str(fields["supplier_sku"] or ""),
+        str(fields["source_occurrence_ref"] or ""),
         _canonical_json_bytes(fields["source_ref"]).decode("ascii"),
         str(fields["package_type"] or ""),
         _canonical_json_bytes(fields).decode("ascii"),
@@ -1213,10 +1268,20 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
         if forecast["status"] == CALCULATED_RESEARCH_ONLY:
             forecast_count += 1
         abc_member = abc["members"][variant_id]
+        mapping_reasons = sorted(
+            {
+                reason
+                for hypothesis in hypotheses
+                for reason in _mapping_blocker_reason_codes(
+                    _hypothesis_fields(hypothesis)
+                )
+            }
+        )
         missing = sorted(
             set(_variant_missing_reasons(variant, len(hypotheses)))
             .union(str(item) for item in forecast.get("reason_codes", []))
             .union(str(item) for item in abc_member.get("reason_codes", []))
+            .union(mapping_reasons)
         )
         coverage_rows.append(
             {
@@ -1237,7 +1302,10 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
                     "supplier_sku": None,
                     "supplier_description": None,
                     "source_ref": None,
+                    "source_occurrence_ref": None,
                     "source_hypothesis_label": None,
+                    "unapproved_mapping_confidence": None,
+                    "unapproved_mapping_evidence": None,
                     "package_type": None,
                     "raw_pack": None,
                     "shopify_sellable_units_per_case": None,
@@ -1376,6 +1444,7 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
             str(item["shopify_variant_id"]),
             str(item.get("supplier_name") or ""),
             str(item.get("supplier_sku") or ""),
+            str(item.get("source_occurrence_ref") or ""),
             str(item.get("source_ref") or ""),
             str(item.get("hypothesis_package_type") or ""),
             _canonical_json_bytes(item).decode("ascii"),
@@ -1498,7 +1567,11 @@ def filter_private_research_rows(
                 row["supplier_name"],
                 row["supplier_sku"],
                 row["supplier_description"],
+                row["source_occurrence_ref"],
                 row["source_ref"],
+                _canonical_json_bytes(
+                    row["unapproved_mapping_evidence"]
+                ).decode("ascii"),
                 row["hypothesis_package_type"],
                 *reasons,
             )
@@ -1631,7 +1704,12 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 "Shopify Variant ID",
                 "Supplier",
                 "Supplier SKU",
+                "Source occurrence reference",
                 "Join",
+                "Unapproved mapping label",
+                "Unapproved mapping confidence",
+                "Unapproved mapping evidence",
+                "Unapproved mapping blocker reasons",
                 "Hypothesis package",
                 "Hypothesis raw pack",
                 "Hypothesis sellable units/case",
@@ -1661,7 +1739,12 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                     row["shopify_variant_id"],
                     row["supplier_name"],
                     row["supplier_sku"],
+                    row["source_occurrence_ref"],
                     row["join_status"],
+                    row["source_hypothesis_label"],
+                    row["unapproved_mapping_confidence"],
+                    row["unapproved_mapping_evidence"],
+                    row["unapproved_mapping_blocker_reasons"],
                     row["hypothesis_package_type"],
                     row["hypothesis_raw_pack"],
                     row["hypothesis_shopify_sellable_units_per_case"],
@@ -1697,6 +1780,9 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 "Provided Variant ID",
                 "Supplier",
                 "Supplier SKU",
+                "Source occurrence reference",
+                "Unapproved mapping evidence",
+                "Unapproved mapping blocker reasons",
                 "Hypothesis raw pack",
                 "Hypothesis sellable units/case",
                 "Hypothesis qualifying units/case",
@@ -1712,6 +1798,9 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                     row["provided_shopify_variant_id"],
                     row["supplier_name"],
                     row["supplier_sku"],
+                    row["source_occurrence_ref"],
+                    row["unapproved_mapping_evidence"],
+                    row["unapproved_mapping_blocker_reasons"],
                     row["hypothesis_raw_pack"],
                     row["hypothesis_shopify_sellable_units_per_case"],
                     row["hypothesis_qualifying_units_per_case"],
@@ -1776,8 +1865,13 @@ _CSV_FIELDS = (
     "variant_title",
     "supplier_name",
     "supplier_sku",
+    "source_occurrence_ref",
     "join_status",
     "selection_status",
+    "source_hypothesis_label",
+    "unapproved_mapping_confidence",
+    "unapproved_mapping_evidence",
+    "unapproved_mapping_blocker_reasons",
     "hypothesis_package_type",
     "hypothesis_raw_pack",
     "hypothesis_shopify_sellable_units_per_case",
@@ -1898,8 +1992,19 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "variant_title": item["variant_title"],
                 "supplier_name": item["supplier_name"],
                 "supplier_sku": item["supplier_sku"],
+                "source_occurrence_ref": item["source_occurrence_ref"],
                 "join_status": item["join_status"],
                 "selection_status": item["selection_status"],
+                "source_hypothesis_label": item["source_hypothesis_label"],
+                "unapproved_mapping_confidence": item[
+                    "unapproved_mapping_confidence"
+                ],
+                "unapproved_mapping_evidence": item[
+                    "unapproved_mapping_evidence"
+                ],
+                "unapproved_mapping_blocker_reasons": item[
+                    "unapproved_mapping_blocker_reasons"
+                ],
                 "hypothesis_package_type": item["hypothesis_package_type"],
                 "hypothesis_raw_pack": item["hypothesis_raw_pack"],
                 "hypothesis_shopify_sellable_units_per_case": item[
@@ -1989,8 +2094,19 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "shopify_variant_id": item["parent_shopify_variant_id"],
                 "supplier_name": item["supplier_name"],
                 "supplier_sku": item["supplier_sku"],
+                "source_occurrence_ref": item["source_occurrence_ref"],
                 "join_status": item["join_status"],
                 "selection_status": item["selection_status"],
+                "source_hypothesis_label": item["source_hypothesis_label"],
+                "unapproved_mapping_confidence": item[
+                    "unapproved_mapping_confidence"
+                ],
+                "unapproved_mapping_evidence": item[
+                    "unapproved_mapping_evidence"
+                ],
+                "unapproved_mapping_blocker_reasons": item[
+                    "unapproved_mapping_blocker_reasons"
+                ],
                 "hypothesis_package_type": item["hypothesis_package_type"],
                 "hypothesis_raw_pack": item["hypothesis_raw_pack"],
                 "hypothesis_shopify_sellable_units_per_case": item[

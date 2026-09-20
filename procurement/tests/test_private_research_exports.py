@@ -79,7 +79,19 @@ def export_intake(*, formula_values: bool = False) -> dict[str, object]:
             "supplier_sku": f"={index}+1" if formula_values else "SKU<&>",
             "supplier_description": "<img src=x onerror=alert(1)>",
             "source_ref": "private-page-1",
+            "source_occurrence_id": (
+                f"=OCC-{index}" if formula_values else f"A1-OCC-{index}"
+            ),
             "mapping_status": "UNAPPROVED_HYPOTHESIS",
+            "mapping_confidence": {"status": "UNAPPROVED", "basis": "A1"},
+            "mapping_evidence": {
+                "candidate_disposition": "REVIEW_REQUIRED",
+                "blockers": {
+                    "identity": ["SOURCE_IDENTITY_UNRESOLVED"],
+                    "packaging": [],
+                },
+                "relationship_record_sha256": "f" * 64,
+            },
             "package_type": "STANDARD",
             "raw_pack": "12/750ML",
             "units_per_case": 12,
@@ -267,6 +279,15 @@ class PrivateResearchExportTests(unittest.TestCase):
             '"case_price":"96.00"',
             research["unapproved_price_ladder_evidence"],
         )
+        self.assertEqual(research["source_occurrence_ref"], "A1-OCC-1")
+        self.assertIn(
+            '"candidate_disposition":"REVIEW_REQUIRED"',
+            research["unapproved_mapping_evidence"],
+        )
+        self.assertIn(
+            "A1_MAPPING_BLOCKER:identity:SOURCE_IDENTITY_UNRESOLVED",
+            research["unapproved_mapping_blocker_reasons"],
+        )
         self.assertNotIn("source_tier_id", research["unapproved_price_ladder_evidence"])
         inventory = json.loads(research["catalog_inventory_evidence"])
         self.assertEqual(inventory["locations"][0]["location_name"], "Main")
@@ -293,6 +314,9 @@ class PrivateResearchExportTests(unittest.TestCase):
             "Raw incoming (untrusted capture only)",
             "Raw incoming operational use",
             "Unapproved source ladder evidence",
+            "Source occurrence reference",
+            "Unapproved mapping evidence",
+            "Unapproved mapping blocker reasons",
             "Economics scope",
             "Historical daily sales evidence SHA-256",
             "Historical daily sales evidence",

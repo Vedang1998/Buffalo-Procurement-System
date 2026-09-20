@@ -324,6 +324,72 @@ class PrivateResearchProjectionTests(unittest.TestCase):
             }.isdisjoint(nested_keys(projection))
         )
 
+    def test_a1_occurrences_and_mapping_blockers_remain_distinct_and_searchable(self):
+        mapping_evidence = {
+            "candidate_disposition": "REVIEW_REQUIRED",
+            "blockers": {
+                "identity": ["SOURCE_IDENTITY_UNRESOLVED"],
+                "packaging": [],
+                "program_price": ["NO_CURRENT_PRICE_OR_TIER_AUTHORITY"],
+                "source_availability": ["SOURCE_BYTES_UNAVAILABLE"],
+            },
+            "relationship_record_sha256": "f" * 64,
+            "offer_preview_fingerprint": "e" * 64,
+        }
+        first = hypothesis(
+            "100",
+            "Alpha",
+            "A-1",
+            "7.00",
+            source_occurrence_id="source-occurrence-1",
+            mapping_confidence={"status": "UNAPPROVED", "basis": "A1_REVIEW"},
+            mapping_evidence=mapping_evidence,
+        )
+        second = copy.deepcopy(first)
+        second["source_occurrence_id"] = "source-occurrence-2"
+        projection = build_private_research_projection(
+            intake([variant("100", hypotheses=[second, first])])
+        )
+
+        rows = projection["research_rows"]
+        self.assertEqual(
+            [row["source_occurrence_ref"] for row in rows],
+            ["source-occurrence-1", "source-occurrence-2"],
+        )
+        self.assertNotEqual(rows[0], rows[1])
+        self.assertEqual(
+            rows[0]["unapproved_mapping_confidence"],
+            {"basis": "A1_REVIEW", "status": "UNAPPROVED"},
+        )
+        self.assertEqual(
+            rows[0]["unapproved_mapping_evidence"][
+                "relationship_record_sha256"
+            ],
+            "f" * 64,
+        )
+        reason = (
+            "A1_MAPPING_BLOCKER:program_price:"
+            "NO_CURRENT_PRICE_OR_TIER_AUTHORITY"
+        )
+        self.assertIn(reason, rows[0]["unapproved_mapping_blocker_reasons"])
+        self.assertIn(reason, rows[0]["missing_data_reasons"])
+        self.assertIn(
+            reason, projection["coverage_rows"][0]["missing_data_reasons"]
+        )
+        self.assertIn(reason, projection["owner_worksheet"][0]["reason_codes"])
+        self.assertEqual(
+            [
+                row["source_occurrence_ref"]
+                for row in filter_private_research_rows(
+                    projection, query="source-occurrence-2"
+                )
+            ],
+            ["source-occurrence-2"],
+        )
+        self.assertEqual(
+            len(filter_private_research_rows(projection, status=reason)), 2
+        )
+
     def test_missing_evidence_never_calls_numerical_calculators(self):
         sparse = {
             "shopify_variant_id": "100",
