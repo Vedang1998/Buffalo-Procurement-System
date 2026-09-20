@@ -189,7 +189,7 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
 
     def test_readiness_allows_validation_beyond_legacy_thirty_seconds(self):
         tool = _load_tool()
-        self.assertEqual(tool.READINESS_TIMEOUT_SECONDS, 600)
+        self.assertEqual(tool.READINESS_TIMEOUT_SECONDS, 1200)
 
         class FakeProcess:
             pid = 424242

@@ -24,7 +24,10 @@ SRC_ROOT = REPO_ROOT / "procurement" / "src"
 RUNTIME_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_VIEWER_RUNTIME_V1"
 SECRET_NAME = "private-viewer.secret"
 PID_NAME = "private-viewer.pid"
-READINESS_TIMEOUT_SECONDS = 10 * 60
+# A full private V2 semantic replay recalculates every registered horizon before
+# the app can become ready.  The ceiling is bounded but must cover that genuine
+# fail-closed replay on the complete private research population.
+READINESS_TIMEOUT_SECONDS = 20 * 60
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _MAX_PID = (1 << 31) - 1

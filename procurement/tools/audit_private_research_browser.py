@@ -45,8 +45,10 @@ ARTIFACT_NAMES = (
     "projection.json",
 )
 # The launcher performs one canonical replay before it starts Uvicorn, then the
-# app performs its own startup replay under the launcher's 600-second window.
-SERVER_READY_SECONDS = 21 * 60
+# app performs its own startup replay under the launcher's bounded window.  A
+# complete V2 population takes roughly fifteen minutes per replay in the owned
+# test environment, so the outer ceiling covers both without weakening either.
+SERVER_READY_SECONDS = 35 * 60
 CDP_READY_SECONDS = 30
 _HEX40 = re.compile(r"[0-9a-f]{40}")
 _PROCESS_TOKEN_ENV = "BUFFALO_PRIVATE_BROWSER_AUDIT_PROCESS_TOKEN"
