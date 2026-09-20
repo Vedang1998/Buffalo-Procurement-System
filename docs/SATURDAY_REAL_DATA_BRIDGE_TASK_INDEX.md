@@ -1,6 +1,7 @@
 # Saturday real-data bridge task index
 
-Status: active local implementation; private research only.
+Status: bounded local delivery complete; private research only; owner review and
+all real purchasing authority remain blocked.
 
 ## Fixed clock
 
@@ -17,9 +18,14 @@ Status: active local implementation; private research only.
 - V2 review ZIP: 1,998,197 bytes,
   `d50c09b9809c269eb7e94596bf1892cfecfd6ea58b35e99607fd0757b8215337`
 - independent reconstruction: exact
-- review disposition: Findings 1, 2, 4, and 5 pass; Finding 3 fails because
-  calculator scalars were not reconciled to frozen source evidence.
-- child-only remediation commit: `ba7a1df32e7d28e4d8fb596c762746f2c4f6defe`
+- frozen-parent review disposition: Findings 1, 2, 4, and 5 pass; Finding 3
+  fails because calculator scalars were not reconciled to frozen source
+  evidence.
+- child-only remediation commit: `ba7a1df32e7d28e4d8fb596c762746f2c4f6defe`.
+- exact tested child: `4919d643f8c49e2b788bda4e8ff95ef24a283c4b`,
+  tree `e2b88e9a421d97359b7a0165c6dc88f1d97a541b`.
+- external/Claude status: `NOT ASSESSED`; same-model review is recorded
+  separately and is not relabelled external.
 
 The frozen parent and its review ZIP remain unchanged.
 
@@ -54,8 +60,21 @@ The frozen parent and its review ZIP remain unchanged.
 - [x] retain failing private-bridge integration test
 - [x] execute exact A1 reader and publish restart-safe private report
 - [x] freeze complete current catalog/inventory and 84-day sales/returns/COGS
-- [ ] immutable private intake and reconciliation service
-- [ ] coverage and research projection
-- [ ] authenticated private UI plus offline HTML/CSV
-- [ ] focused, browser/restart, combined validation
-- [ ] separate code transport and private evidence transport
+- [x] immutable private intake and reconciliation service
+- [x] coverage and research projection
+- [x] authenticated private UI plus offline HTML/CSV
+- [x] focused, browser/restart, combined validation
+- [x] documentation-only closeout and separate code/private transports
+
+## Final controls
+
+- authoritative wrapper: 931/931 passed in 1229.597s; every abnormal counter
+  zero; log SHA-256 `04f8f26fc30e92c6433c1fbcdd517aa0803661e09fabb560f5364edf6ee9be4c`
+- startup: 10/10 passed; log SHA-256
+  `8cbc2321289aad482131291f1375331b42ef87afbd8e2b0aeabd20b734d71193`
+- real-data browser: 70/70 initial and 70/70 restart; all four exports
+  byte-identical; no external request; cleanup complete
+- projection: 2,009 coverage rows, 14,901 research rows, 2,009 worksheet rows;
+  zero forecast, ABC or purchasing-economics calculations
+- exact limitations, artifact hashes, owner decisions and next boundary:
+  `docs/SATURDAY_REAL_DATA_BRIDGE_CLOSEOUT.md`

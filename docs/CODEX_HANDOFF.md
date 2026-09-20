@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-19T23:20:36Z (UTC)
+**Updated:** 2026-09-20T08:03:00Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,60 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Saturday private real-data bridge — BOUNDED LOCAL MACHINE + BROWSER PASS / REAL PURCHASING BLOCKED
+
+- The frozen parent remains commit
+  `c1895ff5a63599bae57fd41de827b0665446682f`, tree
+  `b8aec47caca38bb517603166b1b54b32909181f8`. The exact tested material child
+  is `4919d643f8c49e2b788bda4e8ff95ef24a283c4b`, tree
+  `e2b88e9a421d97359b7a0165c6dc88f1d97a541b`. The 18-commit range is local,
+  linear and adds no migration, table or dependency. Closeout changes are a
+  separate documentation-only child.
+- The earlier V2 delta ZIP remains 1,998,197 bytes with SHA-256
+  `d50c09b9809c269eb7e94596bf1892cfecfd6ea58b35e99607fd0757b8215337`.
+  Fresh empty reconstruction recovered both `dd131602...` and `c1895ff5...`.
+  The frozen-parent review still records findings 1/2/4/5 PASS and finding 3
+  FAIL; the child fixes finding 3 without changing the parent. Claude/external
+  review remains NOT ASSESSED.
+- A content-addressed private intake validates the sealed A1 snapshot and the
+  native read-only Shopify catalog/inventory and daily-sales captures. Variant
+  ID is the only canonical join; supplier identities, packs, mappings and
+  ladders remain unapproved hypotheses. Readback rehashes and rederives every
+  source. No raw private evidence is in Git.
+- Actual measured coverage is 2,009 current Variants, 1,995 A1-to-current
+  joins, five A1 identities absent from the current catalog, 14 current
+  Variants outside A1, and 84 complete sales days from 2026-06-27 through
+  2026-09-18. The 9,431 raw rows cover 1,740 historical IDs; 1,436 join the
+  current catalog and 304 historical IDs do not. The partial 2026-09-19 day is
+  deliberately omitted.
+- The shared zero-authority projection produces 2,009 coverage rows, 14,901
+  research rows and a 2,009-row owner worksheet across eight supplier names.
+  The HTML/CSV/JSON exports share the same bound projection. Exact ABC cohort
+  membership, real forecast schedule/history, trusted incoming/open orders,
+  approved packs/exclusions/margins/prices/fees/policy are absent, so forecast,
+  ABC and purchasing economics are all correctly NOT RUN.
+- Exact material validation passed **931/931** in 1229.597s with every abnormal
+  counter zero; log SHA-256 is
+  `04f8f26fc30e92c6433c1fbcdd517aa0803661e09fabb560f5364edf6ee9be4c`.
+  Startup passed **10/10**. Fresh real-data Chromium passed **70/70** initial
+  and **70/70** restart assertions, with 38 requests/responses per phase, no
+  external HTTP/WebSocket activity, four fully guarded targets per phase and
+  byte-identical exports. Acceptance-result SHA-256 is
+  `d5704289d673ce088d8f1316e78a0a457f15d700d3c1c09fbe837127d18967eb`.
+- Two read-only same-model reviewers found no P0-P2 issue at the exact material
+  target or in the retained browser evidence. They are not external/Claude
+  review. Both app/browser restarts, listeners and owned process trees stopped;
+  runtime secrets and PID files were removed.
+- This does not change the official production phase. No operational database,
+  mapping/price/policy approval, selected offer, DRAFT, PO, Shopify write,
+  supplier communication, deployment or order occurred. The exact evidence,
+  artifact hashes, retained limitations, owner decision list and next boundary
+  are in `docs/SATURDAY_REAL_DATA_BRIDGE_CLOSEOUT.md`.
+- Exact next boundary: deliver the self-contained code/review transport and the
+  separately labelled private offline-preview transport, then stop. Any private
+  refresh, remote viewer access, real numerical evaluation or purchasing action
+  requires new authorization.
 
 ### Development Forecast V2 five-finding remediation — BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS / EXTERNAL REVIEW AND REAL USE BLOCKED
 

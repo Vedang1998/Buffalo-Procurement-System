@@ -5,6 +5,37 @@
 
 This file is the executive roadmap/status view. It is updated when a phase/program milestone changes. It does not replace the canonical system specification or the verified current-state handoff.
 
+## Saturday private real-data bridge
+
+**BOUNDED LOCAL MACHINE + REAL-DATA BROWSER PASS — RESEARCH ONLY; REAL
+PURCHASING AND PRODUCTION AUTHORITY BLOCKED**
+
+The isolated child from frozen parent `c1895ff5...` has an exact tested material
+commit `4919d643f8c49e2b788bda4e8ff95ef24a283c4b`, tree
+`e2b88e9a421d97359b7a0165c6dc88f1d97a541b`. It validates the sealed A1
+review package and read-only native Shopify catalog/inventory and 84 complete
+daily-sales captures into a content-addressed private research intake, projection,
+offline HTML/CSV/JSON exports and an authenticated GET-only loopback viewer. No
+migration, table, dependency, operational database or Shopify write was added.
+
+The measured result covers 2,009 current Variants, 1,995 A1/current joins, 84
+complete days through 2026-09-18, 14,901 research rows and a 2,009-row owner
+worksheet. Exact ABC cohort membership, availability/stockout history, approved
+forecast schedule/policy, trusted incoming/open orders, approved mappings, packs,
+prices, fees, target margins and exclusions remain absent. Consequently ABC,
+forecast/protection and purchasing economics are NOT RUN rather than fabricated.
+
+Exact validation passed **931/931** authoritative tests and **10/10** startup
+tests. Fresh real-data Chromium passed **70/70** assertions before and after
+restart, preserved four byte-identical exports, observed no external network and
+proved viewer/browser process and secret cleanup. Two read-only same-model
+reviews found no P0-P2 issue; external/Claude review remains NOT ASSESSED.
+
+This checkpoint does not advance the official production phase. It creates no
+selected offer, DRAFT, PO, supplier communication, deployment or order authority.
+See `docs/SATURDAY_REAL_DATA_BRIDGE_CLOSEOUT.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact controls, limitations and the next boundary.
+
 ## Development Forecast V2 five-finding remediation
 
 **BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS — EXTERNAL REVIEW, REAL
