@@ -821,6 +821,28 @@ class PrivateResearchV2Tests(unittest.TestCase):
             ):
                 private_research_projection_sha256(forged_counts)
 
+            for field, changed_value in (
+                (
+                    "stage_status",
+                    {
+                        **projection["owner_worksheet"][0]["stage_status"],
+                        "NET_NEED": "SUPPORTED",
+                    },
+                ),
+                ("operational_effect", "ORDER_CREATED"),
+                ("product_title", "forged product"),
+                ("supplier_names", ["forged supplier"]),
+                ("reason_codes", []),
+            ):
+                forged_owner = deepcopy(projection)
+                forged_owner["owner_worksheet"][0][field] = changed_value
+                reseal(forged_owner)
+                with self.subTest(owner_field=field), self.assertRaisesRegex(
+                    PrivateResearchProjectionError,
+                    "owner identity or stage evidence",
+                ):
+                    private_research_projection_sha256(forged_owner)
+
             shifted = deepcopy(projection)
             for scenario in shifted["forecast_research"]["scenarios"]:
                 scenario["contract"] = "UNREGISTERED_SCENARIO"

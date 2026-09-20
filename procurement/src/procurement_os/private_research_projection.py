@@ -1542,6 +1542,7 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
         sidecars = source.get("forecast_sidecars")
         owner_rows = source.get("owner_worksheet")
         coverage_rows = source.get("coverage_rows")
+        research_rows = source.get("research_rows")
         if (
             not required.issubset(source)
             or not isinstance(scenarios, list)
@@ -1550,6 +1551,7 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
             or not isinstance(sidecars, Mapping)
             or not isinstance(owner_rows, list)
             or not isinstance(coverage_rows, list)
+            or not isinstance(research_rows, list)
             or len(owner_rows) != len(coverage_rows)
         ):
             raise PrivateResearchProjectionError("private V2 research projection differs")
@@ -1710,12 +1712,39 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
             _canonical_intake_json_bytes(sidecars)
         ).hexdigest():
             raise PrivateResearchProjectionError("private V2 sidecar inventory differs")
-        expected_refs = ["ABC", "NET_NEED", "CASE_QUANTITY", "ECONOMICS", "ORDER"]
+        expected_blockers = {
+            "ABC": "EXACT_COHORT_AND_COST_AUTHORITY_REMAINS_INCOMPLETE",
+            "NET_NEED": "TRUSTED_INCOMING_OPEN_ORDERS_AND_OPERATIONAL_POLICY_NOT_SUPPLIED",
+            "CASE_QUANTITY": "APPROVED_PACK_NOT_SUPPLIED",
+            "ECONOMICS": "APPROVED_SELECTED_PRICE_MARGIN_AND_FEES_NOT_SUPPLIED",
+            "ORDER": "PRODUCTION_AND_ORDER_AUTHORITY_NOT_GRANTED",
+        }
+        if source.get("shared_stage_blockers") != expected_blockers:
+            raise PrivateResearchProjectionError(
+                "private V2 shared stage blockers differ"
+            )
+        expected_refs = list(expected_blockers)
         coverage_by_id = {
             item.get("shopify_variant_id"): item
             for item in coverage_rows
             if isinstance(item, Mapping)
         }
+        suppliers_by_id: dict[str, set[str]] = {}
+        for research_row in research_rows:
+            if not isinstance(research_row, Mapping):
+                raise PrivateResearchProjectionError(
+                    "private V2 research row differs"
+                )
+            research_variant_id = research_row.get("shopify_variant_id")
+            supplier_name = research_row.get("supplier_name")
+            if not isinstance(research_variant_id, str):
+                raise PrivateResearchProjectionError(
+                    "private V2 research Variant differs"
+                )
+            if isinstance(supplier_name, str) and supplier_name:
+                suppliers_by_id.setdefault(research_variant_id, set()).add(
+                    supplier_name
+                )
         owner_ids: set[str] = set()
         derived_counts = {
             scenario_id: {
@@ -1744,6 +1773,40 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
                 raise PrivateResearchProjectionError("private V2 owner row differs")
             owner_ids.add(variant_id)
             coverage = coverage_by_id.get(variant_id)
+            expected_stage_status = (
+                {
+                    "CAPTURE": (
+                        "SUPPORTED"
+                        if variant_id in variant_history_sha
+                        else "BLOCKED:CAPTURE"
+                    ),
+                    "IDENTITY": "SUPPORTED_CURRENT_OR_APPROVED_HISTORICAL_IDENTITY",
+                    "FORECAST": coverage.get("forecast_status"),
+                    "ABC": "BLOCKED:ABC",
+                    "NET_NEED": "BLOCKED:NET_NEED",
+                    "CASE_QUANTITY": "BLOCKED:CASE_QUANTITY",
+                    "ECONOMICS": "BLOCKED:ECONOMICS",
+                    "ORDER": "BLOCKED:ORDER",
+                }
+                if isinstance(coverage, Mapping)
+                else None
+            )
+            if (
+                not isinstance(coverage, Mapping)
+                or item.get("authority") != AUTHORITY_LABEL
+                or item.get("research_only") is not True
+                or item.get("product_title") != coverage.get("product_title")
+                or item.get("variant_title") != coverage.get("variant_title")
+                or item.get("supplier_names")
+                != sorted(suppliers_by_id.get(variant_id, set()))
+                or item.get("reason_codes") != coverage.get("missing_data_reasons")
+                or item.get("stage_status") != expected_stage_status
+                or item.get("owner_response") != ""
+                or item.get("operational_effect") != "NONE"
+            ):
+                raise PrivateResearchProjectionError(
+                    "private V2 owner identity or stage evidence differs"
+                )
             expected_history = {
                 "start_date": history.get("start_date"),
                 "end_date": history.get("end_date"),
