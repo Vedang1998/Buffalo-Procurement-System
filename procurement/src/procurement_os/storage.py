@@ -71,6 +71,37 @@ class LocalFilesystemStorage(StorageAdapter):
         finally:
             temporary_path.unlink(missing_ok=True)
 
+    def put_bytes_once(self, key: str, data: bytes) -> None:
+        """Atomically create one immutable object without replacing a prior one.
+
+        The temporary file is completely written and fsynced before a hard link
+        publishes it at ``key``.  ``os.link`` is the portable local-filesystem
+        create-if-absent primitive we need here: if another writer already
+        published the key, ``FileExistsError`` is raised and the existing bytes
+        are left untouched.  Callers that want idempotent content-addressed
+        replay may catch that error and compare the already-published bytes.
+        """
+
+        p = self._path(key)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{p.name}.", suffix=".tmp", dir=p.parent
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.link(temporary_path, p, follow_symlinks=False)
+            directory_descriptor = os.open(p.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_descriptor)
+            finally:
+                os.close(directory_descriptor)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+
     def get_bytes(self, key: str) -> bytes:
         return self._path(key).read_bytes()
 

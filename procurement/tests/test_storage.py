@@ -57,6 +57,27 @@ class TestLocalFilesystemStorage(unittest.TestCase):
             self.store.list_keys("packets/"), ["packets/review.zip"]
         )
 
+    def test_put_bytes_once_publishes_complete_bytes_and_refuses_replacement(self):
+        self.store.put_bytes_once("intakes/blob", b"first-complete-object")
+        with self.assertRaises(FileExistsError):
+            self.store.put_bytes_once("intakes/blob", b"different-object")
+        self.assertEqual(
+            self.store.get_bytes("intakes/blob"), b"first-complete-object"
+        )
+        self.assertEqual(self.store.list_keys("intakes/"), ["intakes/blob"])
+
+    def test_put_bytes_once_link_failure_leaves_no_partial_object_or_temporary_file(self):
+        with patch(
+            "procurement_os.storage.os.link",
+            side_effect=OSError("synthetic no-replace publication failure"),
+        ):
+            with self.assertRaisesRegex(
+                OSError, "synthetic no-replace publication failure"
+            ):
+                self.store.put_bytes_once("intakes/blob", b"complete-object")
+        self.assertFalse(self.store.exists("intakes/blob"))
+        self.assertEqual(self.store.list_keys("intakes/"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
