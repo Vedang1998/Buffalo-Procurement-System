@@ -3785,6 +3785,163 @@ def build_development_baseline_need_binding(
     return {**unsigned, "sha256": canonical_evidence_sha256(unsigned)}
 
 
+def _validate_v2_development_need_sources(
+    context: Mapping[str, Any],
+    *,
+    evidence: Mapping[str, Any],
+    vendor: Sequence[Any],
+    position: Mapping[str, Any],
+) -> bool:
+    """Bind duplicated V2 calculator scalars to their frozen source evidence."""
+
+    def strict_decimal(value: Any, field: str) -> Decimal:
+        if isinstance(value, bool) or not isinstance(value, (str, Decimal)):
+            raise DevelopmentForecastError(f"{field} has the wrong type")
+        return _decimal(value, field)
+
+    def strict_positive_int(value: Any, field: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise DevelopmentForecastError(f"{field} has the wrong type")
+        return value
+
+    units_per_case = strict_positive_int(
+        context.get("units_per_case"), "units_per_case"
+    )
+    qualifying_units_per_case = strict_positive_int(
+        context.get("qualifying_units_per_case"),
+        "qualifying_units_per_case",
+    )
+    offer = context.get("offer_evidence")
+    if not isinstance(offer, dict):
+        return False
+    for field, expected in (
+        ("shopify_units_per_case", units_per_case),
+        ("qualifying_units_per_case", qualifying_units_per_case),
+    ):
+        raw = offer.get(field)
+        if isinstance(raw, bool) or not isinstance(raw, (int, str, Decimal)):
+            return False
+        numeric = _decimal(raw, f"offer {field}")
+        if numeric != numeric.to_integral_value() or int(numeric) != expected:
+            return False
+
+    available = strict_decimal(context.get("available_units"), "available_units")
+    trusted_incoming = strict_decimal(
+        context.get("trusted_incoming_units"), "trusted_incoming_units"
+    )
+    inventory_rows = context.get("inventory_rows")
+    if not isinstance(inventory_rows, (list, tuple)) or not inventory_rows:
+        return False
+    inventory_available = Decimal("0")
+    inventory_incoming = Decimal("0")
+    for row in inventory_rows:
+        if (
+            not isinstance(row, (list, tuple))
+            or len(row) < 5
+            or row[3] != "VALID"
+            or not isinstance(row[0], str)
+            or not row[0]
+        ):
+            return False
+        inventory_available += strict_decimal(row[1], "inventory available")
+        inventory_incoming += strict_decimal(row[2], "inventory incoming")
+    if inventory_available != available or inventory_incoming != trusted_incoming:
+        return False
+
+    if (
+        position.get("variant_id") != context.get("variant_id")
+        or position.get("vendor_id") != context.get("vendor_id")
+        or not isinstance(position.get("blocks_reorder"), bool)
+        or isinstance(position.get("open_line_count"), bool)
+        or not isinstance(position.get("open_line_count"), int)
+        or position.get("open_line_count") < 0
+        or strict_decimal(
+            position.get("trusted_incoming_units"),
+            "open position trusted incoming",
+        )
+        != trusted_incoming
+        or not isinstance(position.get("blockers"), list)
+        or bool(position["blockers"]) != position["blocks_reorder"]
+    ):
+        return False
+    blockers = context.get("blockers")
+    if not isinstance(blockers, list) or not all(
+        isinstance(item, str) and item for item in blockers
+    ):
+        return False
+    if (
+        ("OPEN_PO_RECONCILIATION_BLOCKED" in blockers)
+        != position["blocks_reorder"]
+    ):
+        return False
+
+    policies = context.get("policies")
+    policy_mode = context.get("policy_mode")
+    if (
+        not isinstance(policy_mode, str)
+        or not policy_mode
+        or not isinstance(policies, (list, tuple))
+        or len(policies) != 1
+        or not isinstance(policies[0], (list, tuple))
+        or len(policies[0]) < 3
+        or isinstance(policies[0][0], bool)
+        or not isinstance(policies[0][0], int)
+        or not isinstance(policies[0][1], dict)
+        or str(policies[0][1].get("mode") or "").strip().upper()
+        != policy_mode
+        or not isinstance(policies[0][2], str)
+        or not policies[0][2].strip()
+    ):
+        return False
+
+    if (
+        len(vendor) < 22
+        or isinstance(vendor[2], bool)
+        or not isinstance(vendor[2], int)
+        or vendor[2] < 1
+        or isinstance(vendor[3], bool)
+        or not isinstance(vendor[3], int)
+        or vendor[3] < 0
+        or not isinstance(vendor[8], bool)
+        or (
+            vendor[9] is not None
+            and (
+                isinstance(vendor[9], bool)
+                or not isinstance(vendor[9], (str, Decimal))
+            )
+        )
+    ):
+        return False
+    calendar = evidence.get("protection_calendar")
+    if not isinstance(calendar, dict):
+        return False
+    expected_vendor_projection = {
+        "timezone_name": vendor[15],
+        "order_days": vendor[13],
+        "order_cutoff_local": (
+            vendor[14].isoformat() if isinstance(vendor[14], time) else vendor[14]
+        ),
+        "expected_delivery_days": vendor[16],
+        "order_cycle_days": vendor[2],
+        "lead_time_days": vendor[3],
+        "lead_time_variability_days": (
+            "0"
+            if strict_decimal(
+                vendor[4], "vendor lead_time_variability_days"
+            )
+            == 0
+            else str(
+                strict_decimal(
+                    vendor[4], "vendor lead_time_variability_days"
+                ).normalize()
+            )
+        ),
+    }
+    return canonical_evidence_json(expected_vendor_projection) == (
+        canonical_evidence_json(calendar.get("vendor_rules_projection"))
+    )
+
+
 def validate_development_baseline_need_context(
     context: Mapping[str, Any],
     *,
@@ -3835,6 +3992,13 @@ def validate_development_baseline_need_context(
         if not isinstance(vendor, (list, tuple)) or len(vendor) < 22:
             return False
         if not isinstance(position, dict):
+            return False
+        if manifest_contract == V2_CONTRACT and not _validate_v2_development_need_sources(
+            context,
+            evidence=evidence,
+            vendor=vendor,
+            position=position,
+        ):
             return False
         plan = DevelopmentForecastPlan(evidence)
         expected = calculate_development_baseline_need(

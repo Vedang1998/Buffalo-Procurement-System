@@ -934,14 +934,28 @@ class DevelopmentForecastTests(unittest.TestCase):
             "available_units": Decimal("0"),
             "trusted_incoming_units": Decimal("0"),
             "inventory_capture": ["capture"],
-            "inventory_rows": [["location", Decimal("0"), Decimal("0"), "VALID"]],
-            "open_po_position": {"blocks_reorder": False},
+            "inventory_rows": [
+                ["location", Decimal("0"), Decimal("0"), "VALID", "capture"]
+            ],
+            "open_po_position": {
+                "variant_id": "1001",
+                "vendor_id": "00000000-0000-4000-8000-000000000001",
+                "trusted_incoming_units": Decimal("0"),
+                "open_line_count": 0,
+                "blocks_reorder": False,
+                "trusted_sources": [],
+                "blockers": [],
+            },
             "policy_mode": "ROUTINE",
-            "policies": [[1, {"mode": "ROUTINE"}]],
+            "policies": [[1, {"mode": "ROUTINE"}, "synthetic:owner", ""]],
             "units_per_case": 6,
             "qualifying_units_per_case": 6,
             "offer_id": 1,
-            "offer_evidence": {"supplier_sku": "SUP-001"},
+            "offer_evidence": {
+                "supplier_sku": "SUP-001",
+                "shopify_units_per_case": Decimal("6"),
+                "qualifying_units_per_case": Decimal("6"),
+            },
             "vendor_id": "00000000-0000-4000-8000-000000000001",
             "vendor_rules": vendor,
             "need": serialize_baseline_need(need),
@@ -1007,6 +1021,72 @@ class DevelopmentForecastTests(unittest.TestCase):
                 caller_context, manifest_contract=V2_CONTRACT
             )
         )
+
+        def recalculate_and_rebind(changed):
+            changed_vendor = changed["vendor_rules"]
+            changed_position = changed["open_po_position"]
+            changed_need = calculate_development_baseline_need(
+                forecast_daily_velocity=plan.forecast_daily_velocity,
+                point_forecast_units=plan.point_forecast_units,
+                empirical_protection_units=plan.protection_units,
+                forecast_horizon_days=plan.horizon_days,
+                available_units=changed["available_units"],
+                trusted_incoming_units=changed["trusted_incoming_units"],
+                order_cycle_days=int(changed_vendor[2]),
+                lead_time_days=int(changed_vendor[3]),
+                lead_time_variability_days=changed_vendor[4],
+                policy_mode=changed["policy_mode"],
+                units_per_case=int(changed["units_per_case"]),
+                loose_order_allowed=bool(changed_vendor[8]),
+                loose_unit_fee=changed_vendor[9],
+                open_po_blocked=bool(changed_position["blocks_reorder"]),
+                protection_days_override=plan.horizon_days,
+            )
+            changed["need"] = serialize_baseline_need(changed_need)
+            changed["development_baseline_need_binding"] = (
+                build_development_baseline_need_binding(changed, changed_need)
+            )
+
+        scalar_substitutions = []
+
+        changed = copy.deepcopy(context)
+        changed["units_per_case"] = True
+        recalculate_and_rebind(changed)
+        scalar_substitutions.append(changed)
+
+        changed = copy.deepcopy(context)
+        changed["units_per_case"] = 1
+        recalculate_and_rebind(changed)
+        scalar_substitutions.append(changed)
+
+        changed = copy.deepcopy(context)
+        changed["available_units"] = Decimal("30")
+        recalculate_and_rebind(changed)
+        scalar_substitutions.append(changed)
+
+        changed = copy.deepcopy(context)
+        changed["policy_mode"] = "ALLOCATED"
+        recalculate_and_rebind(changed)
+        scalar_substitutions.append(changed)
+
+        changed = copy.deepcopy(context)
+        changed["open_po_position"]["blocks_reorder"] = True
+        changed["open_po_position"]["blockers"] = [{"reason": "unresolved"}]
+        recalculate_and_rebind(changed)
+        scalar_substitutions.append(changed)
+
+        changed = copy.deepcopy(context)
+        changed["vendor_rules"][2] = "14"
+        recalculate_and_rebind(changed)
+        scalar_substitutions.append(changed)
+
+        for changed in scalar_substitutions:
+            self.assertFalse(
+                validate_development_baseline_need_context(
+                    changed, manifest_contract=V2_CONTRACT
+                )
+            )
+
         malformed_calendar = caller_plan.to_json_dict()
         malformed_calendar["protection_calendar"] = []
         self.assertFalse(
