@@ -1963,7 +1963,15 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
                 derived_counts[scenario_id][bucket] += 1
                 point = summary.get("point_forecast_units")
                 try:
-                    if point is not None and Decimal(str(point)) == 0:
+                    if (
+                        (
+                            history.get("contract")
+                            != "BUFFALO_PRIVATE_FORECAST_HISTORY_COMPOSITE_V3"
+                            or bucket == "calculated"
+                        )
+                        and point is not None
+                        and Decimal(str(point)) == 0
+                    ):
                         derived_counts[scenario_id]["numerical_zero"] += 1
                 except InvalidOperation as exc:
                     raise PrivateResearchProjectionError(
@@ -2053,6 +2061,15 @@ def filter_private_research_rows(
                     *[str(item) for item in row["sidecar_keys"]],
                     _canonical_json_bytes(row["scenario_results"]).decode("ascii"),
                     _canonical_json_bytes(row["stage_status"]).decode("ascii"),
+                    *(
+                        (
+                            _canonical_json_bytes(
+                                row["unapproved_supplier_offer_summary"]
+                            ).decode("ascii"),
+                        )
+                        if value["contract"] == V3_PROJECTION_CONTRACT
+                        else ()
+                    ),
                 )
             ).casefold()
             statuses = {
@@ -2204,7 +2221,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
             "Product",
             "Variant",
             "Named suppliers",
-            *( ("Unapproved supplier/offer hypotheses",) if is_v3 else () ),
+            *( ("Unapproved supplier/offer summary",) if is_v3 else () ),
             "Recorded sales coverage",
             *(("Existence basis", "Recent 7-day recorded sales", "Recent 28-day recorded sales") if is_v3 else ()),
             "Captured stock provenance",
@@ -2234,7 +2251,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 row["product_title"],
                 row["variant_title"],
                 row["supplier_names"],
-                *( (row["unapproved_supplier_hypotheses"],) if is_v3 else () ),
+                *( (row["unapproved_supplier_offer_summary"],) if is_v3 else () ),
                 row["recorded_sales_coverage"],
                 *(
                     (
@@ -2585,7 +2602,7 @@ _CSV_FIELDS = (
 )
 
 _V3_CSV_FIELDS = _CSV_FIELDS + (
-    "unapproved_supplier_hypotheses",
+    "unapproved_supplier_offer_summary",
     "existence_basis",
     "recent_7d_start_date",
     "recent_7d_end_date",
@@ -2914,8 +2931,8 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
             scenarios = item["scenario_results"]
             row.update(
                 {
-                    "unapproved_supplier_hypotheses": item[
-                        "unapproved_supplier_hypotheses"
+                    "unapproved_supplier_offer_summary": item[
+                        "unapproved_supplier_offer_summary"
                     ],
                     "catalog_available": stock["available"],
                     "catalog_on_hand": stock["on_hand"],
@@ -2971,8 +2988,8 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 "recent_observed_sales"
             ]
             row["details"]["next_missing_stage"] = item["next_missing_stage"]
-            row["details"]["unapproved_supplier_hypotheses"] = item[
-                "unapproved_supplier_hypotheses"
+            row["details"]["unapproved_supplier_offer_summary"] = item[
+                "unapproved_supplier_offer_summary"
             ]
         rows.append(row)
     stream = io.StringIO(newline="")

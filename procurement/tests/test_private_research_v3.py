@@ -31,6 +31,7 @@ from procurement_os.private_research import (
 )
 from procurement_os.private_research_projection import (
     PrivateResearchProjectionError,
+    canonical_private_research_projection_bytes,
     filter_private_research_rows,
     private_research_projection_sha256,
     render_private_research_csv,
@@ -53,6 +54,7 @@ from procurement_os.private_research_v3 import (
 import procurement_os.private_research as private_research
 import procurement_os.private_research_v2 as private_research_v2
 import procurement_os.private_research_v3 as private_research_v3
+from test_audit_private_research_browser import _load_tool as _load_browser_tool
 
 
 SEED_FIELDS = [
@@ -331,13 +333,19 @@ class PrivateResearchV3Tests(unittest.TestCase):
                 "BLOCKED",
             )
             self.assertEqual(
-                owners["100"]["unapproved_supplier_hypotheses"][0][
+                owners["500"]["recent_observed_sales"]["windows"]["D7"][
+                    "identity_scope"
+                ],
+                "NO_SUPPORTED_WINDOW_EXISTENCE_OR_RECORDED_ROWS",
+            )
+            self.assertEqual(
+                owners["100"]["unapproved_supplier_offer_summary"]["preview"][0][
                     "supplier_sku"
                 ],
                 "=DANGEROUS-SKU",
             )
             self.assertEqual(
-                owners["100"]["unapproved_supplier_hypotheses"][0][
+                owners["100"]["unapproved_supplier_offer_summary"]["preview"][0][
                     "selection_status"
                 ],
                 "NOT_RUN_NO_SELECTION_AUTHORITY",
@@ -396,10 +404,18 @@ class PrivateResearchV3Tests(unittest.TestCase):
             with self.assertRaises(PrivateResearchProjectionError):
                 private_research_projection_sha256(forged_projection)
 
+            forged_contract = deepcopy(projection)
+            forged_contract["forecast_research"]["history"][
+                "eligibility_controls"
+            ]["contract"] = "FORGED_ELIGIBILITY_CONTRACT"
+            self._reseal_projection(forged_contract)
+            with self.assertRaises(PrivateResearchProjectionError):
+                private_research_projection_sha256(forged_contract)
+
             forged_owner = deepcopy(projection)
             forged_owner["owner_worksheet"][0][
-                "unapproved_supplier_hypotheses"
-            ] = []
+                "unapproved_supplier_offer_summary"
+            ]["all_hypotheses_sha256"] = "f" * 64
             self._reseal_projection(forged_owner)
             with self.assertRaises(PrivateResearchProjectionError):
                 private_research_projection_sha256(forged_owner)
@@ -434,6 +450,32 @@ class PrivateResearchV3Tests(unittest.TestCase):
             with self.assertRaises(PrivateResearchProjectionError):
                 private_research_projection_sha256(forged_recent)
 
+            forged_units = deepcopy(projection)
+            history = forged_units["forecast_research"]["history"]
+            changed_recent = history["recent_observed_sales_by_variant"]["100"]
+            changed_recent["windows"]["D7"]["net_units"] = "999999"
+            history["eligibility_controls"][
+                "recent_observed_sales_sha256"
+            ] = private_research_v3._sha(
+                history["recent_observed_sales_by_variant"]
+            )
+            next(
+                item
+                for item in forged_units["owner_worksheet"]
+                if item["shopify_variant_id"] == "100"
+            )["recent_observed_sales"] = deepcopy(changed_recent)
+            self._reseal_projection(forged_units)
+            with self.assertRaises(PrivateResearchProjectionError):
+                private_research_projection_sha256(forged_units)
+
+            forged_coverage = deepcopy(projection)
+            forged_coverage["coverage_rows"][0][
+                "primary_forecast_status"
+            ] = "NOT_APPLICABLE"
+            self._reseal_projection(forged_coverage)
+            with self.assertRaises(PrivateResearchProjectionError):
+                private_research_projection_sha256(forged_coverage)
+
     def test_blocked_evaluation_is_forecast_stage_and_not_numerical_zero(self):
         with self._built() as built, patch.object(
             private_research_v2,
@@ -463,8 +505,8 @@ class PrivateResearchV3Tests(unittest.TestCase):
             projection = built["projection"]
             html = render_private_research_html(projection)
             csv_text = render_private_research_csv(projection)
-            self.assertIn("Unapproved supplier/offer hypotheses", html)
-            self.assertIn("&lt;script&gt;not executable&lt;/script&gt;", html)
+            self.assertIn("Unapproved supplier/offer summary", html)
+            self.assertIn("=Product &lt;100&gt;", html)
             self.assertNotIn("<script>not executable</script>", html)
             rows = list(csv.DictReader(io.StringIO(csv_text)))
             owner_rows = [row for row in rows if row["row_type"] == "OWNER_WORKSHEET"]
@@ -482,6 +524,65 @@ class PrivateResearchV3Tests(unittest.TestCase):
                     for row in projection["owner_worksheet"]
                     if "Product 200" in row["product_title"]
                 ],
+            )
+            owner_100 = next(
+                row
+                for row in projection["owner_worksheet"]
+                if row["shopify_variant_id"] == "100"
+            )
+            self.assertEqual(
+                filter_private_research_rows(projection, query="=DANGEROUS-SKU"),
+                [owner_100],
+            )
+
+            projection_bytes = canonical_private_research_projection_bytes(
+                projection
+            )
+            artifacts = {
+                "coverage.json": b"{\"synthetic_v3\":true}\n",
+                "owner-preview.html": html.encode("utf-8"),
+                "owner-worksheet.csv": csv_text.encode("utf-8"),
+                "projection.json": projection_bytes,
+            }
+            media_types = {
+                "coverage.json": "application/json",
+                "owner-preview.html": "text/html; charset=utf-8",
+                "owner-worksheet.csv": "text/csv; charset=utf-8",
+                "projection.json": "application/json",
+            }
+            manifest = {
+                "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3",
+                "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+                "projection_contract": PROJECTION_CONTRACT,
+                "base_intake_id": "a" * 64,
+                "base_intake_sha256": "b" * 64,
+                "workspace_id": "c" * 64,
+                "projection_sha256": projection["projection_sha256"],
+                "artifacts": [
+                    {
+                        "name": name,
+                        "path": name,
+                        "bytes": len(data),
+                        "sha256": _sha(data),
+                        "media_type": media_types[name],
+                    }
+                    for name, data in sorted(artifacts.items())
+                ],
+            }
+            expectations = _load_browser_tool()._build_expectations(
+                {
+                    "manifest": manifest,
+                    "projection": projection,
+                    "artifacts": artifacts,
+                }
+            )
+            self.assertIn(
+                "unapproved_supplier_offer_summary",
+                expectations["evidence"]["required_fields"],
+            )
+            self.assertIn(
+                "Unapproved supplier/offer summary:",
+                expectations["evidence"]["visible_markers"],
             )
 
     def test_private_write_workspace_replay_and_source_path_guards(self):
@@ -552,6 +653,15 @@ class PrivateResearchV3Tests(unittest.TestCase):
                     parent_v2_input=built["parent"],
                     seed_manifest_path=built["manifest_path"],
                     seed_variants_path=link,
+                )
+            ancestor_link = built["root"] / "seed-directory-link"
+            ancestor_link.symlink_to(built["root"], target_is_directory=True)
+            with self.assertRaisesRegex(PrivateResearchV3Error, "path differs"):
+                build_private_v3_research_input(
+                    built["base"],
+                    parent_v2_input=built["parent"],
+                    seed_manifest_path=built["manifest_path"],
+                    seed_variants_path=ancestor_link / "variants.csv",
                 )
 
 

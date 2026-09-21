@@ -427,7 +427,7 @@ def private_research_index(
             recent_sales = row.get("recent_observed_sales", {})
             next_stage = row.get("next_missing_stage", {})
             unapproved_hypotheses = row.get(
-                "unapproved_supplier_hypotheses", []
+                "unapproved_supplier_offer_summary", {}
             )
             result_summary = "".join(
                 "<li><strong>"
@@ -454,6 +454,8 @@ def private_research_index(
                         (scenario_id, scenarios.get(scenario_id))
                         for scenario_id in ("H3", "H10", "H17")
                     )
+                    if development_v3 and isinstance(scenarios, dict)
+                    else scenarios.items()
                     if isinstance(scenarios, dict)
                     else ()
                 )
@@ -494,7 +496,7 @@ def private_research_index(
                     + html.escape(
                         json.dumps(next_stage, sort_keys=True, separators=(",", ":"))
                     )
-                    + "</p><p><strong>Unapproved supplier/offer hypotheses:</strong> "
+                    + "</p><p><strong>Unapproved supplier/offer summary:</strong> "
                     + html.escape(
                         json.dumps(
                             unapproved_hypotheses,

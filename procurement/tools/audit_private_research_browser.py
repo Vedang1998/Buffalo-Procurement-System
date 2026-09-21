@@ -1001,7 +1001,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                         "RETRIEVABLE_MISSING_SOURCES",
                         "GENUINELY_OWNER_SPECIFIC_UNANSWERED_FACTS",
                         "FUTURE_RELEASE_AUTHORITY",
-                        "Unapproved supplier/offer hypotheses",
+                        "Unapproved supplier/offer summary",
                     ]
                     if is_v3
                     else []
@@ -1033,6 +1033,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                             "existence_basis",
                             "recent_observed_sales",
                             "next_missing_stage",
+                            "unapproved_supplier_offer_summary",
                         ]
                         if is_v3
                         else []
@@ -1052,6 +1053,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                             "Existence basis:",
                             "Recent recorded sales:",
                             "Next missing stage:",
+                            "Unapproved supplier/offer summary:",
                         ]
                         if is_v3
                         else []

@@ -1402,6 +1402,55 @@ def _compact_unapproved_hypothesis(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _summarize_unapproved_hypotheses(
+    hypotheses: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return a bounded owner preview while binding every detailed hypothesis."""
+
+    normalized = sorted(
+        (_json_clone(item) for item in hypotheses), key=lambda item: _canonical(item)
+    )
+    preview_fields = (
+        "supplier_name",
+        "supplier_sku",
+        "source_occurrence_ref",
+        "source_hypothesis_label",
+        "unapproved_mapping_confidence",
+        "hypothesis_package_type",
+        "hypothesis_raw_pack",
+        "hypothesis_shopify_sellable_units_per_case",
+        "hypothesis_qualifying_units_per_case",
+        "hypothesis_break_unit",
+        "hypothesis_break_quantity",
+        "hypothesis_current_unit_cost",
+        "unapproved_price_ladder_evidence_count",
+        "selection_status",
+        "detail_evidence_sha256",
+    )
+    supplier_names = sorted(
+        {
+            str(item["supplier_name"])
+            for item in normalized
+            if isinstance(item.get("supplier_name"), str)
+            and item["supplier_name"]
+        }
+    )
+    return {
+        "authority": "UNAPPROVED_RESEARCH_HYPOTHESES_ONLY",
+        "hypothesis_count": len(normalized),
+        "named_supplier_count": len(supplier_names),
+        "supplier_names": supplier_names,
+        "preview_limit": 3,
+        "preview": [
+            {key: item.get(key) for key in preview_fields}
+            for item in normalized[:3]
+        ],
+        "all_hypotheses_sha256": _sha(normalized),
+        "detail_projection_section": "research_rows",
+        "selection_authority": False,
+    }
+
+
 def _build_private_research_projection_from_validated_input(
     value: Mapping[str, Any],
     base_intake: Mapping[str, Any],
@@ -1586,7 +1635,11 @@ def _build_private_research_projection_from_validated_input(
                         else "BLOCKED"
                     )
                     primary_counts[scenario_id][result["primary_status"]] += 1
-                if result.get("point_forecast_units") is not None and Decimal(str(result["point_forecast_units"])) == 0:
+                if (
+                    (primary_counts is None or bucket == "calculated")
+                    and result.get("point_forecast_units") is not None
+                    and Decimal(str(result["point_forecast_units"])) == 0
+                ):
                     counts[scenario_id]["numerical_zero"] += 1
                     if (
                         primary_counts is not None
@@ -1793,8 +1846,10 @@ def _build_private_research_projection_from_validated_input(
                     "windows": {},
                 },
             )
-            owner_row["unapproved_supplier_hypotheses"] = deepcopy(
-                compact_hypotheses_by_variant.get(variant_id, [])
+            owner_row["unapproved_supplier_offer_summary"] = (
+                _summarize_unapproved_hypotheses(
+                    compact_hypotheses_by_variant.get(variant_id, [])
+                )
             )
             scenario_results = scenario_results_by_variant[variant_id]
             if variant_id not in input_variant_by_id:

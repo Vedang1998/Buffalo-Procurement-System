@@ -47,6 +47,7 @@ from .private_research_v2 import (
     _projection_canonical,
     _sha,
     _sha_bytes,
+    _summarize_unapproved_hypotheses,
     _source_verified,
     _seal_source_verified,
     input_manifest_key as parent_input_manifest_key,
@@ -150,7 +151,11 @@ def _read_exact_file(
     require_private_mode: bool = False,
 ) -> bytes:
     value = Path(path)
-    if not value.is_absolute() or value.is_symlink():
+    try:
+        resolved = value.resolve(strict=True)
+    except OSError as exc:
+        raise PrivateResearchV3Error(f"{field} is unavailable") from exc
+    if not value.is_absolute() or value != resolved or value.is_symlink():
         raise PrivateResearchV3Error(f"{field} path differs")
     try:
         info = value.stat(follow_symlinks=False)
@@ -361,7 +366,11 @@ def _recent_sales(
             elif direct_rows:
                 identity_scope = "EXACT_CURRENT_SHOPIFY_VARIANT_ID_ONLY"
             else:
-                identity_scope = "EXACT_CURRENT_ID_EXISTENCE_SCOPE_NO_RECORDED_ROWS"
+                identity_scope = (
+                    "EXACT_CURRENT_ID_EXISTENCE_SCOPE_NO_RECORDED_ROWS"
+                    if complete
+                    else "NO_SUPPORTED_WINDOW_EXISTENCE_OR_RECORDED_ROWS"
+                )
             item_windows[label] = {
                 "start_date": start.isoformat(),
                 "end_date": EXPECTED_END.isoformat(),
@@ -679,7 +688,11 @@ def _validate_recent_sales(
                     else (
                         "EXACT_CURRENT_SHOPIFY_VARIANT_ID_ONLY"
                         if direct_rows
-                        else "EXACT_CURRENT_ID_EXISTENCE_SCOPE_NO_RECORDED_ROWS"
+                        else (
+                            "EXACT_CURRENT_ID_EXISTENCE_SCOPE_NO_RECORDED_ROWS"
+                            if expected_complete
+                            else "NO_SUPPORTED_WINDOW_EXISTENCE_OR_RECORDED_ROWS"
+                        )
                     )
                 )
             )
@@ -1184,6 +1197,7 @@ def validate_private_v3_projection(value: Mapping[str, Any]) -> dict[str, Any]:
         or not isinstance(blocked, Mapping)
         or not isinstance(controls, Mapping)
         or set(controls) != _CONTROL_KEYS
+        or controls.get("contract") != ELIGIBILITY_CONTRACT
         or not isinstance(parent_descriptor, Mapping)
         or set(parent_descriptor) != {"contract", "input_id", "sha256"}
         or parent_descriptor.get("contract") != PARENT_INPUT_CONTRACT
@@ -1325,6 +1339,20 @@ def validate_private_v3_projection(value: Mapping[str, Any]) -> dict[str, Any]:
     ):
         raise PrivateResearchV3Error("V3 projection population differs")
     _validate_recent_sales(recent, decision_by_id)
+    try:
+        expected_recent = _recent_sales(
+            ordered_ids,
+            _allocated_daily({"history": history}),
+            decision_by_id,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PrivateResearchV3Error(
+            "V3 projection recent-sales source differs"
+        ) from exc
+    if recent != expected_recent:
+        raise PrivateResearchV3Error(
+            "V3 projection recent-sales derivation differs"
+        )
     derived_primary_counts = {
         scenario_id: {
             "CALCULATED": 0,
@@ -1339,8 +1367,24 @@ def validate_private_v3_projection(value: Mapping[str, Any]) -> dict[str, Any]:
         defaultdict(list)
     )
     research_rows = source.get("research_rows")
-    if not isinstance(research_rows, list):
+    coverage_rows = source.get("coverage_rows")
+    if not isinstance(research_rows, list) or not isinstance(coverage_rows, list):
         raise PrivateResearchV3Error("V3 research-row inventory differs")
+    coverage_by_id: dict[str, Mapping[str, Any]] = {}
+    for coverage_row in coverage_rows:
+        variant_id = (
+            coverage_row.get("shopify_variant_id")
+            if isinstance(coverage_row, Mapping)
+            else None
+        )
+        if (
+            not isinstance(variant_id, str)
+            or variant_id in coverage_by_id
+        ):
+            raise PrivateResearchV3Error("V3 coverage-row identity differs")
+        coverage_by_id[variant_id] = coverage_row
+    if set(coverage_by_id) != set(decision_by_id):
+        raise PrivateResearchV3Error("V3 coverage-row population differs")
     for research_row in research_rows:
         if not isinstance(research_row, Mapping):
             raise PrivateResearchV3Error("V3 research row differs")
@@ -1389,6 +1433,23 @@ def validate_private_v3_projection(value: Mapping[str, Any]) -> dict[str, Any]:
                 point, field="V3 primary forecast point"
             ) == 0:
                 derived_primary_counts[scenario_id]["numerical_zero"] += 1
+        primary_values = {
+            summary.get("primary_status")
+            for summary in scenario_results.values()
+            if isinstance(summary, Mapping)
+        }
+        expected_coverage_primary = (
+            next(iter(primary_values))
+            if len(primary_values) == 1
+            else "BLOCKED"
+        )
+        if (
+            coverage_by_id[variant_id].get("primary_forecast_status")
+            != expected_coverage_primary
+        ):
+            raise PrivateResearchV3Error(
+                "V3 coverage primary outcome differs"
+            )
         if variant_id not in variant_history:
             expected_next = {
                 "stage": "CAPTURE",
@@ -1430,13 +1491,27 @@ def validate_private_v3_projection(value: Mapping[str, Any]) -> dict[str, Any]:
             not isinstance(decision, Mapping)
             or owner.get("existence_basis") != decision.get("existence_basis")
             or owner.get("recent_observed_sales") != recent.get(variant_id)
-            or owner.get("unapproved_supplier_hypotheses")
-            != compact_hypotheses_by_variant.get(variant_id, [])
+            or owner.get("unapproved_supplier_offer_summary")
+            != _summarize_unapproved_hypotheses(
+                compact_hypotheses_by_variant.get(variant_id, [])
+            )
             or owner.get("next_missing_stage") != expected_next
         ):
             raise PrivateResearchV3Error("V3 owner evidence differs")
     if source.get("forecast_primary_status_counts") != derived_primary_counts:
         raise PrivateResearchV3Error("V3 primary result controls differ")
+    for research_row in research_rows:
+        variant_id = research_row.get("shopify_variant_id")
+        forecast = research_row.get("forecast")
+        if (
+            variant_id not in coverage_by_id
+            or not isinstance(forecast, Mapping)
+            or forecast.get("primary_status")
+            != coverage_by_id[variant_id].get("primary_forecast_status")
+        ):
+            raise PrivateResearchV3Error(
+                "V3 research-row primary outcome differs"
+            )
 
     # The V3 result shape intentionally extends, but never weakens, the V2
     # sidecar/evidence/owner validator.  Extra V3 fields are bound above.
