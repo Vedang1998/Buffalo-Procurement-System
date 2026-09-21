@@ -1354,6 +1354,78 @@ def build_private_v2_research_projection(
     )
     if research_input["base_intake"] != _base_intake_identity(base_intake):
         raise PrivateResearchV2Error("V2 research input is bound to another base intake")
+    return _build_private_research_projection_from_validated_input(
+        value,
+        base_intake,
+        source_proof=_INPUT_SOURCE_PROOF,
+        projection_contract=PROJECTION_CONTRACT,
+        input_contract=INPUT_CONTRACT,
+        data_mode=DATA_MODE,
+    )
+
+
+def _compact_unapproved_hypothesis(row: Mapping[str, Any]) -> dict[str, Any]:
+    ladder = row.get("unapproved_price_ladder_evidence")
+    ladder_count = len(ladder) if isinstance(ladder, list) else 0
+    return {
+        "supplier_name": row.get("supplier_name"),
+        "supplier_sku": row.get("supplier_sku"),
+        "supplier_description": row.get("supplier_description"),
+        "source_occurrence_ref": row.get("source_occurrence_ref"),
+        "source_hypothesis_label": row.get("source_hypothesis_label"),
+        "unapproved_mapping_confidence": row.get(
+            "unapproved_mapping_confidence"
+        ),
+        "unapproved_mapping_blocker_reasons": row.get(
+            "unapproved_mapping_blocker_reasons"
+        ),
+        "hypothesis_package_type": row.get("hypothesis_package_type"),
+        "hypothesis_raw_pack": row.get("hypothesis_raw_pack"),
+        "hypothesis_shopify_sellable_units_per_case": row.get(
+            "hypothesis_shopify_sellable_units_per_case"
+        ),
+        "hypothesis_qualifying_units_per_case": row.get(
+            "hypothesis_qualifying_units_per_case"
+        ),
+        "hypothesis_break_unit": row.get("hypothesis_break_unit"),
+        "hypothesis_break_quantity": row.get("hypothesis_break_quantity"),
+        "hypothesis_current_unit_cost": row.get("hypothesis_current_unit_cost"),
+        "hypothesis_allocated_excluded": row.get(
+            "hypothesis_allocated_excluded"
+        ),
+        "hypothesis_combo_excluded": row.get("hypothesis_combo_excluded"),
+        "unapproved_price_ladder_evidence_count": ladder_count,
+        "hypothesis_status": row.get("hypothesis_status"),
+        "selection_status": row.get("selection_status"),
+        "detail_projection_section": "research_rows",
+        "detail_evidence_sha256": _sha(row),
+    }
+
+
+def _build_private_research_projection_from_validated_input(
+    value: Mapping[str, Any],
+    base_intake: Mapping[str, Any],
+    *,
+    source_proof: object,
+    projection_contract: str,
+    input_contract: str,
+    data_mode: str,
+    projection_extras: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a projection from a source-authenticated, versioned research input.
+
+    The input must carry an in-process source-authentication capability.  The V2
+    public entry point above remains byte-compatible.  The additive V3 adapter
+    uses this same numerical path only after independently replaying, validating,
+    and sealing its stronger catalog-preexistence evidence.
+    """
+
+    research_input = _source_verified(
+        value,
+        proof=source_proof,
+        field="versioned research projection input",
+    )
+
     policy = load_development_forecast_policy(evidence_contract=V2_CONTRACT)
     sidecars: dict[str, Any] = {}
     summaries: dict[str, dict[str, Any]] = {}
@@ -1437,11 +1509,11 @@ def build_private_v2_research_projection(
     input_variant_by_id = {
         row["shopify_variant_id"]: row for row in research_input["variants"]
     }
-    base["contract"] = PROJECTION_CONTRACT
-    base["data_mode"] = DATA_MODE
+    base["contract"] = projection_contract
+    base["data_mode"] = data_mode
     base["intake"] = {
-        "contract": INPUT_CONTRACT,
-        "data_mode": DATA_MODE,
+        "contract": input_contract,
+        "data_mode": data_mode,
         "intake_id": research_input["input_id"],
         "base_intake_id": research_input["base_intake"]["intake_id"],
     }
@@ -1462,9 +1534,29 @@ def build_private_v2_research_projection(
         scenario: {"calculated": 0, "blocked": 0, "missing": 0, "unprocessed": 0, "numerical_zero": 0}
         for scenario in ("H3", "H10", "H17")
     }
+    primary_counts = (
+        {
+            scenario: {
+                "CALCULATED": 0,
+                "BLOCKED": 0,
+                "NOT_APPLICABLE": 0,
+                "NOT_PROCESSED": 0,
+                "numerical_zero": 0,
+            }
+            for scenario in ("H3", "H10", "H17")
+        }
+        if projection_contract != PROJECTION_CONTRACT
+        else None
+    )
     coverage_by_id = {row["shopify_variant_id"]: row for row in base["coverage_rows"]}
     preexistence_unproven = set(
         research_input["history"]["preexistence_unproven_variant_ids"]
+    )
+    blocked_reasons = research_input["history"].get(
+        "blocked_reasons_by_variant", {}
+    )
+    recent_sales = research_input["history"].get(
+        "recent_observed_sales_by_variant", {}
     )
     sidecar_keys_by_variant: defaultdict[str, list[str]] = defaultdict(list)
     for key in sidecars:
@@ -1487,27 +1579,76 @@ def build_private_v2_research_projection(
             for scenario_id, result in statuses.items():
                 bucket = "calculated" if result["status"] == CALCULATED_RESEARCH_ONLY else "blocked"
                 counts[scenario_id][bucket] += 1
+                if primary_counts is not None:
+                    result["primary_status"] = (
+                        "CALCULATED"
+                        if result["status"] == CALCULATED_RESEARCH_ONLY
+                        else "BLOCKED"
+                    )
+                    primary_counts[scenario_id][result["primary_status"]] += 1
                 if result.get("point_forecast_units") is not None and Decimal(str(result["point_forecast_units"])) == 0:
                     counts[scenario_id]["numerical_zero"] += 1
+                    if (
+                        primary_counts is not None
+                        and result["primary_status"] == "CALCULATED"
+                    ):
+                        primary_counts[scenario_id]["numerical_zero"] += 1
         else:
-            missing_reason = (
-                "PREEXISTENCE_NOT_ESTABLISHED_FOR_FULL_138_DAY_WINDOW"
-                if variant_id in preexistence_unproven
-                else "NO_SUPPORTED_SOURCE_OBSERVATIONS_IN_138_DAY_WINDOW"
-            )
+            reasons = blocked_reasons.get(variant_id)
+            if not isinstance(reasons, list) or not reasons:
+                reasons = [
+                    (
+                        "PREEXISTENCE_NOT_ESTABLISHED_FOR_FULL_138_DAY_WINDOW"
+                        if variant_id in preexistence_unproven
+                        else "NO_SUPPORTED_SOURCE_OBSERVATIONS_IN_138_DAY_WINDOW"
+                    )
+                ]
+            missing_reasons = sorted(set(str(reason) for reason in reasons))
+            missing_reason = missing_reasons[0]
             row["forecast_status"] = REAL_NUMERICAL_EVALUATION_NOT_RUN
             scenario_results_by_variant[variant_id] = {
                 key: {
                     "status": REAL_NUMERICAL_EVALUATION_NOT_RUN,
-                    "reason_codes": [missing_reason],
+                    "reason_codes": missing_reasons,
+                    **(
+                        {
+                            "primary_status": (
+                                "NOT_APPLICABLE"
+                                if missing_reason
+                                in {
+                                    "VARIANT_CREATED_DURING_FIRST_HISTORY_DAY_FULL_DAY_ZERO_NOT_SUPPORTED",
+                                    "VARIANT_CREATED_AFTER_HISTORY_START_FULL_WINDOW_NOT_SUPPORTED",
+                                }
+                                else "BLOCKED"
+                            )
+                        }
+                        if primary_counts is not None
+                        else {}
+                    ),
                 }
                 for key in ("H3", "H10", "H17")
             }
             row["missing_data_reasons"] = sorted(
-                set(row["missing_data_reasons"]) | {missing_reason}
+                set(row["missing_data_reasons"]) | set(missing_reasons)
             )
             for key in counts:
                 counts[key]["missing"] += 1
+                if primary_counts is not None:
+                    primary_counts[key][
+                        scenario_results_by_variant[variant_id][key][
+                            "primary_status"
+                        ]
+                    ] += 1
+        if primary_counts is not None:
+            primary_values = {
+                item["primary_status"]
+                for item in scenario_results_by_variant[variant_id].values()
+            }
+            row["primary_forecast_status"] = (
+                next(iter(primary_values))
+                if len(primary_values) == 1
+                else "BLOCKED"
+            )
         row["forecast_sidecar_keys"] = sorted(
             sidecar_keys_by_variant.get(variant_id, [])
         )
@@ -1516,6 +1657,15 @@ def build_private_v2_research_projection(
         scenarios = scenario_results_by_variant[variant_id]
         row["forecast"] = {
             "status": coverage_by_id[variant_id]["forecast_status"],
+            **(
+                {
+                    "primary_status": coverage_by_id[variant_id][
+                        "primary_forecast_status"
+                    ]
+                }
+                if primary_counts is not None
+                else {}
+            ),
             "reason_codes": sorted({reason for result in scenarios.values() for reason in result.get("reason_codes", [])}),
             "sidecar_keys": sorted(sidecar_keys_by_variant.get(variant_id, [])),
         }
@@ -1539,11 +1689,24 @@ def build_private_v2_research_projection(
         "ECONOMICS": "APPROVED_SELECTED_PRICE_MARGIN_AND_FEES_NOT_SUPPLIED",
         "ORDER": "PRODUCTION_AND_ORDER_AUTHORITY_NOT_GRANTED",
     }
-    base["owner_worksheet"] = [
-        {
+    compact_hypotheses_by_variant: defaultdict[str, list[dict[str, Any]]] = (
+        defaultdict(list)
+    )
+    if projection_contract != PROJECTION_CONTRACT:
+        for research_row in base["research_rows"]:
+            if research_row.get("supplier_name"):
+                compact_hypotheses_by_variant[
+                    research_row["shopify_variant_id"]
+                ].append(_compact_unapproved_hypothesis(research_row))
+        for hypotheses in compact_hypotheses_by_variant.values():
+            hypotheses.sort(key=lambda item: _canonical(item))
+    base["owner_worksheet"] = []
+    for row in base["coverage_rows"]:
+        variant_id = row["shopify_variant_id"]
+        owner_row = {
             "authority": AUTHORITY_LABEL,
             "research_only": True,
-            "shopify_variant_id": row["shopify_variant_id"],
+            "shopify_variant_id": variant_id,
             "product_title": row["product_title"],
             "variant_title": row["variant_title"],
             "supplier_names": deepcopy(
@@ -1561,15 +1724,19 @@ def build_private_v2_research_projection(
                     "availability_basis"
                 ],
                 "status": (
-                    "COMPLETE_138_DAY_RESEARCH_HISTORY"
-                    if row["shopify_variant_id"] in input_variant_by_id
+                    (
+                        "COMPLETE_138_DAY_SUPPORTED_ATTRIBUTED_RECORDED_SALES_SERIES"
+                        if projection_contract != PROJECTION_CONTRACT
+                        else "COMPLETE_138_DAY_RESEARCH_HISTORY"
+                    )
+                    if variant_id in input_variant_by_id
                     else "NO_SUPPORTED_FULL_WINDOW_HISTORY"
                 ),
                 "observations_sha256": (
-                    input_variant_by_id[row["shopify_variant_id"]][
+                    input_variant_by_id[variant_id][
                         "observations_sha256"
                     ]
-                    if row["shopify_variant_id"] in input_variant_by_id
+                    if variant_id in input_variant_by_id
                     else None
                 ),
             },
@@ -1587,13 +1754,13 @@ def build_private_v2_research_projection(
                 "inventory_evidence": row["inventory_evidence"],
             },
             "scenario_results": scenario_results_by_variant[
-                row["shopify_variant_id"]
+                variant_id
             ],
             "sidecar_keys": sorted(
-                sidecar_keys_by_variant.get(row["shopify_variant_id"], [])
+                sidecar_keys_by_variant.get(variant_id, [])
             ),
             "stage_status": {
-                "CAPTURE": "SUPPORTED" if row["shopify_variant_id"] in summaries else "BLOCKED:CAPTURE",
+                "CAPTURE": "SUPPORTED" if variant_id in summaries else "BLOCKED:CAPTURE",
                 "IDENTITY": "SUPPORTED_CURRENT_OR_APPROVED_HISTORICAL_IDENTITY",
                 "FORECAST": row["forecast_status"],
                 "ABC": "BLOCKED:ABC",
@@ -1612,8 +1779,48 @@ def build_private_v2_research_projection(
             "owner_response": "",
             "operational_effect": "NONE",
         }
-        for row in base["coverage_rows"]
-    ]
+        if projection_contract != PROJECTION_CONTRACT:
+            input_variant = input_variant_by_id.get(variant_id)
+            owner_row["existence_basis"] = (
+                input_variant.get("existence_basis")
+                if isinstance(input_variant, Mapping)
+                else None
+            )
+            owner_row["recent_observed_sales"] = recent_sales.get(
+                variant_id,
+                {
+                    "status": "NO_SUPPORTED_RECENT_SALES_EVIDENCE",
+                    "windows": {},
+                },
+            )
+            owner_row["unapproved_supplier_hypotheses"] = deepcopy(
+                compact_hypotheses_by_variant.get(variant_id, [])
+            )
+            scenario_results = scenario_results_by_variant[variant_id]
+            if variant_id not in input_variant_by_id:
+                owner_row["next_missing_stage"] = {
+                    "stage": "CAPTURE",
+                    "reason": scenario_results["H3"]["reason_codes"][0],
+                }
+            elif all(
+                result.get("status") == CALCULATED_RESEARCH_ONLY
+                for result in scenario_results.values()
+            ):
+                owner_row["next_missing_stage"] = {
+                    "stage": "ABC",
+                    "reason": "EXACT_COHORT_AND_COST_AUTHORITY_REMAINS_INCOMPLETE",
+                }
+            else:
+                blocked_result = next(
+                    result
+                    for result in scenario_results.values()
+                    if result.get("status") != CALCULATED_RESEARCH_ONLY
+                )
+                owner_row["next_missing_stage"] = {
+                    "stage": "FORECAST",
+                    "reason": blocked_result["reason_codes"][0],
+                }
+        base["owner_worksheet"].append(owner_row)
     base["coverage_summary"]["forecast_calculated_research_only_count"] = sum(
         row["forecast_status"] == CALCULATED_RESEARCH_ONLY for row in base["coverage_rows"]
     )
@@ -1626,7 +1833,16 @@ def build_private_v2_research_projection(
         "reason_codes": ["EXACT_COHORT_AND_COST_AUTHORITY_REMAINS_INCOMPLETE"],
     }
     base["forecast_research_counts"] = counts
+    if primary_counts is not None:
+        base["forecast_primary_status_counts"] = primary_counts
     base["limitations"] = sorted(set(base["limitations"]) | set(research_input["limitations"]))
+    if projection_extras:
+        for key, item in projection_extras.items():
+            if key in base:
+                raise PrivateResearchV2Error(
+                    "versioned projection extra collides with canonical output"
+                )
+            base[key] = deepcopy(item)
     normalized = _json_clone(base)
     normalized["projection_sha256"] = _sha_bytes(_projection_canonical(normalized))
     if private_research_projection_sha256(normalized) != normalized["projection_sha256"]:

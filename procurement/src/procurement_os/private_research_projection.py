@@ -36,6 +36,7 @@ from .private_research_intake import (
 
 PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1"
 V2_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+V3_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
 V2_SCENARIO_CONTRACT = "BUFFALO_PRIVATE_FORECAST_RESEARCH_SCENARIO_V1"
 AUTHORITY_LABEL = "ZERO_AUTHORITY_RESEARCH_ONLY"
 DATA_MODE = "PRIVATE_REAL_DATA_RESEARCH_ONLY"
@@ -1502,6 +1503,21 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
 
 
 def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
+    if (
+        isinstance(projection, Mapping)
+        and projection.get("contract") == V3_PROJECTION_CONTRACT
+    ):
+        from .private_research_v3 import (
+            PrivateResearchV3Error,
+            validate_private_v3_projection,
+        )
+
+        try:
+            return validate_private_v3_projection(projection)
+        except PrivateResearchV3Error as exc:
+            raise PrivateResearchProjectionError(
+                "private V3 research projection differs"
+            ) from exc
     source = dict(_mapping(projection, "projection"))
     supplied_sha = source.pop("projection_sha256", None)
     contract_modes = {
@@ -1813,7 +1829,12 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
                 "complete_day_count": history.get("complete_day_count"),
                 "availability_basis": history.get("availability_basis"),
                 "status": (
-                    "COMPLETE_138_DAY_RESEARCH_HISTORY"
+                    (
+                        "COMPLETE_138_DAY_SUPPORTED_ATTRIBUTED_RECORDED_SALES_SERIES"
+                        if history.get("contract")
+                        == "BUFFALO_PRIVATE_FORECAST_HISTORY_COMPOSITE_V3"
+                        else "COMPLETE_138_DAY_RESEARCH_HISTORY"
+                    )
                     if variant_id in variant_history_sha
                     else "NO_SUPPORTED_FULL_WINDOW_HISTORY"
                 ),
@@ -2010,7 +2031,7 @@ def filter_private_research_rows(
     vendor_filter = vendor.strip()
     status_filter = status.strip()
     result: list[dict[str, Any]] = []
-    if value["contract"] == V2_PROJECTION_CONTRACT:
+    if value["contract"] in {V2_PROJECTION_CONTRACT, V3_PROJECTION_CONTRACT}:
         for row in value["owner_worksheet"]:
             reasons = [str(item) for item in row["reason_codes"]]
             scenario_values = list(row["scenario_results"].values())
@@ -2131,6 +2152,24 @@ def _compact_v2_research_provenance(value: Mapping[str, Any]) -> dict[str, Any]:
     identity = _mapping(
         research.get("source_identity"), "V2 forecast source identity"
     )
+    history_keys = (
+        "contract",
+        "composite_id",
+        "start_date",
+        "end_date",
+        "complete_day_count",
+        "availability_basis",
+        "signed_sales_transform",
+        "partitions",
+        "identity_authority",
+        "allocation_controls",
+    )
+    if value.get("contract") == V3_PROJECTION_CONTRACT:
+        history_keys += (
+            "parent_v2_input",
+            "existence_evidence",
+            "eligibility_controls",
+        )
     return {
         "input_id": research.get("input_id"),
         "policy": research.get("policy"),
@@ -2140,21 +2179,7 @@ def _compact_v2_research_provenance(value: Mapping[str, Any]) -> dict[str, Any]:
             "evidence_sha256": identity.get("evidence_sha256"),
             "shop": identity.get("shop"),
         },
-        "history": {
-            key: history.get(key)
-            for key in (
-                "contract",
-                "composite_id",
-                "start_date",
-                "end_date",
-                "complete_day_count",
-                "availability_basis",
-                "signed_sales_transform",
-                "partitions",
-                "identity_authority",
-                "allocation_controls",
-            )
-        },
+        "history": {key: history.get(key) for key in history_keys},
         "scenarios": research.get("scenarios"),
         "sidecars_sha256": research.get("sidecars_sha256"),
     }
@@ -2164,10 +2189,14 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
     """Render one static offline HTML worksheet from a verified projection."""
 
     value = _validated_projection(projection)
-    is_v2 = value["contract"] == V2_PROJECTION_CONTRACT
-    coverage = [] if is_v2 else value["coverage_rows"]
-    research = [] if is_v2 else value["research_rows"]
-    unjoined = [] if is_v2 else value["unjoined_supplier_hypotheses"]
+    is_v3 = value["contract"] == V3_PROJECTION_CONTRACT
+    is_development = value["contract"] in {
+        V2_PROJECTION_CONTRACT,
+        V3_PROJECTION_CONTRACT,
+    }
+    coverage = [] if is_development else value["coverage_rows"]
+    research = [] if is_development else value["research_rows"]
+    unjoined = [] if is_development else value["unjoined_supplier_hypotheses"]
     worksheet = value["owner_worksheet"]
     owner_headers = (
         (
@@ -2175,18 +2204,21 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
             "Product",
             "Variant",
             "Named suppliers",
+            *( ("Unapproved supplier/offer hypotheses",) if is_v3 else () ),
             "Recorded sales coverage",
+            *(("Existence basis", "Recent 7-day recorded sales", "Recent 28-day recorded sales") if is_v3 else ()),
             "Captured stock provenance",
             "H3 research result",
             "H10 research result",
             "H17 research result",
             "Stage status",
+            *(("Next missing stage",) if is_v3 else ()),
             "Forecast sidecar keys",
             "Research question",
             "Reason codes",
             "Owner response",
         )
-        if is_v2
+        if is_development
         else (
             "Shopify Variant ID",
             "Named suppliers",
@@ -2202,12 +2234,23 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
                 row["product_title"],
                 row["variant_title"],
                 row["supplier_names"],
+                *( (row["unapproved_supplier_hypotheses"],) if is_v3 else () ),
                 row["recorded_sales_coverage"],
+                *(
+                    (
+                        row["existence_basis"],
+                        row["recent_observed_sales"]["windows"].get("D7"),
+                        row["recent_observed_sales"]["windows"].get("D28"),
+                    )
+                    if is_v3
+                    else ()
+                ),
                 row["captured_stock_provenance"],
                 row["scenario_results"]["H3"],
                 row["scenario_results"]["H10"],
                 row["scenario_results"]["H17"],
                 row["stage_status"],
+                *( (row["next_missing_stage"],) if is_v3 else () ),
                 row["sidecar_keys"],
                 row["question"],
                 row["reason_codes"],
@@ -2215,7 +2258,7 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
             )
             for row in worksheet
         )
-        if is_v2
+        if is_development
         else (
             (
                 row["shopify_variant_id"],
@@ -2233,20 +2276,40 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
             ("Stage", "Blocker"),
             sorted(value["shared_stage_blockers"].items()),
         )
-        if is_v2
+        if is_development
         else ""
     )
-    v2_notice = (
+    development_notice = (
         "<p class=\"banner\">PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY. "
         "H3/H10/H17 are research assumptions, not supplier schedules. No production "
         "forecast-policy approval or purchasing authority is granted. Detailed "
         "coverage, source provenance, and evidence sidecars remain hash-bound in "
-        "projection.json.</p><h2>V2 source, policy, and 138-day coverage</h2><pre>"
+        "projection.json.</p><h2>"
+        + (
+            "V3 additive source, exact-ID existence evidence, policy, and 138-day coverage"
+            if is_v3
+            else "V2 source, policy, and 138-day coverage"
+        )
+        + "</h2><pre>"
         + _html_value(_compact_v2_research_provenance(value))
         + "</pre><h2>Forecast result controls</h2><pre>"
         + _html_value(value["forecast_research_counts"])
         + "</pre>"
-        if is_v2
+        + (
+            "<h2>Primary per-horizon coverage outcomes</h2><pre>"
+            + _html_value(value["forecast_primary_status_counts"])
+            + "</pre>"
+            if is_v3
+            else ""
+        )
+        if is_development
+        else ""
+    )
+    decision_queue = (
+        "<h2>Grouped decision queue</h2><pre>"
+        + _html_value(value["grouped_decision_queue"])
+        + "</pre>"
+        if is_v3
         else ""
     )
     return (
@@ -2271,7 +2334,8 @@ def render_private_research_html(projection: Mapping[str, Any]) -> str:
         f"Projection SHA-256: <code id=\"projection-sha256\">"
         f"{_html_value(value['projection_sha256'])}</code><br>"
         f"Intake: <code>{_html_value(value['intake']['intake_id'])}</code></p>"
-        + v2_notice
+        + development_notice
+        + decision_queue
         + "<h2>Coverage</h2>"
         + _html_table(
             (
@@ -2520,12 +2584,49 @@ _CSV_FIELDS = (
     "details",
 )
 
+_V3_CSV_FIELDS = _CSV_FIELDS + (
+    "unapproved_supplier_hypotheses",
+    "existence_basis",
+    "recent_7d_start_date",
+    "recent_7d_end_date",
+    "recent_7d_coverage_status",
+    "recent_7d_net_units",
+    "recent_28d_start_date",
+    "recent_28d_end_date",
+    "recent_28d_coverage_status",
+    "recent_28d_net_units",
+    "history_start_date",
+    "history_end_date",
+    "forecast_origin",
+    "h3_status",
+    "h3_point_forecast_units",
+    "h3_model",
+    "h3_confidence",
+    "h3_target_end_exclusive",
+    "h10_status",
+    "h10_point_forecast_units",
+    "h10_model",
+    "h10_confidence",
+    "h10_target_end_exclusive",
+    "h17_status",
+    "h17_point_forecast_units",
+    "h17_model",
+    "h17_confidence",
+    "h17_target_end_exclusive",
+    "next_missing_stage",
+    "next_missing_reason",
+)
+
 
 def render_private_research_csv(projection: Mapping[str, Any]) -> str:
     """Render one formula-safe UTF-8 CSV from a verified projection."""
 
     value = _validated_projection(projection)
-    is_v2 = value["contract"] == V2_PROJECTION_CONTRACT
+    is_v3 = value["contract"] == V3_PROJECTION_CONTRACT
+    is_development = value["contract"] in {
+        V2_PROJECTION_CONTRACT,
+        V3_PROJECTION_CONTRACT,
+    }
     common = {
         "projection_sha256": value["projection_sha256"],
         "projection_contract": value["contract"],
@@ -2546,14 +2647,26 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                         ),
                         "forecast_research_counts": value["forecast_research_counts"],
                         "shared_stage_blockers": value["shared_stage_blockers"],
+                        **(
+                            {
+                                "forecast_primary_status_counts": value[
+                                    "forecast_primary_status_counts"
+                                ],
+                                "grouped_decision_queue": value[
+                                    "grouped_decision_queue"
+                                ]
+                            }
+                            if is_v3
+                            else {}
+                        ),
                     }
-                    if is_v2
+                    if is_development
                     else {}
                 ),
             },
         }
     ]
-    for item in ([] if is_v2 else value["coverage_rows"]):
+    for item in ([] if is_development else value["coverage_rows"]):
         rows.append(
             {
                 **common,
@@ -2603,7 +2716,7 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 },
             }
         )
-    for item in ([] if is_v2 else value["research_rows"]):
+    for item in ([] if is_development else value["research_rows"]):
         rows.append(
             {
                 **common,
@@ -2707,7 +2820,7 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                 },
             }
         )
-    for item in ([] if is_v2 else value["unjoined_supplier_hypotheses"]):
+    for item in ([] if is_development else value["unjoined_supplier_hypotheses"]):
         rows.append(
             {
                 **common,
@@ -2765,8 +2878,7 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
             }
         )
     for item in value["owner_worksheet"]:
-        rows.append(
-            {
+        row = {
                 **common,
                 "row_type": "OWNER_WORKSHEET",
                 "shopify_variant_id": item["shopify_variant_id"],
@@ -2790,17 +2902,85 @@ def render_private_research_csv(projection: Mapping[str, Any]) -> str:
                             "stage_blocker_refs": item["stage_blocker_refs"],
                             "sidecar_keys": item["sidecar_keys"],
                         }
-                        if is_v2
+                        if is_development
                         else {}
                     ),
                 },
             }
-        )
+        if is_v3:
+            stock = item["captured_stock_provenance"]
+            d7 = item["recent_observed_sales"]["windows"]["D7"]
+            d28 = item["recent_observed_sales"]["windows"]["D28"]
+            scenarios = item["scenario_results"]
+            row.update(
+                {
+                    "unapproved_supplier_hypotheses": item[
+                        "unapproved_supplier_hypotheses"
+                    ],
+                    "catalog_available": stock["available"],
+                    "catalog_on_hand": stock["on_hand"],
+                    "catalog_committed": stock["committed"],
+                    "catalog_incoming": stock["trusted_incoming"],
+                    "catalog_raw_incoming": stock["raw_incoming"],
+                    "catalog_raw_incoming_trust": stock["raw_incoming_trust"],
+                    "catalog_raw_incoming_operational_use": stock[
+                        "raw_incoming_operational_use"
+                    ],
+                    "catalog_inventory_evidence": stock["inventory_evidence"],
+                    "forecast_status": item["stage_status"]["FORECAST"],
+                    "abc_status": item["stage_status"]["ABC"],
+                    "economics_status": item["stage_status"]["ECONOMICS"],
+                    "existence_basis": item["existence_basis"],
+                    "recent_7d_start_date": d7["start_date"],
+                    "recent_7d_end_date": d7["end_date"],
+                    "recent_7d_coverage_status": d7["coverage_status"],
+                    "recent_7d_net_units": d7["net_units"],
+                    "recent_28d_start_date": d28["start_date"],
+                    "recent_28d_end_date": d28["end_date"],
+                    "recent_28d_coverage_status": d28["coverage_status"],
+                    "recent_28d_net_units": d28["net_units"],
+                    "history_start_date": item["recorded_sales_coverage"][
+                        "start_date"
+                    ],
+                    "history_end_date": item["recorded_sales_coverage"][
+                        "end_date"
+                    ],
+                    "forecast_origin": value["forecast_research"]["scenarios"][
+                        0
+                    ]["forecast_origin"],
+                    "next_missing_stage": item["next_missing_stage"]["stage"],
+                    "next_missing_reason": item["next_missing_stage"]["reason"],
+                }
+            )
+            for scenario_id, prefix in (("H3", "h3"), ("H10", "h10"), ("H17", "h17")):
+                scenario = scenarios[scenario_id]
+                row[f"{prefix}_status"] = scenario["primary_status"]
+                row[f"{prefix}_point_forecast_units"] = scenario.get(
+                    "point_forecast_units"
+                )
+                row[f"{prefix}_model"] = scenario.get("selected_model")
+                row[f"{prefix}_confidence"] = scenario.get("confidence")
+                row[f"{prefix}_target_end_exclusive"] = (
+                    scenario.get("target_end_exclusive")
+                    or value["forecast_research"]["scenarios"][
+                        {"H3": 0, "H10": 1, "H17": 2}[scenario_id]
+                    ]["target_end_exclusive"]
+                )
+            row["details"]["existence_basis"] = item["existence_basis"]
+            row["details"]["recent_observed_sales"] = item[
+                "recent_observed_sales"
+            ]
+            row["details"]["next_missing_stage"] = item["next_missing_stage"]
+            row["details"]["unapproved_supplier_hypotheses"] = item[
+                "unapproved_supplier_hypotheses"
+            ]
+        rows.append(row)
     stream = io.StringIO(newline="")
-    writer = csv.DictWriter(stream, fieldnames=_CSV_FIELDS, lineterminator="\n")
+    fields = _V3_CSV_FIELDS if is_v3 else _CSV_FIELDS
+    writer = csv.DictWriter(stream, fieldnames=fields, lineterminator="\n")
     writer.writeheader()
     for row in rows:
         writer.writerow(
-            {field: _spreadsheet_safe(row.get(field)) for field in _CSV_FIELDS}
+            {field: _spreadsheet_safe(row.get(field)) for field in fields}
         )
     return stream.getvalue()

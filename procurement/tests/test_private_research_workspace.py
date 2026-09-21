@@ -24,6 +24,7 @@ class PrivateResearchWorkspaceTests(unittest.TestCase):
             build_private_research_projection=mock.DEFAULT,
             render_private_research_html=mock.DEFAULT,
             render_private_research_csv=mock.DEFAULT,
+            private_research_projection_sha256=mock.DEFAULT,
         ), intake, projection
 
     def test_exact_replay_and_partial_resume_verify_immutable_artifacts(self):
@@ -36,6 +37,9 @@ class PrivateResearchWorkspaceTests(unittest.TestCase):
                 patched["build_private_research_projection"].return_value = projection
                 patched["render_private_research_html"].return_value = "<html>safe</html>"
                 patched["render_private_research_csv"].return_value = "safe\n"
+                patched["private_research_projection_sha256"].return_value = (
+                    "a" * 64
+                )
                 first = private_research.build_private_research_workspace(
                     root, "1" * 64
                 )
@@ -46,6 +50,27 @@ class PrivateResearchWorkspaceTests(unittest.TestCase):
                 workspace = (
                     root / "private-research" / "workspaces" / first["workspace_id"]
                 )
+                coverage = workspace / "coverage.json"
+                coverage.chmod(0o644)
+                with self.assertRaisesRegex(
+                    private_research.PrivateResearchError,
+                    "workspace object differs",
+                ):
+                    private_research.build_private_research_workspace(
+                        root, "1" * 64
+                    )
+                coverage.chmod(0o600)
+                extra = workspace / "unexpected.tmp"
+                extra.write_bytes(b"unexpected")
+                extra.chmod(0o600)
+                with self.assertRaisesRegex(
+                    private_research.PrivateResearchError,
+                    "workspace inventory differs",
+                ):
+                    private_research.build_private_research_workspace(
+                        root, "1" * 64
+                    )
+                extra.unlink()
                 (workspace / "manifest.json").unlink()
                 resumed = private_research.build_private_research_workspace(
                     root, "1" * 64
@@ -84,6 +109,9 @@ class PrivateResearchWorkspaceTests(unittest.TestCase):
                 patched["build_private_research_projection"].return_value = projection
                 patched["render_private_research_html"].return_value = "<html>safe</html>"
                 patched["render_private_research_csv"].return_value = "safe\n"
+                patched["private_research_projection_sha256"].return_value = (
+                    "a" * 64
+                )
                 manifest = private_research.build_private_research_workspace(
                     root, "1" * 64
                 )

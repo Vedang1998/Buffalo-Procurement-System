@@ -296,6 +296,24 @@ def _v2_research_provenance(projection: dict[str, object]) -> dict[str, object]:
         return {}
     history = research.get("history")
     identity = research.get("source_identity")
+    history_keys = (
+        "contract",
+        "composite_id",
+        "start_date",
+        "end_date",
+        "complete_day_count",
+        "availability_basis",
+        "signed_sales_transform",
+        "partitions",
+        "identity_authority",
+        "allocation_controls",
+    )
+    if projection.get("contract") == "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3":
+        history_keys += (
+            "parent_v2_input",
+            "existence_evidence",
+            "eligibility_controls",
+        )
     return {
         "input_id": research.get("input_id"),
         "policy": research.get("policy"),
@@ -310,21 +328,7 @@ def _v2_research_provenance(projection: dict[str, object]) -> dict[str, object]:
             else None
         ),
         "history": (
-            {
-                key: history.get(key)
-                for key in (
-                    "contract",
-                    "composite_id",
-                    "start_date",
-                    "end_date",
-                    "complete_day_count",
-                    "availability_basis",
-                    "signed_sales_transform",
-                    "partitions",
-                    "identity_authority",
-                    "allocation_controls",
-                )
-            }
+            {key: history.get(key) for key in history_keys}
             if isinstance(history, dict)
             else None
         ),
@@ -357,10 +361,18 @@ def private_research_index(
         raise HTTPException(status_code=422, detail="Private research filter is too long")
     if stockout not in {"", "NOT_CAPTURED", "CAPTURED_IN_RESEARCH_INPUT", "INCOMPLETE_OR_UNKNOWN"}:
         raise HTTPException(status_code=422, detail="Stockout evidence filter differs")
-    development_v2 = (
-        projection.get("contract") == "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+    development_contract = projection.get("contract")
+    development_research = (
+        development_contract
+        in {
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
+        }
         and projection.get("data_mode")
         == "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
+    )
+    development_v3 = (
+        development_contract == "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
     )
     try:
         rows = filter_private_research_rows(
@@ -400,7 +412,7 @@ def private_research_index(
                 if value
             )
         )
-        if development_v2:
+        if development_research:
             suppliers = row.get("supplier_names", [])
             supplier = html.escape(
                 ", ".join(str(item) for item in suppliers)
@@ -412,6 +424,11 @@ def private_research_index(
             stage_status = row.get("stage_status", {})
             recorded_coverage = row.get("recorded_sales_coverage", {})
             captured_stock = row.get("captured_stock_provenance", {})
+            recent_sales = row.get("recent_observed_sales", {})
+            next_stage = row.get("next_missing_stage", {})
+            unapproved_hypotheses = row.get(
+                "unapproved_supplier_hypotheses", []
+            )
             result_summary = "".join(
                 "<li><strong>"
                 + html.escape(scenario_id)
@@ -424,10 +441,21 @@ def private_research_index(
                 + " · confidence "
                 + html.escape(str(result.get("confidence") or "—"))
                 + " · status "
-                + html.escape(str(result.get("status") or ""))
+                + html.escape(
+                    str(
+                        result.get("primary_status")
+                        if development_v3
+                        else result.get("status")
+                    )
+                )
                 + "</li>"
                 for scenario_id, result in (
-                    scenarios.items() if isinstance(scenarios, dict) else ()
+                    (
+                        (scenario_id, scenarios.get(scenario_id))
+                        for scenario_id in ("H3", "H10", "H17")
+                    )
+                    if isinstance(scenarios, dict)
+                    else ()
                 )
                 if isinstance(result, dict)
             )
@@ -455,6 +483,29 @@ def private_research_index(
                     )
                 )
                 + "</p>"
+                + (
+                    "<p><strong>Existence basis:</strong> "
+                    + html.escape(str(row.get("existence_basis") or "not established"))
+                    + "</p><p><strong>Recent recorded sales:</strong> "
+                    + html.escape(
+                        json.dumps(recent_sales, sort_keys=True, separators=(",", ":"))
+                    )
+                    + "</p><p><strong>Next missing stage:</strong> "
+                    + html.escape(
+                        json.dumps(next_stage, sort_keys=True, separators=(",", ":"))
+                    )
+                    + "</p><p><strong>Unapproved supplier/offer hypotheses:</strong> "
+                    + html.escape(
+                        json.dumps(
+                            unapproved_hypotheses,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    )
+                    + "</p>"
+                    if development_v3
+                    else ""
+                )
             )
         else:
             supplier = html.escape(
@@ -497,7 +548,7 @@ def private_research_index(
     declared = projection.get("declared_coverage", {})
     mode_badge = (
         "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY · H3/H10/H17 ASSUMPTIONS"
-        if development_v2
+        if development_research
         else "PRIVATE_REAL_SOURCE_REVIEW"
     )
     return HTMLResponse(
@@ -520,10 +571,30 @@ def private_research_index(
         + _json_html(declared)
         + "</pre></details>"
         + (
-            "<section><h2>V2 research source, policy, and 138-day coverage</h2><pre>"
+            "<section><h2>"
+            + (
+                "V3 additive research source, exact-ID existence evidence, policy, and 138-day coverage"
+                if development_v3
+                else "V2 research source, policy, and 138-day coverage"
+            )
+            + "</h2><pre>"
             + _json_html(_v2_research_provenance(projection))
             + "</pre></section>"
-            if development_v2
+            if development_research
+            else ""
+        )
+        + (
+            "<section><h2>Primary per-horizon coverage outcomes</h2><pre>"
+            + _json_html(projection.get("forecast_primary_status_counts"))
+            + "</pre></section>"
+            if development_v3
+            else ""
+        )
+        + (
+            "<section><h2>Grouped decision queue</h2><pre>"
+            + _json_html(projection.get("grouped_decision_queue"))
+            + "</pre></section>"
+            if development_v3
             else ""
         )
         + "<p><a href='/private-research/artifacts/owner-preview.html'>Offline HTML preview</a> · "

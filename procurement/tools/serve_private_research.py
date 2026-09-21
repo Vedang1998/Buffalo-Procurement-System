@@ -36,7 +36,9 @@ _MAX_PID_RECORD_BYTES = 4_096
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from procurement_os.private_research import read_private_research_workspace
+from procurement_os.private_research import (
+    read_private_research_workspace_structural as read_private_research_workspace,
+)
 
 
 class PrivateResearchServeError(RuntimeError):
@@ -213,6 +215,9 @@ def serve(root: Path, workspace: Path, port: int) -> None:
     pid_path = root / PID_NAME
     if pid_path.exists() or pid_path.is_symlink():
         raise PrivateResearchServeError("private viewer runtime is already reserved")
+    # The application startup performs the full raw-source semantic replay.  The
+    # launcher only needs an exact structural/artifact preflight before spawning
+    # it; repeating the full replay here doubles cold-start work and memory.
     read_private_research_workspace(workspace)
     commit, tree = _source_identity()
     _assert_port_free(port)

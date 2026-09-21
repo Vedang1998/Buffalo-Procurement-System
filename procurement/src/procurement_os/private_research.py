@@ -22,6 +22,7 @@ from .private_research_intake import (
 from .private_research_projection import (
     PROJECTION_CONTRACT,
     build_private_research_projection,
+    private_research_projection_sha256,
     render_private_research_csv,
     render_private_research_html,
 )
@@ -30,10 +31,12 @@ from .storage import LocalFilesystemStorage
 
 CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1"
 V2_CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2"
+V3_CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3"
 AUTHORITY = "PRIVATE_REAL_SOURCE_REVIEW_ONLY"
 DATA_MODE = "PRIVATE_REAL_SOURCE_REVIEW"
 V2_DATA_MODE = "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
 V2_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
+V3_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
 OPERATIONAL_AUTHORITY = False
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _ARTIFACT_MEDIA_TYPES = {
@@ -114,9 +117,13 @@ def _coverage_export(projection: Mapping[str, Any]) -> dict[str, Any]:
         coverage = projection.get("coverage_rows")
     return {
         "contract": (
-            "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V2"
-            if projection.get("contract") == V2_PROJECTION_CONTRACT
-            else "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V1"
+            "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V3"
+            if projection.get("contract") == V3_PROJECTION_CONTRACT
+            else (
+                "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V2"
+                if projection.get("contract") == V2_PROJECTION_CONTRACT
+                else "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V1"
+            )
         ),
         "authority": AUTHORITY,
         "operational_authority": False,
@@ -159,6 +166,31 @@ def _v2_workspace_identity(
     )
 
 
+def _v3_workspace_identity(
+    research_input: Mapping[str, Any],
+    parent_v2_input: Mapping[str, Any],
+    base_intake: Mapping[str, Any],
+    projection: Mapping[str, Any],
+) -> str:
+    return _sha256(
+        _canonical_bytes(
+            {
+                "contract": V3_CONTRACT,
+                "input_id": research_input.get("input_id"),
+                "input_sha256": _sha256(_canonical_bytes(research_input)),
+                "parent_v2_input_id": parent_v2_input.get("input_id"),
+                "parent_v2_input_sha256": _sha256(
+                    _canonical_bytes(parent_v2_input)
+                ),
+                "base_intake_id": base_intake.get("intake_id"),
+                "base_intake_sha256": _sha256(_canonical_bytes(base_intake)),
+                "projection_contract": V3_PROJECTION_CONTRACT,
+                "projection_sha256": projection.get("projection_sha256"),
+            }
+        )
+    )
+
+
 def build_private_research_workspace(
     private_root: str | Path,
     intake_id: str,
@@ -190,8 +222,6 @@ def build_private_research_workspace(
         directory.chmod(0o700)
     storage = LocalFilesystemStorage(root)
     manifest_key = f"{prefix}/manifest.json"
-    if storage.exists(manifest_key):
-        return read_private_research_workspace(root / prefix)["manifest"]
     artifacts = {
         "coverage.json": _canonical_bytes(_coverage_export(projection)),
         "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
@@ -219,11 +249,8 @@ def build_private_research_workspace(
         "limitations": _limitations(projection),
         "zero_authority": dict(_ZERO_AUTHORITY),
     }
-    try:
-        storage.put_bytes_once(manifest_key, _canonical_bytes(manifest))
-    except FileExistsError:
-        return read_private_research_workspace(root / prefix)["manifest"]
-    return read_private_research_workspace(root / prefix)["manifest"]
+    _put_once_or_verify(storage, manifest_key, _canonical_bytes(manifest))
+    return read_private_research_workspace_structural(workspace_path)["manifest"]
 
 
 def build_private_v2_research_workspace(
@@ -271,8 +298,6 @@ def build_private_v2_research_workspace(
         directory.chmod(0o700)
     storage = LocalFilesystemStorage(root)
     manifest_key = f"{prefix}/manifest.json"
-    if storage.exists(manifest_key):
-        return read_private_research_workspace(root / prefix)["manifest"]
     artifacts = {
         "coverage.json": _canonical_bytes(_coverage_export(projection)),
         "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
@@ -302,11 +327,136 @@ def build_private_v2_research_workspace(
         "limitations": _limitations(projection),
         "zero_authority": dict(_ZERO_AUTHORITY),
     }
+    _put_once_or_verify(storage, manifest_key, _canonical_bytes(manifest))
+    return read_private_research_workspace_structural(workspace_path)["manifest"]
+
+
+def build_private_v3_research_workspace(
+    private_root: str | Path,
+    input_id: str,
+) -> dict[str, Any]:
+    """Build or exactly replay a sealed additive V3 research workspace."""
+
     try:
-        storage.put_bytes_once(manifest_key, _canonical_bytes(manifest))
-    except FileExistsError:
-        return read_private_research_workspace(root / prefix)["manifest"]
-    return read_private_research_workspace(root / prefix)["manifest"]
+        from .private_research_v2 import input_manifest_key as v2_input_manifest_key
+        from .private_research_v3 import (
+            build_private_v3_research_projection,
+            input_manifest_key as v3_input_manifest_key,
+            read_private_v3_research_bundle,
+        )
+
+        root = validate_private_root(Path(private_root))
+        research_input, parent_v2_input, base_intake = (
+            read_private_v3_research_bundle(root, input_id)
+        )
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private V3 research inputs are invalid") from exc
+    return _build_private_v3_research_workspace_from_verified(
+        root,
+        research_input,
+        parent_v2_input,
+        base_intake,
+    )
+
+
+def _build_private_v3_research_workspace_from_verified(
+    private_root: str | Path,
+    research_input: Mapping[str, Any],
+    parent_v2_input: Mapping[str, Any],
+    base_intake: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Publish V3 from already source-authenticated in-process inputs.
+
+    This is deliberately private to the local orchestration boundary.  The
+    projection builder verifies both source capabilities and their content
+    bindings before any output is accepted.  Public ID-based replay continues
+    through ``build_private_v3_research_workspace`` above.
+    """
+
+    try:
+        from .private_research_v2 import input_manifest_key as v2_input_manifest_key
+        from .private_research_v3 import (
+            build_private_v3_research_projection,
+            input_manifest_key as v3_input_manifest_key,
+        )
+
+        root = validate_private_root(Path(private_root))
+        projection = build_private_v3_research_projection(
+            research_input, parent_v2_input, base_intake
+        )
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private V3 research inputs are invalid") from exc
+    if (
+        not isinstance(research_input, dict)
+        or not isinstance(parent_v2_input, dict)
+        or not isinstance(base_intake, dict)
+        or not isinstance(projection, dict)
+        or projection.get("contract") != V3_PROJECTION_CONTRACT
+    ):
+        raise PrivateResearchError("private V3 research input shape differs")
+    projection_sha = projection.get("projection_sha256")
+    if not isinstance(projection_sha, str) or not _HEX64.fullmatch(projection_sha):
+        raise PrivateResearchError("private V3 research projection identity differs")
+    input_id = research_input.get("input_id")
+    if not isinstance(input_id, str) or not _HEX64.fullmatch(input_id):
+        raise PrivateResearchError("private V3 research input identity differs")
+    workspace_id = _v3_workspace_identity(
+        research_input, parent_v2_input, base_intake, projection
+    )
+    prefix = f"private-research/workspaces/{workspace_id}"
+    workspace_path = root / prefix
+    workspace_path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for directory in (
+        root / "private-research",
+        root / "private-research" / "workspaces",
+        workspace_path,
+    ):
+        directory.chmod(0o700)
+    storage = LocalFilesystemStorage(root)
+    artifacts = {
+        "coverage.json": _canonical_bytes(_coverage_export(projection)),
+        "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
+        "owner-worksheet.csv": render_private_research_csv(projection).encode("utf-8"),
+        "projection.json": _canonical_bytes(projection),
+    }
+    artifact_records: list[dict[str, Any]] = []
+    for name in sorted(artifacts):
+        data = artifacts[name]
+        _put_once_or_verify(storage, f"{prefix}/{name}", data)
+        artifact_records.append(_artifact_record(name, data))
+    manifest: dict[str, Any] = {
+        "contract": V3_CONTRACT,
+        "data_mode": V2_DATA_MODE,
+        "authority": AUTHORITY,
+        "operational_authority": False,
+        "workspace_id": workspace_id,
+        "intake_id": input_id,
+        "intake_manifest_key": v3_input_manifest_key(input_id),
+        "intake_sha256": _sha256(_canonical_bytes(research_input)),
+        "parent_v2_input_id": parent_v2_input["input_id"],
+        "parent_v2_input_manifest_key": v2_input_manifest_key(
+            parent_v2_input["input_id"]
+        ),
+        "parent_v2_input_sha256": _sha256(
+            _canonical_bytes(parent_v2_input)
+        ),
+        "base_intake_id": base_intake["intake_id"],
+        "base_intake_manifest_key": intake_manifest_key(base_intake["intake_id"]),
+        "base_intake_sha256": _sha256(_canonical_bytes(base_intake)),
+        "projection_contract": V3_PROJECTION_CONTRACT,
+        "projection_sha256": projection_sha,
+        "artifacts": artifact_records,
+        "limitations": _limitations(projection),
+        "zero_authority": dict(_ZERO_AUTHORITY),
+    }
+    _put_once_or_verify(
+        storage, f"{prefix}/manifest.json", _canonical_bytes(manifest)
+    )
+    return read_private_research_workspace_structural(workspace_path)["manifest"]
 
 
 def _validate_workspace_root(path: Path) -> tuple[Path, str]:
@@ -442,6 +592,379 @@ def _read_private_v2_workspace(
     return {"manifest": dict(manifest), "projection": projection, "artifacts": loaded}
 
 
+def _read_private_v3_workspace(
+    *,
+    root: Path,
+    prefix: str,
+    expected_workspace_id: str,
+    storage: LocalFilesystemStorage,
+    manifest: Mapping[str, Any],
+    manifest_bytes: bytes,
+) -> dict[str, Any]:
+    try:
+        from .private_research_v2 import input_manifest_key as v2_input_manifest_key
+        from .private_research_v3 import (
+            build_private_v3_research_projection,
+            input_manifest_key as v3_input_manifest_key,
+            read_private_v3_research_bundle,
+        )
+
+        input_id = str(manifest.get("intake_id", ""))
+        parent_id = str(manifest.get("parent_v2_input_id", ""))
+        base_id = str(manifest.get("base_intake_id", ""))
+        expected_input_key = v3_input_manifest_key(input_id)
+        expected_parent_key = v2_input_manifest_key(parent_id)
+        expected_base_key = intake_manifest_key(base_id)
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private V3 research manifest contract differs") from exc
+    expected_keys = {
+        "contract",
+        "data_mode",
+        "authority",
+        "operational_authority",
+        "workspace_id",
+        "intake_id",
+        "intake_manifest_key",
+        "intake_sha256",
+        "parent_v2_input_id",
+        "parent_v2_input_manifest_key",
+        "parent_v2_input_sha256",
+        "base_intake_id",
+        "base_intake_manifest_key",
+        "base_intake_sha256",
+        "projection_contract",
+        "projection_sha256",
+        "artifacts",
+        "limitations",
+        "zero_authority",
+    }
+    if (
+        set(manifest) != expected_keys
+        or manifest.get("contract") != V3_CONTRACT
+        or manifest.get("data_mode") != V2_DATA_MODE
+        or manifest.get("authority") != AUTHORITY
+        or manifest.get("operational_authority") is not False
+        or manifest.get("workspace_id") != expected_workspace_id
+        or manifest.get("projection_contract") != V3_PROJECTION_CONTRACT
+        or manifest.get("intake_manifest_key") != expected_input_key
+        or manifest.get("parent_v2_input_manifest_key") != expected_parent_key
+        or manifest.get("base_intake_manifest_key") != expected_base_key
+        or not _exact_zero_authority(manifest.get("zero_authority"))
+        or _canonical_bytes(manifest) != manifest_bytes
+    ):
+        raise PrivateResearchError("private V3 research manifest contract differs")
+    try:
+        research_input, parent_v2_input, base_intake = (
+            read_private_v3_research_bundle(root, input_id)
+        )
+        projection = build_private_v3_research_projection(
+            research_input, parent_v2_input, base_intake
+        )
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private V3 research semantic replay failed") from exc
+    if (
+        manifest.get("intake_sha256") != _sha256(_canonical_bytes(research_input))
+        or manifest.get("parent_v2_input_sha256")
+        != _sha256(_canonical_bytes(parent_v2_input))
+        or manifest.get("base_intake_sha256")
+        != _sha256(_canonical_bytes(base_intake))
+        or manifest.get("projection_sha256") != projection.get("projection_sha256")
+        or expected_workspace_id
+        != _v3_workspace_identity(
+            research_input, parent_v2_input, base_intake, projection
+        )
+        or manifest.get("limitations") != _limitations(projection)
+    ):
+        raise PrivateResearchError("private V3 research source binding differs")
+    expected_artifacts = {
+        "coverage.json": _canonical_bytes(_coverage_export(projection)),
+        "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
+        "owner-worksheet.csv": render_private_research_csv(projection).encode("utf-8"),
+        "projection.json": _canonical_bytes(projection),
+    }
+    records = manifest.get("artifacts")
+    if not isinstance(records, list) or len(records) != len(expected_artifacts):
+        raise PrivateResearchError("private V3 research artifact inventory differs")
+    by_name: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict) or set(record) != {
+            "name",
+            "path",
+            "bytes",
+            "sha256",
+            "media_type",
+        }:
+            raise PrivateResearchError("private V3 research artifact record differs")
+        name = record.get("name")
+        if not isinstance(name, str) or name in by_name or record.get("path") != name:
+            raise PrivateResearchError("private V3 research artifact name differs")
+        by_name[name] = record
+    if set(by_name) != set(expected_artifacts):
+        raise PrivateResearchError("private V3 research artifact set differs")
+    loaded: dict[str, bytes] = {}
+    for name, expected in expected_artifacts.items():
+        try:
+            data = storage.get_bytes(f"{prefix}/{name}")
+        except OSError as exc:
+            raise PrivateResearchError("private V3 research artifact is unavailable") from exc
+        if data != expected or by_name[name] != _artifact_record(name, data):
+            raise PrivateResearchError("private V3 research artifact integrity differs")
+        loaded[name] = data
+    return {"manifest": dict(manifest), "projection": projection, "artifacts": loaded}
+
+
+def read_private_research_workspace_structural(
+    workspace_root: str | Path,
+) -> dict[str, Any]:
+    """Validate a sealed workspace without replaying its upstream source package.
+
+    This is a preflight/read-only delivery check, not a source-authentication
+    boundary.  It validates the private path and modes, canonical manifests,
+    content-addressed workspace identity, projection semantics, exact exports, and
+    all artifact hashes.  The application startup continues to call
+    :func:`read_private_research_workspace`, which replays the complete raw-source
+    derivation and referenced-input availability on every launch and restart.
+    """
+
+    path = Path(workspace_root)
+    private_root, expected_workspace_id = _validate_workspace_root(path)
+    expected_names = set(_ARTIFACT_MEDIA_TYPES) | {"manifest.json"}
+    try:
+        entries = list(path.iterdir())
+    except OSError as exc:
+        raise PrivateResearchError("private research workspace is unavailable") from exc
+    if {entry.name for entry in entries} != expected_names:
+        raise PrivateResearchError("private research workspace inventory differs")
+    for entry in entries:
+        try:
+            info = entry.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise PrivateResearchError(
+                "private research workspace inventory is unavailable"
+            ) from exc
+        if (
+            entry.is_symlink()
+            or not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o600
+        ):
+            raise PrivateResearchError("private research workspace object differs")
+    try:
+        root = validate_private_root(private_root)
+        storage = LocalFilesystemStorage(root)
+        prefix = f"private-research/workspaces/{expected_workspace_id}"
+        manifest_bytes = storage.get_bytes(f"{prefix}/manifest.json")
+        manifest = json.loads(manifest_bytes)
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private research manifest is unreadable") from exc
+    if not isinstance(manifest, dict) or _canonical_bytes(manifest) != manifest_bytes:
+        raise PrivateResearchError("private research manifest contract differs")
+
+    workspace_contract = manifest.get("contract")
+    is_v2 = workspace_contract == V2_CONTRACT
+    is_v3 = workspace_contract == V3_CONTRACT
+    is_development = is_v2 or is_v3
+    expected_keys = {
+        "contract",
+        "data_mode",
+        "authority",
+        "operational_authority",
+        "workspace_id",
+        "intake_id",
+        "intake_manifest_key",
+        "intake_sha256",
+        "projection_contract",
+        "projection_sha256",
+        "artifacts",
+        "limitations",
+        "zero_authority",
+    }
+    if is_development:
+        expected_keys |= {
+            "base_intake_id",
+            "base_intake_manifest_key",
+            "base_intake_sha256",
+        }
+    if is_v3:
+        expected_keys |= {
+            "parent_v2_input_id",
+            "parent_v2_input_manifest_key",
+            "parent_v2_input_sha256",
+        }
+    try:
+        if is_v3:
+            from .private_research_v2 import input_manifest_key as v2_input_manifest_key
+            from .private_research_v3 import input_manifest_key as v3_input_manifest_key
+
+            expected_input_key = v3_input_manifest_key(
+                str(manifest.get("intake_id", ""))
+            )
+            expected_parent_key = v2_input_manifest_key(
+                str(manifest.get("parent_v2_input_id", ""))
+            )
+            expected_base_key = intake_manifest_key(
+                str(manifest.get("base_intake_id", ""))
+            )
+        elif is_v2:
+            from .private_research_v2 import input_manifest_key as v2_input_manifest_key
+
+            expected_input_key = v2_input_manifest_key(str(manifest.get("intake_id", "")))
+            expected_base_key = intake_manifest_key(
+                str(manifest.get("base_intake_id", ""))
+            )
+        else:
+            expected_input_key = intake_manifest_key(
+                str(manifest.get("intake_id", ""))
+            )
+            expected_base_key = None
+            expected_parent_key = None
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private research manifest contract differs") from exc
+    if (
+        set(manifest) != expected_keys
+        or manifest.get("contract")
+        != (V3_CONTRACT if is_v3 else (V2_CONTRACT if is_v2 else CONTRACT))
+        or manifest.get("data_mode")
+        != (V2_DATA_MODE if is_development else DATA_MODE)
+        or manifest.get("authority") != AUTHORITY
+        or manifest.get("operational_authority") is not False
+        or manifest.get("workspace_id") != expected_workspace_id
+        or manifest.get("projection_contract")
+        != (
+            V3_PROJECTION_CONTRACT
+            if is_v3
+            else (V2_PROJECTION_CONTRACT if is_v2 else PROJECTION_CONTRACT)
+        )
+        or manifest.get("intake_manifest_key") != expected_input_key
+        or (
+            is_development
+            and manifest.get("base_intake_manifest_key") != expected_base_key
+        )
+        or (
+            is_v3
+            and manifest.get("parent_v2_input_manifest_key")
+            != expected_parent_key
+        )
+        or not _exact_zero_authority(manifest.get("zero_authority"))
+    ):
+        raise PrivateResearchError("private research manifest contract differs")
+
+    records = manifest.get("artifacts")
+    if not isinstance(records, list) or len(records) != len(_ARTIFACT_MEDIA_TYPES):
+        raise PrivateResearchError("private research artifact inventory differs")
+    by_name: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict) or set(record) != {
+            "name",
+            "path",
+            "bytes",
+            "sha256",
+            "media_type",
+        }:
+            raise PrivateResearchError("private research artifact record differs")
+        name = record.get("name")
+        if (
+            not isinstance(name, str)
+            or name in by_name
+            or name not in _ARTIFACT_MEDIA_TYPES
+            or record.get("path") != name
+            or record.get("media_type") != _ARTIFACT_MEDIA_TYPES[name]
+        ):
+            raise PrivateResearchError("private research artifact name differs")
+        by_name[name] = record
+    if set(by_name) != set(_ARTIFACT_MEDIA_TYPES):
+        raise PrivateResearchError("private research artifact set differs")
+    loaded: dict[str, bytes] = {}
+    for name in sorted(_ARTIFACT_MEDIA_TYPES):
+        try:
+            data = storage.get_bytes(f"{prefix}/{name}")
+        except OSError as exc:
+            raise PrivateResearchError("private research artifact is unavailable") from exc
+        if by_name[name] != _artifact_record(name, data):
+            raise PrivateResearchError("private research artifact integrity differs")
+        loaded[name] = data
+    try:
+        projection = json.loads(loaded["projection.json"])
+        if (
+            not isinstance(projection, dict)
+            or _canonical_bytes(projection) != loaded["projection.json"]
+            or private_research_projection_sha256(projection)
+            != manifest.get("projection_sha256")
+        ):
+            raise PrivateResearchError("private research projection differs")
+    except PrivateResearchError:
+        raise
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError("private research projection is invalid") from exc
+    expected_artifacts = {
+        "coverage.json": _canonical_bytes(_coverage_export(projection)),
+        "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
+        "owner-worksheet.csv": render_private_research_csv(projection).encode("utf-8"),
+        "projection.json": _canonical_bytes(projection),
+    }
+    if any(loaded[name] != expected for name, expected in expected_artifacts.items()):
+        raise PrivateResearchError("private research artifact content differs")
+    if manifest.get("limitations") != _limitations(projection):
+        raise PrivateResearchError("private research limitations differ")
+    if is_v3:
+        expected_identity = _sha256(
+            _canonical_bytes(
+                {
+                    "contract": V3_CONTRACT,
+                    "input_id": manifest.get("intake_id"),
+                    "input_sha256": manifest.get("intake_sha256"),
+                    "parent_v2_input_id": manifest.get("parent_v2_input_id"),
+                    "parent_v2_input_sha256": manifest.get(
+                        "parent_v2_input_sha256"
+                    ),
+                    "base_intake_id": manifest.get("base_intake_id"),
+                    "base_intake_sha256": manifest.get("base_intake_sha256"),
+                    "projection_contract": V3_PROJECTION_CONTRACT,
+                    "projection_sha256": manifest.get("projection_sha256"),
+                }
+            )
+        )
+    elif is_v2:
+        expected_identity = _sha256(
+            _canonical_bytes(
+                {
+                    "contract": V2_CONTRACT,
+                    "input_id": manifest.get("intake_id"),
+                    "input_sha256": manifest.get("intake_sha256"),
+                    "base_intake_id": manifest.get("base_intake_id"),
+                    "base_intake_sha256": manifest.get("base_intake_sha256"),
+                    "projection_contract": V2_PROJECTION_CONTRACT,
+                    "projection_sha256": manifest.get("projection_sha256"),
+                }
+            )
+        )
+    else:
+        expected_identity = _sha256(
+            _canonical_bytes(
+                {
+                    "contract": CONTRACT,
+                    "intake_id": manifest.get("intake_id"),
+                    "intake_sha256": manifest.get("intake_sha256"),
+                    "projection_contract": PROJECTION_CONTRACT,
+                    "projection_sha256": manifest.get("projection_sha256"),
+                }
+            )
+        )
+    if expected_identity != expected_workspace_id:
+        raise PrivateResearchError("private research workspace identity differs")
+    return {"manifest": manifest, "projection": projection, "artifacts": loaded}
+
+
 def read_private_research_workspace(workspace_root: str | Path) -> dict[str, Any]:
     """Rehash and semantically rebuild one immutable research workspace."""
 
@@ -478,6 +1001,15 @@ def read_private_research_workspace(workspace_root: str | Path) -> dict[str, Any
         if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
             raise
         raise PrivateResearchError("private research manifest is unreadable") from exc
+    if isinstance(manifest, dict) and manifest.get("contract") == V3_CONTRACT:
+        return _read_private_v3_workspace(
+            root=root,
+            prefix=prefix,
+            expected_workspace_id=expected_workspace_id,
+            storage=storage,
+            manifest=manifest,
+            manifest_bytes=manifest_bytes,
+        )
     if isinstance(manifest, dict) and manifest.get("contract") == V2_CONTRACT:
         return _read_private_v2_workspace(
             root=root,

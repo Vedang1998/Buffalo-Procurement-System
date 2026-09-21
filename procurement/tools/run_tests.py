@@ -60,6 +60,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_private_research_intake.py": 16,
     "test_private_research_projection.py": 19,
     "test_private_research_v2.py": 5,
+    "test_private_research_v3.py": 5,
     "test_private_research_tools.py": 4,
     "test_private_research_workspace.py": 2,
     "test_readiness.py": 21,
