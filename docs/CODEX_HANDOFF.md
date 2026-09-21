@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-20T08:03:00Z (UTC)
+**Updated:** 2026-09-21T21:57:14Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,68 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Monday private research coverage expansion — MATERIAL CHECKPOINT PRESERVED / FINAL ACCEPTANCE INCOMPLETE
+
+- The authorized execution window began at `2026-09-21T10:57:26Z` and its
+  hard stop was `2026-09-21T20:57:26Z`. Work stopped when the host clock was
+  observed beyond that boundary. The isolated branch is
+  `codex/private-v2-research-input`; the preserved material checkpoint is
+  commit `7eccf94585e95b632f982dbabc7cc25842a4c47b`, tree
+  `dce11f14d5f8258b5b2ad57eb3f3b89164f1b384`. The starting checkpoint
+  `afba33adfd37e8a59a48665fcc9175f9e4647338`, tree
+  `0533a987c3330ba3203f82bb534976097f8f184c`, remains unchanged.
+- The exact frozen `afba33a` suite passed **936/936**, with every abnormal
+  counter zero; raw log SHA-256 is
+  `00c4e42e7080d61bfb71f6fece590c617edc8d58604a976992a7c91dd42c35e0`.
+  Separate startup checks passed **10/10**, raw SHA-256
+  `6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7`.
+  That evidence is retained privately under
+  `private-v2-research-20260920T133732Z/evidence/frozen-suite-afba33a-20260921`.
+- The 73-Variant parent was not a sample cap: it required an allocated source
+  row on the first history day. Exact-ID-only, hash-pinned reviewed seed
+  creation evidence supports 1,292 additional pre-window current Variants, for
+  a union of **1,365 supported / 644 unsupported** out of 2,009. The unsupported
+  partition is 600 created after the history start, one conservatively blocked
+  on the first history date because the retained timestamp has no timezone,
+  and 43 absent from reviewed creation evidence. No title, SKU, fuzzy match or
+  guessed alias expands eligibility.
+- Additive V3 contracts bind the immutable V2 parent plus exact reviewed seed
+  bytes, retain source-authentication capabilities, publish only the 1,292
+  added series, reuse the registered Development Forecast V2 engine, preserve
+  UNKNOWN availability, and keep all purchasing authority false. Compact owner
+  rows include D7/D28 recorded-sales diagnostics, H3/H10/H17 outcomes, precise
+  next-stage status, and a bounded unapproved supplier/offer summary whose hash
+  binds the full detailed research-row evidence.
+- A provisional real V3 computation on earlier checkpoint `9fd49b6...`
+  completed in 621.29 seconds and produced 1,365 calculated results per
+  horizon, with 43 BLOCKED and 601 NOT_APPLICABLE per horizon in the primary
+  owner taxonomy. Its H3/H10/H17 numerical-zero counts were respectively
+  1,030/813/768. Because later integrity and compact-output corrections changed
+  the material source, its input/projection/workspace identifiers and artifacts
+  are **STALE / NOT FINAL** and must not be cited as final acceptance evidence.
+- On the final delta, the registered discovery population and module-floor sum
+  reconcile at **941**. Final V3 focused tests passed **5/5**; an independent
+  read-only reviewer ran **65/65** pure focused tests, and compile/diff checks
+  passed. Another read-only reviewer found no P0-P2 defect and directly verified
+  that V2 generation retains its pre-V3 owner shape. A contrary V2-compatibility
+  comment was traced to overlooking the explicit V3-only contract branch; it is
+  not an open finding.
+- Final authoritative `941/941`, final real V3 rebuild/source readback, actual
+  authenticated private Chromium initial/restart acceptance, final compact
+  artifact identities, and final code/private ZIP transports were **NOT RUN / NOT
+  SEALED before the hard stop**. Earlier initial ZIPs remain explicitly
+  `VALIDATION_INCOMPLETE`; they are not final delivery packages.
+- Cleanup at `2026-09-21T21:57:14Z` found no owned V3 builder, viewer, browser,
+  test PostgreSQL root, loopback listener, runtime secret or PID file. No
+  operational database, Shopify write, DRAFT, PO, supplier communication,
+  deployment, release or purchase occurred. Real purchasing remains
+  **UNAUTHORIZED / NOT ESTABLISHED**.
+- Exact next boundary: independently review `7eccf945...`, rebuild/reseal the
+  real V3 workspace from retained source bytes, run the one final authoritative
+  suite and actual browser/restart acceptance, and create the two final
+  transports. This requires a new explicit execution authorization because the
+  ten-hour window expired.
 
 ### Saturday private real-data bridge — BOUNDED LOCAL MACHINE + BROWSER PASS / REAL PURCHASING BLOCKED
 
