@@ -60,18 +60,20 @@ validation again.
 
 ### Shared filtering core
 
-Move only the already-established query/vendor/status matching loop into a
-private iterator over a previously validated projection. The public
-`filter_private_research_rows()` remains the supported external boundary,
-still calls `_validated_projection()`, and materializes the iterator exactly as
-before.
+Move only the already-established query/vendor/status matching semantics into
+a compiled private row predicate. The predicate accepts one row plus the fixed
+projection contract; it never accepts or authenticates a whole projection. The
+public `filter_private_research_rows()` remains the supported external
+boundary, still calls `_validated_projection()`, selects rows from that
+validated value, and applies the shared predicate exactly as before.
 
-The app consumes only row references from that private iterator while applying
-its existing stockout filter, count, and pagination. It recursively copies only
-the at-most-50 selected rows before rendering. Request code therefore cannot
-mutate nested structures in the cached workspace, and an ordinary unfiltered
-request does not copy, serialize, or hash all 2,009 rows or the complete 230MB
-projection.
+After its snapshot-identity guard, the app selects the sealed row collection
+itself and applies that same predicate while performing its existing stockout
+filter, count, and pagination. It recursively copies only the at-most-50
+selected rows before returning them to request rendering. Request code
+therefore cannot mutate nested structures in the cached workspace, no unchecked
+whole-projection fast path exists, and an ordinary unfiltered request does not
+copy, serialize, or hash all 2,009 rows or the complete 230MB projection.
 
 ### App-owned access guard
 
@@ -86,8 +88,9 @@ and checks all of the following before calling the private core:
 
 Any mismatch raises `PrivateResearchProjectionError`, which the route already
 normalizes to a private 503 response. No request parameter, filename, hash, or
-identity string can opt into this path. Only after this guard may the route use
-the private match iterator and copy its selected page.
+identity string can opt into this path. Only after this guard may the route
+select the cached row collection, apply the shared row predicate, and return
+its detached selected page.
 
 Artifact and projection download routes continue to return the exact sealed
 bytes already held by the validated workspace.

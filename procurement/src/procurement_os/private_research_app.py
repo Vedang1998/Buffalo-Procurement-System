@@ -30,8 +30,10 @@ from .private_research import (
     read_private_research_workspace,
 )
 from .private_research_projection import (
+    V2_PROJECTION_CONTRACT,
+    V3_PROJECTION_CONTRACT,
     PrivateResearchProjectionError,
-    _iter_filtered_private_research_rows,
+    _compile_private_research_row_filter,
 )
 
 
@@ -255,12 +257,21 @@ def _page_app_owned_workspace_rows(
     end = page * page_size
     matched_count = 0
     selected: list[dict[str, object]] = []
-    for row in _iter_filtered_private_research_rows(
-        projection,
+    contract = str(projection["contract"])
+    rows = (
+        projection["owner_worksheet"]
+        if contract in {V2_PROJECTION_CONTRACT, V3_PROJECTION_CONTRACT}
+        else projection["research_rows"]
+    )
+    matches = _compile_private_research_row_filter(
+        contract,
         query=query,
         vendor=vendor,
         status=status,
-    ):
+    )
+    for row in rows:
+        if not matches(row):
+            continue
         if stockout and _stockout_evidence_status(dict(row)) != stockout:
             continue
         if start <= matched_count < end:

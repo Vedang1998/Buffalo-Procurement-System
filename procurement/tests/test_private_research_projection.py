@@ -17,7 +17,7 @@ from procurement_os.private_research_projection import (
     PROJECTION_CONTRACT,
     REAL_NUMERICAL_EVALUATION_NOT_RUN,
     PrivateResearchProjectionError,
-    _iter_filtered_private_research_rows,
+    _compile_private_research_row_filter,
     build_private_research_projection,
     canonical_private_research_projection_bytes,
     filter_private_research_rows,
@@ -1106,7 +1106,7 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         with self.assertRaisesRegex(PrivateResearchProjectionError, "must be strings"):
             filter_private_research_rows(projection, query=1)  # type: ignore[arg-type]
 
-    def test_validated_filter_core_matches_public_semantics_and_public_refuses_tamper(self):
+    def test_row_filter_matches_public_semantics_and_public_refuses_tamper(self):
         projection = build_private_research_projection(
             intake(
                 [
@@ -1134,12 +1134,14 @@ class PrivateResearchProjectionTests(unittest.TestCase):
                     projection,
                     **selected_filters,
                 )
+                matches = _compile_private_research_row_filter(
+                    projection["contract"],
+                    **selected_filters,
+                )
                 private = [
                     dict(row)
-                    for row in _iter_filtered_private_research_rows(
-                        projection,
-                        **selected_filters,
-                    )
+                    for row in projection["research_rows"]
+                    if matches(row)
                 ]
                 self.assertEqual(private, public)
                 self.assertEqual(

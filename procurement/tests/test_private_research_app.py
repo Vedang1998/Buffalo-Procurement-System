@@ -91,6 +91,7 @@ class PrivateResearchAppTests(unittest.TestCase):
                 },
             }
         ]
+        self.workspace["projection"]["research_rows"] = self.research_rows
 
     def _client(self) -> TestClient:
         patcher = mock.patch.object(
@@ -102,8 +103,8 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         filter_patcher = mock.patch.object(
             private_research_app,
-            "_iter_filtered_private_research_rows",
-            return_value=self.research_rows,
+            "_compile_private_research_row_filter",
+            return_value=lambda row: True,
         )
         filter_patcher.start()
         self.addCleanup(filter_patcher.stop)
@@ -299,7 +300,43 @@ class PrivateResearchAppTests(unittest.TestCase):
 
     def test_app_owned_page_is_detached_and_rejects_unowned_snapshots(self):
         workspace = deepcopy(self.workspace)
-        workspace["projection"]["research_rows"] = [self._filterable_row("1001")]
+        first = {
+            "shopify_variant_id": "1001",
+            "product_title": "Product 1",
+            "variant_title": "750 mL",
+            "supplier_names": ["Alpha"],
+            "reason_codes": ["UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK"],
+            "scenario_results": {
+                "H3": {
+                    "status": "CALCULATED_RESEARCH_ONLY",
+                    "reason_codes": [
+                        "UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK"
+                    ],
+                }
+            },
+            "stage_status": {"FORECAST": "CALCULATED_RESEARCH_ONLY"},
+            "sidecar_keys": ["variant:1001:H3"],
+            "unapproved_supplier_offer_summary": {},
+        }
+        second = {
+            **deepcopy(first),
+            "shopify_variant_id": "2002",
+            "product_title": "Product 2",
+            "supplier_names": ["Zulu"],
+            "reason_codes": [],
+            "scenario_results": {
+                "H3": {
+                    "status": "CALCULATED_RESEARCH_ONLY",
+                    "reason_codes": [],
+                }
+            },
+            "sidecar_keys": ["variant:2002:H3"],
+        }
+        workspace["projection"] = {
+            **workspace["projection"],
+            "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
+            "owner_worksheet": [first, second],
+        }
         with mock.patch.object(
             private_research_app,
             "read_private_research_workspace",
@@ -312,12 +349,51 @@ class PrivateResearchAppTests(unittest.TestCase):
             page=1,
             page_size=50,
         )
-        self.assertEqual((total, pages), (1, 1))
-        self.assertEqual(selected, [self._filterable_row("1001")])
-        selected[0]["forecast"]["status"] = "MUTATED_REQUEST_COPY"
+        self.assertEqual((total, pages), (2, 1))
         self.assertEqual(
-            workspace["projection"]["research_rows"][0]["forecast"]["status"],
-            "REAL_NUMERICAL_EVALUATION_NOT_RUN",
+            [row["shopify_variant_id"] for row in selected],
+            ["1001", "2002"],
+        )
+        selected[0]["scenario_results"]["H3"][
+            "status"
+        ] = "MUTATED_REQUEST_COPY"
+        self.assertEqual(
+            workspace["projection"]["owner_worksheet"][0]["scenario_results"][
+                "H3"
+            ]["status"],
+            "CALCULATED_RESEARCH_ONLY",
+        )
+        not_captured = private_research_app._page_app_owned_workspace_rows(
+            loaded,
+            stockout="NOT_CAPTURED",
+            page=1,
+            page_size=50,
+        )
+        captured = private_research_app._page_app_owned_workspace_rows(
+            loaded,
+            stockout="CAPTURED_IN_RESEARCH_INPUT",
+            page=1,
+            page_size=50,
+        )
+        by_query = private_research_app._page_app_owned_workspace_rows(
+            loaded,
+            query="Product 2",
+            vendor="Zulu",
+            status="CALCULATED_RESEARCH_ONLY",
+            page=1,
+            page_size=50,
+        )
+        self.assertEqual(
+            [row["shopify_variant_id"] for row in not_captured[2]],
+            ["1001"],
+        )
+        self.assertEqual(
+            [row["shopify_variant_id"] for row in captured[2]],
+            ["2002"],
+        )
+        self.assertEqual(
+            [row["shopify_variant_id"] for row in by_query[2]],
+            ["2002"],
         )
         with self.assertRaisesRegex(
             private_research_app.PrivateResearchProjectionError,
