@@ -38,13 +38,76 @@ _MAX_PID_RECORD_BYTES = 4_096
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from procurement_os.private_research import (
-    read_private_research_workspace_structural as read_private_research_workspace,
-)
-
 
 class PrivateResearchServeError(RuntimeError):
     pass
+
+
+def read_private_research_workspace(path: Path) -> dict[str, object]:
+    from procurement_os.private_research import (
+        read_private_research_workspace_structural as reader,
+    )
+
+    return reader(path)
+
+
+def _run_structural_preflight(workspace: Path) -> None:
+    try:
+        child_pid = os.fork()
+    except OSError as exc:
+        raise PrivateResearchServeError(
+            "private viewer structural preflight could not start"
+        ) from exc
+    if child_pid == 0:
+        try:
+            read_private_research_workspace(workspace)
+        except BaseException:
+            os._exit(1)
+        os._exit(0)
+    try:
+        while True:
+            try:
+                waited_pid, status_value = os.waitpid(child_pid, 0)
+                break
+            except InterruptedError:
+                continue
+    except ChildProcessError as exc:
+        raise PrivateResearchServeError(
+            "private viewer structural preflight could not be reaped"
+        ) from exc
+    except BaseException:
+        child_is_live = False
+        while True:
+            try:
+                probed_pid, _ = os.waitpid(child_pid, os.WNOHANG)
+                child_is_live = probed_pid == 0
+                break
+            except InterruptedError:
+                continue
+            except ChildProcessError:
+                break
+        if child_is_live:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            while True:
+                try:
+                    os.waitpid(child_pid, 0)
+                    break
+                except InterruptedError:
+                    continue
+                except ChildProcessError:
+                    break
+        raise
+    if (
+        waited_pid != child_pid
+        or not os.WIFEXITED(status_value)
+        or os.WEXITSTATUS(status_value)
+    ):
+        raise PrivateResearchServeError(
+            "private viewer structural preflight failed"
+        )
 
 
 def _reject_symlinked_components(path: Path) -> None:
@@ -240,7 +303,7 @@ def serve(root: Path, workspace: Path, port: int) -> None:
     # The application startup performs the full raw-source semantic replay.  The
     # launcher only needs an exact structural/artifact preflight before spawning
     # it; repeating the full replay here doubles cold-start work and memory.
-    read_private_research_workspace(workspace)
+    _run_structural_preflight(workspace)
     gc.collect()
     commit, tree = _source_identity()
     _assert_port_free(port)

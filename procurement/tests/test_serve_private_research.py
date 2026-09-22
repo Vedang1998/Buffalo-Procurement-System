@@ -220,9 +220,18 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
             runtime = self._runtime(parent, tool)
             workspace = parent / "workspace"
             workspace.mkdir(mode=0o700)
+            preflight_pid = parent / "preflight.pid"
+
+            def read_workspace(_path):
+                preflight_pid.write_text(str(os.getpid()), encoding="ascii")
+
             ready = FakeResponse()
             with (
-                mock.patch.object(tool, "read_private_research_workspace"),
+                mock.patch.object(
+                    tool,
+                    "read_private_research_workspace",
+                    side_effect=read_workspace,
+                ),
                 mock.patch.object(
                     tool, "_source_identity", return_value=("a" * 40, "b" * 40)
                 ),
@@ -260,6 +269,9 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
                 tool.serve(runtime, workspace, 18876)
             self.assertEqual(open_url.call_count, 2)
             self.assertEqual(identity.call_count, 2)
+            self.assertNotEqual(
+                int(preflight_pid.read_text(encoding="ascii")), os.getpid()
+            )
             self.assertTrue(all(call.kwargs["timeout"] == 1 for call in open_url.call_args_list))
             self.assertEqual(
                 sleep.call_args_list,
@@ -267,6 +279,39 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
             )
             collect.assert_called_once_with()
             self.assertFalse((runtime / tool.PID_NAME).exists())
+
+            with (
+                mock.patch.object(tool.os, "fork", return_value=4242),
+                mock.patch.object(
+                    tool.os,
+                    "waitpid",
+                    side_effect=(
+                        KeyboardInterrupt(),
+                        InterruptedError(),
+                        (0, 0),
+                        InterruptedError(),
+                        (4242, 9),
+                    ),
+                ) as waitpid,
+                mock.patch.object(tool.os, "kill") as kill,
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tool._run_structural_preflight(workspace)
+            kill.assert_called_once_with(4242, tool.signal.SIGKILL)
+            self.assertEqual(waitpid.call_count, 5)
+
+            with (
+                mock.patch.object(tool.os, "fork", return_value=4242),
+                mock.patch.object(
+                    tool.os,
+                    "waitpid",
+                    side_effect=(KeyboardInterrupt(), ChildProcessError()),
+                ),
+                mock.patch.object(tool.os, "kill") as kill,
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tool._run_structural_preflight(workspace)
+            kill.assert_not_called()
 
     def test_launcher_subprocess_import_graph_excludes_operational_services(self):
         script = """
@@ -313,7 +358,7 @@ print(json.dumps({
         )
         self.assertEqual(
             json.loads(result.stdout),
-            {"contract_loaded": True, "forbidden": []},
+            {"contract_loaded": False, "forbidden": []},
             result.stderr,
         )
 

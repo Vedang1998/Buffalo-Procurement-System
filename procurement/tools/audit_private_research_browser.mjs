@@ -1052,7 +1052,8 @@ async function audit(client) {
     {expectedSha256: EXPECTED.semantic_hashes.manifest_sha256, actualSha256: semanticSha256(manifest)},
   );
   check(
-    projectionResponse.status === 200 && stable(projection) === stable(EXPECTED.projection),
+    projectionResponse.status === 200 &&
+      semanticSha256(projection) === EXPECTED.semantic_hashes.projection_sha256,
     "v2.readback.projection",
     {expectedSha256: EXPECTED.semantic_hashes.projection_sha256, actualSha256: semanticSha256(projection)},
   );

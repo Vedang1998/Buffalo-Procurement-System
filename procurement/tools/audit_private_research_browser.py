@@ -974,7 +974,6 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "contract": CONTRACT,
         "manifest": manifest,
-        "projection": projection,
         "semantic_hashes": {
             "manifest_sha256": _json_sha256(manifest),
             "projection_sha256": _json_sha256(projection),

@@ -546,7 +546,8 @@ def _start_capture_listener(port, received):
 class PrivateResearchBrowserAuditTests(unittest.TestCase):
     def test_canonical_expectations_cover_counts_filters_details_and_artifacts(self):
         tool = _load_tool()
-        expectations = tool._build_expectations(_synthetic_workspace())
+        workspace = _synthetic_workspace()
+        expectations = tool._build_expectations(workspace)
         self.assertEqual(expectations["contract"], tool.CONTRACT)
         self.assertEqual(expectations["counts"]["research_rows"], 2)
         self.assertEqual(
@@ -558,8 +559,9 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
         )
         self.assertEqual(
             set(expectations["initial"]["detail_row"]),
-            set(expectations["projection"]["research_rows"][0]),
+            set(workspace["projection"]["research_rows"][0]),
         )
+        self.assertNotIn("projection", expectations)
         self.assertEqual(
             {item["name"] for item in expectations["artifacts"]},
             set(tool.ARTIFACT_NAMES),
