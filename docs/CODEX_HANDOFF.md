@@ -57,9 +57,9 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   purchasing authority remain absent. No production DB/Shopify write, DRAFT,
   PO/order, supplier contact, deployment, push, PR, or release occurred.
 - Recoverable transports were sealed at the bounded stop under the private
-  delivery root. The code/review ZIP is 3,203,269 bytes (outer SHA reported
-  adjacent to the archive because an archive cannot contain its own hash). The
-  clearly PRIVATE results ZIP is 790,053,924 bytes with SHA-256
+  delivery root. The code/review ZIP outer SHA is reported adjacent to the
+  archive because an archive cannot contain its own hash. The clearly PRIVATE
+  results ZIP is 790,053,924 bytes with SHA-256
   `015f6427b9865527f0ef42d031e726494e97fcaf72c092429781a98537b211ef`.
   Both passed internal SHA checks and ZIP CRC checks and are explicitly labeled
   validation-incomplete, not final acceptance packages.
