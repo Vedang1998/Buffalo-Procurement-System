@@ -192,6 +192,21 @@ def _json_sha256(value: object) -> str:
     return _sha256(_canonical_json_bytes(value))
 
 
+def _json_response_record(value: object) -> dict[str, object]:
+    digest = hashlib.sha256()
+    byte_count = 0
+    encoder = json.JSONEncoder(
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+    for chunk in encoder.iterencode(value):
+        encoded = chunk.encode("utf-8")
+        digest.update(encoded)
+        byte_count += len(encoded)
+    return {"bytes": byte_count, "sha256": digest.hexdigest()}
+
+
 def _git_stdout(repo_root: Path, *arguments: str) -> bytes:
     try:
         git_info = _TRUSTED_GIT.stat(follow_symlinks=False)
@@ -978,6 +993,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             "manifest_sha256": _json_sha256(manifest),
             "projection_sha256": _json_sha256(projection),
         },
+        "projection_endpoint": _json_response_record(projection),
         "workspace_hashes": workspace_hashes,
         "route_table": _private_app_route_table(),
         "assertion_ids": list(ASSERTION_IDS),

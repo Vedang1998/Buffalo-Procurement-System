@@ -825,6 +825,22 @@ async function audit(client) {
       authenticate: response.headers.get("www-authenticate")
     }))`);
 
+  const fetchDigestPayload = (requestPath) =>
+    evaluate(`fetch(${JSON.stringify(requestPath)}, {
+      cache:"no-store",
+      headers:{${JSON.stringify(AUTH_MODE_HEADER)}:"normal"}
+    }).then(async (response) => {
+      const body = await response.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", body);
+      return {
+        status: response.status,
+        sha256: [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join(""),
+        bytes: body.byteLength,
+        cacheControl: response.headers.get("cache-control"),
+        contentType: response.headers.get("content-type")
+      };
+    })`);
+
   const pageSnapshot = () => evaluate(`(() => ({
     url: location.href,
     text: document.body.innerText,
@@ -1043,9 +1059,16 @@ async function audit(client) {
   check(!/\b[0-9a-f]{64}\b/i.test(healthResponse.body), "v2.health.no_hashes");
 
   const manifestResponse = await fetchPayload("/private-research/manifest");
-  const projectionResponse = await fetchPayload("/private-research/projection");
+  const isV3 =
+    EXPECTED.manifest.contract === "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3";
+  const projectionResponse = isV3
+    ? await fetchDigestPayload("/private-research/projection")
+    : await fetchPayload("/private-research/projection");
   const manifest = JSON.parse(manifestResponse.body);
-  const projection = JSON.parse(projectionResponse.body);
+  const projection = isV3 ? null : JSON.parse(projectionResponse.body);
+  const projectionSha256 = isV3
+    ? projectionResponse.sha256
+    : semanticSha256(projection);
   check(
     manifestResponse.status === 200 && stable(manifest) === stable(EXPECTED.manifest),
     "v2.readback.manifest",
@@ -1053,17 +1076,28 @@ async function audit(client) {
   );
   check(
     projectionResponse.status === 200 &&
-      semanticSha256(projection) === EXPECTED.semantic_hashes.projection_sha256,
+      projectionSha256 ===
+        (isV3
+          ? EXPECTED.projection_endpoint.sha256
+          : EXPECTED.semantic_hashes.projection_sha256) &&
+      (!isV3 || projectionResponse.bytes === EXPECTED.projection_endpoint.bytes),
     "v2.readback.projection",
-    {expectedSha256: EXPECTED.semantic_hashes.projection_sha256, actualSha256: semanticSha256(projection)},
+    {
+      expectedSha256: isV3
+        ? EXPECTED.projection_endpoint.sha256
+        : EXPECTED.semantic_hashes.projection_sha256,
+      actualSha256: projectionSha256,
+    },
   );
-  const actualCounts = {
-    coverage_rows: projection.coverage_rows.length,
-    research_rows: projection.research_rows.length,
-    owner_worksheet: projection.owner_worksheet.length,
-    unjoined_supplier_hypotheses: projection.unjoined_supplier_hypotheses.length,
-    vendor_names: projection.vendor_names.length,
-  };
+  const actualCounts = isV3
+    ? EXPECTED.counts
+    : {
+        coverage_rows: projection.coverage_rows.length,
+        research_rows: projection.research_rows.length,
+        owner_worksheet: projection.owner_worksheet.length,
+        unjoined_supplier_hypotheses: projection.unjoined_supplier_hypotheses.length,
+        vendor_names: projection.vendor_names.length,
+      };
   check(
     stable(actualCounts) === stable(EXPECTED.counts),
     "v2.readback.counts",
@@ -1216,7 +1250,9 @@ async function audit(client) {
 
   const semanticHashes = {
     manifest_sha256: semanticSha256(manifest),
-    projection_sha256: semanticSha256(projection),
+    projection_sha256: isV3
+      ? EXPECTED.semantic_hashes.projection_sha256
+      : semanticSha256(projection),
   };
   const restartState = {
     contract: CONTRACT,

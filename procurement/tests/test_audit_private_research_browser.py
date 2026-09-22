@@ -562,6 +562,18 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             set(workspace["projection"]["research_rows"][0]),
         )
         self.assertNotIn("projection", expectations)
+        self.assertEqual(set(expectations["projection_endpoint"]), {"bytes", "sha256"})
+        self.assertEqual(
+            expectations["projection_endpoint"]["sha256"],
+            tool._sha256(
+                json.dumps(
+                    workspace["projection"],
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ),
+        )
         self.assertEqual(
             {item["name"] for item in expectations["artifacts"]},
             set(tool.ARTIFACT_NAMES),
@@ -1289,6 +1301,7 @@ time.sleep(60)
             "owner-worksheet.csv",
             "coverage.json",
             "projection.json",
+            'crypto.subtle.digest("SHA-256", body)',
         ):
             with self.subTest(required=required):
                 self.assertIn(required, source)
