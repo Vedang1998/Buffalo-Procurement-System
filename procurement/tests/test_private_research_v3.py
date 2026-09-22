@@ -647,9 +647,26 @@ class PrivateResearchV3Tests(unittest.TestCase):
                     read_private_research_workspace_structural(workspace)["manifest"],
                     manifest,
                 )
-                self.assertEqual(
-                    read_private_research_workspace(workspace)["manifest"], manifest
-                )
+                validator = private_research_v3.validate_private_v3_projection
+                with patch.object(
+                    private_research_v3,
+                    "validate_private_v3_projection",
+                    wraps=validator,
+                ) as validate_projection:
+                    self.assertEqual(
+                        read_private_research_workspace(workspace)["manifest"],
+                        manifest,
+                    )
+                    cold_validation_count = validate_projection.call_count
+                    self.assertGreater(cold_validation_count, 0)
+                    self.assertEqual(
+                        read_private_research_workspace(workspace)["manifest"],
+                        manifest,
+                    )
+                    self.assertGreater(
+                        validate_projection.call_count,
+                        cold_validation_count,
+                    )
                 replayed, parent, base = read_private_v3_research_bundle(
                     private_root, written["input_id"]
                 )

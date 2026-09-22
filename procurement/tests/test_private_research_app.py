@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import base64
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,11 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from procurement_os import local_access, private_research_app
+from procurement_os import (
+    local_access,
+    private_research_app,
+    private_research_projection,
+)
 
 
 PORT = 18876
@@ -49,11 +54,7 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.addCleanup(self.environment.stop)
         local_access.clear_local_sessions()
         self.addCleanup(local_access.clear_local_sessions)
-        private_research_app._CACHED_WORKSPACE_PATH = None
         private_research_app._CACHED_WORKSPACE = None
-        self.addCleanup(
-            lambda: setattr(private_research_app, "_CACHED_WORKSPACE_PATH", None)
-        )
         self.addCleanup(lambda: setattr(private_research_app, "_CACHED_WORKSPACE", None))
         self.workspace = {
             "manifest": {
@@ -101,7 +102,7 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         filter_patcher = mock.patch.object(
             private_research_app,
-            "filter_private_research_rows",
+            "_iter_filtered_private_research_rows",
             return_value=self.research_rows,
         )
         filter_patcher.start()
@@ -122,6 +123,21 @@ class PrivateResearchAppTests(unittest.TestCase):
             f"private:{secret}".encode("utf-8")
         ).decode("ascii")
         return f"Basic {credential}"
+
+    def _filterable_row(self, variant_id: str) -> dict[str, object]:
+        return {
+            **deepcopy(self.research_rows[0]),
+            "shopify_variant_id": variant_id,
+            "supplier_sku": f"FIX-{variant_id}",
+            "supplier_description": "Fixture research row",
+            "source_occurrence_ref": f"fixture:{variant_id}",
+            "source_ref": "fixture-source",
+            "unapproved_mapping_evidence": {},
+            "hypothesis_package_type": "STANDARD",
+            "selection_status": "UNAPPROVED_HYPOTHESIS",
+            "abc": {"status": "NOT_RUN", "abc_class": None},
+            "economics": {"status": "NOT_RUN"},
+        }
 
     def test_basic_protection_space_rejects_ambient_cookie_and_wrong_port(self):
         client = self._client()
@@ -194,9 +210,232 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.assertEqual(response.headers["content-type"], "application/json")
         self.assertEqual(int(response.headers["content-length"]), len(projection_bytes))
 
+    def test_warm_page_and_filter_requests_do_not_revalidate_projection(self):
+        rows = [
+            {
+                "shopify_variant_id": str(1000 + index),
+                "product_title": f"Fixture Product {index:03d}",
+                "variant_title": "750 mL",
+                "supplier_name": "Fixture Supplier",
+                "supplier_sku": f"FIX-{index:03d}",
+                "supplier_description": "Fixture research row",
+                "source_occurrence_ref": f"fixture:{index:03d}",
+                "source_ref": "fixture-source",
+                "unapproved_mapping_evidence": {},
+                "hypothesis_package_type": "STANDARD",
+                "join_status": "EXACT_SHOPIFY_VARIANT_ID",
+                "selection_status": "UNAPPROVED_HYPOTHESIS",
+                "missing_data_reasons": ["FORECAST_EVIDENCE_MISSING"],
+                "forecast": {
+                    "status": "REAL_NUMERICAL_EVALUATION_NOT_RUN",
+                    "reason_codes": ["FORECAST_EVIDENCE_MISSING"],
+                },
+                "abc": {"status": "NOT_RUN", "abc_class": None},
+                "economics": {"status": "NOT_RUN"},
+            }
+            for index in range(51)
+        ]
+        workspace = {
+            **self.workspace,
+            "projection": {
+                **self.workspace["projection"],
+                "research_rows": rows,
+            },
+        }
+        expected_workspace = deepcopy(workspace)
+        with mock.patch.object(
+            private_research_app,
+            "read_private_research_workspace",
+            return_value=workspace,
+        ) as read_workspace, mock.patch.object(
+            private_research_projection,
+            "_validated_projection",
+            side_effect=lambda projection: projection,
+        ) as validate_projection:
+            private_research_app.validate_workspace_at_startup()
+            client = TestClient(
+                private_research_app.app,
+                base_url=ORIGIN,
+                client=("127.0.0.1", 50001),
+            )
+            self.addCleanup(client.close)
+            self._login(client)
+            responses = (
+                client.get("/private-research"),
+                client.get("/private-research", params={"page": 2}),
+                client.get("/private-research", params={"q": "Product 005"}),
+                client.get(
+                    "/private-research",
+                    params={"vendor": "Fixture Supplier"},
+                ),
+                client.get(
+                    "/private-research",
+                    params={"status": "FORECAST_EVIDENCE_MISSING"},
+                ),
+                client.get("/private-research", params={"q": "no match"}),
+            )
+
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        first, second, query, vendor, status, no_match = responses
+        self.assertIn("Showing 50 of 51 matched rows · page 1 of 2.", first.text)
+        positions = [
+            first.text.index(f"data-variant-id='{variant_id}'")
+            for variant_id in range(1000, 1050)
+        ]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("data-variant-id='1050'", first.text)
+        self.assertIn("Showing 1 of 51 matched rows · page 2 of 2.", second.text)
+        self.assertIn("data-variant-id='1050'", second.text)
+        self.assertNotIn("data-variant-id='1049'", second.text)
+        self.assertIn("Showing 1 of 1 matched rows · page 1 of 1.", query.text)
+        self.assertIn("data-variant-id='1005'", query.text)
+        self.assertNotIn("data-variant-id='1004'", query.text)
+        self.assertIn("Showing 50 of 51 matched rows · page 1 of 2.", vendor.text)
+        self.assertIn("Showing 50 of 51 matched rows · page 1 of 2.", status.text)
+        self.assertIn("Showing 0 of 0 matched rows · page 1 of 1.", no_match.text)
+        self.assertEqual(read_workspace.call_count, 1)
+        self.assertEqual(validate_projection.call_count, 0)
+        self.assertEqual(workspace, expected_workspace)
+
+    def test_app_owned_page_is_detached_and_rejects_unowned_snapshots(self):
+        workspace = deepcopy(self.workspace)
+        workspace["projection"]["research_rows"] = [self._filterable_row("1001")]
+        with mock.patch.object(
+            private_research_app,
+            "read_private_research_workspace",
+            return_value=workspace,
+        ):
+            loaded = private_research_app._workspace()
+
+        total, pages, selected = private_research_app._page_app_owned_workspace_rows(
+            loaded,
+            page=1,
+            page_size=50,
+        )
+        self.assertEqual((total, pages), (1, 1))
+        self.assertEqual(selected, [self._filterable_row("1001")])
+        selected[0]["forecast"]["status"] = "MUTATED_REQUEST_COPY"
+        self.assertEqual(
+            workspace["projection"]["research_rows"][0]["forecast"]["status"],
+            "REAL_NUMERICAL_EVALUATION_NOT_RUN",
+        )
+        with self.assertRaisesRegex(
+            private_research_app.PrivateResearchProjectionError,
+            "app-owned validated snapshot",
+        ):
+            private_research_app._page_app_owned_workspace_rows(
+                deepcopy(loaded),
+                page=1,
+                page_size=50,
+            )
+
+    def test_workspace_switch_is_atomic_and_rows_do_not_mix(self):
+        first_path = os.environ["BUFFALO_PRIVATE_RESEARCH_WORKSPACE"]
+        second_path = str(Path(self.temporary.name) / "second-workspace")
+        first = deepcopy(self.workspace)
+        first["projection"]["research_rows"] = [self._filterable_row("1001")]
+        second = deepcopy(self.workspace)
+        second["projection"]["research_rows"] = [self._filterable_row("2002")]
+
+        def load(path: Path):
+            if str(path) == first_path:
+                return first
+            if str(path) == second_path:
+                return second
+            raise AssertionError(path)
+
+        with mock.patch.object(
+            private_research_app,
+            "read_private_research_workspace",
+            side_effect=load,
+        ) as read_workspace:
+            loaded_first = private_research_app._workspace()
+            with mock.patch.dict(
+                os.environ,
+                {"BUFFALO_PRIVATE_RESEARCH_WORKSPACE": second_path},
+                clear=False,
+            ):
+                loaded_second = private_research_app._workspace()
+                with self.assertRaisesRegex(
+                    private_research_app.PrivateResearchProjectionError,
+                    "app-owned validated snapshot",
+                ):
+                    private_research_app._page_app_owned_workspace_rows(
+                        loaded_first,
+                        page=1,
+                        page_size=50,
+                    )
+                _, _, selected = (
+                    private_research_app._page_app_owned_workspace_rows(
+                        loaded_second,
+                        page=1,
+                        page_size=50,
+                    )
+                )
+        self.assertEqual(read_workspace.call_count, 2)
+        self.assertEqual(
+            [row["shopify_variant_id"] for row in selected],
+            ["2002"],
+        )
+
+    def test_failed_load_never_publishes_or_serves_a_stale_snapshot(self):
+        first_path = os.environ["BUFFALO_PRIVATE_RESEARCH_WORKSPACE"]
+        second_path = str(Path(self.temporary.name) / "invalid-workspace")
+        first = deepcopy(self.workspace)
+        first["projection"]["research_rows"] = deepcopy(self.research_rows)
+
+        def load(path: Path):
+            if str(path) == first_path:
+                return first
+            raise private_research_app.PrivateResearchError("invalid replacement")
+
+        with mock.patch.object(
+            private_research_app,
+            "read_private_research_workspace",
+            side_effect=load,
+        ):
+            loaded_first = private_research_app._workspace()
+            published = private_research_app._CACHED_WORKSPACE
+            with mock.patch.dict(
+                os.environ,
+                {"BUFFALO_PRIVATE_RESEARCH_WORKSPACE": second_path},
+                clear=False,
+            ):
+                with self.assertRaises(private_research_app.HTTPException) as failed:
+                    private_research_app._workspace()
+                self.assertEqual(failed.exception.status_code, 503)
+                self.assertIs(private_research_app._CACHED_WORKSPACE, published)
+                with self.assertRaisesRegex(
+                    private_research_app.PrivateResearchProjectionError,
+                    "app-owned validated snapshot",
+                ):
+                    private_research_app._page_app_owned_workspace_rows(
+                        loaded_first,
+                        page=1,
+                        page_size=50,
+                    )
+                private_research_app._CACHED_WORKSPACE = None
+                with self.assertRaises(private_research_app.HTTPException):
+                    private_research_app._workspace()
+                self.assertIsNone(private_research_app._CACHED_WORKSPACE)
+
+    def test_cache_clear_simulates_restart_and_invokes_loader_again(self):
+        workspace = deepcopy(self.workspace)
+        workspace["projection"]["research_rows"] = deepcopy(self.research_rows)
+        with mock.patch.object(
+            private_research_app,
+            "read_private_research_workspace",
+            return_value=workspace,
+        ) as read_workspace:
+            private_research_app.validate_workspace_at_startup()
+            private_research_app._workspace()
+            self.assertEqual(read_workspace.call_count, 1)
+            private_research_app._CACHED_WORKSPACE = None
+            private_research_app.validate_workspace_at_startup()
+        self.assertEqual(read_workspace.call_count, 2)
+
     def test_health_refuses_an_unreadable_workspace(self):
         client = self._client()
-        private_research_app._CACHED_WORKSPACE_PATH = None
         private_research_app._CACHED_WORKSPACE = None
         with mock.patch.object(
             private_research_app,

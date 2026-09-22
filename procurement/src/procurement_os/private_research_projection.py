@@ -2017,30 +2017,35 @@ def private_research_projection_sha256(projection: Mapping[str, Any]) -> str:
     return str(_validated_projection(projection)["projection_sha256"])
 
 
-def filter_private_research_rows(
+def _iter_filtered_private_research_rows(
     projection: Mapping[str, Any],
     *,
     query: str = "",
     vendor: str = "",
     status: str = "",
-) -> list[dict[str, Any]]:
-    """Return a deterministic server-rendering filter over the same projection.
+) -> Iterable[Mapping[str, Any]]:
+    """Yield matching rows from a projection already validated by its owner.
+
+    This private iterator performs no projection authentication.  The public
+    boundary below validates arbitrary supplied projections before delegating;
+    the private viewer may use this iterator only for its exact app-owned
+    startup-validated snapshot.
 
     ``vendor`` is an exact supplier-name filter. ``status`` may be one of the
     fixed values visible on a research row (join, selection, forecast, ABC,
-    economics, or ABC class), ``MISSING_DATA``, or an exact reason code.  This
-    helper neither changes nor re-hashes the projection.
+    economics, or ABC class), ``MISSING_DATA``, or an exact reason code.
     """
 
-    value = _validated_projection(projection)
     if not all(isinstance(item, str) for item in (query, vendor, status)):
         raise PrivateResearchProjectionError("research filters must be strings")
     needle = query.strip().casefold()
     vendor_filter = vendor.strip()
     status_filter = status.strip()
-    result: list[dict[str, Any]] = []
-    if value["contract"] in {V2_PROJECTION_CONTRACT, V3_PROJECTION_CONTRACT}:
-        for row in value["owner_worksheet"]:
+    if projection["contract"] in {
+        V2_PROJECTION_CONTRACT,
+        V3_PROJECTION_CONTRACT,
+    }:
+        for row in projection["owner_worksheet"]:
             reasons = [str(item) for item in row["reason_codes"]]
             scenario_values = list(row["scenario_results"].values())
             scenario_reasons = [
@@ -2067,7 +2072,7 @@ def filter_private_research_rows(
                                 row["unapproved_supplier_offer_summary"]
                             ).decode("ascii"),
                         )
-                        if value["contract"] == V3_PROJECTION_CONTRACT
+                        if projection["contract"] == V3_PROJECTION_CONTRACT
                         else ()
                     ),
                 )
@@ -2098,10 +2103,10 @@ def filter_private_research_rows(
                 continue
             if status_filter and status_filter not in statuses:
                 continue
-            result.append(dict(row))
-        return result
+            yield row
+        return
 
-    for row in value["research_rows"]:
+    for row in projection["research_rows"]:
         reasons = [str(item) for item in row["missing_data_reasons"]]
         searchable = "\n".join(
             str(item or "")
@@ -2138,8 +2143,28 @@ def filter_private_research_rows(
             continue
         if status_filter and status_filter not in statuses:
             continue
-        result.append(dict(row))
-    return result
+        yield row
+
+
+def filter_private_research_rows(
+    projection: Mapping[str, Any],
+    *,
+    query: str = "",
+    vendor: str = "",
+    status: str = "",
+) -> list[dict[str, Any]]:
+    """Validate and deterministically filter an arbitrary projection."""
+
+    value = _validated_projection(projection)
+    return [
+        dict(row)
+        for row in _iter_filtered_private_research_rows(
+            value,
+            query=query,
+            vendor=vendor,
+            status=status,
+        )
+    ]
 
 
 def _html_value(value: Any) -> str:

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import base64
 import binascii
+from copy import deepcopy
+from dataclasses import dataclass
 import html
 import hmac
 import json
@@ -29,7 +31,7 @@ from .private_research import (
 )
 from .private_research_projection import (
     PrivateResearchProjectionError,
-    filter_private_research_rows,
+    _iter_filtered_private_research_rows,
 )
 
 
@@ -41,8 +43,17 @@ app = FastAPI(
     openapi_url=None,
 )
 
-_CACHED_WORKSPACE_PATH: str | None = None
-_CACHED_WORKSPACE: dict[str, object] | None = None
+
+@dataclass(frozen=True)
+class _ValidatedWorkspaceSnapshot:
+    """One atomically published, fully replayed private workspace."""
+
+    path: str
+    workspace: dict[str, object]
+    projection: dict[str, object]
+
+
+_CACHED_WORKSPACE: _ValidatedWorkspaceSnapshot | None = None
 _BASIC_USERNAME = "private"
 _BASIC_CHALLENGE = 'Basic realm="Buffalo private research", charset="UTF-8"'
 
@@ -196,19 +207,67 @@ app.add_middleware(PrivateResearchBasicAccessMiddleware)
 
 
 def _workspace() -> dict[str, object]:
-    global _CACHED_WORKSPACE_PATH, _CACHED_WORKSPACE
+    global _CACHED_WORKSPACE
     raw = os.getenv("BUFFALO_PRIVATE_RESEARCH_WORKSPACE", "").strip()
     if not raw:
         raise HTTPException(status_code=503, detail="Private research workspace is absent")
-    if _CACHED_WORKSPACE_PATH == raw and _CACHED_WORKSPACE is not None:
-        return _CACHED_WORKSPACE
+    cached = _CACHED_WORKSPACE
+    if cached is not None and cached.path == raw:
+        return cached.workspace
     try:
         loaded = read_private_research_workspace(Path(raw))
     except PrivateResearchError as exc:
         raise HTTPException(status_code=503, detail="Private research workspace is invalid") from exc
-    _CACHED_WORKSPACE_PATH = raw
-    _CACHED_WORKSPACE = loaded
+    projection = loaded.get("projection")
+    if not isinstance(projection, dict):
+        raise HTTPException(status_code=503, detail="Private research workspace is invalid")
+    _CACHED_WORKSPACE = _ValidatedWorkspaceSnapshot(raw, loaded, projection)
     return loaded
+
+
+def _page_app_owned_workspace_rows(
+    workspace: dict[str, object],
+    *,
+    query: str = "",
+    vendor: str = "",
+    status: str = "",
+    stockout: str = "",
+    page: int,
+    page_size: int,
+) -> tuple[int, int, list[dict[str, object]]]:
+    """Return one detached page from the exact app-authenticated snapshot."""
+
+    raw = os.getenv("BUFFALO_PRIVATE_RESEARCH_WORKSPACE", "").strip()
+    cached = _CACHED_WORKSPACE
+    projection = workspace.get("projection")
+    if (
+        not raw
+        or cached is None
+        or cached.path != raw
+        or workspace is not cached.workspace
+        or projection is not cached.projection
+        or not isinstance(projection, dict)
+    ):
+        raise PrivateResearchProjectionError(
+            "private projection is not the app-owned validated snapshot"
+        )
+    start = (page - 1) * page_size
+    end = page * page_size
+    matched_count = 0
+    selected: list[dict[str, object]] = []
+    for row in _iter_filtered_private_research_rows(
+        projection,
+        query=query,
+        vendor=vendor,
+        status=status,
+    ):
+        if stockout and _stockout_evidence_status(dict(row)) != stockout:
+            continue
+        if start <= matched_count < end:
+            selected.append(deepcopy(dict(row)))
+        matched_count += 1
+    total_pages = max(1, math.ceil(matched_count / page_size))
+    return matched_count, total_pages, selected
 
 
 @app.on_event("startup")
@@ -379,18 +438,19 @@ def private_research_index(
         development_contract == "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
     )
     try:
-        rows = filter_private_research_rows(
-            projection, query=q, vendor=vendor, status=status
+        matched_count, total_pages, selected = _page_app_owned_workspace_rows(
+            workspace,
+            query=q,
+            vendor=vendor,
+            status=status,
+            stockout=stockout,
+            page=page,
+            page_size=50,
         )
     except PrivateResearchProjectionError as exc:
         raise HTTPException(status_code=503, detail="Private projection is invalid") from exc
-    if stockout:
-        rows = [row for row in rows if _stockout_evidence_status(row) == stockout]
-    page_size = 50
-    total_pages = max(1, math.ceil(len(rows) / page_size))
     if page < 1 or page > total_pages:
         raise HTTPException(status_code=404, detail="Private research page is absent")
-    selected = rows[(page - 1) * page_size : page * page_size]
     vendor_names = sorted(
         {
             str(item)
@@ -622,7 +682,7 @@ def private_research_index(
             )
         )
         + "</select></label><button type='submit'>Filter</button></form>"
-        f"<p>Showing {len(selected)} of {len(rows)} matched rows · page {page} of {total_pages}.</p>"
+        f"<p>Showing {len(selected)} of {matched_count} matched rows · page {page} of {total_pages}.</p>"
         + "".join(cards)
         + f"<nav>{' · '.join(navigation)}</nav>"
         "<p>Quit the private browser process when finished to clear its local HTTP Basic credential cache.</p>"

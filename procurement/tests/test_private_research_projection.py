@@ -17,6 +17,7 @@ from procurement_os.private_research_projection import (
     PROJECTION_CONTRACT,
     REAL_NUMERICAL_EVALUATION_NOT_RUN,
     PrivateResearchProjectionError,
+    _iter_filtered_private_research_rows,
     build_private_research_projection,
     canonical_private_research_projection_bytes,
     filter_private_research_rows,
@@ -1104,6 +1105,52 @@ class PrivateResearchProjectionTests(unittest.TestCase):
         self.assertEqual(projection["projection_sha256"], digest)
         with self.assertRaisesRegex(PrivateResearchProjectionError, "must be strings"):
             filter_private_research_rows(projection, query=1)  # type: ignore[arg-type]
+
+    def test_validated_filter_core_matches_public_semantics_and_public_refuses_tamper(self):
+        projection = build_private_research_projection(
+            intake(
+                [
+                    variant(
+                        "100",
+                        hypotheses=[hypothesis("100", "Alpha", "A-1", "7")],
+                    ),
+                    variant(
+                        "200",
+                        hypotheses=[hypothesis("200", "Zulu", "Z-1", "8")],
+                    ),
+                ]
+            )
+        )
+        filters = (
+            {},
+            {"query": "product 200"},
+            {"vendor": "Alpha"},
+            {"status": "MISSING_DATA"},
+            {"query": "no match"},
+        )
+        for selected_filters in filters:
+            with self.subTest(filters=selected_filters):
+                public = filter_private_research_rows(
+                    projection,
+                    **selected_filters,
+                )
+                private = [
+                    dict(row)
+                    for row in _iter_filtered_private_research_rows(
+                        projection,
+                        **selected_filters,
+                    )
+                ]
+                self.assertEqual(private, public)
+                self.assertEqual(
+                    [row["shopify_variant_id"] for row in private],
+                    [row["shopify_variant_id"] for row in public],
+                )
+
+        forged = copy.deepcopy(projection)
+        forged["research_rows"][0]["supplier_name"] = "Forged Supplier"
+        with self.assertRaisesRegex(PrivateResearchProjectionError, "SHA differs"):
+            filter_private_research_rows(forged)
 
     def test_projection_sha_binds_every_research_field(self):
         projection = build_private_research_projection(
