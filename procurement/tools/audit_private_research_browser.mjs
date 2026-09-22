@@ -50,6 +50,7 @@ const APPLICATION_TARGET_TYPES = new Set(GUARDED_TARGET_TYPES);
 const CHILD_CAPABLE_TARGET_TYPES = new Set(GUARDED_TARGET_TYPES);
 const INERT_TARGET_TYPES = new Set(["browser", "tab"]);
 const SOCKET_GUARD_BINDING = "__buffaloPrivateBrowserSocketAttempt";
+const PAGE_LOAD_TIMEOUT_MS = 120000;
 const SOCKET_GUARD_SOURCE = `(() => {
   const report = globalThis[${JSON.stringify(SOCKET_GUARD_BINDING)}];
   if (typeof report !== "function") return false;
@@ -805,7 +806,15 @@ async function audit(client) {
   };
 
   const navigate = async (url) => {
-    const loaded = client.waitEvent("Page.loadEventFired", sessionId);
+    const loaded = client.waitEvent(
+      "Page.loadEventFired",
+      sessionId,
+      PAGE_LOAD_TIMEOUT_MS,
+    );
+    // Attach a rejection handler before Page.navigate: a slow real-data
+    // response must fail through the audit boundary, not Node's unhandled-
+    // rejection policy while the navigation command is still pending.
+    void loaded.catch(() => {});
     const response = await client.send("Page.navigate", {url}, sessionId);
     if (response.errorText) throw new Error(`navigation failed: ${response.errorText}`);
     await loaded;
@@ -895,7 +904,12 @@ async function audit(client) {
   };
 
   const submitFilter = async (parameters) => {
-    const loaded = client.waitEvent("Page.loadEventFired", sessionId);
+    const loaded = client.waitEvent(
+      "Page.loadEventFired",
+      sessionId,
+      PAGE_LOAD_TIMEOUT_MS,
+    );
+    void loaded.catch(() => {});
     try {
       await evaluate(`(() => {
         const form = document.querySelector('form[action="/private-research"]');

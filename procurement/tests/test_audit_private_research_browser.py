@@ -1302,6 +1302,8 @@ time.sleep(60)
             "coverage.json",
             "projection.json",
             'crypto.subtle.digest("SHA-256", body)',
+            "const PAGE_LOAD_TIMEOUT_MS = 120000",
+            "void loaded.catch(() => {});",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, source)
