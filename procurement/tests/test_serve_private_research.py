@@ -190,6 +190,7 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
     def test_readiness_allows_validation_beyond_legacy_thirty_seconds(self):
         tool = _load_tool()
         self.assertEqual(tool.READINESS_TIMEOUT_SECONDS, 1200)
+        self.assertEqual(tool.PROCESS_IDENTITY_TIMEOUT_SECONDS, 5)
 
         class FakeProcess:
             pid = 424242
@@ -229,11 +230,16 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
                 mock.patch.object(
                     tool,
                     "_process_identity",
-                    return_value={
-                        "process_start_ticks": 1,
-                        "cmdline_sha256": "c" * 64,
-                    },
-                ),
+                    side_effect=(
+                        tool.PrivateResearchServeError(
+                            "private viewer process command differs"
+                        ),
+                        {
+                            "process_start_ticks": 1,
+                            "cmdline_sha256": "c" * 64,
+                        },
+                    ),
+                ) as identity,
                 mock.patch.object(
                     tool.subprocess, "Popen", return_value=FakeProcess()
                 ),
@@ -242,14 +248,24 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
                     "urlopen",
                     side_effect=(tool.URLError("not ready"), ready),
                 ) as open_url,
-                mock.patch.object(tool.time, "monotonic", side_effect=(0.0, 1.0, 31.0)),
+                mock.patch.object(
+                    tool.time,
+                    "monotonic",
+                    side_effect=(0.0, 0.1, 0.2, 1.0, 1.1, 31.0),
+                ),
                 mock.patch.object(tool.time, "sleep") as sleep,
+                mock.patch.object(tool.gc, "collect") as collect,
                 mock.patch("builtins.print"),
             ):
                 tool.serve(runtime, workspace, 18876)
             self.assertEqual(open_url.call_count, 2)
+            self.assertEqual(identity.call_count, 2)
             self.assertTrue(all(call.kwargs["timeout"] == 1 for call in open_url.call_args_list))
-            sleep.assert_called_once_with(0.1)
+            self.assertEqual(
+                sleep.call_args_list,
+                [mock.call(0.01), mock.call(0.1)],
+            )
+            collect.assert_called_once_with()
             self.assertFalse((runtime / tool.PID_NAME).exists())
 
     def test_launcher_subprocess_import_graph_excludes_operational_services(self):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import hashlib
 import json
 import os
@@ -28,6 +29,7 @@ PID_NAME = "private-viewer.pid"
 # the app can become ready.  The ceiling is bounded but must cover that genuine
 # fail-closed replay on the complete private research population.
 READINESS_TIMEOUT_SECONDS = 20 * 60
+PROCESS_IDENTITY_TIMEOUT_SECONDS = 5
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _MAX_PID = (1 << 31) - 1
@@ -195,6 +197,26 @@ def _process_identity(pid: int) -> dict[str, object]:
     }
 
 
+def _wait_process_identity(
+    process: subprocess.Popen[bytes],
+) -> dict[str, object]:
+    deadline = time.monotonic() + PROCESS_IDENTITY_TIMEOUT_SECONDS
+    last_error: PrivateResearchServeError | None = None
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise PrivateResearchServeError(
+                "private viewer exited before process identity stabilized"
+            )
+        try:
+            return _process_identity(process.pid)
+        except PrivateResearchServeError as exc:
+            last_error = exc
+        time.sleep(0.01)
+    raise PrivateResearchServeError(
+        "private viewer process identity did not stabilize"
+    ) from last_error
+
+
 def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -219,6 +241,7 @@ def serve(root: Path, workspace: Path, port: int) -> None:
     # launcher only needs an exact structural/artifact preflight before spawning
     # it; repeating the full replay here doubles cold-start work and memory.
     read_private_research_workspace(workspace)
+    gc.collect()
     commit, tree = _source_identity()
     _assert_port_free(port)
     child_env = {
@@ -260,7 +283,7 @@ def serve(root: Path, workspace: Path, port: int) -> None:
     )
     requested_stop = False
     try:
-        process_identity = _process_identity(process.pid)
+        process_identity = _wait_process_identity(process)
         descriptor = os.open(pid_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             json.dump(
