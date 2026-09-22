@@ -60,15 +60,18 @@ validation again.
 
 ### Shared filtering core
 
-Move only the already-established query/vendor/status loop into
-`_filter_validated_private_research_rows()`. The public
-`filter_private_research_rows()` remains the supported external boundary and
-still calls `_validated_projection()` before delegating.
+Move only the already-established query/vendor/status matching loop into a
+private iterator over a previously validated projection. The public
+`filter_private_research_rows()` remains the supported external boundary,
+still calls `_validated_projection()`, and materializes the iterator exactly as
+before.
 
-The private core returns recursively cloned JSON row values. Request rendering
-therefore cannot mutate nested structures in the cached workspace. It does not
-clone, serialize, or hash the complete 230MB projection; it clones only rows
-that match the requested filter.
+The app consumes only row references from that private iterator while applying
+its existing stockout filter, count, and pagination. It recursively copies only
+the at-most-50 selected rows before rendering. Request code therefore cannot
+mutate nested structures in the cached workspace, and an ordinary unfiltered
+request does not copy, serialize, or hash all 2,009 rows or the complete 230MB
+projection.
 
 ### App-owned access guard
 
@@ -83,7 +86,8 @@ and checks all of the following before calling the private core:
 
 Any mismatch raises `PrivateResearchProjectionError`, which the route already
 normalizes to a private 503 response. No request parameter, filename, hash, or
-identity string can opt into this path.
+identity string can opt into this path. Only after this guard may the route use
+the private match iterator and copy its selected page.
 
 Artifact and projection download routes continue to return the exact sealed
 bytes already held by the validated workspace.
