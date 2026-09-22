@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import base64
 import ctypes
+import gc
 import hashlib
 import importlib.util
 import json
@@ -1136,6 +1137,31 @@ def _write_private_json(path: Path, value: object) -> None:
         handle.write(b"\n")
 
 
+def _compact_runtime_expectations(
+    expectations: Mapping[str, Any],
+) -> dict[str, Any]:
+    manifest = expectations.get("manifest")
+    if not isinstance(manifest, Mapping):
+        raise PrivateResearchBrowserAuditError(
+            "browser expectation manifest is absent"
+        )
+    workspace_id = manifest.get("workspace_id")
+    if not isinstance(workspace_id, str) or len(workspace_id) != 64:
+        raise PrivateResearchBrowserAuditError(
+            "browser expectation workspace identity differs"
+        )
+    return {
+        "workspace_id": workspace_id,
+        "route_table": expectations["route_table"],
+        "workspace_hashes": expectations["workspace_hashes"],
+        "semantic_hashes": expectations["semantic_hashes"],
+        "counts": expectations["counts"],
+        "artifacts": expectations["artifacts"],
+        "assertion_ids": expectations["assertion_ids"],
+        "tooling": expectations["tooling"],
+    }
+
+
 def _minimal_environment(
     *,
     path: str,
@@ -2187,6 +2213,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         temporary_root = Path(temporary_context.name)
         expectations_path = temporary_root / "expectations.json"
         _write_private_json(expectations_path, expectations)
+        runtime_expectations = _compact_runtime_expectations(expectations)
+        del workspace
+        del expectations
+        gc.collect()
         state_path = temporary_root / "restart-state.json"
         server_log = temporary_root / "viewer.log"
         server_log.touch(mode=0o600)
@@ -2226,7 +2256,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                         raw_result,
                         phase=phase,
                         base_url=base_url,
-                        expectations=expectations,
+                        expectations=runtime_expectations,
                     )
                 finally:
                     if browser is not None and browser_handle is not None:
@@ -2302,17 +2332,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     result = {
         "contract": CONTRACT,
         "workspace_root": str(workspace_root),
-        "workspace_id": expectations["manifest"]["workspace_id"],
+        "workspace_id": runtime_expectations["workspace_id"],
         "origin": base_url,
         "evidence_root": str(evidence_root),
         "source": expected_source,
-        "route_table": expectations["route_table"],
-        "workspace_hashes": expectations["workspace_hashes"],
-        "semantic_hashes": expectations["semantic_hashes"],
-        "counts": expectations["counts"],
+        "route_table": runtime_expectations["route_table"],
+        "workspace_hashes": runtime_expectations["workspace_hashes"],
+        "semantic_hashes": runtime_expectations["semantic_hashes"],
+        "counts": runtime_expectations["counts"],
         "artifact_hashes": phase_results["initial"]["artifact_hashes"],
         "tooling": {
-            **expectations["tooling"],
+            **runtime_expectations["tooling"],
             "browser": phase_results["initial"]["browser"],
         },
         "phases": phase_results,

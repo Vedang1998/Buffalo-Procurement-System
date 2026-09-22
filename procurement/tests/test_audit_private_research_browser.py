@@ -837,6 +837,25 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                 port=18876,
             )
             secret_value = b"synthetic-private-browser-secret-value"
+            compact = tool._compact_runtime_expectations(expectations)
+            self.assertEqual(
+                set(compact),
+                {
+                    "workspace_id",
+                    "route_table",
+                    "workspace_hashes",
+                    "semantic_hashes",
+                    "counts",
+                    "artifacts",
+                    "assertion_ids",
+                    "tooling",
+                },
+            )
+            self.assertNotIn("manifest", compact)
+            self.assertNotIn("projection", compact)
+            self.assertEqual(
+                compact["workspace_id"], workspace["manifest"]["workspace_id"]
+            )
 
             def initialize(root):
                 secret = root / "private-viewer.secret"
@@ -895,6 +914,7 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
                         "_node_runtime_info",
                         return_value={"version": process_version(), "major": "22"},
                     ),
+                    mock.patch.object(tool.gc, "collect") as collect,
                     mock.patch.object(tool, "_assert_port_free"),
                     mock.patch.object(
                         tool.shutil,
@@ -917,6 +937,7 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             self.assertEqual(stop_server.call_count, 2)
             self.assertEqual(stop_browser.call_count, 2)
             self.assertEqual(assert_source.call_count, 5)
+            collect.assert_called_once_with()
             self.assertFalse(runtime_root.exists())
             self.assertTrue(result["cleanup"]["runtime_root_removed"])
             self.assertEqual(result["source"], source_identity)
