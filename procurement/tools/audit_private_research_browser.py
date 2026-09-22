@@ -986,6 +986,17 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
     }
     if isinstance(intake_sha256, str) and len(intake_sha256) == 64:
         workspace_hashes["intake_sha256"] = intake_sha256
+    projection_endpoint = _json_response_record(projection)
+    if is_v3:
+        projection_artifact = artifacts.get("projection.json")
+        if not isinstance(projection_artifact, bytes):
+            raise PrivateResearchBrowserAuditError(
+                "workspace projection artifact bytes are absent"
+            )
+        projection_endpoint = {
+            "bytes": len(projection_artifact),
+            "sha256": _sha256(projection_artifact),
+        }
     return {
         "contract": CONTRACT,
         "manifest": manifest,
@@ -993,7 +1004,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             "manifest_sha256": _json_sha256(manifest),
             "projection_sha256": _json_sha256(projection),
         },
-        "projection_endpoint": _json_response_record(projection),
+        "projection_endpoint": projection_endpoint,
         "workspace_hashes": workspace_hashes,
         "route_table": _private_app_route_table(),
         "assertion_ids": list(ASSERTION_IDS),

@@ -167,6 +167,10 @@ class PrivateResearchAppTests(unittest.TestCase):
             self.workspace["artifacts"]["owner-worksheet.csv"],
         )
         self.assertEqual(
+            client.get("/private-research/projection").json(),
+            self.workspace["projection"],
+        )
+        self.assertEqual(
             client.get("/private-research/artifacts/not-published.bin").status_code,
             404,
         )
@@ -177,6 +181,18 @@ class PrivateResearchAppTests(unittest.TestCase):
             ).status_code,
             403,
         )
+        projection_bytes = b'{"artifact_order":true,"contract":"V3"}\n'
+        self.workspace["manifest"]["contract"] = (
+            "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3"
+        )
+        self.workspace["artifacts"]["projection.json"] = projection_bytes
+
+        response = client.get("/private-research/projection")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, projection_bytes)
+        self.assertEqual(response.headers["content-type"], "application/json")
+        self.assertEqual(int(response.headers["content-length"]), len(projection_bytes))
 
     def test_health_refuses_an_unreadable_workspace(self):
         client = self._client()

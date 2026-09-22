@@ -22,7 +22,11 @@ from .local_access import (
     _read_secret,
     runtime_config,
 )
-from .private_research import PrivateResearchError, read_private_research_workspace
+from .private_research import (
+    V3_CONTRACT,
+    PrivateResearchError,
+    read_private_research_workspace,
+)
 from .private_research_projection import (
     PrivateResearchProjectionError,
     filter_private_research_rows,
@@ -636,11 +640,29 @@ def private_research_manifest() -> JSONResponse:
 
 
 @app.get("/private-research/projection")
-def private_research_projection() -> JSONResponse:
+def private_research_projection() -> Response:
     workspace = _workspace()
     projection = workspace.get("projection")
     if not isinstance(projection, dict):
         raise HTTPException(status_code=503, detail="Private projection is absent")
+    manifest = workspace.get("manifest")
+    if isinstance(manifest, dict) and manifest.get("contract") == V3_CONTRACT:
+        artifacts = workspace.get("artifacts")
+        projection_bytes = (
+            artifacts.get("projection.json")
+            if isinstance(artifacts, dict)
+            else None
+        )
+        if not isinstance(projection_bytes, bytes):
+            raise HTTPException(
+                status_code=503,
+                detail="Private projection artifact is absent",
+            )
+        # V3 projections are large enough that independently rebuilt mappings
+        # can have equivalent canonical semantics but different insertion order.
+        # Serve the already validated immutable artifact so the browser's raw
+        # body commitment is stable and exactly workspace-manifest bound.
+        return Response(content=projection_bytes, media_type="application/json")
     return JSONResponse(projection)
 
 

@@ -576,6 +576,25 @@ class PrivateResearchV3Tests(unittest.TestCase):
                     "artifacts": artifacts,
                 }
             )
+            self.assertEqual(
+                expectations["projection_endpoint"],
+                {
+                    "bytes": len(projection_bytes),
+                    "sha256": _sha(projection_bytes),
+                },
+            )
+            reordered_projection = dict(reversed(tuple(projection.items())))
+            reordered_expectations = _load_browser_tool()._build_expectations(
+                {
+                    "manifest": manifest,
+                    "projection": reordered_projection,
+                    "artifacts": artifacts,
+                }
+            )
+            self.assertEqual(
+                reordered_expectations["projection_endpoint"],
+                expectations["projection_endpoint"],
+            )
             self.assertIn(
                 "unapproved_supplier_offer_summary",
                 expectations["evidence"]["required_fields"],
