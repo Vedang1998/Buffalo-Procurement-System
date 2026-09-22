@@ -6,6 +6,7 @@ or commerce integration.
 """
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import os
@@ -680,14 +681,14 @@ def _read_private_v3_workspace(
         or manifest.get("limitations") != _limitations(projection)
     ):
         raise PrivateResearchError("private V3 research source binding differs")
-    expected_artifacts = {
-        "coverage.json": _canonical_bytes(_coverage_export(projection)),
-        "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
-        "owner-worksheet.csv": render_private_research_csv(projection).encode("utf-8"),
-        "projection.json": _canonical_bytes(projection),
-    }
+    # The source bundles are needed only through the semantic identity checks
+    # above.  Releasing them before rendering the large immutable artifacts keeps
+    # the private viewer's fail-closed startup replay within a bounded footprint.
+    del research_input, parent_v2_input, base_intake
+    gc.collect()
+    artifact_names = tuple(_ARTIFACT_MEDIA_TYPES)
     records = manifest.get("artifacts")
-    if not isinstance(records, list) or len(records) != len(expected_artifacts):
+    if not isinstance(records, list) or len(records) != len(artifact_names):
         raise PrivateResearchError("private V3 research artifact inventory differs")
     by_name: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -703,10 +704,18 @@ def _read_private_v3_workspace(
         if not isinstance(name, str) or name in by_name or record.get("path") != name:
             raise PrivateResearchError("private V3 research artifact name differs")
         by_name[name] = record
-    if set(by_name) != set(expected_artifacts):
+    if set(by_name) != set(artifact_names):
         raise PrivateResearchError("private V3 research artifact set differs")
     loaded: dict[str, bytes] = {}
-    for name, expected in expected_artifacts.items():
+    for name in artifact_names:
+        if name == "coverage.json":
+            expected = _canonical_bytes(_coverage_export(projection))
+        elif name == "owner-preview.html":
+            expected = render_private_research_html(projection).encode("utf-8")
+        elif name == "owner-worksheet.csv":
+            expected = render_private_research_csv(projection).encode("utf-8")
+        else:
+            expected = _canonical_bytes(projection)
         try:
             data = storage.get_bytes(f"{prefix}/{name}")
         except OSError as exc:
