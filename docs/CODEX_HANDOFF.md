@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-22T04:05:08Z (UTC)
+**Updated:** 2026-09-22T15:03:33Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,66 +10,80 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Private V3 research acceptance — RECOVERABLE FINAL CHECKPOINT / BROWSER AND FINAL-SUITE REBIND INCOMPLETE
+### Private V3 final acceptance — INCOMPLETE / REAL BROWSER INITIAL TIMEOUT
 
-- Authorized window: T0 `2026-09-22T01:19:10Z`, packaging reserve
-  `2026-09-22T03:34:10Z`, hard stop `2026-09-22T04:19:10Z`. Branch:
-  `codex/private-v2-research-input`. Preserved lineage is starting commit
-  `afba33adfd37e8a59a48665fcc9175f9e4647338` / tree `0533a987...`, material
-  checkpoint `7eccf94585e95b632f982dbabc7cc25842a4c47b` / tree `dce11f14...`, and
-  documentation checkpoint `b47ea0e17288b383bcf9a7bd6aeaa97a7c2d082c` / tree `72523eb2...`.
-- Independent exact review of `7eccf945...` found no P0/P1/P2 issue; 39/39
-  focused tests passed and V1/V2 projection/HTML/CSV bytes were unchanged.
-- The retained-source final rebuild is valid and immutable: input
-  `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`,
+- Authorization clock: T0 `2026-09-22T11:48:33Z`, packaging reserve
+  `2026-09-22T15:03:33Z`, hard stop `2026-09-22T15:48:33Z`. Branch:
+  `codex/private-v2-research-input`. Preserved material is
+  `aebadb66744a72588005c7367a70fdd85dcc3c47` / tree
+  `ced867f985ee463729fdeee686a6607baf5e078e`; preserved handoff is
+  `996408b33217a2ba9cb32a7c8a061e4554e8dc1d` / tree
+  `67fee7672880f2772714c77b6bea0cba15e77f02`. The two original
+  validation-incomplete archives remain byte-unchanged: code SHA-256
+  `d34d1a0fe4df22a9c0b1af78f150e92574710374aa5059429ecffd3babf6d2b7`
+  (3,205,100 bytes) and PRIVATE SHA-256
+  `015f6427b9865527f0ef42d031e726494e97fcaf72c092429781a98537b211ef`
+  (790,053,924 bytes).
+- Final retained research bytes were not regenerated. Their identities remain
+  input `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`,
   projection `b200deb0b6fd0a2f1c133114bf6b3a6db1eccc7d6e44deaf738dcdd864c11ae4`,
-  workspace `c5a71f4798eb2ed3e948f2bbc20097151ad92199b3b72f30276992e8150f2968`.
-  Build elapsed 697.108s; build-log SHA-256 is `2913e88c...`. Structural
-  readback passed in 154.03s (`5fe2b57d...`); full authenticated semantic
-  readback passed in 526.56s (`77d2544e...`).
-- Final artifacts are coverage JSON `1919e246...` (11,151,899 bytes), compact
-  HTML `df8ffb0f...` (21,248,489 bytes), CSV `0c4adf70...` (24,717,127 bytes),
-  and projection JSON `f47e81ad...` (230,669,882 bytes). Coverage is 1,365
-  supported (73 parent + 1,292 exact-ID additions) and 644 unsupported. Per
+  and workspace `c5a71f4798eb2ed3e948f2bbc20097151ad92199b3b72f30276992e8150f2968`.
+  Artifacts remain coverage JSON 11,151,899 bytes / SHA-256 `1919e246...`,
+  compact HTML 21,248,489 / `df8ffb0f...`, CSV 24,717,127 / `0c4adf70...`,
+  and projection JSON 230,669,882 / `f47e81ad...`.
+- Commit `9e0b11f10a44004547816c475541fa8adbc7d538` / tree
+  `ea014777249618a4e105659faf8806679db18378` made the demonstrated minimum
+  V3-only correction that serves the sealed projection artifact bytes. On that
+  exact commit the authoritative suite passed 941/941 with every abnormal
+  counter zero in 1103.721s (wrapper 1128s), raw SHA-256
+  `375405b23e3fa496a7297df10c66ca1fb0dcfe9560c96d74360dc8f9caee2ef7`;
+  startup passed 10/10 in 0.003s, SHA-256 `6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7`.
+  A full-size authenticated probe then transferred the exact 230,669,882-byte
+  projection twice with SHA-256 `f47e81ad...` in 0.215760s and 0.209630s.
+- The first real browser attempt exposed an early unhandled page-load timeout.
+  Commit `48d25b9bfdc4681f9fcd7dd651022cc296a98b38` / tree
+  `c214c87f701ce3a9dc6eb732931526697c0b76a2` applies only a bounded page-load
+  waiter correction; its browser-harness module passed 15/15 and independent
+  review found no P0/P1/P2 issue. The required complete suite was **not rerun**
+  on `48d25b9...` and no final-tip suite PASS is claimed.
+- The canonical real run on `48d25b9...` started at
+  `2026-09-22T14:34:29Z` and ended at `2026-09-22T14:57:55Z` with exit 1:
+  the initial Node/CDP phase exceeded its bounded 300-second subprocess limit.
+  It produced no browser result JSON and no downloads; restart was not reached.
+  Exact inspection found that every page/filter GET still invokes the public
+  filter boundary, which reruns the complete V3/V2 semantic validator over the
+  already startup-validated, cached 230MB projection. This is a demonstrated
+  P1 acceptance blocker. It was not changed after the packaging reserve began.
+- Aggregate reconciliation of the immutable outputs passed. For each of
   H3/H10/H17: CALCULATED 1,365; BLOCKED 43; NOT_APPLICABLE 601;
-  NOT_PROCESSED 0. Numerical-zero subsets are H3 1,030, H10 813, H17 768.
-  The 601 are 600 post-start creations plus one conservative first-day record;
-  the 43 lack reviewed creation evidence. No title/SKU/fuzzy/guessed identity
-  or invented pre-creation zero expanded eligibility.
-- The authoritative suite passed 941/941 with every abnormal counter zero on
-  exact documentation checkpoint `b47ea0e...`; raw SHA-256 `d185052f...`,
-  startup 10/10 SHA-256 `6f1aee1...`. Subsequent viewer-only memory/CDP fixes
-  are commits `b5872b9...`, `5524683...`, `37638d1...`, `866bf3e...`, and
-  `aebadb66744a72588005c7367a70fdd85dcc3c47`; every bounded delta passed its
-  focused tests and independent no-P0/P1/P2 review. The full 941-test suite has
-  **not** been rebound to `aebadb6...` and must not be described as final-tip
-  suite evidence.
-- Actual viewer execution proved launcher preflight isolation and completed one
-  full app semantic replay without the prior OOM. The ensuing V3 CDP phase
-  exposed a 230MB debugger-transfer problem; `aebadb6...` replaces it with an
-  exact streaming endpoint commitment and passed 15/15 synthetic browser tests
-  plus independent review. There was insufficient bounded time to rerun both
-  real initial/restart phases. Therefore authenticated Chromium acceptance is
-  **INCOMPLETE**, not failed or passed. Diagnostic log hashes include
-  `ed135646...` (pre-Chromium OOM) and `0a145435...` (post-replay CDP failure).
-- This remains DEVELOPMENT RESEARCH ONLY. Supplier mappings/offers/prices/packs,
-  calendars, trusted incoming/open orders, production forecast policy, and all
-  purchasing authority remain absent. No production DB/Shopify write, DRAFT,
-  PO/order, supplier contact, deployment, push, PR, or release occurred.
-- Recoverable transports were sealed at the bounded stop under the private
-  delivery root. The code/review ZIP outer SHA is reported adjacent to the
-  archive because an archive cannot contain its own hash. The clearly PRIVATE
-  results ZIP is 790,053,924 bytes with SHA-256
-  `015f6427b9865527f0ef42d031e726494e97fcaf72c092429781a98537b211ef`.
-  Both passed internal SHA checks and ZIP CRC checks and are explicitly labeled
-  validation-incomplete, not final acceptance packages.
-- Cleanup at `2026-09-22T04:11:19Z` found a clean worktree, unchanged
-  `PHASE_STATUS.md` blob `da9d8bd9...`, free port 18876, and no owned viewer,
-  audit, Chromium, test-PostgreSQL, runtime-secret, or PID-file residue.
-- Exact next authorization boundary: from clean `aebadb6...`, run the one final
-  941-test suite and a fresh authenticated Chromium initial/restart acceptance,
-  verify cleanup, then seal the code/review and clearly PRIVATE result packages.
-  Do not reuse the stale `9fd49b6...` run or claim acceptance before both gates.
+  NOT_PROCESSED 0. Exact pre-display numerical-zero subsets are H3 1,030,
+  H10 813, H17 768. Membership sets are identical across horizons. Eligibility
+  is 73 parent plus 1,292 exact-ID pre-window Variants; the remaining reasons
+  are 600 post-start creations, one conservative first-day/no-timezone record,
+  and 43 exact IDs absent from reviewed creation evidence. No title/SKU/fuzzy
+  match, guessed alias, invented zero, trusted incoming, supplier calendar,
+  price, pack, or approval was introduced.
+- Overall acceptance is **INCOMPLETE / NOT ACCEPTED**. The successful `9e0b11f`
+  suite and transfer proof are preserved, but they do not substitute for a
+  final-tip suite plus successful real Chromium initial/restart phases. No
+  PRIVATE results replacement is issued because the immutable results did not
+  change and every new browser download directory is empty; the original
+  PRIVATE archive remains the result carrier. A small additive code/review
+  supplement records the exact failures, reviews, hashes, and reconstruction.
+- Cleanup after the failed run found a clean worktree before this documentation
+  update, free loopback ports 18876/54171, and no owned viewer, audit, Uvicorn,
+  Chromium, crashpad, Node, test-PostgreSQL, runtime-secret, or PID-file
+  process/resource residue. `procurement/docs/PHASE_STATUS.md` remains unchanged.
+- This remains DEVELOPMENT RESEARCH ONLY. No production DB or Shopify write,
+  supplier mapping/price/pack approval, trusted incoming, DRAFT, PO/order,
+  supplier contact, deployment, push, PR, merge, or purchasing authority was
+  exercised or granted.
+- Exact next authorization boundary: from the preserved checkpoint, implement
+  only the reviewed app-internal cached-projection filter path while keeping the
+  public validation boundary fail closed; independently review it; rerun the
+  complete authoritative suite on that exact commit; then complete fresh real
+  authenticated Chromium initial and restart phases with byte-equivalent
+  downloads and cleanup proof. Do not claim PASS before all three gates finish.
 
 ### Saturday private real-data bridge — BOUNDED LOCAL MACHINE + BROWSER PASS / REAL PURCHASING BLOCKED
 
