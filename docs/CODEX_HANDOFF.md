@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-22T15:03:33Z (UTC)
+**Updated:** 2026-09-23T22:34:12Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,114 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Private V3 final acceptance — VALIDATION GATES PASS / DELIVERY PENDING / OPERATIONAL AUTHORITY BLOCKED
+
+- Authorization clock: T0 `2026-09-23T21:46:10Z`, packaging reserve
+  `2026-09-23T23:16:10Z`, hard stop `2026-09-23T23:46:10Z`. Work remained
+  on `codex/private-v2-research-input` in the isolated checkout. The protected
+  checkout and remote refs were not changed.
+- The frozen runtime/browser baseline remains
+  `a438a69cb05dd4f7dfb990e14de33f208dab7ccf` / tree
+  `2dacc029f088a7d44feb537d9784dc9f6a6924dd`. Its direct test-only child is
+  `62383f48aae9bbd401754bba543659c2b6543023` / tree
+  `686f8e5744f4f40bd916fb8f29c502a36508ca0b`. Only
+  `procurement/tests/test_persistent_mapping_foundation_contract.py` and
+  `procurement/tests/test_supplier_format_conformance.py` changed: their
+  independently specified exact population expectations now match the
+  independently reconciled 947-test registry, while exact-total,
+  reduced-registration and pre-run deletion-detection checks remain fail
+  closed. `procurement/tools/run_tests.py` and all runtime code are unchanged.
+- Focused validation passed **12/12** in 1.541s; raw log SHA-256 is
+  `0fe02f3a141ce0f03d1aae68032df1d05cf24346793f43363485c8a7664ee20f`.
+  The exact two-file patch SHA-256 is
+  `e6aa152005566e71ad861cf6cd0df73511a1f76731ce8ec63c6140d6dfcac141`.
+  One bounded read-only reviewer independently reconciled 947 discovered
+  tests and 947 registered floors, exercised both negative cases, confirmed
+  the reduced suite refuses at 946 before runner execution, and found no
+  P0/P1/P2 issue.
+- On exact `62383f48...`, the authoritative wrapper passed **947 discovered /
+  947 executed / 947 passed**, with failures 0, errors 0, skips 0, expected
+  failures 0 and unexpected successes 0. Runner time was 1304.922s and wrapper
+  time 1323s; raw log SHA-256 is
+  `ef93115b5a08e1b9674320a89eb893d86b68dd66ce4592bd92a878a74fa3121e`.
+  After verified PostgreSQL cleanup, startup validation ran exactly once and
+  passed **10/10** in 0.005s; raw log SHA-256 is
+  `613651f9a638a300d82c649547b5cede9523ceae784078db59332817220355d7`.
+  The sealed suite checksum-set SHA-256 is
+  `3455fe9c9c5a54b1f9cf239fa13d134e7a0ea2b37141363a150c3435db023be4`.
+- The earlier exact-baseline run remains preserved as **FAIL**, not relabeled:
+  on `a438a69...` it discovered and executed 947 tests, passed 945 and failed
+  only the two stale independent `941` expectations. Its raw log SHA-256 is
+  `fb6ffd8ffe7b32c8710f4d11f211c0f309a30766ed6c9a548c9b0452ba56379c`;
+  startup was deliberately not run after that failure.
+- Browser acceptance was executed at `a438a69...`, not at the test-only child:
+  initial Chromium passed **72/72** assertions and restart Chromium passed
+  **72/72**, with 38 requests and 38 responses per phase, exact artifact
+  equality, and no external HTTP, WebSocket or unexpected network activity.
+  Separate authenticated same-process HTTP probes covered pagination,
+  no-match and recovery; they are not counted as Chromium assertions. The
+  complete run took 1574.637s, including cold semantic replays of about
+  489.951s and 490.516s; warmed sidecar requests took 0.158–0.248s.
+  Acceptance-result SHA-256 is
+  `7a92beb2113dceee2ace68322823173e8b0bbb450cd7707fa6c53d4f9864955a`.
+- A complete tracked-file comparison binds that browser evidence to
+  `62383f48...` without relabeling it as a new execution. Both commits contain
+  388 tracked leaves; exactly the two authorized mode-100644 test files differ,
+  with no addition, deletion, rename or mode change, and all other 386
+  path/mode/blob records are identical. The filtered manifest SHA-256 is
+  identical at both commits:
+  `d9c9b97ab13d699fbee23e6eecc317d34720d812a3b890bdd8fcb9da0fc5aab2`.
+- Retained authenticated source and result bytes were not regenerated. Their
+  immutable identities remain input
+  `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`,
+  projection `b200deb0b6fd0a2f1c133114bf6b3a6db1eccc7d6e44deaf738dcdd864c11ae4`,
+  and workspace
+  `c5a71f4798eb2ed3e948f2bbc20097151ad92199b3b72f30276992e8150f2968`.
+  Exact artifacts remain coverage JSON 11,151,899 bytes / SHA-256
+  `1919e2465f7fe8e559a940eb66f435d18dfcd06537df1accc75ac38098592982`,
+  compact owner HTML 21,248,489 /
+  `df8ffb0f4ff635c319eab5d848bb71808b68395e12a113e0ce4252d294bb668d`,
+  owner CSV 24,717,127 /
+  `0c4adf709cd18b68a64642df5fbaf1b6ab5083a274552a7b42f39164db594b55`,
+  and projection JSON 230,669,882 /
+  `f47e81ad868a8dfada60055e3a3ac9b61aebf9a733c28aacea4af910388d727b`.
+- Final coverage is unchanged. Separately for H3, H10 and H17:
+  **CALCULATED 1,365; BLOCKED 43; NOT_APPLICABLE 601; NOT_PROCESSED 0**.
+  Numerical zero is a subset of CALCULATED: H3 **1,030**, H10 **813**, H17
+  **768**. Supported eligibility is 1,365 exact current Variant IDs. The other
+  644 are 600 created after the history start, one conservatively excluded on
+  the first date because its retained creation timestamp has no timezone, and
+  43 absent from reviewed creation evidence. No title, SKU or fuzzy match,
+  guessed alias, invented pre-creation zero, trusted incoming, supplier
+  calendar, price, pack or approval was introduced.
+- The planned additive
+  `private-v3-final-acceptance-PASS-62383f4-code-review-supplement` reconstructs
+  the unpublished range from the exact last-delivered prerequisite
+  `d6fce979059b4206573219b8839f6e62a5eef6f0` / tree
+  `d161d71fa8c08146c1c70c4f9791e4df963a4e76` through the documentation-only
+  successor. Sealing follows this documentation commit. To avoid a
+  self-referential archive identity, its exact final byte size and SHA-256 must
+  be recorded only in the adjacent external `.zip.sha256` and delivery
+  response, not inside the ZIP. The large PRIVATE results archive is not being
+  regenerated; it remains 790,053,924 bytes, SHA-256
+  `015f6427b9865527f0ef42d031e726494e97fcaf72c092429781a98537b211ef`.
+- Final cleanup removed the owned PostgreSQL root and left no owned suite,
+  viewer, browser, Node/CDP, listener, test database, runtime secret or PID-file
+  resource. The isolated worktree was clean before this documentation update;
+  `procurement/docs/PHASE_STATUS.md` remains unchanged.
+- All code, suite, startup, browser-attribution and cleanup validation gates are
+  **PASS**. Overall bounded acceptance is deliberately not declared inside this
+  pre-seal documentation commit; the delivery response may declare it only
+  after archive reconstruction, manifest, checksum and ZIP integrity checks
+  also pass. No operational database or Shopify write, mapping/price/pack
+  approval, trusted incoming, DRAFT, PO/order, supplier contact, deployment,
+  push, PR, merge, production release or purchasing authority was exercised or
+  granted.
+- Exact next authority boundary: owner acceptance, production approval and any
+  real purchasing or release action remain separate and require new explicit
+  authorization. No further runtime, data-capture or procurement action is
+  authorized by this checkpoint.
 
 ### Private V3 final acceptance — INCOMPLETE / REAL BROWSER INITIAL TIMEOUT
 
