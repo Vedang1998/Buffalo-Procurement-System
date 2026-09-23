@@ -233,13 +233,19 @@ class SupplierFormatConformanceTests(unittest.TestCase):
         self.assertTrue(any(item.startswith("$.zero: expected int") for item in differences))
         self.assertTrue(any(item.startswith("$.ordered[0]:") for item in differences))
 
+        expected_global_test_population = 947
         module = "test_supplier_format_conformance.py"
         self.assertEqual(runner.REQUIRED_MODULE_MINIMUMS[module], 9)
-        self.assertEqual(runner.GLOBAL_MINIMUM_TESTS, 941)
-        self.assertEqual(sum(runner.REQUIRED_MODULE_MINIMUMS.values()), 941)
+        self.assertEqual(
+            runner.GLOBAL_MINIMUM_TESTS, expected_global_test_population
+        )
+        self.assertEqual(
+            sum(runner.REQUIRED_MODULE_MINIMUMS.values()),
+            expected_global_test_population,
+        )
         altered = dict(runner.REQUIRED_MODULE_MINIMUMS)
         altered["test_sales.py"] -= 1
-        self.assertNotEqual(sum(altered.values()), 941)
+        self.assertNotEqual(sum(altered.values()), expected_global_test_population)
         self.assertEqual(
             runner._module_minimum_errors(Counter({module: 8}), {module: 9}),
             [f"{module} discovered 8 tests; required minimum is 9"],
