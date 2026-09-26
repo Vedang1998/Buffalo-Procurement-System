@@ -45,13 +45,14 @@ ARTIFACT_NAMES = (
     "coverage.json",
     "projection.json",
 )
-# The launcher performs one canonical replay before it starts Uvicorn, then the
-# app performs its own startup replay under the launcher's bounded window.  A
-# complete V2 population takes roughly fifteen minutes per replay in the owned
-# test environment, so the outer ceiling covers both without weakening either.
-SERVER_READY_SECONDS = 35 * 60
+# Corrected-V3 requires an independent structural semantic replay followed by
+# the app's full startup replay.  The outer ceiling is deliberately bounded but
+# includes headroom for both 1,365-Variant joint-horizon passes on the owned
+# 8 GiB host; the app retains its own smaller bounded readiness ceiling.
+SERVER_READY_SECONDS = 90 * 60
 CDP_READY_SECONDS = 30
 _HEX40 = re.compile(r"[0-9a-f]{40}")
+_HEX64 = re.compile(r"[0-9a-f]{64}")
 _PROCESS_TOKEN_ENV = "BUFFALO_PRIVATE_BROWSER_AUDIT_PROCESS_TOKEN"
 _PR_SET_CHILD_SUBREAPER = 36
 _SUBREAPER_ENABLED = False
@@ -672,42 +673,108 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         or not isinstance(artifacts, dict)
     ):
         raise PrivateResearchBrowserAuditError("canonical workspace result is incomplete")
+    tuples = {
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+            "PRIVATE_REAL_SOURCE_REVIEW",
+            "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+        ),
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+        ),
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+        ),
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+        ),
+    }
+    expected = tuples.get(manifest.get("contract"))
+    if (
+        expected is None
+        or manifest.get("data_mode") != expected[1]
+        or manifest.get("projection_contract") != expected[0]
+        or projection.get("contract") != expected[0]
+        or projection.get("data_mode") != expected[2]
+    ):
+        raise PrivateResearchBrowserAuditError(
+            "canonical workspace contract tuple differs"
+        )
     is_v2 = manifest.get("contract") == "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2"
     is_v3 = manifest.get("contract") == "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3"
-    is_development = is_v2 or is_v3
+    is_corrected = (
+        manifest.get("contract")
+        == "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1"
+    )
+    is_development = is_v2 or is_v3 or is_corrected
     rows = projection.get("owner_worksheet" if is_development else "research_rows")
     if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
         raise PrivateResearchBrowserAuditError(
             "browser filtering requires at least one research row"
         )
     if is_development:
-        research = projection.get("forecast_research")
-        counts_value = projection.get("forecast_research_counts")
+        research = projection.get(
+            "joint_forecast_research" if is_corrected else "forecast_research"
+        )
+        counts_value = (
+            research.get("primary_status_counts")
+            if is_corrected and isinstance(research, Mapping)
+            else projection.get("forecast_research_counts")
+        )
         owner_rows = projection.get("owner_worksheet")
-        scenarios = research.get("scenarios") if isinstance(research, Mapping) else None
+        scenarios = (
+            [
+                {"scenario_id": scenario_id}
+                for scenario_id in ("H3", "H10", "H17")
+            ]
+            if is_corrected
+            and isinstance(research, Mapping)
+            and isinstance(research.get("scenario_dates"), Mapping)
+            and set(research["scenario_dates"]) == {
+                "history_start", "history_end", "forecast_origin", "H3", "H10", "H17"
+            }
+            else research.get("scenarios")
+            if isinstance(research, Mapping)
+            else None
+        )
         allocation = (
-            research.get("history", {}).get("allocation_controls")
+            {
+                "eligible_variant_count": research.get(
+                    "membership_controls", {}
+                ).get("eligible", {}).get("count")
+            }
+            if is_corrected
+            and isinstance(research, Mapping)
+            and isinstance(research.get("membership_controls"), Mapping)
+            else research.get("history", {}).get("allocation_controls")
             if isinstance(research, Mapping)
             and isinstance(research.get("history"), Mapping)
             else None
         )
-        if (
-            projection.get("contract")
-            != (
+        expected_projection_contract = (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1"
+            if is_corrected
+            else (
                 "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
                 if is_v3
                 else "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
             )
+        )
+        if (
+            projection.get("contract")
+            != expected_projection_contract
             or projection.get("data_mode")
             != "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
             or manifest.get("data_mode")
             != "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
             or manifest.get("projection_contract")
-            != (
-                "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
-                if is_v3
-                else "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
-            )
+            != expected_projection_contract
             or not isinstance(manifest.get("base_intake_id"), str)
             or len(manifest["base_intake_id"]) != 64
             or not isinstance(manifest.get("base_intake_sha256"), str)
@@ -724,7 +791,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             raise PrivateResearchBrowserAuditError(
                 (
                     "private V3 forecast workspace contract differs"
-                    if is_v3
+                    if is_v3 or is_corrected
                     else "private V2 forecast workspace contract differs"
                 )
             )
@@ -736,6 +803,38 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             )
         for horizon in ("H3", "H10", "H17"):
             bucket = counts_value[horizon]
+            if is_corrected:
+                if (
+                    not isinstance(bucket, Mapping)
+                    or set(bucket)
+                    != {
+                        "CALCULATED", "BLOCKED", "NOT_APPLICABLE",
+                        "NOT_PROCESSED", "numerical_zero",
+                    }
+                    or any(
+                        isinstance(bucket.get(key), bool)
+                        or not isinstance(bucket.get(key), int)
+                        or bucket[key] < 0
+                        for key in bucket
+                    )
+                    or sum(
+                        bucket[key]
+                        for key in (
+                            "CALCULATED", "BLOCKED", "NOT_APPLICABLE",
+                            "NOT_PROCESSED",
+                        )
+                    )
+                    != coverage_count
+                    or bucket["CALCULATED"] != eligible
+                    or bucket["BLOCKED"] != 0
+                    or bucket["NOT_APPLICABLE"] != coverage_count - eligible
+                    or bucket["NOT_PROCESSED"] != 0
+                    or bucket["numerical_zero"] > bucket["CALCULATED"]
+                ):
+                    raise PrivateResearchBrowserAuditError(
+                        f"private corrected-V3 {horizon} result controls differ"
+                    )
+                continue
             if (
                 not isinstance(bucket, Mapping)
                 or set(bucket)
@@ -754,8 +853,12 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                 raise PrivateResearchBrowserAuditError(
                     f"private development {horizon} result controls differ"
                 )
-        if is_v3:
-            primary_counts = projection.get("forecast_primary_status_counts")
+        if is_v3 or is_corrected:
+            primary_counts = (
+                counts_value
+                if is_corrected
+                else projection.get("forecast_primary_status_counts")
+            )
             queue = projection.get("grouped_decision_queue")
             if (
                 not isinstance(primary_counts, Mapping)
@@ -817,11 +920,20 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
             raise PrivateResearchBrowserAuditError(
                 "private development owner-result inventory differs"
             )
-    vendor_values = {
-        item
-        for item in projection.get("vendor_names", [])
-        if isinstance(item, str) and item
-    }
+    vendor_values = (
+        {
+            name
+            for row in rows
+            for name in row.get("supplier_names", [])
+            if isinstance(name, str) and name
+        }
+        if is_corrected
+        else {
+            item
+            for item in projection.get("vendor_names", [])
+            if isinstance(item, str) and item
+        }
+    )
     named_row = next(
         (
             row
@@ -853,7 +965,12 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                     isinstance(result, Mapping)
                     and result.get("status") == "CALCULATED_RESEARCH_ONLY"
                     and isinstance(result.get("selected_model"), str)
-                    and isinstance(result.get("confidence"), str)
+                    and isinstance(
+                        result.get(
+                            "joint_confidence" if is_corrected else "confidence"
+                        ),
+                        str,
+                    )
                     for result in row["scenario_results"].values()
                 )
                 and isinstance(row.get("stage_status"), dict)
@@ -955,27 +1072,49 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     count_fields = (
-        "coverage_rows",
-        "research_rows",
-        "owner_worksheet",
-        "unjoined_supplier_hypotheses",
-        "vendor_names",
+        ("coverage_rows", "owner_worksheet", "forecast_sidecars")
+        if is_corrected
+        else (
+            "coverage_rows",
+            "research_rows",
+            "owner_worksheet",
+            "unjoined_supplier_hypotheses",
+            "vendor_names",
+        )
+    )
+    expected_count_types = (
+        {
+            "coverage_rows": list,
+            "owner_worksheet": list,
+            "forecast_sidecars": dict,
+        }
+        if is_corrected
+        else {field: list for field in count_fields}
     )
     counts = {
-        field: len(projection.get(field, []))
-        for field in count_fields
-        if isinstance(projection.get(field), list)
+        field: len(projection[field])
+        for field, expected_type in expected_count_types.items()
+        if isinstance(projection.get(field), expected_type)
     }
     if set(counts) != set(count_fields):
         raise PrivateResearchBrowserAuditError("workspace projection counts are incomplete")
     workspace_id = manifest.get("workspace_id")
     projection_sha256 = manifest.get("projection_sha256")
-    intake_sha256 = manifest.get("intake_sha256")
+    intake_sha256 = manifest.get(
+        "corrected_input_sha256" if is_corrected else "intake_sha256"
+    )
     if (
         not isinstance(workspace_id, str)
-        or len(workspace_id) != 64
+        or not _HEX64.fullmatch(workspace_id)
         or not isinstance(projection_sha256, str)
-        or len(projection_sha256) != 64
+        or not _HEX64.fullmatch(projection_sha256)
+        or (
+            is_corrected
+            and (
+                not isinstance(intake_sha256, str)
+                or not _HEX64.fullmatch(intake_sha256)
+            )
+        )
     ):
         raise PrivateResearchBrowserAuditError("workspace identity hashes differ")
     workspace_hashes = {
@@ -985,9 +1124,11 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         "projection_semantic_sha256": _json_sha256(projection),
     }
     if isinstance(intake_sha256, str) and len(intake_sha256) == 64:
-        workspace_hashes["intake_sha256"] = intake_sha256
+        workspace_hashes[
+            "corrected_input_sha256" if is_corrected else "intake_sha256"
+        ] = intake_sha256
     projection_endpoint = _json_response_record(projection)
-    if is_v3:
+    if is_v3 or is_corrected:
         projection_artifact = artifacts.get("projection.json")
         if not isinstance(projection_artifact, bytes):
             raise PrivateResearchBrowserAuditError(
@@ -1012,14 +1153,28 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
         "page_markers": (
             [
                 "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
-                "H3/H10/H17 ASSUMPTIONS",
                 (
-                    "V3 additive research source, exact-ID existence evidence, policy, and 138-day coverage"
+                    "CORRECTED JOINT H3/H10/H17"
+                    if is_corrected
+                    else "H3/H10/H17 ASSUMPTIONS"
+                ),
+                (
+                    "Corrected-V3 joint-horizon source, reviewed exact-ID evidence, policy, and 138-day controls"
+                    if is_corrected
+                    else "V3 additive research source, exact-ID existence evidence, policy, and 138-day coverage"
                     if is_v3
                     else "V2 research source, policy, and 138-day coverage"
                 ),
-                str(research.get("history", {}).get("start_date", "")),
-                str(research.get("history", {}).get("end_date", "")),
+                str(
+                    research.get("scenario_dates", {}).get("history_start", "")
+                    if is_corrected
+                    else research.get("history", {}).get("start_date", "")
+                ),
+                str(
+                    research.get("scenario_dates", {}).get("history_end", "")
+                    if is_corrected
+                    else research.get("history", {}).get("end_date", "")
+                ),
                 *(
                     [
                         "Primary per-horizon coverage outcomes",
@@ -1030,7 +1185,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                         "FUTURE_RELEASE_AUTHORITY",
                         "Unapproved supplier/offer summary",
                     ]
-                    if is_v3
+                    if is_v3 or is_corrected
                     else []
                 ),
             ]
@@ -1062,7 +1217,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                             "next_missing_stage",
                             "unapproved_supplier_offer_summary",
                         ]
-                        if is_v3
+                        if is_v3 or is_corrected
                         else []
                     ),
                 ],
@@ -1082,7 +1237,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                             "Next missing stage:",
                             "Unapproved supplier/offer summary:",
                         ]
-                        if is_v3
+                        if is_v3 or is_corrected
                         else []
                     ),
                     *[
@@ -1098,7 +1253,7 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                                         ]["primary_status"]
                                     )
                                 ]
-                                if is_v3
+                                if is_v3 or is_corrected
                                 else []
                             ),
                             str(
@@ -1113,11 +1268,47 @@ def _build_expectations(workspace: Mapping[str, Any]) -> dict[str, Any]:
                             ),
                             str(
                                 detail_row["scenario_results"][scenario_id][
-                                    "confidence"
+                                    (
+                                        "joint_confidence"
+                                        if is_corrected
+                                        else "confidence"
+                                    )
                                 ]
+                            ),
+                            *(
+                                [
+                                    str(
+                                        detail_row["scenario_results"][
+                                            scenario_id
+                                        ]["protection_units"]
+                                    ),
+                                    str(
+                                        detail_row["scenario_results"][
+                                            scenario_id
+                                        ]["target_units"]
+                                    ),
+                                    str(
+                                        detail_row["scenario_results"][
+                                            scenario_id
+                                        ].get("horizon_evaluation_wape")
+                                        or "—"
+                                    ),
+                                ]
+                                if is_corrected
+                                else []
                             ),
                         )
                     ],
+                    *(
+                        [
+                            "Joint H3/H10/H17 confidence",
+                            "horizon evaluation WAPE",
+                            "Target semantics:",
+                            "not a purchase quantity",
+                        ]
+                        if is_corrected
+                        else []
+                    ),
                     str(detail_row["recorded_sales_coverage"]["status"]),
                     str(detail_row["captured_stock_provenance"]["status"]),
                 ],

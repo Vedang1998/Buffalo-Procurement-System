@@ -25,13 +25,22 @@ from .local_access import (
     runtime_config,
 )
 from .private_research import (
+    CONTRACT as V1_WORKSPACE_CONTRACT,
+    DATA_MODE as V1_WORKSPACE_DATA_MODE,
+    V2_CONTRACT as V2_WORKSPACE_CONTRACT,
+    V2_DATA_MODE as DEVELOPMENT_WORKSPACE_DATA_MODE,
     V3_CONTRACT,
+    V3_CORRECTED_CONTRACT,
     PrivateResearchError,
     read_private_research_workspace,
 )
 from .private_research_projection import (
+    DATA_MODE as V1_PROJECTION_DATA_MODE,
+    PROJECTION_CONTRACT as V1_PROJECTION_CONTRACT,
+    V2_DATA_MODE as DEVELOPMENT_PROJECTION_DATA_MODE,
     V2_PROJECTION_CONTRACT,
     V3_PROJECTION_CONTRACT,
+    V3_CORRECTED_PROJECTION_CONTRACT,
     PrivateResearchProjectionError,
     _compile_private_research_row_filter,
 )
@@ -221,7 +230,42 @@ def _workspace() -> dict[str, object]:
     except PrivateResearchError as exc:
         raise HTTPException(status_code=503, detail="Private research workspace is invalid") from exc
     projection = loaded.get("projection")
-    if not isinstance(projection, dict):
+    manifest = loaded.get("manifest")
+    tuples = {
+        V1_WORKSPACE_CONTRACT: (
+            V1_PROJECTION_CONTRACT,
+            V1_WORKSPACE_DATA_MODE,
+            V1_PROJECTION_DATA_MODE,
+        ),
+        V2_WORKSPACE_CONTRACT: (
+            V2_PROJECTION_CONTRACT,
+            DEVELOPMENT_WORKSPACE_DATA_MODE,
+            DEVELOPMENT_PROJECTION_DATA_MODE,
+        ),
+        V3_CONTRACT: (
+            V3_PROJECTION_CONTRACT,
+            DEVELOPMENT_WORKSPACE_DATA_MODE,
+            DEVELOPMENT_PROJECTION_DATA_MODE,
+        ),
+        V3_CORRECTED_CONTRACT: (
+            V3_CORRECTED_PROJECTION_CONTRACT,
+            DEVELOPMENT_WORKSPACE_DATA_MODE,
+            DEVELOPMENT_PROJECTION_DATA_MODE,
+        ),
+    }
+    expected = (
+        tuples.get(manifest.get("contract"))
+        if isinstance(manifest, dict)
+        else None
+    )
+    if (
+        not isinstance(projection, dict)
+        or expected is None
+        or manifest.get("data_mode") != expected[1]
+        or manifest.get("projection_contract") != expected[0]
+        or projection.get("contract") != expected[0]
+        or projection.get("data_mode") != expected[2]
+    ):
         raise HTTPException(status_code=503, detail="Private research workspace is invalid")
     _CACHED_WORKSPACE = _ValidatedWorkspaceSnapshot(raw, loaded, projection)
     return loaded
@@ -260,7 +304,11 @@ def _page_app_owned_workspace_rows(
     contract = str(projection["contract"])
     rows = (
         projection["owner_worksheet"]
-        if contract in {V2_PROJECTION_CONTRACT, V3_PROJECTION_CONTRACT}
+        if contract in {
+            V2_PROJECTION_CONTRACT,
+            V3_PROJECTION_CONTRACT,
+            V3_CORRECTED_PROJECTION_CONTRACT,
+        }
         else projection["research_rows"]
     )
     matches = _compile_private_research_row_filter(
@@ -268,6 +316,16 @@ def _page_app_owned_workspace_rows(
         query=query,
         vendor=vendor,
         status=status,
+        corrected_primary_status_by_id=(
+            {
+                str(row["shopify_variant_id"]): str(
+                    row["primary_forecast_status"]
+                )
+                for row in projection["coverage_rows"]
+            }
+            if contract == V3_CORRECTED_PROJECTION_CONTRACT
+            else None
+        ),
     )
     for row in rows:
         if not matches(row):
@@ -411,6 +469,26 @@ def _v2_research_provenance(projection: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _corrected_research_provenance(
+    projection: dict[str, object],
+) -> dict[str, object]:
+    research = projection.get("joint_forecast_research")
+    if not isinstance(research, dict):
+        return {}
+    return {
+        "implementation_lineage": projection.get("implementation_lineage"),
+        "corrected_input": projection.get("corrected_input"),
+        "parent_projection": projection.get("parent_projection"),
+        "policy": research.get("policy"),
+        "creation_evidence_delta": research.get("creation_evidence_delta"),
+        "source_identity": research.get("source_identity"),
+        "history_controls": research.get("history_controls"),
+        "membership_controls": research.get("membership_controls"),
+        "scenario_dates": research.get("scenario_dates"),
+        "sidecars_sha256": research.get("sidecars_sha256"),
+    }
+
+
 def _json_html(value: object) -> str:
     return html.escape(
         json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")),
@@ -441,6 +519,7 @@ def private_research_index(
         in {
             "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
             "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
+            V3_CORRECTED_PROJECTION_CONTRACT,
         }
         and projection.get("data_mode")
         == "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
@@ -448,6 +527,10 @@ def private_research_index(
     development_v3 = (
         development_contract == "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
     )
+    development_corrected = (
+        development_contract == V3_CORRECTED_PROJECTION_CONTRACT
+    )
+    development_owner_rows = development_v3 or development_corrected
     try:
         matched_count, total_pages, selected = _page_app_owned_workspace_rows(
             workspace,
@@ -462,21 +545,44 @@ def private_research_index(
         raise HTTPException(status_code=503, detail="Private projection is invalid") from exc
     if page < 1 or page > total_pages:
         raise HTTPException(status_code=404, detail="Private research page is absent")
-    vendor_names = sorted(
-        {
-            str(item)
-            for item in projection.get("vendor_names", [])
-            if isinstance(item, str) and item
-        }
-    )
+    if development_corrected:
+        vendor_names = sorted(
+            {
+                str(name)
+                for row in projection.get("owner_worksheet", [])
+                if isinstance(row, dict)
+                for name in row.get("supplier_names", [])
+                if isinstance(name, str) and name
+            }
+        )
+    else:
+        vendor_names = sorted(
+            {
+                str(item)
+                for item in projection.get("vendor_names", [])
+                if isinstance(item, str) and item
+            }
+        )
     options = ["<option value=''>All named suppliers</option>"] + [
         f"<option value='{html.escape(name, quote=True)}'"
         f"{' selected' if name == vendor else ''}>{html.escape(name)}</option>"
         for name in vendor_names
     ]
+    corrected_status_by_id = (
+        {
+            str(row.get("shopify_variant_id")): row.get(
+                "primary_forecast_status"
+            )
+            for row in projection.get("coverage_rows", [])
+            if isinstance(row, dict)
+        }
+        if development_corrected
+        else {}
+    )
     cards = []
     for row in selected:
-        variant_id = html.escape(str(row.get("shopify_variant_id", "")))
+        raw_variant_id = str(row.get("shopify_variant_id", ""))
+        variant_id = html.escape(raw_variant_id)
         title = html.escape(
             " — ".join(
                 value
@@ -511,15 +617,29 @@ def private_research_index(
                 + html.escape(str(result.get("selected_model") or "not calculated"))
                 + " · point "
                 + html.escape(str(result.get("point_forecast_units") or "—"))
-                + " · target "
-                + html.escape(str(result.get("target_units") or "—"))
-                + " · confidence "
-                + html.escape(str(result.get("confidence") or "—"))
+                + (
+                    " · protection "
+                    + html.escape(str(result.get("protection_units") or "—"))
+                    + " · target "
+                    + html.escape(str(result.get("target_units") or "—"))
+                    + " · Joint H3/H10/H17 confidence "
+                    + html.escape(str(result.get("joint_confidence") or "—"))
+                    + " · horizon evaluation WAPE "
+                    + html.escape(
+                        str(result.get("horizon_evaluation_wape") or "—")
+                    )
+                    if development_corrected
+                    else " · target "
+                    + html.escape(str(result.get("target_units") or "—"))
+                    + " · confidence "
+                    + html.escape(str(result.get("confidence") or "—"))
+                )
                 + " · status "
                 + html.escape(
                     str(
                         result.get("primary_status")
-                        if development_v3
+                        or corrected_status_by_id.get(raw_variant_id)
+                        if development_owner_rows
                         else result.get("status")
                     )
                 )
@@ -529,7 +649,7 @@ def private_research_index(
                         (scenario_id, scenarios.get(scenario_id))
                         for scenario_id in ("H3", "H10", "H17")
                     )
-                    if development_v3 and isinstance(scenarios, dict)
+                    if development_owner_rows and isinstance(scenarios, dict)
                     else scenarios.items()
                     if isinstance(scenarios, dict)
                     else ()
@@ -543,7 +663,15 @@ def private_research_index(
                 + _stockout_evidence_status(row)
                 + "</p><ul>"
                 + result_summary
-                + "</ul><p><strong>Stage status:</strong> "
+                + "</ul>"
+                + (
+                    "<p><strong>Target semantics:</strong> Research demand and "
+                    "protection target — not a purchase quantity, case quantity, "
+                    "recommended buy, draft, PO, or order.</p>"
+                    if development_corrected
+                    else ""
+                )
+                + "<p><strong>Stage status:</strong> "
                 + html.escape(
                     json.dumps(stage_status, sort_keys=True, separators=(",", ":"))
                 )
@@ -580,7 +708,7 @@ def private_research_index(
                         )
                     )
                     + "</p>"
-                    if development_v3
+                    if development_owner_rows
                     else ""
                 )
             )
@@ -606,7 +734,11 @@ def private_research_index(
             + " — "
             + title
             + summary
-            + "<p><strong>Missing/pending:</strong> "
+            + (
+                "<p><strong>Status/reason codes:</strong> "
+                if development_corrected
+                else "<p><strong>Missing/pending:</strong> "
+            )
             + html.escape(", ".join(str(item) for item in reasons) or "none")
             + "</p><details><summary>Evidence and research diagnostics</summary><pre>"
             + _json_html(row)
@@ -624,7 +756,12 @@ def private_research_index(
         )
     declared = projection.get("declared_coverage", {})
     mode_badge = (
-        "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY · H3/H10/H17 ASSUMPTIONS"
+        (
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY · CORRECTED JOINT "
+            "H3/H10/H17 · ZERO AUTHORITY"
+            if development_corrected
+            else "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY · H3/H10/H17 ASSUMPTIONS"
+        )
         if development_research
         else "PRIVATE_REAL_SOURCE_REVIEW"
     )
@@ -650,28 +787,44 @@ def private_research_index(
         + (
             "<section><h2>"
             + (
-                "V3 additive research source, exact-ID existence evidence, policy, and 138-day coverage"
-                if development_v3
+                (
+                    "Corrected-V3 joint-horizon source, reviewed exact-ID evidence, "
+                    "policy, and 138-day controls"
+                    if development_corrected
+                    else "V3 additive research source, exact-ID existence evidence, policy, and 138-day coverage"
+                )
+                if development_owner_rows
                 else "V2 research source, policy, and 138-day coverage"
             )
             + "</h2><pre>"
-            + _json_html(_v2_research_provenance(projection))
+            + _json_html(
+                _corrected_research_provenance(projection)
+                if development_corrected
+                else _v2_research_provenance(projection)
+            )
             + "</pre></section>"
             if development_research
             else ""
         )
         + (
             "<section><h2>Primary per-horizon coverage outcomes</h2><pre>"
-            + _json_html(projection.get("forecast_primary_status_counts"))
+            + _json_html(
+                projection.get("joint_forecast_research", {}).get(
+                    "primary_status_counts"
+                )
+                if development_corrected
+                and isinstance(projection.get("joint_forecast_research"), dict)
+                else projection.get("forecast_primary_status_counts")
+            )
             + "</pre></section>"
-            if development_v3
+            if development_owner_rows
             else ""
         )
         + (
             "<section><h2>Grouped decision queue</h2><pre>"
             + _json_html(projection.get("grouped_decision_queue"))
             + "</pre></section>"
-            if development_v3
+            if development_owner_rows
             else ""
         )
         + "<p><a href='/private-research/artifacts/owner-preview.html'>Offline HTML preview</a> · "
@@ -717,7 +870,10 @@ def private_research_projection() -> Response:
     if not isinstance(projection, dict):
         raise HTTPException(status_code=503, detail="Private projection is absent")
     manifest = workspace.get("manifest")
-    if isinstance(manifest, dict) and manifest.get("contract") == V3_CONTRACT:
+    if isinstance(manifest, dict) and manifest.get("contract") in {
+        V3_CONTRACT,
+        V3_CORRECTED_CONTRACT,
+    }:
         artifacts = workspace.get("artifacts")
         projection_bytes = (
             artifacts.get("projection.json")

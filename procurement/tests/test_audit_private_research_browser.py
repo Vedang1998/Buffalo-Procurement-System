@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from procurement_os.private_research_projection import (
     build_private_research_projection,
+    canonical_private_research_projection_bytes,
     filter_private_research_rows,
 )
 from test_private_research_projection import (
@@ -46,6 +47,7 @@ from procurement_os.private_research_v2 import (
     build_private_v2_research_projection,
 )
 import procurement_os.private_research_v2 as private_research_v2
+import procurement_os.private_research_v3_corrected as corrected
 
 
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "audit_private_research_browser.py"
@@ -121,10 +123,12 @@ def _synthetic_workspace() -> dict[str, object]:
     return {
         "manifest": {
             "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1",
+            "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
             "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
             "operational_authority": False,
             "workspace_id": "f" * 64,
             "intake_sha256": "e" * 64,
+            "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
             "projection_sha256": projection["projection_sha256"],
             "artifacts": records,
         },
@@ -544,6 +548,28 @@ def _start_capture_listener(port, received):
 
 
 class PrivateResearchBrowserAuditTests(unittest.TestCase):
+    def test_expectations_reject_unknown_mixed_and_partial_contract_tuples(self):
+        tool = _load_tool()
+        cases = (
+            (("manifest", "contract"), "UNKNOWN_WORKSPACE"),
+            (
+                ("manifest", "projection_contract"),
+                "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            ),
+            (
+                ("projection", "data_mode"),
+                "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            ),
+        )
+        for path, replacement in cases:
+            workspace = _synthetic_workspace()
+            workspace[path[0]][path[1]] = replacement
+            with self.subTest(path=path), self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError,
+                "canonical workspace contract tuple differs",
+            ):
+                tool._build_expectations(workspace)
+
     def test_canonical_expectations_cover_counts_filters_details_and_artifacts(self):
         tool = _load_tool()
         workspace = _synthetic_workspace()
@@ -594,7 +620,7 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             tool.PrivateResearchBrowserAuditError,
-            "private V2 forecast workspace contract differs",
+            "canonical workspace contract tuple differs",
         ):
             tool._build_expectations(malformed_v2)
 
@@ -613,6 +639,142 @@ class PrivateResearchBrowserAuditTests(unittest.TestCase):
             v2_expectations["page_markers"],
         )
         self.assertTrue(v2_expectations["evidence"]["visible_markers"])
+
+    def test_corrected_expectations_bind_joint_counts_markers_and_raw_projection(self):
+        from test_private_research_v3_corrected import (
+            PrivateResearchV3CorrectedTests,
+        )
+
+        tool = _load_tool()
+        helper = PrivateResearchV3CorrectedTests(
+            methodName="test_primary_counts_and_memberships_are_exact"
+        )
+        with helper._built() as built:
+            projection = built["corrected_projection"]
+            projection_bytes = canonical_private_research_projection_bytes(projection)
+            artifacts = {
+                "owner-preview.html": b"<!doctype html><p>corrected fixture</p>\n",
+                "owner-worksheet.csv": b"row_type,shopify_variant_id\n",
+                "coverage.json": b'{"corrected":true}\n',
+                "projection.json": projection_bytes,
+            }
+            records = [
+                {
+                    "name": name,
+                    "path": name,
+                    "bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "media_type": "application/octet-stream",
+                }
+                for name, data in sorted(artifacts.items())
+            ]
+            child_input = built["input"]
+            corrected_input_sha = hashlib.sha256(
+                corrected.canonical_json_bytes(child_input)
+            ).hexdigest()
+            workspace = {
+                "manifest": {
+                    "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1",
+                    "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+                    "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
+                    "operational_authority": False,
+                    "workspace_id": "f" * 64,
+                    "projection_sha256": projection["projection_sha256"],
+                    "projection_contract": projection["contract"],
+                    "corrected_input_sha256": corrected_input_sha,
+                    "base_intake_id": child_input["base_intake"]["intake_id"],
+                    "base_intake_sha256": child_input["base_intake"]["sha256"],
+                    "artifacts": records,
+                },
+                "projection": projection,
+                "artifacts": artifacts,
+            }
+            expectations = tool._build_expectations(workspace)
+
+            wrong_disposition = deepcopy(workspace)
+            wrong_h3 = wrong_disposition["projection"]["joint_forecast_research"][
+                "primary_status_counts"
+            ]["H3"]
+            wrong_h3["BLOCKED"] = 1
+            wrong_h3["NOT_APPLICABLE"] -= 1
+            with self.assertRaisesRegex(
+                tool.PrivateResearchBrowserAuditError,
+                "corrected-V3 H3 result controls differ",
+            ):
+                tool._build_expectations(wrong_disposition)
+
+            wrong_sidecars = deepcopy(workspace)
+            wrong_sidecars["projection"]["forecast_sidecars"] = []
+            with (
+                mock.patch.object(
+                    tool,
+                    "filter_private_research_rows",
+                    return_value=projection["owner_worksheet"],
+                ),
+                self.assertRaisesRegex(
+                    tool.PrivateResearchBrowserAuditError,
+                    "projection counts are incomplete",
+                ),
+            ):
+                tool._build_expectations(wrong_sidecars)
+
+            null_wape = deepcopy(workspace)
+            null_rows = null_wape["projection"]["owner_worksheet"]
+            calculated = next(
+                row
+                for row in null_rows
+                if row["scenario_results"]["H3"].get("primary_status")
+                == "CALCULATED"
+            )
+            calculated["scenario_results"]["H3"]["horizon_evaluation_wape"] = None
+            with mock.patch.object(
+                tool,
+                "filter_private_research_rows",
+                return_value=null_rows,
+            ):
+                null_expectations = tool._build_expectations(null_wape)
+            self.assertIn("—", null_expectations["evidence"]["visible_markers"])
+            self.assertNotIn(
+                "None", null_expectations["evidence"]["visible_markers"]
+            )
+
+            missing_input_hash = deepcopy(workspace)
+            del missing_input_hash["manifest"]["corrected_input_sha256"]
+            with (
+                mock.patch.object(
+                    tool,
+                    "filter_private_research_rows",
+                    return_value=projection["owner_worksheet"],
+                ),
+                self.assertRaisesRegex(
+                    tool.PrivateResearchBrowserAuditError,
+                    "workspace identity hashes differ",
+                ),
+            ):
+                tool._build_expectations(missing_input_hash)
+
+        self.assertEqual(len(corrected_input_sha), 64)
+        self.assertEqual(
+            expectations["workspace_hashes"]["corrected_input_sha256"],
+            corrected_input_sha,
+        )
+        self.assertNotIn("intake_sha256", expectations["workspace_hashes"])
+        self.assertEqual(
+            expectations["counts"],
+            {"coverage_rows": 5, "owner_worksheet": 5, "forecast_sidecars": 2},
+        )
+        self.assertIn("CORRECTED JOINT H3/H10/H17", expectations["page_markers"])
+        self.assertIn(
+            "Joint H3/H10/H17 confidence",
+            expectations["evidence"]["visible_markers"],
+        )
+        self.assertEqual(
+            expectations["projection_endpoint"],
+            {
+                "bytes": len(projection_bytes),
+                "sha256": hashlib.sha256(projection_bytes).hexdigest(),
+            },
+        )
 
     def test_phase_validation_rejects_external_requests(self):
         tool = _load_tool()
@@ -1285,6 +1447,8 @@ time.sleep(60)
             tool._assert_port_free(port, label="registration failure fixture")
 
     def test_node_script_is_dependency_free_and_syntax_valid(self):
+        tool = _load_tool()
+        self.assertEqual(tool.SERVER_READY_SECONDS, 5400)
         source = SCRIPT.read_text(encoding="utf-8")
         for required in (
             "Target.setAutoAttach",

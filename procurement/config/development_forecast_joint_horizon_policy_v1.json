@@ -1,0 +1,121 @@
+{
+  "authority": {
+    "commercial_authority": false,
+    "production_activation": false
+  },
+  "candidates": {
+    "order": [
+      "NAIVE",
+      "SEASONAL_NAIVE",
+      "DAMPED_ETS",
+      "TSB",
+      "CATEGORY_SHRINKAGE"
+    ],
+    "simple_baseline": "NAIVE"
+  },
+  "contract": "BUFFALO_DEVELOPMENT_FORECAST_JOINT_HORIZON_POLICY_V1",
+  "decimal": {
+    "emax": 999999,
+    "emin": -999999,
+    "internal_encoding": "FINITE_PLAIN_DECIMAL_STRIP_TRAILING_FRACTIONAL_ZEROS_NORMALIZE_NEGATIVE_ZERO",
+    "precision": 50,
+    "rounding": "ROUND_HALF_EVEN",
+    "traps": [
+      "InvalidOperation",
+      "DivisionByZero",
+      "Overflow"
+    ]
+  },
+  "evidence_contract": "BUFFALO_DEVELOPMENT_FORECAST_JOINT_HORIZON_EVIDENCE_V1",
+  "fva": {
+    "gate": "100_TIMES_COMPLEX_ERROR_LE_98_TIMES_NAIVE_ERROR",
+    "minimum_relative_improvement_denominator": 100,
+    "minimum_relative_improvement_numerator": 2
+  },
+  "history": {
+    "days": 138,
+    "end_date": "2026-09-18",
+    "start_date": "2026-05-04"
+  },
+  "horizons": {
+    "displayed_days": [
+      3,
+      10,
+      17
+    ],
+    "forecast_origin": "2026-09-19",
+    "maximum_path_days": 17,
+    "target_end": "2026-10-05",
+    "target_start": "2026-09-19"
+  },
+  "method_version": "DEVELOPMENT_ROLLING_ORIGIN_JOINT_HORIZON_V1",
+  "output": {
+    "metric_quantum": "0.000001",
+    "published_daily_basis": "DIFFERENCE_PUBLISHED_CUMULATIVE",
+    "rounding": "ROUND_HALF_UP",
+    "units_quantum": "0.0001"
+  },
+  "parent_policy": {
+    "method_version": "DEVELOPMENT_ROLLING_ORIGIN_V2",
+    "policy_canonical_sha256": "ff62b1d313a18a907e811e8722431efee2349fc95a31e08ea5843ca2664ca858",
+    "policy_contract": "BUFFALO_DEVELOPMENT_FORECAST_POLICY_V2",
+    "policy_source_sha256": "fee2e91e14565a835f1d69c27ff547ccdda5c22c6bc43a2bb003c2b78f190b52"
+  },
+  "protection": {
+    "quantile_denominator": 10,
+    "quantile_numerator": 9,
+    "quantile_rule": "NEAREST_RANK_CEILING_FIXED_COMMON_ORIGIN_INVENTORY",
+    "shortfall_basis": "CUMULATIVE_NONNEGATIVE_DAILY_SHORTFALL"
+  },
+  "rate_cap": {
+    "formula": "MIN_RAW_CUMULATIVE_AND_DAY_TIMES_CALENDAR_MEAN_CAP",
+    "maximum_calendar_mean_multiplier": "1.25",
+    "strict_hit_rule": "RAW_CUMULATIVE_GT_DAY_TIMES_CAP"
+  },
+  "scoring": {
+    "diagnostics": [
+      "DAILY_MAE",
+      "MAXIMUM_PREFIX_ABSOLUTE_ERROR_MEAN"
+    ],
+    "objective": "WAPE_OVER_DISJOINT_SEGMENT_TOTALS_ELSE_DAILY_NORMALIZED_MAE",
+    "segments": [
+      {
+        "end_day": 3,
+        "id": "A",
+        "length": 3,
+        "start_day": 1,
+        "weight_denominator": 17,
+        "weight_numerator": 3
+      },
+      {
+        "end_day": 10,
+        "id": "B",
+        "length": 7,
+        "start_day": 4,
+        "weight_denominator": 17,
+        "weight_numerator": 7
+      },
+      {
+        "end_day": 17,
+        "id": "C",
+        "length": 7,
+        "start_day": 11,
+        "weight_denominator": 17,
+        "weight_numerator": 7
+      }
+    ],
+    "tie_break_rule": "CANDIDATE_ORDER"
+  },
+  "windows": {
+    "calibration_end_exclusive": 88,
+    "calibration_minimum_common_origins": 8,
+    "calibration_start_index": 66,
+    "evaluation_end_exclusive": 122,
+    "evaluation_minimum_common_origins": 4,
+    "evaluation_start_index": 104,
+    "minimum_training_days": 28,
+    "selection_end_exclusive": 50,
+    "selection_minimum_common_origins": 8,
+    "selection_start_index": 28
+  }
+}

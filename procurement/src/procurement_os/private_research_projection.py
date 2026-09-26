@@ -37,6 +37,9 @@ from .private_research_intake import (
 PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1"
 V2_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
 V3_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
+V3_CORRECTED_PROJECTION_CONTRACT = (
+    "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1"
+)
 V2_SCENARIO_CONTRACT = "BUFFALO_PRIVATE_FORECAST_RESEARCH_SCENARIO_V1"
 AUTHORITY_LABEL = "ZERO_AUTHORITY_RESEARCH_ONLY"
 DATA_MODE = "PRIVATE_REAL_DATA_RESEARCH_ONLY"
@@ -1505,6 +1508,21 @@ def build_private_research_projection(intake: Mapping[str, Any]) -> dict[str, An
 def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
     if (
         isinstance(projection, Mapping)
+        and projection.get("contract") == V3_CORRECTED_PROJECTION_CONTRACT
+    ):
+        from .private_research_v3_corrected import (
+            PrivateResearchV3CorrectedError,
+            validate_private_v3_corrected_projection,
+        )
+
+        try:
+            return validate_private_v3_corrected_projection(projection)
+        except PrivateResearchV3CorrectedError as exc:
+            raise PrivateResearchProjectionError(
+                "private corrected-V3 research projection differs"
+            ) from exc
+    if (
+        isinstance(projection, Mapping)
         and projection.get("contract") == V3_PROJECTION_CONTRACT
     ):
         from .private_research_v3 import (
@@ -2008,7 +2026,24 @@ def canonical_private_research_projection_bytes(
 ) -> bytes:
     """Return canonical full projection bytes after verifying its bound SHA."""
 
-    return _canonical_json_bytes(_validated_projection(projection)) + b"\n"
+    value = _validated_projection(projection)
+    if value["contract"] == V3_CORRECTED_PROJECTION_CONTRACT:
+        try:
+            return (
+                json.dumps(
+                    value,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise PrivateResearchProjectionError(
+                "private corrected-V3 projection bytes differ"
+            ) from exc
+    return _canonical_json_bytes(value) + b"\n"
 
 
 def private_research_projection_sha256(projection: Mapping[str, Any]) -> str:
@@ -2023,6 +2058,7 @@ def _compile_private_research_row_filter(
     query: str = "",
     vendor: str = "",
     status: str = "",
+    corrected_primary_status_by_id: Mapping[str, str] | None = None,
 ) -> Callable[[Mapping[str, Any]], bool]:
     """Compile shared row semantics without accepting a projection boundary.
 
@@ -2037,7 +2073,11 @@ def _compile_private_research_row_filter(
     vendor_filter = vendor.strip()
     status_filter = status.strip()
 
-    if contract in {V2_PROJECTION_CONTRACT, V3_PROJECTION_CONTRACT}:
+    if contract in {
+        V2_PROJECTION_CONTRACT,
+        V3_PROJECTION_CONTRACT,
+        V3_CORRECTED_PROJECTION_CONTRACT,
+    }:
 
         def matches(row: Mapping[str, Any]) -> bool:
             reasons = [str(item) for item in row["reason_codes"]]
@@ -2066,7 +2106,11 @@ def _compile_private_research_row_filter(
                                 row["unapproved_supplier_offer_summary"]
                             ).decode("ascii"),
                         )
-                        if contract == V3_PROJECTION_CONTRACT
+                        if contract
+                        in {
+                            V3_PROJECTION_CONTRACT,
+                            V3_CORRECTED_PROJECTION_CONTRACT,
+                        }
                         else ()
                     ),
                 )
@@ -2076,6 +2120,19 @@ def _compile_private_research_row_filter(
                 *scenario_reasons,
                 *[str(item) for item in row["stage_status"].values()],
             }
+            if contract == V3_CORRECTED_PROJECTION_CONTRACT:
+                if corrected_primary_status_by_id is None:
+                    raise PrivateResearchProjectionError(
+                        "corrected primary status controls are absent"
+                    )
+                fallback_status = corrected_primary_status_by_id.get(
+                    str(row["shopify_variant_id"])
+                )
+                if not isinstance(fallback_status, str):
+                    raise PrivateResearchProjectionError(
+                        "corrected primary status controls differ"
+                    )
+                statuses.add(fallback_status)
             for scenario in scenario_values:
                 if isinstance(scenario, Mapping):
                     statuses.update(
@@ -2086,6 +2143,7 @@ def _compile_private_research_row_filter(
                             "selected_model",
                             "protection_status",
                             "confidence",
+                            "joint_confidence",
                         )
                         if scenario.get(key) is not None
                     )
@@ -2156,7 +2214,12 @@ def filter_private_research_rows(
     contract = str(value["contract"])
     rows = (
         value["owner_worksheet"]
-        if contract in {V2_PROJECTION_CONTRACT, V3_PROJECTION_CONTRACT}
+        if contract
+        in {
+            V2_PROJECTION_CONTRACT,
+            V3_PROJECTION_CONTRACT,
+            V3_CORRECTED_PROJECTION_CONTRACT,
+        }
         else value["research_rows"]
     )
     matches = _compile_private_research_row_filter(
@@ -2164,6 +2227,16 @@ def filter_private_research_rows(
         query=query,
         vendor=vendor,
         status=status,
+        corrected_primary_status_by_id=(
+            {
+                str(row["shopify_variant_id"]): str(
+                    row["primary_forecast_status"]
+                )
+                for row in value["coverage_rows"]
+            }
+            if contract == V3_CORRECTED_PROJECTION_CONTRACT
+            else None
+        ),
     )
     return [
         dict(row)
@@ -2232,10 +2305,109 @@ def _compact_v2_research_provenance(value: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _render_corrected_v3_html(value: Mapping[str, Any]) -> str:
+    research = value["joint_forecast_research"]
+    worksheet = value["owner_worksheet"]
+    provenance = {
+        "implementation_lineage": value["implementation_lineage"],
+        "corrected_input": value["corrected_input"],
+        "parent_projection": value["parent_projection"],
+        "source_identity": research["source_identity"],
+        "history_controls": research["history_controls"],
+        "membership_controls": research["membership_controls"],
+        "scenario_dates": research["scenario_dates"],
+        "policy": research["policy"],
+        "creation_evidence_delta": research["creation_evidence_delta"],
+        "sidecars_sha256": research["sidecars_sha256"],
+    }
+    rows = (
+        (
+            row["shopify_variant_id"],
+            row["product_title"],
+            row["variant_title"],
+            row["supplier_names"],
+            row["unapproved_supplier_offer_summary"],
+            row["recorded_sales_coverage"],
+            row["existence_basis"],
+            row["recent_observed_sales"]["windows"].get("D7"),
+            row["recent_observed_sales"]["windows"].get("D28"),
+            row["captured_stock_provenance"],
+            row["scenario_results"]["H3"],
+            row["scenario_results"]["H10"],
+            row["scenario_results"]["H17"],
+            row["stage_status"],
+            row["next_missing_stage"],
+            row["sidecar_keys"],
+            row["reason_codes"],
+            row["owner_response"],
+        )
+        for row in worksheet
+    )
+    return (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; "
+        "script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src "
+        "'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'\">"
+        "<meta name=\"robots\" content=\"noindex,nofollow\">"
+        "<title>Private corrected-V3 coherent-horizon research — zero authority</title>"
+        "<style>body{font-family:system-ui,sans-serif;margin:2rem auto;max-width:120rem;"
+        "padding:0 1rem;color:#181818}h1,h2{line-height:1.2}.banner{border:3px solid "
+        "#8b1e1e;background:#fff4f4;padding:1rem;font-weight:700}table{border-collapse:"
+        "collapse;width:100%;margin:1rem 0 2rem}th,td{border:1px solid #aaa;padding:.45rem;"
+        "text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eee}"
+        "code,pre{overflow-wrap:anywhere;white-space:pre-wrap}</style></head><body>"
+        "<h1>Private corrected-V3 coherent-horizon research</h1>"
+        "<p class=\"banner\">ZERO_AUTHORITY_RESEARCH_ONLY. H3/H10/H17 are cumulative "
+        "research demand forecasts from one coherent 17-day path. Target units are "
+        "research demand/protection targets, not a purchase quantity, case quantity, "
+        "recommended buys, drafts, purchase orders, or orders.</p>"
+        f"<p>Contract: <code>{_html_value(value['contract'])}</code><br>"
+        f"Projection SHA-256: <code id=\"projection-sha256\">"
+        f"{_html_value(value['projection_sha256'])}</code></p>"
+        "<h2>Corrected input, parent, source, history, and policy controls</h2><pre>"
+        + _html_value(provenance)
+        + "</pre><h2>Primary H3/H10/H17 outcome counts</h2><pre>"
+        + _html_value(research["primary_status_counts"])
+        + "</pre><h2>Raw diagnostics versus corrected coherence</h2><pre>"
+        + _html_value(research["violation_counts"])
+        + "</pre><h2>Grouped decision queue</h2><pre>"
+        + _html_value(value["grouped_decision_queue"])
+        + "</pre><h2>One row per current Shopify Variant</h2>"
+        + _html_table(
+            (
+                "Shopify Variant ID",
+                "Product",
+                "Variant",
+                "Named suppliers",
+                "Unapproved supplier/offer summary",
+                "Recorded sales coverage",
+                "Existence basis",
+                "Recent 7-day recorded sales",
+                "Recent 28-day recorded sales",
+                "Captured stock provenance",
+                "H3 corrected research result (point / protection / target / Joint H3/H10/H17 confidence / horizon evaluation WAPE)",
+                "H10 corrected research result (point / protection / target / Joint H3/H10/H17 confidence / horizon evaluation WAPE)",
+                "H17 corrected research result (point / protection / target / Joint H3/H10/H17 confidence / horizon evaluation WAPE)",
+                "Stage status",
+                "Next missing stage",
+                "Joint sidecar keys",
+                "Reason codes",
+                "Owner response",
+            ),
+            rows,
+        )
+        + "<h2>Limitations</h2><pre>"
+        + _html_value(value["limitations"])
+        + "</pre></body></html>"
+    )
+
+
 def render_private_research_html(projection: Mapping[str, Any]) -> str:
     """Render one static offline HTML worksheet from a verified projection."""
 
     value = _validated_projection(projection)
+    if value["contract"] == V3_CORRECTED_PROJECTION_CONTRACT:
+        return _render_corrected_v3_html(value)
     is_v3 = value["contract"] == V3_PROJECTION_CONTRACT
     is_development = value["contract"] in {
         V2_PROJECTION_CONTRACT,
@@ -2665,10 +2837,151 @@ _V3_CSV_FIELDS = _CSV_FIELDS + (
 )
 
 
+_CORRECTED_V3_CSV_FIELDS = (
+    "row_type",
+    "projection_sha256",
+    "projection_contract",
+    "authority",
+    "shopify_variant_id",
+    "product_title",
+    "variant_title",
+    "supplier_names",
+    "unapproved_supplier_offer_summary",
+    "existence_basis",
+    "recorded_sales_coverage",
+    "recent_7d_recorded_sales",
+    "recent_28d_recorded_sales",
+    "captured_stock_provenance",
+    "h3_primary_status",
+    "h3_point_forecast_units",
+    "h3_protection_units",
+    "h3_target_units",
+    "h3_selected_model",
+    "h3_joint_h3_h10_h17_confidence",
+    "h3_horizon_evaluation_wape",
+    "h3_target_end",
+    "h10_primary_status",
+    "h10_point_forecast_units",
+    "h10_protection_units",
+    "h10_target_units",
+    "h10_selected_model",
+    "h10_joint_h3_h10_h17_confidence",
+    "h10_horizon_evaluation_wape",
+    "h10_target_end",
+    "h17_primary_status",
+    "h17_point_forecast_units",
+    "h17_protection_units",
+    "h17_target_units",
+    "h17_selected_model",
+    "h17_joint_h3_h10_h17_confidence",
+    "h17_horizon_evaluation_wape",
+    "h17_target_end",
+    "stage_status",
+    "next_missing_stage",
+    "reason_codes",
+    "joint_sidecar_keys",
+    "details",
+)
+
+
+def _render_corrected_v3_csv(value: Mapping[str, Any]) -> str:
+    common = {
+        "projection_sha256": value["projection_sha256"],
+        "projection_contract": value["contract"],
+        "authority": "ZERO_AUTHORITY_RESEARCH_ONLY",
+    }
+    research = value["joint_forecast_research"]
+    coverage_status_by_id = {
+        row["shopify_variant_id"]: row["primary_forecast_status"]
+        for row in value["coverage_rows"]
+    }
+    rows: list[dict[str, Any]] = [
+        {
+            **common,
+            "row_type": "PROJECTION",
+            "details": {
+                "shared_confidence_label": "Joint H3/H10/H17 confidence",
+                "corrected_input": value["corrected_input"],
+                "parent_projection": value["parent_projection"],
+                "implementation_lineage": value["implementation_lineage"],
+                "declared_coverage": value["declared_coverage"],
+                "coverage_summary": value["coverage_summary"],
+                "joint_forecast_research": research,
+                "grouped_decision_queue": value["grouped_decision_queue"],
+                "zero_authority": value["zero_authority"],
+            },
+        }
+    ]
+    for item in value["owner_worksheet"]:
+        scenarios = item["scenario_results"]
+        row: dict[str, Any] = {
+            **common,
+            "row_type": "OWNER_WORKSHEET",
+            "shopify_variant_id": item["shopify_variant_id"],
+            "product_title": item["product_title"],
+            "variant_title": item["variant_title"],
+            "supplier_names": item["supplier_names"],
+            "unapproved_supplier_offer_summary": item[
+                "unapproved_supplier_offer_summary"
+            ],
+            "existence_basis": item["existence_basis"],
+            "recorded_sales_coverage": item["recorded_sales_coverage"],
+            "recent_7d_recorded_sales": item["recent_observed_sales"]["windows"].get("D7"),
+            "recent_28d_recorded_sales": item["recent_observed_sales"]["windows"].get("D28"),
+            "captured_stock_provenance": item["captured_stock_provenance"],
+            "stage_status": item["stage_status"],
+            "next_missing_stage": item["next_missing_stage"],
+            "reason_codes": item["reason_codes"],
+            "joint_sidecar_keys": item["sidecar_keys"],
+            "details": {
+                "owner_response": item["owner_response"],
+                "question": item["question"],
+                "stage_blocker_refs": item["stage_blocker_refs"],
+                "scenario_results": scenarios,
+                "target_units_semantics": "RESEARCH_DEMAND_AND_PROTECTION_TARGET_NOT_PURCHASE_QUANTITY",
+            },
+        }
+        for scenario_id, prefix in (("H3", "h3"), ("H10", "h10"), ("H17", "h17")):
+            scenario = scenarios[scenario_id]
+            row[f"{prefix}_primary_status"] = (
+                scenario.get("primary_status")
+                or coverage_status_by_id[item["shopify_variant_id"]]
+            )
+            row[f"{prefix}_point_forecast_units"] = scenario.get("point_forecast_units")
+            row[f"{prefix}_protection_units"] = scenario.get("protection_units")
+            row[f"{prefix}_target_units"] = scenario.get("target_units")
+            row[f"{prefix}_selected_model"] = scenario.get("selected_model")
+            row[f"{prefix}_joint_h3_h10_h17_confidence"] = scenario.get(
+                "joint_confidence"
+            )
+            row[f"{prefix}_horizon_evaluation_wape"] = scenario.get(
+                "horizon_evaluation_wape"
+            )
+            row[f"{prefix}_target_end"] = scenario.get("target_end") or research[
+                "scenario_dates"
+            ][scenario_id]["target_end"]
+        rows.append(row)
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        stream, fieldnames=_CORRECTED_V3_CSV_FIELDS, lineterminator="\n"
+    )
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(
+            {
+                field: _spreadsheet_safe(row.get(field))
+                for field in _CORRECTED_V3_CSV_FIELDS
+            }
+        )
+    return stream.getvalue()
+
+
 def render_private_research_csv(projection: Mapping[str, Any]) -> str:
     """Render one formula-safe UTF-8 CSV from a verified projection."""
 
     value = _validated_projection(projection)
+    if value["contract"] == V3_CORRECTED_PROJECTION_CONTRACT:
+        return _render_corrected_v3_csv(value)
     is_v3 = value["contract"] == V3_PROJECTION_CONTRACT
     is_development = value["contract"] in {
         V2_PROJECTION_CONTRACT,

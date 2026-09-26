@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import importlib.util
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
+import json
 import os
 from pathlib import Path
 import stat
@@ -11,6 +14,11 @@ from unittest import mock
 
 
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "serve_private_research.py"
+CORRECTED_BUILD_TOOL = (
+    Path(__file__).resolve().parents[1]
+    / "tools"
+    / "build_private_v3_corrected_research.py"
+)
 
 
 def _load_tool():
@@ -22,7 +30,89 @@ def _load_tool():
     return module
 
 
+def _load_corrected_build_tool():
+    spec = importlib.util.spec_from_file_location(
+        "build_private_v3_corrected_research_test", CORRECTED_BUILD_TOOL
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("corrected private research builder could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class PrivateResearchToolsTests(unittest.TestCase):
+    def test_corrected_builder_reports_only_aggregate_bound_artifact_metadata(self):
+        tool = _load_corrected_build_tool()
+        snapshot = {"accepted_parent": "unchanged"}
+        delta = {"delta_id": "d" * 64}
+        corrected_input = {
+            "input_id": "a" * 64,
+            "coverage_controls": {
+                "current_catalog_count": 2009,
+                "eligible_count": 1365,
+                "not_applicable_count": 644,
+                "blocked_count": 0,
+                "not_processed_count": 0,
+            },
+        }
+        artifacts = [
+            {
+                "name": "projection.json",
+                "bytes": 123,
+                "sha256": "a" * 64,
+                "media_type": "application/json",
+            }
+        ]
+        manifest = {
+            "workspace_id": "b" * 64,
+            "projection_sha256": "c" * 64,
+            "artifacts": artifacts,
+        }
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                tool, "accepted_parent_snapshot", side_effect=(snapshot, snapshot)
+            ),
+            mock.patch.object(
+                tool,
+                "read_private_v3_research_bundle",
+                return_value=({"parent": "v3"}, {}, {}),
+            ),
+            mock.patch.object(
+                tool,
+                "write_private_v3_corrected_input",
+                return_value=(delta, corrected_input),
+            ),
+            mock.patch.object(
+                tool,
+                "build_private_v3_corrected_research_workspace",
+                return_value=manifest,
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = tool.main(
+                [
+                    "--private-root",
+                    "/private/root",
+                    "--creation-evidence-delta",
+                    "/private/delta.csv",
+                ]
+            )
+        self.assertEqual(status, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(result["artifacts"], artifacts)
+        self.assertEqual(result["projection_sha256"], "c" * 64)
+        self.assertEqual(result["eligible_count"], 1365)
+        self.assertEqual(result["not_applicable_count"], 644)
+        self.assertFalse(result["commercial_authority"])
+        self.assertFalse(result["production_activation"])
+        self.assertNotIn("owner_worksheet", result)
+        self.assertNotIn("observations", stdout.getvalue())
+
     def test_initialize_runtime_creates_only_private_secret_without_disclosure(self):
         tool = _load_tool()
         with TemporaryDirectory(prefix="buffalo-private-launcher-parent-") as temp:
@@ -118,7 +208,21 @@ class PrivateResearchToolsTests(unittest.TestCase):
                     return b'{"ok":true}'
 
             with (
-                mock.patch.object(tool, "read_private_research_workspace"),
+                mock.patch.object(
+                    tool,
+                    "read_private_research_workspace",
+                    return_value={
+                        "manifest": {
+                            "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1",
+                            "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
+                            "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                        },
+                        "projection": {
+                            "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                            "data_mode": "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+                        },
+                    },
+                ),
                 mock.patch.object(tool, "_source_identity", return_value=("a" * 40, "b" * 40)),
                 mock.patch.object(tool, "_assert_port_free"),
                 mock.patch.object(

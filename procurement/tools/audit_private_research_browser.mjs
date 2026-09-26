@@ -1073,8 +1073,10 @@ async function audit(client) {
   check(!/\b[0-9a-f]{64}\b/i.test(healthResponse.body), "v2.health.no_hashes");
 
   const manifestResponse = await fetchPayload("/private-research/manifest");
-  const isV3 =
-    EXPECTED.manifest.contract === "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3";
+  const isV3 = new Set([
+    "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3",
+    "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1",
+  ]).has(EXPECTED.manifest.contract);
   const projectionResponse = isV3
     ? await fetchDigestPayload("/private-research/projection")
     : await fetchPayload("/private-research/projection");

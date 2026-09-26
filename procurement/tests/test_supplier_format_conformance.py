@@ -233,7 +233,7 @@ class SupplierFormatConformanceTests(unittest.TestCase):
         self.assertTrue(any(item.startswith("$.zero: expected int") for item in differences))
         self.assertTrue(any(item.startswith("$.ordered[0]:") for item in differences))
 
-        expected_global_test_population = 947
+        expected_global_test_population = 993
         module = "test_supplier_format_conformance.py"
         self.assertEqual(runner.REQUIRED_MODULE_MINIMUMS[module], 9)
         self.assertEqual(

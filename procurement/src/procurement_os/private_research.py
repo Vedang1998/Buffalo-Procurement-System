@@ -33,11 +33,13 @@ from .storage import LocalFilesystemStorage
 CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1"
 V2_CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2"
 V3_CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3"
+V3_CORRECTED_CONTRACT = "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1"
 AUTHORITY = "PRIVATE_REAL_SOURCE_REVIEW_ONLY"
 DATA_MODE = "PRIVATE_REAL_SOURCE_REVIEW"
 V2_DATA_MODE = "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY"
 V2_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2"
 V3_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3"
+V3_CORRECTED_PROJECTION_CONTRACT = "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1"
 OPERATIONAL_AUTHORITY = False
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _ARTIFACT_MEDIA_TYPES = {
@@ -61,10 +63,21 @@ class PrivateResearchError(RuntimeError):
 
 
 def _canonical_bytes(value: Any) -> bytes:
-    return (
-        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        + "\n"
-    ).encode("utf-8")
+    try:
+        return (
+            json.dumps(
+                value,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise PrivateResearchError(
+            "private research canonical bytes differ"
+        ) from exc
 
 
 def _sha256(data: bytes) -> str:
@@ -113,20 +126,45 @@ def _exact_zero_authority(value: Any) -> bool:
 
 
 def _coverage_export(projection: Mapping[str, Any]) -> dict[str, Any]:
+    contract = projection.get("contract")
+    expected_modes = {
+        PROJECTION_CONTRACT: "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+        V2_PROJECTION_CONTRACT: V2_DATA_MODE,
+        V3_PROJECTION_CONTRACT: V2_DATA_MODE,
+        V3_CORRECTED_PROJECTION_CONTRACT: V2_DATA_MODE,
+    }
+    expected_mode = expected_modes.get(contract)
+    if expected_mode is None or projection.get("data_mode") != expected_mode:
+        raise PrivateResearchError("private research coverage projection tuple differs")
+    try:
+        private_research_projection_sha256(projection)
+    except Exception as exc:
+        if isinstance(exc, MemoryError):
+            raise
+        raise PrivateResearchError(
+            "private research coverage projection differs"
+        ) from exc
     coverage = projection.get("coverage")
     if coverage is None:
         coverage = projection.get("coverage_rows")
     return {
         "contract": (
+            "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V3_CORRECTED_V1"
+            if contract == V3_CORRECTED_PROJECTION_CONTRACT
+            else (
             "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V3"
-            if projection.get("contract") == V3_PROJECTION_CONTRACT
+            if contract == V3_PROJECTION_CONTRACT
             else (
                 "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V2"
-                if projection.get("contract") == V2_PROJECTION_CONTRACT
+                if contract == V2_PROJECTION_CONTRACT
                 else "BUFFALO_PRIVATE_RESEARCH_COVERAGE_EXPORT_V1"
-            )
+            ))
         ),
-        "authority": AUTHORITY,
+        "authority": (
+            "ZERO_AUTHORITY_RESEARCH_ONLY"
+            if contract == V3_CORRECTED_PROJECTION_CONTRACT
+            else AUTHORITY
+        ),
         "operational_authority": False,
         "projection_sha256": projection.get("projection_sha256"),
         "coverage": coverage,
@@ -190,6 +228,81 @@ def _v3_workspace_identity(
             }
         )
     )
+
+
+def _v3_corrected_workspace_identity(
+    corrected_input: Mapping[str, Any],
+    projection: Mapping[str, Any],
+    artifact_records: list[dict[str, Any]],
+) -> str:
+    if (
+        not isinstance(artifact_records, list)
+        or len(artifact_records) != len(_ARTIFACT_MEDIA_TYPES)
+        or any(
+            not isinstance(record, dict)
+            or set(record) != {"name", "path", "bytes", "sha256", "media_type"}
+            or not isinstance(record.get("name"), str)
+            or record.get("path") != record.get("name")
+            or record.get("name") not in _ARTIFACT_MEDIA_TYPES
+            or type(record.get("bytes")) is not int
+            or record["bytes"] < 0
+            or not isinstance(record.get("sha256"), str)
+            or not _HEX64.fullmatch(record["sha256"])
+            or record.get("media_type")
+            != _ARTIFACT_MEDIA_TYPES[record["name"]]
+            for record in artifact_records
+        )
+        or len({record["name"] for record in artifact_records})
+        != len(_ARTIFACT_MEDIA_TYPES)
+    ):
+        raise PrivateResearchError(
+            "private corrected-V3 workspace artifact records differ"
+        )
+    parent_v3 = corrected_input["parent_v3_input"]
+    parent_v2 = corrected_input["parent_v2_input"]
+    base = corrected_input["base_intake"]
+    parent_projection = corrected_input["parent_projection"]
+    delta = corrected_input["creation_evidence_delta"]
+    preimage = {
+        "contract": V3_CORRECTED_CONTRACT,
+        "implementation_lineage": corrected_input["implementation_lineage"],
+        "corrected_input": {
+            "input_id": corrected_input["input_id"],
+            "sha256": _sha256(_canonical_bytes(corrected_input)),
+        },
+        "parent_v3_input": {
+            "input_id": parent_v3["input_id"],
+            "sha256": parent_v3["sha256"],
+        },
+        "parent_v2_input": {
+            "input_id": parent_v2["input_id"],
+            "sha256": parent_v2["sha256"],
+        },
+        "base_intake": {
+            "intake_id": base["intake_id"],
+            "sha256": base["sha256"],
+        },
+        "parent_projection": {
+            "projection_sha256": parent_projection["projection_sha256"],
+            "artifact_sha256": parent_projection["artifact_sha256"],
+        },
+        "creation_evidence_delta": {
+            "delta_id": delta["delta_id"],
+            "raw_csv_sha256": delta["raw_csv_sha256"],
+            "normalized_row_set_sha256": delta["normalized_row_set_sha256"],
+        },
+        "joint_policy": {
+            "policy_canonical_sha256": corrected_input["joint_policy"][
+                "policy_canonical_sha256"
+            ]
+        },
+        "corrected_projection": {
+            "contract": V3_CORRECTED_PROJECTION_CONTRACT,
+            "projection_sha256": projection["projection_sha256"],
+        },
+        "artifacts": sorted(artifact_records, key=lambda item: item["name"]),
+    }
+    return _sha256(_canonical_bytes(preimage))
 
 
 def build_private_research_workspace(
@@ -460,6 +573,168 @@ def _build_private_v3_research_workspace_from_verified(
     return read_private_research_workspace_structural(workspace_path)["manifest"]
 
 
+def build_private_v3_corrected_research_workspace(
+    private_root: str | Path,
+    input_id: str,
+    *,
+    repo_root: str | Path,
+) -> dict[str, Any]:
+    """Build the additive corrected-V3 workspace from immutable parents."""
+
+    try:
+        from .private_research_v3 import read_private_v3_research_bundle
+        from .private_research_v3_corrected import (
+            PARENT_V3_INPUT_ID,
+            accepted_parent_snapshot,
+            read_private_v3_corrected_bundle,
+        )
+
+        root = validate_private_root(Path(private_root))
+        parent_before = accepted_parent_snapshot(root)
+        parent_v3, parent_v2, base = read_private_v3_research_bundle(
+            root, PARENT_V3_INPUT_ID
+        )
+        delta, corrected_input = read_private_v3_corrected_bundle(
+            root,
+            input_id,
+            parent_v3_input=parent_v3,
+            repo_root=repo_root,
+        )
+        parent_workspace = read_private_research_workspace(
+            root
+            / "private-research"
+            / "workspaces"
+            / corrected_input["parent_projection"]["workspace_id"]
+        )
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 research inputs are invalid"
+        ) from exc
+    manifest = _build_private_v3_corrected_workspace_from_verified(
+        root,
+        corrected_input,
+        delta,
+        parent_v3,
+        parent_v2,
+        parent_workspace["projection"],
+    )
+    try:
+        parent_after = accepted_parent_snapshot(root)
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 accepted parent post-check failed"
+        ) from exc
+    if _canonical_bytes(parent_before) != _canonical_bytes(parent_after):
+        raise PrivateResearchError("private corrected-V3 accepted parent changed")
+    return manifest
+
+
+def _build_private_v3_corrected_workspace_from_verified(
+    private_root: str | Path,
+    corrected_input: Mapping[str, Any],
+    delta: Mapping[str, Any],
+    parent_v3: Mapping[str, Any],
+    parent_v2: Mapping[str, Any],
+    parent_projection: Mapping[str, Any],
+) -> dict[str, Any]:
+    try:
+        from .private_research_v3_corrected import (
+            _ensure_corrected_private_parent,
+            build_private_v3_corrected_projection,
+            corrected_input_manifest_key,
+            delta_manifest_key,
+        )
+
+        root = validate_private_root(Path(private_root))
+        projection = build_private_v3_corrected_projection(
+            corrected_input, delta, parent_v3, parent_v2, parent_projection
+        )
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 projection inputs are invalid"
+        ) from exc
+    if (
+        projection.get("contract") != V3_CORRECTED_PROJECTION_CONTRACT
+        or corrected_input.get("contract")
+        != "BUFFALO_PRIVATE_DEVELOPMENT_FORECAST_RESEARCH_INPUT_V3_CORRECTED_V1"
+    ):
+        raise PrivateResearchError("private corrected-V3 input shape differs")
+    artifacts = {
+        "coverage.json": _canonical_bytes(_coverage_export(projection)),
+        "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
+        "owner-worksheet.csv": render_private_research_csv(projection).encode("utf-8"),
+        "projection.json": _canonical_bytes(projection),
+    }
+    artifact_records = [
+        _artifact_record(name, artifacts[name]) for name in sorted(artifacts)
+    ]
+    workspace_id = _v3_corrected_workspace_identity(
+        corrected_input, projection, artifact_records
+    )
+    prefix = f"private-research/workspaces/{workspace_id}"
+    workspace_path = root / prefix
+    _ensure_corrected_private_parent(root, f"{prefix}/manifest.json")
+    storage = LocalFilesystemStorage(root)
+    for name in sorted(artifacts):
+        _put_once_or_verify(storage, f"{prefix}/{name}", artifacts[name])
+    parent_v3_descriptor = corrected_input["parent_v3_input"]
+    parent_v2_descriptor = corrected_input["parent_v2_input"]
+    base_descriptor = corrected_input["base_intake"]
+    parent_projection_descriptor = corrected_input["parent_projection"]
+    delta_descriptor = corrected_input["creation_evidence_delta"]
+    manifest: dict[str, Any] = {
+        "contract": V3_CORRECTED_CONTRACT,
+        "data_mode": V2_DATA_MODE,
+        "authority": AUTHORITY,
+        "operational_authority": False,
+        "workspace_id": workspace_id,
+        "corrected_input_id": corrected_input["input_id"],
+        "corrected_input_key": corrected_input_manifest_key(
+            corrected_input["input_id"]
+        ),
+        "corrected_input_sha256": _sha256(_canonical_bytes(corrected_input)),
+        "parent_v3_input_id": parent_v3_descriptor["input_id"],
+        "parent_v3_input_key": parent_v3_descriptor["storage_key"],
+        "parent_v3_input_sha256": parent_v3_descriptor["sha256"],
+        "parent_v2_input_id": parent_v2_descriptor["input_id"],
+        "parent_v2_input_key": parent_v2_descriptor["storage_key"],
+        "parent_v2_input_sha256": parent_v2_descriptor["sha256"],
+        "base_intake_id": base_descriptor["intake_id"],
+        "base_intake_key": base_descriptor["storage_key"],
+        "base_intake_sha256": base_descriptor["sha256"],
+        "parent_projection_sha256": parent_projection_descriptor[
+            "projection_sha256"
+        ],
+        "parent_projection_artifact_sha256": parent_projection_descriptor[
+            "artifact_sha256"
+        ],
+        "creation_delta_id": delta_descriptor["delta_id"],
+        "creation_delta_raw_sha256": delta_descriptor["raw_csv_sha256"],
+        "creation_delta_normalized_row_set_sha256": delta_descriptor[
+            "normalized_row_set_sha256"
+        ],
+        "implementation_lineage": corrected_input["implementation_lineage"],
+        "joint_policy_canonical_sha256": corrected_input["joint_policy"][
+            "policy_canonical_sha256"
+        ],
+        "projection_contract": V3_CORRECTED_PROJECTION_CONTRACT,
+        "projection_sha256": projection["projection_sha256"],
+        "artifacts": artifact_records,
+        "limitations": _limitations(projection),
+        "zero_authority": dict(_ZERO_AUTHORITY),
+    }
+    _put_once_or_verify(
+        storage, f"{prefix}/manifest.json", _canonical_bytes(manifest)
+    )
+    return read_private_research_workspace(workspace_path)["manifest"]
+
+
 def _validate_workspace_root(path: Path) -> tuple[Path, str]:
     if not path.is_absolute() or path.is_symlink():
         raise PrivateResearchError("private research workspace path differs")
@@ -726,15 +1001,235 @@ def _read_private_v3_workspace(
     return {"manifest": dict(manifest), "projection": projection, "artifacts": loaded}
 
 
+def _read_private_v3_corrected_workspace(
+    *,
+    root: Path,
+    prefix: str,
+    expected_workspace_id: str,
+    storage: LocalFilesystemStorage,
+    manifest: Mapping[str, Any],
+    manifest_bytes: bytes,
+    repo_root: str | Path,
+) -> dict[str, Any]:
+    try:
+        from .private_research_v3 import read_private_v3_research_bundle
+        from .private_research_v3_corrected import (
+            PARENT_V3_INPUT_ID,
+            accepted_parent_snapshot,
+            build_private_v3_corrected_projection,
+            corrected_input_manifest_key,
+            read_private_v3_corrected_bundle,
+        )
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 manifest contract differs"
+        ) from exc
+    expected_keys = {
+        "contract", "data_mode", "authority", "operational_authority",
+        "workspace_id", "corrected_input_id", "corrected_input_key",
+        "corrected_input_sha256", "parent_v3_input_id", "parent_v3_input_key",
+        "parent_v3_input_sha256", "parent_v2_input_id", "parent_v2_input_key",
+        "parent_v2_input_sha256", "base_intake_id", "base_intake_key",
+        "base_intake_sha256", "parent_projection_sha256",
+        "parent_projection_artifact_sha256", "creation_delta_id",
+        "creation_delta_raw_sha256", "creation_delta_normalized_row_set_sha256",
+        "implementation_lineage", "joint_policy_canonical_sha256",
+        "projection_contract", "projection_sha256", "artifacts", "limitations",
+        "zero_authority",
+    }
+    input_id = str(manifest.get("corrected_input_id", ""))
+    try:
+        expected_input_key = corrected_input_manifest_key(input_id)
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 manifest contract differs"
+        ) from exc
+    if (
+        set(manifest) != expected_keys
+        or manifest.get("contract") != V3_CORRECTED_CONTRACT
+        or manifest.get("data_mode") != V2_DATA_MODE
+        or manifest.get("authority") != AUTHORITY
+        or manifest.get("operational_authority") is not False
+        or manifest.get("workspace_id") != expected_workspace_id
+        or manifest.get("corrected_input_key") != expected_input_key
+        or manifest.get("projection_contract")
+        != V3_CORRECTED_PROJECTION_CONTRACT
+        or not _exact_zero_authority(manifest.get("zero_authority"))
+        or _canonical_bytes(manifest) != manifest_bytes
+    ):
+        raise PrivateResearchError("private corrected-V3 manifest contract differs")
+    try:
+        parent_before = accepted_parent_snapshot(root)
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 accepted parent pre-check failed"
+        ) from exc
+    records = manifest.get("artifacts")
+    if not isinstance(records, list) or len(records) != len(_ARTIFACT_MEDIA_TYPES):
+        raise PrivateResearchError("private corrected-V3 artifact inventory differs")
+    if [record.get("name") if isinstance(record, Mapping) else None for record in records] != sorted(
+        _ARTIFACT_MEDIA_TYPES
+    ):
+        raise PrivateResearchError("private corrected-V3 artifact order differs")
+    by_name: dict[str, dict[str, Any]] = {}
+    loaded: dict[str, bytes] = {}
+    for record in records:
+        if (
+            not isinstance(record, dict)
+            or set(record) != {"name", "path", "bytes", "sha256", "media_type"}
+            or not isinstance(record.get("name"), str)
+            or record["name"] in by_name
+            or record.get("path") != record["name"]
+            or record["name"] not in _ARTIFACT_MEDIA_TYPES
+            or type(record.get("bytes")) is not int
+            or record["bytes"] < 0
+            or not isinstance(record.get("sha256"), str)
+            or not _HEX64.fullmatch(record["sha256"])
+            or record.get("media_type")
+            != _ARTIFACT_MEDIA_TYPES[record["name"]]
+        ):
+            raise PrivateResearchError("private corrected-V3 artifact record differs")
+        by_name[record["name"]] = dict(record)
+    if set(by_name) != set(_ARTIFACT_MEDIA_TYPES):
+        raise PrivateResearchError("private corrected-V3 artifact set differs")
+    for name in _ARTIFACT_MEDIA_TYPES:
+        try:
+            data = storage.get_bytes(f"{prefix}/{name}")
+        except OSError as exc:
+            raise PrivateResearchError(
+                "private corrected-V3 artifact is unavailable"
+            ) from exc
+        if by_name[name] != _artifact_record(name, data):
+            raise PrivateResearchError(
+                "private corrected-V3 artifact integrity differs"
+            )
+        loaded[name] = data
+    try:
+        serialized_projection = json.loads(loaded["projection.json"])
+        if (
+            not isinstance(serialized_projection, dict)
+            or _canonical_bytes(serialized_projection) != loaded["projection.json"]
+        ):
+            raise PrivateResearchError(
+                "private corrected-V3 projection serialization differs"
+            )
+        parent_v3, parent_v2, _base = read_private_v3_research_bundle(
+            root, PARENT_V3_INPUT_ID
+        )
+        delta, corrected_input = read_private_v3_corrected_bundle(
+            root,
+            input_id,
+            parent_v3_input=parent_v3,
+            repo_root=repo_root,
+        )
+        parent_workspace = read_private_research_workspace(
+            root
+            / "private-research"
+            / "workspaces"
+            / corrected_input["parent_projection"]["workspace_id"]
+        )
+        projection = build_private_v3_corrected_projection(
+            corrected_input,
+            delta,
+            parent_v3,
+            parent_v2,
+            parent_workspace["projection"],
+        )
+    except PrivateResearchError:
+        raise
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 semantic replay failed"
+        ) from exc
+    if dict(projection) != serialized_projection:
+        raise PrivateResearchError("private corrected-V3 projection replay differs")
+    expected_artifacts = {
+        "coverage.json": _canonical_bytes(_coverage_export(projection)),
+        "owner-preview.html": render_private_research_html(projection).encode("utf-8"),
+        "owner-worksheet.csv": render_private_research_csv(projection).encode("utf-8"),
+        "projection.json": _canonical_bytes(projection),
+    }
+    if any(loaded[name] != data for name, data in expected_artifacts.items()):
+        raise PrivateResearchError("private corrected-V3 artifact content differs")
+    input_descriptor = corrected_input
+    if (
+        manifest.get("corrected_input_sha256")
+        != _sha256(_canonical_bytes(corrected_input))
+        or manifest.get("parent_v3_input_id")
+        != input_descriptor["parent_v3_input"]["input_id"]
+        or manifest.get("parent_v3_input_key")
+        != input_descriptor["parent_v3_input"]["storage_key"]
+        or manifest.get("parent_v3_input_sha256")
+        != input_descriptor["parent_v3_input"]["sha256"]
+        or manifest.get("parent_v2_input_id")
+        != input_descriptor["parent_v2_input"]["input_id"]
+        or manifest.get("parent_v2_input_key")
+        != input_descriptor["parent_v2_input"]["storage_key"]
+        or manifest.get("parent_v2_input_sha256")
+        != input_descriptor["parent_v2_input"]["sha256"]
+        or manifest.get("base_intake_id")
+        != input_descriptor["base_intake"]["intake_id"]
+        or manifest.get("base_intake_key")
+        != input_descriptor["base_intake"]["storage_key"]
+        or manifest.get("base_intake_sha256")
+        != input_descriptor["base_intake"]["sha256"]
+        or manifest.get("parent_projection_sha256")
+        != input_descriptor["parent_projection"]["projection_sha256"]
+        or manifest.get("parent_projection_artifact_sha256")
+        != input_descriptor["parent_projection"]["artifact_sha256"]
+        or manifest.get("creation_delta_id")
+        != input_descriptor["creation_evidence_delta"]["delta_id"]
+        or manifest.get("creation_delta_raw_sha256")
+        != input_descriptor["creation_evidence_delta"]["raw_csv_sha256"]
+        or manifest.get("creation_delta_normalized_row_set_sha256")
+        != input_descriptor["creation_evidence_delta"]["normalized_row_set_sha256"]
+        or manifest.get("implementation_lineage")
+        != input_descriptor["implementation_lineage"]
+        or manifest.get("joint_policy_canonical_sha256")
+        != input_descriptor["joint_policy"]["policy_canonical_sha256"]
+        or manifest.get("projection_sha256") != projection["projection_sha256"]
+        or manifest.get("limitations") != _limitations(projection)
+        or _v3_corrected_workspace_identity(
+            corrected_input, projection, records
+        )
+        != expected_workspace_id
+    ):
+        raise PrivateResearchError("private corrected-V3 source binding differs")
+    try:
+        parent_after = accepted_parent_snapshot(root)
+    except Exception as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
+        raise PrivateResearchError(
+            "private corrected-V3 accepted parent post-check failed"
+        ) from exc
+    if _canonical_bytes(parent_before) != _canonical_bytes(parent_after):
+        raise PrivateResearchError("private corrected-V3 accepted parent changed")
+    return {
+        "manifest": dict(manifest),
+        "projection": projection,
+        "artifacts": loaded,
+    }
+
+
 def read_private_research_workspace_structural(
     workspace_root: str | Path,
 ) -> dict[str, Any]:
-    """Validate a sealed workspace without replaying its upstream source package.
+    """Validate a sealed workspace for read-only delivery preflight.
 
-    This is a preflight/read-only delivery check, not a source-authentication
-    boundary.  It validates the private path and modes, canonical manifests,
-    content-addressed workspace identity, projection semantics, exact exports, and
-    all artifact hashes.  The application startup continues to call
+    Legacy contracts validate paths and modes, canonical manifests,
+    content-addressed identity, projection semantics, exact exports, and artifact
+    hashes without replaying upstream source packages. Corrected-V3 intentionally
+    performs its independently mandated accepted-parent and joint-planner replay
+    at this boundary. The application startup also calls
     :func:`read_private_research_workspace`, which replays the complete raw-source
     derivation and referenced-input availability on every launch and restart.
     """
@@ -774,6 +1269,17 @@ def read_private_research_workspace_structural(
         raise PrivateResearchError("private research manifest is unreadable") from exc
     if not isinstance(manifest, dict) or _canonical_bytes(manifest) != manifest_bytes:
         raise PrivateResearchError("private research manifest contract differs")
+
+    if manifest.get("contract") == V3_CORRECTED_CONTRACT:
+        return _read_private_v3_corrected_workspace(
+            root=root,
+            prefix=prefix,
+            expected_workspace_id=expected_workspace_id,
+            storage=storage,
+            manifest=manifest,
+            manifest_bytes=manifest_bytes,
+            repo_root=Path(__file__).resolve().parents[3],
+        )
 
     workspace_contract = manifest.get("contract")
     is_v2 = workspace_contract == V2_CONTRACT
@@ -1018,6 +1524,19 @@ def read_private_research_workspace(workspace_root: str | Path) -> dict[str, Any
             storage=storage,
             manifest=manifest,
             manifest_bytes=manifest_bytes,
+        )
+    if (
+        isinstance(manifest, dict)
+        and manifest.get("contract") == V3_CORRECTED_CONTRACT
+    ):
+        return _read_private_v3_corrected_workspace(
+            root=root,
+            prefix=prefix,
+            expected_workspace_id=expected_workspace_id,
+            storage=storage,
+            manifest=manifest,
+            manifest_bytes=manifest_bytes,
+            repo_root=Path(__file__).resolve().parents[3],
         )
     if isinstance(manifest, dict) and manifest.get("contract") == V2_CONTRACT:
         return _read_private_v2_workspace(

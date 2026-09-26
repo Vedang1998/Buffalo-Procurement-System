@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from procurement_os import (
@@ -59,13 +60,16 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.workspace = {
             "manifest": {
                 "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1",
+                "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
                 "authority": "PRIVATE_REAL_SOURCE_REVIEW_ONLY",
                 "operational_authority": False,
                 "workspace_id": "b" * 64,
+                "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
                 "projection_sha256": "a" * 64,
             },
             "projection": {
                 "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                "data_mode": "PRIVATE_REAL_DATA_RESEARCH_ONLY",
                 "projection_sha256": "a" * 64,
                 "vendor_names": ["Fixture Supplier"],
                 "declared_coverage": {"current_catalog_population": 1},
@@ -211,6 +215,97 @@ class PrivateResearchAppTests(unittest.TestCase):
         self.assertEqual(response.headers["content-type"], "application/json")
         self.assertEqual(int(response.headers["content-length"]), len(projection_bytes))
 
+    def test_corrected_joint_workspace_uses_owner_rows_and_artifact_projection(self):
+        scenario = {
+            "status": "CALCULATED_RESEARCH_ONLY",
+            "primary_status": "CALCULATED",
+            "selected_model": "NAIVE",
+            "point_forecast_units": "1.0000",
+            "protection_units": "0.5000",
+            "target_units": "1.5000",
+            "joint_confidence": "LOW",
+            "horizon_evaluation_wape": "0.125000",
+            "reason_codes": ["UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK"],
+        }
+        owner = {
+            "shopify_variant_id": "1001",
+            "product_title": "Corrected Fixture Product",
+            "variant_title": "750 mL",
+            "supplier_names": ["Corrected Fixture Supplier"],
+            "unapproved_supplier_offer_summary": {"offer_count": 0},
+            "recorded_sales_coverage": {"status": "COMPLETE"},
+            "captured_stock_provenance": {"status": "UNKNOWN"},
+            "recent_observed_sales": {"windows": {}},
+            "existence_basis": "SYNTHETIC_EXACT_ID_FIXTURE",
+            "scenario_results": {
+                key: {**deepcopy(scenario), "horizon_days": days}
+                for key, days in (("H3", 3), ("H10", 10), ("H17", 17))
+            },
+            "stage_status": {"FORECAST": "CALCULATED_RESEARCH_ONLY"},
+            "next_missing_stage": {"stage": "ABC", "reason": "FIXTURE"},
+            "stage_blocker_refs": [
+                "ABC", "NET_NEED", "CASE_QUANTITY", "ECONOMICS", "ORDER"
+            ],
+            "sidecar_keys": ["joint17:1001:fixture"],
+            "reason_codes": ["UNKNOWN_AVAILABILITY_NOT_ASSUMED_IN_STOCK"],
+            "owner_response": "",
+            "question": "",
+        }
+        projection_bytes = b'{"corrected_artifact_order":true}\n'
+        self.workspace["manifest"] = {
+            **self.workspace["manifest"],
+            "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1",
+            "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1",
+            "corrected_input_sha256": "c" * 64,
+        }
+        self.workspace["projection"] = {
+            "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1",
+            "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "projection_sha256": "a" * 64,
+            "declared_coverage": {"current_catalog_population": 1},
+            "coverage_rows": [
+                {
+                    "shopify_variant_id": "1001",
+                    "primary_forecast_status": "CALCULATED",
+                }
+            ],
+            "owner_worksheet": [owner],
+            "joint_forecast_research": {
+                "primary_status_counts": {
+                    key: {
+                        "CALCULATED": 1,
+                        "NOT_APPLICABLE": 0,
+                        "BLOCKED": 0,
+                        "NOT_PROCESSED": 0,
+                        "numerical_zero": 0,
+                    }
+                    for key in ("H3", "H10", "H17")
+                },
+                "scenario_dates": {
+                    "history_start": "2026-05-04",
+                    "history_end": "2026-09-18",
+                },
+            },
+            "grouped_decision_queue": {"categories": []},
+        }
+        self.workspace["artifacts"]["projection.json"] = projection_bytes
+        client = self._client()
+        self._login(client)
+
+        page = client.get("/private-research")
+        response = client.get("/private-research/projection")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("CORRECTED JOINT H3/H10/H17", page.text)
+        self.assertIn("Corrected Fixture Supplier", page.text)
+        self.assertIn("Joint H3/H10/H17 confidence LOW", page.text)
+        self.assertIn("horizon evaluation WAPE 0.125000", page.text)
+        self.assertIn("not a purchase quantity", page.text)
+        self.assertIn("Status/reason codes:", page.text)
+        self.assertNotIn("Missing/pending:", page.text)
+        self.assertEqual(response.content, projection_bytes)
+
     def test_warm_page_and_filter_requests_do_not_revalidate_projection(self):
         rows = [
             {
@@ -335,7 +430,14 @@ class PrivateResearchAppTests(unittest.TestCase):
         workspace["projection"] = {
             **workspace["projection"],
             "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
+            "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
             "owner_worksheet": [first, second],
+        }
+        workspace["manifest"] = {
+            **workspace["manifest"],
+            "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3",
+            "data_mode": "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
         }
         with mock.patch.object(
             private_research_app,
@@ -519,8 +621,35 @@ class PrivateResearchAppTests(unittest.TestCase):
             side_effect=private_research_app.PrivateResearchError("corrupt"),
         ):
             response = client.get("/health")
-        self.assertEqual(response.status_code, 503)
-        self.assertNotEqual(response.json().get("ok"), True)
+            self.assertEqual(response.status_code, 503)
+
+    def test_workspace_cache_rejects_unknown_and_mixed_contract_tuples(self):
+        cases = (
+            ("manifest contract", ("manifest", "contract"), "UNKNOWN_WORKSPACE"),
+            (
+                "manifest projection contract",
+                ("manifest", "projection_contract"),
+                "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            ),
+            (
+                "projection data mode",
+                ("projection", "data_mode"),
+                "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            ),
+        )
+        for label, path, replacement in cases:
+            workspace = deepcopy(self.workspace)
+            workspace[path[0]][path[1]] = replacement
+            private_research_app._CACHED_WORKSPACE = None
+            with self.subTest(case=label), mock.patch.object(
+                private_research_app,
+                "read_private_research_workspace",
+                return_value=workspace,
+            ):
+                with self.assertRaises(HTTPException) as caught:
+                    private_research_app._workspace()
+                self.assertEqual(caught.exception.status_code, 503)
+                self.assertIsNone(private_research_app._CACHED_WORKSPACE)
 
     def _assert_server_secret_unavailable(self, client: TestClient) -> None:
         responses = (

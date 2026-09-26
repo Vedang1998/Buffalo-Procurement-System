@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,39 @@ def _load_tool():
 
 
 class ServePrivateResearchHardeningTests(unittest.TestCase):
+    def test_preflight_tuple_rejects_unknown_mixed_and_partial_contracts(self):
+        tool = _load_tool()
+        workspace = {
+            "manifest": {
+                "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1",
+                "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
+                "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+            },
+            "projection": {
+                "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                "data_mode": "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+            },
+        }
+        tool._validate_workspace_tuple(workspace)
+        for path, replacement in (
+            (("manifest", "contract"), "UNKNOWN_WORKSPACE"),
+            (
+                ("manifest", "projection_contract"),
+                "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            ),
+            (
+                ("projection", "data_mode"),
+                "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            ),
+        ):
+            forged = deepcopy(workspace)
+            forged[path[0]][path[1]] = replacement
+            with self.subTest(path=path), self.assertRaisesRegex(
+                tool.PrivateResearchServeError,
+                "workspace tuple differs",
+            ):
+                tool._validate_workspace_tuple(forged)
+
     def _runtime(self, parent: Path, tool) -> Path:
         root = parent / "runtime"
         root.mkdir(mode=0o700)
@@ -189,7 +223,7 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
 
     def test_readiness_allows_validation_beyond_legacy_thirty_seconds(self):
         tool = _load_tool()
-        self.assertEqual(tool.READINESS_TIMEOUT_SECONDS, 1200)
+        self.assertEqual(tool.READINESS_TIMEOUT_SECONDS, 2700)
         self.assertEqual(tool.PROCESS_IDENTITY_TIMEOUT_SECONDS, 5)
 
         class FakeProcess:
@@ -224,6 +258,17 @@ class ServePrivateResearchHardeningTests(unittest.TestCase):
 
             def read_workspace(_path):
                 preflight_pid.write_text(str(os.getpid()), encoding="ascii")
+                return {
+                    "manifest": {
+                        "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1",
+                        "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
+                        "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                    },
+                    "projection": {
+                        "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                        "data_mode": "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+                    },
+                }
 
             ready = FakeResponse()
             with (

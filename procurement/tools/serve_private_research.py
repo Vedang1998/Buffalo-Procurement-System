@@ -28,7 +28,10 @@ PID_NAME = "private-viewer.pid"
 # A full private V2 semantic replay recalculates every registered horizon before
 # the app can become ready.  The ceiling is bounded but must cover that genuine
 # fail-closed replay on the complete private research population.
-READINESS_TIMEOUT_SECONDS = 20 * 60
+# Corrected-V3 performs a full accepted-parent replay plus 1,365 joint-horizon
+# semantic replays at application startup.  Keep the wait bounded while leaving
+# enough headroom for the authenticated cold-start path on the owned 8 GiB host.
+READINESS_TIMEOUT_SECONDS = 45 * 60
 PROCESS_IDENTITY_TIMEOUT_SECONDS = 5
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -51,6 +54,49 @@ def read_private_research_workspace(path: Path) -> dict[str, object]:
     return reader(path)
 
 
+def _validate_workspace_tuple(workspace: object) -> None:
+    if not isinstance(workspace, dict):
+        raise PrivateResearchServeError("private viewer workspace tuple differs")
+    manifest = workspace.get("manifest")
+    projection = workspace.get("projection")
+    tuples = {
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+            "PRIVATE_REAL_SOURCE_REVIEW",
+            "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+        ),
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V2": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V2",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+        ),
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+        ),
+        "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V3_CORRECTED_V1": (
+            "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V3_CORRECTED_V1",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+            "PRIVATE_REAL_DATA_DEVELOPMENT_RESEARCH_ONLY",
+        ),
+    }
+    expected = (
+        tuples.get(manifest.get("contract"))
+        if isinstance(manifest, dict)
+        else None
+    )
+    if (
+        not isinstance(projection, dict)
+        or expected is None
+        or manifest.get("data_mode") != expected[1]
+        or manifest.get("projection_contract") != expected[0]
+        or projection.get("contract") != expected[0]
+        or projection.get("data_mode") != expected[2]
+    ):
+        raise PrivateResearchServeError("private viewer workspace tuple differs")
+
+
 def _run_structural_preflight(workspace: Path) -> None:
     try:
         child_pid = os.fork()
@@ -60,7 +106,8 @@ def _run_structural_preflight(workspace: Path) -> None:
         ) from exc
     if child_pid == 0:
         try:
-            read_private_research_workspace(workspace)
+            result = read_private_research_workspace(workspace)
+            _validate_workspace_tuple(result)
         except BaseException:
             os._exit(1)
         os._exit(0)
@@ -300,9 +347,9 @@ def serve(root: Path, workspace: Path, port: int) -> None:
     pid_path = root / PID_NAME
     if pid_path.exists() or pid_path.is_symlink():
         raise PrivateResearchServeError("private viewer runtime is already reserved")
-    # The application startup performs the full raw-source semantic replay.  The
-    # launcher only needs an exact structural/artifact preflight before spawning
-    # it; repeating the full replay here doubles cold-start work and memory.
+    # The application startup performs the full raw-source semantic replay. For
+    # legacy contracts this call is structural/artifact-only; corrected-V3 also
+    # performs its independently required planner/source replay here.
     _run_structural_preflight(workspace)
     gc.collect()
     commit, tree = _source_identity()
