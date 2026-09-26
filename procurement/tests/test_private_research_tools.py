@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 from contextlib import redirect_stderr, redirect_stdout
+import gc
 from io import StringIO
 import json
 import os
@@ -11,6 +12,11 @@ import stat
 from tempfile import TemporaryDirectory
 import unittest
 from unittest import mock
+import weakref
+
+from procurement_os import private_research_v2
+from procurement_os import private_research_v3
+from procurement_os import private_research_v3_corrected as corrected
 
 
 TOOL = Path(__file__).resolve().parents[1] / "tools" / "serve_private_research.py"
@@ -112,6 +118,180 @@ class PrivateResearchToolsTests(unittest.TestCase):
         self.assertFalse(result["production_activation"])
         self.assertNotIn("owner_worksheet", result)
         self.assertNotIn("observations", stdout.getvalue())
+
+    def test_corrected_builder_releases_initial_bundle_before_workspace_phase(self):
+        tool = _load_corrected_build_tool()
+        snapshot = {"accepted_parent": "unchanged"}
+        references: dict[str, weakref.ReferenceType] = {}
+        phases: list[str] = []
+
+        class WeakMapping(dict):
+            pass
+
+        def read_bundle(_root, _input_id):
+            parent_v3 = private_research_v2._seal_source_verified(
+                {"parent": "v3"}, proof=private_research_v3._V3_INPUT_SOURCE_PROOF
+            )
+            parent_v2 = private_research_v2._seal_source_verified(
+                {"parent": "v2"}, proof=private_research_v2._INPUT_SOURCE_PROOF
+            )
+            base = WeakMapping({"base": "intake"})
+            references.update(
+                parent_v3=weakref.ref(parent_v3),
+                parent_v2=weakref.ref(parent_v2),
+                base_intake=weakref.ref(base),
+            )
+            phases.append("bundle")
+            return parent_v3, parent_v2, base
+
+        def write_input(_root, *, parent_v3_input, delta_csv_path, repo_root):
+            self.assertIs(references["parent_v3"](), parent_v3_input)
+            delta = corrected._seal_owned(
+                {"delta_id": "d" * 64}, corrected._DELTA_PROOF
+            )
+            corrected_input = corrected._seal_owned(
+                {
+                    "input_id": "a" * 64,
+                    "coverage_controls": {
+                        "current_catalog_count": 2009,
+                        "eligible_count": 1365,
+                        "not_applicable_count": 644,
+                        "blocked_count": 0,
+                        "not_processed_count": 0,
+                    },
+                },
+                corrected._INPUT_PROOF,
+            )
+            references.update(
+                delta=weakref.ref(delta),
+                corrected_input=weakref.ref(corrected_input),
+            )
+            phases.append("input")
+            return delta, corrected_input
+
+        def build_workspace(_root, input_id, *, repo_root):
+            self.assertEqual(input_id, "a" * 64)
+            self.assertTrue(references)
+            self.assertTrue(
+                all(reference() is None for reference in references.values())
+            )
+            phases.append("workspace")
+            return {
+                "workspace_id": "b" * 64,
+                "projection_sha256": "c" * 64,
+                "artifacts": [],
+            }
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                tool, "accepted_parent_snapshot", new=lambda _root: snapshot
+            ),
+            mock.patch.object(
+                tool, "read_private_v3_research_bundle", new=read_bundle
+            ),
+            mock.patch.object(
+                tool, "write_private_v3_corrected_input", new=write_input
+            ),
+            mock.patch.object(
+                tool,
+                "build_private_v3_corrected_research_workspace",
+                new=build_workspace,
+            ),
+            mock.patch.object(gc, "collect", new=lambda: 0),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = tool.main(
+                [
+                    "--private-root",
+                    "/private/root",
+                    "--creation-evidence-delta",
+                    "/private/delta.csv",
+                ]
+            )
+        self.assertEqual(status, 0)
+        self.assertEqual(phases, ["bundle", "input", "workspace"])
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(json.loads(stdout.getvalue())["workspace_id"], "b" * 64)
+
+    def test_corrected_builder_failure_releases_owned_inputs_and_emits_no_success(self):
+        tool = _load_corrected_build_tool()
+        references: list[weakref.ReferenceType] = []
+
+        class WeakMapping(dict):
+            pass
+
+        def read_bundle(_root, _input_id):
+            parent_v3 = private_research_v2._seal_source_verified(
+                {"parent": "v3"}, proof=private_research_v3._V3_INPUT_SOURCE_PROOF
+            )
+            parent_v2 = private_research_v2._seal_source_verified(
+                {"parent": "v2"}, proof=private_research_v2._INPUT_SOURCE_PROOF
+            )
+            base = WeakMapping({"base": "intake"})
+            references.extend((weakref.ref(parent_v3), weakref.ref(parent_v2), weakref.ref(base)))
+            return parent_v3, parent_v2, base
+
+        def write_input(_root, **_kwargs):
+            delta = corrected._seal_owned(
+                {"delta_id": "d" * 64}, corrected._DELTA_PROOF
+            )
+            corrected_input = corrected._seal_owned(
+                {
+                    "input_id": "a" * 64,
+                    "coverage_controls": {
+                        "current_catalog_count": 2009,
+                        "eligible_count": 1365,
+                        "not_applicable_count": 644,
+                        "blocked_count": 0,
+                        "not_processed_count": 0,
+                    },
+                },
+                corrected._INPUT_PROOF,
+            )
+            references.extend((weakref.ref(delta), weakref.ref(corrected_input)))
+            return delta, corrected_input
+
+        def fail_workspace(*_args, **_kwargs):
+            self.assertTrue(all(reference() is None for reference in references))
+            raise tool.PrivateResearchError("synthetic workspace failure")
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                tool,
+                "accepted_parent_snapshot",
+                new=lambda _root: {"accepted_parent": "unchanged"},
+            ),
+            mock.patch.object(
+                tool, "read_private_v3_research_bundle", new=read_bundle
+            ),
+            mock.patch.object(
+                tool, "write_private_v3_corrected_input", new=write_input
+            ),
+            mock.patch.object(
+                tool,
+                "build_private_v3_corrected_research_workspace",
+                new=fail_workspace,
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = tool.main(
+                [
+                    "--private-root",
+                    "/private/root",
+                    "--creation-evidence-delta",
+                    "/private/delta.csv",
+                ]
+            )
+        self.assertEqual(status, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "synthetic workspace failure\n")
+        self.assertTrue(all(reference() is None for reference in references))
 
     def test_initialize_runtime_creates_only_private_secret_without_disclosure(self):
         tool = _load_tool()

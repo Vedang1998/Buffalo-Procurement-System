@@ -389,6 +389,25 @@ class PrivateResearchV3Tests(unittest.TestCase):
                     forged_input, built["parent"], built["base"]
                 )
 
+            captured_combined = []
+
+            def fail_combined(combined, *_args, **_kwargs):
+                captured_combined.append(combined)
+                raise RuntimeError("synthetic combined projection failure")
+
+            with patch.object(
+                private_research_v3,
+                "_build_private_research_projection_from_validated_input",
+                new=fail_combined,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "synthetic combined projection failure"
+                ):
+                    build_private_v3_research_projection(
+                        value, built["parent"], built["base"]
+                    )
+            self.assertEqual(captured_combined, [{}])
+
             forged_projection = deepcopy(projection)
             ledger = forged_projection["forecast_research"]["history"][
                 "eligibility_ledger"

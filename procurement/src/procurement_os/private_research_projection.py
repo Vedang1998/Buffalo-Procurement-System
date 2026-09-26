@@ -1512,11 +1512,11 @@ def _validated_projection(projection: Mapping[str, Any]) -> dict[str, Any]:
     ):
         from .private_research_v3_corrected import (
             PrivateResearchV3CorrectedError,
-            validate_private_v3_corrected_projection,
+            _validate_private_v3_corrected_projection_borrowed,
         )
 
         try:
-            return validate_private_v3_corrected_projection(projection)
+            return _validate_private_v3_corrected_projection_borrowed(projection)
         except PrivateResearchV3CorrectedError as exc:
             raise PrivateResearchProjectionError(
                 "private corrected-V3 research projection differs"
@@ -2239,7 +2239,11 @@ def filter_private_research_rows(
         ),
     )
     return [
-        dict(row)
+        (
+            _json_value(row)
+            if contract == V3_CORRECTED_PROJECTION_CONTRACT
+            else dict(row)
+        )
         for row in rows
         if matches(row)
     ]

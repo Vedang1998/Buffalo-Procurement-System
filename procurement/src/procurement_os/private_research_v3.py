@@ -49,6 +49,7 @@ from .private_research_v2 import (
     _sha_bytes,
     _summarize_unapproved_hypotheses,
     _source_verified,
+    _release_source_verified,
     _seal_source_verified,
     input_manifest_key as parent_input_manifest_key,
     read_private_v2_research_bundle,
@@ -1147,17 +1148,27 @@ def build_private_v3_research_projection(
         _combined_input(normalized, parent),
         proof=_V3_COMBINED_SOURCE_PROOF,
     )
-    return _build_private_research_projection_from_validated_input(
-        combined,
-        base_intake,
-        source_proof=_V3_COMBINED_SOURCE_PROOF,
-        projection_contract=PROJECTION_CONTRACT,
-        input_contract=INPUT_CONTRACT,
-        data_mode=DATA_MODE,
-        projection_extras={
-            "grouped_decision_queue": _grouped_decision_queue(normalized)
-        },
-    )
+    try:
+        return _build_private_research_projection_from_validated_input(
+            combined,
+            base_intake,
+            source_proof=_V3_COMBINED_SOURCE_PROOF,
+            projection_contract=PROJECTION_CONTRACT,
+            input_contract=INPUT_CONTRACT,
+            data_mode=DATA_MODE,
+            projection_extras={
+                "grouped_decision_queue": _grouped_decision_queue(normalized)
+            },
+        )
+    finally:
+        try:
+            _release_source_verified(
+                combined,
+                proof=_V3_COMBINED_SOURCE_PROOF,
+                field="combined V3 research input",
+            )
+        finally:
+            combined.clear()
 
 
 def validate_private_v3_projection(value: Mapping[str, Any]) -> dict[str, Any]:

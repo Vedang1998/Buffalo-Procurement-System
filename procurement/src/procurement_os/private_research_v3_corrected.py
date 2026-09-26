@@ -243,11 +243,16 @@ _VERIFIED: dict[
     int,
     tuple[weakref.ReferenceType[_VerifiedCorrected], object, str],
 ] = {}
+_RELEASED: dict[
+    int,
+    tuple[weakref.ReferenceType[_VerifiedCorrected], object],
+] = {}
 
 
-def _seal(value: Mapping[str, Any], proof: object) -> _VerifiedCorrected:
+def _register(
+    result: _VerifiedCorrected, proof: object
+) -> _VerifiedCorrected:
     try:
-        result = _VerifiedCorrected(_json_clone(value))
         digest = hashlib.sha256(canonical_json_bytes(dict(result))).hexdigest()
     except (TypeError, ValueError, PrivateResearchV2Error) as exc:
         raise PrivateResearchV3CorrectedError(
@@ -259,14 +264,72 @@ def _seal(value: Mapping[str, Any], proof: object) -> _VerifiedCorrected:
         record = _VERIFIED.get(object_id)
         if record is not None and record[0] is reference:
             _VERIFIED.pop(object_id, None)
+        released = _RELEASED.get(object_id)
+        if released is not None and released[0] is reference:
+            _RELEASED.pop(object_id, None)
 
     reference = weakref.ref(result, release)
     _VERIFIED[object_id] = (reference, proof, digest)
     return result
 
 
-def _unseal(value: Mapping[str, Any], proof: object, field: str) -> dict[str, Any]:
+def _seal(value: Mapping[str, Any], proof: object) -> _VerifiedCorrected:
+    return _register(_VerifiedCorrected(_json_clone(value)), proof)
+
+
+def _seal_owned(
+    value: dict[str, Any], proof: object
+) -> _VerifiedCorrected:
+    """Transfer a newly constructed, unaliased mapping without a deep clone."""
+
+    if type(value) is not dict:
+        raise PrivateResearchV3CorrectedError(
+            "owned corrected capability shape differs"
+        )
+    result = _VerifiedCorrected(value)
+    value.clear()
+    return _register(result, proof)
+
+
+def _release(value: Mapping[str, Any], *, proof: object, field: str) -> None:
+    """Release one proof-bound corrected capability before the next phase."""
+
     record = _VERIFIED.get(id(value))
+    if (
+        isinstance(value, _VerifiedCorrected)
+        and record is not None
+        and record[0]() is value
+        and record[1] is proof
+    ):
+        _VERIFIED.pop(id(value), None)
+        _RELEASED[id(value)] = (record[0], proof)
+        return
+    released = _RELEASED.get(id(value))
+    if (
+        isinstance(value, _VerifiedCorrected)
+        and released is not None
+        and released[0]() is value
+        and released[1] is proof
+    ):
+        return
+    raise PrivateResearchV3CorrectedError(
+        f"{field} is not an owned corrected capability"
+    )
+
+
+def _authenticated(
+    value: Mapping[str, Any], proof: object, field: str
+) -> _VerifiedCorrected:
+    record = _VERIFIED.get(id(value))
+    if (
+        not isinstance(value, _VerifiedCorrected)
+        or record is None
+        or record[0]() is not value
+        or record[1] is not proof
+    ):
+        raise PrivateResearchV3CorrectedError(
+            f"{field} is not source-authenticated"
+        )
     try:
         digest = hashlib.sha256(canonical_json_bytes(dict(value))).hexdigest()
     except (TypeError, ValueError, PrivateResearchV2Error) as exc:
@@ -274,15 +337,16 @@ def _unseal(value: Mapping[str, Any], proof: object, field: str) -> dict[str, An
             f"{field} is not source-authenticated"
         ) from exc
     if (
-        not isinstance(value, _VerifiedCorrected)
-        or record is None
-        or record[0]() is not value
-        or record[1] is not proof
-        or record[2] != digest
+        record[2] != digest
     ):
         raise PrivateResearchV3CorrectedError(f"{field} is not source-authenticated")
+    return value
+
+
+def _unseal(value: Mapping[str, Any], proof: object, field: str) -> dict[str, Any]:
+    authenticated = _authenticated(value, proof, field)
     try:
-        return _json_clone(value)
+        return _json_clone(authenticated)
     except (TypeError, ValueError, PrivateResearchV2Error) as exc:
         raise PrivateResearchV3CorrectedError(
             f"{field} is not source-authenticated"
@@ -300,6 +364,20 @@ def _logical_sha(value: Mapping[str, Any], field: str | None = None) -> str:
     if field is not None:
         basis.pop(field, None)
     return hashlib.sha256(_projection_canonical(basis)).hexdigest()
+
+
+def _logical_sha_borrowed(
+    value: Mapping[str, Any], field: str | None = None
+) -> str:
+    basis = dict(value)
+    if field is not None:
+        basis.pop(field, None)
+    try:
+        return hashlib.sha256(_projection_canonical(basis)).hexdigest()
+    except (TypeError, ValueError) as exc:
+        raise PrivateResearchV3CorrectedError(
+            "corrected logical bytes differ"
+        ) from exc
 
 
 def _strict_equal(left: Any, right: Any) -> bool:
@@ -1012,7 +1090,9 @@ def _history_controls(parent_projection: Mapping[str, Any], ledger: Sequence[Map
         "parent_eligibility_controls": eligibility,
         "parent_allocation_ledger_sha256": allocation["ledger_sha256"],
         "parent_eligibility_ledger_sha256": eligibility["eligibility_ledger_sha256"],
-        "parent_variant_observations_sha256": _logical_sha(forecast["variant_observations_sha256"]),
+        "parent_variant_observations_sha256": _logical_sha_borrowed(
+            forecast["variant_observations_sha256"]
+        ),
         "parent_recent_observed_sales_sha256": eligibility["recent_observed_sales_sha256"],
         "corrected_disposition_ledger_sha256": hashlib.sha256(
             _projection_canonical(list(ledger))
@@ -1248,7 +1328,7 @@ def _build_projection_unsealed_in_context(
         "history_controls": history_controls,
         "membership_controls": membership,
         "scenario_dates": _scenario_dates(),
-        "sidecars_sha256": _logical_sha(sidecars),
+        "sidecars_sha256": _logical_sha_borrowed(sidecars),
         "primary_status_counts": counts,
         "violation_counts": violations,
     }
@@ -1289,7 +1369,9 @@ def _build_projection_unsealed_in_context(
         "grouped_decision_queue": _grouped_queue(),
         "limitations": sorted(set(parent_projection_value["limitations"]) | set(source_input["limitations"])),
     }
-    payload["projection_sha256"] = _logical_sha(payload, "projection_sha256")
+    payload["projection_sha256"] = _logical_sha_borrowed(
+        payload, "projection_sha256"
+    )
     return payload
 
 
@@ -1319,21 +1401,46 @@ def build_private_v3_corrected_projection(
     parent_v2: Mapping[str, Any],
     parent_projection: Mapping[str, Any],
 ) -> _VerifiedCorrected:
-    source_input = _unseal(corrected_input, _INPUT_PROOF, "corrected input")
-    source_delta = _unseal(delta, _DELTA_PROOF, "creation delta")
-    value = _build_projection_unsealed(
-        source_input, source_delta, parent_v3, parent_v2, parent_projection
-    )
-    return _seal(value, _PROJECTION_PROOF)
+    source_input: dict[str, Any] | None = None
+    source_delta: dict[str, Any] | None = None
+    value: dict[str, Any] | None = None
+    try:
+        source_input = _unseal(corrected_input, _INPUT_PROOF, "corrected input")
+        source_delta = _unseal(delta, _DELTA_PROOF, "creation delta")
+        value = _build_projection_unsealed(
+            source_input, source_delta, parent_v3, parent_v2, parent_projection
+        )
+        return _seal_owned(value, _PROJECTION_PROOF)
+    finally:
+        if source_input is not None:
+            source_input.clear()
+        if source_delta is not None:
+            source_delta.clear()
+        if value is not None:
+            value.clear()
+
+
+def _validate_private_v3_corrected_projection_borrowed(
+    value: Mapping[str, Any],
+) -> _VerifiedCorrected:
+    """Authenticate an internal read-only projection view without cloning it."""
+
+    result = _authenticated(value, _PROJECTION_PROOF, "corrected projection")
+    if (
+        result.get("contract") != PROJECTION_CONTRACT
+        or result.get("projection_sha256")
+        != _logical_sha_borrowed(result, "projection_sha256")
+    ):
+        raise PrivateResearchV3CorrectedError(
+            "corrected projection identity differs"
+        )
+    return result
 
 
 def validate_private_v3_corrected_projection(value: Mapping[str, Any]) -> dict[str, Any]:
     """Accept only a projection produced by authenticated parent replay."""
 
-    result = _unseal(value, _PROJECTION_PROOF, "corrected projection")
-    if result.get("contract") != PROJECTION_CONTRACT or result.get("projection_sha256") != _logical_sha(result, "projection_sha256"):
-        raise PrivateResearchV3CorrectedError("corrected projection identity differs")
-    return result
+    return _json_clone(_validate_private_v3_corrected_projection_borrowed(value))
 
 
 def replay_private_v3_corrected_projection(
@@ -1344,17 +1451,24 @@ def replay_private_v3_corrected_projection(
     parent_v2: Mapping[str, Any],
     parent_projection: Mapping[str, Any],
 ) -> _VerifiedCorrected:
-    expected = _build_projection_unsealed(
-        corrected_input, delta, parent_v3, parent_v2, parent_projection
-    )
-    if (
-        not isinstance(value, Mapping)
-        or value.get("projection_sha256")
-        != _logical_sha(value, "projection_sha256")
-        or not _strict_equal(value, expected)
-    ):
-        raise PrivateResearchV3CorrectedError("corrected projection semantic replay differs")
-    return _seal(expected, _PROJECTION_PROOF)
+    expected: dict[str, Any] | None = None
+    try:
+        expected = _build_projection_unsealed(
+            corrected_input, delta, parent_v3, parent_v2, parent_projection
+        )
+        if (
+            not isinstance(value, Mapping)
+            or value.get("projection_sha256")
+            != _logical_sha_borrowed(value, "projection_sha256")
+            or not _strict_equal(value, expected)
+        ):
+            raise PrivateResearchV3CorrectedError(
+                "corrected projection semantic replay differs"
+            )
+        return _seal_owned(expected, _PROJECTION_PROOF)
+    finally:
+        if expected is not None:
+            expected.clear()
 
 
 def delta_manifest_key(delta_id: str) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextlib import contextmanager
 from copy import deepcopy
 import csv
@@ -16,6 +17,7 @@ import stat
 import tempfile
 import unittest
 from unittest.mock import patch
+import weakref
 
 import test_private_research_v3 as legacy_v3_tests
 
@@ -687,6 +689,30 @@ class PrivateResearchV3CorrectedTests(unittest.TestCase):
                 projection, status="NOT_APPLICABLE"
             )
             self.assertEqual(len(not_applicable), 3)
+            self.assertEqual(
+                list(not_applicable[0]["scenario_results"]["H3"]),
+                sorted(not_applicable[0]["scenario_results"]["H3"]),
+            )
+            selected_id = not_applicable[0]["shopify_variant_id"]
+            source_row = next(
+                row
+                for row in projection["owner_worksheet"]
+                if row["shopify_variant_id"] == selected_id
+            )
+            original_reasons = deepcopy(
+                source_row["scenario_results"]["H3"]["reason_codes"]
+            )
+            not_applicable[0]["scenario_results"]["H3"][
+                "reason_codes"
+            ].append("CALLER_MUTATION")
+            self.assertEqual(
+                source_row["scenario_results"]["H3"]["reason_codes"],
+                original_reasons,
+            )
+            self.assertEqual(
+                projection_module.private_research_projection_sha256(projection),
+                projection["projection_sha256"],
+            )
         with patch.object(
             projection_module,
             "_validated_projection",
@@ -710,6 +736,123 @@ class PrivateResearchV3CorrectedTests(unittest.TestCase):
         gc.collect()
         self.assertNotIn(object_id, corrected._VERIFIED)
         self.assertEqual(len(corrected._VERIFIED), before)
+
+    def test_corrected_capabilities_release_explicitly_without_deep_owned_clone(self) -> None:
+        proof = object()
+
+        class HostileUnregisteredMapping(Mapping):
+            def __getitem__(self, _key):
+                raise MemoryError("must not be traversed")
+
+            def __iter__(self):
+                raise MemoryError("must not be traversed")
+
+            def __len__(self):
+                raise MemoryError("must not be traversed")
+
+        with self.assertRaisesRegex(
+            corrected.PrivateResearchV3CorrectedError,
+            "not source-authenticated",
+        ):
+            corrected._authenticated(
+                HostileUnregisteredMapping(), proof, "foreign fixture"
+            )
+        value = corrected._seal({"payload": ["x" * 1024]}, proof)
+        object_id = id(value)
+        reference = weakref.ref(value)
+        with self.assertRaisesRegex(
+            corrected.PrivateResearchV3CorrectedError,
+            "owned corrected capability",
+        ):
+            corrected._release(value, proof=object(), field="fixture")
+        corrected._release(value, proof=proof, field="fixture")
+        self.assertNotIn(object_id, corrected._VERIFIED)
+        self.assertIn(object_id, corrected._RELEASED)
+        with self.assertRaisesRegex(
+            corrected.PrivateResearchV3CorrectedError,
+            "owned corrected capability",
+        ):
+            corrected._release(value, proof=object(), field="released fixture")
+        with self.assertRaisesRegex(
+            corrected.PrivateResearchV3CorrectedError,
+            "not source-authenticated",
+        ):
+            corrected._unseal(value, proof, "fixture")
+        corrected._release(value, proof=proof, field="fixture")
+        foreign = corrected._VerifiedCorrected({"payload": "unregistered"})
+        with self.assertRaisesRegex(
+            corrected.PrivateResearchV3CorrectedError,
+            "owned corrected capability",
+        ):
+            corrected._release(foreign, proof=proof, field="foreign fixture")
+        del value
+        gc.collect()
+        self.assertIsNone(reference())
+        self.assertNotIn(object_id, corrected._RELEASED)
+
+        nested = {"values": ["large"]}
+        source = {"nested": nested}
+        owned = corrected._seal_owned(source, proof)
+        self.assertEqual(source, {})
+        self.assertIs(owned["nested"], nested)
+        self.assertIs(corrected._authenticated(owned, proof, "owned"), owned)
+        detached = corrected._unseal(owned, proof, "owned")
+        self.assertIsNot(detached, owned)
+        self.assertIsNot(detached["nested"], nested)
+        owned["nested"]["values"].append("mutated")
+        with self.assertRaisesRegex(
+            corrected.PrivateResearchV3CorrectedError,
+            "not source-authenticated",
+        ):
+            corrected._authenticated(owned, proof, "owned")
+        corrected._release(owned, proof=proof, field="owned")
+
+        source_input = corrected._seal(
+            {"large_input": ["x" * 1024]}, corrected._INPUT_PROOF
+        )
+        source_delta = corrected._seal(
+            {"large_delta": ["y" * 1024]}, corrected._DELTA_PROOF
+        )
+        captured: dict[str, dict] = {}
+
+        def fail_projection(input_value, delta_value, *_args):
+            captured["input"] = input_value
+            captured["delta"] = delta_value
+            raise corrected.PrivateResearchV3CorrectedError(
+                "synthetic projection failure"
+            )
+
+        with patch.object(
+            corrected, "_build_projection_unsealed", new=fail_projection
+        ):
+            with self.assertRaisesRegex(
+                corrected.PrivateResearchV3CorrectedError,
+                "synthetic projection failure",
+            ):
+                corrected.build_private_v3_corrected_projection(
+                    source_input, source_delta, {}, {}, {}
+                )
+        self.assertEqual(captured["input"], {})
+        self.assertEqual(captured["delta"], {})
+        corrected._release(
+            source_input, proof=corrected._INPUT_PROOF, field="input fixture"
+        )
+        corrected._release(
+            source_delta, proof=corrected._DELTA_PROOF, field="delta fixture"
+        )
+
+        expected = {"large_expected": ["z" * 1024]}
+        with patch.object(
+            corrected, "_build_projection_unsealed", new=lambda *_args: expected
+        ):
+            with self.assertRaisesRegex(
+                corrected.PrivateResearchV3CorrectedError,
+                "semantic replay differs",
+            ):
+                corrected.replay_private_v3_corrected_projection(
+                    {}, {}, {}, {}, {}, {}
+                )
+        self.assertEqual(expected, {})
 
     def test_parent_snapshot_pins_legacy_directory_modes_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

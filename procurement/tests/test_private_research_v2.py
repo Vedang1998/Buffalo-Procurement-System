@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
+import gc
 import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import weakref
 
 from test_private_research_projection import intake, variant
 
@@ -320,6 +323,174 @@ class PrivateResearchV2Tests(unittest.TestCase):
             "HISTORY_EXTENSION_54D": extension,
             "HISTORY_REPLACEMENT_84D": replacement,
         }
+
+    def test_source_capability_registry_is_weak_and_explicitly_releasable(self):
+        active_before = len(private_research_v2._SOURCE_VERIFIED_REGISTRY)
+        released_before = len(private_research_v2._SOURCE_RELEASED_REGISTRY)
+        proof = object()
+        value = private_research_v2._seal_source_verified(
+            {"payload": ["x" * 1024] * 8}, proof=proof
+        )
+        object_id = id(value)
+        reference = weakref.ref(value)
+        record = private_research_v2._SOURCE_VERIFIED_REGISTRY[object_id]
+        self.assertIs(record[0](), value)
+        self.assertIsInstance(record[2], bytes)
+
+        class WeakCanonical(bytearray):
+            pass
+
+        canonical_reference = None
+
+        def tracked_canonical(_value):
+            nonlocal canonical_reference
+            result = WeakCanonical(record[2])
+            canonical_reference = weakref.ref(result)
+            return result
+
+        def clone_after_canonical_release(source):
+            self.assertIsNotNone(canonical_reference)
+            self.assertIsNone(canonical_reference())
+            return dict(source)
+
+        with (
+            patch.object(
+                private_research_v2, "_canonical", new=tracked_canonical
+            ),
+            patch.object(
+                private_research_v2,
+                "_json_clone",
+                new=clone_after_canonical_release,
+            ),
+        ):
+            self.assertEqual(
+                private_research_v2._source_verified(
+                    value, proof=proof, field="fixture"
+                ),
+                dict(value),
+            )
+        self.assertEqual(
+            private_research_v2._source_verified(
+                value, proof=proof, field="fixture"
+            ),
+            dict(value),
+        )
+        with self.assertRaisesRegex(
+            PrivateResearchV2Error, "owned source capability"
+        ):
+            private_research_v2._release_source_verified(
+                value, proof=object(), field="fixture"
+            )
+        private_research_v2._release_source_verified(
+            value, proof=proof, field="fixture"
+        )
+        self.assertNotIn(object_id, private_research_v2._SOURCE_VERIFIED_REGISTRY)
+        self.assertIn(object_id, private_research_v2._SOURCE_RELEASED_REGISTRY)
+        self.assertEqual(
+            len(private_research_v2._SOURCE_RELEASED_REGISTRY[object_id]), 2
+        )
+        with self.assertRaisesRegex(
+            PrivateResearchV2Error, "not source-authenticated"
+        ):
+            private_research_v2._source_verified(
+                value, proof=proof, field="fixture"
+            )
+        with self.assertRaisesRegex(
+            PrivateResearchV2Error, "owned source capability"
+        ):
+            private_research_v2._release_source_verified(
+                value, proof=object(), field="released fixture"
+            )
+        private_research_v2._release_source_verified(
+            value, proof=proof, field="fixture"
+        )
+        foreign = private_research_v2._SourceVerifiedMapping(
+            {"payload": "unregistered"}
+        )
+        with self.assertRaisesRegex(
+            PrivateResearchV2Error, "owned source capability"
+        ):
+            private_research_v2._release_source_verified(
+                foreign, proof=proof, field="foreign fixture"
+            )
+        del value
+        gc.collect()
+        self.assertIsNone(reference())
+        self.assertNotIn(object_id, private_research_v2._SOURCE_RELEASED_REGISTRY)
+        self.assertEqual(
+            len(private_research_v2._SOURCE_VERIFIED_REGISTRY), active_before
+        )
+        self.assertEqual(
+            len(private_research_v2._SOURCE_RELEASED_REGISTRY), released_before
+        )
+
+    def test_source_capability_cleanup_is_typed_and_does_not_grow(self):
+        active_before = len(private_research_v2._SOURCE_VERIFIED_REGISTRY)
+        released_before = len(private_research_v2._SOURCE_RELEASED_REGISTRY)
+        proof = object()
+        changed = private_research_v2._seal_source_verified(
+            {"payload": "safe"}, proof=proof
+        )
+        changed["payload"] = "changed"
+        with self.assertRaisesRegex(
+            PrivateResearchV2Error, "not source-authenticated"
+        ):
+            private_research_v2._source_verified(
+                changed, proof=proof, field="changed fixture"
+            )
+        private_research_v2._release_source_verified(
+            changed, proof=proof, field="changed fixture"
+        )
+        del changed
+        gc.collect()
+        mutated = private_research_v2._seal_source_verified(
+            {"payload": "safe"}, proof=proof
+        )
+        mutated["forbidden"] = {1, 2}
+        with self.assertRaises(PrivateResearchV2Error):
+            private_research_v2._source_verified(
+                mutated, proof=proof, field="mutated fixture"
+            )
+        private_research_v2._release_source_verified(
+            mutated, proof=proof, field="mutated fixture"
+        )
+        del mutated
+        gc.collect()
+
+        class HostileUnregisteredMapping(Mapping):
+            def __getitem__(self, _key):
+                raise MemoryError("must not be traversed")
+
+            def __iter__(self):
+                raise MemoryError("must not be traversed")
+
+            def __len__(self):
+                raise MemoryError("must not be traversed")
+
+        with self.assertRaisesRegex(
+            PrivateResearchV2Error, "not source-authenticated"
+        ):
+            private_research_v2._source_verified(
+                HostileUnregisteredMapping(), proof=proof, field="foreign fixture"
+            )
+        for index in range(20):
+            value = private_research_v2._seal_source_verified(
+                {"index": index}, proof=proof
+            )
+            object_id = id(value)
+            reference = weakref.ref(value)
+            del value
+            gc.collect()
+            self.assertIsNone(reference())
+            self.assertNotIn(
+                object_id, private_research_v2._SOURCE_VERIFIED_REGISTRY
+            )
+        self.assertEqual(
+            len(private_research_v2._SOURCE_VERIFIED_REGISTRY), active_before
+        )
+        self.assertEqual(
+            len(private_research_v2._SOURCE_RELEASED_REGISTRY), released_before
+        )
 
     def test_explicit_v2_dispatch_runs_three_unknown_availability_scenarios(self):
         with tempfile.TemporaryDirectory() as directory:

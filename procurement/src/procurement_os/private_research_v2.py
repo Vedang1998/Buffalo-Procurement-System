@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import weakref
 from typing import Any, Iterable, Mapping, Sequence
 
 from .development_forecast import (
@@ -136,7 +137,10 @@ def _sha_bytes(value: bytes) -> str:
 _COMPOSITE_SOURCE_PROOF = object()
 _INPUT_SOURCE_PROOF = object()
 _SOURCE_VERIFIED_REGISTRY: dict[
-    int, tuple["_SourceVerifiedMapping", object, bytes]
+    int, tuple[weakref.ReferenceType["_SourceVerifiedMapping"], object, bytes]
+] = {}
+_SOURCE_RELEASED_REGISTRY: dict[
+    int, tuple[weakref.ReferenceType["_SourceVerifiedMapping"], object]
 ] = {}
 
 
@@ -151,12 +155,49 @@ def _seal_source_verified(
     value: Mapping[str, Any], *, proof: object
 ) -> _SourceVerifiedMapping:
     sealed = _SourceVerifiedMapping(value)
-    _SOURCE_VERIFIED_REGISTRY[id(sealed)] = (
-        sealed,
-        proof,
-        _canonical(dict(sealed)),
+    object_id = id(sealed)
+
+    def release(
+        reference: weakref.ReferenceType[_SourceVerifiedMapping],
+    ) -> None:
+        registered = _SOURCE_VERIFIED_REGISTRY.get(object_id)
+        if registered is not None and registered[0] is reference:
+            _SOURCE_VERIFIED_REGISTRY.pop(object_id, None)
+        released = _SOURCE_RELEASED_REGISTRY.get(object_id)
+        if released is not None and released[0] is reference:
+            _SOURCE_RELEASED_REGISTRY.pop(object_id, None)
+
+    reference = weakref.ref(sealed, release)
+    _SOURCE_VERIFIED_REGISTRY[object_id] = (
+        reference, proof, _canonical(dict(sealed))
     )
     return sealed
+
+
+def _release_source_verified(
+    value: Mapping[str, Any], *, proof: object, field: str
+) -> None:
+    """Release one proof-bound source capability without relying on GC."""
+
+    registered = _SOURCE_VERIFIED_REGISTRY.get(id(value))
+    if (
+        isinstance(value, _SourceVerifiedMapping)
+        and registered is not None
+        and registered[0]() is value
+        and registered[1] is proof
+    ):
+        _SOURCE_VERIFIED_REGISTRY.pop(id(value), None)
+        _SOURCE_RELEASED_REGISTRY[id(value)] = (registered[0], proof)
+        return
+    released = _SOURCE_RELEASED_REGISTRY.get(id(value))
+    if (
+        isinstance(value, _SourceVerifiedMapping)
+        and released is not None
+        and released[0]() is value
+        and released[1] is proof
+    ):
+        return
+    raise PrivateResearchV2Error(f"{field} is not an owned source capability")
 
 
 def _source_verified(
@@ -166,10 +207,21 @@ def _source_verified(
     if (
         not isinstance(value, _SourceVerifiedMapping)
         or registered is None
-        or registered[0] is not value
+        or registered[0]() is not value
         or registered[1] is not proof
-        or registered[2] != _canonical(dict(value))
     ):
+        raise PrivateResearchV2Error(f"{field} is not source-authenticated")
+    try:
+        canonical = _canonical(dict(value))
+    except Exception as exc:
+        if isinstance(exc, MemoryError):
+            raise
+        raise PrivateResearchV2Error(
+            f"{field} is not source-authenticated"
+        ) from exc
+    canonical_matches = registered[2] == canonical
+    del canonical
+    if not canonical_matches:
         raise PrivateResearchV2Error(f"{field} is not source-authenticated")
     return _json_clone(value)
 
