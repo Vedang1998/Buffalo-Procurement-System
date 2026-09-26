@@ -63,7 +63,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_private_research_v2.py": 5,
     "test_private_research_v3.py": 5,
     "test_private_research_tools.py": 5,
-    "test_private_research_v3_corrected.py": 15,
+    "test_private_research_v3_corrected.py": 16,
     "test_private_research_workspace.py": 5,
     "test_readiness.py": 21,
     "test_replenishment.py": 9,

@@ -264,6 +264,40 @@ class PrivateResearchV3CorrectedTests(unittest.TestCase):
                 self.assertEqual(counts["NOT_PROCESSED"], 0)
             self.assertEqual(projection["coverage_summary"]["variant_count"], 5)
 
+    def test_violation_counts_are_unique_variants_not_pair_events(self) -> None:
+        def scenario(point: str, protection: str) -> dict[str, object]:
+            return {
+                "primary_status": "CALCULATED",
+                "point_forecast_units": point,
+                "protection_units": protection,
+                "target_units": str(Decimal(point) + Decimal(protection)),
+            }
+
+        rows = [
+            {
+                "shopify_variant_id": "100",
+                "scenario_results": {
+                    "H3": scenario("3", "6"),
+                    "H10": scenario("2", "6"),
+                    "H17": scenario("1", "6"),
+                },
+            },
+            {
+                "shopify_variant_id": "200",
+                "scenario_results": {
+                    "H3": scenario("1", "4"),
+                    "H10": scenario("2", "1"),
+                    "H17": scenario("3", "1"),
+                },
+            },
+        ]
+        self.assertEqual(corrected._raw_violations(rows), (1, 2, 2))
+        with patch.object(corrected, "ELIGIBLE_VARIANT_COUNT", 2):
+            self.assertEqual(
+                corrected._corrected_coherence_controls(rows),
+                (1, 2, 2),
+            )
+
     def test_plain_or_resealed_projection_is_not_source_authenticated(self) -> None:
         with self._built() as built:
             forged = deepcopy(dict(built["corrected_projection"]))

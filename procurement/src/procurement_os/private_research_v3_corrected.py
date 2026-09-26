@@ -883,8 +883,10 @@ def _observations_by_id(parent_v3: Mapping[str, Any], parent_v2: Mapping[str, An
 
 
 def _raw_violations(owner_rows: Sequence[Mapping[str, Any]]) -> tuple[int, int, int]:
-    point_count = 0
-    target_count = 0
+    """Count affected Variants per ladder, never adjacent-pair events."""
+
+    point_affected: set[str] = set()
+    target_affected: set[str] = set()
     affected: set[str] = set()
     for row in owner_rows:
         results = row.get("scenario_results")
@@ -895,28 +897,23 @@ def _raw_violations(owner_rows: Sequence[Mapping[str, Any]]) -> tuple[int, int, 
             targets = [Decimal(str(results[key]["target_units"])) for key in ("H3", "H10", "H17")]
         except (KeyError, TypeError, InvalidOperation):
             continue
-        if points[0] > points[1]:
-            point_count += 1
-            affected.add(str(row["shopify_variant_id"]))
-        if points[1] > points[2]:
-            point_count += 1
-            affected.add(str(row["shopify_variant_id"]))
-        if targets[0] > targets[1]:
-            target_count += 1
-            affected.add(str(row["shopify_variant_id"]))
-        if targets[1] > targets[2]:
-            target_count += 1
-            affected.add(str(row["shopify_variant_id"]))
-    return point_count, target_count, len(affected)
+        variant_id = str(row["shopify_variant_id"])
+        if points[0] > points[1] or points[1] > points[2]:
+            point_affected.add(variant_id)
+            affected.add(variant_id)
+        if targets[0] > targets[1] or targets[1] > targets[2]:
+            target_affected.add(variant_id)
+            affected.add(variant_id)
+    return len(point_affected), len(target_affected), len(affected)
 
 
 def _corrected_coherence_controls(
     owner_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[int, int, int]:
-    """Derive corrected ladder violations and enforce published identities."""
+    """Derive per-Variant ladder violations and enforce published identities."""
 
-    point_count = 0
-    target_count = 0
+    point_affected: set[str] = set()
+    target_affected: set[str] = set()
     affected: set[str] = set()
     calculated = 0
     for row in owner_rows:
@@ -954,17 +951,15 @@ def _corrected_coherence_controls(
                 "corrected point/protection/target identity differs"
             )
         variant_id = str(row.get("shopify_variant_id", ""))
-        for left, right in zip(points, points[1:]):
-            if left > right:
-                point_count += 1
-                affected.add(variant_id)
-        for left, right in zip(targets, targets[1:]):
-            if left > right:
-                target_count += 1
-                affected.add(variant_id)
+        if any(left > right for left, right in zip(points, points[1:])):
+            point_affected.add(variant_id)
+            affected.add(variant_id)
+        if any(left > right for left, right in zip(targets, targets[1:])):
+            target_affected.add(variant_id)
+            affected.add(variant_id)
     if calculated != ELIGIBLE_VARIANT_COUNT:
         raise PrivateResearchV3CorrectedError("corrected calculated population differs")
-    return point_count, target_count, len(affected)
+    return len(point_affected), len(target_affected), len(affected)
 
 
 def _corrected_disposition_ledger(
