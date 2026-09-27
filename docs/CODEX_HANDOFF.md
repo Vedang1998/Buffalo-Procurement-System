@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-23T22:34:12Z (UTC)
+**Updated:** 2026-09-27T16:44:15Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,207 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Corrected-V3 memory-lifetime remediation — MACHINE VALIDATION PASS / OWNER ACCEPTANCE PENDING / OPERATIONAL AUTHORITY BLOCKED
+
+- The confirmed starting checkpoint is commit
+  `85f454aaef1be5c7d6d2cb1262d540b1901c8b04`, tree
+  `f70d42dd196e6b8fca56ff39b54f737593b4d7b0`. The approved design is its
+  direct child `b188eaddc23359f8ccae1fec7aac2b1f2827c185`, tree
+  `f7b45776e4ad3b155eabebeb00db7ce631001055`. The exact implementation is
+  commit `223c0ae6ba89248223cc9093579e195295b7024e`, tree
+  `3daaa79a1d622fa99a8625df9e044303b35f9119`, on branch
+  `codex/private-v3-memory-remediation`. The implementation worktree was clean
+  before this handoff-only update.
+- The failed Build 1 workspace
+  `3142adf1bb651bcf032c8f7bc8265428ff149c313be06434393b5c12b4df97b9`
+  remains **MATERIALIZED BUT UNCONFIRMED**. Build 1 exited 137 after one
+  invocation, with a cgroup OOM kill during post-publication semantic replay;
+  no semantic replay success was recorded. It was not promoted, reused as the
+  final workspace, or accepted into the implementation lineage. The accepted
+  parent snapshot remained byte-identical.
+- The demonstrated defect was heavyweight lifetime overlap, not forecast
+  math: legacy verified-source registries strongly retained source objects and
+  canonical bytes; the publication frame retained parent/source/projection and
+  all rendered artifact payloads; and full semantic readback then loaded a
+  second artifact set, rebuilt parent/corrected graphs, and rendered expected
+  artifacts while those objects remained reachable. GC could not establish a
+  reliable boundary while registry and frame references were still strong.
+- The implementation makes legacy capability retention weak-lifetime and adds
+  proof/identity-checked explicit release/tombstones; transfers freshly built
+  corrected projections through an owned-seal path; uses authenticated borrowed
+  views only for internal read-only work; preserves detached public validation
+  and filter results; ends the publication frame before replay; explicitly
+  releases source, parent, projection, artifact and registry references; and
+  performs compact semantic readback with sequential per-artifact comparison.
+  Exception paths sever owned graphs. `gc.collect()` is advisory only and is
+  not part of the correctness protocol. The public reader contract remains
+  backward compatible.
+- The 14 implementation files are:
+  `procurement/src/procurement_os/private_research.py`,
+  `private_research_projection.py`, `private_research_v2.py`,
+  `private_research_v3.py`, `private_research_v3_corrected.py`;
+  `procurement/tools/build_private_v3_corrected_research.py` and
+  `procurement/tools/run_tests.py`; and tests
+  `test_persistent_mapping_foundation_contract.py`,
+  `test_private_research_tools.py`, `test_private_research_v2.py`,
+  `test_private_research_v3.py`, `test_private_research_v3_corrected.py`,
+  `test_private_research_workspace.py`, and
+  `test_supplier_format_conformance.py`. The implementation delta is 1,850
+  insertions and 282 deletions. It adds lifetime/release/replay/error-path
+  coverage and updates only the independently derived test floors; there is no
+  schema, migration, forecast-math, model-selection, FVA-policy, pricing,
+  inventory, purchasing, PO, Shopify-write, or deployment change.
+- Final focused lifecycle/capability/replay/workspace/tooling validation passed
+  **45/45**. Direct tests cover weak collection, explicit release while values
+  remain live, identity/proof/tombstone refusal, hostile foreign mappings,
+  publication-before-replay boundaries with GC disabled, parent/source graph
+  death, one-at-a-time artifact-byte lifetimes, exception cleanup, tamper/hash/
+  semantic/lineage/accepted-parent mismatch refusal, deterministic retries, and
+  detached public results. The focused corrected browser environment module
+  separately passed **17/17** with pinned Node and Chromium. Static semantic
+  comparison found exact byte equality with the pre-remediation implementation
+  across V1/V2/V3/corrected projection, coverage, HTML, CSV, filtered rows,
+  schemas and row order.
+- One instrumented real corrected build on exact `223c0ae6...` exited 0 after
+  2,526.889s. Measured `wait4` process peak RSS was **3,773,936 KiB**
+  (hard gate below 5 GiB); the same-FD isolated cgroup peak was
+  **3,865,370,624 bytes** (below 6 GiB); child and root OOM, OOM-kill and
+  OOM-group-kill deltas were all **0**; exit 137 was false. Evidence is
+  `real-build-memory-isolated-223c0ae-20260926T202543Z`.
+- The required independent second complete build/readback also exited 0 after
+  2,370.506s, with peak RSS **3,773,932 KiB**, cgroup peak
+  **4,367,605,760 bytes**, and zero OOM events. Its stdout, all identities and
+  artifact records were byte-identical to the first build. All seven immutable
+  records retained exact bytes, SHA-256, mode, owner, mtime and non-symlink
+  state. Evidence is
+  `deterministic-build-isolated-223c0ae-20260926T211319Z`.
+- The fresh accepted corrected workspace is
+  `031dfc5f8e4ed83f14184fc0d324dfc99c6af02bf3896bd493ceeaebed62451a`;
+  corrected input is
+  `a03b54022e1363e53bdfe5b42ce7a811af4470436f9723286716e570cee1a82c`;
+  creation delta is
+  `9d58607e0845d4a2f71c5da9ca6dce2b3760707d8356229ad19488d5ea0ddbe9`;
+  parent V3 input is
+  `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`;
+  and corrected logical projection SHA-256 is
+  `650236984b3a95c7ade245b210000153bd93353ddea3cbcf9473e18851efeb3a`.
+  Corrected artifacts are: `coverage.json` 10,684,242 bytes / SHA-256
+  `0207ca46da3a8a86bc66708250f8365c169abba6c0af90fe7cbb5cb8bb71db32`;
+  `owner-preview.html` 21,144,726 /
+  `d306c10d1e1e7298edbfb55c03a516520be3e6f1c6e914fa67b9cb88939ec95a`;
+  `owner-worksheet.csv` 17,347,994 /
+  `ab0e427a8252008ac55e086aa2ff8eba00bf8d06a500773ec642d09bdbdf6f30`;
+  and `projection.json` 191,788,544 /
+  `eb54bc5f68094b1b87c78e6fbe76500d3f317616f7695c4b2d70a7d0318da18d`.
+- Bounded aggregate semantic replay passed with `failures=[]` and accepted
+  parent before/after equality at snapshot SHA-256
+  `61cc5ce121a244ed7d61b4a4a8a5b964cbb8581a2dc1c0431f8a4519ebe411c9`.
+  Evidence is `corrected-v3-aggregate-audit-isolated-223c0ae-20260926T223447Z`;
+  report SHA-256 is
+  `7b9307298ef5f9af4fec6727518c0e01f0314924ee5571ddae0cd0fc01930c9f`.
+  The audit ran once, exited 0, peaked at 3,777,180 KiB process RSS and
+  3,954,843,648 cgroup bytes, and recorded zero OOM deltas.
+- Exact population and membership controls pass for H3/H10/H17:
+  **2,009 current**, **1,365 CALCULATED**, **644 NOT_APPLICABLE**,
+  **0 BLOCKED**, **0 NOT_PROCESSED**. The six membership controls are current
+  2,009, eligible 1,365, parent-not-applicable 601, reviewed-prior-blocked 43,
+  corrected-not-applicable 644 and corrected-blocked 0. The exact 43-row delta
+  converts the prior blocked membership to corrected NOT_APPLICABLE. Corrected
+  point, target and unique cumulative coherence violations are all **0**;
+  independently reported raw-parent counts remain 38, 136 and 151.
+- Historical controls remain unchanged: 138 complete days from 2026-05-04
+  through 2026-09-18; source partitions are 5,722 extension rows plus 9,431
+  replacement rows = 15,153. Raw and ledger signed totals both equal 21,984
+  net units, $343,005.83 net revenue, $250,749.53 historical COGS and 15,153
+  rows. Allocation is 12,148 direct rows, 2,869 historically allocated rows,
+  132 quarantined rows and four absent-current target rows. Eligibility remains
+  73 parent-first-day plus 1,292 pre-window exact IDs = 1,365; missing evidence
+  is 600 post-start creations, one first-history-day record and the reviewed 43.
+  Identity authority remains 2,029 approved self-identities, 3,301 seed alias
+  rows, 1,055 conflict-free aliases, 343 original Phase-4 rows, 280 terminal
+  rows and 56 terminal safe alias families. All 1,365 sidecars reconcile; joint
+  score recomputation mismatches are 0.
+- The corrected authoritative repository suite ran exactly once in its fixed
+  sanitized environment and passed **1,003 discovered / 1,003 executed /
+  1,003 passed**, with failures, errors, skips, expected failures and unexpected
+  successes all 0. Unittest time was 1,038.216s, runner time 1,054.421s and
+  supervisor time 1,057.027s. Raw log SHA-256 is
+  `b0f780b71a24fdc98cd42042a76204076fbce4795d89a230b4b1778d58ef33b7`;
+  cgroup peak was 1,897,639,936 bytes and OOM deltas were 0. Evidence is
+  `authoritative-suite-corrected-env-223c0ae-20260927T000750Z`. The earlier
+  997-pass/2-error/4-skip run remains preserved as a harness-environment FAIL:
+  its sanitized PATH omitted host Node/Chromium; it is not relabeled or used as
+  acceptance evidence.
+- Startup validation invoked the exact 10-test module once; the child exited 0
+  and reported `Ran 10 tests in 0.004s` plus terminal `OK`, so the startup suite
+  is **10/10 PASS**. Its outside-Git parser honestly remains `gate_pass=false`:
+  one passing fail-closed test intentionally wrote an expected application
+  `ERROR` line to the same stderr stream before unittest emitted a standalone
+  `ok`, while the parser counted only same-line `test ... ok` records. The raw
+  bytes and false wrapper field were preserved and independently adjudicated;
+  no rerun occurred. Evidence is
+  `startup-validation-223c0ae-20260927T003552Z`.
+- Static/security validation is PASS. The corrected offline `uv 0.12.3` lock
+  check exited 0 with pinned Python; 156 Python files compiled; shell syntax and
+  diff checks passed; the exact 14-file implementation inventory/modes passed;
+  no secret, private-data, generated-artifact, protected business/schema, or
+  high-risk-literal drift was found. Evidence is
+  `static-security-gates-223c0ae-20260927T005015Z-D9czq3` plus final
+  `static-security-adjudication-223c0ae-20260927T005926Z-2QEIll`. The original
+  offline uv attempt that omitted `UV_PYTHON` remains preserved as an
+  environment failure rather than being rewritten.
+- Fresh canonical Chromium acceptance on exact `223c0ae6...` completed initial
+  **72/72** and restart **72/72**, with 38 requests and 38 responses per phase,
+  all authentication/no-store/read-only/all-target checks true, four guarded
+  targets per phase, no unsupported/unattached/unguarded/live-detached target,
+  and no external HTTP, WebSocket or unexpected-scheme request. Both phases
+  downloaded the four exact canonical artifacts. The tracked harness invoked
+  once, exited 0 with no signal or stderr, and proved two server sessions, two
+  Chromium sessions and all four owned process trees stopped; it removed the
+  runtime/auth material and revalidated source before finalizing its result.
+  Primary evidence is
+  `corrected-v3-browser-acceptance-post-rollover2-223c0ae-20260927T144400Z-WaUU6N`;
+  acceptance-result SHA-256 is
+  `9f9ef00a659aa7ec6c2d60109629b233288e1a845afa763434b2aa06b093d15a`.
+  Browser `wait4` max RSS was 3,799,740 KiB, isolated cgroup peak
+  4,625,575,936 bytes and all OOM deltas were 0.
+- The auxiliary browser supervisor's original `gate_pass=false`,
+  `ports_gate_pass=false` and `natural_cleanup_gate_pass=false` fields remain
+  unchanged. Its immediate post-exit probe used a plain bind without
+  `SO_REUSEADDR`, unlike the canonical tracked harness, and therefore conflated
+  normal TCP teardown/TIME_WAIT with a live listener. Samples show both ports
+  last listening at 16:30:25Z and no listener from 16:30:26Z through child exit;
+  the cgroup and residual-process sets were empty. A delayed read-only check
+  found no `/proc/net/tcp` entries, connection refusal, and successful plain and
+  reusable binds for both ports, with runtime/temp absent. Three independent
+  same-model read-only reviews found no P0/P1/P2 and concluded no rerun was
+  required. The separate immutable `PASS_NO_RERUN` adjudication is
+  `browser-acceptance-adjudication-223c0ae-20260927T164415Z/adjudication.json`,
+  SHA-256
+  `9e927bac7801bfbd4a519bc30d6a3de1e8baf2403030064873146af4fefa4948`.
+  Earlier infrastructure-interrupted or pre-exec browser roots remain separate,
+  are not combined with this PASS, and had scoped auth/temp remnants removed
+  after metadata-only interruption adjudication.
+- Final cleanup found no owned build, suite, PostgreSQL, viewer, Chromium,
+  Node/CDP, listener, isolated-cgroup PID, runtime secret, temp root, test DB or
+  task process. The seven corrected immutable records remain exact, accepted
+  parent snapshot remains unchanged, and no production database, Shopify,
+  browser external-network, purchasing, supplier, PO, deployment, push, PR or
+  merge action occurred.
+- Same-model Codex review is supplementary: exact-diff semantic review and
+  focused/static/browser evidence reviews found no remaining P0/P1/P2. No
+  Claude Code, Cursor or other external-model review occurred, and none is
+  claimed. ChatGPT/owner business-rule and control-total acceptance remains the
+  next review boundary. `procurement/docs/PHASE_STATUS.md` is intentionally
+  unchanged because no official program/phase milestone changed.
+- There is no remaining machine-validation blocker inside this narrow memory
+  remediation. Exact next authorization boundary: stop after this handoff and
+  obtain owner acceptance. Any ABC work; supplier mapping, price or pack
+  approval; trusted incoming/open-PO work; vendor calendars; net need or
+  economics; purchasing recommendation; DRAFT, PO or order action; Railway
+  migration; deployment; production activation; production DB or Shopify write
+  requires separate explicit authorization.
 
 ### Private V3 final acceptance — VALIDATION GATES PASS / DELIVERY PENDING / OPERATIONAL AUTHORITY BLOCKED
 
