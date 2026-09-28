@@ -19,9 +19,31 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
+
+
+REVIEWED_CURRENT_PRICE_SEED_SHA256 = (
+    "44bacf203e19bd12071b616430a9091ca5c1c4b46da48ea1e6f04f7b8f7f8201"
+)
+REVIEWED_CURRENT_PRICE_SEED_ROWS = 271
+REVIEWED_SUPPLIER_OFFER_SEED_SHA256 = (
+    "e31f23c1a8f306efff4b2850d5299b84cca36ca92f2e744e6ec4f54f065c7253"
+)
+REVIEWED_SUPPLIER_OFFER_SEED_ROWS = 85
+REVIEWED_SEED_MANIFEST_SHA256 = (
+    "2231ee97b9f01e98ada7da765718f1b217d4c6003a56e27506443f2848556456"
+)
+REVIEWED_SEED_FILES = {
+    "variants.csv": ("dd31f1852c0ea79f8a66f8a34e7b1dac892501183da7f83d4de025a2e1349509", 2029),
+    "variant_aliases.csv": ("b9a2e862fcdff9e204f889ec277ae18201b78dc1197e53bb8876f5b520a68a21", 3301),
+    "vendors.csv": ("a544fdbbeec0f3fb18fee4052eb20f4b50d5e528d2778470980cf2da82316e79", 4),
+    "supplier_offers.csv": (REVIEWED_SUPPLIER_OFFER_SEED_SHA256, REVIEWED_SUPPLIER_OFFER_SEED_ROWS),
+    "current_prices.csv": (REVIEWED_CURRENT_PRICE_SEED_SHA256, REVIEWED_CURRENT_PRICE_SEED_ROWS),
+    "open_exceptions.csv": ("f7c12e0284636dad16f140e6133ddc9e6adde540d905fad3fde861ef9211d631", 4),
+}
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -79,6 +101,51 @@ def _import_seed_on_conn(seed_dir: Path, conn: Any) -> dict[str,int]:
     if conn is not None:
       with conn.transaction():
        with conn.cursor() as cur:
+        # Migration 011 freezes ordinary unprovenanced CURRENT writes.  Its
+        # narrowly scoped authority keeps fresh-install and idempotent seed
+        # reruns possible only for this exact reviewed August bundle.
+        cur.execute(
+            """SELECT to_regprocedure(
+                   'authorize_legacy_price_seed_import(text,text,integer,text,integer,text)'
+               )"""
+        )
+        if cur.fetchone()[0] is not None:
+            loaded_rows = {
+                "variants.csv": variants,
+                "variant_aliases.csv": aliases,
+                "vendors.csv": vendors,
+                "supplier_offers.csv": offers,
+                "current_prices.csv": prices,
+                "open_exceptions.csv": exceptions,
+            }
+            manifest_sha256 = hashlib.sha256(
+                (seed_dir / "manifest.json").read_bytes()
+            ).hexdigest()
+            actual_hashes = {
+                name: hashlib.sha256((seed_dir / name).read_bytes()).hexdigest()
+                for name in REVIEWED_SEED_FILES
+            }
+            bundle_matches = manifest_sha256 == REVIEWED_SEED_MANIFEST_SHA256
+            bundle_matches = bundle_matches and all(
+                actual_hashes[name] == expected_hash
+                and len(loaded_rows[name]) == expected_rows
+                for name, (expected_hash, expected_rows) in REVIEWED_SEED_FILES.items()
+            )
+            if not bundle_matches:
+                raise ValueError(
+                    "seed bundle does not match the reviewed August authority"
+                )
+            cur.execute(
+                "SELECT authorize_legacy_price_seed_import(%s,%s,%s,%s,%s,%s)",
+                (
+                    manifest_sha256,
+                    actual_hashes["supplier_offers.csv"],
+                    len(offers),
+                    actual_hashes["current_prices.csv"],
+                    len(prices),
+                    "procurement.tools.import_seed_csv",
+                ),
+            )
         vendor_ids={}
         for v in vendors:
             cur.execute("""

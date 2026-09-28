@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-06T17:01:01Z (UTC)
+**Updated:** 2026-09-27T16:44:15Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,2804 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Corrected-V3 memory-lifetime remediation — MACHINE VALIDATION PASS / OWNER ACCEPTANCE PENDING / OPERATIONAL AUTHORITY BLOCKED
+
+- The confirmed starting checkpoint is commit
+  `85f454aaef1be5c7d6d2cb1262d540b1901c8b04`, tree
+  `f70d42dd196e6b8fca56ff39b54f737593b4d7b0`. The approved design is its
+  direct child `b188eaddc23359f8ccae1fec7aac2b1f2827c185`, tree
+  `f7b45776e4ad3b155eabebeb00db7ce631001055`. The exact implementation is
+  commit `223c0ae6ba89248223cc9093579e195295b7024e`, tree
+  `3daaa79a1d622fa99a8625df9e044303b35f9119`, on branch
+  `codex/private-v3-memory-remediation`. The implementation worktree was clean
+  before this handoff-only update.
+- The failed Build 1 workspace
+  `3142adf1bb651bcf032c8f7bc8265428ff149c313be06434393b5c12b4df97b9`
+  remains **MATERIALIZED BUT UNCONFIRMED**. Build 1 exited 137 after one
+  invocation, with a cgroup OOM kill during post-publication semantic replay;
+  no semantic replay success was recorded. It was not promoted, reused as the
+  final workspace, or accepted into the implementation lineage. The accepted
+  parent snapshot remained byte-identical.
+- The demonstrated defect was heavyweight lifetime overlap, not forecast
+  math: legacy verified-source registries strongly retained source objects and
+  canonical bytes; the publication frame retained parent/source/projection and
+  all rendered artifact payloads; and full semantic readback then loaded a
+  second artifact set, rebuilt parent/corrected graphs, and rendered expected
+  artifacts while those objects remained reachable. GC could not establish a
+  reliable boundary while registry and frame references were still strong.
+- The implementation makes legacy capability retention weak-lifetime and adds
+  proof/identity-checked explicit release/tombstones; transfers freshly built
+  corrected projections through an owned-seal path; uses authenticated borrowed
+  views only for internal read-only work; preserves detached public validation
+  and filter results; ends the publication frame before replay; explicitly
+  releases source, parent, projection, artifact and registry references; and
+  performs compact semantic readback with sequential per-artifact comparison.
+  Exception paths sever owned graphs. `gc.collect()` is advisory only and is
+  not part of the correctness protocol. The public reader contract remains
+  backward compatible.
+- The 14 implementation files are:
+  `procurement/src/procurement_os/private_research.py`,
+  `private_research_projection.py`, `private_research_v2.py`,
+  `private_research_v3.py`, `private_research_v3_corrected.py`;
+  `procurement/tools/build_private_v3_corrected_research.py` and
+  `procurement/tools/run_tests.py`; and tests
+  `test_persistent_mapping_foundation_contract.py`,
+  `test_private_research_tools.py`, `test_private_research_v2.py`,
+  `test_private_research_v3.py`, `test_private_research_v3_corrected.py`,
+  `test_private_research_workspace.py`, and
+  `test_supplier_format_conformance.py`. The implementation delta is 1,850
+  insertions and 282 deletions. It adds lifetime/release/replay/error-path
+  coverage and updates only the independently derived test floors; there is no
+  schema, migration, forecast-math, model-selection, FVA-policy, pricing,
+  inventory, purchasing, PO, Shopify-write, or deployment change.
+- Final focused lifecycle/capability/replay/workspace/tooling validation passed
+  **45/45**. Direct tests cover weak collection, explicit release while values
+  remain live, identity/proof/tombstone refusal, hostile foreign mappings,
+  publication-before-replay boundaries with GC disabled, parent/source graph
+  death, one-at-a-time artifact-byte lifetimes, exception cleanup, tamper/hash/
+  semantic/lineage/accepted-parent mismatch refusal, deterministic retries, and
+  detached public results. The focused corrected browser environment module
+  separately passed **17/17** with pinned Node and Chromium. Static semantic
+  comparison found exact byte equality with the pre-remediation implementation
+  across V1/V2/V3/corrected projection, coverage, HTML, CSV, filtered rows,
+  schemas and row order.
+- One instrumented real corrected build on exact `223c0ae6...` exited 0 after
+  2,526.889s. Measured `wait4` process peak RSS was **3,773,936 KiB**
+  (hard gate below 5 GiB); the same-FD isolated cgroup peak was
+  **3,865,370,624 bytes** (below 6 GiB); child and root OOM, OOM-kill and
+  OOM-group-kill deltas were all **0**; exit 137 was false. Evidence is
+  `real-build-memory-isolated-223c0ae-20260926T202543Z`.
+- The required independent second complete build/readback also exited 0 after
+  2,370.506s, with peak RSS **3,773,932 KiB**, cgroup peak
+  **4,367,605,760 bytes**, and zero OOM events. Its stdout, all identities and
+  artifact records were byte-identical to the first build. All seven immutable
+  records retained exact bytes, SHA-256, mode, owner, mtime and non-symlink
+  state. Evidence is
+  `deterministic-build-isolated-223c0ae-20260926T211319Z`.
+- The fresh accepted corrected workspace is
+  `031dfc5f8e4ed83f14184fc0d324dfc99c6af02bf3896bd493ceeaebed62451a`;
+  corrected input is
+  `a03b54022e1363e53bdfe5b42ce7a811af4470436f9723286716e570cee1a82c`;
+  creation delta is
+  `9d58607e0845d4a2f71c5da9ca6dce2b3760707d8356229ad19488d5ea0ddbe9`;
+  parent V3 input is
+  `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`;
+  and corrected logical projection SHA-256 is
+  `650236984b3a95c7ade245b210000153bd93353ddea3cbcf9473e18851efeb3a`.
+  Corrected artifacts are: `coverage.json` 10,684,242 bytes / SHA-256
+  `0207ca46da3a8a86bc66708250f8365c169abba6c0af90fe7cbb5cb8bb71db32`;
+  `owner-preview.html` 21,144,726 /
+  `d306c10d1e1e7298edbfb55c03a516520be3e6f1c6e914fa67b9cb88939ec95a`;
+  `owner-worksheet.csv` 17,347,994 /
+  `ab0e427a8252008ac55e086aa2ff8eba00bf8d06a500773ec642d09bdbdf6f30`;
+  and `projection.json` 191,788,544 /
+  `eb54bc5f68094b1b87c78e6fbe76500d3f317616f7695c4b2d70a7d0318da18d`.
+- Bounded aggregate semantic replay passed with `failures=[]` and accepted
+  parent before/after equality at snapshot SHA-256
+  `61cc5ce121a244ed7d61b4a4a8a5b964cbb8581a2dc1c0431f8a4519ebe411c9`.
+  Evidence is `corrected-v3-aggregate-audit-isolated-223c0ae-20260926T223447Z`;
+  report SHA-256 is
+  `7b9307298ef5f9af4fec6727518c0e01f0314924ee5571ddae0cd0fc01930c9f`.
+  The audit ran once, exited 0, peaked at 3,777,180 KiB process RSS and
+  3,954,843,648 cgroup bytes, and recorded zero OOM deltas.
+- Exact population and membership controls pass for H3/H10/H17:
+  **2,009 current**, **1,365 CALCULATED**, **644 NOT_APPLICABLE**,
+  **0 BLOCKED**, **0 NOT_PROCESSED**. The six membership controls are current
+  2,009, eligible 1,365, parent-not-applicable 601, reviewed-prior-blocked 43,
+  corrected-not-applicable 644 and corrected-blocked 0. The exact 43-row delta
+  converts the prior blocked membership to corrected NOT_APPLICABLE. Corrected
+  point, target and unique cumulative coherence violations are all **0**;
+  independently reported raw-parent counts remain 38, 136 and 151.
+- Historical controls remain unchanged: 138 complete days from 2026-05-04
+  through 2026-09-18; source partitions are 5,722 extension rows plus 9,431
+  replacement rows = 15,153. Raw and ledger signed totals both equal 21,984
+  net units, $343,005.83 net revenue, $250,749.53 historical COGS and 15,153
+  rows. Allocation is 12,148 direct rows, 2,869 historically allocated rows,
+  132 quarantined rows and four absent-current target rows. Eligibility remains
+  73 parent-first-day plus 1,292 pre-window exact IDs = 1,365; missing evidence
+  is 600 post-start creations, one first-history-day record and the reviewed 43.
+  Identity authority remains 2,029 approved self-identities, 3,301 seed alias
+  rows, 1,055 conflict-free aliases, 343 original Phase-4 rows, 280 terminal
+  rows and 56 terminal safe alias families. All 1,365 sidecars reconcile; joint
+  score recomputation mismatches are 0.
+- The corrected authoritative repository suite ran exactly once in its fixed
+  sanitized environment and passed **1,003 discovered / 1,003 executed /
+  1,003 passed**, with failures, errors, skips, expected failures and unexpected
+  successes all 0. Unittest time was 1,038.216s, runner time 1,054.421s and
+  supervisor time 1,057.027s. Raw log SHA-256 is
+  `b0f780b71a24fdc98cd42042a76204076fbce4795d89a230b4b1778d58ef33b7`;
+  cgroup peak was 1,897,639,936 bytes and OOM deltas were 0. Evidence is
+  `authoritative-suite-corrected-env-223c0ae-20260927T000750Z`. The earlier
+  997-pass/2-error/4-skip run remains preserved as a harness-environment FAIL:
+  its sanitized PATH omitted host Node/Chromium; it is not relabeled or used as
+  acceptance evidence.
+- Startup validation invoked the exact 10-test module once; the child exited 0
+  and reported `Ran 10 tests in 0.004s` plus terminal `OK`, so the startup suite
+  is **10/10 PASS**. Its outside-Git parser honestly remains `gate_pass=false`:
+  one passing fail-closed test intentionally wrote an expected application
+  `ERROR` line to the same stderr stream before unittest emitted a standalone
+  `ok`, while the parser counted only same-line `test ... ok` records. The raw
+  bytes and false wrapper field were preserved and independently adjudicated;
+  no rerun occurred. Evidence is
+  `startup-validation-223c0ae-20260927T003552Z`.
+- Static/security validation is PASS. The corrected offline `uv 0.12.3` lock
+  check exited 0 with pinned Python; 156 Python files compiled; shell syntax and
+  diff checks passed; the exact 14-file implementation inventory/modes passed;
+  no secret, private-data, generated-artifact, protected business/schema, or
+  high-risk-literal drift was found. Evidence is
+  `static-security-gates-223c0ae-20260927T005015Z-D9czq3` plus final
+  `static-security-adjudication-223c0ae-20260927T005926Z-2QEIll`. The original
+  offline uv attempt that omitted `UV_PYTHON` remains preserved as an
+  environment failure rather than being rewritten.
+- Fresh canonical Chromium acceptance on exact `223c0ae6...` completed initial
+  **72/72** and restart **72/72**, with 38 requests and 38 responses per phase,
+  all authentication/no-store/read-only/all-target checks true, four guarded
+  targets per phase, no unsupported/unattached/unguarded/live-detached target,
+  and no external HTTP, WebSocket or unexpected-scheme request. Both phases
+  downloaded the four exact canonical artifacts. The tracked harness invoked
+  once, exited 0 with no signal or stderr, and proved two server sessions, two
+  Chromium sessions and all four owned process trees stopped; it removed the
+  runtime/auth material and revalidated source before finalizing its result.
+  Primary evidence is
+  `corrected-v3-browser-acceptance-post-rollover2-223c0ae-20260927T144400Z-WaUU6N`;
+  acceptance-result SHA-256 is
+  `9f9ef00a659aa7ec6c2d60109629b233288e1a845afa763434b2aa06b093d15a`.
+  Browser `wait4` max RSS was 3,799,740 KiB, isolated cgroup peak
+  4,625,575,936 bytes and all OOM deltas were 0.
+- The auxiliary browser supervisor's original `gate_pass=false`,
+  `ports_gate_pass=false` and `natural_cleanup_gate_pass=false` fields remain
+  unchanged. Its immediate post-exit probe used a plain bind without
+  `SO_REUSEADDR`, unlike the canonical tracked harness, and therefore conflated
+  normal TCP teardown/TIME_WAIT with a live listener. Samples show both ports
+  last listening at 16:30:25Z and no listener from 16:30:26Z through child exit;
+  the cgroup and residual-process sets were empty. A delayed read-only check
+  found no `/proc/net/tcp` entries, connection refusal, and successful plain and
+  reusable binds for both ports, with runtime/temp absent. Three independent
+  same-model read-only reviews found no P0/P1/P2 and concluded no rerun was
+  required. The separate immutable `PASS_NO_RERUN` adjudication is
+  `browser-acceptance-adjudication-223c0ae-20260927T164415Z/adjudication.json`,
+  SHA-256
+  `9e927bac7801bfbd4a519bc30d6a3de1e8baf2403030064873146af4fefa4948`.
+  Earlier infrastructure-interrupted or pre-exec browser roots remain separate,
+  are not combined with this PASS, and had scoped auth/temp remnants removed
+  after metadata-only interruption adjudication.
+- Final cleanup found no owned build, suite, PostgreSQL, viewer, Chromium,
+  Node/CDP, listener, isolated-cgroup PID, runtime secret, temp root, test DB or
+  task process. The seven corrected immutable records remain exact, accepted
+  parent snapshot remains unchanged, and no production database, Shopify,
+  browser external-network, purchasing, supplier, PO, deployment, push, PR or
+  merge action occurred.
+- Same-model Codex review is supplementary: exact-diff semantic review and
+  focused/static/browser evidence reviews found no remaining P0/P1/P2. No
+  Claude Code, Cursor or other external-model review occurred, and none is
+  claimed. ChatGPT/owner business-rule and control-total acceptance remains the
+  next review boundary. `procurement/docs/PHASE_STATUS.md` is intentionally
+  unchanged because no official program/phase milestone changed.
+- There is no remaining machine-validation blocker inside this narrow memory
+  remediation. Exact next authorization boundary: stop after this handoff and
+  obtain owner acceptance. Any ABC work; supplier mapping, price or pack
+  approval; trusted incoming/open-PO work; vendor calendars; net need or
+  economics; purchasing recommendation; DRAFT, PO or order action; Railway
+  migration; deployment; production activation; production DB or Shopify write
+  requires separate explicit authorization.
+
+### Private V3 final acceptance — VALIDATION GATES PASS / DELIVERY PENDING / OPERATIONAL AUTHORITY BLOCKED
+
+- Authorization clock: T0 `2026-09-23T21:46:10Z`, packaging reserve
+  `2026-09-23T23:16:10Z`, hard stop `2026-09-23T23:46:10Z`. Work remained
+  on `codex/private-v2-research-input` in the isolated checkout. The protected
+  checkout and remote refs were not changed.
+- The frozen runtime/browser baseline remains
+  `a438a69cb05dd4f7dfb990e14de33f208dab7ccf` / tree
+  `2dacc029f088a7d44feb537d9784dc9f6a6924dd`. Its direct test-only child is
+  `62383f48aae9bbd401754bba543659c2b6543023` / tree
+  `686f8e5744f4f40bd916fb8f29c502a36508ca0b`. Only
+  `procurement/tests/test_persistent_mapping_foundation_contract.py` and
+  `procurement/tests/test_supplier_format_conformance.py` changed: their
+  independently specified exact population expectations now match the
+  independently reconciled 947-test registry, while exact-total,
+  reduced-registration and pre-run deletion-detection checks remain fail
+  closed. `procurement/tools/run_tests.py` and all runtime code are unchanged.
+- Focused validation passed **12/12** in 1.541s; raw log SHA-256 is
+  `0fe02f3a141ce0f03d1aae68032df1d05cf24346793f43363485c8a7664ee20f`.
+  The exact two-file patch SHA-256 is
+  `e6aa152005566e71ad861cf6cd0df73511a1f76731ce8ec63c6140d6dfcac141`.
+  One bounded read-only reviewer independently reconciled 947 discovered
+  tests and 947 registered floors, exercised both negative cases, confirmed
+  the reduced suite refuses at 946 before runner execution, and found no
+  P0/P1/P2 issue.
+- On exact `62383f48...`, the authoritative wrapper passed **947 discovered /
+  947 executed / 947 passed**, with failures 0, errors 0, skips 0, expected
+  failures 0 and unexpected successes 0. Runner time was 1304.922s and wrapper
+  time 1323s; raw log SHA-256 is
+  `ef93115b5a08e1b9674320a89eb893d86b68dd66ce4592bd92a878a74fa3121e`.
+  After verified PostgreSQL cleanup, startup validation ran exactly once and
+  passed **10/10** in 0.005s; raw log SHA-256 is
+  `613651f9a638a300d82c649547b5cede9523ceae784078db59332817220355d7`.
+  The sealed suite checksum-set SHA-256 is
+  `3455fe9c9c5a54b1f9cf239fa13d134e7a0ea2b37141363a150c3435db023be4`.
+- The earlier exact-baseline run remains preserved as **FAIL**, not relabeled:
+  on `a438a69...` it discovered and executed 947 tests, passed 945 and failed
+  only the two stale independent `941` expectations. Its raw log SHA-256 is
+  `fb6ffd8ffe7b32c8710f4d11f211c0f309a30766ed6c9a548c9b0452ba56379c`;
+  startup was deliberately not run after that failure.
+- Browser acceptance was executed at `a438a69...`, not at the test-only child:
+  initial Chromium passed **72/72** assertions and restart Chromium passed
+  **72/72**, with 38 requests and 38 responses per phase, exact artifact
+  equality, and no external HTTP, WebSocket or unexpected network activity.
+  Separate authenticated same-process HTTP probes covered pagination,
+  no-match and recovery; they are not counted as Chromium assertions. The
+  complete run took 1574.637s, including cold semantic replays of about
+  489.951s and 490.516s; warmed sidecar requests took 0.158–0.248s.
+  Acceptance-result SHA-256 is
+  `7a92beb2113dceee2ace68322823173e8b0bbb450cd7707fa6c53d4f9864955a`.
+- A complete tracked-file comparison binds that browser evidence to
+  `62383f48...` without relabeling it as a new execution. Both commits contain
+  388 tracked leaves; exactly the two authorized mode-100644 test files differ,
+  with no addition, deletion, rename or mode change, and all other 386
+  path/mode/blob records are identical. The filtered manifest SHA-256 is
+  identical at both commits:
+  `d9c9b97ab13d699fbee23e6eecc317d34720d812a3b890bdd8fcb9da0fc5aab2`.
+- Retained authenticated source and result bytes were not regenerated. Their
+  immutable identities remain input
+  `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`,
+  projection `b200deb0b6fd0a2f1c133114bf6b3a6db1eccc7d6e44deaf738dcdd864c11ae4`,
+  and workspace
+  `c5a71f4798eb2ed3e948f2bbc20097151ad92199b3b72f30276992e8150f2968`.
+  Exact artifacts remain coverage JSON 11,151,899 bytes / SHA-256
+  `1919e2465f7fe8e559a940eb66f435d18dfcd06537df1accc75ac38098592982`,
+  compact owner HTML 21,248,489 /
+  `df8ffb0f4ff635c319eab5d848bb71808b68395e12a113e0ce4252d294bb668d`,
+  owner CSV 24,717,127 /
+  `0c4adf709cd18b68a64642df5fbaf1b6ab5083a274552a7b42f39164db594b55`,
+  and projection JSON 230,669,882 /
+  `f47e81ad868a8dfada60055e3a3ac9b61aebf9a733c28aacea4af910388d727b`.
+- Final coverage is unchanged. Separately for H3, H10 and H17:
+  **CALCULATED 1,365; BLOCKED 43; NOT_APPLICABLE 601; NOT_PROCESSED 0**.
+  Numerical zero is a subset of CALCULATED: H3 **1,030**, H10 **813**, H17
+  **768**. Supported eligibility is 1,365 exact current Variant IDs. The other
+  644 are 600 created after the history start, one conservatively excluded on
+  the first date because its retained creation timestamp has no timezone, and
+  43 absent from reviewed creation evidence. No title, SKU or fuzzy match,
+  guessed alias, invented pre-creation zero, trusted incoming, supplier
+  calendar, price, pack or approval was introduced.
+- The planned additive
+  `private-v3-final-acceptance-PASS-62383f4-code-review-supplement` reconstructs
+  the unpublished range from the exact last-delivered prerequisite
+  `d6fce979059b4206573219b8839f6e62a5eef6f0` / tree
+  `d161d71fa8c08146c1c70c4f9791e4df963a4e76` through the documentation-only
+  successor. Sealing follows this documentation commit. To avoid a
+  self-referential archive identity, its exact final byte size and SHA-256 must
+  be recorded only in the adjacent external `.zip.sha256` and delivery
+  response, not inside the ZIP. The large PRIVATE results archive is not being
+  regenerated; it remains 790,053,924 bytes, SHA-256
+  `015f6427b9865527f0ef42d031e726494e97fcaf72c092429781a98537b211ef`.
+- Final cleanup removed the owned PostgreSQL root and left no owned suite,
+  viewer, browser, Node/CDP, listener, test database, runtime secret or PID-file
+  resource. The isolated worktree was clean before this documentation update;
+  `procurement/docs/PHASE_STATUS.md` remains unchanged.
+- All code, suite, startup, browser-attribution and cleanup validation gates are
+  **PASS**. Overall bounded acceptance is deliberately not declared inside this
+  pre-seal documentation commit; the delivery response may declare it only
+  after archive reconstruction, manifest, checksum and ZIP integrity checks
+  also pass. No operational database or Shopify write, mapping/price/pack
+  approval, trusted incoming, DRAFT, PO/order, supplier contact, deployment,
+  push, PR, merge, production release or purchasing authority was exercised or
+  granted.
+- Exact next authority boundary: owner acceptance, production approval and any
+  real purchasing or release action remain separate and require new explicit
+  authorization. No further runtime, data-capture or procurement action is
+  authorized by this checkpoint.
+
+### Private V3 final acceptance — INCOMPLETE / REAL BROWSER INITIAL TIMEOUT
+
+- Authorization clock: T0 `2026-09-22T11:48:33Z`, packaging reserve
+  `2026-09-22T15:03:33Z`, hard stop `2026-09-22T15:48:33Z`. Branch:
+  `codex/private-v2-research-input`. Preserved material is
+  `aebadb66744a72588005c7367a70fdd85dcc3c47` / tree
+  `ced867f985ee463729fdeee686a6607baf5e078e`; preserved handoff is
+  `996408b33217a2ba9cb32a7c8a061e4554e8dc1d` / tree
+  `67fee7672880f2772714c77b6bea0cba15e77f02`. The two original
+  validation-incomplete archives remain byte-unchanged: code SHA-256
+  `d34d1a0fe4df22a9c0b1af78f150e92574710374aa5059429ecffd3babf6d2b7`
+  (3,205,100 bytes) and PRIVATE SHA-256
+  `015f6427b9865527f0ef42d031e726494e97fcaf72c092429781a98537b211ef`
+  (790,053,924 bytes).
+- Final retained research bytes were not regenerated. Their identities remain
+  input `f4f881df40ef5b7275a3ae2b15f3e7004e08e629916a40f71c651687abebe410`,
+  projection `b200deb0b6fd0a2f1c133114bf6b3a6db1eccc7d6e44deaf738dcdd864c11ae4`,
+  and workspace `c5a71f4798eb2ed3e948f2bbc20097151ad92199b3b72f30276992e8150f2968`.
+  Artifacts remain coverage JSON 11,151,899 bytes / SHA-256 `1919e246...`,
+  compact HTML 21,248,489 / `df8ffb0f...`, CSV 24,717,127 / `0c4adf70...`,
+  and projection JSON 230,669,882 / `f47e81ad...`.
+- Commit `9e0b11f10a44004547816c475541fa8adbc7d538` / tree
+  `ea014777249618a4e105659faf8806679db18378` made the demonstrated minimum
+  V3-only correction that serves the sealed projection artifact bytes. On that
+  exact commit the authoritative suite passed 941/941 with every abnormal
+  counter zero in 1103.721s (wrapper 1128s), raw SHA-256
+  `375405b23e3fa496a7297df10c66ca1fb0dcfe9560c96d74360dc8f9caee2ef7`;
+  startup passed 10/10 in 0.003s, SHA-256 `6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7`.
+  A full-size authenticated probe then transferred the exact 230,669,882-byte
+  projection twice with SHA-256 `f47e81ad...` in 0.215760s and 0.209630s.
+- The first real browser attempt exposed an early unhandled page-load timeout.
+  Commit `48d25b9bfdc4681f9fcd7dd651022cc296a98b38` / tree
+  `c214c87f701ce3a9dc6eb732931526697c0b76a2` applies only a bounded page-load
+  waiter correction; its browser-harness module passed 15/15 and independent
+  review found no P0/P1/P2 issue. The required complete suite was **not rerun**
+  on `48d25b9...` and no final-tip suite PASS is claimed.
+- The canonical real run on `48d25b9...` started at
+  `2026-09-22T14:34:29Z` and ended at `2026-09-22T14:57:55Z` with exit 1:
+  the initial Node/CDP phase exceeded its bounded 300-second subprocess limit.
+  It produced no browser result JSON and no downloads; restart was not reached.
+  Exact inspection found that every page/filter GET still invokes the public
+  filter boundary, which reruns the complete V3/V2 semantic validator over the
+  already startup-validated, cached 230MB projection. This is a demonstrated
+  P1 acceptance blocker. It was not changed after the packaging reserve began.
+- Aggregate reconciliation of the immutable outputs passed. For each of
+  H3/H10/H17: CALCULATED 1,365; BLOCKED 43; NOT_APPLICABLE 601;
+  NOT_PROCESSED 0. Exact pre-display numerical-zero subsets are H3 1,030,
+  H10 813, H17 768. Membership sets are identical across horizons. Eligibility
+  is 73 parent plus 1,292 exact-ID pre-window Variants; the remaining reasons
+  are 600 post-start creations, one conservative first-day/no-timezone record,
+  and 43 exact IDs absent from reviewed creation evidence. No title/SKU/fuzzy
+  match, guessed alias, invented zero, trusted incoming, supplier calendar,
+  price, pack, or approval was introduced.
+- Overall acceptance is **INCOMPLETE / NOT ACCEPTED**. The successful `9e0b11f`
+  suite and transfer proof are preserved, but they do not substitute for a
+  final-tip suite plus successful real Chromium initial/restart phases. No
+  PRIVATE results replacement is issued because the immutable results did not
+  change and every new browser download directory is empty; the original
+  PRIVATE archive remains the result carrier. A small additive code/review
+  supplement records the exact failures, reviews, hashes, and reconstruction.
+- Cleanup after the failed run found a clean worktree before this documentation
+  update, free loopback ports 18876/54171, and no owned viewer, audit, Uvicorn,
+  Chromium, crashpad, Node, test-PostgreSQL, runtime-secret, or PID-file
+  process/resource residue. `procurement/docs/PHASE_STATUS.md` remains unchanged.
+- This remains DEVELOPMENT RESEARCH ONLY. No production DB or Shopify write,
+  supplier mapping/price/pack approval, trusted incoming, DRAFT, PO/order,
+  supplier contact, deployment, push, PR, merge, or purchasing authority was
+  exercised or granted.
+- Exact next authorization boundary: from the preserved checkpoint, implement
+  only the reviewed app-internal cached-projection filter path while keeping the
+  public validation boundary fail closed; independently review it; rerun the
+  complete authoritative suite on that exact commit; then complete fresh real
+  authenticated Chromium initial and restart phases with byte-equivalent
+  downloads and cleanup proof. Do not claim PASS before all three gates finish.
+
+### Saturday private real-data bridge — BOUNDED LOCAL MACHINE + BROWSER PASS / REAL PURCHASING BLOCKED
+
+- The frozen parent remains commit
+  `c1895ff5a63599bae57fd41de827b0665446682f`, tree
+  `b8aec47caca38bb517603166b1b54b32909181f8`. The exact tested material child
+  is `4919d643f8c49e2b788bda4e8ff95ef24a283c4b`, tree
+  `e2b88e9a421d97359b7a0165c6dc88f1d97a541b`. The 18-commit range is local,
+  linear and adds no migration, table or dependency. Closeout changes are a
+  separate documentation-only child.
+- The earlier V2 delta ZIP remains 1,998,197 bytes with SHA-256
+  `d50c09b9809c269eb7e94596bf1892cfecfd6ea58b35e99607fd0757b8215337`.
+  Fresh empty reconstruction recovered both `dd131602...` and `c1895ff5...`.
+  The frozen-parent review still records findings 1/2/4/5 PASS and finding 3
+  FAIL; the child fixes finding 3 without changing the parent. Claude/external
+  review remains NOT ASSESSED.
+- A content-addressed private intake validates the sealed A1 snapshot and the
+  native read-only Shopify catalog/inventory and daily-sales captures. Variant
+  ID is the only canonical join; supplier identities, packs, mappings and
+  ladders remain unapproved hypotheses. Readback rehashes and rederives every
+  source. No raw private evidence is in Git.
+- Actual measured coverage is 2,009 current Variants, 1,995 A1-to-current
+  joins, five A1 identities absent from the current catalog, 14 current
+  Variants outside A1, and 84 complete sales days from 2026-06-27 through
+  2026-09-18. The 9,431 raw rows cover 1,740 historical IDs; 1,436 join the
+  current catalog and 304 historical IDs do not. The partial 2026-09-19 day is
+  deliberately omitted.
+- The shared zero-authority projection produces 2,009 coverage rows, 14,901
+  research rows and a 2,009-row owner worksheet across eight supplier names.
+  The HTML/CSV/JSON exports share the same bound projection. Exact ABC cohort
+  membership, real forecast schedule/history, trusted incoming/open orders,
+  approved packs/exclusions/margins/prices/fees/policy are absent, so forecast,
+  ABC and purchasing economics are all correctly NOT RUN.
+- Exact material validation passed **931/931** in 1229.597s with every abnormal
+  counter zero; log SHA-256 is
+  `04f8f26fc30e92c6433c1fbcdd517aa0803661e09fabb560f5364edf6ee9be4c`.
+  Startup passed **10/10**. Fresh real-data Chromium passed **70/70** initial
+  and **70/70** restart assertions, with 38 requests/responses per phase, no
+  external HTTP/WebSocket activity, four fully guarded targets per phase and
+  byte-identical exports. Acceptance-result SHA-256 is
+  `d5704289d673ce088d8f1316e78a0a457f15d700d3c1c09fbe837127d18967eb`.
+- Two read-only same-model reviewers found no P0-P2 issue at the exact material
+  target or in the retained browser evidence. They are not external/Claude
+  review. Both app/browser restarts, listeners and owned process trees stopped;
+  runtime secrets and PID files were removed.
+- This does not change the official production phase. No operational database,
+  mapping/price/policy approval, selected offer, DRAFT, PO, Shopify write,
+  supplier communication, deployment or order occurred. The exact evidence,
+  artifact hashes, retained limitations, owner decision list and next boundary
+  are in `docs/SATURDAY_REAL_DATA_BRIDGE_CLOSEOUT.md`.
+- Exact next boundary: deliver the self-contained code/review transport and the
+  separately labelled private offline-preview transport, then stop. Any private
+  refresh, remote viewer access, real numerical evaluation or purchasing action
+  requires new authorization.
+
+### Development Forecast V2 five-finding remediation — BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS / EXTERNAL REVIEW AND REAL USE BLOCKED
+
+- The reviewed reconstruction remains frozen at commit
+  `dd1316022c3e778963c84d818f79ce61f61f192a`, tree
+  `cc98458065117be8850225099591acb60e48f469`. The separate isolated material
+  child is commit `ac65b8fc3263834d1a4c91001330e227f14870bb`, tree
+  `6bbb6bfbeade34771b6f95cc0bf3cc257c5d986d`. The range is five linear
+  commits, 18 files and `+4482/-289`; the final closeout is documentation-only
+  and is identified separately in the additive review archive.
+- The new `development-forecast-v2` fixture/profile is registered separately
+  from V1 and requires the exact server-owned profile, fixture, policy,
+  schedule, database and runtime attestation tuple. Unknown, partial, mixed or
+  hash-mismatched tuples refuse without fallback. Existing V1 policy, fixture,
+  run and packet bytes are not relabeled or converted. No migration, table or
+  dependency was added; the `procurement/db` tree remains
+  `c6fd3e0459473ad479c106222a3b8d9746c0862a`.
+- All five bounded findings are closed in the registered V2 path: forecast
+  evidence is semantically rebound to baseline need and deterministic replay;
+  incomplete ABC cohorts receive no letters; confidence thresholds are
+  explicit policy inputs; the schedule resolves independent anchored review,
+  submission and receipt opportunities; and 138 contiguous synthetic days
+  support unchanged origin minima through H31. Southern proves an anchored
+  H17 interval (2026-10-05 through start-of-day 2026-10-22); Western is the H3
+  weekly control. Owner quantity edits remain separate immutable review facts.
+- Exact material validation passed pure forecast **13/13**, launcher/fixture
+  **15/15**, PostgreSQL service **13/13**, startup **10/10**, and the
+  authoritative repository wrapper **845 discovered / 845 executed / 845
+  passed** in 1180.378s, with every abnormal counter zero. The authoritative
+  suite log SHA-256 is
+  `a3205c1075393556d5de84df1a11b43dfe575bc85426f51350325194523be193`.
+- Fresh Chromium on exact `ac65b8f...` passed **171 assertions**: 19 price, 86
+  V2 workflow, and 22 each for source restart, distinct-cluster recovery and
+  recovered restart. Browser actions created the decisions and run; nothing
+  was precompleted. The result is two DRAFTs, three lines and a 14-member
+  packet. Southern contributes $180; Western contributes $102 merchandise and
+  one $7 below-minimum fee; grand merchandise is **$282**, fees **$7**, and
+  DRAFT total **$289**. Variant 4003 remains blocked for missing selected-offer
+  head and Variant 4004 freezes four loose units plus a `$3.00` fee before the
+  unresolved-fee blocker.
+- Recovery used distinct PostgreSQL system identifiers
+  `7687385158040509340` and `7687385410796826131`; source and target durable
+  state SHA-256 is identical:
+  `32b0a4de9f37c554e69f76693ef4ede8c914dcbee93e0b7d4efd8bdf6db08f98`.
+  Source restart, restore, recovered restart and terminal replay preserved the
+  exact two CSVs and packet. The browser summary SHA-256 is
+  `59e5cad333b05f172c86b3707c65e5cad5d5c38550579ac6274889b1b2d750b4`.
+- Two read-only same-model reviewers inspected exact `ac65b8f...` and found no
+  remaining P0-P2 issue. They did not run database/browser checks and are not
+  external/Claude review. The first pre-final browser attempt remains an
+  explicit diagnostic: it exposed an invalid V2 loose-fee fixture rather than
+  being counted as evidence. The corrected V2-only history passed while V1
+  fixture bytes and results stayed unchanged.
+- Both demo databases, app instances and Chromium were stopped. A six-secret
+  exact-value scan found zero matches in retained evidence; the exact isolated
+  runtime roots, databases, backups and secrets were deleted. No owned
+  listener/process remains.
+- This remains fabricated synthetic internal-DRAFT evidence. UNKNOWN
+  availability forces limited/LOW evidence; connected ABC lacks historical
+  COGS; category shrinkage lacks a causal prior; nonzero lead variability
+  refuses; real policy/data/backtesting, direct-SQL enforcement, production
+  identity, owner access, native Shopify validation, deployment, PO release
+  and orders remain blocked. The official production phase is unchanged.
+  Exact evidence, hashes and the five-finding matrix are in
+  `docs/DEVELOPMENT_FORECAST_V2_CLOSEOUT.md`.
+- Exact next boundary: preserve the material commit plus documentation-only
+  child, expose the additive V2 review archive for independent review, and
+  stop. External acceptance or any real/default activation requires a new
+  reviewed owner authorization.
+
+### Wednesday development forecast-to-DRAFT — BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS / OWNER AND REAL USE BLOCKED
+
+- The protected prerequisite remains commit
+  `fac9d55cb91728dba36207ffe93f2c93da369cf4`, tree
+  `4def364ace5e438767413aff817278091ac93f69`. The isolated child is
+  `codex/wednesday-demand-to-draft`. The exact tested implementation is commit
+  `49c7b334ec958e6a03ca898e45aedf3163a9a3db`, tree
+  `ffdbe27d1283c5f6da03dea259d914d3094fdd5c`. The prerequisite checkout and
+  all remote refs were left unchanged. Any later closeout commit is
+  documentation-only and is identified separately in the additive review
+  transport.
+- The original causal test failed at the actual missing connection on design
+  child `de050824...`: importing `procurement_os.development_forecast` raised
+  `ModuleNotFoundError`, so the frozen parent could not compute the required
+  forecast -> protection -> need oracle. The retained raw causal-red SHA-256 is
+  `d98fb64fab534e9d6744f359e656676e4c1b0c17333d02cb5bb5446d06a337f3`.
+- The development-only engine now evaluates NAIVE, weekly seasonal-naive,
+  damped ETS and TSB candidates with chronological, purchase-horizon rolling
+  origins. CATEGORY_SHRINKAGE is explicitly `NOT_CONFIGURED` without a frozen
+  causal category prior. GP-dollar ABC is implemented as a pure classifier,
+  while the connected fixture reports `MISSING_HISTORICAL_COGS` and never uses
+  current supplier price as historical cost. The policy, model evidence and
+  exact frozen daily observations are hash-bound; manifest and packet
+  validation deterministically rerun the planner.
+- The synthetic policy uses an 84-day connected history, independent
+  selection/calibration/evaluation regions, a 0.90 empirical full-horizon
+  shortfall quantile and at least eight calibration origins. Protection is
+  added exactly once. Any UNKNOWN availability makes protection
+  `CALCULATED_LIMITED_AVAILABILITY` and confidence LOW. Nonzero lead-time
+  variability refuses until a validated delivery-delay model exists.
+  ONE_BOTTLE and ALLOCATED policies remain authoritative over forecast target
+  arithmetic. These are fabricated development values, not approved Buffalo
+  operating policy.
+- Exact-target focused validation passed **19/19** in 36.618s (log SHA-256
+  `82d999558709ac501a94031dfdbedd9dd8cf4d54701e8f2a0bf24e04418c0485`).
+  The authoritative wrapper then passed **837 discovered / 837 executed / 837
+  passed** in 1157.416s, with zero failures, errors, skips, expected failures or
+  unexpected successes (log SHA-256
+  `ecbb731fac57193e2c734d9df2229a1dbee73779cb6ecbbc15a73b276f1c519d`).
+  Startup hardening passed **10/10** in 0.004s (log SHA-256
+  `8cbc2321289aad482131291f1375331b42ef87afbd8e2b0aeabd20b734d71193`).
+- Fresh real Chromium acceptance on exact `49c7b334...` passed **165
+  assertions**: 19 price, 83 complete workflow, and 21 each for source restart,
+  distinct-cluster recovery and recovered restart. Browser actions created the
+  price confirmation/application, seven mapping decisions, five offer
+  selections, four immutable review decisions and two blocker exclusions.
+  The run reached `PACKET_BUILT` with two DRAFTs, three lines and three
+  artifacts. Southern total was $90; Western merchandise was $102 plus one $7
+  below-minimum fee for $109; grand merchandise was **$192**, fees **$7**, and
+  DRAFT total **$199**. The packet has 14 members including
+  `forecast-and-protection-evidence.json`.
+- The connected forecast evidence contains four recommendation results with
+  actual vendor-calendar horizons: Southern Variant 1001 uses 10 days and the
+  three Western results use 3 days. Original model recommendations are frozen
+  separately from owner review: 1001 was accepted at 3 cases; 4001 was edited
+  from 1 to 2 cases; 4002 was accepted at 1 case; allocated 4005 was rejected
+  at zero. Variant 4003 remained blocked for missing selected-offer head with no
+  legacy fallback; 4004 remained blocked for unconfirmed positive loose-unit
+  fee semantics. No model-accuracy or FVA uplift claim is made from this
+  fabricated run.
+- The populated V1 backup restored into a separate PostgreSQL 16 cluster with
+  the same logical database name. Source and target system identifiers are
+  distinct (`7687272298707398797` and `7687272544110264867`) while full durable
+  state SHA-256 is identical:
+  `31cca9cc6075a477718bf4a09c87d7a75e45dabd3a1c4ad8ed0d404cb33ffc8b`.
+  Both vendor CSVs and the packet remained byte-identical through source
+  restart, recovery, recovered restart and terminal replay. The exact-target
+  acceptance summary SHA-256 is
+  `325fffc5f135e25eacfc55d6e8c56e7d4937f810992a7f303e02f441ea3d7e25`.
+- Two independent read-only same-model reviewers inspected exact
+  `49c7b334...` after the final numerical/evidence corrections and reported no
+  remaining P0, P1 or P2 finding. They did not execute tests or claim to be
+  Claude/external review. The exact-target machine evidence above is the
+  execution authority; owner acceptance and external independent review remain
+  pending.
+- The first browser attempt failed during PostgreSQL startup on a 124-byte
+  Unix-socket path and never reached readiness. Its raw `pg_ctl` failure was
+  preserved; the direct server diagnostic was not retained. Cleanup checks
+  proved that no listener or owned process remained afterward. The accepted
+  retry changed only the private work-root path, not source. Final independent
+  evidence checks found no leaked secret; both databases, app servers and
+  Chromium were stopped, and the exact temporary runtime was removed after
+  verification.
+- This is fabricated loopback-Linux, internal-DRAFT evidence only. It adds no
+  migration/table, real price/mapping/forecast authority, deployment, Shopify
+  action, PO release or order. Default/real paths remain inactive; a request
+  cannot activate the feature. Direct-SQL enforcement, real historical COGS,
+  real availability and forecast backtesting, approved service/XYZ/FVA policy,
+  production identity/IdP, owner remote access, native Shopify CSV validation
+  and every operational ordering gate remain blocked. The secondary real-input
+  readiness analysis was **NOT RUN**.
+- The original engineering window was observed at
+  `2026-09-17T03:35:33.373323Z`; its validation reserve began
+  `2026-09-17T09:35:33.373323Z` and hard stop was
+  `2026-09-17T11:35:33.373323Z`. Later remediation/validation is reported at
+  its actual time and is not represented as in-window work or an extension.
+- Exact next boundary: preserve the tested material commit and its
+  documentation-only closeout, expose the additive review package, and stop.
+  Any real/default activation, real-data evaluation, policy approval, remote
+  integration, deployment, Shopify write, PO release or order requires a new
+  reviewed authorization and owner acceptance.
+
+### Price-to-DRAFT acceptance follow-up — BOUNDED SYNTHETIC MACHINE + INDEPENDENT REVIEW PASS / OWNER USABILITY + REAL USE BLOCKED
+
+- The frozen prerequisite remains commit
+  `20dd65ad6e60f044bd25fbb92b46cca1f54d2357`, tree
+  `3ebebd652a12f0dbbe45d0f4a330dd5c8f21d638`. The isolated follow-up branch is
+  `codex/price-to-draft-acceptance-followup`. The exact machine-tested
+  implementation is commit `450b55375fa97fa60535e2249d1cfddd5b838c5e`,
+  tree `05ce96f32140e66c3089e856d220247d73b16904`. Claude's independently reviewed
+  candidate is commit `85242ba6919093933fc7b684406493945cf14bba`, tree
+  `2ede46ef2b3bba6e246fa81d3834ddb450bd3463`. The bounded regression test
+  candidate is commit `369e5efc22ecd076d81d9a08b91c0686443981e5`, tree
+  `1d7468c6549e6260e9ab36b4826e3dbe1b6d06e2`. The later closeout commit is
+  documentation-only and is identified separately in the review transport.
+- The owner accepted Claude's coordinated independent review at exact
+  `85242ba...`. Claude independently executed or verified authoritative
+  **823/823** with every abnormal counter zero, startup **10/10**,
+  selected-offer **6/6**, synthetic-price **7/7**, actual browser/recovery
+  **160/160**, distinct-cluster populated restore with byte-identical artifacts,
+  and fresh cleanup checks. These remain Claude's results at that exact target;
+  they are not relabeled as executions of the later follow-up.
+- The bounded follow-up retains four specific review proofs without changing
+  product behavior: A-1 selects a higher-ID, more-expensive offer through the
+  actual mapping/selection/Monday path and freezes only its ladder; B-1 has two
+  separate actual review-path negatives for each half-bound price-authority
+  state while preserving lawful legacy success; C-2 freezes nonzero Available
+  `2.0000` across two named locations and carries its time/run identity through
+  actual stored CSV despite a later live value of `17`; C-1 documents that the
+  below-minimum fee is already contained in aggregate `vendor_delivery_fee`.
+- On exact `369e5ef...`, affected focused modules passed **113/113** in
+  118.836s (log SHA-256
+  `6b167b1a830d440314e3ec50c9190eded3078c56d5d7eceb808463d52bbcef9e`),
+  the authoritative wrapper passed **827 discovered / 827 executed / 827
+  passed** in 1029.822s with every abnormal counter zero (log SHA-256
+  `69aa1938cd28ae3cc19b06b4d4916b7a9839ac3bfb251c09e03f8172b9c1cb4f`),
+  and startup passed **10/10** in 0.003s (log SHA-256
+  `5eef6e01d9377b779737bd712f324b0d67e4b63b4c371bee617609073ad34b47`).
+  The stock case is a separate regression, not part of the prior 160 browser
+  assertions; browser/recovery was not rerun for this test/documentation delta.
+- Parent-to-test-commit changes are confined to tests, the sum-derived runner
+  floors and one documentation file. `procurement/src`, `procurement/db` and
+  `procurement/config` retain exact tree IDs
+  `21466a109cf2faa387d1c7ceb083a625ba8acabb`,
+  `c6fd3e0459473ad479c106222a3b8d9746c0862a` and
+  `37fda861a54c6ab915ef97474e98f4e35b28fbf9`; runtime, migrations and
+  configuration are byte-identical. The original causal-red raw log and
+  original cleanup transcript remain absent and were not reconstructed.
+- The required frozen-candidate suite was run before follow-up implementation.
+  It discovered and executed all **823** registered tests, with **795 passes,
+  0 failures and 32 errors** in 992.768s. The first error was the demonstrated
+  compatibility defect: 013-only Monday fixtures lacked the nullable
+  `run_price_snapshots.source_price_id` lineage columns added by migration 016,
+  while shared review code selected those columns directly. The retained raw
+  log SHA-256 is
+  `d9e579c991e8a6a14faccb113d7f5989330fdf0dcca7ff738fb2f22a586940f0`.
+  Its separately run startup validation passed **10/10**.
+- The follow-up preserves the accepted price schema and Southern uploaded-book
+  path. It adds one code-pinned synthetic V3 mapping packet and an additive
+  multivendor fixture profile; it does not modify migrations or grant arbitrary
+  fixture authority. Browser actions create seven mapping decisions and five
+  selections. Six purposefully different purchasing inputs cover the selected
+  Southern bottle, a Western retail multipack, a Western individual bottle,
+  missing selection despite a usable legacy offer, a positive-loose-fee
+  blocker, and an allocated/excluded item. Southern alone uses the uploaded
+  replacement book; Western uses disclosed schema-valid pre-011 synthetic
+  CURRENT rows. Northern remains an unaffected control.
+- The final browser run passed **19 price + 81 multivendor + 20 source-restart
+  + 20 restored + 20 restored-restart = 160 assertions**. It produced exactly
+  two DRAFTs and three lines. Southern Variant 1001 was edited across its
+  uploaded BREAK tier to 2 cases / $60 merchandise / $60 total. Western Variant
+  4001 was edited across its 18-BT tier to 2 cases / $84; Variant 4002 was
+  accepted at 1 case / $18. Western merchandise was $102, its $120 minimum had
+  an $18 shortfall, and the $7 below-minimum fee was charged once, producing a
+  $109 vendor total. Grand merchandise was **$162**, fees **$7**, and DRAFT
+  total **$169**. Variant 4003 remained blocked for missing selected-offer head
+  without legacy fallback; Variant 4004 remained blocked for unresolved
+  positive loose-unit fee; Variant 4005 retained its zero-unit
+  `ROUTINE_EXCLUDED` recommendation and was immutably rejected.
+- New internal DRAFT CSV V2 lines and the review/DRAFT UI expose the run-bound
+  captured Available quantity, timezone-aware capture time, source inventory
+  snapshot-run ID, and canonical location-scope evidence. The accepted lines
+  freeze Available `0.0000` at `2026-10-05T12:00:00+00:00`; they do not read a
+  newer live quantity during export. Retired V1 runs keep the exact historical
+  25-column CSV renderer and stored packet bytes.
+- A supported populated V1 backup taken after DRAFT creation contains the exact
+  database dump and four storage members. It restored into a new owned
+  PostgreSQL 16 cluster using the same logical database name. Source and target
+  system identifiers are distinct (`7685939127348653914` and
+  `7685939307666866400`), while complete durable state SHA-256 is identical:
+  `fa62374e234522f43bd948d59c1786863a1dee1ecec397597278abf8807f8101`.
+  Authenticated restored and post-restart downloads preserved both vendor CSVs
+  and the 13-member review packet byte-for-byte. Exact artifact SHA-256 values
+  are `babbdab54dcbc7cec050d32abb6a64afa01a8497dc8eb9ea34ea17ccecd91c05`,
+  `3efef523da9ebf30cb71df8b528ec914d6c1c2a5e9da4315a68dc0037aabc353`,
+  and `60f35b489740a0a3f3533afd9c2479ff8a9dee3d54622d61de3882c5178c1598`;
+  replay retained
+  two POs, three lines and three artifacts without duplication. The V2
+  pre-application backup remains a separate contract and was not used as the
+  populated restore artifact.
+- The final authoritative wrapper on exact `450b553...` passed **823 discovered
+  / 823 executed / 823 passed** in 1032.763s. Failures, errors, skips, expected
+  failures and unexpected successes were all zero. The retained log is
+  `/home/runner/workspace/.ai-auth/codex/evidence/price-to-draft-final-validation-450b553-20260916T0130Z/full.log`
+  with SHA-256
+  `acbe37ac0f3c628e2035d1bdc6161116f3038d3bfd77c772f8506788c2280998`.
+  Startup validation separately passed **10/10**, log SHA-256
+  `b9c37738f7e36a217480772a37fa4a76f5531320ee39c8a363f9facbe1956630`.
+- Chronology correction: the previous hard stop was
+  `2026-09-15T11:15:34Z`; final source `20dd65ad...` at 07:54:24Z and accepted
+  price-browser records around 07:55Z preceded it, but the prior recovery backup
+  records `20260915T225242Z` and therefore occurred after that cutoff. The older
+  statement that all recovery work completed before the cutoff was unsupported.
+  The frozen archive and timestamps remain unchanged; no continuous work is
+  inferred for the gap. This follow-up used a new observed window beginning
+  `2026-09-15T23:53:21Z`, with implementation cutoff
+  `2026-09-16T02:53:21Z` and hard stop `2026-09-16T03:53:21Z`.
+- This is fabricated, loopback Linux, internal-DRAFT evidence only. It does not
+  establish commercial data authority, production forecasting/policy readiness,
+  deployment portability, native Shopify CSV acceptance, public/remote owner
+  access, PO release or ordering. Direct-SQL selected-offer enforcement remains
+  a known limitation. No remote, PR/CI, protected-checkout, deployment,
+  operational database, Shopify, supplier or order action occurred. Claude's
+  coordinated review is accepted for the exact synthetic candidate only; owner
+  usability acceptance, commercial approval, deployment approval and real
+  cutover remain absent.
+- Exact next boundary: preserve the tested implementation and documentation-only
+  closeout, expose one additive review transport, and stop. Any real/default
+  activation, commercial inputs, remote integration, deployment, Shopify write,
+  PO release or order requires separate design, review and owner authorization.
+
+### Synthetic selected-offer consumption — BOUNDED SYNTHETIC PASS / REAL CUTOVER BLOCKED
+
+- Work is isolated on `codex/mapping-monday-shadow-freeze`, based on owner-cited
+  checkpoint `22ab1cf800963a6d99e65eb210d8cfb1bbec0abd`, tree
+  `7c8da387d4e2b177dd3790763382247caa60914a`. The owner-approved bounded design
+  is `docs/superpowers/specs/2026-09-14-synthetic-selected-offer-consumption-design.md`;
+  its renewed implementation cutoff is `2026-09-15T01:29:54Z` and hard handoff
+  is `2026-09-15T02:29:54Z`. The original Sunday 09:00 delivery and the first
+  implementation window were missed; neither remains an active delivery date.
+- The current local candidate connects one isolated, attested synthetic
+  path: fabricated sealed supplier evidence -> human mapping approval ->
+  separate routine SELECT -> selected active VERIFIED STANDARD offer -> that
+  offer's independently seeded verified synthetic CURRENT BASE/BREAK ladder,
+  pack and vendor fees -> existing inventory/demand calculation -> separate
+  quantity review -> internal DRAFT -> existing 12-member frozen packet. With
+  two otherwise eligible active STANDARD offers, the legacy resolver is
+  deliberately ambiguous while the confirmed selected `SUP-001` offer alone
+  produces the recommendation. Missing or changed selected lineage blocks the
+  item; it never falls back to the usable legacy offer.
+- The default/real-disabled path remains byte-shaped as before: it omits the
+  selected contract and evidence, retains the legacy resolver, and does not
+  change old run, DRAFT or packet bytes. No migration or table was added. All
+  repository mapping, activation, recommendation-cutover and selected-input
+  policy flags remain false. A distinct supervised local-only capability is
+  re-attested against loopback PostgreSQL 16, exact roles/schema/contracts and
+  an owned `_test` or marked `_demo` database. Request data and a stored run
+  label cannot enable it.
+- The focused causal test first failed at the intended baseline: with a valid
+  confirmed selection and two eligible active STANDARD offers, the legacy path
+  ignored the selection, emitted `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`
+  and created zero recommendations. After implementation, all six new
+  selected-offer tests pass, covering the causal BASE-to-BREAK chain,
+  missing-head no-fallback, fresh-observer late rollback, late CLEAR refusal,
+  held-lock typed refusal and malformed-manifest/deadline refusal. The affected
+  modules passed **92/92**. Fresh owned-demo initialization and exact replay
+  verification both passed with two offers and four legal pre-011 CURRENT
+  price rows.
+- The authoritative clean-source wrapper passed **816 discovered / 816
+  executed / 816 passed** in 1049.228s, with zero failures, errors, skips,
+  expected failures or unexpected successes. It ran against owned loopback
+  PostgreSQL 16 at implementation commit
+  `08be4a86b927999ddb7e8a48938deec787bf864e`, tree
+  `7990fd45b48917c5c90168821ef1dbdd8e508a0b`; the retained log is
+  `/home/runner/workspace/.ai-auth/codex/evidence/selected-offer-validation-08be4a8-20260915T004310Z/full.log`
+  (SHA-256 `99fa95236f6cc03f346b92b0dfbef5036877aa6a5a0d5359ac07e9445c33ef8b`).
+- The focused causal fixture independently freezes the selected source price
+  IDs and run snapshot IDs, changes one reviewed line from one BASE-priced case
+  to two BREAK-priced cases, carries the exact final tier through review, DRAFT
+  reconciliation and packet evidence, and replays the run/DRAFT/packet without
+  duplication. The separate fresh-demo/browser fixture expects `SUP-001` BASE
+  `$12.00`, reviewed two-case BREAK merchandise `$19.00`, `$5.00` delivery fee
+  and one `$24.00` internal DRAFT. Real loopback Chromium passed **160/160
+  phase-one + 24/24 post-restart assertions**, with zero console/runtime
+  errors and no request outside `127.0.0.1`. The evidence root is
+  `/home/runner/workspace/.ai-auth/codex/evidence/selected-offer-browser-08be4a8-20260915T004135Z`;
+  summary SHA-256 is
+  `53f2ad15a8e501f05fec2f2d23ffae2ab554673e2c7838af8c3fe09a600a624e`,
+  database-state digest is
+  `30cfa94ccda17743c48c77441d78db1e4b1a149cbbdc1333fa3cc055c2a6b188`,
+  and the 12-member review ZIP SHA-256 is
+  `6355b8711ed762a000da75dc085d420735e4ca2d969c28d23d0540487d416c92`.
+  Browser replay completed without duplication before restart; after restart,
+  persisted state and both artifact re-fetches remained byte-identical.
+- This is synthetic implementation permission, not real supplier-data or
+  production activation. Direct SQL still lacks an independent trigger proving
+  recommendation offer = selected head. Real supplier authority and price
+  lifecycle, production identity/IdP, completed forecasting policy/FVA,
+  Shopify integration, PO release and ordering remain blocked and outside this
+  slice. No remote, PR/CI, protected checkout, deployment, operational database,
+  Shopify, supplier communication, real mapping/price approval, PO release or
+  order action occurred.
+- Independent read-only review of the backend chain and the final six-line
+  browser-auditor correction found no P0-P2 issue. The reviewer independently
+  checked the 39-file browser inventory, 160+24 assertions, both artifact
+  streams, packet membership, restart parity and database digest. This is a
+  bounded machine/reviewer pass for the isolated synthetic service/UI
+  connection; owner acceptance of the resulting evidence remains pending.
+- Exact next boundary: stop this task, preserve the recoverable candidate and
+  obtain owner acceptance of this checkpoint. Any real/default selected-offer
+  consumption requires a separately reviewed design with independent database
+  enforcement, real identity and approved real supplier/price inputs;
+  deployment, Shopify writes, PO release and ordering remain separately
+  unauthorized.
+
+### Persistent-mapping strict-acceptance descendant — BOUNDED SYNTHETIC PASS / FULL GOAL INCOMPLETE
+
+- The controlling code/test checkpoint is exact commit
+  `46833b9bf47aeccc7fa0d98451136dffe6101e7c`, tree
+  `93c514d937384663e1cceeddecc71c6bc19da858`, on isolated branch
+  `codex/mapping-acceptance-hardening`. It is a seven-file descendant of the
+  separately closed forecast-evidence checkpoint `5476268...`; the frozen
+  Sunday checkout remains clean at `64d8f74...` / tree `6900194...`, and the
+  protected connected checkout remains clean at `3a4704e...` / tree
+  `1986bd8...`. There was no remote, main, PR/CI, connected-app, deployment,
+  operational-database or Shopify mutation.
+- All specification-named persistent-mapping acceptance clauses now have
+  substantive executable proof: **39/39 PostgreSQL methods + 3/3 pure
+  methods PASS** in exact canonical order. The closure covers exact migration
+  replay and byte binding, failure atomicity, hostile schema/role topology,
+  immutable evidence and provenance, null/absent semantics, mapping and
+  selection idempotency/concurrency, stale-preview refusal, human-context
+  binding, immutable operational contracts, zero-authority upgrade, commit
+  uncertainty/recovery, and test-runner population enforcement. Independent
+  post-implementation review found no P0-P2 finding. This is acceptance of the
+  bounded foundation contract, not production or commercial readiness.
+- The implementation now treats ambiguous connection-level or process
+  exceptions observed from COMMIT as outcome-unknown, discards the dedicated
+  connection and never blindly replays; retryable, unique-recovery and
+  definitive database failures retain their separately typed paths. The
+  migration runner independently rejects direct, inherited,
+  transitive SET and mixed SET-to-INHERIT owner paths across schema, relation,
+  column and function privileges, and its public entry point supports the
+  reviewed staged maintenance-pair rotation without skipping installed
+  application dependencies.
+- Synthetic mapping packet V2 seals and persists explicit
+  `NOT_APPROVED` / `NOT_IMPORT_READY` source authority and import states. It
+  intentionally does not reinterpret or update preserved V1 demo rows; final
+  validation used a new owned `_demo` database and separate private runtime.
+  The accepted database contains exactly two V2 review batches/candidates,
+  both still `NOT_APPROVED` and `NOT_IMPORT_READY`.
+- Real Chromium on the clean exact implementation tree again passed **154
+  phase-one + 23 post-restart assertions**. The browser exercised fabricated
+  V2 intake, DEFER, exact existing-offer approval and separate shadow SELECT;
+  retired the fixed unbuilt V1 forecast run; prepared/reviewed its V2
+  replacement; separately confirmed a material quantity edit; built one
+  internal DRAFT for `$20.02`; replayed it without duplication; then restarted
+  the application and re-fetched the exact artifacts. There were zero non-DRAFT POs, Shopify
+  calls, releases or persisted spoof actors. Export remains
+  `INTERNAL_DRAFT_ONLY`; `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native
+  Shopify import was attempted or proven.
+- Mapping remains **SHADOW ONLY**. The accepted Monday recommendation did not
+  consume the newly reviewed mapping selection: it continued to use the
+  pre-seeded active STANDARD offer and CURRENT synthetic price. Selection
+  activation, scoped price lifecycle and the selected-offer-to-recommendation
+  cutover are disabled and unimplemented. Therefore this run does not prove a
+  causal supplier-evidence-to-priced-recommendation production chain.
+- Demand evidence remains the bounded emergency V2 correction. All 84 calendar
+  days remain `UNKNOWN`; model selection/FVA is `NOT_VALIDATED`, classification
+  and safety stock are `NOT_CALCULATED`, and stockout censoring is
+  `EVIDENCE_UNAVAILABLE`. Demand-evidence SHA-256 is
+  `8909585dcb7f294a8ca0aa32be9381e2a14ee8a988a70291ea6d852ba573d3e9`.
+- Fresh post-commit machine validation passed: startup **10/10** in 0.004s;
+  exact strict matrix **42/42** in 153.622s; affected set **195/195** in
+  222.124s; and one authoritative wrapper **809 discovered / 809 executed /
+  809 passed** in 996.897s on Python 3.13.11 and owned loopback PostgreSQL
+  16.9. Failures, errors, skips, expected failures and unexpected successes
+  were all zero. Each accepted invocation ran once with no automatic retry.
+  One earlier pre-commit full-suite invocation was manually interrupted after
+  review exposed the now-fixed public-runner maintenance-role transition; it
+  produced no accepted result and is not counted.
+- Browser durable-state SHA-256 is
+  `a6a40b0a69e5d754c072b5ab0412f01dc63cbd1461dea726689100a5db0e8076`.
+  Internal CSV and 12-member review ZIP SHA-256 values are
+  `ba5bde4f4eeb4a9d78617944ab9785f853361d9051a71c4eafffaa06ed211f79`
+  and
+  `7459aff6bb9bc8b7ab8ccdcc0a9694cb5e74a8082042d13a1a2a8686abba3b28`.
+  A real backup from `buffalo_mapping_46833b9_candidate_demo` restored into
+  new empty `buffalo_mapping_46833b9_restore_demo`; complete relation/sequence
+  state and both storage artifacts matched the same state evidence. Manifest,
+  database-dump and storage-archive SHA-256 values are respectively
+  `080b31d850923c90c732fd5a0b4d1242c34bfc97ae9477d2bdb7c31b2f938161`,
+  `1a435b81e71424a52bceba8ad90f5d77a004f3c3b9c086b6a000cc3fdc2382a4`
+  and
+  `f3e425ba4fe8e16dd453396e36e1f8d2ed20431499e7df0090c6991941aad292`.
+  Restored initializer replay returned `initialized:false`.
+- Exact accepted evidence roots are
+  `/home/runner/workspace/.ai-auth/codex/evidence/mapping-acceptance-validation-46833b9-20260914T010139Z`
+  and
+  `/home/runner/workspace/.ai-auth/codex/evidence/mapping-acceptance-browser-46833b9-final-20260914T012845Z`.
+  Startup/matrix/affected/full log SHA-256 values are
+  `8cbc2321...`, `dc3f0d39...`, `5d8e2668...` and `29f02744...`;
+  `ACCEPTANCE_SUMMARY.json` SHA-256 is `e37285d1...`; the independent recovery
+  record is `RECOVERY_VERIFICATION.txt`. The backup manifest is under
+  `/home/runner/workspace/.ai-auth/codex/mapping-acceptance-46833b9-runtime/backups/candidate-20260914T012928Z/manifest.json`.
+- The fabricated gate snapshot remains non-transferable:
+  `CATALOG_SYNC`, `SALES_BACKFILL`, `INVENTORY_HISTORY`,
+  `OPEN_PO_RECONCILIATION`, global `VENDOR_RULES` and one-vendor
+  `VENDOR_RULES` were PASS; `MAPPING_INTEGRITY` and `PRICE_COVERAGE` were WARN.
+  PO generation remained separately masked BLOCKED for
+  `SYNTHETIC DEMO / INTERNAL DRAFT ONLY`; these values grant no commercial or
+  production readiness.
+- Current states are `LOCAL_END_TO_END = PASS` for the bounded synthetic
+  descendant; `PERSISTENT_MAPPING_39_PLUS_3 = PASS` for the reviewed foundation;
+  `MAPPING_TO_MONDAY_CUTOVER = NOT_IMPLEMENTED`; `COMMERCIAL_DATA_READINESS =
+  NOT_APPROVED`; `PRODUCTION_RELEASE = BLOCKED`; `FULL_PRODUCT_REQUIREMENTS =
+  PARTIAL / INCOMPLETE`; and `GOAL = INCOMPLETE`.
+- The planned supplemental transport destination is
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Mapping_Acceptance_Hardening_Candidate_20260914.zip`.
+  It is not assembled at this documentation checkpoint. Once assembled, use
+  it only after verifying its separately reported outer SHA-256 and enclosed
+  recursive `SHA256SUMS`.
+- Exact next authorization boundary: local transport assembly and owner review
+  may complete without changing runtime behavior. Any mapping activation,
+  selected-offer recommendation cutover, scoped CURRENT-price lifecycle,
+  supplier/data authority, model/FVA/protection policy, DRAFT supersession,
+  remote integration, CI, deployment, Shopify action, PO release or real order
+  requires a separately reviewed design and explicit authority. The most
+  dependency-correct product slice is a reviewed shadow comparison/freeze of
+  selection-versus-legacy recommendation inputs; it must not silently activate
+  or alter order quantities.
+- The browser/Uvicorn processes are stopped and no public preview or tunnel
+  exists. Same-host restart instructions are in
+  `docs/SUNDAY_PURCHASING_ACCEPTANCE.md`. Generated secret values remain only
+  in the private mode-0600 files beneath the mode-0700 runtime root and are
+  excluded from source, evidence prose and the planned transport.
+
+### Prior forecast-evidence correction checkpoint — FROZEN PARENT / SUPERSEDED AS CURRENT CHECKPOINT
+
+The section below is retained as historical evidence for the separately closed
+`5476268...` checkpoint. Statements of “current” and “next” within it describe
+that earlier checkpoint; the strict-acceptance entry above is controlling.
+
+- The controlling current checkpoint is exact code/test commit
+  `1729647f0ea46a147cd33fd6d8f33e8914cbcfac`, tree
+  `315389603f3618cddfd95f748d131e3f6ba719b9`, on isolated branch
+  `codex/forecast-evidence-correction`. It descends from the separately frozen
+  Sunday package at `64d8f74ef0d01b87fe96a4c1972faf2dcc702375`
+  without modifying that checkout or transport. The protected connected
+  checkout remains clean at `3a4704e...` / tree `1986bd8...`; no remote, main,
+  PR/CI, connected-app, deployment, operational-database or Shopify state
+  changed.
+- The correction removes the unsupported conversion of a point-in-time
+  inventory zero/positive quantity or positive sale into a whole-day
+  `STOCKOUT`/`IN_STOCK` fact. New emergency runs use
+  `EMERGENCY_TRANSPARENT_V2`; their 84-day calendar, normalized sales
+  authority, signed raw 7/14/28 windows, point-in-time snapshot groups and
+  `UNKNOWN` availability states are frozen before fingerprinting and persist
+  identically in the run manifest, forecast diagnostics, recommendation
+  metrics and packet JSON.
+- The slice does not invent forecasting policy. Demand regime, selected model,
+  ABC, XYZ, in-stock velocity and safety stock remain `NULL`; model selection
+  is `NOT_VALIDATED`, classification/safety stock are `NOT_CALCULATED`, and
+  stockout censoring is `EVIDENCE_UNAVAILABLE`. Full model backtests/FVA,
+  empirical service-level protection, event/analog policy and commercial
+  source authority remain incomplete.
+- Checksum-pinned post-mapping migration 015 provides the guarded V1-to-V2
+  lifecycle. Active unbuilt V1 runs are read-only and return
+  `FORECAST_METHOD_RETIRED_REPREPARATION_REQUIRED`; an authenticated preview
+  and exact confirmation can append one retirement event plus one protected
+  audit and change only run status/stage to `FAILED`. New/changed V1
+  analysis/input, review, exception and PO/line records are blocked at the
+  database boundary. The sole child-write exception is the exact append-only
+  packet event/artifact insertion needed to package an already-built V1 DRAFT;
+  that DRAFT otherwise remains immutable, downloadable and packet-replayable,
+  cannot use retirement, and has no same-day supersession path.
+- Real Chromium on the clean exact tree passed **154 phase-one + 23
+  post-restart assertions**. It retired fixed synthetic V1 run
+  `00000000-0000-4000-8000-000000000901`, prepared a V2 replacement, retained
+  two point-in-time rows while keeping all 84 days `UNKNOWN`, exercised the
+  existing mapping/selection and mixed eligible/blocked review flow, built one
+  internal DRAFT for `$20.02`, downloaded/re-fetched exact artifacts and
+  replayed after restart. There were zero non-DRAFT POs, Shopify calls,
+  releases or persisted spoof actors. Export remains `INTERNAL_DRAFT_ONLY` and
+  `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
+  attempted or proven.
+- Browser durable-state SHA-256 is
+  `4f4a641815e396ae812938d1336f6688ec703d5ebea9d993e87891a9ce6452a5`;
+  demand-evidence SHA-256 is
+  `58d25db7a6dcf1177be637e62a683bf4f5b8d9174ebf89b8b2a63fa1f0ab332c`;
+  internal CSV and review ZIP SHA-256 values are `82c4318d...` and
+  `e5224953...`.
+- Offline lock verification resolved 22 packages. Startup passed **10/10**;
+  the exact affected set passed **185/185** in 144.964 seconds; and one final
+  authoritative DB-reaching run passed **809 discovered / 809 executed / 809
+  passed** in 871.428 seconds on Python 3.13.11 and owned loopback PostgreSQL
+  16.9. All abnormal counters were zero; each accepted suite invocation ran
+  once, with no automatic retry.
+- A real backup from `buffalo_forecast_1729647_candidate_demo` restored into
+  new empty `buffalo_forecast_1729647_restore_demo`. The complete database
+  relation/sequence state matched exact `4f4a6418...`; restored storage bytes
+  independently matched the manifest entries and artifact hashes
+  `82c4318d...` / `e5224953...`. Manifest SHA-256 is `cafe2e7c...`; dump and
+  storage archive hashes are `74c6a7f6...` and `4da1dae9...`.
+- The first pre-final restore rehearsal correctly refused a catalog mismatch
+  caused by PostgreSQL's semantically equivalent dump/restore rendering of
+  function search paths and non-semantic trigger parse locations. No restored
+  state was accepted. Commit `1729647...` narrowly canonicalizes those two
+  reviewed representations while retaining and hashing complete semantic
+  definitions. It accepts only exact legacy/current metadata provenance and
+  still requires the live catalog to recompute to `2fafe14a...` before and
+  after its SQL assertion. Independent review found no P0-P2 issue; semantic
+  search-path and trigger-operator tamper cases refuse. A final read-only
+  source/restored preflight record is retained as
+  `retirement-catalog-preflight.json`, SHA-256
+  `3953c77e8226148191cea69684d0808c48e7da669f358ef4fa0b1bb98327d8ac`.
+- Three correction-specific setup attempts are preserved separately and are not
+  accepted workflow/test runs. Browser setup root
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-browser-f2bdd16-final-20260913T174400Z`
+  stopped before server/workflow startup because the launcher interpreter lacked
+  Psycopg; its `server.log` SHA-256 is
+  `203a64b3eade7c17af6b34bf363b863b559a52f7afd9acf78b8adc193520d78e`.
+  Pre-final validation root
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-validation-450b485-20260913T175921Z`
+  retains a wrong-directory startup discovery with zero tests (log SHA-256
+  `e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce`)
+  and an offline full-suite setup that stopped with zero tests because the
+  download cache was unavailable (log SHA-256
+  `cb01aa23224e1abf899cd8d117516e352c717a0b6976743d610ddb4b8aface0e`).
+- Exact evidence roots are
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-browser-1729647-final-20260913T185846Z`
+  (summary SHA-256 `dc044c16...`) and
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-validation-1729647-20260913T183822Z`
+  (startup/focused/full log SHA-256 values `6f1aee17...`, `d0075506...`,
+  `bd091a97...`). Recovery manifest is under
+  `/home/runner/workspace/.ai-auth/codex/sunday-forecast-1729647-runtime/backups/candidate-20260913T190000Z/manifest.json`.
+  The planned owner transport destination is
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Forecast_Evidence_Candidate_20260913.zip`
+  and is not yet assembled at this documentation checkpoint. Once assembled,
+  it must be checked against its separately reported SHA-256 plus enclosed
+  recursive `SHA256SUMS` before use.
+- Conservative mapping evidence remains unchanged: all 42 named methods are
+  green, but only PG rows 7, 11, 34 and 39 were previously accepted as full
+  strict clauses. Do not convert registration/execution into a full 39+3
+  acceptance claim.
+- Current states: `LOCAL_END_TO_END = PASS` for this bounded synthetic
+  descendant; `DEMAND_EVIDENCE_CORRECTION = PASS` for emergency V2;
+  `COMMERCIAL_DATA_READINESS = NOT_APPROVED`; `PRODUCTION_RELEASE = BLOCKED`;
+  `FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`; `GOAL = INCOMPLETE`.
+- The synthetic demo's canonical gate snapshot was `CATALOG_SYNC = PASS`,
+  `SALES_BACKFILL = PASS`, `INVENTORY_HISTORY = PASS`,
+  `OPEN_PO_RECONCILIATION = PASS`, global and one-vendor `VENDOR_RULES = PASS`,
+  `MAPPING_INTEGRITY = WARN`, and `PRICE_COVERAGE = WARN`. These are fabricated,
+  non-transferable demo facts; the operational projection remained
+  `PO generation = BLOCKED — SYNTHETIC DEMO / INTERNAL DRAFT ONLY` and grants
+  no commercial or production readiness.
+- Exact next boundary: after assembly, owner/external review of the frozen
+  transport, then
+  owner decisions for a provenance-bearing full-day availability source and
+  missing forecasting parameters. Private-real sources, model/FVA/protection,
+  scoped price lifecycle, DRAFT supersession, strategic economics and browser
+  breadth must close before any full-product claim. Remote integration, CI,
+  deployment and every Shopify/PO/order action require separate authority.
+- Same-host restart/launch commands and exact limitations are in
+  `docs/SUNDAY_PURCHASING_ACCEPTANCE.md`. The browser/Uvicorn processes were
+  stopped; no public preview or tunnel exists. Candidate secrets remain only
+  in the mode-0600 files under the private mode-0700 runtime root and are not
+  included in source, evidence prose or the planned transport.
+
+### Prior Sunday local purchasing candidate — FROZEN PARENT / SUPERSEDED AS CURRENT CHECKPOINT
+
+The section below is retained as historical evidence for the separately frozen
+`64d8f74...` parent package. The forecast-evidence correction entry above is the
+controlling current boundary.
+
+- Under contract `BUFFALO-SATURDAY-PURCHASING-COMPLETION-2026-09-12`, work
+  preserved reader/QA I0 `5f86eee6...`, reviewed merge-hook safety
+  `9cbbf368...`, reviewed persistent-mapping design `b0c8d3fe...`, and the
+  separately packaged Wright correction `e0bd6ce6...`. Work was isolated from
+  base `f4f376442b8d019bd2418d74bb8766d0739c73f4` on branch
+  `codex/sunday-purchasing-release-candidate`, with no remotes, disabled hooks
+  and disabled default push. The protected connected checkout remained clean
+  at `3a4704e...` / tree `1986bd8...`.
+- Exact code/test candidate
+  `802efc8147693d0de65d5636a0c1607364b5dd4f`, tree
+  `843959cd3598eba12c6899bb1a003fad6a1e1003`, implements the reviewed
+  persistent-mapping foundation and its provisional migration 014, fabricated
+  package intake, append-only mapping/rejection/selection services, a
+  loopback-only named-session/CSRF boundary, server-paged mapping UI, the
+  existing Monday review/DRAFT flow, synthetic initialization, a supervised
+  launcher, real same-host backup/restore, and a two-phase Chromium auditor.
+  All mapping read/write flags remain server-enforced; activation, selected-
+  offer recommendation cutover and policy mapping remain disabled.
+  `802efc8...` descends from the previously tested `6ebe829...` checkpoint and
+  adds top-level `TEST DATA — NOT FOR ORDERING`, `SYNTHETIC_DEMO` and explicit
+  fabricated-authoritative-format disclosure to standalone mapping evidence;
+  it grants no new authority.
+- A stale launcher catalog binding was exposed by the first browser database
+  preflight: migration marker/contract were exact, but the pinned catalog
+  signature was an older `98f6...` value. It was corrected to the installed
+  and freshly recomputed `5a9fff00...` value, pinned by the existing unit
+  method, focused-tested, and independently re-reviewed. A second preflight
+  stopped before server/browser startup because the scrubbed PATH omitted the
+  installed Chromium/Node locations. Both failed roots are preserved as setup
+  evidence; neither performed an acceptance run.
+- The accepted real browser run is bound to exact commit/tree above and
+  reverified a clean all-files validation clone at completion. Phase one passed 126
+  assertions and phase two passed 23 assertions after a real application
+  process restart. It used only fabricated owner-demo data on PostgreSQL 16.9
+  at `127.0.0.1`; runtime/UI/API responses were conspicuously
+  `TEST DATA — NOT FOR ORDERING` and masked operational PO authority while
+  preserving canonical diagnostic facts separately.
+- Observed durable effects were exactly two review batches/candidates, a DEFER
+  and a LINKED_EXISTING APPROVE decision, one separate SELECT event/head with
+  shadow `MATCH`, one Monday run, one eligible recommendation, one still-OPEN
+  blocked variant with a RUN_ONLY exclusion, one MATERIAL edit confirmation,
+  and one internal DRAFT/line for Synthetic Southern. The DRAFT was two cases
+  / 12 units with merchandise and PO totals of `$20.02`. There were zero
+  non-DRAFT POs, zero persisted spoof-actor rows, zero Shopify calls and no
+  release action.
+- Downloaded artifact hashes were
+  `7924b9a999a6a70a295b6589764e6a2d28d1511c6ee43fe485461ede6af015ea`
+  for the internal CSV and
+  `68c53a5c05a01b317e4a30a935a083a13a4bbc655d2aba72e7e2d3ce3a49c00f`
+  for the 12-member review ZIP. Both were re-fetched and hash-verified after
+  restart. Two separate mapping-evidence JSON downloads remained metadata-only
+  and review-only, and each carries an explicit top-level synthetic safety
+  label and fabricated-source disclosure. Export remains
+  `INTERNAL_DRAFT_ONLY` with
+  `SHOPIFY_PO_CSV_FORMAT_NOT_LIVE_VALIDATED`; no native Shopify import was
+  attempted or proven.
+- A real PostgreSQL custom-format dump and private storage archive were created
+  with sessions/secrets excluded, then restored into a new empty owned
+  `buffalo_802efc8_restore_demo` database. The complete relation and sequence
+  inventories, stored artifact bytes and durable state matched exact SHA-256
+  `80ffbb0786cb748e58167e4963f13b19764b1eda847068a0d331f7b3496e9fbb`
+  before backup and after restore. This is same-host recovery evidence, not an
+  off-host or host-replacement backup claim.
+- Cached `uv 0.12.3` validated the lock (`Resolved 22 packages`). The executed
+  Python 3.13.11 environment's five direct project dependencies match the lock.
+  Startup hardening passed **10/10**; the final focused set passed **77/77** in
+  67.188 seconds; and one authoritative run against owned loopback PostgreSQL
+  16.9 passed **788 discovered / 788 executed / 788 passed** in 827.302 seconds.
+  Failures, errors, skips, expected failures and unexpected successes were all
+  zero. Two preserved setup attempts ran zero tests: offline `uv run` lacked a
+  cached HTTPX wheel and isolated repository `.venv` lacked Psycopg. The
+  final lock-check setup also stopped before resolution because the scrubbed
+  PATH omitted Python 3.13. The accepted runs used the already-installed
+  dependency-matching interpreter under `env -i`; there was no network
+  fallback, CI run or automatic CI retry, and the accepted DB-reaching complete
+  suite ran once.
+- Complete-suite fixture teardown removed the shared owned-cluster synthetic
+  SET-role membership. Only the exact reviewed SET-only
+  `qa_release_login` to `qa_mapping_owner` edge was restored; a final read-only
+  connection re-proved session/effective role, database, loopback PG16 and the
+  unchanged `80ffbb07...` durable-state hash. No production role changed.
+- Accepted browser evidence is under
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-purchasing-browser-802efc8-final-20260913T102200Z`;
+  its summary SHA-256 is `f941ce3bb9bc0c35b608964eb62a9f06faaebc6954421da809084002c4836dd1`.
+  Accepted focused/startup/full logs are under
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-purchasing-validation-802efc8-20260913T102300Z`
+  with focused/startup/full SHA-256 values `48531a2b...`, `8cbc2321...` and
+  `722fc32e...`. Backup manifest SHA-256
+  is `cd29779b...` under the private runtime backup
+  directory. Transport copies and complete hashes are recorded in the
+  owner-facing artifact index. The final transport is
+  `/home/runner/workspace/.ai-auth/codex/artifacts/Buffalo_Sunday_Purchasing_Candidate_20260913.zip`,
+  exposed through the final Codex file link.
+- The 39 named PostgreSQL mapping methods plus three pure methods all execute
+  green, and independent review found no production source defect in the final
+  mapping fixes. However, independent strict clause review accepts only
+  PostgreSQL rows 7, 11, 34 and 39 as full PASS; the other 35 PostgreSQL rows
+  and pure P1–P3 remain PARTIAL. Do not describe 42 green methods as execution
+  of every clause in the reviewed 39+3 matrix.
+- Browser scope was deliberately narrow: one regular vendor/offer/price, one
+  eligible and one blocked variant. Private V5/S1 inputs, corrupted package
+  cases, mapping breadth/concurrent browser actions, price-book/vendor-rule
+  mutations, CURRENT/FUTURE/carry/deal cases, full forecast portfolio,
+  one-bottle/receipt cases, BT/CS/assortment/combo and multi-vendor scenarios
+  were not all browser-run. The implementation still identifies its forecast
+  as `EMERGENCY_TRANSPARENT_V1`; model-selection/FVA and full ABC/XYZ/seasonal
+  strategy remain incomplete, strategic buying stays evidence-only, and
+  immutable same-day DRAFT supersession is not implemented.
+- Final status is therefore: `LOCAL_END_TO_END = PASS` for the bounded
+  synthetic vertical; `COMMERCIAL_DATA_READINESS = NOT_APPROVED`;
+  `PRODUCTION_RELEASE = BLOCKED`;
+  `FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`; and
+  `GOAL = INCOMPLETE`. No main/remote ref, PR, GitHub Actions run,
+  connected-app file, Replit setting, deployment, publication, operational DB, Shopify,
+  supplier, price activation, PO release or real order changed.
+- Exact next boundary: owner/external review of the frozen transport and matrix
+  gaps; then physically separate private-real source review and fresh real
+  catalog/sales/inventory/incoming/vendor/mapping/price evidence. Close forecast,
+  price lifecycle, supersession and missing browser scenarios before claiming
+  the full product. Remote integration, CI, receiver installation, deployment
+  and any Shopify/order action each require later explicit authorization.
+- Launchability is local-only. With the preserved/restored owned PostgreSQL 16
+  demo database running, use the exact `serve` command and private runtime root
+  recorded in `docs/SUNDAY_PURCHASING_ACCEPTANCE.md`, then browse on the same
+  host at `http://127.0.0.1:8765/`. The acceptance server was stopped; no
+  public preview or tunnel remains. The owned loopback PostgreSQL cluster was
+  stopped after final launchability readback; its private host-local data root
+  remains for the recorded restart command.
+
+### Overnight PR #23 CI and prospective reader/QA integration — HOSTED GREEN / LOCAL GREEN / NOT MERGED
+
+- Under contract `BUFFALO-OVERNIGHT-PR23-INTEGRATION-EXTRACTION-01`, PR #23's
+  source was advanced once by ordinary fast-forward from exact `ec71fe9c` to
+  the reviewed correction `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`.
+  Exact `main` remained `f308ac666a2377f540e528bc873463daecc20cf8`;
+  the PR remains draft and unmerged.
+- The sole fresh pull-request run is `34667397483`, attempt `1`, job
+  `103481989320`. GitHub reports the run, job, lock/install, startup, complete
+  Procurement suite, post steps, and job completion all `success` at source
+  head `48e0e2e`. The corresponding live pull merge ref is
+  `66ec83c92b5bf5eae461f4a9bcacca5ef62dfe05`, with ordered parents exact main
+  then exact source and tree `b181c02d1d0ffbabc2142c7cf91d146e00f272f4`,
+  identical to the reviewed source tree.
+- The hosted run-log archive is not public: its endpoint returned HTTP 403 and
+  the public job page requires sign-in. Therefore the raw hosted log and its
+  printed `602/602` summary were not independently retained. The exact tree's
+  reviewed/static population is 602 and its fail-closed runner cannot return
+  success with a skip or abnormal result; this is stronger than a badge-only
+  observation but retains the raw-log limitation. No rerun was requested.
+- A push-disabled private scratch clone produced prospective merge I0
+  `99d77b46555a3b1204dfda93907090e0f28dca26`, tree
+  `190722472a0e198200321bf063349dcce1f214f2`, with ordered parents exact
+  correction `48e0e2e...` then full supplier-reader/QA head `a49f4d1...`.
+  The latter includes the complete reviewed reader/follow-up ancestry through
+  `a056e111...`; no intermediate commits were separately cherry-picked.
+- The only textual conflicts were `docs/CODEX_HANDOFF.md` and
+  `procurement/tools/run_tests.py`. Resolution retained both handoff histories,
+  all server-address safety logic, all prior module floors, the five supplier
+  module floors `30/9/15/29/16`, Monday `54`, Phase 4 corrective `70`, runner
+  `24`, and the sum-derived global floor. One integration-only QA assertion was
+  mechanically changed from its branch population `686` to the independently
+  discovered union `701`; no test was removed or weakened.
+- Exact I0 validation used Python 3.13.11, pinned `uv 0.12.3`, and the exact
+  digest-pinned PostgreSQL 16 image on owned host networking. Startup passed
+  `10/10`; runner plus supplier focus passed `123/123`; Monday passed `54/54`;
+  static discovery registered exactly `38/38` modules at `701/701`; and the
+  single authoritative full run passed **701 discovered / 701 executed / 701
+  passed** in 766.975 seconds. Failures, errors, skips, expected failures, and
+  unexpected successes were all zero. Client and server addresses were
+  `127.0.0.1`, `monday_synthetic_ready` was verified before fixture DDL, and
+  the owned PostgreSQL container was removed successfully.
+- Bounded independent static review returned mechanical/code **PASS** with no
+  P0/P1 finding. Its sole P2 requested this exact current entry and a formatting
+  correction, now applied in this later documentation-only handoff.
+- I0 is a **PROSPECTIVE / NOT_MAIN / NOT_GITHUB_CI combined candidate**. It is
+  not a release, persistent-mapping implementation, approval, or operational
+  authority. The next in-scope action is local started-server/Chromium
+  acceptance on this exact combined code, followed separately by the bounded
+  offline Wright extraction prototype. No main merge, deployment, PR creation,
+  additional Actions run, production/Shopify connection, mapping or price
+  approval, supplier action, CURRENT activation, or order is authorized.
+### Automatic merge-hook safety remediation — LOCAL TESTED CANDIDATE / NOT INSTALLED OR PUSHED
+
+- The owner accepted the earlier deployment-isolation STOP and authorized one
+  narrow local remediation. The original request is 5,124 bytes / SHA-256
+  `bc9fc9b2ac933c70acc353c00cc1be6530b8f67693d3a9f4414c171484c05cfd`;
+  consolidated steering is 20,571 bytes / SHA-256
+  `3b6a79e21a4615b0a9088c6bfb0fd2ee7b6ad060e8e6d2e06cc72feabba65598`.
+- Work used a separate plain scratch clone on
+  `codex/merge-hook-safety-remediation`, created exactly from
+  `48e0e2e832fbfd9f45877923eeaba64c9294b0b0`, tree
+  `b181c02d1d0ffbabc2142c7cf91d146e00f272f4`. The clone has independent Git
+  metadata, no remotes, `remote.pushDefault=disabled`, and an empty private
+  `core.hooksPath`. The connected checkout's files, HEAD `3a4704e...`, and tree
+  `1986bd8...` remained clean and unchanged. Final reconciliation nevertheless
+  found that its local branch label had been switched at
+  `2026-09-12T22:55:08Z` from
+  `codex/wright-description-scope-remediation` to
+  `codex/wright-structural-scope-remediation`; both local labels point to the
+  same commit. This Git-metadata switch was an isolation-process deviation. It
+  was not silently reversed and caused no file, commit, remote-ref, sync,
+  restart, or candidate-installation change.
+- Exact implementation commit
+  `9befc0d280896f3f57f4fa482923120ae1163c79`, tree
+  `7da5a685485a02054788918cf9f301fd18ea789f`, has the required base as its
+  sole parent. It changes only `.replit`, `scripts/post-merge.sh`,
+  `procurement/tests/test_automatic_merge_safety.py`, and the new exact module
+  floor in `procurement/tools/run_tests.py`; this handoff is the fifth and only
+  documentation path in the complete candidate.
+- `.replit` removes only the four-line top-level `[postMerge]` stanza and its
+  separator. The resulting valid TOML is 1,017 bytes / SHA-256
+  `651f3048271498471335f90dac914d6fb125a38a28f73d28dd5703a03f963814`;
+  all deployment build/postBuild, run workflows, agent, Nix, and comments are
+  byte-identical. The retained compatibility script is executable mode 0755,
+  SHA-256 `a24b2fe99208c420037a19d7bb0d17b434b7dcb846f20bb4eada339fc8fe5e1e`,
+  and contains only `/bin/sh`, literal `printf` of `Automatic post-merge
+  actions are disabled.`, and `exit 0`. It performs and claims no install,
+  migration, database, network, application, deployment, or forwarded action.
+- Ten new stdlib tests pin the exact TOML transformation, exact script bytes
+  and mode, absence of any repository workflow reference, and direct
+  invocation under constructed empty/synthetic environments. Missing, empty,
+  and synthetic `DATABASE_URL`, hostile extra arguments, `ENV`/`BASH_ENV`, and
+  repeated calls all return the same fixed output; fake package, database,
+  network, application, and deployment executables never run, and synthetic
+  secret-like values never appear. Focused result: **10/10 PASS** in 0.030
+  seconds. `test_automatic_merge_safety.py: 10` is registered while the global
+  floor remains `sum(REQUIRED_MODULE_MINIMUMS.values())`.
+- Startup validation passed **10/10** in 0.006 seconds. The one complete
+  authoritative suite discovered/executed/passed **612/612** in 764.184
+  seconds with failures, errors, skips, expected failures, and unexpected
+  successes all zero. It used Python 3.13.11, pinned uv 0.12.3 in offline mode,
+  and an owned PostgreSQL 16.10 `procurement_test` instance with client
+  loopback verified and server address `127.0.0.1`; its directory and process
+  were absent after cleanup. Two preserved pre-test setup attempts executed no
+  tests: one lacked an explicit Python locator and one found an offline wheel
+  absent from cache. The passing run used a private copy of the already
+  lock-matching environment and no network.
+- Evidence is mode 0600 under
+  `.ai-auth/codex/evidence/consolidated-merge-hook-wright-20260912T224620Z/packet-a/`.
+  Focused/startup/full log SHA-256 values are respectively
+  `6833eee6810c8dcfd3926bb11337966182ccd20c3e071cda86ed87897ba9ff8c`,
+  `67aa7963919dca08a76bd01fb733289c46d8c14503a4bbe7e4fe61a7b8301025`,
+  and `43a2bd858bd7d3add5475efa6f4cad4d3e084e7b728e650f3a6ec0588329d8fa`.
+- A bounded read-only challenger found no P0/P1/P2 source or test defect. The
+  host's ordinary ambient shell does contain credential variable names; no
+  value was read or printed. Clone creation, every material writer/test/freeze
+  command after that fact was surfaced, and each hook subprocess used explicit
+  `env -i` or a constructed environment. This is process isolation evidence,
+  not a claim that the ambient host environment is uncredentialed.
+- **Concrete receiver inventory:** the local proposed repository
+  neutralization is verified, and installation in the one inspected connected
+  checkout is **VERIFIED OFF** because its exact files still contain the old
+  registration and mutating script. Whether that checkout is the loaded source
+  for either exact app, and each app's installed/platform-loaded/cached state,
+  are **NOT EXPOSED**. The sole GitHub Actions workflow is **VERIFIED ON** for
+  PRs to and pushes on main, while deployment/operational-database mutation
+  from that workflow is **VERIFIED OFF**. GitHub webhooks/installed-app settings
+  are **NOT EXPOSED**.
+- Original app `Buffalo Procurement System`, replId
+  `3ffc2cc4-b7c3-478b-999d-8214873cceae`, and live deployment
+  `abcc03bd-9cd4-47fa-8f3e-9b198156c4f9` are **VERIFIED ON**. Its installed
+  SHA/config, automatic GitHub sync, loaded/cached hook, automatic publication,
+  schedules/webhooks, and hook-context `DATABASE_URL` are **NOT EXPOSED**.
+  Historical authorized application paths prove operational database access
+  existed, not that this hook receives it. Sibling `Buffalo Procurement System
+  (1)`, replId `51491277-e96e-4466-9d9e-b9a6f23a79ea`, is a **VERIFIED ON**
+  possible receiver whose current deployment is **VERIFIED OFF**; its checkout,
+  sync/publication settings, cached config, and credentials are **NOT EXPOSED**.
+- No screenshot bytes were present in the supplied attachment directory. The
+  owner-described image is retained as testimony only: it shows the Wright
+  branch/upstream, a clean status, a 19-hour-old fetch, and Sync/Pull/Push plus
+  a closed settings menu. It does not identify an app/replId, exact SHA,
+  current synchronization, disabled automation/hook state, or deployment
+  source/revision, and it does not show PR #23 merged.
+- **Safe future installation, not executed:** first obtain administrator/UI
+  evidence placing both exact replIds in source-change quarantine, with
+  automatic GitHub sync/import and automatic publish/deploy-on-source-change
+  explicitly OFF. Without pull/merge/sync/restart/publish, inspect and preserve
+  each actual checkout; install and hash-verify the inert script first through
+  a non-Git path, then remove/hash/TOML-verify the installed `.replit` stanza.
+  If loaded/cached hook state cannot be read back without restart, retain the
+  quarantine and stop. Only then overlay the other three reviewed files. A
+  later repository push requires separate authorization, review, and fresh
+  exact-candidate CI; re-enabling sync, main merge, or publication remains a
+  separate boundary.
+- PR #23 remains on hold. This local candidate changes its reviewed tree and
+  cannot reuse its current review/CI checkpoint. No remote ref, PR, CI,
+  connected-app file, platform setting, deployment, operational database,
+  Shopify, mapping/price, maintenance SQL, supplier, or order action changed.
+  The consolidated task may proceed only to the separately isolated local
+  Wright structural remediation; this candidate itself stops before delivery.
+
+### PR #23 server-side-loopback CI remediation — TESTED / REVIEW PASS / FRESH GITHUB CI PENDING
+
+- The owner-supplied diagnostic kit was verified before use. The outer ZIP is
+  138,223 bytes with SHA-256
+  `1bde7414c04244243047ecbbec74abf2d96042b7c238640c45aa335e4d31b2f8`;
+  all seven payload members listed in `SHA256SUMS.json` match. Its original
+  unmodified Actions-log
+  archive is 120,003 bytes with SHA-256
+  `e0e083a4881c0ab56192c1d7628b23eb7de676a199526b55cb2d231580d94a56`;
+  the raw main log has SHA-256
+  `20a1baafc9e4fb2ed819c6c96521f86b2e57a1de27e06f5f619139e5e0eb3cf2`.
+  The archive remains outside Git.
+- Original Actions run `34185466802`, attempt 1, job `101932809520`, checked
+  out `f7bbb45a31953eccd4ec5016269057e9e2c003d3`. That merge checkout and exact PR
+  source `ec71fe9c5a6f13832a8cad65b065be9747010486` share tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. The complete log proves
+  **599 discovered / 599 executed / 562 passed / 11 failures / 26 errors** in
+  958.285 seconds, with every other abnormal counter zero. All 37 abnormalities
+  were in `MondayWorkflowPostgresTests` and repeatedly surfaced
+  `CURRENT_SALES_COVERAGE_UNPROVEN`; startup passed **10/10** and the Phase 4
+  corrective module's 70 entries all passed. This was not a timeout.
+- Work was isolated on `codex/pr23-ci-loopback-remediation`, created at exact
+  PR source `ec71fe9c`. The reviewed implementation commit is
+  `07ba389fd6ea956890bcbea2e53b5bc8036a8788`, tree
+  `c4e428901099d784e2fc4be446142b569e2b43db`, with that source as its sole
+  parent. It changes exactly seven CI/test-harness files: the Procurement CI
+  workflow, deterministic test runner, shared PostgreSQL test support, Monday
+  workflow tests, two existing database-safety mock fixtures, and runner
+  self-tests.
+- Real disposable reproduction used the workflow's exact digest-pinned
+  PostgreSQL 16.14 image. Through the old default bridge and published
+  loopback client port, PostgreSQL measured `inet_client_addr=172.17.0.1` and
+  `inet_server_addr=172.17.0.2`; server-side loopback was false. The full Monday
+  module then reproduced the original distribution exactly: **54 executed / 17
+  passed / 11 failures / 26 errors**. Four representative synthetic-path tests
+  failed while the canonical-sales control passed. This is local measured
+  topology evidence, not a claim that the supplied original Actions log
+  recorded `inet_server_addr()`.
+- With the same image on owned Linux host networking and PostgreSQL explicitly
+  bound to `127.0.0.1`, both client and server addresses measured
+  `127.0.0.1`. The same representative set passed **5/5**, including the
+  canonical-sales control, and the complete Monday module passed **54/54**.
+  The workflow now creates that loopback-only disposable topology at a generated
+  port with a generated credential that is not logged and tmpfs data, validates URL,
+  database name, PostgreSQL major, and server address before suite work, and
+  removes only the captured owned container ID while preserving the original
+  test exit status. The timeout remains 20 minutes.
+- Generic test-database validation now reports
+  `client_url_loopback=verified` separately from `server_address`; it does not
+  reject bridged databases globally. The Monday PostgreSQL class alone opts
+  into the unchanged runtime server-side-loopback contract before any fixture
+  DDL. A negative real bridge check collapsed the former cascade to one
+  class-level error with 51 PostgreSQL Monday tests unexecuted and the measured
+  server address reported; the three pure Monday tests are outside that class.
+  The runtime synthetic authority check itself is unchanged.
+- Three substantive runner tests were added: generic server-address recording
+  without global rejection, exact Monday acceptance of `127.0.0.1`/`::1` plus
+  bridge rejection, and static workflow ownership/topology checks. No existing
+  test method, skip policy, timeout, assertion, or floor was removed or
+  weakened. `test_test_runner.py` rises from 21 to **24** and the sum-derived
+  global floor rises from 599 to **602**; Monday remains **54**.
+- Candidate validation passed: runner self-tests **24/24**; focused affected
+  cases **5/5**; Monday **54/54**; pinned-uv startup hardening **10/10**; and
+  one full run through the workflow's final-step topology completed in 751.199
+  seconds at **602 discovered / 602 executed / 602 passed**, with failures,
+  errors, skips, expected failures, and unexpected successes all zero. An
+  earlier material-candidate run exposed four stale three-column database mock
+  rows (**598 passed / 4 errors**); only those mock rows were extended with the
+  newly queried address, their fail-before-DDL assertions then passed **4/4**,
+  and only the later 602/602 run is accepted. YAML parsing, Python compilation,
+  `uv 0.12.3` lock validation, `git diff --check`, added credential-marker
+  review, and owned-container cleanup also passed.
+- Local execution used host `uv 0.9.24` for the short workflow setup/preflight
+  snippets; the authoritative suite wrapper detected that mismatch and ran the
+  suite through `uvx`-provided **uv 0.12.3**, and startup/lock validation was
+  separately repeated with explicit uv 0.12.3. The hosted workflow installs uv
+  0.12.3 before these snippets, but only fresh Actions execution can prove that
+  hosted path. Local evidence is not reported as fresh GitHub CI.
+- Two independent static reviewers returned **PASS** with no P0/P1/P2 findings
+  on exact implementation commit `07ba389f`. They independently confirmed the
+  owned cleanup/credential boundary, targeted rather than global preflight,
+  exact test floors, preserved canonical controls in the corrected topology,
+  and byte-identical protected scope. Static review is not execution evidence.
+- Product runtime (`procurement/src`), schema and migrations
+  (`procurement/db`), canonical authority, Master Plan, `rules.toml`, supplier
+  readers, `scripts/procurement-tests`, `uv.lock`, and `pyproject.toml` are
+  byte-identical to `ec71fe9c`. Production database connections/writes,
+  Shopify calls/writes, mapping or price approvals, persistent-foundation SQL,
+  supplier actions, and PO/order actions were all **0**. No existing PR branch,
+  PR metadata, Actions run, merge target, deployment, or operational state was
+  changed.
+- **Exact next authorization boundary:** stop at this tested remediation
+  handoff. A separately authorized integration must preserve PR #23 history,
+  apply the reviewed child without pushing directly to the preserved source by
+  accident, and then obtain fresh exact-head GitHub CI. Until that CI is
+  reviewed, this is a **TESTED CI REMEDIATION — NOT INTEGRATION OR DEPLOYMENT
+  APPROVAL**. No PR change/retry, merge, deployment, production connection,
+  Shopify action, supplier communication, or PO/order action is authorized.
+
+### Overnight unblock and supplier-format regression preparation — COMPLETED / STOPPED AT HANDOFF
+
+- The one bounded window began at `2026-09-11T03:56:29Z`, ended at
+  `2026-09-11T05:19:00Z`, and had a hard deadline of
+  `2026-09-11T11:56:29Z` with
+  final reserve beginning `2026-09-11T10:41:29Z`. Work stopped early because
+  every eligible packet was completed or reduced to an exact external
+  dependency; there was no deadline overrun.
+- New reviewable outputs are: the frozen maintenance-identity correction;
+  an exact PR #23 failure-evidence dossier; a reproducible prospective
+  integration tree and handoff-conflict proposal; an executable fabricated
+  supplier-format conformance corpus with a presence-aware pure helper; and a
+  provider-neutral identity/evidence/supplier-configuration preview. Private
+  evidence is under
+  `.ai-auth/codex/evidence/overnight-20260911T035629Z/`; it remains host-local
+  and has no proven off-host backup/readback.
+
+| Packet | Terminal status | Exact boundary |
+| --- | --- | --- |
+| A — maintenance identity | `DONE AS STATIC DESIGN / EXECUTABLE PROOF UNRUN` | Frozen local/origin branch `codex/persistent-mapping-foundation-design` at `b0c8d3fec8ec57e57881e91615cc6f7c3cf75b4d`, tree `251643acdf6aa68c02241d198eb5ad96edba54c4` |
+| B — PR #23 CI | `BLOCKED_WITH_EXACT_DEPENDENCY` for root cause | Existing attempt-1 job log for run `34185466802`, job `101932809520`, must come from an authorized Actions reader |
+| C — integration rehearsal | `DONE AS REHEARSAL / NOT_MERGED / NOT_GITHUB_CI` | Hypothetical commit `d5ee31dd0728ba98141f2083075dca92dbb1189e`, tree `c9fc8959d5864ee67331d8c972e3671f4a92f8fd`; reconstructable from a verified small bundle |
+| D — source-format regressions | `DONE AS SYNTHETIC QA PREPARATION` | Code candidate `ff58fdfe6a66864c088eac8d13b97f2686ec92e2`, tree `21658016a03d03c706a43824ea4aa69a42817711`, exact parent `a056e111...` |
+| E — prerequisite previews | `DONE AS DRAFT / UNPUBLISHED / FAIL-CLOSED` | No provider, account, policy, role, schedule, or operational authority selected |
+
+- **Packet A:** the two-document-only delta is frozen and pushed. Its proposed
+  release config now pins an exact independently approved ordered
+  `(session_user,current_user)` pair set; missing/mismatched configuration,
+  caller substitution, forged arguments/GUCs, arbitrary role recombination,
+  application invocation, and forbidden direct/transitive role topology fail
+  closed at the mapping-family boundary. Planned row 26 includes those cases
+  without changing the still-unexecuted **39 PostgreSQL + 3 pure/static**
+  matrix. Proposed-Python AST, fixed-vector hashes, counts, formatting, and
+  bounded secret checks passed. Read-only helper review of exact remediation
+  `f5791627...` returned `PASS`; that is not represented as Claude's requested
+  independent confirmation, which remains pending on frozen `b0c8d3f...`.
+  No proposed persistent SQL or planned acceptance test was executed.
+- **Packet B:** current remote identities remain `origin/main=f308ac666...`,
+  PR source `ec71fe9c...`, and pull merge `f7bbb45a...`; source and pull merge
+  share tree `543be91a...`. Lock validation, locked installation, and startup
+  passed remotely. The suite step ended with exit `1` after 959 seconds—241
+  seconds before the workflow timeout—with one generic annotation, no artifact,
+  and no accessible traceback or final runner summary. Existing exact-tree
+  local evidence remains `599/599` in 787.161 seconds, but it is not GitHub CI.
+  Timeout and pre-suite bootstrap failure are contradicted; the precise
+  assertion/environment/fixture/resource cause is unknowable without the
+  existing job log. No behavioral patch or rerun is justified.
+- **Packet C:** scratch Git preserved ancestry by merging exact PR source
+  `ec71fe9c...` then frozen design/reader lineage `b0c8d3f...`, with merge base
+  `88bf800...`. Git reported exactly one conflict,
+  `docs/CODEX_HANDOFF.md`; the proposed resolution retains both histories and
+  changes no runtime, SQL, configuration, security, test, or runner semantics.
+  Migrations remain exactly schema plus `001`–`013`; no persistent-mapping
+  migration exists. Discovery is `689/689`, supplier-review focus passed
+  `90/90` in 2.312 seconds, and startup passed `10/10`. The single permitted
+  full suite was externally interrupted after clean observed results but before
+  any final count/exit; it is **not a pass**, and no second suite was run. The
+  3,539-byte prerequisite bundle SHA-256 is
+  `2716f895cae61caa059d7271c630ee6077914952ff7b0904c9f1fa59546107b1`;
+  `git bundle verify` passed.
+- **Packet D:** the isolated QA commit changes exactly the fabricated eight-line
+  JSONL corpus, a private-input-free pure test helper, a nine-method test module,
+  and the exact runner floor `9`; no `procurement/src`, migration, config,
+  lockfile, workflow, or production extractor changed. Cases retain literal
+  codes/suffixes/scope, occurrence versus offer identity, units/tiers,
+  continuation boundaries, threshold versus price changes, literal report
+  periods, the existing valid 27-field price contract, absent/null/zero,
+  arithmetic contradictions, mutually exclusive split-fee accounting,
+  regular/gift/special/combo separation, deal/base separation, rejection, and
+  clarification memory. Every public row is fabricated and declares zero
+  mapping, selection, price, Shopify, supplier-contact, and order effects.
+  Reviewer-discovered SF-05 contract invalidity and SF-06 fee double-counting
+  were corrected; bounded final review returned `PASS` with no P0/P1/P2.
+  Focused tests passed `9/9`, startup `10/10`, and the authoritative safe
+  wrapper passed **686 discovered / 686 executed / 686 passes** in 663.595
+  seconds with every abnormal counter zero on Python 3.13.11/PostgreSQL 16.9.
+  The extractor remains `NOT_IMPLEMENTED_NOT_TESTED`, and a genuine later
+  edition remains `NOT_PROVEN`.
+- **Packet E:** the draft recommends provider-neutral OIDC Authorization Code
+  with PKCE S256 at FastAPI, opaque issuer-scoped principals, deny-by-default
+  server-owned action/object capabilities, and separate application,
+  maintenance, policy-service, and Shopify credential identities. Official
+  OIDC/OAuth and current Replit access documentation were checked. The
+  least-privilege matrix separately covers cost view, evidence download,
+  intake, mapping, routine selection, price approval, cost/retail/SKU sync,
+  reversal, order approval, and order release; no wildcard admin bypass is
+  proposed. The exact three draft linkage classes are independent raw/catalog
+  GTIN, exact current Shopify SKU plus distributor-product identity, and prior
+  human-approved external-crosswalk fingerprint. They remain unpublished and
+  policy approval therefore fails closed.
+- Supplier configuration remains a preview only. Available evidence shows one
+  September-labeled source set, not recurrence or complete validity. Empire and
+  Southern base/change reports remain separate; Latitude, Monsieur Touton,
+  NY Wine & Spirits, Try-It, Winebow, and Wright each remain one-observation
+  evidence; genuine Skurnik is absent. Try-It's historical delivery statement
+  is not price cadence. Templeton remains exactly two item-scoped `NOT FOUND`
+  records with no mapping, price, order, vendor-wide, or historical-sales
+  authority.
+- Four pending inputs remain tied narrowly: private IdP/account-role assignment
+  blocks private route exposure and real human actions; owner publication of
+  the three evidence classes blocks only policy-approved mapping; unattended
+  SKU authority blocks only a later unattended executor; supplier cadence,
+  validity, and scope blocks price scheduling/carry-forward/overlays. Separately,
+  an approved maintenance-pair configuration blocks real migration
+  publication/application/replay, not static design or disposable testing.
+- Ten original supplier PDFs and their hashes are locally present. Original S1
+  archive SHA-256 `461eda8e...38ff`, clarification/profile A1 archive SHA-256
+  `ac4f02d1...0293`, genuine Skurnik, and a genuine later edition remain
+  missing or `NOT_PROVEN_LOCAL`; no V5 artifact is substituted. The precise
+  future transfer is the original bytes followed by hash verification.
+- `procurement/docs/PHASE_STATUS.md` is unchanged because no program phase or
+  release milestone changed. Persistent-foundation implementation/SQL,
+  operational DB and Shopify access, roles/permissions, approvals, activation,
+  supplier contact, orders, deployment, main/PR mutation, merge, and CI retry
+  were all zero/not performed.
+- **Single highest-priority next authorization:** authorize a repository
+  administrator or Actions reader to transfer the existing PR #23 attempt-1
+  job log byte-for-byte with a retained hash. Diagnose its first traceback and
+  final runner/service evidence before authorizing any CI rerun, behavioral
+  patch, foundation integration, or dependent persistent-mapping implementation.
+### Overnight Packet A maintenance-identity correction — COMPLETE AS DESIGN / STATIC REVIEW PASS / FROZEN AT CLOSEOUT
+
+- The expanded overnight window began at `2026-09-11T03:56:29Z`; its hard
+  eight-hour deadline is `2026-09-11T11:56:29Z`, with the final 75 minutes
+  reserved from `2026-09-11T10:41:29Z`. The design branch was reverified clean
+  and synchronized at exact parent
+  `faad4bb2c327485c5409be89a8c592cb8201efd3`, tree
+  `5defb293425e05bc82acbf38b88e561d569abbf0`, before the correction. No
+  unexpected work was discarded.
+- The maintenance-identity specification commits are initial correction
+  `b49850b3a28f6810f19d333e9967039bd29443ed` followed by review remediation
+  `f5791627feedfefe2becddffebc70e2a25ffa719`. The resulting tree is
+  `af31285d372ad50c88dbb3d1d03b30831be14b3c` and the specification blob is
+  `31ae73d0940de7caca7f60cf204db161bfe22f58`. Those commits change only
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  This closeout changes only `docs/CODEX_HANDOFF.md`; the final Packet A delta
+  from `faad4bb...` is therefore exactly the two authorized documents. Once
+  this closeout is committed and pushed, that branch tip is the frozen NEW-1
+  confirmation target and later packets must not move it.
+- **NEW-1 implicit caller trust — corrected in design, unexecuted.** The
+  proposed release manifest now pins a server-owned maintenance-identity
+  configuration reference, its full-document SHA-256, and the SHA-256 of its
+  canonical non-empty ordered exact `(session_user,current_user)` pair set.
+  The configuration is a separately approved release/deployment input. Actual
+  production role names remain unassigned; missing, placeholder, malformed,
+  wrong-release/schema, empty, or hash-mismatched input refuses and the caller
+  is never substituted as a default.
+- The config shape is now mechanical rather than implied: one exact-key JSON
+  object with an exact array of
+  `{session_user,current_user}` objects, sorted exact role names, specified
+  UTF-8 canonical separators/key ordering, and one final LF for the full file.
+  A fabricated test vector fixes independently reproducible config and pair
+  hashes. Publication must prove the parsed config, manifest fields, and exact
+  rendered SQL literals agree before migration/function hashes are accepted;
+  tuple-shaped or merely self-consistent wrong literals refuse.
+- The proposed runner loads only that literal manifest reference and verifies
+  PostgreSQL's complete observed pair before either role is exempted or any
+  persistent-mapping-family SQL runs. An unapproved application invocation or
+  application-origin `SET ROLE` stops at that boundary. The same check runs
+  before proposed authority DDL and again before signature publication. The
+  accepted scope remains narrow: schema-through-013 legacy files may already
+  have committed before this mapping-family refusal; no mapping marker,
+  authority row, or role membership may change.
+- The proposed installed topology helper embeds the same canonical pair
+  contract/config digest as reviewed SQL literals, recomputes the pair digest,
+  and reads PostgreSQL's own `session_user` and `current_user`. Its complete
+  source/properties remain independently hash-pinned by the runner. The
+  no-argument installed assertion invokes it as its first trust-boundary
+  operation. A caller argument, request actor, mutable `meta` row, custom GUC,
+  direct health-check call, or arbitrary combination of individually known
+  roles cannot alter the expected pair.
+- Maintenance-pair rotation is explicitly staged. Adjacent releases require a
+  non-empty old/new pair intersection and the invoker must be in it. Replacing
+  disjoint sets requires one release that adds a new pair while retaining an
+  old transition pair, then a second release that removes the old pair. A
+  one-step disjoint change refuses; no caller or administrator is silently
+  grandfathered as a bridge.
+- Real maintenance continues to scan every other non-superuser login's
+  direct/transitive `SET ROLE`, `INHERIT`, mixed owner paths, and effective
+  schema/relation/column/function privileges. No `SECURITY DEFINER`, grant,
+  membership change, application permission, startup credential, or actual
+  identity configuration is proposed. Superusers remain trusted database
+  administrators outside the ordinary ACL threat model; this check is not
+  claimed to defeat a malicious administrator. Ordinary application startup
+  cannot implicitly act as maintenance. A later approved integration must bind
+  and invoke the separate approved maintenance session or the mapping migration
+  remains blocked.
+- Planned PostgreSQL row 26 now covers an approved exact pair, application
+  runner and direct-assertion calls, application-origin role assumption,
+  direct/transitive owner paths, missing/mismatched binding, recombined roles,
+  and forged arguments/GUCs, including zero mapping marker/authority/member
+  effects. It remains one method, so the unexecuted matrix stays exactly **39
+  PostgreSQL + 3 pure/static methods**, 42 unique names, with planned floors
+  39 and 3 and a sum-derived global floor.
+- Static writer checks passed: the one proposed-Python block parses with
+  `ast` (529 lines); both fixed vector hashes reproduce; the matrix is exactly
+  39+3 with 42 unique test names; the
+  proposed SQL still contains exactly five tables, four views, and 35 functions
+  with 35 pinned search paths; dollar tags balance; `git diff --check` and the
+  bounded added-line secret-pattern scan pass. The proposed SQL was not parsed
+  by PostgreSQL, executed, or accepted against a database. No full suite was
+  run for this documentation-only delta.
+- Runtime and operational authority remain byte-identical to the parent:
+  `procurement/src=01b78c126549a576d3e182925a976e239a3ac84b`,
+  `procurement/db=5033259c8a99d49a5900dc2db224dbf30484cf1e`,
+  `procurement/config=ecc9a177de316fa987f51c3079b8a8da25e3650e`,
+  `procurement/tests=93d1701d6e232802d45241911f74aa2bc6c53ef5`, and
+  `procurement/tools=a66ee05ca5ae08a18a8707afba82b807e7046a49`.
+  Canonical authority, CURRENT, Master Plan, rules, and phase-status bytes are
+  also unchanged. SQL/migration execution, operational DB access, Shopify,
+  role/permission changes, approvals, activation, PR/CI mutation, integration,
+  deployment, supplier contact, and orders remain zero/not performed.
+- Narrow reviewer `/root/packet_a_static_review` initially returned **REQUEST
+  CHANGES** on
+  `b49850b...`: runner tuples and SQL objects lacked one normative
+  serialization, and a disjoint pair rotation had no possible one-release
+  invoker. Both findings are corrected in `f579162...`; bounded static recheck
+  returned **PASS** on exact `f579162...` and combined `faad4bb..f579162`
+  with no remaining P0/P1/P2. The reviewer independently reproduced both
+  fixed hashes, parsed the 529-line Python block, and confirmed 39+3. This is
+  static design approval only, not SQL parsing/execution, PostgreSQL acceptance,
+  integration approval, or deployment approval.
+- Short independent-confirmation prompt: review only the final two-document
+  delta from `faad4bb...` on
+  `codex/persistent-mapping-foundation-design`; verify exact independently
+  configured session/effective-role pair binding in runner and direct assertion,
+  row 26, unchanged 39+3 count, and zero caller/GUC/meta default; treat all SQL
+  and tests as unexecuted and do not reopen Claude's seven closed findings.
+
+Overnight continuation ledger at this checkpoint:
+
+| Packet | Status | Durable boundary |
+|---|---|---|
+| A — maintenance identity | `DONE AS STATIC DESIGN / EXECUTABLE PROOF UNRUN` | Frozen at this closeout; do not move the branch afterward |
+| B — PR #23 CI | `DIAGNOSTIC DOSSIER COMPLETE / ROOT CAUSE BLOCKED` | Existing attempt-1 log from an authorized Actions reader is the exact missing evidence; no rerun or patch is justified yet |
+| C — integration rehearsal | `NOT STARTED` | Private scratch only after A freezes |
+| D — source-format regressions | `READ-ONLY INVENTORY COMPLETE / QA WRITES NOT STARTED` | Isolated `codex/supplier-format-regression-prep` must start from exact `a056e111...` |
+| E — prerequisite previews | `NOT STARTED` | Static/current-source recommendations and private inventory only |
+
+### Persistent mapping construction remediation — COMPLETE AS DESIGN / IMPLEMENTATION STILL UNAUTHORIZED / STOPPED
+
+- The owner accepted Claude's independent **REQUEST CHANGES** verdict on the
+  initial construction specification and authorized one documentation-only
+  remediation. Work began from a clean, synchronized local/upstream/live
+  `codex/persistent-mapping-foundation-design` at exact
+  `13bbb48d4b3f1d529f9b794e11188d53ad11155c`, tree
+  `1d01359456c70a57be133b73f66f11c6b54198f1`. That checkpoint remains the
+  direct ancestor; no amend, reset, rebase, force-push, merge, cherry-pick, PR,
+  or CI action was performed.
+- The identifiable specification-remediation commit is
+  `69a99a74106dad6da3637e623e2e81eb9e4672bd`, tree
+  `c1bab73a2c6a7053ed3e3b7f98b3a60620d3888d`, with specification blob
+  `fd0ec4b92f039964fe19115dbb65722a3b05136e`. It changes only
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  The closeout commit containing this entry adds only `docs/CODEX_HANDOFF.md`;
+  therefore final scope from `13bbb48...` is exactly those two authorized
+  documents.
+- **P1 independent replay trust anchors — design-remediated, unexecuted.** An
+  ordered literal runner manifest binds each reviewed release, migration bytes,
+  PostgreSQL major, stable schema name, both validator/calculator definitions
+  and properties, and every non-catalog helper. Runtime schema OIDs bind catalog
+  reads during one invocation but are not portable hash inputs. Trusted catalog
+  inspection precedes either anchor invocation; database metadata cannot choose
+  an older version. Exact manifest prefixes permit a reviewed v2 transition
+  without v1 SQL overwriting it, while missing/unknown/coordinated tampering
+  refuses.
+- **P1 explicit schema and safe resolution — design-remediated, unexecuted.**
+  The proposal binds one explicit non-system/non-temporary target schema by
+  safely quoted name and invocation OID, qualifies authority/marker/anchor
+  references, and gives every owned function a signed path with explicit
+  `pg_temp` last. Legacy unqualified DDL uses a separate target-first path.
+  Only `schema_postgres.sql` may install genuinely absent pgcrypto; installation
+  and post-verification share its transaction. Preinstalled and fresh paths
+  refuse target/helper decoys, wrong extension membership, untrusted effective
+  `CREATE`, unusable targets, wrong controlled resolution, or a non-16 server
+  before a marker commits.
+- **P1 effective ownership and role membership — design-remediated,
+  unexecuted.** The generic boundary treats the explicitly invoked maintenance
+  principal and superusers as trusted administration and every other
+  non-superuser LOGIN as untrusted. Direct/transitive `SET ROLE`, `INHERIT`, and
+  mixed paths plus effective schema/relation/column/function privileges are
+  checked. Unsafe topology refuses and is reported; the migration neither
+  invents production role names nor changes memberships. Custom
+  `procurement.*` settings alone are never identity.
+- **P1 DEFER without invented identity — design-remediated, unexecuted.**
+  Candidate operational keys are conditionally nullable. DEFER preserves the
+  immutable batch/candidate, actual ABSENT/EXPLICIT_NULL/VALUE evidence, reason,
+  and verified human provenance while storing null operational targets, keys,
+  package, mutable fingerprints, and results. APPROVE remains fully strict;
+  REJECT requires the separately defined exact Variant/vendor/supplier scope.
+  DEFER has no offer, rejection, approval, selection, price, Shopify, or order
+  effect.
+- **P1 concurrent idempotency and offer reuse — design-remediated,
+  unexecuted.** Intake, mapping, and selection authenticate before replay
+  disclosure, acquire a payload-neutral operation/scope/key session lock on a
+  dedicated backend before a fresh `SERIALIZABLE` snapshot, recheck the complete
+  request, and use deterministic business-lock order. Known-abort automatic
+  retries are limited to proven `40001` or `40P01` cases. Separately, an unknown
+  COMMIT outcome may start a new attempt only after a new authenticated,
+  idempotency-locked lookup proves the original backend gone and key absent;
+  otherwise it returns `COMMIT_OUTCOME_UNKNOWN`. Both paths share three total
+  attempts, a five-second lock wait, and a 30-second operation limit, with
+  explicit cleanup. The service locks the operational offer key
+  before lookup/create; a changed create-to-link result requires a fresh preview,
+  new confirmation, and new key. Every historical approval permanently binds
+  key to offer even when effectiveness later changes.
+- **P2 test registration — corrected in design, unexecuted.** There is no
+  proposed `TEST_MODULES`. The expanded matrix contains exactly **39 planned
+  disposable-PostgreSQL methods plus three planned pure/static methods**, 42
+  unique names. Planned floors are
+  `test_persistent_mapping_foundation_postgres.py: 39` and
+  `test_persistent_mapping_foundation_contract.py: 3` through
+  `REQUIRED_MODULE_MINIMUMS`; discovery remains `test_*.py` and the global
+  floor remains sum-derived.
+- **P2 migration-lock scope — corrected in design, unexecuted.** Runner and SQL
+  use one version-independent, schema-scoped mapping-family transaction-lock
+  key. The claim begins only at the mapping family: concurrent invocations may
+  already have re-executed and committed legacy schema-through-013 files. It is
+  not whole-run serialization or whole-chain rollback.
+- The matrix retains every prior acceptance requirement and adds substantive
+  trust-anchor, hostile-schema/helper, recursive-role, unresolved-DEFER,
+  concurrent intake/mapping/selection, confirmation-sensitive offer reuse,
+  inverse different-key/same-offer concurrency, retry exhaustion, lock cleanup,
+  and unknown-COMMIT cases without changing the five-table/four-view slice.
+  Fresh validation uses the actual chain; upgrade validation uses an exact 013
+  predecessor that does not already contain the proposed objects.
+- Static writer checks passed: `git diff --check`; one proposed-Python block
+  parsed by `ast` (423 lines); exact matrix accounting `39 + 3` with 42 unique
+  test IDs; proposed SQL structural accounting of five tables, four views, and
+  35 functions with 35 pinned search paths; balanced dollar tags; exact
+  one-file pre-closeout scope; and bounded added-line secret-pattern scanning.
+  The proposed SQL was not parsed by a PostgreSQL parser, applied, or executed.
+  No full suite was run for documentation-only changes.
+- Read-only reviewer `/root/service_acceptance_audit` returned **PASS** with no
+  P0/P1/P2 on exact spec blob `fd0ec4b...` for action-specific provenance,
+  DEFER/REJECT semantics, permanent identity versus effective authority,
+  idempotency/reconfirmation, inverse-key concurrency, and the 39+3 matrix.
+  Read-only reviewer `/root/sql_runner_audit` returned **PASS** with no P0/P1/P2
+  on that same blob for anchor ordering, fresh/preinstalled pgcrypto, controlled
+  legacy resolution, stable manifest hashes, OID/temp binding, PostgreSQL-major
+  validation, and the shared schema-scoped lock. Both reviews were static; no
+  SQL, migration, database test, private evidence, or Shopify action was run.
+  These are Codex's bounded remediation checks, not Claude's required final
+  independent re-review.
+- The proposed canonical, Master Plan, and `rules.toml` amendments remain text
+  inside the specification only. All operational capability flags remain
+  proposed false. Exact object proof from `13bbb48...` to the specification
+  commit keeps `procurement/src` at `01b78c126549a576d3e182925a976e239a3ac84b`,
+  `procurement/db` at `5033259c8a99d49a5900dc2db224dbf30484cf1e`,
+  `procurement/config` at `ecc9a177de316fa987f51c3079b8a8da25e3650e`,
+  `procurement/tests` at `93d1701d6e232802d45241911f74aa2bc6c53ef5`,
+  and `procurement/tools` at `a66ee05ca5ae08a18a8707afba82b807e7046a49`.
+  Canonical spec, CURRENT, Master Plan, rules, and phase-status blobs are also
+  byte-identical. No migration number or executable byte was added.
+- Dependency and integration status is unchanged: first establish an approved,
+  green Monday foundation on then-current main; then integrate and validate the
+  offline bridge, V5 reader, A1 adapter, and policy/follow-up/test closure in
+  their reviewed order; then layer this design history. Only after that exact
+  integrated predecessor is reverified may a newly authorized implementation
+  branch assign the next migration number. This branch is neither a standalone
+  main-ready patch nor integration/deployment approval.
+- The four pending inputs retain narrow blockers: private IdP/named-role
+  assignments block private route exposure and real human writes;
+  owner-published independent-linkage evidence classes block policy approval;
+  unattended SKU policy blocks only a later unattended Shopify executor; and
+  supplier/book cadence-validity-scope blocks later carry-forward, replacement,
+  and deal-overlay pricing. None blocks this schema design or future labeled
+  disposable tests. The six answered owner questions and Shopify cost
+  destination were not reopened.
+- **Exact next permissible step:** Claude independently re-reviews only these
+  seven remediations and their interactions against `69a99a7...`. If that
+  review accepts the design and the dependency sequence later yields an
+  approved integrated target, request a new authorization limited to the
+  proposed canonical/config amendments, checksum-pinned runner boundary, exact
+  next-numbered migration, internal no-public-route services, and registered
+  39+3 acceptance tests. Independent backend/data review and owner acceptance
+  remain required afterward. No implementation, SQL/migration execution,
+  operational DB/private access, role change, Shopify action, real approval,
+  activation, PR/CI mutation, integration, deployment, supplier contact, or
+  order action is authorized now.
+
+### Initial persistent mapping construction package — SUPERSEDED BY ACCEPTED REQUEST CHANGES
+
+The section below is retained as historical evidence for the initial package
+at `0bfcf48...` / `13bbb48...`. Claude's later REQUEST CHANGES verdict supersedes
+its construction-ready status; the remediation section above is the current
+state and still awaits Claude's bounded independent re-review.
+
+- This documentation task began from a clean, synchronized preserved branch
+  `codex/supplier-mapping-review-policy-followup` at exact
+  `a056e111e2f21b96a9452be9a559e10f03805a6f`, tree
+  `22552b1460a360823b3f35558a995855af887596`. Local branch, upstream, and the
+  live remote ref were identical before isolation and remained identical at
+  closeout. Work is isolated on
+  `codex/persistent-mapping-foundation-design`; the independently reviewed
+  construction-specification commit is
+  `0bfcf48fbc3372b4975437536b8ab907bf11ec19`, tree
+  `a20744383869050d09bdfefb8d33e7ea52e2d403`, with specification blob
+  `d677e87d93420ea4b2e81f976260dec4121baa31`. The closeout commit containing
+  this entry adds only the handoff to that design-only history.
+- The package is
+  `docs/superpowers/specs/2026-09-10-persistent-mapping-foundation-implementation-spec.md`.
+  It preserves, rather than replaces, reviewed design blob
+  `362d37e9300a5ba7007bf5ca7308e09ad03d411d`. Its proposed SQL remains outside
+  `procurement/db`; no migration number, runtime/config toggle, authority byte,
+  schema object, role, route, or persistent record was created by this branch.
+- Read-only ref inspection found live `origin/main` at exact
+  `f308ac666a2377f540e528bc873463daecc20cf8`, tree
+  `0a8a2ea80721a97858c2120545d1e6b6f3805247`. The local branch named `main` is
+  divergent at `4bde08152cf958dc97686e01a4f27d83fdb4961f`, two local-only / 52
+  origin-only commits, and is not an integration target. The source lineage is
+  39 commits unique from merge base `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`;
+  this package is not a standalone cherry-pick onto current main.
+- PR #23 remains an open draft whose current integration candidate is
+  `ec71fe9c5a6f13832a8cad65b065be9747010486`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. Public metadata reports 14
+  commits, 65 files, `+20,781/-146`, `mergeable=true`, `rebaseable=false`, and
+  `mergeable_state=unstable`; its body is stale. Recorded CI run `34185466802`
+  passed startup but its full-suite job exited 1 after 959 seconds. The public
+  response does not expose the cause, authenticated `gh` metadata is
+  unavailable, and detailed logs were previously HTTP 403/admin-only; those
+  known failed access attempts were not repeated. Read-only merge-tree analysis
+  predicts a `docs/CODEX_HANDOFF.md` conflict; it is not per-commit or behavioral
+  compatibility proof.
+- **Recommended future integration order:** first turn the Monday foundation
+  into an approved, exact, green integrated baseline on then-current main;
+  next integrate and independently validate the offline bridge
+  `fa594b6..2a7192f`, V5 reader `48f5b35..6528bc6`, A1 adapter
+  `7e57301..9ef51a2`, then policy/follow-up/test closure
+  `db39429..a056e11`; next layer this design package; only then create a newly
+  authorized implementation branch. Preserve reviewed boundaries, resolve the
+  handoff deliberately, and re-prove floors/full CI on the integrated bytes.
+  No part of this sequence was executed here.
+- The intended migration predecessor is the exact integrated
+  `013_monday_p1_remediation.sql` chain, including
+  `monday_price_book_contract='v2-future-only'` and
+  `monday_p1_remediation_contract='v1'`, only if no intervening migration lands.
+  The future implementer must recheck that chain and assign the next number;
+  this package deliberately uses
+  `PROPOSED_UNNUMBERED_persistent_mapping_foundation.sql`.
+- The proposed first slice contains five authority tables: immutable review
+  batches, immutable review candidates, append-only mapping decisions,
+  append-only routine-selection events, and narrow current-selection heads. It
+  provides effective-decision, diagnostics, selected-offer, and shadow views,
+  exact keys/constraints/indexes/functions/triggers, no backfill, and one
+  transaction per migration or application operation. It reuses the existing
+  Variant, vendor, supplier-offer, rejection, price, artifact, and recommendation
+  contracts; it creates no parallel catalog or price engine.
+- Printed occurrences, operational offers, mapping decisions, and routine
+  selections remain separate. Repeated occurrences/tiers can share one exact
+  operational offer; material package/conversion/qualifier/component differences
+  cannot collapse; supplier-code reuse cannot rewrite an old identity. Existing
+  active vendor/code uniqueness and referenced/priced offer protections remain
+  mandatory. A mapping approval may create an inactive, unpriced offer, while a
+  second confirmation may select only an independently eligible mapped regular
+  offer. Neither action activates the offer, creates price, changes legacy
+  recommendations, or authorizes Shopify/procurement effects.
+- Publication of the migration additionally requires the specified narrow
+  `apply_schema.py` change: numbered persistent-mapping migrations carry exact
+  content-addressed headers, store their raw-file SHA-256, acquire a transaction
+  advisory family lock before reading the marker, and on exact replay validate
+  the current contract then skip historical SQL. Legacy/mismatched checksum
+  markers, missing contract/signature metadata, concurrent different-byte first
+  apply, or catalog drift fail closed. This prevents an old `v1` file from
+  overwriting a later checksum-pinned contract transition.
+- The migration proposal pins the exact predecessor index predicates, trigger
+  functions/bytes/events and nine-column `UPDATE OF` attachment, and required
+  eligibility function. Its installed logical catalog signature covers new
+  columns/types/defaults/**column ACLs**, constraints, indexes, triggers,
+  functions, views, owners, and relation/function ACLs. It revokes `PUBLIC`,
+  inherited named-role, and per-column privileges before signing; no application
+  role is invented or granted.
+- Service boundaries are internal only and require explicit `SERIALIZABLE`
+  transactions, a server-loaded true capability flag, a transaction-local
+  capability reference, and a verified principal/role/authentication-context
+  tuple. Mapping and selection use separate database-derived previews,
+  confirmations, idempotency keys, and append-only records even when performed
+  by the same owner. A shared token, client actor string, or custom GUC alone is
+  not identity. The policy function returns false until an actual immutable
+  owner-published policy and independently corroborated evidence classes exist.
+- Exact proposed authority text is mirrored for the canonical system spec and
+  Master Plan; the proposed `rules.toml` section leaves intake, human mapping,
+  policy mapping, selection, shadow reads, activation, and recommendation
+  cutover false. Those are proposals for the next authorized implementation,
+  not edits made now. `CURRENT_AUTHORITY.md` and `PHASE_STATUS.md` remain
+  unchanged.
+- The acceptance matrix names exactly **31 disposable-PostgreSQL tests and
+  three pure/static tests**, with planned module floors 31 and 3 and the global
+  floor remaining sum-derived. It covers fresh true-chain and exact historical
+  upgrade paths, immutable checksum replay and concurrent first apply,
+  idempotency/payload conflicts, evidence/null/occurrence/offer separation,
+  stale and concurrent decisions, rollback, rejection memory, V5 non-adoption,
+  unchanged legacy recommendations, and zero Shopify/price/order/supplier
+  effects. These are executable future criteria, **not executed results**.
+  Every named principal/package and future disposable-PostgreSQL result remains
+  a labeled simulation unless separately authorized evidence is actually run.
+- Read-only dependency auditor `/root/dependency_git_audit` established the
+  refs, provenance, PR/CI gaps, conflict risk, and integration sequence without
+  a repository or external-state mutation. Bounded static reviewer
+  `/root/closure_scope_audit` found and drove closure of fail-closed contract
+  gaps involving rejection scoping/immutability, combo reachability, operational
+  offer identity, confirmation/capability enforcement, predecessor signatures,
+  version-aware replay, transaction isolation, metadata deletion, concurrent
+  first apply, and relation/function/column ACLs. It returned **PASS** on exact
+  `0bfcf48...` with no remaining P0/P1/P2 finding. Neither reviewer executed the
+  SQL, tests, operational DB, private package, or Shopify. The scope reviewer
+  made no network call; the dependency auditor's bounded external reads were
+  one live-ref check and public PR metadata, with no authenticated/private
+  diagnostic retry or external-state mutation.
+- Documentation validation only: diff checking, balanced SQL/Python fences,
+  Python AST parsing of the proposed runner fragment, acceptance-row/floor
+  accounting (`31 + 3`), changed-file scope, and secret-pattern scanning passed.
+  No full suite was spent on documentation-only changes. The proposed SQL was
+  not applied or represented as parsed/executed acceptance evidence.
+- Base-to-reviewed-candidate object proof keeps `procurement/src` at tree
+  `01b78c126549a576d3e182925a976e239a3ac84b`, `procurement/db` at
+  `5033259c8a99d49a5900dc2db224dbf30484cf1e`, `procurement/config` at
+  `ecc9a177de316fa987f51c3079b8a8da25e3650e`, `procurement/tests` at
+  `93d1701d6e232802d45241911f74aa2bc6c53ef5`, and `procurement/tools` at
+  `a66ee05ca5ae08a18a8707afba82b807e7046a49`. The canonical spec, CURRENT,
+  Master Plan, rules, and phase-status blobs also remain exact. Final branch
+  scope versus `a056e11` is only the new construction specification plus this
+  handoff.
+- Four inputs remain unresolved only where they matter: private IdP/named roles
+  block private route exposure and real human writes; owner-published
+  independent-linkage evidence classes block policy approval; unattended SKU
+  policy blocks only a later unattended Shopify executor; supplier/book
+  cadence-validity-scope blocks later price carry-forward/replacement/deal
+  overlays. None blocks the schema, pure tests, or labeled disposable-PostgreSQL
+  construction. The six owner questions and Shopify cost destination remain
+  answered and were not re-asked.
+- Operational DB/private-package access, SQL/migration execution, runtime
+  implementation, real mapping/selection/price records, permission changes,
+  Shopify access, supplier contact, orders/POs, activation, deployment, PR
+  creation/change/retry, CI retry, merge/rebase/cherry-pick, and integration
+  actions in this task: `0`. **Exact next authorization boundary:** after the
+  dependency sequence produces an approved integrated target, authorize only
+  the first-slice canonical/config amendments, checksum-pinned runner boundary,
+  exact next-numbered migration, internal no-public-route domain services, and
+  the 31+3 registered acceptance tests; then require independent backend/data
+  review and stop for owner acceptance. All later identity configuration,
+  policy execution, pricing, activation, cutover, Shopify, and purchasing work
+  remains separately scoped.
+
+### NEW-1 / NEW-2 / NEW-3 test-only closure — COMPLETE / STOPPED AT HANDOFF
+
+- The owner accepted Claude's narrow follow-up disposition as **APPROVE WITH
+  NONBLOCKING FINDINGS**. All seven earlier findings, `LOW-1` through `LOW-5`
+  and `INFO-2` / `INFO-3`, are closed and remain closed. Claude's separately
+  attributed pre-correction evidence is focused `89/89`, startup `10/10`, and
+  synthetic Chromium `20/20`. Claude's full-suite result is 676 executed / 673
+  passes / three failures, with all three failures reproduced as unchanged-base
+  environmental bootstrap failures; that run is not described as green.
+  Claude private replay: **NOT RUN**. Claude private-manifest verification:
+  **NOT RUN**.
+- This bounded correction began from exact synchronized branch
+  `codex/supplier-mapping-review-policy-followup` at
+  `6838ab3485c42c2b8b764a5d7aefe45a982f3106`, tree
+  `b6aa5fd37ca48f66c077fb1c449e4683c28c44c1`. The additive implementation
+  commit is `438e416bc5ebec4ffc95cc1cef81669c41d64bef`, tree
+  `15e361dec3abbb73d8fc3a753f3e1333863c1806`, with the starting checkpoint as
+  its sole parent. It changes exactly `procurement/tools/run_tests.py`,
+  `procurement/tests/test_supplier_review_real_v5.py`, and
+  `procurement/tools/audit_supplier_review_browser.py`. The documentation-only
+  closeout is the commit containing this entry.
+- **NEW-1 CLOSED:** the final A1 module population is 29, consisting of the 28
+  reviewed starting tests plus the NEW-3 regression, and its registered floor
+  is exactly `29`. `GLOBAL_MINIMUM_TESTS` remains the sum of all 37 unchanged
+  module registrations and is exactly `677`; no global literal was introduced.
+  An in-memory scratch probe used the existing discovery/count/minimum
+  machinery and removed only the three tests added by `ea9c508...`:
+  `test_deeper_control_totals_require_expected_counts_and_distributions`,
+  `test_a1_required_ledger_tables_fail_closed_on_name_count_and_digest`, and
+  `test_pdf_page_bounds_are_labelled_as_pinned_not_independently_parsed`. The
+  synthetic population became A1 `26/29` and global `674/677` and produced both
+  expected minimum errors. No real test was deleted or weakened, and
+  `test_test_runner.py` remains unchanged at `21/21`.
+- **NEW-2 CLOSED:** the synthetic, host-resolution-blocked Chromium audit keeps
+  the complete 250-result traversal as `100 + 100 + 50`, all 250 unique IDs,
+  page boundaries, Previous navigation, hostile-link filtering, escaping, and
+  zero external-request/runtime/console checks. It additionally proves an exact
+  zero-result render, honest `0 matching Variants; showing 0; page 0/0` text,
+  both controls disabled, recovery to the unique final result on page `1/1`,
+  and return to the broad query on the first 100 results at page `1/3` with
+  correctly reset controls. The actual final audit is `26/26`; the production
+  renderer was not changed.
+- **NEW-3 CLOSED:** a dedicated regression first passes a valid 20-row
+  `owner_decisions` control, then changes only `PackageTable.name` to the
+  namespace-prefixed `daytime_addendum__owner_decisions`. The package retains
+  the original `owner_decisions` lookup key, materialized state, rows, declared
+  count, raw/canonical digests, and every other dataclass field. The exact
+  name/identity guard refuses it with `required A1 ledger table count or
+  identity differs: owner_decisions`; no missing, streamed, short, or
+  wrong-digest condition can satisfy the regression.
+- Writer validation is separately attributed: supplier-review focus `90/90` in
+  1.595 seconds; runner self-tests `21/21` in 0.259 seconds; Chromium
+  `26/26`; startup hardening `10/10` in 0.003 seconds; and the authoritative
+  safe harness `677/677` in 675.504 seconds. The full harness independently
+  verified Python 3.13.11, PostgreSQL 16.9, loopback, and exact disposable
+  database `procurement_test`. Discovery, execution, passes, and the derived
+  global floor are all 677; failures, errors, skips, expected failures, and
+  unexpected successes are all zero. Pinned `uv 0.12.3` lock checking, AST
+  parsing of 99 tracked Python files, diff checking, and added-line secret
+  scanning passed.
+- Independent read-only reviewers `/root/closure_code_review` and
+  `/root/closure_scope_audit` reviewed exact `438e416...` and each returned
+  **PASS** with no P0/P1/P2 finding. The broad reviewer independently ran the
+  corrected focused set `90/90`, runner self-tests `21/21`, and Chromium
+  `26/26`; the targeted reviewer independently reproduced the one-test identity
+  guard and the count/floor probe. Neither reviewer ran the full database suite
+  or private package, and neither made an edit or operational action.
+- Base-to-implementation Git object proof shows `procurement/src` tree
+  `01b78c126549a576d3e182925a976e239a3ac84b`, `procurement/db` tree
+  `5033259c8a99d49a5900dc2db224dbf30484cf1e`, and `procurement/config` tree
+  `ecc9a177de316fa987f51c3079b8a8da25e3650e` at both checkpoints. The reviewed
+  persistent-authority and acceptance-adapter designs remain exact blobs
+  `362d37e9300a5ba7007bf5ca7308e09ad03d411d` and
+  `1a5318f7163bac6942c95a4b904e9abf4e200740`. Thus every product/runtime,
+  schema/migration/config, and reviewed-design byte remains unchanged from
+  `6838ab34`; the final base-to-closeout delta adds only this handoff to the
+  three implementation paths above.
+- The private A1 package, report, and manifest were not rerun or regenerated in
+  this test-only closure. Byte identity preserves the scope of the earlier
+  writer-only private evidence; it is not a new replay or independent private
+  verification. The approximately 96 MB self-contained report and previously
+  measured approximately 1.397 GB peak-memory limitation remain. Off-host
+  backup remains unproven.
+- Packet B is accepted as a reviewed design suitable for scoping its first
+  persistent implementation, not as migration or operational authority. The
+  six owner policy questions and Shopify cost destination remain answered and
+  were not re-asked. Four implementation/configuration details remain pending:
+  the private identity provider and named-role assignments; the final
+  owner-published independent initial-linkage evidence classes; whether a later
+  separately approved service policy may execute eligible SKU requests
+  unattended after the owner-confirmed first release; and actual
+  cadence/validity/scope configuration for each distributor/book family.
+- Read-only integration recommendation only: this branch is not a standalone
+  patch for `main`; it descends from the still-unmerged Monday foundation,
+  offline bridge, V5 reader, and real-A1 adapter lineage. Under a future explicit
+  authorization, first select a fresh approved integration target and verify
+  ancestry/conflicts, then integrate and review that dependency lineage in
+  order before the Packet A/runtime-report corrections, Packet B design
+  commits, this test-protection commit, and its closeout. Do not execute that
+  recommendation, rebase this branch, or assume direct cherry-pick safety.
+  `procurement/docs/PHASE_STATUS.md` remains unchanged because no phase or
+  program milestone changed.
+- Operational database connections/writes, Shopify reads/writes, mapping or
+  price approvals/activations, CURRENT activation, supplier communication,
+  orders/POs, deployments, PR creation/change/retry, merges, and integration
+  actions in this closure: `0`. **Exact next authorization boundary:** owner
+  review of this stopped test-only handoff. Any integration or persistent
+  Packet B implementation requires a new explicit authorization.
+
+### Claude review follow-up and owner policy design — OFFLINE CORRECTION COMPLETE / DESIGN ONLY
+
+- This bounded follow-up preserves branch
+  `codex/supplier-mapping-real-package-acceptance` at required checkpoint
+  `9ef51a2b7166df9ed58bc72c3f82f57ea8caeb55`, tree
+  `f3d563ac6b2d6d0b4f369fc57f96189831ab83d6`. Work is isolated on child
+  `codex/supplier-mapping-review-policy-followup`. The policy-design commit is
+  `db394295deafea53ac1d0eb944430b2d67b163ee`; the exact independently reviewed
+  Packet A code/report candidate is
+  `ea9c50841bcf48bfbb1b57f237231a229681fcfe`, tree
+  `b075fb935036da156b936b82481112c7e06ee669`; and the subsequent design-only
+  lineage/currency correction is
+  `46c6eb41c6c93d8764f5cfcd5df637e86d7e7ca2`, tree
+  `327ed93519e9c3240c3b9425db92ae1164b927ab`. The closeout commit containing
+  this entry changes documentation only. `main`, PR #23, and the unmerged
+  foundation history remain untouched.
+- The owner records Claude's exact disposition as **APPROVE WITH NONBLOCKING
+  FINDINGS**. Claude's reported focused result was `86/86`, startup `10/10`,
+  and full suite 673 executed / 670 pass / 3 fail. All three bootstrap failures
+  reproduced on the unchanged base. Claude did **not** run the private
+  real-data reproduction or private-manifest verification. Therefore Claude's
+  full suite is not described as green and no independent private replay is
+  claimed. The earlier writer `673/673` and private results remain separately
+  attributed writer evidence. The frozen Claude prompt in host-local evidence
+  is not a response artifact; the owner's message supplies this accepted
+  verdict.
+- Packet A closes each accepted follow-up finding without changing Phase 4
+  bootstrap safeguards: LOW-1 duplicate constant authority is removed; LOW-2
+  requires all 12 A1 ledger source tables, exact materialization/counts, and
+  canonical identities before report projection, and the renderer requires all
+  six outer ledgers; LOW-3 makes deep 8-row gift and 249-row fixed-combo control
+  totals explicit production preconditions with direct failure tests; LOW-4
+  exercises safe and hostile `local_pdf_href` values through actual Chromium;
+  LOW-5 simplifies the redundant file-count arithmetic. INFO-2 adds bounded
+  100-result pagination with honest total/range/page state so all broad-search
+  results are reachable. INFO-3 now says PDF page references are
+  `RANGE_CHECKED_AGAINST_PINNED_DECLARATION_NOT_INDEPENDENTLY_PARSED`; PDF page
+  counts were not independently parsed by this reader.
+- Writer validation on the follow-up branch passed focused `89/89`, startup
+  `10/10`, and the full safe harness `676/676` in 695.648 seconds, with zero
+  failures, errors, skips, expected failures, or unexpected successes. The
+  synthetic actual-browser audit passed `20/20`: 250/250 broad-search results
+  were reachable as 100 + 100 + 50, only the valid PDF link became an anchor,
+  JavaScript and raw/normalized/encoded traversal attempts remained inert, and
+  HTTP(S) requests, runtime exceptions, and console errors were zero.
+- Read-only reviewer `/root/final_code_review` independently checked exact
+  commit `ea9c508...`, ran focused `89/89` and browser `20/20`, and returned
+  `PASS` with no P0/P1/P2 finding. That reviewer did not run the private package
+  or full suite. A separate design review found three documentation gaps in the
+  first design: reversal lineage, authoritative currency when live `unitCost`
+  is null, and the migration-only `ADOPT_EXISTING_BASELINE` event vocabulary.
+  Commit `46c6eb4...` closes them by binding reversals to the current successful
+  unreversed effective head, binding `shop { id myshopifyDomain currencyCode }`
+  to cost preview/execution, and defining/testing baseline adoption. The same
+  reviewer then rechecked exact commit `46c6eb4...` and returned `PASS`: all
+  three findings resolved, with no remaining defect in the narrow scope. That
+  review made no edits and ran no private data or operational Shopify action.
+- The available private A1 input was re-read without rewriting source bytes.
+  Both writer executions returned `REVIEW_ONLY_VALIDATED` and
+  `REVIEW ONLY / NOT_APPROVED / NOT_IMPORT_READY`; the second exact replay left
+  every output byte and mtime unchanged. The fresh excluded bundle contains
+  report JSON 95,054,596 bytes, SHA-256
+  `27a7ec0d1fc7ad0a5d426428f6ce24fd5d9ec65060b4d8c195c6eda796760b22`;
+  HTML 94,690,398 bytes, SHA-256
+  `cd0e24bb57229c076afca3857982a2a628ce6d83b8799af29aee0c18ed9d3d78`;
+  and checksum manifest 343 bytes, SHA-256
+  `87460521dac8133c0cd5bc5d8bf9617ba3bb5994786f0040f4969866a1b53e4c`.
+  It projects 2,000 review batches / 14,823 offers and exact identities/counts
+  for all 12 required ledgers. This is writer private evidence only. Commercial
+  evidence remains outside Git.
+- The approximately 96 MB self-contained report and previously measured
+  approximately 1.397 GB peak-memory limitation remain. Off-host backup remains
+  unproven. Browser and private checks establish bounded offline behavior only,
+  not authenticated-server, deployment, production, mapping, price, purchasing,
+  or Shopify acceptance.
+- The revised persistent workflow design records the owner's six product
+  requirements separately from engineering recommendations: one usual primary
+  regular offer without deleting valid alternatives; one authenticated owner
+  may separately confirm mapping and routine selection; policy-bound base-book
+  carry-forward with monthly/seasonal/irregular schedules and scoped expiring
+  deal overlays; exact evidence-based automatic mapping with append-only system
+  provenance; private least-privilege access and separately confirmed cost,
+  retail, and SKU sync; and guarded high-confidence primary-regular SKU
+  writeback. The cost destination is Shopify InventoryItem Cost per item via
+  `inventoryItemUpdate(input.cost)`, read back through `InventoryItem.unitCost`,
+  for exactly one Shopify sellable unit. Quoted, received, invoiced, calculated,
+  and selected costs remain separate. No averaging or implied field authority
+  is introduced.
+- The design keeps human-approved mapping, policy-approved mapping, chosen
+  routine offer, supplier-price/carry-forward authority, owner-triggered cost
+  or retail sync, policy-eligible SKU sync, and order approval/release as
+  separately queryable states. It identifies exact canonical/config conflicts
+  and proposes later lifecycle/migration amendments, but changes no runtime
+  flag, schema, migration, OAuth scope, persistent table, route, recommendation,
+  price state, or commercial record now.
+- Four implementation details remain genuinely unanswered: the private identity
+  provider and named-role assignments; the final owner-published independent
+  initial-linkage evidence classes; whether a later separately approved service
+  policy may execute eligible SKU requests unattended after the owner-confirmed
+  first release; and actual cadence/validity/scope configuration for each
+  distributor/book family. The six owner policy questions and Shopify cost
+  destination are answered and must not be re-asked.
+- Read-only integration plan: compare the preserved parent to this child, then
+  review/cherry-pick only the exact reviewed commits in order onto a fresh
+  future integration branch created from the then-approved target. Verify
+  ancestry and conflicts without mutation first; do not rebase this child,
+  merge current `main`, absorb unmerged foundation history, or create/modify a
+  PR under this authorization. `PHASE_STATUS.md` is unchanged because no phase
+  milestone changed.
+- Operational database access/writes, Shopify reads/writes, mapping or price
+  approvals/activations, supplier contact, PO/order actions, deployments,
+  permission changes, PR changes/retries, new PRs, and merges: `0`.
+  **Exact next authorization boundary:** owner and independent read-only review
+  of this frozen child branch and its offline evidence. A later implementation,
+  migration, permission deployment, test-store execution, recommendation
+  cutover, or integration requires a new explicit authorization.
+
+### Real sealed V5-DAYTIME-A1 package acceptance — REVIEW ONLY / NOT_APPROVED / NOT_IMPORT_READY
+
+- This offline follow-on began at `2026-09-09T00:56:09Z` from required
+  checkpoint `6528bc69b1a49c786d7a61fbf293989b6ec093f4`, tree
+  `26670893ead77e49627693fca9b7e27108751a0b`. Work remained isolated on
+  `codex/supplier-mapping-real-package-acceptance`. The approved scoped design
+  is `7e57301bd2e4ee2c76245ece5ca1012396ce7601`, tree
+  `a1d613655fc8bd4d1826cfe33e04e963b96831b6`; the exact material code/test
+  candidate is `482b1e63d84bd4e76d8a75444d124d3e724b083d`, tree
+  `a2546b23b3e932d5a7f5c4f774b4c4beaca58bc7`. Its eight-file implementation
+  commit adds the exact A1 adapter and tests and updates only the existing
+  offline reader, report, CLI, and test floor. Together with the design, the
+  base-to-candidate delta is nine Python/Markdown files. It changes no schema,
+  migration, canonical business rule, live route, production configuration,
+  mapping, price, inventory, forecast, PO, Shopify, or deployment authority.
+  The documentation-only closeout is the commit containing this entry.
+- The R1 replacement wrapper is 386,533,606 bytes with SHA-256
+  `5f8d07805f9cd83bf4421f6b355062188b04550d18adb207f60672b7b6604bce`.
+  Independent receiving inspection found its 26 members safe and byte-exact;
+  all 25 payload-manifest entries passed size/hash checks. The original root,
+  seal, and addendum SHA-256 values are respectively
+  `4eef2d6cfe6b89c94804a749be89d4848d48379bff1521f66cfb42d60d599f82`,
+  `02e81308aad9a242a9606d3b53598a625032dff00e21f61dcd7f8980c3ddc4cc`,
+  and `1e51bce76ea1afa02f9fcd8d7bb3d7d54fdae01c9bbb7b33b00b6aa4e31ca2f5`.
+  The unavailable old monolith SHA-256
+  `3a0bcdee8967aa51e1083f693d3e2fd39aa3ea83a7822cf2dc5cde9f7bc3ca09`
+  is explicitly `not_expected_for_this_replacement`; it is not an R1
+  acceptance prerequisite. The application reader receives only the portable
+  directory, so its own replacement-transport state truthfully remains
+  `NOT_EVALUATED_BY_PORTABLE_READER` rather than repeating external attestation.
+- Before changing code, the exact checkpoint reader was run unchanged against
+  the genuine package. It exited `2` with
+  `NONCANONICAL_MANIFEST: portable root bytes are not canonical` in 1.407028
+  seconds at 37,844 KiB peak RSS. The genuine revision intentionally uses
+  sealed, pretty-printed raw root/seal bytes and a materially different
+  120-table contract. The correction therefore adds an exact raw-root hash /
+  package-ID / semantic-revision dispatch to a dedicated validator; it does
+  not relax canonical handling for the synthetic portable or legacy V4/V5
+  paths. Unknown or near-match packages still fail closed.
+- The exact candidate verified five immutable sealed archives, all 2,853 inner
+  members, all nine portable top-level files, 120 logical tables / 746,048
+  rows / 139 parts, and all 2,684 embedded files. Namespace controls reconcile
+  to `effective_v5` 52 tables / 691,311 rows / 70 parts, `v5_sidecar` 44 /
+  36,222 / 45, and `daytime_addendum` 24 / 18,515 / 24. The reader preserves
+  absent/null/false/zero distinctions, leading-zero and suffixed supplier
+  codes, the unchanged 27-field normalized projection, comparison-parent
+  separation, duplicate logical-name namespaces, explicitly reviewed nulls,
+  and zero approval/import authority. It retains bounded lazy access only
+  through already verified immutable archive snapshots.
+- Structural and relational controls independently reconcile the original
+  2,000-Variant cohort and separate 2,003-ID historical census (1,999 returned,
+  four additions, one not returned without deletion inference), 38,032
+  ordinary source offers, 76,896 ordinary tiers, 936 comparison parents /
+  3,765 comparison rows, 80,661 normalized rows with exactly 27 fields, 2,000
+  review batches / 14,823 displayed occurrences, 714 active requirements
+  across 475 Variants and 120 requests, 20 owner decisions, 460 complete
+  combos, 25 additive source overlays, and seven sibling reviews. All mapping,
+  price, import-ready, selection, contact/send, mutation, database, Shopify,
+  supplier, and order effects remain zero.
+
+| Acceptance state | Exact result |
+| --- | --- |
+| R1 wrapper / transfer manifest | `PASS` as separate receiving evidence; application reader `NOT_EVALUATED` |
+| Raw portable-file integrity | `PASS` |
+| Complete effective-snapshot restoration | `PASS` |
+| Structural replay / relationship validation | `PASS` / `PASS` |
+| Ten separately transferred original PDFs | `PASS` for exact name, size, SHA-256, and page bounds |
+| Three declared page-image bundles | `UNAVAILABLE_3_DECLARED_BUNDLES` |
+| Original historical V4 patch replay | `UNAVAILABLE_EXACT_V4_BASELINE_REQUIRED` |
+| Semantic review | `TARGETED_UNAPPROVED_REVIEW` |
+| Mapping / price approval | `NOT_APPROVED` / `NOT_APPROVED` |
+| Import readiness | `NOT_IMPORT_READY` |
+| Genuine next-month supplier book | Not supplied; no real monthly comparison claimed |
+
+- The final private bundle is
+  `input/accepted-report-final-a1/{report.json,report.html,SHA256SUMS.json}`.
+  JSON is 96,655,733 bytes, SHA-256
+  `8374652283925fe89c8252e99e336586126bce2dbb8c14decc7700b42ed8e65a`;
+  HTML is 96,293,128 bytes, SHA-256
+  `37fb21c46b9d2eab6e2c077ea2cf7b3de3e60d355b3167adb1846458866e7514`;
+  the checksum manifest is 343 bytes, SHA-256
+  `9977553e983598a1b54a0ecbfa02e621e3d0c86ea226a489bf11b5e86357d904`.
+  First publication took 309.486822 seconds; exact replay took 298.865084
+  seconds. Both exited zero with empty stderr and 243-byte bounded stdout;
+  every output hash and nanosecond mtime remained identical. Peak child RSS
+  across the two executions was 1,397,300 KiB.
+- Chromium 152.0.7977.64 rendered the actual self-contained `file://` HTML
+  with CDP and host resolution blocking HTTP(S). It exercised all 2,000 unique
+  Variant batches / 14,823 occurrences, exact Variant, supplier, SKU, and
+  `Unfilled` search, occurrence detail, sidecar evidence, all six global
+  ledgers, all 14,823 bound path-safe PDF links, and three representative local
+  physical-page navigations. External anchors/HTTP requests, runtime
+  exceptions, console errors, navigation errors, and loading failures were all
+  zero. This proves offline file rendering only, not an authenticated server or
+  production interface.
+- Final focused validation passed `86/86` in 2.157 seconds; startup hardening
+  passed `10/10` in 0.003 seconds. The one exact-final authoritative
+  disposable-loopback PostgreSQL 16.9 run discovered, executed, and passed
+  `673/673` in 711.303 seconds (724-second wrapper), with failures, errors,
+  skips, expected failures, and unexpected successes all zero across the exact
+  37-module floor. AST parsing of 97 Python files, pinned `uv 0.12.3` lock
+  checking, diff checking, extension/private-generated checks, and added-line
+  secret/private-literal scans passed on the clean implementation tree.
+- Read-only same-model reviewer `/root/final_contract_report_review` found two
+  grouped P1s in an earlier candidate: collapsed integrity/restoration result
+  states and incomplete propagation/tests for the required three-part terminal
+  label. After remediation it returned: `PASS — no remaining P0/P1/P2 findings
+  in the second label-contract remediation.` This does not replace a
+  Claude-specific review. The existing Claude credential remains unavailable;
+  disposition is **REVIEW PENDING**, with the exact frozen prompt retained
+  outside Git as `CLAUDE_READ_ONLY_REVIEW_PROMPT_482B1E6.md`. No login loop,
+  OAuth bypass, or separately billed API was used.
+- The persistent multi-offer authority design remains a proposal with six open
+  owner decisions and no implementation under this task:
+
+  1. Keep routine selection Variant-wide unless the owner deliberately chooses
+     Variant-plus-vendor/channel scope; narrower scope permits simultaneous
+     channel choices but changes existing uniqueness and recommendation
+     semantics.
+  2. Prefer distinct mapping and selection confirmations with least-privilege
+     roles; allowing one owner for both reduces friction but weakens separation
+     of duties.
+  3. Require explicit validity/expiry and fail closed when a monthly book is
+     missing; this prevents stale economics from becoming current but requires
+     timely re-review.
+  4. Do not bootstrap any verified single offer automatically. If an owner
+     elects a bootstrap set, require an explicit fingerprinted batch review;
+     the tradeoff is review effort for auditable authority.
+  5. Use a private authenticated identity provider, server-derived actor
+     identity, and per-action roles for list/detail/download/mapping/selection;
+     this adds security administration but avoids shared-token or caller-
+     asserted authority.
+  6. Keep Shopify SKU writeback absent. Any future support needs a separately
+     authorized scope, compare-and-swap preconditions, immutable audit, and a
+     tested rollback; convenience does not justify silent identity drift.
+
+- Host-local evidence is retained outside Git under
+  `/home/runner/workspace/.ai-auth/codex/evidence/real-package-acceptance-20260909T005609Z`.
+  It includes the unchanged-reader failure, final focused/startup/full/static
+  evidence, exact publish/replay attestation, Chromium audit/trace, private
+  report bundle, frozen Claude prompt, and a final hash manifest. Off-host
+  backup is not proven. The follow-on closeout exceeded the contract's eight-
+  hour execution window; this is a disclosed process limitation and creates no
+  approval or exception. `PHASE_STATUS.md` is unchanged because no program
+  milestone changed. PR #23 remains untouched, draft, historically non-green,
+  and outside this branch.
+- Production/development operational database connections or writes, Shopify
+  calls/writes, mapping or price activations, supplier transmissions, orders or
+  POs, deployments, `main` merges, PR changes/retries, and new PRs: `0`.
+  **Exact next authorization boundary:** owner review of this frozen checkpoint,
+  its evidence, and the six design decisions. Do not merge, deploy, approve,
+  import, select, write back, contact a supplier, or order under this handoff.
+
+### Daytime V5 supplier-review compatibility — REVIEW ONLY / NOT_IMPORT_READY / NO V5 PR
+
+- The bounded Daytime execution began at `2026-09-08T11:30:17Z` /
+  `2026-09-08T07:30:17-0400` in `America/New_York`. The private intake kit
+  SHA-256 is
+  `8a696f3a618c789bcc064ddf2f8468dabc2f588428cca2ed4215fd22de44ff73`;
+  all nine members declared by its outer seal independently matched their byte
+  counts and SHA-256 values. Bundled analysis code was inspected only as data
+  and was not executed.
+- The immutable Night 2 base is branch
+  `codex/supplier-mapping-review-bridge`, commit
+  `2a7192ff16c86630f01300f493560ccee8d2685f`, tree
+  `6a6bf1fcecfd13f8b51ec1267411572a8799d34c`. Work proceeded only on isolated
+  child branch `codex/supplier-mapping-v5-validation`; neither `main`, PR #23,
+  nor G10 was merged into it. Design commit `48f5b355...`, initial
+  implementation `5dffb755...`, intermediate remediation `72f2d12...`, strict
+  completion remediation `f7edd300...`, and the final bounded HTML follow-up
+  `bb0aaf33...` are retained in history.
+- The exact frozen implementation/test/review candidate is
+  `bb0aaf3312742d59a1937d8538e729c7b3a5da99`, tree
+  `016e33dea31ad0b91ed4ccee7daf5657b4c615de`. Its 12-file delta from the
+  Night 2 base consists only of four Markdown handoff/design documents, three
+  review-only Python modules, one review-only CLI, three test modules, and
+  test-runner floors. It changes no schema, migration, canonical rule,
+  workflow, operational price, or production configuration. The final
+  closeout commit changes documentation only; all non-document bytes remain
+  identical to this candidate.
+- The reader now handles the actual supplied V5 layout as an explicitly
+  versioned, fail-closed diagnostic format and retains V4.1 compatibility. It
+  validates manifests, table profiles, nine patch streams, the 17-row locator
+  correction inventory, native types/presence, joins, source hashes, and zero
+  authority. The code-owned portable transport reconstructs canonical JSONL
+  across sealed ZIP shards and rejects mixed roots, self-authorized patch
+  fields, spoofed lineage, empty source evidence, and declared-versus-row scope
+  contradictions. A complete synthetic transport is software evidence only,
+  never commercial replay or approval.
+- The actual V5 archive has 201 members with all 200 manifest-declared members
+  verified and exposes 53 diagnostic tables. Exact V4.1 predecessor,
+  workbook, and developer-packet hashes verify. Package integrity/schema and
+  V4.1/locator patch binding are `PASS`; locator overlay and V4-to-V5 replay are
+  `BASELINE_REQUIRED`; source availability is `SOURCE_EVIDENCE_REQUIRED`;
+  semantic review is `REVIEW_REQUIRED`; approval is `NOT_APPROVED`; import
+  readiness is `NO`. The actual comparison is `NOT_COMPARABLE` with every
+  change-claim list empty.
+- Seven evidence prerequisites remain unavailable: the exact V4 baseline,
+  original supplier PDFs, an actual portable snapshot root, three indexed
+  source-page archives, and unchanged-artifact source bytes. The supplied
+  controls nevertheless reconcile: original cohort 2,000; current census
+  2,003 = 1,999 returned + one not returned + four additions; 14,812 source
+  occurrences across 1,886 families, including 1,796 multi-offer families;
+  110 conditional gifts; 249 fixed-combo components; 799 dependencies with
+  714 active across 475 variants; and 308 normalized review rows. Mapping,
+  price, and import approvals are all zero.
+- The code-owned synthetic portable fixture returns `STRUCTURED_REPLAY` with
+  structural/source checks `PASS`, but remains `SIMULATED`, review-required,
+  unapproved, and not import-ready. The final P1 remediation binds lineage to
+  code-owned test anchors, derives and checks supplier/period/channel/territory
+  scope against reconstructed rows and source evidence, and distinguishes
+  locator patch binding `PASS` from base-backed locator replay
+  `BASELINE_REQUIRED`.
+- Strict completion remediation adds a typed unique-row locator validator in
+  the real replay path; bounded reviewable gift/combo sidecar projections;
+  hard-coded independent known answers for all eight supplied synthetic layout
+  boundaries and all 12 simulated next-month cases; missing-sidecar,
+  wrong-order, duplicate-locator, and interrupted-replay challenges; and an
+  explicit simulation marker in JSON and HTML. It does not create a mapping,
+  selected offer, tier, price, or operational action.
+- Final actual report JSON is 23,614,092 bytes with SHA-256
+  `35c5551a642b52bc02a91b1fa6164d61219e84e85bb6cacc53acf047c6941f93`;
+  its bounded tabular HTML is 137,164 bytes with SHA-256
+  `c99d7aae9b1dfa7777411969e5ef9ad482659a8d2401e5fd8e3ad0c6e3d4a7cc`.
+  CLI execution took 29.723974 seconds with peak RSS 335,640 KiB. Synthetic
+  JSON/HTML are 32,531/6,850 bytes with SHA-256
+  `fa20cad453d671deb0389ade982cb4f16079fe39fa22c1d52efb9a1829f73ce1` /
+  `38166d89ff7c7a69fe650691ce938383ab75e4882bac06c83e97474b833223a6`.
+  A synthetic self-comparison is explicitly simulated and has JSON/HTML hashes
+  `fdd579a932cdc5da00a998fb029f53230b860cee555f587ac3906c265a82fdb5` /
+  `ecc91c1e1dd80acc77f428fba0a082b5816fe41b9a179a4a2788d10beeb057f5`.
+  Chromium 152 rendered all three local `file://` reports with networking
+  disabled and exposed `Simulated: yes` in the comparison DOM. This is local
+  report rendering, not started-server or production-browser acceptance.
+- Fabricated scale evidence replays 12,000 baseline rows plus 120 replacements
+  and 80 appends to exactly 12,080 rows, including exact second-replay
+  idempotency and unchanged-baseline proof. A separately instrumented run
+  measured 10,554,020 peak Python-tracked bytes in 34.266422 seconds; its outer
+  process took 36.302799 seconds with peak RSS 49,896 KiB. Older 220 MB/48 MB
+  reports and prior `final-v*` evidence remain superseded diagnostics.
+- Final focused pure validation passed `61/61` (package `15`, V5 `16`, mapping
+  `30`). Startup hardening passed `10/10`. The authoritative
+  disposable-loopback PostgreSQL 16.9 run discovered, executed, and passed
+  `648/648` in 842.975 seconds across 36 registered module floors; failures,
+  errors, skips, expected failures, and unexpected successes were all zero.
+  Its wrapper exited zero after 858.882607 seconds with peak RSS 138,388 KiB.
+  The net `+25` from the distinct 623-test Night 2 baseline is nine additional
+  mapping-review tests plus 16 V5 tests; no integration merge supplied tests.
+  Pinned `uv 0.12.3` lock validation, Python compilation/AST parsing, exact
+  floor discovery, changed-file secret/private-data scans, and final diff
+  checks passed.
+- A read-only same-model Codex adversarial reviewer (`/root/v5_adapter_review`,
+  GPT-5 family) reviewed intermediate snapshots and drove fail-closed fixes. A
+  final read-only same-model reviewer (`/root/final_completion_reaudit`) then
+  reviewed exact `bb0aaf3...` / `016e33d...`, independently ran `61/61`, and
+  returned PASS with no concrete P0/P1. That does not satisfy a Claude-specific
+  review. The prior Claude Code OAuth session remains expired, so Claude
+  disposition is **REVIEW PENDING**; no OAuth workaround or separately billed
+  API was used. A precise frozen-candidate Claude prompt is retained outside
+  Git as `CLAUDE_READ_ONLY_REVIEW_PROMPT_BB0AAF3_TEST_DATA.md`.
+- Host-local test evidence is retained outside Git under
+  `/home/runner/workspace/.ai-auth/codex/evidence/daytime-20260908T113017Z`.
+  Current report directories are `actual-v5-bb0aaf3-report-test-data/`,
+  `synthetic-portable-bb0aaf3-report-test-data/`, and
+  `synthetic-portable-bb0aaf3-compare-report-test-data/`; current Chromium
+  evidence is `browser-bb0aaf3/`.
+  The final evidence verifier and SHA-256 manifest cover report, browser,
+  focused, suite, startup, static, scale, Git, and cleanup evidence and identify
+  current versus superseded files. Off-host backup is not proven.
+- PR #23 remains a separate draft integration concern: base
+  `f308ac666a2377f540e528bc873463daecc20cf8`, source
+  `ec71fe9c5a6f13832a8cad65b065be9747010486`, and synthetic merge
+  `f7bbb45a31953eccd4ec5016269057e9e2c003d3`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. GitHub run `34185466802`
+  was pull-request attempt 1; startup passed but its full suite exited 1 after
+  959 seconds. The public API reported the draft PR mergeable with state
+  `unstable`; detailed logs remain admin-only (`403`), its sole annotation is
+  generic, and no artifact establishes a cause. The raw API payload was not
+  retained, and use of the synthetic merge as the remote checkout is inferred,
+  not directly proven. One exact local synthetic-tree reproduction passed
+  startup `10/10` and suite `599/599` in 787.161 seconds with every abnormal
+  counter zero. Local green is not green GitHub CI; there was no retry or PR23
+  change, and its public body remains stale because update credentials were
+  unavailable.
+- The next-packet design at
+  `docs/superpowers/specs/2026-09-08-persistent-multi-offer-mapping-authority-design.md`
+  proposes append-only review intake/decision/selection events, one mutable
+  selected-offer head, and a reviewed shadow cutover from
+  `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`. It keeps mapping approval,
+  price approval, and Shopify SKU writeback separate. All six owner decisions
+  in that design remain open; no schema, migration, UI, approval, selected
+  offer, price promotion, or cutover was implemented.
+- Historical process evidence is not rewritten as success: durable checkpoints
+  at 11:30, 13:04, 14:15, and 15:40 exceeded the requested approximate
+  30-minute cadence; K6 design-first timing is not independently provable
+  because design and some implementation appeared in one commit; and focused
+  review logs before the final run were summary-only. These are disclosed
+  process limitations, not product approval or grounds to weaken a blocker.
+- Actual portable bytes, the V4 baseline, original PDFs/source bundles,
+  unchanged source bytes, a genuine next-month book, authenticated private
+  caller, persistent mapping authority, current-price approval, and production
+  integration remain unresolved. Phase 4 stays open/preflight-pending; Phase 5
+  remains complete; Phase 6 remains authorized but paused; CURRENT/FUTURE,
+  readiness, mappings, prices, and PO state are unchanged.
+- This is an offline engineering checkpoint only. This week's orders remain
+  owner-handled and out of scope. Production/development operational database
+  connections/writes, Shopify calls/writes, mapping/price activations, supplier
+  transmissions, orders/POs, deployments, main merges, and V5 PRs: `0`.
+  **Exact next action:** ChatGPT/owner review of this frozen V5 checkpoint and
+  host-local evidence; no merge or operational action.
+
+### Night 2 offline supplier-mapping review bridge — REVIEW ONLY / NOT_IMPORT_READY
+
+- The bounded Night 2 execution began at `2026-09-08T03:35:50Z` /
+  `2026-09-07T23:35:50-0400` in `America/New_York`; the final validation and
+  handoff remained inside the eight-hour contract window.
+- Packet A integrated exact `main`
+  `f308ac666a2377f540e528bc873463daecc20cf8` into the PR #23 feature
+  branch with history-preserving merge commit
+  `ec71fe9c5a6f13832a8cad65b065be9747010486`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`. Only
+  `docs/CODEX_HANDOFF.md` required manual conflict resolution; both the Monday
+  and main G9 histories were retained. Local exact-merge validation passed
+  `599/599` plus startup `10/10`.
+- PR #23 remains draft and frozen. Configured pull-request CI run
+  `34185466802` passed startup, but its full-suite step exited `1` after 959
+  seconds. The public API exposes no diagnostic beyond exit code 1 and the
+  detailed log endpoint requires repository-admin rights. It was not retried
+  and is not green. No PR merge, auto-merge, workflow change, or branch-
+  protection change occurred. GitHub created synthetic pull-request merge
+  `f7bbb45a31953eccd4ec5016269057e9e2c003d3`, tree
+  `543be91aee06386b7889a1fc4198eaafe89e74df`, with parents exact main then
+  `ec71fe9...`; because detailed logs returned `403`, its use as the Actions
+  checkout is inferred from workflow semantics rather than directly proven.
+  The public PR description still names the pre-integration `88bf800...`
+  checkpoint and says the conflict/CI are pending; GitHub metadata credentials
+  were unavailable, so it could not be corrected. Repository handoff evidence
+  below is current, but the stale reviewer-facing PR body and unexplained
+  non-green CI remain Packet A release blockers.
+- The separate branch `codex/supplier-mapping-review-bridge` was therefore
+  based on the contract-authorized verified fallback
+  `88bf800708881e5801a51d0cb165e84e8c8cf198`, tree
+  `54357c11531018c49bfc4035dfe40d9858c1f788`. Its final implementation
+  checkpoint is `ecc1835dc025c21c9c0e9c5879328a01b81c04dd`, tree
+  `6eaf41bfe0eb62afa7cfbd379d13bc1456a8dc11`.
+- The bridge adds a bounded directory/ZIP review-package reader, raw and
+  canonical hash validation, exact typed CSV sidecars, fail-closed joins and
+  patch replay, occurrence-preserving offer-family reports, candidate monthly
+  comparison, escaped deterministic HTML/JSON, and a database-free CLI whose
+  default is no-write dry-run. Explicit output uses atomic no-replace
+  publication and exact replay. Code-owned V4.1 table contracts prevent a
+  patch from authorizing its own fields; strict identity, type, count, join,
+  hash, replay, archive, and authority guards fail closed. It does not call or
+  modify mapping, price, readiness, inventory, forecast, PO, Shopify, or
+  deployment authority. Its human HTML is a bounded escaped summary rather
+  than a raw JSON dump; full canonical detail remains in `report.json`.
+- Final focused validation passed `36/36` (`21` mapping and `15` package).
+  Startup hardening passed `10/10` in 0.003 seconds. The one authoritative
+  final suite discovered, executed, and passed `623/623` in 643.625 seconds
+  across 35 registered modules; failures, errors, skips, expected failures,
+  and unexpected successes were all zero. Compilation, pinned lock, exact
+  discovery/floors, diff, generated/private-extension, secret-prefix, and
+  operational-call/import checks passed.
+- Independent read-only reviews found concrete integrity and semantic P1s in
+  earlier snapshots. After bounded remediation, the prior exact five-file
+  snapshot received a targeted independent PASS. A strict completion audit
+  then identified the raw-JSON HTML, explicit SKU-reuse/round-trip coverage,
+  and a private classification literal; commit `ecc1835...` corrected all
+  three without changing operational code. Its targeted independent re-review
+  returned PASS with no concrete P0/P1 and independently reran `36/36`.
+  The exact private not-returned value is now preserved only from runtime
+  evidence; public code requires one nonblank textual ID and cohort arithmetic
+  without embedding the private status association.
+- The contract-requested Claude Code review was attempted once against frozen
+  head `1df36b3ce33ce2f2426fd0d7bb72d668e45a906d`, tree
+  `4f90f2b87cf1fe8cb0770ace66d8e6f07b9d02d0`, with only read/search tools
+  permitted. Claude Code `2.1.227` exited before reviewing because its OAuth
+  session was expired and could not be refreshed. Its disposition is therefore
+  **REVIEW PENDING**, not approval; no OAuth workaround or paid API was used.
+  The outside-Git attempt record has SHA-256
+  `26fe5bce614ace923093f39a549fd7c657662d8c73ad3ff0a08d96c8458cfd6c`.
+- The supplied private V4.1 delta ZIP contains 35 members including its hash
+  manifest; all 34 declared members verified. The tool reproduces the supplied
+  typed 27-column delta view, reconciles 1,302 companion patches, 5,172
+  workbook patches, 189 unchanged-artifact records and the exact 2,000/2,003
+  cohorts, and reports exactly `BASELINE_REQUIRED`. The exact 389 MB V4
+  baseline archive, original supplier PDFs, Tier/source registry adapter, and
+  exposed/effective projection proof were not supplied, so no complete patch
+  replay, whole 80,661-row claim, or purchasing-ready result is made. Even a
+  future twelve-table mechanical replay remains `SOURCE_EVIDENCE_REQUIRED`.
+  Real mapping approvals, current-price approvals, application IDs, and
+  import-ready rows remain zero.
+- Private kit bytes, commercial rows, and rendered reports remain outside Git
+  under
+  `/home/runner/workspace/.ai-auth/codex/evidence/night2-20260908T033550Z`.
+  The current directory report is
+  `v4_1-review-only-report-ecc1835-test-data`; its concise HTML is 9,254 bytes,
+  contains six tables and no raw JSON `<pre>`, and has SHA-256
+  `4fb69ebabe2c55f5491d5f993d24b69232fffa440e4c7612a34a70386cfa20ed`.
+  Its report JSON SHA-256 remains
+  `7f4f0adb18d0c2f3c99a6dbe26a35de22ea58a9d01c10b752b45313cf43f2fb9`.
+  ZIP-input parity is retained separately; after removing only the deliberately
+  different source-path field, both semantic reports hash to
+  `fb4d74f468148b6f646ed65b73b965d4cc911b82588ccaa637795ff802f29437`.
+  `ecc1835-validation-test-data/SHA256SUMS_TEST_DATA.txt` verifies nine current
+  remediation/report/supplement files and has SHA-256
+  `38150950ee5baa7103b6c4cb9e8e525477f77fa0b2d7d4405783fa2695e79f5f`.
+  The supplement proves the private workbook's exact G01–G21 sequence and
+  review-only routing, and proves the actual partial delta comparison returns
+  `NOT_COMPARABLE` with zero invented change claims.
+  Older pre-remediation report directories are not current evidence. The
+  current evidence is host-local; off-host backup is not proven.
+- Process disclosure: three read-only child agents were briefly live at once,
+  exceeding the contract maximum of two; one was immediately interrupted.
+  Root remained the sole writer, no child made a repository/DB/network
+  mutation, and the final independent reviewer classified the deviation as
+  documentation-only rather than a code-verdict defect.
+- **Next integration proposal, not authorization:** independently review a
+  minimal immutable mapping-decision/selected-offer schema and private UI;
+  retain every rejected/alternate occurrence; separately design guarded
+  initial CURRENT bootstrap/FUTURE rollover and supplier-specific licensed
+  parser fixtures. Do not weaken `EXACTLY_ONE_ACTIVE_STANDARD_OFFER_REQUIRED`
+  before that reviewed selection authority exists.
+- **Exact next authorization boundary:** ChatGPT/owner review of the frozen
+  bridge candidate, its completed targeted independent review, and the pending
+  Claude review limitation. No bridge PR, application integration,
+  schema/UI change, mapping/price approval, import, or operational action is
+  authorized by this checkpoint.
+- This is an offline engineering checkpoint only. This week's orders remain
+  owner-handled and out of scope. Production/development operational database
+  connections/writes: `0 / 0`; Shopify calls/writes: `0 / 0`; mapping/price
+  activations, supplier transmissions, and real PO actions: `0`.
+
+### Emergency Monday offline draft-PR/CI checkpoint — NOT PRODUCTION READY
+
+- Independent review originally returned REQUEST CHANGES on implementation commit
+  `4b342cf67ec1d488a2f84433042a468609624d84`, tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. The branch entered remediation at
+  documentation head `3aed22dd09f951b27f30e04517fd3fd104f99dcd`, tree
+  `8574d92621d8f265deba5f740d49f94ab84920c9`.
+- Exact reviewed and tested source candidate:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`, on
+  `codex/emergency-monday-procurement-mvp`. The material P1 implementation commit
+  within that candidate is
+  `dda6b0986710f032f05f50273527af160cacde5c`, tree
+  `6fc845669afa056854b9306d3cf05074fa57afe3`. That exact reviewed source
+  candidate inherited the pre-authorized emergency history from `1920a16`
+  before the ordinary Packet A integration of exact `main`
+  `f308ac666a2377f540e528bc873463daecc20cf8` into this draft-PR branch.
+- P1-1 is fail-closed with one full requested-variant manifest/fingerprint
+  across prepare/replay/preview/confirm/build. Original blocked-input exceptions
+  remain immutable; an append-only, exact-fingerprint RUN_ONLY
+  `ACKNOWLEDGE_AND_EXCLUDE` action records actor/timestamp/reason and never
+  changes global facts or creates eligibility. REJECT remains separate.
+- P1-2 uses the expressly authorized simpler fallback: one active RUNNING
+  Monday Procurement run per business date, backed by service precheck,
+  PostgreSQL uniqueness, and DRAFT/RUNNING lifecycle triggers. A failed
+  pre-build run releases the date; a built DRAFT keeps it. Supersession was not
+  implemented and DRAFT remains excluded from trusted incoming.
+- P1-4 restores vendor scope: incomplete vendors keep VENDOR FAIL/blocking
+  evidence while mixed global coverage is WARN/nonblocking. A genuine global
+  PASS is accepted, but WARN cannot replace missing vendor evidence. Migration
+  013 repairs legacy persisted summary state without inventing vendor PASS.
+- P1-5 uses one temporary owner-reviewable policy in `rules.toml`: strict-above
+  `2.0x` frozen raw baseline units or strict-above `30.0` resulting days of
+  supply is MATERIAL. Exactly-at values remain NORMAL; positive edits from zero
+  baseline/forecast are MATERIAL; no quantity is capped. Material edits require
+  a separate append-only confirmation bound to the exact run, recommendation,
+  input/preview fingerprints, and quantities. Actor, database timestamp, and
+  reason are audited; immutable evidence records the policy, inventory/days,
+  and incremental/final cash. Python and SQL independently enforce the same
+  rounded classification.
+- P1-3 remains an explicit owner decision. No positive loose-fee meaning was
+  guessed. Any required positive-fee loose quantity becomes
+  `LOOSE_UNIT_FEE_SEMANTICS_UNCONFIRMED`; Python/SQL/upgrade guards reject it.
+  Case-only orders and confirmed zero-fee loose orders may continue when all
+  other facts pass.
+- The emergency service remains `INTERNAL_DRAFT_ONLY`. Seven Monday route/method
+  pairs cover list, prepare, detail, blocker exclusion, review, DRAFT build, and
+  artifact download; none provides FINAL, release, import, Shopify, supplier
+  transmission, or production mutation. Review-token equality authorizes the
+  operation but does not authenticate the caller or entered actor; verified
+  private caller authentication remains a production prerequisite.
+- Exact implementation validation provisioned/destroyed loopback PostgreSQL
+  16.9 `procurement_test`: Monday `54/54`; readiness `21/21`; vendor rules
+  `16/16`; PO ledger compatibility `35/35`; affected surface `218/218`; full
+  authoritative suite discovered/executed/passed `587/587` in 842.923 seconds.
+  Failures, errors, skips, expected failures, and unexpected successes were all
+  `0`, and all 33 registered module floors passed. Startup hardening passed
+  `10/10`; compilation, pinned `uv 0.12.3` lock, shell syntax, diff, secret,
+  generated/binary, and forbidden-runtime-call scans passed.
+- Hard-coded independent boundaries prove `5/6/7` units from baseline 3 are
+  NORMAL/NORMAL/MATERIAL at `1.6667x/2.0000x/2.3333x` and `$50/$60/$70` final
+  cash; `29.99/30.00/30.01` days are NORMAL/NORMAL/MATERIAL; raw `30.004`
+  rounds to `30.00` consistently; and a `1000x` edit is MATERIAL at
+  `$30,000.00` final / `$29,970.00` incremental cash.
+- Claude independently re-reviewed the completed candidate and returned
+  **APPROVE WITH NONBLOCKING FINDINGS**. Its independent validation passed the
+  full suite `587/587` and startup hardening `10/10`; failures, errors, skips,
+  expected failures, and unexpected successes were all `0`. ChatGPT accepts
+  this as code-review evidence, not as merge, production, or policy approval.
+- The preserved nonblocking findings are: **N-1**, the database guard contains
+  the exact exclusion `run_id` check but the Python-side defense-in-depth check
+  is absent; **N-2**, material confirmation is a distinct action and not a
+  second-person requirement; **N-3**, days-of-supply classification uses the
+  canonical rounded value; **N-4**, material-policy changes invalidate in-flight
+  runs; **N-5**, a targeted positive CASE-minimum arithmetic assertion remains
+  to be added; and **N-6**, confidential Monday GET/list/detail/download
+  surfaces still need verified caller protection.
+- Codex separately completed the authorized local started-server/browser
+  acceptance on the exact source candidate using synthetic data, loopback
+  PostgreSQL 16 `_test` resources, Uvicorn, and Chromium. All `48/48` browser
+  assertions and `144/144` database/download/ZIP assertions passed. The one
+  DRAFT and one line reconcile `$20.02` merchandise plus `$5.00` fee to
+  `$25.02`; two artifacts and one packet event were preserved; the packet has
+  12 entries with a valid internal manifest; replay was idempotent; and the
+  server, browser, listeners, and disposable database were stopped.
+- That evidence remains host-local and outside Git at
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`.
+  `SHA256SUMS_TEST_DATA.txt` contains 53 records covering every other retained
+  file and has SHA-256
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`;
+  `ACCEPTANCE_REPORT_TEST_DATA.md` has SHA-256
+  `b4bad03c7f885221e0594c7163a74cecb2bf2e598e654e7589813cb845fe7887`.
+  Off-host backup is not proven. The deleted pre-remediation `/tmp` sample is
+  not current evidence.
+- Owner decisions remain required for the temporary `2.0x`/`30.0 days` policy,
+  positive loose-fee application semantics, and any future supersession design.
+  Real current sales, same-day inventory, open orders, vendor facts,
+  mappings/packs, and CURRENT prices remain unproven. This week's orders are
+  explicitly out of scope and are being handled separately by the owner.
+- Deferred P2 items remain explicit: trusted-write-role artifact semantics,
+  human-interpreted blackout/special-rule text, synthetic `_test` sales fixture
+  authority, native Shopify CSV, App Storage/private access/auth,
+  Nix/runtime/dependencies, backup/restore, real migrations, production/private
+  browser and shadow-mode acceptance, and disabled strategic forward buying.
+  The accepted local started-server/browser exercise closes only that offline
+  acceptance gap.
+- This remediation changes no formal phase completion. Published-production
+  Phase 4 remains OPEN and formal Phase 6 remains owner-authorized but PAUSED.
+  Production database connections/writes: `0 / 0`; Shopify calls/writes:
+  `0 / 0`; FINAL/release/transmission/real-money actions: `0`.
+- **Historical correction-branch boundary:** keep PR #23 draft, obtain the existing
+  configured CI on the history-preserving integration if it passes local
+  integration validation, then stop for ChatGPT PR/CI review. This is an
+  **OFFLINE DRAFT-ONLY FOUNDATION — NOT PRODUCTION READY**. No merge,
+  deployment, republish, production connection, Shopify action, supplier
+  communication, or PO release is authorized.
+- **Historical supplier-QA boundary:** the formerly stated documentation/draft-PR/CI boundary was completed by
+  Night 2 Packet A and is recorded above. PR #23 now awaits ChatGPT/owner
+  review of its non-green CI; no retry, source change, merge, deployment,
+  republish, production connection, Shopify action, supplier communication, or
+  PO release is authorized.
 
 ### G9 read-only published-production preflight mode — IMPLEMENTED / AWAITING INDEPENDENT REVIEW
 
@@ -71,10 +2869,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   actions: **0**. Published-production Phase 4 remains **OPEN** and Phase 6
   remains **OWNER AUTHORIZED but PAUSED**. The separate paused
   `codex/emergency-monday-procurement-mvp` workstream remains untouched by G9.
-- **Exact next action:** ChatGPT implementation review plus independent
-  adversarial review of this exact branch head before PR authorization. No PR,
-  merge, deployment, production connection, correction execution, Shopify
-  access, or PO action is authorized by this checkpoint.
+- **Historical G9 boundary:** this section records the main-side G9 checkpoint
+  merged into the draft-PR branch. It does not authorize G10 invocation,
+  deployment, production connection, correction execution, Shopify access, or
+  any PO action.
 
 ### PR #20 post-merge checkpoint — MERGED / CI PASS / RELEASE PREFLIGHT PENDING
 
@@ -1325,18 +4123,36 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 - Pre-retirement Phase 3 had 1,979 exact active historical/current IDs, 20 genuinely new active variants, 46 deleted historical identities, and 4 inactive-as-expected identities.
 - Exact lookup plus deterministic continuity review found no credible current counterpart for all 46 deleted identities; human-authorized retirement was executed and audited before the successful post-retirement catalog sync.
 
-## Authorization boundary / next action
+## Historical / superseded authorization boundaries
 
-Phase 5 Foundation UI remains **COMPLETE**. Corrective published-production
-Phase 4 implementation, authority, review, merge, and CI gates are complete at
-`main` `1920a16a6dc13a1b4357315f5049b938cbe7c0e2`, but production execution and
-independent post-action reconciliation remain outstanding. G9 read-only
-preflight-mode implementation is validated on
-`codex/phase4-production-preflight-mode` but has not been reviewed, merged, or
-run in the published Scheduled Deployment. No deployment or production
-connection is authorized yet. Phase 6 is owner-authorized but **PAUSED** on
-this prerequisite. The exact next action is ChatGPT implementation review and
-independent adversarial review of the G9 branch before PR authorization.
-Vendor Rules, inventory snapshots, price books, forecasting, procurement, PO
-generation/release, Shopify mutation, and other downstream implementation
-remain out of scope.
+The controlling current boundary is the forecast-evidence correction
+descendant entry at the top of this handoff. The older boundaries below are retained only
+as historical provenance and grant no present authority.
+
+At the earlier `1920a16a6dc13a1b4357315f5049b938cbe7c0e2` snapshot,
+Phase 5 Foundation UI was recorded as **COMPLETE**, while published-production
+Phase 4 execution and independent post-action reconciliation remained
+outstanding. G9 read-only preflight-mode implementation was recorded as
+validated on `codex/phase4-production-preflight-mode` but unreviewed, unmerged
+and not run in the published Scheduled Deployment. No deployment or production
+connection was authorized; Phase 6 was paused on that prerequisite. The
+then-recorded next action was ChatGPT implementation review and independent
+adversarial review of G9 before PR authorization. Vendor Rules, inventory
+snapshots, price books, forecasting, procurement, PO generation/release,
+Shopify mutation and other downstream implementation were recorded as out of
+scope.
+
+The supplier-reader/QA lineage separately recorded an immediate owner review
+of its frozen Daytime V5 review-only checkpoint, host-local evidence, pending
+Claude-specific review and then-non-green PR #23 CI result. It granted no V5
+merge, PR or operational authority. At the later
+`74d864ab46df3bdd0f5aede510aa0c6d62ffbfeb` snapshot, corrective Phase 4
+implementation/authority/review/merge/CI gates were recorded complete, while
+production execution and independent post-action reconciliation were still
+outstanding. Scheduled Deployment and production connection remained
+unauthorized; Phase 6 was paused, and the downstream areas remained out of
+scope.
+
+These are retained historical boundaries only. The controlling current
+boundary is the forecast-evidence correction descendant entry above and grants
+no merge or operational authority.

@@ -10,6 +10,12 @@ unset DATABASE_URL
 for variable in $(compgen -A variable PG); do
   unset "$variable"
 done
+# Deterministic tests also never inherit Shopify or review credentials. Tests
+# that exercise authorization install synthetic values inside their own process.
+unset SHOPIFY_SHOP SHOPIFY_STORE SHOPIFY_STORE_DOMAIN SHOPIFY_SHOP_DOMAIN
+unset SHOPIFY_CLIENT_ID SHOPIFY_CLIENT_SECRET SHOPIFY_API_KEY SHOPIFY_API_SECRET
+unset SHOPIFY_ACCESS_TOKEN SHOPIFY_ADMIN_ACCESS_TOKEN
+unset RECONCILIATION_REVIEW_TOKEN PRICE_BOOK_REVIEW_TOKEN PHASE4_REVIEW_TOKEN_INPUT
 
 if [[ "$(uv --version 2>/dev/null || true)" == "uv $required_uv_version "* ]]; then
   uv_command=(uv)

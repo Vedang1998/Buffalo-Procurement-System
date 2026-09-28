@@ -5,9 +5,323 @@
 
 This file is the executive roadmap/status view. It is updated when a phase/program milestone changes. It does not replace the canonical system specification or the verified current-state handoff.
 
+## Saturday private real-data bridge
+
+**BOUNDED LOCAL MACHINE + REAL-DATA BROWSER PASS — RESEARCH ONLY; REAL
+PURCHASING AND PRODUCTION AUTHORITY BLOCKED**
+
+The isolated child from frozen parent `c1895ff5...` has an exact tested material
+commit `4919d643f8c49e2b788bda4e8ff95ef24a283c4b`, tree
+`e2b88e9a421d97359b7a0165c6dc88f1d97a541b`. It validates the sealed A1
+review package and read-only native Shopify catalog/inventory and 84 complete
+daily-sales captures into a content-addressed private research intake, projection,
+offline HTML/CSV/JSON exports and an authenticated GET-only loopback viewer. No
+migration, table, dependency, operational database or Shopify write was added.
+
+The measured result covers 2,009 current Variants, 1,995 A1/current joins, 84
+complete days through 2026-09-18, 14,901 research rows and a 2,009-row owner
+worksheet. Exact ABC cohort membership, availability/stockout history, approved
+forecast schedule/policy, trusted incoming/open orders, approved mappings, packs,
+prices, fees, target margins and exclusions remain absent. Consequently ABC,
+forecast/protection and purchasing economics are NOT RUN rather than fabricated.
+
+Exact validation passed **931/931** authoritative tests and **10/10** startup
+tests. Fresh real-data Chromium passed **70/70** assertions before and after
+restart, preserved four byte-identical exports, observed no external network and
+proved viewer/browser process and secret cleanup. Two read-only same-model
+reviews found no P0-P2 issue; external/Claude review remains NOT ASSESSED.
+
+This checkpoint does not advance the official production phase. It creates no
+selected offer, DRAFT, PO, supplier communication, deployment or order authority.
+See `docs/SATURDAY_REAL_DATA_BRIDGE_CLOSEOUT.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact controls, limitations and the next boundary.
+
+## Development Forecast V2 five-finding remediation
+
+**BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS — EXTERNAL REVIEW, REAL
+POLICY AND PRODUCTION USE BLOCKED**
+
+The separate `development-forecast-v2` profile is machine-tested at material
+commit `ac65b8fc3263834d1a4c91001330e227f14870bb`, tree
+`6bbb6bfbeade34771b6f95cc0bf3cc257c5d986d`, from the reviewed frozen
+prerequisite `dd131602...`. Its immutable registry preserves V1 and requires an
+exact server-owned V2 fixture/policy/schedule/runtime tuple; mixed, partial and
+caller-selected identities refuse. No migration, table or dependency was
+added.
+
+The five bounded findings are closed: semantic forecast-to-need binding,
+incomplete-ABC refusal, policy-bound confidence, anchored alternating-week
+scheduling and adequate longer-horizon origins. The fabricated 138-day V2
+corpus proves Southern H17 and Western H3 through the actual selected-price,
+review, DRAFT and packet path while preserving separate owner quantity edits.
+
+Exact material validation passed 13/13 pure forecast, 15/15 launcher/fixture,
+13/13 PostgreSQL service, 10/10 startup and **845/845** authoritative tests
+with every abnormal counter zero. Chromium passed **171 assertions** through
+browser-created state, two DRAFTs/three lines, the 14-member packet, source
+restart, same-name restore into a distinct PostgreSQL 16 cluster, recovered
+restart and terminal replay. Final economics are $282 merchandise + one $7
+fee = $289, and source/target durable state shares SHA-256
+`32b0a4de9f37c554e69f76693ef4ede8c914dcbee93e0b7d4efd8bdf6db08f98`.
+
+This does not change the official production phase. All inputs and schedule
+anchors are fabricated; availability remains UNKNOWN/limited; connected ABC
+has no historical COGS; real forecast-policy approval, real backtesting,
+direct-SQL cutover enforcement, production identity/IdP, owner access, native
+Shopify validation, deployment, PO release and ordering remain blocked. See
+`docs/DEVELOPMENT_FORECAST_V2_CLOSEOUT.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact identities, evidence and next boundary.
+
+## Wednesday development forecast-to-DRAFT candidate
+
+**BOUNDED SYNTHETIC MACHINE + STATIC REVIEW PASS — OWNER/EXTERNAL REVIEW,
+REAL POLICY AND PRODUCTION USE BLOCKED**
+
+The isolated child from prerequisite `fac9d55...` has an exact tested material
+commit `49c7b334ec958e6a03ca898e45aedf3163a9a3db`, tree
+`ffdbe27d1283c5f6da03dea259d914d3094fdd5c`. It adds a server-attested,
+development-fixture-only rolling-origin forecast/protection contract that
+actually drives the existing selected-offer recommendation, human review,
+two-vendor internal DRAFT and frozen packet path. It adds no migration or
+table, and the default/real path remains inactive and byte-compatible.
+
+Exact-target focused validation passed 19/19, startup passed 10/10, and the
+authoritative suite passed **837/837** in 1157.416s with every abnormal counter
+zero. Fresh Chromium passed **165 assertions** through declared price
+application, mapping/selection, a six-input Monday run, forecast evidence,
+review, two DRAFTs/three lines, a 14-member packet, source restart, same-name
+restore to a physically distinct PostgreSQL 16 cluster, recovered restart and
+terminal replay. The accepted economics are $192 merchandise + one $7 fee =
+$199. Source/target durable state SHA-256 is
+`31cca9cc6075a477718bf4a09c87d7a75e45dabd3a1c4ad8ed0d404cb33ffc8b`.
+
+All fixture histories have UNKNOWN availability, so the engine correctly marks
+protection LIMITED and confidence LOW. Category shrinkage is NOT_CONFIGURED
+without a frozen causal prior; connected ABC is NOT_CONFIGURED without
+historical COGS; nonzero lead-time variability refuses until a delivery-delay
+model exists. These facts are not forecast-accuracy defects hidden as zeros.
+Two read-only same-model reviewers found no remaining P0-P2 issue at the exact
+material commit, but this is not external/Claude review or owner acceptance.
+
+This candidate does not change the official production phase. Real historical
+COGS/availability, backtesting, service/XYZ/FVA policy approval, direct-SQL
+cutover enforcement, production identity/IdP, owner remote access, native
+Shopify CSV validation, PO release and orders remain blocked. See
+`docs/WEDNESDAY_DEMAND_TO_DRAFT_CLOSEOUT.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact evidence, limitations and the next boundary.
+
+## Synthetic price-to-DRAFT acceptance follow-up
+
+**BOUNDED SYNTHETIC MACHINE PASS — EXTERNAL REVIEW PENDING / REAL AND
+PRODUCTION USE BLOCKED**
+
+The isolated follow-up from received `20dd65ad...` has a machine-tested
+implementation at `450b55375fa97fa60535e2249d1cfddd5b838c5e`, tree
+`05ce96f32140e66c3089e856d220247d73b16904`. The frozen candidate's required
+first wrapper run discovered/executed 823 tests and exposed a real legacy-schema
+compatibility defect (795 pass, 32 errors); its startup validation passed 10/10.
+The follow-up repaired that narrow defect, added a checksum-pinned fabricated
+multivendor profile and frozen-stock DRAFT output, and preserved old packet/CSV
+bytes.
+
+Real loopback Chromium then passed 160 assertions across uploaded Southern
+replacement pricing, six purposeful inputs, two actual DRAFT vendors, review,
+two CSVs, one 13-member packet, source restart, populated backup, same-logical-
+name restore into a physically distinct PostgreSQL 16 cluster, restored login
+and downloads, restored restart and replay. The exact results are two POs,
+three lines, merchandise $162, one $7 fee and total $169. New DRAFT lines bind
+captured Available, capture time, source snapshot and location scope. Complete
+source and restored state share digest `fa62374e...8101`, and all three artifact
+hashes remain identical.
+
+The final authoritative suite passed 823/823 in 1032.763s with every abnormal
+counter zero; startup passed 10/10. This is a synthetic machine acceptance
+candidate, not phase completion, release, commercial authority or owner
+acceptance. The older claim that a 22:52:42Z recovery preceded the prior
+11:15:34Z hard stop is additively corrected as unsupported; frozen evidence is
+unchanged. See `docs/PRICE_TO_DRAFT_ACCEPTANCE_FOLLOWUP.md` and the top entry
+in `docs/CODEX_HANDOFF.md` for exact evidence and limits.
+
+## Synthetic selected-offer consumption candidate
+
+**BOUNDED SYNTHETIC PASS — ISOLATED SYNTHETIC ONLY / REAL AND
+PRODUCTION CUTOVER BLOCKED**
+
+On `codex/mapping-monday-shadow-freeze`, the bounded owner-approved candidate
+connects fabricated sealed review evidence and separate human mapping/selection
+decisions to the selected offer's synthetic CURRENT ladder, the existing
+inventory/demand calculation, reviewed quantity, internal DRAFT and frozen
+packet. The causal regression deliberately keeps two active eligible STANDARD
+offers so the old resolver cannot produce a recommendation; only the selected
+`SUP-001` lineage can complete the synthetic line. Missing or changed selection
+evidence fails closed without legacy fallback.
+
+No schema migration, offer/price mutation, activation, Shopify write, release
+or real-data authority is included. Default runs retain the legacy byte shape
+and resolver. Every repository capability/cutover flag remains false, and the
+selected path requires a distinct supervised local-only flag plus exact owned
+test/demo database attestation. Direct-SQL selected-head enforcement remains a
+known blocker to any real/default use.
+
+Evidence includes the intended causal red, six passing selected tests, one
+92/92 affected-module pass, fresh/replay initializer verification with two
+offers/four schema-valid synthetic pre-011 CURRENT price rows, and a clean
+authoritative **816/816** suite with every abnormal result counter zero. Real loopback
+Chromium passed **160 + 24** assertions through mapping, selection, selected
+BASE-to-BREAK economics, review, DRAFT, packet replay and application restart;
+independent review found no P0-P2 issue. This is a bounded machine/reviewer pass
+for only the isolated synthetic service/UI connection; owner acceptance remains
+pending, and the result does not change the official production phase. The
+Sunday 09:00 delivery and first authorized implementation window were missed
+and remain recorded as missed.
+
 ## Architecture
 
 **CLOSED / ACCEPTED.** Replit-centered, deterministic, fail-closed production architecture. No mandatory runtime LLM. Shopify Variant ID remains canonical identity.
+
+## Persistent-mapping strict-acceptance descendant
+
+**BOUNDED SYNTHETIC PASS — 39+3 FOUNDATION ACCEPTED / MAPPING CUTOVER NOT
+IMPLEMENTED / FULL PRODUCT PARTIAL / PRODUCTION BLOCKED**
+
+The isolated branch `codex/mapping-acceptance-hardening` has an independently
+reviewed and locally tested implementation checkpoint at
+`46833b9bf47aeccc7fa0d98451136dffe6101e7c`, tree
+`93c514d937384663e1cceeddecc71c6bc19da858`. It descends from the separately
+closed forecast-evidence checkpoint `5476268...` without modifying the frozen
+Sunday checkout or protected connected checkout.
+
+Every specification-named persistent-mapping acceptance clause now has
+substantive executable proof: 39/39 PostgreSQL methods and 3/3 pure methods pass
+in exact canonical order. The closure covers migration trust and replay,
+pre-effect role/privilege refusal, immutable evidence, exact null/absent and
+provenance semantics, idempotency/concurrency/stale-preview outcomes, human
+context, zero operational authority, COMMIT uncertainty and actual runner-floor
+enforcement. Packet V2 additionally seals and persists `NOT_APPROVED` and
+`NOT_IMPORT_READY`; it grants no activation or import authority.
+
+Post-commit validation passed startup 10/10, strict matrix 42/42, affected set
+195/195 and the authoritative suite 809/809 with every abnormal counter zero.
+Real loopback Chromium passed 154 + 23 assertions across V2 mapping review,
+shadow selection, guarded V1 retirement, V2 Monday review, one internal DRAFT,
+downloads and application restart. Same-host backup/restore reproduced the
+complete 61-relation/33-sequence state and two storage artifacts at durable
+state SHA-256 `a6a40b0a...`; independent post-machine review found no P0-P2.
+
+This checkpoint changes no official production phase. Mapping remains
+shadow-only. The Monday recommendation still consumed the pre-seeded active
+STANDARD offer and CURRENT synthetic price, not the newly reviewed mapping
+selection. Selection activation, scoped price lifecycle and selected-offer
+recommendation cutover are unimplemented, so no causal supplier-evidence to
+priced-recommendation production chain has been proven. Forecasting remains the
+bounded emergency V2 evidence path; full model/FVA/protection, DRAFT
+supersession, strategic economics, commercial data and broad browser coverage
+remain incomplete.
+
+No deployment, operational database, Shopify call, PO release or real order is
+authorized. Current explicit states are `LOCAL_END_TO_END = PASS` for the
+bounded synthetic descendant, `PERSISTENT_MAPPING_39_PLUS_3 = PASS`,
+`MAPPING_TO_MONDAY_CUTOVER = NOT_IMPLEMENTED`, `COMMERCIAL_DATA_READINESS =
+NOT_APPROVED`, `PRODUCTION_RELEASE = BLOCKED`, `FULL_PRODUCT_REQUIREMENTS =
+PARTIAL / INCOMPLETE`, and `GOAL = INCOMPLETE`. See
+`docs/SUNDAY_PURCHASING_ACCEPTANCE.md` and the top entry in
+`docs/CODEX_HANDOFF.md` for exact evidence, restart instructions and the next
+authorization boundary.
+
+## Prior forecast-evidence correction descendant
+
+**HISTORICAL CLOSED CHECKPOINT — SUPERSEDED AS CURRENT STATUS BY THE
+STRICT-ACCEPTANCE ENTRY ABOVE**
+
+**BOUNDED SYNTHETIC PASS — DEMAND EVIDENCE CORRECTED / FULL PRODUCT PARTIAL /
+PRODUCTION BLOCKED**
+
+The isolated branch `codex/forecast-evidence-correction` has a reviewed and
+locally tested code/test checkpoint at
+`1729647f0ea46a147cd33fd6d8f33e8914cbcfac`, tree
+`315389603f3618cddfd95f748d131e3f6ba719b9`. It descends from the separately
+frozen Sunday package without changing that checkout.
+
+The active emergency Monday path no longer infers a whole-day stockout or
+in-stock interval from one point-in-time inventory quantity or a sale. New
+`EMERGENCY_TRANSPARENT_V2` runs freeze exact 84-day sales authority, raw
+7/14/28 windows and point-in-time provenance while retaining every availability
+day as `UNKNOWN` until a separately reviewed full-day source exists. Regime,
+model, ABC/XYZ, in-stock velocity and safety stock remain uncalculated; no
+forecasting policy was invented.
+
+Additive migration 015 guards historical V1 analysis/input, review, exception
+and PO/line records and provides one exact, append-only pre-build retirement
+event/audit so the business date can be reprepared under V2. Its sole
+child-write exception is the exact append-only packet event/artifact insertion
+needed to package an already-built V1 DRAFT; it cannot retire or supersede that
+DRAFT. Real loopback Chromium passed 154 + 23 assertions across V1 retirement, V2
+prepare/review/internal-DRAFT/download/replay and application restart. A real
+same-host PostgreSQL/storage backup restored the complete state into a new
+empty database after a dump/restore catalog-rendering defect was found,
+remediated and independently reviewed. Startup passed 10/10, the affected set
+passed 185/185, and the final authoritative suite passed 809/809 with every
+abnormal counter zero.
+
+This checkpoint changes no official production phase. Mapping remains
+shadow-only; activation, policy mapping and recommendation cutover are disabled.
+The strict 39+3 matrix still has only partial clause evidence despite all 42
+named methods being green. Private-real and commercial inputs remain
+unapproved; full model selection/FVA, ABC/XYZ, empirical protection, price
+lifecycle, DRAFT supersession, strategic economics and browser breadth remain
+incomplete. No deployment, Shopify call, PO release or real order is
+authorized. Current explicit states are `LOCAL_END_TO_END = PASS` for the
+bounded synthetic descendant, `DEMAND_EVIDENCE_CORRECTION = PASS`,
+`COMMERCIAL_DATA_READINESS = NOT_APPROVED`, `PRODUCTION_RELEASE = BLOCKED`,
+`FULL_PRODUCT_REQUIREMENTS = PARTIAL / INCOMPLETE`, and `GOAL = INCOMPLETE`.
+See `docs/SUNDAY_PURCHASING_ACCEPTANCE.md` and the latest entry in
+`docs/CODEX_HANDOFF.md` for exact evidence and limitations.
+
+## Offline supplier-mapping review tooling
+
+**REVIEW-ONLY CHECKPOINT — NOT A PHASE COMPLETION OR OPERATIONAL AUTHORITY**
+
+The Night 2 bridge remains immutable at branch
+`codex/supplier-mapping-review-bridge`, commit
+`2a7192ff16c86630f01300f493560ccee8d2685f`, tree
+`6a6bf1fcecfd13f8b51ec1267411572a8799d34c`; its reviewed implementation
+history and `623/623` result remain preserved.
+
+The isolated Daytime child branch `codex/supplier-mapping-v5-validation`
+extends that review-only tooling for the actual supplied V5 diagnostic layout
+and a code-owned synthetic portable transport. Its exact frozen
+implementation/test/review candidate is
+`bb0aaf3312742d59a1937d8538e729c7b3a5da99`, tree
+`016e33dea31ad0b91ed4ccee7daf5657b4c615de`. The actual V5 package verifies
+201/200 archive/manifest members and its structural schema, but remains
+`BASELINE_REQUIRED`, `SOURCE_EVIDENCE_REQUIRED`, `REVIEW_REQUIRED`,
+`NOT_APPROVED`, and not import-ready because the exact V4 baseline, original
+PDFs/source bundles, actual portable root, and unchanged source bytes are not
+available. The complete synthetic portable fixture is `STRUCTURED_REPLAY` but
+remains simulated, unapproved, and not import-ready.
+
+Strict completion remediation directly proves the supplied eight synthetic
+layout boundaries, all 12 simulated monthly cases, exact locator replay order,
+missing-sidecar and interruption failures, and reviewable gift/combo evidence.
+The report exposes simulation in JSON and HTML without granting authority.
+Final authoritative validation passed `648/648` across 36 registered modules,
+startup hardening passed `10/10`, and all abnormal counters were zero. A
+read-only same-model Codex adversarial review of the exact frozen candidate
+independently passed `61/61` and found no concrete P0/P1. It does not replace
+the Claude-specific review; Claude remains `REVIEW PENDING` because the
+existing OAuth session expired, with no workaround or paid API used; an exact
+frozen-candidate prompt is retained in host-local evidence. Historical
+checkpoint-cadence and design-timestamp proof limitations are
+explicitly disclosed in `docs/CODEX_HANDOFF.md`. At that earlier Daytime
+checkpoint, the persistent multi-offer mapping-authority packet was design-only:
+no migration, UI, mapping/price approval, selected offer, writeback, or cutover
+had been implemented. That earlier milestone changed no Phase 4/6,
+CURRENT/FUTURE pricing, readiness, mapping, or PO status; its then-recorded next
+action was ChatGPT/owner review of the frozen V5 checkpoint and host-local
+evidence. The separately frozen prior Sunday parent subsequently implemented
+provisional migration 014 in owned isolated PostgreSQL; the current correction
+descendant adds guarded application migration 015. Mapping remains shadow-only,
+and nothing was activated or written to an operational database.
 
 ## Official implementation phases
 
@@ -170,6 +484,67 @@ Formal Phase 6 foundation acceptance, including the deferred legacy
 direct-invocation test-harness hardening item, is authorized but implementation
 has not started. Do not begin until the corrective published-production Phase 4
 closeout is independently reviewed, executed, and verified.
+
+## Authorized emergency Monday offline checkpoint
+
+**INDEPENDENTLY REVIEWED OFFLINE DRAFT-PR/CI CHECKPOINT — NOT FORMAL PHASE OR PRODUCTION ACCEPTANCE**
+
+- Emergency branch: `codex/emergency-monday-procurement-mvp`.
+- Independent review requested changes to commit
+  `4b342cf67ec1d488a2f84433042a468609624d84`, tree
+  `01a451f66ca8ee8d3aaad57090d00de201f30a1c`. Exact tested P1 implementation:
+  `dda6b0986710f032f05f50273527af160cacde5c`, tree
+  `6fc845669afa056854b9306d3cf05074fa57afe3`.
+- Exact reviewed and tested source candidate for the offline checkpoint:
+  `e59ea665408cb881f25cff995cc2a6957fa59f94`, tree
+  `e528fa3ff9cc7a3e13758075c7b8e98b3d5a2dce`.
+- The offline path now integrates validated/frozen inputs, deterministic
+  baseline recommendations, explicit human preview/confirmation, separate
+  vendor DRAFT POs, and a reconciled internal review packet. P1 remediation
+  adds full-set fingerprinting plus audited run-only blocker exclusion, one
+  active Monday run per business date, vendor-scoped incomplete-rule blocking,
+  and a distinct confirmation for edits above the temporary `2.0x` raw-
+  baseline or `30.0`-day thresholds. Positive-fee loose quantities remain
+  blocked pending owner semantics. It stays restricted to immutable
+  `INTERNAL_DRAFT_ONLY` runs; strategic extra quantity remains zero.
+- The authoritative disposable PostgreSQL 16.9 suite passed `587/587` in
+  842.923 seconds with every abnormal counter at zero; affected tests passed
+  `218/218`, and startup hardening passed `10/10`. Claude independently passed
+  `587/587` plus startup `10/10` with every abnormal counter zero and returned
+  **APPROVE WITH NONBLOCKING FINDINGS**. Supplemental Codex reviews found no
+  remaining concrete in-scope P0/P1.
+- Separate offline local acceptance on the exact candidate used actual Uvicorn,
+  Chromium, synthetic data, and disposable loopback PostgreSQL 16 `_test`
+  resources: browser `48/48`, database/download/ZIP verifier `144/144`, one
+  DRAFT, one line, two artifacts, one packet event, `$20.02 + $5.00 = $25.02`,
+  and 12 packet entries with verified replay and cleanup. The host-local
+  53-record manifest covers every other retained file and is outside Git at
+  `/home/runner/workspace/.ai-auth/codex/evidence/monday-started-server-e59ea665-20260907T180925Z`;
+  its SHA-256 is
+  `fe6d601746de858f733731ee2834b9134b84735d243d98269624a14ffec01cd0`.
+- Nonblocking N-1 through N-6 remain recorded in the Monday handoff/evidence
+  documents: Python exclusion defense-in-depth, distinct-action semantics,
+  rounded days-of-supply classification, policy-drift invalidation, a missing
+  targeted positive CASE-minimum assertion, and confidential GET/download
+  caller protection.
+- Real source freshness, private access, runtime, App Storage,
+  migration/backup, native Shopify CSV, production/private browser/shadow,
+  deployment, and production acceptance remain unproven. Host-local evidence
+  is not proven backed up off-host. This week's orders are out of scope and are
+  being handled separately by the owner.
+- Production database connections/writes and Shopify calls/writes remain
+  `0 / 0`; FINAL, release, supplier-transmission, and real-money actions remain
+  `0`.
+
+This emergency checkpoint does not close or renumber a canonical phase, reopen
+production permissions, or alter the Phase 4/Phase 6 statuses above.
+Its documentation-only checkpoint and draft PR/configured CI have occurred.
+PR #23's original non-green CI is now explained by the server-side-loopback
+topology mismatch; its reviewed correction is included in the prospective
+combined candidate, and one fresh exact-correction-head hosted run completed
+successfully. PR #23 remains draft and unmerged, the hosted raw log was not
+publicly retrievable, and no phase completion, main merge, deployment, or
+operational authority follows from that result.
 
 ## Post-foundation ordered workstreams
 

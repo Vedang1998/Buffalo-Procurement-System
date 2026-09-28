@@ -1,0 +1,41 @@
+{
+  "application_at": "2026-10-01T14:00:00+00:00",
+  "contract": "BUFFALO_SYNTHETIC_PRICE_REPLACEMENT_FIXTURE_V1",
+  "monday_evaluation_at": "2026-10-05T14:00:00+00:00",
+  "observation_at": "2026-09-16T14:00:00+00:00",
+  "policies": [
+    {
+      "baseline_rows": [
+        ["SUP-001", "BASE", null, null, "12.0000", "2.0000", "synthetic-owner-demo.csv", 3],
+        ["SUP-001", "BREAK", "2.0000", "CS", "9.5000", "1.5833", "synthetic-owner-demo.csv", 4],
+        ["SUP-ALT", "BASE", null, null, "10.0100", "1.6683", "synthetic-owner-demo.csv", 1],
+        ["SUP-ALT", "BREAK", "2.0000", "CS", "10.0000", "1.6667", "synthetic-owner-demo.csv", 2]
+      ],
+      "currency": "USD",
+      "policy_ref": "synthetic-southern-monthly-complete-v1",
+      "price_scope_key": "COMPLETE_VENDOR",
+      "target_for_replacement": true,
+      "vendor_id": "00000000-0000-4000-8000-000000000001",
+      "vendor_name": "Synthetic Southern"
+    },
+    {
+      "baseline_rows": [
+        ["CTRL-3003", "BASE", null, null, "24.0000", "4.0000", "synthetic-control-demo.csv", 1],
+        ["CTRL-3003", "BREAK", "2.0000", "CS", "21.0000", "3.5000", "synthetic-control-demo.csv", 2]
+      ],
+      "currency": "USD",
+      "policy_ref": "synthetic-control-monthly-complete-v1",
+      "price_scope_key": "COMPLETE_VENDOR",
+      "target_for_replacement": false,
+      "vendor_id": "00000000-0000-4000-8000-000000000002",
+      "vendor_name": "Synthetic Northern Control"
+    }
+  ],
+  "policy_timezone": "America/New_York",
+  "schema": "qa_mapping_test",
+  "source_period_label": "2026-10 fabricated monthly replacement",
+  "source_valid_from": "2026-10-01",
+  "source_valid_through": "2026-10-31",
+  "source_validity_basis": "FABRICATED_MONTHLY_SUPPLIER_SCHEDULE",
+  "supplier_verified_at": "2026-09-16T14:00:00+00:00"
+}

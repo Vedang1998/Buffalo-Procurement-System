@@ -1,0 +1,2 @@
+safety_label,vendor_id,vendor_name,order_days,order_cutoff_local,timezone_name,expected_delivery_days,order_cycle_days,lead_time_days,lead_time_variability_days,reliability_pct,minimum_type,minimum_value,below_minimum_fee,loose_order_allowed,loose_unit_fee,special_rules,holiday_blackout_notes,confirmation_source,confirmed_by,confirmed_at,operator_note
+TEST DATA — NOT FOR ORDERING,,,,,,,,,,,,,,,,,,,,,

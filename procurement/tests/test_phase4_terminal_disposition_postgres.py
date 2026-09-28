@@ -4,7 +4,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 import hashlib
-import os
 from pathlib import Path
 import sys
 import unittest
@@ -49,6 +48,7 @@ from procurement_os.sales import (
     SalesSourceRow,
     load_identity_index,
 )
+from postgres_test_support import validated_test_connection
 
 
 DB_DIR = PROCUREMENT_ROOT / "db"
@@ -77,13 +77,13 @@ OWNER_AUTHORIZATION = "OWNER_AUTHORIZATION_2026-08-21_PHASE4_TERMINAL_PACKET"
 EVIDENCE_VERSION = "phase4-terminal-disposition-evidence-v1"
 
 
-@unittest.skipUnless(os.getenv("DATABASE_URL"), "PostgreSQL integration requires DATABASE_URL")
 class Phase4TerminalDispositionPostgresTests(unittest.TestCase):
     def setUp(self) -> None:
-        import psycopg
         from psycopg import sql
 
-        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
+        self.conn, self.test_target, self.test_database_info = (
+            validated_test_connection()
+        )
         self.schema = f"phase4_terminal_{uuid.uuid4().hex}"
         self.conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))
         self.conn.execute(
@@ -2009,10 +2009,8 @@ class Phase4TerminalDispositionPostgresTests(unittest.TestCase):
         self.assertEqual(post["source_lifecycle"], "POST_REBUILD")
 
     def test_concurrent_transaction_lock_fails_closed(self):
-        import psycopg
-
         artifact = self.seed_preterminal_state()
-        blocker = psycopg.connect(os.environ["DATABASE_URL"])
+        blocker, _, _ = validated_test_connection()
         try:
             blocker.execute("BEGIN")
             acquire_backfill_transaction_lock(blocker)

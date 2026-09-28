@@ -1,0 +1,441 @@
+"""Private research viewer launcher boundary tests."""
+from __future__ import annotations
+
+import importlib.util
+from contextlib import redirect_stderr, redirect_stdout
+import gc
+from io import StringIO
+import json
+import os
+from pathlib import Path
+import stat
+from tempfile import TemporaryDirectory
+import unittest
+from unittest import mock
+import weakref
+
+from procurement_os import private_research_v2
+from procurement_os import private_research_v3
+from procurement_os import private_research_v3_corrected as corrected
+
+
+TOOL = Path(__file__).resolve().parents[1] / "tools" / "serve_private_research.py"
+CORRECTED_BUILD_TOOL = (
+    Path(__file__).resolve().parents[1]
+    / "tools"
+    / "build_private_v3_corrected_research.py"
+)
+
+
+def _load_tool():
+    spec = importlib.util.spec_from_file_location("serve_private_research_test", TOOL)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("private research launcher could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_corrected_build_tool():
+    spec = importlib.util.spec_from_file_location(
+        "build_private_v3_corrected_research_test", CORRECTED_BUILD_TOOL
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("corrected private research builder could not be loaded")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class PrivateResearchToolsTests(unittest.TestCase):
+    def test_corrected_builder_reports_only_aggregate_bound_artifact_metadata(self):
+        tool = _load_corrected_build_tool()
+        snapshot = {"accepted_parent": "unchanged"}
+        delta = {"delta_id": "d" * 64}
+        corrected_input = {
+            "input_id": "a" * 64,
+            "coverage_controls": {
+                "current_catalog_count": 2009,
+                "eligible_count": 1365,
+                "not_applicable_count": 644,
+                "blocked_count": 0,
+                "not_processed_count": 0,
+            },
+        }
+        artifacts = [
+            {
+                "name": "projection.json",
+                "bytes": 123,
+                "sha256": "a" * 64,
+                "media_type": "application/json",
+            }
+        ]
+        manifest = {
+            "workspace_id": "b" * 64,
+            "projection_sha256": "c" * 64,
+            "artifacts": artifacts,
+        }
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                tool, "accepted_parent_snapshot", side_effect=(snapshot, snapshot)
+            ),
+            mock.patch.object(
+                tool,
+                "read_private_v3_research_bundle",
+                return_value=({"parent": "v3"}, {}, {}),
+            ),
+            mock.patch.object(
+                tool,
+                "write_private_v3_corrected_input",
+                return_value=(delta, corrected_input),
+            ),
+            mock.patch.object(
+                tool,
+                "build_private_v3_corrected_research_workspace",
+                return_value=manifest,
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = tool.main(
+                [
+                    "--private-root",
+                    "/private/root",
+                    "--creation-evidence-delta",
+                    "/private/delta.csv",
+                ]
+            )
+        self.assertEqual(status, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(result["artifacts"], artifacts)
+        self.assertEqual(result["projection_sha256"], "c" * 64)
+        self.assertEqual(result["eligible_count"], 1365)
+        self.assertEqual(result["not_applicable_count"], 644)
+        self.assertFalse(result["commercial_authority"])
+        self.assertFalse(result["production_activation"])
+        self.assertNotIn("owner_worksheet", result)
+        self.assertNotIn("observations", stdout.getvalue())
+
+    def test_corrected_builder_releases_initial_bundle_before_workspace_phase(self):
+        tool = _load_corrected_build_tool()
+        snapshot = {"accepted_parent": "unchanged"}
+        references: dict[str, weakref.ReferenceType] = {}
+        phases: list[str] = []
+
+        class WeakMapping(dict):
+            pass
+
+        def read_bundle(_root, _input_id):
+            parent_v3 = private_research_v2._seal_source_verified(
+                {"parent": "v3"}, proof=private_research_v3._V3_INPUT_SOURCE_PROOF
+            )
+            parent_v2 = private_research_v2._seal_source_verified(
+                {"parent": "v2"}, proof=private_research_v2._INPUT_SOURCE_PROOF
+            )
+            base = WeakMapping({"base": "intake"})
+            references.update(
+                parent_v3=weakref.ref(parent_v3),
+                parent_v2=weakref.ref(parent_v2),
+                base_intake=weakref.ref(base),
+            )
+            phases.append("bundle")
+            return parent_v3, parent_v2, base
+
+        def write_input(_root, *, parent_v3_input, delta_csv_path, repo_root):
+            self.assertIs(references["parent_v3"](), parent_v3_input)
+            delta = corrected._seal_owned(
+                {"delta_id": "d" * 64}, corrected._DELTA_PROOF
+            )
+            corrected_input = corrected._seal_owned(
+                {
+                    "input_id": "a" * 64,
+                    "coverage_controls": {
+                        "current_catalog_count": 2009,
+                        "eligible_count": 1365,
+                        "not_applicable_count": 644,
+                        "blocked_count": 0,
+                        "not_processed_count": 0,
+                    },
+                },
+                corrected._INPUT_PROOF,
+            )
+            references.update(
+                delta=weakref.ref(delta),
+                corrected_input=weakref.ref(corrected_input),
+            )
+            phases.append("input")
+            return delta, corrected_input
+
+        def build_workspace(_root, input_id, *, repo_root):
+            self.assertEqual(input_id, "a" * 64)
+            self.assertTrue(references)
+            self.assertTrue(
+                all(reference() is None for reference in references.values())
+            )
+            phases.append("workspace")
+            return {
+                "workspace_id": "b" * 64,
+                "projection_sha256": "c" * 64,
+                "artifacts": [],
+            }
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                tool, "accepted_parent_snapshot", new=lambda _root: snapshot
+            ),
+            mock.patch.object(
+                tool, "read_private_v3_research_bundle", new=read_bundle
+            ),
+            mock.patch.object(
+                tool, "write_private_v3_corrected_input", new=write_input
+            ),
+            mock.patch.object(
+                tool,
+                "build_private_v3_corrected_research_workspace",
+                new=build_workspace,
+            ),
+            mock.patch.object(gc, "collect", new=lambda: 0),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = tool.main(
+                [
+                    "--private-root",
+                    "/private/root",
+                    "--creation-evidence-delta",
+                    "/private/delta.csv",
+                ]
+            )
+        self.assertEqual(status, 0)
+        self.assertEqual(phases, ["bundle", "input", "workspace"])
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(json.loads(stdout.getvalue())["workspace_id"], "b" * 64)
+
+    def test_corrected_builder_failure_releases_owned_inputs_and_emits_no_success(self):
+        tool = _load_corrected_build_tool()
+        references: list[weakref.ReferenceType] = []
+
+        class WeakMapping(dict):
+            pass
+
+        def read_bundle(_root, _input_id):
+            parent_v3 = private_research_v2._seal_source_verified(
+                {"parent": "v3"}, proof=private_research_v3._V3_INPUT_SOURCE_PROOF
+            )
+            parent_v2 = private_research_v2._seal_source_verified(
+                {"parent": "v2"}, proof=private_research_v2._INPUT_SOURCE_PROOF
+            )
+            base = WeakMapping({"base": "intake"})
+            references.extend((weakref.ref(parent_v3), weakref.ref(parent_v2), weakref.ref(base)))
+            return parent_v3, parent_v2, base
+
+        def write_input(_root, **_kwargs):
+            delta = corrected._seal_owned(
+                {"delta_id": "d" * 64}, corrected._DELTA_PROOF
+            )
+            corrected_input = corrected._seal_owned(
+                {
+                    "input_id": "a" * 64,
+                    "coverage_controls": {
+                        "current_catalog_count": 2009,
+                        "eligible_count": 1365,
+                        "not_applicable_count": 644,
+                        "blocked_count": 0,
+                        "not_processed_count": 0,
+                    },
+                },
+                corrected._INPUT_PROOF,
+            )
+            references.extend((weakref.ref(delta), weakref.ref(corrected_input)))
+            return delta, corrected_input
+
+        def fail_workspace(*_args, **_kwargs):
+            self.assertTrue(all(reference() is None for reference in references))
+            raise tool.PrivateResearchError("synthetic workspace failure")
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                tool,
+                "accepted_parent_snapshot",
+                new=lambda _root: {"accepted_parent": "unchanged"},
+            ),
+            mock.patch.object(
+                tool, "read_private_v3_research_bundle", new=read_bundle
+            ),
+            mock.patch.object(
+                tool, "write_private_v3_corrected_input", new=write_input
+            ),
+            mock.patch.object(
+                tool,
+                "build_private_v3_corrected_research_workspace",
+                new=fail_workspace,
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            status = tool.main(
+                [
+                    "--private-root",
+                    "/private/root",
+                    "--creation-evidence-delta",
+                    "/private/delta.csv",
+                ]
+            )
+        self.assertEqual(status, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "synthetic workspace failure\n")
+        self.assertTrue(all(reference() is None for reference in references))
+
+    def test_initialize_runtime_creates_only_private_secret_without_disclosure(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-launcher-parent-") as temp:
+            root = Path(temp) / "runtime"
+            result = tool.initialize_runtime(root)
+            self.assertEqual(result["contract"], tool.RUNTIME_CONTRACT)
+            self.assertFalse(result["secret_value_disclosed"])
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+            secret = root / tool.SECRET_NAME
+            self.assertEqual(stat.S_IMODE(secret.stat().st_mode), 0o600)
+            self.assertGreaterEqual(len(secret.read_text(encoding="utf-8").strip()), 24)
+            self.assertNotIn(secret.read_text(encoding="utf-8").strip(), str(result))
+            with self.assertRaisesRegex(tool.PrivateResearchServeError, "must be empty"):
+                tool.initialize_runtime(root)
+
+    def test_runtime_refuses_symlink_and_reports_only_owned_pid_state(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-launcher-parent-") as temp:
+            parent = Path(temp)
+            real = parent / "real"
+            real.mkdir(mode=0o700)
+            link = parent / "link"
+            link.symlink_to(real, target_is_directory=True)
+            with self.assertRaises(tool.PrivateResearchServeError):
+                tool.initialize_runtime(link)
+            self.assertEqual(
+                tool.status(real),
+                {"contract": tool.RUNTIME_CONTRACT, "running": False},
+            )
+            pid = real / tool.PID_NAME
+            pid.write_text('{"pid":999999999}\n', encoding="utf-8")
+            pid.chmod(0o600)
+            state = tool.status(real)
+            self.assertFalse(state["running"])
+            self.assertTrue(state["stale_pid_file"])
+            pid.write_text(
+                '{"cmdline_sha256":"'
+                + ("a" * 64)
+                + '","pid":'
+                + str(os.getpid())
+                + ',"process_start_ticks":1,"source_commit":"'
+                + ("b" * 40)
+                + '","source_tree":"'
+                + ("c" * 40)
+                + '"}\n',
+                encoding="utf-8",
+            )
+            self.assertFalse(tool.status(real)["running"])
+
+    def test_runtime_refuses_workspace_overlap_and_child_failure_is_typed(self):
+        tool = _load_tool()
+        with TemporaryDirectory(prefix="buffalo-private-launcher-parent-") as temp:
+            parent = Path(temp)
+            workspace = (
+                parent
+                / "private-research"
+                / "workspaces"
+                / ("a" * 64)
+            )
+            workspace.mkdir(parents=True, mode=0o700)
+            with self.assertRaisesRegex(
+                tool.PrivateResearchServeError, "must not be inside"
+            ):
+                tool.initialize_runtime(workspace / "runtime")
+
+            runtime = parent / "runtime"
+            runtime.mkdir(mode=0o700)
+            secret = runtime / tool.SECRET_NAME
+            secret.write_text("fixture-secret\n", encoding="utf-8")
+            secret.chmod(0o600)
+
+            class FakeProcess:
+                pid = 424242
+                returncode = None
+
+                def poll(self):
+                    return self.returncode
+
+                def wait(self, timeout=None):
+                    self.returncode = 7
+                    return self.returncode
+
+            class FakeResponse:
+                status = 200
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+                def read(self):
+                    return b'{"ok":true}'
+
+            with (
+                mock.patch.object(
+                    tool,
+                    "read_private_research_workspace",
+                    return_value={
+                        "manifest": {
+                            "contract": "BUFFALO_PRIVATE_REAL_RESEARCH_WORKSPACE_V1",
+                            "data_mode": "PRIVATE_REAL_SOURCE_REVIEW",
+                            "projection_contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                        },
+                        "projection": {
+                            "contract": "BUFFALO_PRIVATE_RESEARCH_PROJECTION_V1",
+                            "data_mode": "PRIVATE_REAL_DATA_RESEARCH_ONLY",
+                        },
+                    },
+                ),
+                mock.patch.object(tool, "_source_identity", return_value=("a" * 40, "b" * 40)),
+                mock.patch.object(tool, "_assert_port_free"),
+                mock.patch.object(
+                    tool,
+                    "_process_identity",
+                    return_value={
+                        "process_start_ticks": 1,
+                        "cmdline_sha256": "c" * 64,
+                    },
+                ),
+                mock.patch.object(tool.subprocess, "Popen", return_value=FakeProcess()),
+                mock.patch.object(tool, "urlopen", return_value=FakeResponse()),
+            ):
+                with self.assertRaisesRegex(
+                    tool.PrivateResearchServeError, "status 7"
+                ):
+                    tool.serve(runtime, workspace, 18876)
+            self.assertFalse((runtime / tool.PID_NAME).exists())
+
+    def test_launcher_source_has_no_database_or_shopify_composition(self):
+        source = TOOL.read_text(encoding="utf-8")
+        for forbidden in (
+            "DATABASE_URL",
+            "TEST_DATABASE_URL",
+            "SHOPIFY_ACCESS_TOKEN",
+            "procurement_os.api",
+            "0.0.0.0",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+        self.assertIn('"127.0.0.1"', source)
+        self.assertIn('"PRIVATE_REAL_SOURCE_REVIEW"', source)
+
+
+if __name__ == "__main__":
+    unittest.main()

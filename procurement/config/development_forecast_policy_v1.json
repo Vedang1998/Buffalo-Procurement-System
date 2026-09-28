@@ -1,0 +1,85 @@
+{
+  "abc": {
+    "a_cumulative_share": "0.80",
+    "b_incremental_share": "0.15",
+    "basis": "HISTORICAL_GROSS_PROFIT_DOLLARS",
+    "classification_period_days": 84,
+    "missing_cost_status": "NOT_CONFIGURED"
+  },
+  "availability": {
+    "minimum_proven_in_stock_days_for_full_protection": 28
+  },
+  "candidate_order": [
+    "NAIVE",
+    "SEASONAL_NAIVE",
+    "DAMPED_ETS",
+    "TSB",
+    "CATEGORY_SHRINKAGE"
+  ],
+  "category_shrinkage": {
+    "minimum_history_days": 14,
+    "prior_strength_days": "28"
+  },
+  "commercial_authority": false,
+  "contract": "BUFFALO_DEVELOPMENT_FORECAST_POLICY_V1",
+  "damped_ets": {
+    "alpha": "0.35",
+    "beta": "0.10",
+    "minimum_history_days": 28,
+    "phi": "0.80"
+  },
+  "fva": {
+    "minimum_relative_improvement": "0.02",
+    "simple_baseline": "NAIVE"
+  },
+  "history": {
+    "connected_history_days": 84,
+    "maximum_history_days": 84
+  },
+  "metrics": {
+    "bias": "MEAN_FORECAST_MINUS_ACTUAL",
+    "mae": "MEAN_ABSOLUTE_ERROR",
+    "mase": "MAE_DIVIDED_BY_PRESELECTION_NAIVE_SCALE_OR_NULL",
+    "wape": "SUM_ABSOLUTE_ERROR_DIVIDED_BY_SUM_ABSOLUTE_ACTUAL_OR_NULL"
+  },
+  "method_version": "DEVELOPMENT_ROLLING_ORIGIN_V1",
+  "naive": {
+    "trailing_window_days": 28
+  },
+  "production_activation": false,
+  "protection": {
+    "minimum_full_horizon_origins": 8,
+    "quantile": "0.90",
+    "residual_definition": "MAX_ACTUAL_HORIZON_MINUS_POINT_FORECAST_ZERO"
+  },
+  "rate_cap": {
+    "maximum_calendar_mean_multiplier": "1.25"
+  },
+  "selection_metric": "WAPE_WHEN_DEFINED_ELSE_MAE",
+  "seasonal_naive": {
+    "minimum_history_days": 28,
+    "period_days": 7
+  },
+  "tsb": {
+    "alpha_probability": "0.20",
+    "alpha_size": "0.20",
+    "intermittent_zero_share": "0.40",
+    "minimum_history_days": 28,
+    "minimum_positive_days": 2
+  },
+  "tie_break_rule": "CANDIDATE_ORDER",
+  "windows": {
+    "calibration_days": 21,
+    "evaluation_days": 14,
+    "minimum_evaluation_origins": 4,
+    "minimum_selection_origins": 8,
+    "minimum_training_days": 28,
+    "selection_origin_days": 21
+  },
+  "xyz": {
+    "minimum_week_buckets": 4,
+    "x_max_coefficient_of_variation": "0.50",
+    "y_max_coefficient_of_variation": "1.00",
+    "zero_demand_class": "Z"
+  }
+}

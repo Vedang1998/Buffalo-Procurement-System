@@ -45,6 +45,7 @@ strict_normalized_import_contract = true
 staging_required = true
 transactional_promotion_required = true
 run_price_snapshot_for_reproducibility = true
+synthetic_price_replacement_enabled = false
 
 [assortment]
 default_scope = "same_product"
@@ -76,6 +77,12 @@ permanent_scope = true
 never_silently_change_global_rules = true
 structured_writeback_required = true
 
+[review.emergency_material_edit]
+policy_version = "EMERGENCY_MONDAY_MATERIAL_EDIT_V1"
+owner_approval_status = "PENDING_OWNER_APPROVAL"
+max_normal_baseline_multiplier = 2.0
+max_normal_resulting_days_supply = 30.0
+
 [data_quality]
 material_ambiguity_blocks_affected_item = true
 penny_level_difference_blocks = false
@@ -95,6 +102,19 @@ review_min_score = 0.82
 size_conflict_blocks_auto_match = true
 pack_conflict_blocks_auto_match = true
 fuzzy_is_supporting_evidence_only = true
+fuzzy_can_authorize = false
+
+[persistent_mapping]
+contract_version = "v1-shadow-only"
+routine_selection_scope = "ROUTINE_PROCUREMENT_STANDARD"
+review_intake_writes_enabled = false
+human_mapping_writes_enabled = false
+policy_mapping_writes_enabled = false
+routine_selection_writes_enabled = false
+selected_offer_shadow_reads_enabled = false
+synthetic_selected_offer_inputs_enabled = false
+recommendation_cutover_enabled = false
+offer_activation_enabled = false
 
 [po]
 official_shopify_csv_target = true

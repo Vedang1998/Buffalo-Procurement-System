@@ -1,0 +1,90 @@
+{
+  "contract": "BUFFALO_SYNTHETIC_MAPPING_REVIEW_PACKET_V2",
+  "fixture_disclosure": "FABRICATED TEST DATA ONLY. The authoritative-format case uses source_is_simulation=false only to exercise the reviewed positive database branch; it is not real supplier evidence or approval.",
+  "packages": [
+    {
+      "candidates": [
+        {
+          "blockers": [
+            "IDENTITY_UNRESOLVED"
+          ],
+          "distributor_product_id_state": "ABSENT",
+          "occurrence_key": "synthetic-unresolved-occurrence-001",
+          "occurrence_role": "UNKNOWN",
+          "offer_class": "UNKNOWN",
+          "package_type_state": "EXPLICIT_NULL",
+          "printed_occurrence_text": "Unresolved synthetic supplier line",
+          "source_file_name": "synthetic-unresolved-source.txt",
+          "source_page_end": 1,
+          "source_page_start": 1,
+          "source_vendor_identity": "Synthetic Southern",
+          "supplier_code_state": "ABSENT"
+        }
+      ],
+      "intake_idempotency_key": "10000000-0000-4000-8000-000000000002",
+      "source_evidence": {
+        "notice": "TEST DATA — NOT FOR ORDERING",
+        "printed_lines": [
+          "Unresolved synthetic supplier line"
+        ]
+      },
+      "source_authority_state": "NOT_APPROVED",
+      "source_import_state": "NOT_IMPORT_READY",
+      "source_is_simulation": true,
+      "source_package_id": "synthetic-unresolved-review-v2",
+      "source_revision": "2"
+    },
+    {
+      "candidates": [
+        {
+          "assortable_state": "VALUE",
+          "assortable_value": false,
+          "assortment_group_state": "EXPLICIT_NULL",
+          "assortment_scope_state": "VALUE",
+          "assortment_scope_value": "PRODUCT",
+          "distributor_product_id_state": "VALUE",
+          "distributor_product_id_value": "SUP-001",
+          "independent_origin_material": "Independent fabricated catalog observation for Variant 1001",
+          "independent_observation_material": "Exact fabricated supplier offer SUP-001, 6x750ML",
+          "occurrence_key": "fabricated-authoritative-format-occurrence-001",
+          "occurrence_role": "PRIMARY",
+          "offer_class": "REGULAR",
+          "package_type_state": "VALUE",
+          "package_type_value": "STANDARD",
+          "physical_units_state": "VALUE",
+          "physical_units_value": "6.0000",
+          "printed_occurrence_text": "SUP-001 Synthetic Citrus 750ML 6x750ML",
+          "proposed_variant_id": "1001",
+          "proposed_vendor_id": "00000000-0000-4000-8000-000000000001",
+          "qualifying_units_state": "VALUE",
+          "qualifying_units_value": "6.0000",
+          "raw_pack_state": "VALUE",
+          "raw_pack_value": "6x750ML",
+          "retail_pack_units_state": "ABSENT",
+          "shopify_units_state": "VALUE",
+          "shopify_units_value": "6.0000",
+          "size_state": "VALUE",
+          "size_value": "750ML",
+          "source_file_name": "fabricated-authoritative-format-source.txt",
+          "source_page_end": 1,
+          "source_page_start": 1,
+          "source_vendor_identity": "Synthetic Southern",
+          "supplier_code_state": "VALUE",
+          "supplier_code_value": "SUP-001"
+        }
+      ],
+      "intake_idempotency_key": "20000000-0000-4000-8000-000000000002",
+      "source_evidence": {
+        "notice": "FABRICATED AUTHORITATIVE-FORMAT CONTRACT CASE — NOT REAL EVIDENCE",
+        "printed_lines": [
+          "SUP-001 Synthetic Citrus 750ML 6x750ML"
+        ]
+      },
+      "source_authority_state": "NOT_APPROVED",
+      "source_import_state": "NOT_IMPORT_READY",
+      "source_is_simulation": false,
+      "source_package_id": "fabricated-authoritative-format-review-v2",
+      "source_revision": "2"
+    }
+  ]
+}

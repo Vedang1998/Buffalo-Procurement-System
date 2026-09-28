@@ -4,7 +4,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import date, timedelta
 import hashlib
-import importlib.util
 import inspect
 import json
 import os
@@ -27,6 +26,7 @@ sys.path.insert(0, str(PROCUREMENT_ROOT / "tools"))
 import reconcile_phase4_published_production as corrective
 import test_phase4_terminal_disposition_postgres as terminal_fixture_module
 import procurement_os.historical_sales_terminal as terminal_service
+from postgres_test_support import validated_test_connection
 
 from procurement_os.historical_sales_manifest import protected_state_fingerprints
 from procurement_os.historical_sales_terminal import (
@@ -34,15 +34,6 @@ from procurement_os.historical_sales_terminal import (
     derive_execution_git_identity,
 )
 
-
-RUNNER_PATH = PROCUREMENT_ROOT / "tools" / "run_tests.py"
-RUNNER_SPEC = importlib.util.spec_from_file_location(
-    "phase4_corrective_test_database_runner_contract", RUNNER_PATH
-)
-assert RUNNER_SPEC is not None and RUNNER_SPEC.loader is not None
-test_runner = importlib.util.module_from_spec(RUNNER_SPEC)
-sys.modules[RUNNER_SPEC.name] = test_runner
-RUNNER_SPEC.loader.exec_module(test_runner)
 
 DB_DIR = PROCUREMENT_ROOT / "db"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -107,37 +98,6 @@ TREE_SHA = "b" * 40
 TRUSTED_PYTHON = Path(
     "/nix/store/yp3s28b4xjvcq53wapb1v7hv5hlmmmma-python-wrapped-0.1.0/bin/.python-wrapped"
 )
-
-
-def validated_test_connection():
-    """Use only the authoritative TEST_DATABASE_URL safety contract."""
-
-    target = test_runner._validated_test_database_target()
-    test_runner._clear_libpq_environment()
-
-    import psycopg
-
-    connection = psycopg.connect(target.url, connect_timeout=5)
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """SELECT current_database(),current_setting('server_version'),
-                          current_setting('server_version_num')::integer"""
-            )
-            row = cursor.fetchone()
-        if row is None:
-            raise ValueError("PostgreSQL identity query returned no row")
-        database_info = test_runner._validate_database_facts(
-            target,
-            database=row[0],
-            server_version=row[1],
-            server_version_num=row[2],
-        )
-    except BaseException:
-        connection.close()
-        raise
-    return connection, target, database_info
-
 
 def run_isolated_real_git(arguments):
     with corrective._isolated_git_subprocess_environment():
@@ -413,7 +373,9 @@ class CorrectiveTestDatabaseSafetyTests(unittest.TestCase):
         return connection
 
     def test_connected_database_identity_mismatch_fails_before_fixture_ddl(self):
-        connection = self._identity_connection(("neondb", "16.15", 160015))
+        connection = self._identity_connection(
+            ("neondb", "16.15", 160015, "127.0.0.1")
+        )
         with patch.dict(
             os.environ, {"TEST_DATABASE_URL": SAFE_TEST_URL}, clear=True
         ), patch("psycopg.connect", return_value=connection):
@@ -423,7 +385,9 @@ class CorrectiveTestDatabaseSafetyTests(unittest.TestCase):
         connection.close.assert_called_once_with()
 
     def test_connected_wrong_major_fails_before_fixture_ddl(self):
-        connection = self._identity_connection(("procurement_test", "17.1", 170001))
+        connection = self._identity_connection(
+            ("procurement_test", "17.1", 170001, "127.0.0.1")
+        )
         with patch.dict(
             os.environ, {"TEST_DATABASE_URL": SAFE_TEST_URL}, clear=True
         ), patch("psycopg.connect", return_value=connection):

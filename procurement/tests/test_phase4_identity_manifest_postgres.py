@@ -6,7 +6,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 import hashlib
 import inspect
-import os
 from pathlib import Path
 import sys
 import unittest
@@ -32,6 +31,7 @@ from procurement_os.historical_sales_manifest import (
     validate_database_preflight,
 )
 from procurement_os.sales import SalesSourceRow, load_identity_index
+from postgres_test_support import validated_test_connection
 
 
 DB_DIR = PROCUREMENT_ROOT / "db"
@@ -50,10 +50,8 @@ MIGRATIONS = (
 BUSHMILLS_SOURCE_KEY = "0|3010636|BUSHMILLS PROHIBITION|750ML"
 
 
-@unittest.skipUnless(os.getenv("DATABASE_URL"), "PostgreSQL integration requires DATABASE_URL")
 class Phase4IdentityManifestPostgresTests(unittest.TestCase):
     def setUp(self) -> None:
-        import psycopg
         from psycopg import sql
 
         self.manifest = load_authorized_manifest(MANIFEST_PATH)
@@ -61,7 +59,9 @@ class Phase4IdentityManifestPostgresTests(unittest.TestCase):
             actor="phase4-manifest-test",
             implementation_git_sha="a" * 40,
         )
-        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
+        self.conn, self.test_target, self.test_database_info = (
+            validated_test_connection()
+        )
         self.schema = f"phase4_manifest_test_{uuid.uuid4().hex}"
         self.conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))
         self.conn.execute(

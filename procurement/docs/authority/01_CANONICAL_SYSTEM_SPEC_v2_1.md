@@ -140,6 +140,43 @@ Chat history owns nothing operationally important. A deleted AI conversation mus
 
 G. Human intelligence that must NEVER disappear
 
+Persistent supplier mapping authority
+
+A printed source occurrence, an operational supplier offer, a mapping
+decision, and the selected routine offer are separate records. Printed tiers
+or repeated occurrences do not automatically create duplicate operational
+offers. Supplier-code reuse never overwrites a historical offer identity.
+
+Review intake is immutable evidence and carries no mapping, selection, price,
+Shopify, supplier-contact, or order authority. A sealed review package remains
+unapproved evidence; a later application decision references it without
+rewriting package approval/import flags.
+
+Mapping decisions are append-only APPROVE_MAPPING, REJECT_MAPPING, or DEFER
+events. Human approval requires a server-verified named principal and a
+separate exact confirmation. Policy approval requires a service principal,
+an owner-published immutable policy/version, independently corroborated
+deterministic evidence, and exact fingerprints. Missing policy fails closed.
+Fuzzy similarity is supporting evidence only and can never authorize mapping.
+DEFER may preserve a completely or partially unresolved candidate using only
+its immutable source evidence, reason, and authenticated human provenance;
+it fabricates no operational identity or fingerprint and has no operational
+effect. REJECT_MAPPING requires an exact supported Variant/vendor/supplier
+target and never creates broad negative authority from unresolved evidence.
+
+An approved mapping may create an inactive supplier offer. It never activates
+that offer, verifies or activates price, selects a routine offer, writes
+Shopify, or authorizes an order. One append-only selection event and narrow
+ROUTINE_PROCUREMENT_STANDARD head may separately choose one regular offer per
+Shopify Variant. The same named owner may map and select only through separate
+previews, confirmations, idempotency keys, and events. Alternatives and
+explicit reviewed nulls remain preserved.
+
+The selected-offer view is shadow-only until a separately approved
+recommendation cutover. Existing active-offer recommendation semantics remain
+unchanged. Cost, retail-price, and primary-SKU synchronization remain three
+separately controlled later capabilities.
+
 The following are first-class structured concepts, not informal notes:
 
 • gift packs and their temporary supplier SKUs;

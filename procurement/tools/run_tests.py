@@ -15,19 +15,30 @@ from urllib.parse import unquote, urlparse
 
 REQUIRED_PYTHON = (3, 13)
 REQUIRED_POSTGRESQL_MAJOR = 16
+SYNTHETIC_SERVER_LOOPBACKS = frozenset({"127.0.0.1", "::1"})
 
 # These are checkpoint floors set to every currently registered test in each
 # module. New tests remain discoverable, while deleting, renaming, or hiding a
 # checkpoint test cannot be concealed by growth in a different module.
 REQUIRED_MODULE_MINIMUMS = {
     "test_assortment.py": 4,
+    "test_audit_private_research_browser.py": 17,
+    "test_automatic_merge_safety.py": 10,
     "test_catalog.py": 7,
     "test_catalog_readiness.py": 14,
     "test_catalog_reconciliation_phase3.py": 12,
     "test_economics.py": 4,
+    "test_development_forecast.py": 13,
+    "test_development_forecast_joint_horizon.py": 22,
+    "test_forecasting.py": 16,
     "test_historical_sales_review_api.py": 17,
     "test_identity_investigation.py": 32,
+    "test_inventory.py": 16,
+    "test_local_access.py": 13,
+    "test_local_purchasing_candidate.py": 15,
     "test_matching.py": 3,
+    "test_monday_forecast_retirement_postgres.py": 9,
+    "test_monday_workflow.py": 61,
     "test_phase4_historical_sales.py": 33,
     "test_phase4_identity_manifest.py": 16,
     "test_phase4_identity_manifest_postgres.py": 24,
@@ -37,14 +48,40 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_phase4_terminal_disposition.py": 23,
     "test_phase4_terminal_disposition_postgres.py": 35,
     "test_phase5_foundation_ui.py": 22,
-    "test_pricing.py": 3,
-    "test_readiness.py": 19,
+    "test_po_ledger.py": 35,
+    "test_persistent_mapping_foundation_contract.py": 3,
+    "test_persistent_mapping_foundation_postgres.py": 39,
+    "test_selected_offer_consumption_postgres.py": 7,
+    "test_persistent_mapping_http.py": 10,
+    "test_price_book.py": 42,
+    "test_pricing.py": 4,
+    "test_private_research_app.py": 15,
+    "test_private_research_bridge.py": 1,
+    "test_private_research_exports.py": 7,
+    "test_private_research_intake.py": 16,
+    "test_private_research_projection.py": 20,
+    "test_private_research_v2.py": 7,
+    "test_private_research_v3.py": 5,
+    "test_private_research_tools.py": 7,
+    "test_private_research_v3_corrected.py": 17,
+    "test_private_research_workspace.py": 9,
+    "test_readiness.py": 21,
+    "test_replenishment.py": 9,
     "test_review.py": 3,
     "test_sales.py": 18,
+    "test_serve_private_research.py": 7,
     "test_shopify_auth.py": 3,
     "test_shopify_queries.py": 1,
-    "test_storage.py": 5,
-    "test_test_runner.py": 18,
+    "test_storage.py": 12,
+    "test_strategic.py": 13,
+    "test_supplier_mapping_review.py": 30,
+    "test_supplier_format_conformance.py": 9,
+    "test_supplier_review_package.py": 15,
+    "test_supplier_review_real_v5.py": 29,
+    "test_supplier_review_v5.py": 16,
+    "test_synthetic_price_replacement_postgres.py": 14,
+    "test_test_runner.py": 24,
+    "test_vendor_rules.py": 16,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())
 
@@ -60,6 +97,7 @@ class TestDatabaseInfo:
     database: str
     server_version: str
     server_major: int
+    server_address: str | None
 
 
 @dataclass(frozen=True)
@@ -120,8 +158,21 @@ def _validated_test_database_target(value: str | None = None) -> TestDatabaseTar
         or ";" in value
     ):
         raise ValueError("TEST_DATABASE_URL must not contain parameters, a query, or a fragment")
+    # libpq accepts comma-separated multi-host authorities.  urlparse exposes
+    # only the first host through ``hostname``, which could otherwise make a
+    # loopback-first URL fall through to a remote production host.  Reject the
+    # multi-host grammar (including percent-encoded commas) before connecting.
+    decoded_authority = unquote(parsed.netloc)
+    if "," in decoded_authority or decoded_authority.count("@") > 1:
+        raise ValueError("TEST_DATABASE_URL must name exactly one loopback host")
     if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("TEST_DATABASE_URL must target loopback disposable infrastructure")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("TEST_DATABASE_URL port must be a single valid number") from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("TEST_DATABASE_URL port must be a single valid number")
     if not parsed.path.startswith("/") or parsed.path.count("/") != 1:
         raise ValueError("TEST_DATABASE_URL must name exactly one database")
 
@@ -149,6 +200,7 @@ def _validate_database_facts(
     database: str,
     server_version: str,
     server_version_num: int,
+    server_address: str | None,
 ) -> TestDatabaseInfo:
     if database != target.database or not database.endswith("_test"):
         raise ValueError(
@@ -164,7 +216,19 @@ def _validate_database_facts(
         database=database,
         server_version=server_version,
         server_major=server_major,
+        server_address=server_address,
     )
+
+
+def _validate_monday_synthetic_database(database_info: TestDatabaseInfo) -> None:
+    """Require the server-side loopback identity used by Monday synthetic sales."""
+
+    if database_info.server_address not in SYNTHETIC_SERVER_LOOPBACKS:
+        raise ValueError(
+            "Monday synthetic sales fixtures require PostgreSQL server-side loopback; "
+            "a validated loopback client URL does not prove that contract "
+            f"(host(inet_server_addr())={database_info.server_address!r})"
+        )
 
 
 def _validate_test_database(target: TestDatabaseTarget) -> TestDatabaseInfo:
@@ -175,7 +239,8 @@ def _validate_test_database(target: TestDatabaseTarget) -> TestDatabaseInfo:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """SELECT current_database(), current_setting('server_version'),
-                              current_setting('server_version_num')::integer"""
+                              current_setting('server_version_num')::integer,
+                              host(inet_server_addr())"""
                 )
                 row = cursor.fetchone()
     except psycopg.Error as exc:
@@ -189,6 +254,7 @@ def _validate_test_database(target: TestDatabaseTarget) -> TestDatabaseInfo:
         database=row[0],
         server_version=row[1],
         server_version_num=row[2],
+        server_address=row[3],
     )
 
 
@@ -280,7 +346,8 @@ def main() -> int:
         "Procurement OS runtime verified: "
         f"python={sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} "
         f"postgresql={database_info.server_version} "
-        f"database={database_info.database} loopback=verified",
+        f"database={database_info.database} client_url_loopback=verified "
+        f"server_address={database_info.server_address}",
         flush=True,
     )
 

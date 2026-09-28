@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import importlib.util
-import os
 from pathlib import Path
 import re
 import unittest
@@ -21,6 +20,7 @@ from procurement_os.catalog import (
 )
 from procurement_os.historical_sales import assert_catalog_ready
 from procurement_os.readiness import po_readiness
+from postgres_test_support import validated_test_connection
 
 
 DB_DIR = Path(__file__).resolve().parents[1] / "db"
@@ -58,13 +58,13 @@ class ConnectionContext:
         return False
 
 
-@unittest.skipUnless(os.getenv("DATABASE_URL"), "PostgreSQL integration requires DATABASE_URL")
 class CatalogReadinessIntegrationTests(unittest.TestCase):
     def setUp(self):
-        import psycopg
         from psycopg import sql
 
-        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
+        self.conn, self.test_target, self.test_database_info = (
+            validated_test_connection()
+        )
         self.schema = f"catalog_readiness_{uuid.uuid4().hex}"
         self.conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))
         self.conn.execute(
@@ -257,12 +257,12 @@ class CatalogReadinessIntegrationTests(unittest.TestCase):
             and gate["scope_type"] == "GLOBAL"
         )
 
-        database_url = os.environ["DATABASE_URL"]
+        database_url = self.test_target.url
         schema_url = (
             f"{database_url}?options="
             f"{quote(f'-csearch_path={self.schema},public', safe='')}"
         )
-        with patch.dict(os.environ, {"DATABASE_URL": schema_url}), patch.object(
+        with patch.dict("os.environ", {"DATABASE_URL": schema_url}), patch.object(
             health, "check_schema", return_value={"ok": True}
         ), patch.object(
             health,

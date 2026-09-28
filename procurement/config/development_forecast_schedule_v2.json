@@ -1,0 +1,114 @@
+{
+  "commercial_authority": false,
+  "contract": "BUFFALO_SYNTHETIC_DEVELOPMENT_SCHEDULE_V2",
+  "production_activation": false,
+  "profile": "development-forecast-v2",
+  "provenance": {
+    "evidence_ref": "FABRICATED_DEVELOPMENT_SCHEDULE_ACCEPTANCE_2026_10",
+    "kind": "FABRICATED_SYNTHETIC_TEST_DATA",
+    "real_supplier_confirmation": false
+  },
+  "valid_from": "2026-01-01",
+  "valid_through": "2027-12-31",
+  "vendors": [
+    {
+      "delivery_opportunities": {
+        "added_dates": [],
+        "removed_dates": [],
+        "series": [
+          {
+            "anchor_date": "2026-10-08",
+            "cadence_weeks": 2,
+            "series_id": "southern-alternating-thursday-delivery",
+            "weekday": "THURSDAY"
+          }
+        ]
+      },
+      "lead_time_days": 1,
+      "lead_time_variability_days": "0",
+      "receipt_available_local": "00:00:00",
+      "review_opportunities": {
+        "added_dates": [],
+        "removed_dates": [],
+        "series": [
+          {
+            "anchor_date": "2026-10-05",
+            "cadence_weeks": 2,
+            "series_id": "southern-alternating-monday-review",
+            "weekday": "MONDAY"
+          }
+        ]
+      },
+      "schedule_id": "synthetic-southern-alternating-v2",
+      "submission_cutoff_local": "17:00:00",
+      "submission_opportunities": {
+        "added_dates": [],
+        "removed_dates": [],
+        "series": [
+          {
+            "anchor_date": "2026-10-05",
+            "cadence_weeks": 2,
+            "series_id": "southern-alternating-monday-submit",
+            "weekday": "MONDAY"
+          }
+        ]
+      },
+      "timezone_name": "America/New_York",
+      "vendor_id": "00000000-0000-4000-8000-000000000001",
+      "vendor_rule_order_cycle_days": 14
+    },
+    {
+      "delivery_opportunities": {
+        "added_dates": [],
+        "removed_dates": [],
+        "series": [
+          {
+            "anchor_date": "2026-10-08",
+            "cadence_weeks": 1,
+            "series_id": "western-weekly-thursday-delivery",
+            "weekday": "THURSDAY"
+          }
+        ]
+      },
+      "lead_time_days": 1,
+      "lead_time_variability_days": "0",
+      "receipt_available_local": "00:00:00",
+      "review_opportunities": {
+        "added_dates": [],
+        "removed_dates": [],
+        "series": [
+          {
+            "anchor_date": "2026-10-05",
+            "cadence_weeks": 1,
+            "series_id": "western-weekly-monday-review",
+            "weekday": "MONDAY"
+          }
+        ]
+      },
+      "schedule_id": "synthetic-western-weekly-control-v2",
+      "submission_cutoff_local": "17:00:00",
+      "submission_opportunities": {
+        "added_dates": [],
+        "removed_dates": [],
+        "series": [
+          {
+            "anchor_date": "2026-10-05",
+            "cadence_weeks": 1,
+            "series_id": "western-weekly-monday-submit",
+            "weekday": "MONDAY"
+          },
+          {
+            "anchor_date": "2026-10-07",
+            "cadence_weeks": 1,
+            "series_id": "western-weekly-wednesday-submit",
+            "weekday": "WEDNESDAY"
+          }
+        ]
+      },
+      "timezone_name": "America/New_York",
+      "vendor_id": "00000000-0000-4000-8000-000000000003",
+      "vendor_rule_order_cycle_days": 2
+    }
+  ],
+  "version": 2
+}
