@@ -10,6 +10,7 @@ from procurement_os.staging_access import (
     ARGON2_PARALLELISM,
     ARGON2_SALT_LEN,
     ARGON2_TIME_COST,
+    CSRF_COOKIE,
     LOGIN_CHALLENGE_COOKIE,
     SESSION_ABSOLUTE_SECONDS,
     SESSION_COOKIE,
@@ -55,6 +56,8 @@ class StagingAccessTests(unittest.TestCase):
         self.assertEqual(authenticator.parameters.parallelism, ARGON2_PARALLELISM)
         self.assertEqual(authenticator.parameters.salt_len, ARGON2_SALT_LEN)
         self.assertEqual(authenticator.parameters.hash_len, ARGON2_HASH_LEN)
+        self.assertNotIn(self.credential.passphrase, repr(self.credential))
+        self.assertNotIn(self.credential.verifier, repr(self.credential))
 
     def test_weaker_or_non_argon2id_verifier_is_refused(self):
         weak = self.credential.verifier.replace(
@@ -67,6 +70,28 @@ class StagingAccessTests(unittest.TestCase):
                 self.credential.verifier.replace("$argon2id$", "$argon2i$", 1),
                 clock=self.clock,
             )
+
+    def test_malformed_or_resource_amplifying_verifier_is_refused_at_startup(self):
+        verifier = self.credential.verifier
+        salt, digest = verifier.rsplit("$", 2)[1:]
+        mutations = (
+            verifier.replace(salt, "!" + salt[1:], 1),
+            verifier.replace(digest, "!" + digest[1:], 1),
+            verifier + "garbage",
+            verifier.replace("v=19", "v=16", 1),
+            verifier.replace(
+                f"m={ARGON2_MEMORY_COST_KIB}", "m=999999999", 1
+            ),
+            verifier.replace(f"t={ARGON2_TIME_COST}", "t=999999999", 1),
+            verifier.replace(f"p={ARGON2_PARALLELISM}", "p=999999999", 1),
+            verifier.replace(salt, salt[:-1], 1),
+            verifier.replace(digest, digest[:-1], 1),
+        )
+        for mutated in mutations:
+            with self.subTest(mutated=mutated[:48]), self.assertRaisesRegex(
+                StagingAccessError, "exact Argon2id parameters"
+            ):
+                OwnerPasswordAuthenticator(mutated, clock=self.clock)
 
     def test_correct_and_wrong_passphrases_return_only_boolean(self):
         authenticator = OwnerPasswordAuthenticator(
@@ -121,6 +146,9 @@ class StagingAccessTests(unittest.TestCase):
         )
         self.assertIsNotNone(session)
         self.assertEqual(session.principal_ref, "owner:railway-staging:01")
+        self.assertRegex(session.token_digest_hex, r"^[0-9a-f]{64}$")
+        self.assertNotIn(issued.token, repr(issued))
+        self.assertNotIn(issued.csrf_token, repr(issued))
 
     def test_idle_absolute_rotation_logout_and_restart_invalidate_sessions(self):
         fingerprint = verifier_fingerprint(self.credential.verifier)
@@ -214,12 +242,82 @@ class StagingAccessTests(unittest.TestCase):
     def test_login_challenge_is_bound_single_use_and_expires(self):
         challenges = LoginChallengeStore(clock=self.clock, ttl_seconds=120)
         issued = challenges.create()
-        self.assertTrue(challenges.consume(issued.cookie_token, issued.form_token))
-        self.assertFalse(challenges.consume(issued.cookie_token, issued.form_token))
+        self.assertNotIn(issued.cookie_token, repr(issued))
+        self.assertNotIn(issued.form_token, repr(issued))
+        self.assertTrue(
+            challenges.consume_after_admission(issued.cookie_token, issued.form_token)
+        )
+        self.assertFalse(
+            challenges.consume_after_admission(issued.cookie_token, issued.form_token)
+        )
         other = challenges.create()
-        self.assertFalse(challenges.consume(other.cookie_token, issued.form_token))
+        self.assertFalse(
+            challenges.consume_after_admission(other.cookie_token, issued.form_token)
+        )
         self.clock.advance(121)
-        self.assertFalse(challenges.consume(other.cookie_token, other.form_token))
+        self.assertFalse(
+            challenges.consume_after_admission(other.cookie_token, other.form_token)
+        )
+
+    def test_wrong_form_token_does_not_consume_the_valid_challenge(self):
+        challenges = LoginChallengeStore(clock=self.clock)
+        issued = challenges.create()
+        self.assertFalse(
+            challenges.consume_after_admission(issued.cookie_token, "wrong-form-token")
+        )
+        self.assertTrue(
+            challenges.consume_after_admission(issued.cookie_token, issued.form_token)
+        )
+
+    def test_login_page_get_flood_cannot_evict_an_outstanding_challenge(self):
+        challenges = LoginChallengeStore(
+            clock=self.clock, maximum_challenges=4
+        )
+        owner = challenges.create()
+        for _ in range(1_000):
+            challenges.create()
+        self.assertTrue(
+            challenges.consume_after_admission(owner.cookie_token, owner.form_token)
+        )
+
+    def test_login_challenge_signature_restart_and_consumed_capacity_fail_closed(self):
+        challenges = LoginChallengeStore(
+            clock=self.clock, maximum_challenges=2
+        )
+        altered = challenges.create()
+        replacement = "A" if altered.cookie_token[-1] != "A" else "B"
+        self.assertFalse(
+            challenges.consume_after_admission(
+                altered.cookie_token[:-1] + replacement,
+                altered.form_token,
+            )
+        )
+        first = challenges.create()
+        second = challenges.create()
+        third = challenges.create()
+        self.assertTrue(
+            challenges.consume_after_admission(first.cookie_token, first.form_token)
+        )
+        self.assertTrue(
+            challenges.consume_after_admission(second.cookie_token, second.form_token)
+        )
+        self.assertFalse(
+            challenges.consume_after_admission(third.cookie_token, third.form_token)
+        )
+        self.clock.advance(301)
+        after_expiry = challenges.create()
+        self.assertTrue(
+            challenges.consume_after_admission(
+                after_expiry.cookie_token, after_expiry.form_token
+            )
+        )
+        outstanding = challenges.create()
+        challenges.clear()
+        self.assertFalse(
+            challenges.consume_after_admission(
+                outstanding.cookie_token, outstanding.form_token
+            )
+        )
 
     def test_cookie_contract_is_host_only_secure_and_strict(self):
         session = cookie_settings(SESSION_COOKIE, max_age=SESSION_ABSOLUTE_SECONDS)
@@ -232,6 +330,12 @@ class StagingAccessTests(unittest.TestCase):
             self.assertNotIn("domain", settings)
         self.assertTrue(SESSION_COOKIE.startswith("__Host-"))
         self.assertTrue(LOGIN_CHALLENGE_COOKIE.startswith("__Host-"))
+        csrf = cookie_settings(
+            CSRF_COOKIE, max_age=SESSION_ABSOLUTE_SECONDS, httponly=False
+        )
+        self.assertFalse(csrf["httponly"])
+        self.assertTrue(csrf["secure"])
+        self.assertTrue(CSRF_COOKIE.startswith("__Host-"))
 
 
 if __name__ == "__main__":

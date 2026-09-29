@@ -72,6 +72,23 @@ class StagingInternalAssertionTests(unittest.TestCase):
         )
         self.assertEqual(verified.request_id, "req-0001")
 
+    def test_one_shot_capability_iterable_is_materialized_once(self):
+        token = self._token(
+            capabilities=(
+                value
+                for value in (
+                    "procurement.order.approve",
+                    "procurement.review.read",
+                )
+            )
+        )
+        self.assertEqual(
+            self._verify(token).capabilities,
+            frozenset(
+                {"procurement.order.approve", "procurement.review.read"}
+            ),
+        )
+
     def test_assertion_is_single_use(self):
         token = self._token()
         self._verify(token)

@@ -90,13 +90,14 @@ def mint_assertion(
     nonce: str,
 ) -> str:
     _validate_key(key)
+    capability_values = frozenset(capabilities)
     _validate_common(
         worker_role=worker_role,
         request_id=request_id,
         session_digest=session_digest,
         principal_ref=principal_ref,
         role_ref=role_ref,
-        capabilities=capabilities,
+        capabilities=capability_values,
         method=method,
         path=path,
         query=query,
@@ -107,7 +108,7 @@ def mint_assertion(
     expires_ms = issued_ms + ASSERTION_TTL_SECONDS * 1_000
     payload = {
         "body_sha256": hashlib.sha256(body).hexdigest(),
-        "capabilities": sorted(frozenset(capabilities)),
+        "capabilities": sorted(capability_values),
         "expires_ms": expires_ms,
         "issued_ms": issued_ms,
         "method": method,
