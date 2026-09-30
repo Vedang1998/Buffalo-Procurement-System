@@ -206,8 +206,8 @@ assertion; bulk uploads are not part of this staging contract.
 
 ## 7. Research dependency and provenance contract
 
-The research input is the accepted corrected-V3 snapshot. The reported 75 files
-and 1,030,997,932 bytes are an inventory claim, not sufficient proof. A
+The research input is the accepted corrected-V3 snapshot. The reported 75
+records and 1,030,999,197 bytes are an inventory claim, not sufficient proof. A
 metadata-only transfer manifest is rebuilt from the accepted manifests and
 contains the exact allowed relative path, file type, size, SHA-256, required
 mode, ownership class, and dependency role for every member. The transfer

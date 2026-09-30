@@ -109,7 +109,7 @@ Create a metadata-only allowlist builder and validator driven by the accepted
 manifests. Tests must prove:
 
 - exact path/type/size/SHA-256/mode/ownership-role coverage;
-- the expected 75-member, 1,030,997,932-byte inventory only as an aggregate
+- the expected 75-record, 1,030,999,197-byte inventory only as an aggregate
   cross-check;
 - refusal of missing, extra, duplicate, symlink, traversal, changed-mode,
   changed-owner, changed-byte, or unrelated files;

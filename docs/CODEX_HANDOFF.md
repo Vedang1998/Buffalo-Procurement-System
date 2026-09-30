@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-30T01:02:56Z (UTC)
+**Updated:** 2026-09-30T14:44:38Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,48 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Railway staging delivery — TASK 4 AGGREGATE CORRECTION VERIFIED / REPLAY DEPENDENCY BLOCKED
+
+- Task 4 resumed from clean commit
+  `029682abaee6039f678b3524df28a77847dfe9ce`, tree
+  `4e62377904b3d5fbaef5fa6b0a1499884bb6d1bb`. The retained accepted dependency
+  inventory is unchanged at 21,834 bytes and SHA-256
+  `a5d0862c7b37fa729e95dfd3c510c7dd69dda05b96512d3974ba6a567cbc1eb1`;
+  the accepted transfer manifest remains SHA-256
+  `1e2477f9221877c496130ee1458e608e0aaa3d3ffbf41729a46520d289b239c8`.
+  All package checksum records passed.
+- Two independent metadata-only enumerations confirmed the owner-corrected
+  aggregate: **71 host records / 1,030,613,679 bytes** plus **4 accepted-Git
+  records / 385,518 bytes**, for **75 records / 1,030,999,197 bytes**. Every
+  host record remains a regular mode-0600 file owned by the expected local
+  source owner with its exact accepted size and SHA-256. Every Git-backed
+  record remains an exact mode-100644 blob at accepted commit
+  `608929ad00adfd2eefaab29449743c5a3f0f035e`. The three unavailable page
+  bundles and three unresolved standalone reader files remain explicitly
+  declared, absent, and outside the available-record aggregate. No manifest
+  or payload changed. The earlier aggregate assertion was wrong; no causal
+  explanation for the 1,265-byte discrepancy is asserted.
+- The corrected aggregate is now recorded in the approved Railway staging
+  design and Task-4 plan. No per-record commitment was edited, repinned,
+  added, or waived.
+- Required replay review exposed a separate material authority conflict before
+  implementation. The accepted 71-host membership carries the A1 root, seal,
+  five sealed archives, and ten original PDFs, but the existing exact A1
+  semantic reader additionally requires two auxiliary top-level files totaling
+  4,505 bytes and rejects their absence. Those files are not members of the
+  accepted dependency inventory and are not accepted-Git records. Omitting
+  them makes semantic replay fail; adding them changes the owner-approved
+  membership/count/bytes and violates the no-extra-file transfer contract;
+  removing their checks would waive existing per-file integrity validation.
+- Task-4 implementation therefore stopped before adding transfer or bundle
+  code. Owner/authority direction is required either to amend the accepted
+  dependency membership and resulting aggregate to include the two exact
+  auxiliary records, or to approve a separately specified replay-contract
+  transition that preserves their integrity requirement through an authorized
+  source. `procurement/docs/PHASE_STATUS.md` is unchanged. No private payload,
+  bundle, Railway setting, deployment, database, domain, GitHub state, Replit
+  state, Shopify state, scheduled job, or purchasing state was changed.
 
 ### Railway staging delivery — TASK 3 LOCAL MILESTONE PASS / NONDEPLOYABLE / NO EXTERNAL STATE CHANGED
 
