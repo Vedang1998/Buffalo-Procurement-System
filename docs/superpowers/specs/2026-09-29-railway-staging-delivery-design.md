@@ -206,12 +206,18 @@ assertion; bulk uploads are not part of this staging contract.
 
 ## 7. Research dependency and provenance contract
 
-The research input is the accepted corrected-V3 snapshot. The reported 75
-records and 1,030,999,197 bytes are an inventory claim, not sufficient proof. A
-metadata-only transfer manifest is rebuilt from the accepted manifests and
-contains the exact allowed relative path, file type, size, SHA-256, required
-mode, ownership class, and dependency role for every member. The transfer
-copies only that closure, never the whole Replit private root.
+The research input is the accepted corrected-V3 snapshot. The original 75
+records and 1,030,999,197 bytes remain immutable historical evidence. The
+deployment dependency closure is its additive successor: 77 records and
+1,031,003,702 bytes, comprising 73 host records / 1,030,618,184 bytes and the
+unchanged four accepted-Git records / 385,518 bytes. The only additions are the
+two existing A1 semantic-reader auxiliaries already pinned by the accepted
+reader, totaling 4,505 bytes; this correction is distinct from the earlier
+1,265-byte aggregate correction. A metadata-only transfer manifest is rebuilt
+from the accepted manifests and contains the exact allowed source and
+deployment paths, file type, size, SHA-256, required mode, ownership class,
+and dependency role for every member. The transfer copies only that closure,
+never the whole Replit private root.
 
 The closure includes the accepted inputs, delta material, parent inputs and
 workspace, target workspace, immutable sidecars/blobs, and sealed source

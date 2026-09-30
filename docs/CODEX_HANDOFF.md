@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-30T14:44:38Z (UTC)
+**Updated:** 2026-09-30T23:01:20Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,47 +10,88 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Railway staging delivery — TASK 4 AGGREGATE CORRECTION VERIFIED / REPLAY DEPENDENCY BLOCKED
+### Railway staging delivery — TASK 4 IMPLEMENTATION AND STATIC GATES PASS / SEMANTIC REPLAY PENDING
 
-- Task 4 resumed from clean commit
-  `029682abaee6039f678b3524df28a77847dfe9ce`, tree
-  `4e62377904b3d5fbaef5fa6b0a1499884bb6d1bb`. The retained accepted dependency
+- Task 4 resumed from the owner-pinned clean commit
+  `536f54d830c82395566237d7da15875248a15465`, tree
+  `68ee46255d6abca1d4877bff55b23df2a6de6a4d`. The retained accepted dependency
   inventory is unchanged at 21,834 bytes and SHA-256
   `a5d0862c7b37fa729e95dfd3c510c7dd69dda05b96512d3974ba6a567cbc1eb1`;
   the accepted transfer manifest remains SHA-256
   `1e2477f9221877c496130ee1458e608e0aaa3d3ffbf41729a46520d289b239c8`.
-  All package checksum records passed.
-- Two independent metadata-only enumerations confirmed the owner-corrected
-  aggregate: **71 host records / 1,030,613,679 bytes** plus **4 accepted-Git
-  records / 385,518 bytes**, for **75 records / 1,030,999,197 bytes**. Every
-  host record remains a regular mode-0600 file owned by the expected local
-  source owner with its exact accepted size and SHA-256. Every Git-backed
-  record remains an exact mode-100644 blob at accepted commit
-  `608929ad00adfd2eefaab29449743c5a3f0f035e`. The three unavailable page
-  bundles and three unresolved standalone reader files remain explicitly
-  declared, absent, and outside the available-record aggregate. No manifest
-  or payload changed. The earlier aggregate assertion was wrong; no causal
-  explanation for the 1,265-byte discrepancy is asserted.
-- The corrected aggregate is now recorded in the approved Railway staging
-  design and Task-4 plan. No per-record commitment was edited, repinned,
-  added, or waived.
-- Required replay review exposed a separate material authority conflict before
-  implementation. The accepted 71-host membership carries the A1 root, seal,
-  five sealed archives, and ten original PDFs, but the existing exact A1
-  semantic reader additionally requires two auxiliary top-level files totaling
-  4,505 bytes and rejects their absence. Those files are not members of the
-  accepted dependency inventory and are not accepted-Git records. Omitting
-  them makes semantic replay fail; adding them changes the owner-approved
-  membership/count/bytes and violates the no-extra-file transfer contract;
-  removing their checks would waive existing per-file integrity validation.
-- Task-4 implementation therefore stopped before adding transfer or bundle
-  code. Owner/authority direction is required either to amend the accepted
-  dependency membership and resulting aggregate to include the two exact
-  auxiliary records, or to approve a separately specified replay-contract
-  transition that preserves their integrity requirement through an authorized
-  source. `procurement/docs/PHASE_STATUS.md` is unchanged. No private payload,
-  bundle, Railway setting, deployment, database, domain, GitHub state, Replit
-  state, Shopify state, scheduled job, or purchasing state was changed.
+  The original 75-member available-record commitment remains historical
+  evidence: 71 host records / 1,030,613,679 bytes plus four accepted-Git
+  records / 385,518 bytes = **75 / 1,030,999,197**. Its derived membership
+  SHA-256 is
+  `d8514a0b795bd5e588df4a8995b4a8003f5182f9aba4ab4aff10da11e5a99395`.
+  The earlier 1,265-byte aggregate correction remains separate; no causal
+  explanation is asserted.
+- The owner-authorized additive deployment inventory is exactly **77 records /
+  1,031,003,702 bytes**: **73 host / 1,030,618,184** plus the unchanged **four
+  Git / 385,518**. Its body identity is
+  `285381c6bab3c11427e83c37765b9e728bc987af16e6f6b3b5e914d9fe68f1b1`;
+  its canonical file is 49,648 bytes with SHA-256
+  `97fd10669302a2158882d08102b8d306b51b6b3c61bae6941ac957ef787238b2`.
+  It references the unchanged accepted V1 identity and adds only the two
+  reader-pinned A1 auxiliaries. No accepted A1 source manifest, archive,
+  payload, Git lineage, reader contract, or original inventory was edited or
+  relabeled.
+- The exact +4,505-byte auxiliary delta is:
+  `a1-package-v1/Buffalo_Daytime_Final_Deliverable_Hashes.json`, 1,320 bytes,
+  SHA-256
+  `cd5b6a5d7f0db4d9e0e0d21595c93701aeb70f0d2cd18a1c54f2f05bfc2e388e`;
+  and `a1-package-v1/Buffalo_Daytime_V5_Portable_Handoff.md`, 3,185 bytes,
+  SHA-256
+  `aba5558cda8d5f2f8b919bc07720d99c319845e126d76e3d6837b59f785119bd`.
+  Accepted reader code pins both identities and requires them in the exact A1
+  top-level set. Actual regular mode-0600 bytes matched those pre-existing
+  expectations. A bounded metadata/text scan found no credential, session,
+  private-key, token, credentialed URL, database URL, or unrelated-private-work
+  signal. This dependency addition is not linked to the earlier +1,265-byte
+  correction.
+- New code implements deterministic manifest-backed membership, complete safe
+  diagnostics, stable descriptor reads, exact source/deployment modes and
+  ownership roles, two-pass source stability, and one whole-release atomic
+  no-replace publisher for `payload/`, `deployment-inventory.json`, and
+  `source.git`. Restart validation rechecks canonical manifest bytes, exact
+  payload membership and hashes, link counts, every Git commitment, a minimal
+  sealed bare-store filesystem layout, and the two code-owned 0644 policy files
+  beneath exact root-owned 0755 image directories. Neither private payload
+  bodies nor the source bundle is added to Git or an image.
+- Immediately before the irreversible no-replace rename, the publisher rehashes
+  all 73 host sources, descriptor-copies and rehashes the original bundle, and
+  revalidates the code-owned image policies. Post-copy host, bundle or image
+  drift refuses publication. Git subprocess output is bounded while the child
+  runs, and sealed-store files plus total bytes have pre-Git bounds.
+- The accepted source bundle independently rebuilt and publicly revalidated as
+  one complete SHA-1 history: tip
+  `608929ad00adfd2eefaab29449743c5a3f0f035e`, tree
+  `68a72c84d26dc15e0e0c8075dd2c1c6bc46d00b8`, sole parent
+  `223c0ae6ba89248223cc9093579e195295b7024e`, 2,831 exact reachable/all
+  objects, 303 commits and 396 tip-tree entries. Object-set SHA-256 is
+  `63a229b5c3a6fc6ecdf24cd2c0d79b982482823573251e44200531082948893b`;
+  raw tip-tree SHA-256 is
+  `5efe948332c007a3c74332ab5382679f64c6f95a6e31bdcd3a040dfd02253f14`.
+  Shallow, graft, replacement, promisor, alternate, hidden-object, extra-ref,
+  hook, remote, unexpected-config and unrelated-store state fail closed.
+- The real revised manifest rebuilt and round-tripped exactly; the real
+  73-member host closure rehashed to 1,030,618,184 bytes with membership
+  SHA-256
+  `d9cc055cbccfadd105c4fc104afac8e8bc98de7c8a6d44e2a1a0de5c33e60784`
+  and `source_unchanged=true`. Focused Task-4 tests passed **36/36**. Adjacent
+  unchanged-reader/workspace/V3/corrected/viewer tests passed **75/75**.
+  Compilation and `git diff --check` passed. A supplementary same-model
+  read-only review reported no remaining Task-4 P0–P2 finding; it is not an
+  attributable external review.
+- The remaining Task-4 gate is one bounded full semantic replay of the existing
+  unchanged reader: one invocation, 45-minute ceiling, process peak below
+  5 GiB, cgroup peak below 6 GiB, zero OOM deltas, no network/database/browser,
+  exact workspace/artifact/population/coherence aggregates, and no private-row
+  output. The authoritative suite registration/full run remains Task 10 as the
+  approved plan specifies. Crash-left staging reconciliation remains an
+  explicit single-supervisor Task-5/Task-11 lifecycle gate. No private transfer,
+  Railway setting, deployment, database, domain, GitHub state, Replit state,
+  Shopify state, scheduled job, or purchasing state changed.
 
 ### Railway staging delivery — TASK 3 LOCAL MILESTONE PASS / NONDEPLOYABLE / NO EXTERNAL STATE CHANGED
 

@@ -109,8 +109,12 @@ Create a metadata-only allowlist builder and validator driven by the accepted
 manifests. Tests must prove:
 
 - exact path/type/size/SHA-256/mode/ownership-role coverage;
-- the expected 75-record, 1,030,999,197-byte inventory only as an aggregate
-  cross-check;
+- the original 75-record / 1,030,999,197-byte membership and accepted inventory
+  identity remain unchanged historical evidence;
+- the additive deployment closure is exactly 77 records / 1,031,003,702 bytes:
+  73 host records / 1,030,618,184 bytes plus the unchanged four Git records /
+  385,518 bytes, with only the two reader-pinned A1 auxiliaries (4,505 bytes)
+  added;
 - refusal of missing, extra, duplicate, symlink, traversal, changed-mode,
   changed-owner, changed-byte, or unrelated files;
 - known unavailable source bundles remain explicitly unavailable;
@@ -134,6 +138,8 @@ Add state-machine and integration tests for:
 - a 45-minute initialization limit;
 - one bounded automatic retry, second-failure latch, and explicit owner retry;
 - process-group reaping, socket/key/temp cleanup, and no stale fallback;
+- ownership/type/mode-checked recovery of crash-left unpublished research
+  release/control staging directories before a retry or transfer;
 - 30-minute authenticated-idle shutdown;
 - full manifest, Git, and semantic revalidation after every restart;
 - no database environment in the worker;
