@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-27T16:44:15Z (UTC)
+**Updated:** 2026-09-30T01:02:56Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,45 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Railway staging delivery — TASK 3 LOCAL MILESTONE PASS / NONDEPLOYABLE / NO EXTERNAL STATE CHANGED
+
+- Work is isolated on `codex/railway-staging-delivery`. The unchanged accepted
+  source/CI starting point is `e25704e117a3c5bede843cac65ddfdeb7f30024f`
+  (tree `5a76089cc0eadb7f51d54da255cb611a12e2e636`). The approved design and
+  plan are commits `b9cf8aa9e80f0bfee5e00da9588d09427d25c3df` and
+  `7d081653d6456e4f73d62c4475eea02276e8e24a`. The completed local Task-3
+  checkpoint is `3f298b57c7210b54d5dab57dead0d10b566a7920`, tree
+  `459a095ed11765560775047973ff36557072c4ab`.
+- Tasks 1–3 now provide the bounded owner-passphrase/session/CSRF gateway,
+  explicit route policy, mutually exclusive legacy-local versus staging worker
+  boundaries, fixed staging identity/capability construction, canonical HMAC
+  assertions, Linux `SO_PEERCRED` enforcement, exact AF_UNIX listener/path/DAC
+  validation, bounded worker transport, fixed child environment/argv/FD
+  contracts, authenticated parameter-free research control primitives, and
+  retryable process-group/key cleanup. Existing loopback and private-research
+  authentication meanings remain the default when staging mode is absent.
+- Focused locked-environment validation passed **169/169** across staging
+  access, assertions, config, gateway, composition, worker transport,
+  supervisor, legacy local access, private research app, and Replit startup.
+  The gateway suite additionally passed ten consecutive runs (**350/350**) to
+  close the reproduced floating-point login-challenge regression. Compilation
+  and `git diff --check` passed. Two supplementary same-model read-only reviews
+  reported no remaining Task-3 P0–P2 finding; they are not represented as an
+  attributable external review.
+- This checkpoint is deliberately nondeployable. Task 5 still must implement
+  the concrete cross-process PREPARE/COMMIT/DISABLE channel, gateway pending/
+  active state, research readiness, restart rotation, and on-demand lifecycle.
+  Task 8 still must install the package and implement the real root bootstrap,
+  container users/groups/directories/listeners/inherited FDs/signals/cleanup.
+  Tasks 4, 6, 7, 9, 10, 11, 12, and 13 and all of their acceptance gates
+  remain outstanding.
+- No Railway setting, deployment, domain, volume, variable, database, bucket,
+  GitHub branch/PR, Replit deployment, Shopify state, scheduled job, public
+  endpoint, or purchasing state was changed by this implementation milestone,
+  and no private research payload was transferred. `procurement/docs/PHASE_STATUS.md`
+  is unchanged. The next bounded operation is Task 4: implement and verify the
+  metadata-only research transfer allowlist and exact source-bundle contract.
 
 ### Corrected-V3 memory-lifetime remediation — MACHINE VALIDATION PASS / OWNER ACCEPTANCE PENDING / OPERATIONAL AUTHORITY BLOCKED
 
