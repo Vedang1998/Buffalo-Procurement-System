@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 from typing import Iterable
+from urllib.parse import parse_qsl
 
 from starlette.routing import compile_path
 
@@ -350,6 +351,27 @@ def response_metadata_is_allowed(
     )
 
 
+def validate_route_query(query: bytes, allowed_fields: frozenset[str]) -> None:
+    if not isinstance(query, bytes) or len(query) > 8_192:
+        raise StagingRouteError("staging request query exceeds route limit")
+    try:
+        pairs = (
+            parse_qsl(
+                query.decode("ascii"),
+                keep_blank_values=True,
+                strict_parsing=True,
+                max_num_fields=32,
+            )
+            if query
+            else []
+        )
+    except (UnicodeDecodeError, ValueError):
+        raise StagingRouteError("staging request query is invalid") from None
+    names = [name for name, _ in pairs]
+    if len(names) != len(set(names)) or not set(names).issubset(allowed_fields):
+        raise StagingRouteError("staging request query field is not allowed")
+
+
 def _canonical_positive_bigint(value: str) -> bool:
     if not re.fullmatch(r"[1-9][0-9]{0,18}", value):
         return False
@@ -359,42 +381,41 @@ def _canonical_positive_bigint(value: str) -> bool:
 def validate_application_routes(
     *, synthetic_routes: Iterable[object], research_routes: Iterable[object]
 ) -> None:
-    route_objects = {
-        "synthetic": tuple(synthetic_routes),
-        "research": tuple(research_routes),
+    validate_worker_application_routes(
+        worker_role="synthetic", routes=synthetic_routes
+    )
+    validate_worker_application_routes(
+        worker_role="research", routes=research_routes
+    )
+
+
+def validate_worker_application_routes(
+    *, worker_role: str, routes: Iterable[object]
+) -> None:
+    if worker_role not in {"synthetic", "research"}:
+        raise StagingRouteError("staging worker route role differs")
+    actual = {
+        (method, str(getattr(route, "path", ""))): route
+        for route in tuple(routes)
+        for method in (getattr(route, "methods", None) or set())
     }
-    actual_by_worker = {
-        worker: {
-            (method, str(getattr(route, "path", ""))): route
-            for route in routes
-            for method in (getattr(route, "methods", None) or set())
-        }
-        for worker, routes in route_objects.items()
+    expected = {
+        (route.method, route.path_template): route
+        for route in ROUTES
+        if route.worker_role == worker_role
     }
-    expected_by_worker = {
-        worker: {
-            (route.method, route.path_template): route
-            for route in ROUTES
-            if route.worker_role == worker
-        }
-        for worker in ("synthetic", "research")
-    }
-    if any(
-        not set(expected_by_worker[worker]).issubset(actual_by_worker[worker])
-        for worker in expected_by_worker
-    ):
+    if not set(expected).issubset(actual):
         raise StagingRouteError("reviewed staging route inventory differs")
-    for worker, expected in expected_by_worker.items():
-        for identity, spec in expected.items():
-            actual = actual_by_worker[worker][identity]
-            dependant = getattr(actual, "dependant", None)
-            query_fields = frozenset(
-                str(getattr(field, "alias", getattr(field, "name", "")))
-                for field in getattr(dependant, "query_params", ())
-                if getattr(field, "alias", getattr(field, "name", ""))
-            )
-            if query_fields != spec.allowed_query_fields:
-                raise StagingRouteError("reviewed staging query inventory differs")
+    for identity, spec in expected.items():
+        route = actual[identity]
+        dependant = getattr(route, "dependant", None)
+        query_fields = frozenset(
+            str(getattr(field, "alias", getattr(field, "name", "")))
+            for field in getattr(dependant, "query_params", ())
+            if getattr(field, "alias", getattr(field, "name", ""))
+        )
+        if query_fields != spec.allowed_query_fields:
+            raise StagingRouteError("reviewed staging query inventory differs")
 
 
 def canonical_path_is_valid(*, path: str, raw_path: bytes) -> bool:

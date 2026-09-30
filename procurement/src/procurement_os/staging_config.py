@@ -8,6 +8,10 @@ import re
 from typing import Mapping
 
 from .staging_access import OwnerPasswordAuthenticator, StagingAccessError
+from .staging_process_contract import (
+    StagingProcessContractError,
+    validated_process_environment,
+)
 
 
 EXPECTED_PROJECT_ID = "5bdb474a-4af8-4187-b1be-be45594a22b2"
@@ -16,35 +20,6 @@ EXPECTED_APP_SERVICE_ID = "cd0daada-9e8c-4f48-a71e-9151dde451c7"
 EXPECTED_POSTGRES_SERVICE_ID = "cb33800d-7bc4-4b44-817f-671978ea50ce"
 _HEX_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
-_ALLOWED_GATEWAY_ENVIRONMENT = frozenset(
-    {
-        "BUFFALO_STAGING_ENABLED",
-        "BUFFALO_RUNTIME_MODE",
-        "BUFFALO_STAGING_EXTERNAL_HOST",
-        "BUFFALO_STAGING_OWNER_VERIFIER",
-        "BUFFALO_STAGING_VOLUME_ROOT",
-        "BUFFALO_STAGING_EXPECTED_COMMIT",
-        "BUFFALO_STAGING_POSTGRES_SERVICE_ID",
-        "RAILWAY_GIT_COMMIT_SHA",
-        "RAILWAY_PROJECT_ID",
-        "RAILWAY_ENVIRONMENT_ID",
-        "RAILWAY_SERVICE_ID",
-        "RAILWAY_REPLICA_ID",
-        "PORT",
-        # The supervisor may pass only this bounded process-runtime set in
-        # addition to the application contract above.
-        "PATH",
-        "PYTHONPATH",
-        "PYTHONUNBUFFERED",
-        "LANG",
-        "LC_ALL",
-        "TZ",
-        "HOME",
-        "TMPDIR",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-    }
-)
 
 
 class StagingConfigError(ValueError):
@@ -70,11 +45,10 @@ def load_staging_config(
     environ: Mapping[str, str] | None = None,
 ) -> StagingConfig:
     values = os.environ if environ is None else environ
-    unexpected = sorted(
-        str(key) for key in values if str(key) not in _ALLOWED_GATEWAY_ENVIRONMENT
-    )
-    if unexpected:
-        raise StagingConfigError("gateway process environment contains an unapproved entry")
+    try:
+        values = validated_process_environment(role="gateway", environ=values)
+    except StagingProcessContractError as exc:
+        raise StagingConfigError(str(exc).replace("staging process", "gateway process")) from exc
     if _value(values, "BUFFALO_STAGING_ENABLED") != "1":
         raise StagingConfigError("Railway staging is not explicitly enabled")
     if _value(values, "BUFFALO_RUNTIME_MODE") != "SYNTHETIC_DEMO":

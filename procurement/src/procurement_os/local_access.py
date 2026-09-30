@@ -24,6 +24,7 @@ from typing import Any
 from starlette.responses import Response
 
 from .local_identity import Principal, authentication_context_sha256
+from .staging_identity import StagingRequestIdentity
 
 
 SESSION_COOKIE = "buffalo_local_session"
@@ -79,7 +80,9 @@ class LocalSession:
 _sessions: dict[str, LocalSession] = {}
 _session_lock = RLock()
 _NO_REQUEST_CONTEXT = object()
-_request_session: ContextVar[LocalSession | None | object] = ContextVar(
+_request_session: ContextVar[
+    LocalSession | StagingRequestIdentity | None | object
+] = ContextVar(
     "buffalo_local_request_session", default=_NO_REQUEST_CONTEXT
 )
 
@@ -89,6 +92,47 @@ def clear_local_sessions() -> None:
 
     with _session_lock:
         _sessions.clear()
+
+
+def bind_staging_request_identity(
+    identity: StagingRequestIdentity,
+) -> Token[LocalSession | StagingRequestIdentity | None | object]:
+    """Bind a verified staging identity without fabricating a local session."""
+
+    identity.validate()
+    return _request_session.set(identity)
+
+
+def reset_request_identity(
+    token: Token[LocalSession | StagingRequestIdentity | None | object],
+) -> None:
+    _request_session.reset(token)
+
+
+def request_runtime_mode() -> str:
+    """Return the server-owned request mode while preserving local defaults."""
+
+    identity = _request_session.get()
+    if isinstance(identity, StagingRequestIdentity):
+        return (
+            "SYNTHETIC_DEMO"
+            if identity.worker_role == "synthetic"
+            else "PRIVATE_REAL_SOURCE_REVIEW"
+        )
+    return runtime_config().mode
+
+
+def staging_request_has_capability(capability: str) -> bool:
+    identity = _request_session.get()
+    return (
+        isinstance(identity, StagingRequestIdentity)
+        and capability in identity.capabilities
+    )
+
+
+def staging_request_worker_role() -> str | None:
+    identity = _request_session.get()
+    return identity.worker_role if isinstance(identity, StagingRequestIdentity) else None
 
 
 def runtime_config() -> LocalAccessConfig:
@@ -296,31 +340,47 @@ def required_capability(method: str, path: str) -> str | None:
 
 def principal_from_request(request: Any) -> Principal:
     session = getattr(request.state, "local_session", None)
-    if not isinstance(session, LocalSession):
-        raise PermissionError("authenticated local session is absent")
-    return session.principal
+    if isinstance(session, LocalSession):
+        return session.principal
+    identity = getattr(request.state, "staging_identity", None)
+    if isinstance(identity, StagingRequestIdentity):
+        return identity.principal_for()
+    raise PermissionError("authenticated server session is absent")
 
 
 def action_principal(request: Any, capability: str) -> Principal:
     """Return an action-specific role bound to the same server session."""
 
     session = getattr(request.state, "local_session", None)
-    if not isinstance(session, LocalSession) or capability not in session.capabilities:
-        raise PermissionError("authenticated local capability is absent")
-    return Principal(
-        principal_ref=session.principal.principal_ref,
-        role_ref=capability,
-        authn_context_sha256=authentication_context_sha256(
+    if isinstance(session, LocalSession):
+        if capability not in session.capabilities:
+            raise PermissionError("authenticated local capability is absent")
+        return Principal(
             principal_ref=session.principal.principal_ref,
             role_ref=capability,
-            session_ref=session.session_ref,
-        ),
-    )
+            authn_context_sha256=authentication_context_sha256(
+                principal_ref=session.principal.principal_ref,
+                role_ref=capability,
+                session_ref=session.session_ref,
+            ),
+        )
+    identity = getattr(request.state, "staging_identity", None)
+    if isinstance(identity, StagingRequestIdentity):
+        if capability not in identity.capabilities:
+            raise PermissionError("authenticated staging capability is absent")
+        return identity.principal_for(capability)
+    raise PermissionError("authenticated server capability is absent")
 
 
 def has_capability(request: Any, capability: str) -> bool:
     session = getattr(request.state, "local_session", None)
-    return isinstance(session, LocalSession) and capability in session.capabilities
+    if isinstance(session, LocalSession):
+        return capability in session.capabilities
+    identity = getattr(request.state, "staging_identity", None)
+    return (
+        isinstance(identity, StagingRequestIdentity)
+        and capability in identity.capabilities
+    )
 
 
 def authenticated_audit_actor(direct_call_fallback: str = "") -> str:
@@ -339,7 +399,9 @@ def authenticated_audit_actor(direct_call_fallback: str = "") -> str:
             raise PermissionError("direct-call audit actor is absent")
         return value
     if not isinstance(session, LocalSession):
-        raise PermissionError("authenticated local session is absent")
+        if isinstance(session, StagingRequestIdentity):
+            return session.principal_ref
+        raise PermissionError("authenticated server session is absent")
     return session.principal.principal_ref
 
 

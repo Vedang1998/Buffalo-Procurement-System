@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterable
 from contextlib import suppress
-from dataclasses import dataclass
 from http.cookies import CookieError, SimpleCookie
 import html
 import ipaddress
@@ -19,8 +18,8 @@ import inspect
 import re
 import secrets
 import time
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Protocol
-from urllib.parse import parse_qsl, parse_qs, urljoin, urlsplit
+from typing import Any, Mapping
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
@@ -39,6 +38,7 @@ from .staging_access import (
 )
 from .staging_config import StagingConfig
 from .staging_internal import mint_assertion
+from .staging_identity import OWNER_PRINCIPAL_REF, OWNER_ROLE_REF
 from .staging_routes import (
     ROUTES,
     RouteSpec,
@@ -46,12 +46,11 @@ from .staging_routes import (
     canonical_path_is_valid,
     match_route,
     response_metadata_is_allowed,
-    validate_application_routes,
+    validate_route_query,
 )
+from .staging_worker_types import WorkerKeyring, WorkerResponse, WorkerTransport
 
 
-_OWNER_PRINCIPAL = "owner:railway-staging:01"
-_OWNER_ROLE = "RAILWAY_STAGING_OWNER"
 _MAX_LOGIN_BODY = 16 * 1024
 _SECURITY_HEADERS = (
     ("cache-control", "no-store"),
@@ -117,40 +116,22 @@ _POST_FORM = re.compile(
     rb"(<form\b[^>]*\bmethod\s*=\s*(['\"])post\2[^>]*>)",
     re.IGNORECASE,
 )
+_REVIEW_TOKEN_LABEL = re.compile(
+    rb"<label\b[^>]*>[^<]*<input\b(?=[^>]*\bname\s*=\s*(['\"]?)review_token\1)[^>]*>\s*</label>(?:<br>)?",
+    re.IGNORECASE,
+)
+_REVIEW_TOKEN_INPUT = re.compile(
+    rb"<input\b(?=[^>]*\bname\s*=\s*(['\"]?)review_token\1)[^>]*>",
+    re.IGNORECASE,
+)
 class StagingGatewayError(ValueError):
     """The public staging request cannot be accepted."""
 
 
-@dataclass(frozen=True)
-class WorkerResponse:
-    status: int
-    headers: tuple[tuple[bytes, bytes], ...]
-    body: bytes | AsyncIterable[bytes]
-    close: Callable[[], Awaitable[None] | None] | None = None
-
-
-class WorkerTransport(Protocol):
-    async def request(self, **request: object) -> WorkerResponse: ...
-
-
 class RegisteredRoutePolicy:
-    """A fixed intersection of reviewed routes and actual FastAPI routes."""
+    """The reviewed static registry; each worker validates its own live routes."""
 
-    def __init__(
-        self,
-        *,
-        synthetic_routes: Iterable[object] | None = None,
-        research_routes: Iterable[object] | None = None,
-    ) -> None:
-        if synthetic_routes is None or research_routes is None:
-            raise StagingGatewayError("application route validation is incomplete")
-        try:
-            validate_application_routes(
-                synthetic_routes=synthetic_routes,
-                research_routes=research_routes,
-            )
-        except StagingRouteError as exc:
-            raise StagingGatewayError(str(exc)) from exc
+    def __init__(self) -> None:
         self.capabilities = frozenset(route.capability for route in ROUTES)
 
     def match(self, *, method: str, path: str, raw_path: bytes) -> RouteSpec | None:
@@ -169,17 +150,14 @@ class StagingGateway:
         worker_keys: Mapping[str, bytes],
         wall_clock: Any = time.time,
     ) -> None:
-        if set(worker_keys) != {"synthetic", "research"} or any(
-            not isinstance(value, bytes) or len(value) != 32
-            for value in worker_keys.values()
-        ):
-            raise StagingGatewayError("worker key inventory is invalid")
-        if secrets.compare_digest(worker_keys["synthetic"], worker_keys["research"]):
-            raise StagingGatewayError("worker keys must be independently generated")
+        try:
+            keyring = WorkerKeyring(dict(worker_keys))
+        except ValueError as exc:
+            raise StagingGatewayError(str(exc)) from exc
         self.config = config
         self.route_policy = route_policy
         self.transport = transport
-        self.worker_keys = dict(worker_keys)
+        self.worker_keyring = keyring
         self.authenticator = OwnerPasswordAuthenticator(config.owner_verifier)
         self.sessions = StagingSessionStore()
         self.login_challenges = LoginChallengeStore()
@@ -369,17 +347,26 @@ class StagingGateway:
             self._cookies(validated)
         return validated
 
-    @staticmethod
-    async def _lifespan(receive, send) -> None:
+    async def _lifespan(self, receive, send) -> None:
         started = False
         while True:
             message = await receive()
             message_type = message.get("type")
             if message_type == "lifespan.startup" and not started:
+                startup = getattr(self.transport, "startup", None)
+                if callable(startup):
+                    result = startup()
+                    if inspect.isawaitable(result):
+                        await result
                 await send({"type": "lifespan.startup.complete"})
                 started = True
                 continue
             if message_type == "lifespan.shutdown" and started:
+                shutdown = getattr(self.transport, "shutdown", None)
+                if callable(shutdown):
+                    result = shutdown()
+                    if inspect.isawaitable(result):
+                        await result
                 await send({"type": "lifespan.shutdown.complete"})
                 return
             failure_type = (
@@ -453,8 +440,8 @@ class StagingGateway:
             await self._login_failed(send)
             return
         issued = self.sessions.create(
-            principal_ref=_OWNER_PRINCIPAL,
-            role_ref=_OWNER_ROLE,
+            principal_ref=OWNER_PRINCIPAL_REF,
+            role_ref=OWNER_ROLE_REF,
             capabilities=self.route_policy.capabilities,
             credential_fingerprint=self.authenticator.fingerprint,
         )
@@ -562,8 +549,9 @@ class StagingGateway:
         # inside the five-second lifetime and avoids accepting sub-millisecond
         # precision that the canonical assertion format cannot represent.
         issued_at = float(int(self._wall_clock()))
+        worker_key, _ = self.worker_keyring.current(selection.worker_role)
         assertion = mint_assertion(
-            key=self.worker_keys[selection.worker_role],
+            key=worker_key,
             worker_role=selection.worker_role,
             request_id=secrets.token_hex(16),
             session_digest=session.token_digest_hex,
@@ -603,6 +591,18 @@ class StagingGateway:
             request_headers=headers,
             selection=selection,
         )
+
+    def replace_worker_key(
+        self, *, worker_role: str, key: bytes, generation: int
+    ) -> None:
+        try:
+            self.worker_keyring.replace(
+                role=worker_role,
+                key=key,
+                generation=generation,
+            )
+        except ValueError as exc:
+            raise StagingGatewayError(str(exc)) from exc
 
     async def _send_worker_response(
         self,
@@ -720,6 +720,8 @@ class StagingGateway:
                     session, csrf_value
                 ):
                     raise StagingGatewayError("worker HTML session binding differs")
+                if selection.worker_role == "synthetic":
+                    body = self._strip_legacy_review_token_fields(body)
                 body = self._inject_csrf_forms(
                     body,
                     csrf_value,
@@ -861,20 +863,10 @@ class StagingGateway:
 
     @staticmethod
     def _validate_query(query: bytes, allowed_fields: frozenset[str]) -> None:
-        if len(query) > 8_192:
-            raise StagingGatewayError("request query exceeds route limit")
         try:
-            pairs = parse_qsl(
-                query.decode("ascii"),
-                keep_blank_values=True,
-                strict_parsing=True,
-                max_num_fields=32,
-            ) if query else []
-        except (UnicodeDecodeError, ValueError):
-            raise StagingGatewayError("request query is invalid") from None
-        names = [name for name, _ in pairs]
-        if len(names) != len(set(names)) or not set(names).issubset(allowed_fields):
-            raise StagingGatewayError("request query field is not allowed")
+            validate_route_query(query, allowed_fields)
+        except StagingRouteError as exc:
+            raise StagingGatewayError(str(exc)) from exc
 
     def _validate_content_type(
         self, headers: Mapping[bytes, bytes], route: RouteSpec
@@ -1034,6 +1026,11 @@ class StagingGateway:
         if count > _MAX_HTML_FORMS or len(injected) > max_bytes:
             raise StagingGatewayError("worker HTML form inventory exceeds limit")
         return injected
+
+    @staticmethod
+    def _strip_legacy_review_token_fields(body: bytes) -> bytes:
+        without_labels = _REVIEW_TOKEN_LABEL.sub(b"", body)
+        return _REVIEW_TOKEN_INPUT.sub(b"", without_labels)
 
     @staticmethod
     def _header(headers: Mapping[bytes, bytes], name: bytes) -> str:

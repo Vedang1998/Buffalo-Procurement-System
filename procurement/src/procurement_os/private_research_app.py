@@ -214,9 +214,6 @@ class PrivateResearchBasicAccessMiddleware:
         await response({"type": "http"}, None, send)
 
 
-app.add_middleware(PrivateResearchBasicAccessMiddleware)
-
-
 def _workspace() -> dict[str, object]:
     global _CACHED_WORKSPACE
     raw = os.getenv("BUFFALO_PRIVATE_RESEARCH_WORKSPACE", "").strip()
@@ -911,3 +908,13 @@ def private_research_artifact(artifact_name: str) -> Response:
         media_type=media_types[artifact_name],
         headers={"Content-Disposition": f'attachment; filename="{artifact_name}"'},
     )
+
+
+from .staging_composition import install_access_boundary as _install_access_boundary
+
+
+_ACCESS_BOUNDARY = _install_access_boundary(
+    app,
+    local_middleware=PrivateResearchBasicAccessMiddleware,
+    expected_worker_role="research",
+)

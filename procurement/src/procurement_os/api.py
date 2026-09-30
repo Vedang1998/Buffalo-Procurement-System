@@ -33,6 +33,8 @@ from .local_access import (
     create_local_session,
     destroy_local_session,
     runtime_config,
+    staging_request_has_capability,
+    staging_request_worker_role,
 )
 from .matching import MatchCandidate, score_candidate
 from .monday_run import (
@@ -91,6 +93,10 @@ from .development_forecast import (
     V2_METHOD_VERSION as DEVELOPMENT_FORECAST_V2_METHOD_VERSION,
 )
 from .storage import get_storage
+from .staging_composition import (
+    STAGING_WORKER_ROLE_ENV,
+    install_access_boundary as _install_access_boundary,
+)
 from .synthetic_price_replacement import (
     CONTRACT as SYNTHETIC_PRICE_REPLACEMENT_CONTRACT,
     SyntheticPriceReplacementError,
@@ -182,7 +188,6 @@ app = FastAPI(
 app.add_middleware(
     _BoundedPriceBookUploadMiddleware, max_bytes=MAX_PRICE_BOOK_REQUEST_BYTES
 )
-app.add_middleware(LocalAccessMiddleware)
 
 
 class TargetCostRequest(BaseModel):
@@ -225,10 +230,22 @@ class RetireDecision(BaseModel):
     review_token: str
 
 
+def _review_token_form():
+    """Keep legacy required fields; staging authority comes from the gateway."""
+
+    return (
+        Form("")
+        if os.getenv(STAGING_WORKER_ROLE_ENV, "") == "synthetic"
+        else Form(...)
+    )
+
+
 def _require_review_token(supplied: str | None) -> None:
     """Identity decisions are permanent; mutations are disabled unless the reviewer
     presents the shared review token (fail-closed when the token is not configured).
     The token value is never logged or echoed."""
+    if staging_request_has_capability("procurement.order.approve"):
+        return
     import hmac
     expected = os.getenv("RECONCILIATION_REVIEW_TOKEN")
     if not expected:
@@ -240,6 +257,8 @@ def _require_review_token(supplied: str | None) -> None:
 
 def _require_price_book_review_token(supplied: str | None) -> None:
     """FUTURE price activation has a distinct fail-closed authority."""
+    if staging_request_has_capability("procurement.price.approve"):
+        return
     import hmac
 
     expected = os.getenv("PRICE_BOOK_REVIEW_TOKEN")
@@ -250,6 +269,14 @@ def _require_price_book_review_token(supplied: str | None) -> None:
         )
     if not supplied or not hmac.compare_digest(str(supplied), expected):
         raise HTTPException(status_code=403, detail="Invalid price-book review token")
+
+
+def _request_runtime_mode() -> str:
+    return (
+        "SYNTHETIC_DEMO"
+        if staging_request_worker_role() == "synthetic"
+        else runtime_config().mode
+    )
 
 
 def _db_conn():
@@ -340,7 +367,7 @@ def health_full():
 def _runtime_labeled_status(value: dict) -> dict:
     """Separate canonical facts from operational authority in the local demo."""
 
-    if runtime_config().mode != "SYNTHETIC_DEMO":
+    if _request_runtime_mode() != "SYNTHETIC_DEMO":
         return value
     result = dict(value)
     readiness = result.get("po_readiness")
@@ -420,7 +447,7 @@ def _operational_nav(nav_root: str, *, current: str) -> str:
         + "</nav>"
     )
     return navigation + (
-        _mapping_banner() if runtime_config().mode == "SYNTHETIC_DEMO" else ""
+        _mapping_banner() if _request_runtime_mode() == "SYNTHETIC_DEMO" else ""
     )
 
 
@@ -487,7 +514,7 @@ def _admin_status_html(h: dict, *, nav_root: str) -> str:
     )
 
     canonical_enabled = bool(readiness.get("po_generation_enabled", False))
-    synthetic_demo = runtime_config().mode == "SYNTHETIC_DEMO"
+    synthetic_demo = _request_runtime_mode() == "SYNTHETIC_DEMO"
     enabled = canonical_enabled and not synthetic_demo
     po_state = (
         "BLOCKED — SYNTHETIC DEMO / INTERNAL DRAFT ONLY"
@@ -728,7 +755,7 @@ def vendor_rules_update_page(
     actor: str = Form(...),
     reason: str = Form(...),
     expected_version: int = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -805,11 +832,11 @@ def _mapping_state(candidate: dict, field: str) -> str:
 
 
 def _mapping_banner() -> str:
-    config = runtime_config()
+    mode = _request_runtime_mode()
     return (
         "<div style='border:2px solid #b42318;background:#ffebe9;padding:12px;"
         "font-weight:700;margin:12px 0'>TEST DATA — NOT FOR ORDERING · "
-        f"{_html_escape(config.mode)} · SHADOW ONLY · no offer activation, price "
+        f"{_html_escape(mode)} · SHADOW ONLY · no offer activation, price "
         "authority, recommendation cutover, Shopify write, PO release, or order.</div>"
     )
 
@@ -2593,7 +2620,7 @@ def monday_runs_prepare(
     idempotency_key: str = Form(...),
     variant_ids: str = Form(...),
     actor: str = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -2640,7 +2667,7 @@ def monday_stale_forecast_retire(
     run_id: UUID,
     reason: str = Form(...),
     expected_confirmation_sha256: str | None = Form(None),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_review_token(review_token)
     principal = action_principal(request, "procurement.order.approve")
@@ -2682,7 +2709,7 @@ def monday_blocked_item_exclude(
     actor: str = Form(...),
     reason: str = Form(...),
     expected_input_fingerprint: str = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -2713,7 +2740,7 @@ def monday_recommendation_review(
     review_preview_fingerprint: str | None = Form(None),
     material_confirmation_reason: str = Form(""),
     material_edit_confirmation_id: int | None = Form(None),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -2804,7 +2831,7 @@ def monday_run_build(
     actor: str = Form(...),
     draft_preview_fingerprint: str | None = Form(None),
     minimum_disposition: str | None = Form(None),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -3103,7 +3130,7 @@ async def price_book_import(
     request: Request,
     price_book_file: UploadFile = File(...),
     actor: str = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
     replacement_contract: str | None = Form(None),
     expected_declaration_sha256: str | None = Form(None),
 ):
@@ -3152,7 +3179,7 @@ def price_book_promote(
     expected_validation_fingerprint: str = Form(...),
     actor: str = Form(...),
     warning_review_reason: str | None = Form(None),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_price_book_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -3178,7 +3205,7 @@ def declared_price_confirmation_preview(
     confirmation_idempotency_key: str = Form(...),
     actor: str = Form(...),
     warning_review_reason: str | None = Form(None),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_price_book_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -3215,7 +3242,7 @@ def declared_price_confirm(
     confirm: str = Form(...),
     actor: str = Form(...),
     warning_review_reason: str | None = Form(None),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_price_book_review_token(review_token)
     _server_audit_actor(actor)
@@ -3243,7 +3270,7 @@ def synthetic_price_apply_preview(
     batch_id: UUID,
     apply_idempotency_key: str = Form(...),
     actor: str = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_price_book_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -3275,7 +3302,7 @@ def synthetic_price_apply(
     expected_preview_sha256: str = Form(...),
     confirm: str = Form(...),
     actor: str = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_price_book_review_token(review_token)
     _server_audit_actor(actor)
@@ -3302,7 +3329,7 @@ def price_book_reject(
     expected_validation_fingerprint: str = Form(...),
     actor: str = Form(...),
     reason: str = Form(...),
-    review_token: str = Form(...),
+    review_token: str = _review_token_form(),
 ):
     _require_price_book_review_token(review_token)
     actor = _server_audit_actor(actor)
@@ -3331,3 +3358,10 @@ def pricing_rollover(req: RolloverRequest):
             "backup/completeness/rollover transaction is separately reviewed."
         ),
     )
+
+
+_ACCESS_BOUNDARY = _install_access_boundary(
+    app,
+    local_middleware=LocalAccessMiddleware,
+    expected_worker_role="synthetic",
+)

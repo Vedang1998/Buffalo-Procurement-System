@@ -426,7 +426,7 @@ class LoginChallengeStore:
         self._ttl_seconds = float(ttl_seconds)
         self._maximum_challenges = maximum_challenges
         self._signing_key = secrets.token_bytes(32)
-        self._consumed: dict[str, float] = {}
+        self._consumed: dict[str, int] = {}
         self._lock = RLock()
 
     def create(self) -> LoginChallenge:
@@ -455,21 +455,25 @@ class LoginChallengeStore:
 
         if not cookie_token or not form_token:
             return False
-        now = self._clock()
+        now_ms = int(self._clock() * 1_000)
         parsed = self._parse(cookie_token)
         if parsed is None:
             return False
-        payload, issued_at, expires_at, nonce, expected_form_digest = parsed
-        if issued_at > now or expires_at - issued_at != self._ttl_seconds or now > expires_at:
+        payload, issued_ms, expires_ms, nonce, expected_form_digest = parsed
+        if (
+            issued_ms > now_ms
+            or expires_ms - issued_ms != int(self._ttl_seconds * 1_000)
+            or now_ms > expires_ms
+        ):
             return False
         supplied_form_digest = hashlib.sha256(form_token.encode("utf-8")).hexdigest()
         if not hmac.compare_digest(expected_form_digest, supplied_form_digest):
             return False
         with self._lock:
-            self._prune(now)
+            self._prune(now_ms)
             if nonce in self._consumed or len(self._consumed) >= self._maximum_challenges:
                 return False
-            self._consumed[nonce] = expires_at
+            self._consumed[nonce] = expires_ms
         return True
 
     def clear(self) -> None:
@@ -477,18 +481,16 @@ class LoginChallengeStore:
             self._consumed.clear()
             self._signing_key = secrets.token_bytes(32)
 
-    def _prune(self, now: float) -> None:
+    def _prune(self, now_ms: int) -> None:
         expired = [
-            nonce
-            for nonce, expires_at in self._consumed.items()
-            if now > expires_at
+            nonce for nonce, expires_ms in self._consumed.items() if now_ms > expires_ms
         ]
         for nonce in expired:
             self._consumed.pop(nonce, None)
 
     def _parse(
         self, cookie_token: str
-    ) -> tuple[bytes, float, float, str, str] | None:
+    ) -> tuple[bytes, int, int, str, str] | None:
         if not isinstance(cookie_token, str) or len(cookie_token) > 256:
             return None
         parts = cookie_token.split(".")
@@ -514,6 +516,6 @@ class LoginChallengeStore:
             supplied_signature, expected_signature
         ):
             return None
-        issued_at = int(issued_text) / 1_000
-        expires_at = int(expires_text) / 1_000
-        return payload, issued_at, expires_at, nonce, form_digest
+        issued_ms = int(issued_text)
+        expires_ms = int(expires_text)
+        return payload, issued_ms, expires_ms, nonce, form_digest

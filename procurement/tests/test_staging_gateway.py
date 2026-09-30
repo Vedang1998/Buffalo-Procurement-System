@@ -11,7 +11,6 @@ from urllib.parse import urlencode
 
 from fastapi.testclient import TestClient
 
-from procurement_os import api, private_research_app
 from procurement_os.staging_access import (
     AuthenticationThrottled,
     CSRF_COOKIE,
@@ -50,6 +49,14 @@ class _RecordingTransport:
             body=b"worker response",
         )
         self.error: Exception | None = None
+        self.started = 0
+        self.stopped = 0
+
+    async def startup(self):
+        self.started += 1
+
+    async def shutdown(self):
+        self.stopped += 1
 
     async def request(self, **request):
         self.requests.append(request)
@@ -59,19 +66,6 @@ class _RecordingTransport:
 
 
 class StagingGatewayTests(unittest.TestCase):
-    def test_route_policy_requires_both_live_application_inventories(self):
-        for arguments in (
-            {},
-            {"synthetic_routes": api.app.routes},
-            {"research_routes": private_research_app.app.routes},
-        ):
-            with self.subTest(arguments=tuple(arguments)):
-                with self.assertRaisesRegex(
-                    StagingGatewayError,
-                    "application route validation is incomplete",
-                ):
-                    RegisteredRoutePolicy(**arguments)
-
     def setUp(self) -> None:
         self.credential = generate_owner_credential()
         self.config = StagingConfig(
@@ -90,10 +84,7 @@ class StagingGatewayTests(unittest.TestCase):
         self.synthetic_key = bytes.fromhex("11" * 32)
         self.research_key = bytes.fromhex("22" * 32)
         self.transport = _RecordingTransport()
-        self.policy = RegisteredRoutePolicy(
-            synthetic_routes=api.app.routes,
-            research_routes=private_research_app.app.routes,
-        )
+        self.policy = RegisteredRoutePolicy()
         self.gateway = StagingGateway(
             config=self.config,
             route_policy=self.policy,
@@ -140,6 +131,23 @@ class StagingGatewayTests(unittest.TestCase):
         )
         self.assertIsNotNone(session)
         return issued, session
+
+    def test_synthetic_html_removes_legacy_review_token_prompt(self):
+        self.assertEqual(self._login().status_code, 303)
+        self.transport.response = WorkerResponse(
+            status=200,
+            headers=((b"content-type", b"text/html"),),
+            body=(
+                b"<form method='post'><label>Review token "
+                b"<input name='review_token' type='password' required></label>"
+                b"<button>Continue</button></form>"
+            ),
+        )
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("review_token", response.text)
+        self.assertNotIn("type='password'", response.text)
+        self.assertIn("_buffalo_staging_csrf", response.text)
 
     def test_health_is_minimal_and_security_headers_are_unconditional(self):
         response = self.client.get("/health")
@@ -443,6 +451,7 @@ class StagingGatewayTests(unittest.TestCase):
             [message["type"] for message in lifespan_sent],
             ["lifespan.startup.complete", "lifespan.shutdown.complete"],
         )
+        self.assertEqual((self.transport.started, self.transport.stopped), (1, 1))
 
         websocket_sent: list[dict[str, object]] = []
 
@@ -470,6 +479,41 @@ class StagingGatewayTests(unittest.TestCase):
                     "synthetic": self.synthetic_key,
                     "research": self.synthetic_key,
                 },
+            )
+
+    def test_worker_key_rotation_is_monotonic_and_cross_role_safe(self):
+        replacement = bytes.fromhex("33" * 32)
+        self.gateway.replace_worker_key(
+            worker_role="research", key=replacement, generation=1
+        )
+        self.assertEqual(
+            self.gateway.worker_keyring.current("research"),
+            (replacement, 1),
+        )
+        with self.assertRaisesRegex(StagingGatewayError, "not newer"):
+            self.gateway.replace_worker_key(
+                worker_role="research",
+                key=bytes.fromhex("44" * 32),
+                generation=1,
+            )
+        skipped = bytes.fromhex("44" * 32)
+        self.gateway.replace_worker_key(
+            worker_role="research", key=skipped, generation=3
+        )
+        self.assertEqual(
+            self.gateway.worker_keyring.current("research"), (skipped, 3)
+        )
+        with self.assertRaisesRegex(StagingGatewayError, "never be reused"):
+            self.gateway.replace_worker_key(
+                worker_role="research",
+                key=self.synthetic_key,
+                generation=4,
+            )
+        with self.assertRaisesRegex(StagingGatewayError, "never be reused"):
+            self.gateway.replace_worker_key(
+                worker_role="research",
+                key=self.research_key,
+                generation=4,
             )
 
     def test_bulk_price_upload_is_not_a_staging_route(self):
@@ -616,8 +660,11 @@ class StagingGatewayTests(unittest.TestCase):
                     send=first_send,
                 )
             )
-            while not started.is_set():
-                await asyncio.sleep(0)
+            self.assertTrue(
+                await asyncio.wait_for(
+                    asyncio.to_thread(started.wait, 2), timeout=3
+                )
+            )
             first.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await first

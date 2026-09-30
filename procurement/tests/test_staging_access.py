@@ -259,6 +259,16 @@ class StagingAccessTests(unittest.TestCase):
             challenges.consume_after_admission(other.cookie_token, other.form_token)
         )
 
+    def test_login_challenge_ttl_uses_exact_integer_milliseconds(self):
+        self.clock.value = 10_000_000_000.125
+        challenges = LoginChallengeStore(clock=self.clock, ttl_seconds=300)
+        issued = challenges.create()
+        self.assertTrue(
+            challenges.consume_after_admission(
+                issued.cookie_token, issued.form_token
+            )
+        )
+
     def test_wrong_form_token_does_not_consume_the_valid_challenge(self):
         challenges = LoginChallengeStore(clock=self.clock)
         issued = challenges.create()
