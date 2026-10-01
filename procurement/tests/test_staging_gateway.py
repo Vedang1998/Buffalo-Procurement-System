@@ -33,6 +33,7 @@ from procurement_os.staging_gateway import (
 )
 from procurement_os.staging_internal import NonceReplayCache, verify_assertion
 from procurement_os.staging_routes import response_metadata_is_allowed
+from procurement_os.staging_supervisor import ControlStatus
 
 
 HOST = "buffalo-staging.example.test"
@@ -65,6 +66,26 @@ class _RecordingTransport:
         return self.response
 
 
+class _ResearchControl:
+    def __init__(self) -> None:
+        self.state = "READY"
+        self.generation = 0
+        self.calls: list[str] = []
+
+    async def request(self, operation: str) -> ControlStatus:
+        self.calls.append(operation)
+        if operation == "research-stop":
+            self.state = "STOPPED"
+        elif operation == "research-start" and self.state == "STOPPED":
+            self.state = "VALIDATING"
+            self.generation += 1
+        return ControlStatus(
+            state=self.state,
+            generation=self.generation,
+            retry_after_seconds=2 if self.state == "VALIDATING" else None,
+        )
+
+
 class StagingGatewayTests(unittest.TestCase):
     def setUp(self) -> None:
         self.credential = generate_owner_credential()
@@ -84,6 +105,7 @@ class StagingGatewayTests(unittest.TestCase):
         self.synthetic_key = bytes.fromhex("11" * 32)
         self.research_key = bytes.fromhex("22" * 32)
         self.transport = _RecordingTransport()
+        self.research_control = _ResearchControl()
         self.policy = RegisteredRoutePolicy()
         self.gateway = StagingGateway(
             config=self.config,
@@ -93,7 +115,18 @@ class StagingGatewayTests(unittest.TestCase):
                 "synthetic": self.synthetic_key,
                 "research": self.research_key,
             },
+            research_control=self.research_control,
         )
+        for role, key in (
+            ("synthetic", self.synthetic_key),
+            ("research", self.research_key),
+        ):
+            self.gateway.prepare_worker_key(
+                worker_role=role,
+                key=key,
+                generation=0,
+            )
+            self.gateway.commit_worker_key(worker_role=role, generation=0)
         self.client = TestClient(
             self.gateway,
             base_url=ORIGIN,
@@ -292,6 +325,84 @@ class StagingGatewayTests(unittest.TestCase):
             self.assertEqual(verified.principal_ref, "owner:railway-staging:01")
             self.assertIn(request["capability"], verified.capabilities)
 
+    def test_research_control_runs_only_after_auth_route_and_capability_checks(self):
+        self.assertEqual(self.client.get("/private-research").status_code, 401)
+        self.assertEqual(self.research_control.calls, [])
+        self.assertEqual(self._login().status_code, 303)
+
+        self.assertEqual(self.client.get("/definitely-not-a-route").status_code, 403)
+        self.assertEqual(self.client.get("/").status_code, 200)
+        self.assertEqual(self.research_control.calls, [])
+        self.assertEqual(self.client.get("/private-research").status_code, 200)
+        self.assertEqual(
+            self.research_control.calls,
+            ["research-status", "research-start"],
+        )
+
+    def test_cold_research_returns_immediate_retry_after_without_transport(self):
+        self.research_control.state = "STOPPED"
+        self.assertEqual(self._login().status_code, 303)
+        response = self.client.get("/private-research")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers["retry-after"], "2")
+        self.assertEqual(
+            self.research_control.calls,
+            ["research-status", "research-start"],
+        )
+        self.assertEqual(self.transport.requests, [])
+
+    def test_failed_research_never_auto_retries_and_owner_retry_is_csrf_bound(self):
+        self.research_control.state = "FAILED"
+        self.assertEqual(self._login().status_code, 303)
+        failed = self.client.get("/private-research")
+        self.assertEqual(failed.status_code, 503)
+        self.assertNotIn("retry-after", failed.headers)
+        self.assertIn("/private-research/retry", failed.text)
+        self.assertEqual(self.research_control.calls, ["research-status"])
+
+        refused = self.client.post(
+            "/private-research/retry",
+            data={
+                "_buffalo_staging_csrf": self.client.cookies[CSRF_COOKIE],
+                "unexpected": "value",
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(self.research_control.calls, ["research-status"])
+
+        retried = self.client.post(
+            "/private-research/retry",
+            data={"_buffalo_staging_csrf": self.client.cookies[CSRF_COOKIE]},
+            headers={"Origin": ORIGIN},
+            follow_redirects=False,
+        )
+        self.assertEqual(retried.status_code, 303)
+        self.assertEqual(retried.headers["location"], "/private-research")
+        self.assertEqual(
+            self.research_control.calls,
+            [
+                "research-status",
+                "research-status",
+                "research-stop",
+                "research-start",
+            ],
+        )
+
+    def test_research_generation_is_rechecked_before_assertion_minting(self):
+        self.assertEqual(self._login().status_code, 303)
+        original = self.gateway.worker_keyring.current
+
+        def mismatched(role: str):
+            key, generation = original(role)
+            return key, generation + 1 if role == "research" else generation
+
+        with patch.object(self.gateway.worker_keyring, "current", side_effect=mismatched):
+            response = self.client.get("/private-research")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers["retry-after"], "1")
+        self.assertEqual(self.transport.requests, [])
+
     def test_unsafe_routes_require_exact_origin_and_session_csrf(self):
         self.assertEqual(self._login().status_code, 303)
         path = "/economics/target-cost"
@@ -483,34 +594,41 @@ class StagingGatewayTests(unittest.TestCase):
 
     def test_worker_key_rotation_is_monotonic_and_cross_role_safe(self):
         replacement = bytes.fromhex("33" * 32)
-        self.gateway.replace_worker_key(
+        self.gateway.disable_worker_key(worker_role="research", generation=0)
+        self.gateway.prepare_worker_key(
             worker_role="research", key=replacement, generation=1
         )
+        with self.assertRaisesRegex(ValueError, "not active"):
+            self.gateway.worker_keyring.current("research")
+        self.gateway.commit_worker_key(worker_role="research", generation=1)
         self.assertEqual(
             self.gateway.worker_keyring.current("research"),
             (replacement, 1),
         )
         with self.assertRaisesRegex(StagingGatewayError, "not newer"):
-            self.gateway.replace_worker_key(
+            self.gateway.disable_worker_key(worker_role="research", generation=1)
+            self.gateway.prepare_worker_key(
                 worker_role="research",
                 key=bytes.fromhex("44" * 32),
-                generation=1,
+                generation=0,
             )
         skipped = bytes.fromhex("44" * 32)
-        self.gateway.replace_worker_key(
+        self.gateway.prepare_worker_key(
             worker_role="research", key=skipped, generation=3
         )
+        self.gateway.commit_worker_key(worker_role="research", generation=3)
         self.assertEqual(
             self.gateway.worker_keyring.current("research"), (skipped, 3)
         )
+        self.gateway.disable_worker_key(worker_role="research", generation=3)
         with self.assertRaisesRegex(StagingGatewayError, "never be reused"):
-            self.gateway.replace_worker_key(
+            self.gateway.prepare_worker_key(
                 worker_role="research",
                 key=self.synthetic_key,
                 generation=4,
             )
         with self.assertRaisesRegex(StagingGatewayError, "never be reused"):
-            self.gateway.replace_worker_key(
+            self.gateway.prepare_worker_key(
                 worker_role="research",
                 key=self.research_key,
                 generation=4,

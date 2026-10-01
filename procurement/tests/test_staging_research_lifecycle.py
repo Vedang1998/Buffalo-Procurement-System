@@ -73,7 +73,7 @@ class _Driver:
     def commit(self, generation: int) -> None:
         self.commits.append(generation)
 
-    def terminate(self, generation: int) -> None:
+    def terminate(self, generation: int | None) -> None:
         self.terminations.append(generation)
         if self.fail_termination:
             raise RuntimeError("cleanup refused")
@@ -102,7 +102,12 @@ class ResearchLifecycleTests(unittest.TestCase):
 
     @staticmethod
     def _new_manager(
-        *, driver: _Driver, clock: _Clock, sampler, retry_backoff_seconds: int = 7
+        *,
+        driver: _Driver,
+        clock: _Clock,
+        sampler,
+        retry_backoff_seconds: int = 7,
+        idle_timeout_seconds: int = 1_800,
     ) -> ResearchLifecycleManager:
         return ResearchLifecycleManager(
             driver=driver,
@@ -110,6 +115,7 @@ class ResearchLifecycleTests(unittest.TestCase):
             resource_sampler=sampler,
             expected_validation_identity=VALIDATION_IDENTITY,
             retry_backoff_seconds=retry_backoff_seconds,
+            idle_timeout_seconds=idle_timeout_seconds,
         )
 
     def _drive_until(self, predicate, *, maximum: int = 40) -> None:
@@ -202,14 +208,52 @@ class ResearchLifecycleTests(unittest.TestCase):
         self.assertEqual((status.state, status.generation), ("VALIDATING", 1))
         self._drive_until(lambda: self.driver.launches == [0, 1])
 
+    def test_ready_idle_uses_only_authenticated_start_touch(self) -> None:
+        manager = self._new_manager(
+            driver=self.driver,
+            clock=self.clock,
+            sampler=self.sampler,
+            idle_timeout_seconds=10,
+        )
+        manager.start()
+        for _ in range(3):
+            manager.tick()
+        self.driver.observation = AttemptObservation(
+            generation=0,
+            ready=True,
+            validation_identity=VALIDATION_IDENTITY,
+        )
+        for _ in range(4):
+            manager.tick()
+        self.assertEqual(manager.status().state, "READY")
+
+        self.clock.advance(9.999)
+        self.assertEqual(manager.status().state, "READY")
+        self.assertEqual(manager.tick().state, "READY")
+        manager.status()
+        self.clock.advance(0.001)
+        self.assertEqual(manager.tick().state, "STOPPED")
+        self.assertEqual(self.driver.terminations, [0])
+
+        manager.start()
+        for _ in range(7):
+            if manager.status().state == "READY":
+                break
+            manager.tick()
+        self.assertEqual(manager.status().state, "READY")
+        self.clock.advance(9)
+        self.assertEqual(manager.start().state, "READY")
+        self.clock.advance(9)
+        self.assertEqual(manager.tick().state, "READY")
+
     def test_typed_launch_crash_is_cleaned_before_retry(self) -> None:
         self.driver.launch_failure = RecoverableAttemptError(AttemptFailure.CRASH)
         self.manager.start()
-        self._drive_until(lambda: self.driver.terminations == [0])
+        self._drive_until(lambda: self.driver.terminations == [None])
         self.assertEqual(self.manager.status().state, "VALIDATING")
         self.driver.launch_failure = None
         self.clock.advance(7)
-        self._drive_until(lambda: self.driver.launches == [0, 1])
+        self._drive_until(lambda: self.driver.launches == [0, 0])
 
     def test_cleanup_uncertainty_latches_failed_without_retry(self) -> None:
         self._launch()
@@ -223,10 +267,10 @@ class ResearchLifecycleTests(unittest.TestCase):
         self.manager.tick()
         self.assertEqual(self.driver.launches, [0])
 
-    def test_untyped_launch_error_and_wrong_generation_never_retry(self) -> None:
+    def test_untyped_launch_error_and_older_generation_never_retry(self) -> None:
         for configure in (
             lambda driver: setattr(driver, "launch_failure", RuntimeError("refused")),
-            lambda driver: setattr(driver, "launched_generation", 99),
+            lambda driver: setattr(driver, "launched_generation", -1),
         ):
             with self.subTest(configure=configure):
                 clock = _Clock()
@@ -238,13 +282,46 @@ class ResearchLifecycleTests(unittest.TestCase):
                     manager.tick()
                 self.assertEqual(manager.status().state, "FAILED")
                 self.assertEqual(driver.launches, [0])
-                self.assertEqual(driver.terminations, [0])
+                self.assertEqual(driver.terminations, [None])
+
+    def test_burned_key_generations_are_adopted_and_bound_end_to_end(self) -> None:
+        self.driver.launched_generation = 3
+        self.manager.start()
+        self._drive_until(lambda: self.driver.launches == [0])
+        self.assertEqual(self.manager.status().generation, 3)
+
+        self.driver.observation = AttemptObservation(
+            generation=3,
+            ready=True,
+            validation_identity=VALIDATION_IDENTITY,
+        )
+        self.driver.preserve_observation_generation = True
+        self._drive_until(lambda: self.manager.status().state == "READY")
+        self.assertEqual(self.driver.commits, [3])
+
+        self.assertEqual(self.manager.stop().state, "STOPPING")
+        self.assertEqual(self.manager.tick().state, "STOPPED")
+        self.assertEqual(self.driver.terminations, [3])
+
+        self.driver.launched_generation = 7
+        self.driver.preserve_observation_generation = False
+        self.assertEqual(
+            (self.manager.start().state, self.manager.status().generation),
+            ("VALIDATING", 4),
+        )
+        self._drive_until(lambda: self.driver.launches == [0, 4])
+        self.assertEqual(self.manager.status().generation, 7)
 
     def test_recovery_refusal_latches_failed_without_launch(self) -> None:
         self.driver.fail_recovery = True
         self.assertEqual(self.manager.start().state, "VALIDATING")
         self.assertEqual(self.manager.tick().state, "FAILED")
         self.assertEqual(self.driver.launches, [])
+
+        self.assertEqual(self.manager.stop().state, "STOPPED")
+        self.driver.fail_recovery = False
+        self.assertEqual(self.manager.start().generation, 0)
+        self._drive_until(lambda: self.driver.launches == [0])
 
     def test_resource_limits_are_strict_and_any_oom_delta_fails(self) -> None:
         cases = (
@@ -382,7 +459,7 @@ class ResearchLifecycleTests(unittest.TestCase):
         launch_manager.tick()
         self.assertEqual(launch_manager.tick().state, "VALIDATING")
         self.assertEqual(launch_manager.tick().state, "FAILED")
-        self.assertEqual(launch_driver.terminations, [0])
+        self.assertEqual(launch_driver.terminations, [None])
 
     def test_nonretryable_observations_never_auto_retry(self) -> None:
         for failure in (

@@ -1518,15 +1518,18 @@ class SupervisorChildTests(unittest.TestCase):
             synthetic = lifecycle.stage("synthetic")
             research = lifecycle.stage("research")
             keyring = WorkerKeyring(
-                {"synthetic": synthetic.key, "research": research.key}
+                {"synthetic": synthetic.key, "research": research.key},
+                active_roles=frozenset({"synthetic", "research"}),
             )
             replacement = lifecycle.stage("synthetic")
             self.assertEqual(replacement.generation, 1)
-            keyring.replace(
+            keyring.disable(role="synthetic", generation=0)
+            keyring.prepare(
                 role="synthetic",
                 key=replacement.key,
                 generation=replacement.generation,
             )
+            keyring.commit(role="synthetic", generation=replacement.generation)
             self.assertEqual(keyring.current("synthetic"), (replacement.key, 1))
             lifecycle.destroy_all()
 

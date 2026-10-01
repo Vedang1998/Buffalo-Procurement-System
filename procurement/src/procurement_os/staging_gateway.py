@@ -48,6 +48,11 @@ from .staging_routes import (
     response_metadata_is_allowed,
     validate_route_query,
 )
+from .staging_research_gateway import (
+    ResearchControlClient,
+    ResearchDecision,
+    ResearchGatewayCoordinator,
+)
 from .staging_worker_types import WorkerKeyring, WorkerResponse, WorkerTransport
 
 
@@ -108,6 +113,7 @@ _WORKER_RESPONSE_HEADERS = frozenset(
     {b"content-type", b"content-disposition", b"location", b"retry-after"}
 )
 _CSRF_FORM_FIELD = "_buffalo_staging_csrf"
+_RESEARCH_RETRY_PATH = "/private-research/retry"
 _MAX_HTML_FORMS = 512
 _RAILWAY_EDGE_RE = re.compile(r"\A[a-z]{3}[1-9][0-9]{0,2}\Z")
 _RAILWAY_REQUEST_ID_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
@@ -126,6 +132,10 @@ _REVIEW_TOKEN_INPUT = re.compile(
 )
 class StagingGatewayError(ValueError):
     """The public staging request cannot be accepted."""
+
+
+class ResearchWorkerUnavailable(RuntimeError):
+    """A previously admitted research generation became unroutable."""
 
 
 class RegisteredRoutePolicy:
@@ -148,16 +158,25 @@ class StagingGateway:
         route_policy: RegisteredRoutePolicy,
         transport: WorkerTransport,
         worker_keys: Mapping[str, bytes],
+        research_control: ResearchControlClient | None = None,
         wall_clock: Any = time.time,
     ) -> None:
         try:
-            keyring = WorkerKeyring(dict(worker_keys))
+            keyring = WorkerKeyring(dict(worker_keys), active_roles=frozenset())
         except ValueError as exc:
             raise StagingGatewayError(str(exc)) from exc
         self.config = config
         self.route_policy = route_policy
         self.transport = transport
         self.worker_keyring = keyring
+        self.research_coordinator = (
+            ResearchGatewayCoordinator(
+                control=research_control,
+                keyring=keyring,
+            )
+            if research_control is not None
+            else None
+        )
         self.authenticator = OwnerPasswordAuthenticator(config.owner_verifier)
         self.sessions = StagingSessionStore()
         self.login_challenges = LoginChallengeStore()
@@ -232,6 +251,15 @@ class StagingGateway:
             if session is None:
                 await self._respond(send, PlainTextResponse("Unauthorized", status_code=401))
                 return
+            if method == "POST" and path == _RESEARCH_RETRY_PATH:
+                await self._retry_research(
+                    headers=headers,
+                    query=query,
+                    receive=receive,
+                    send=send,
+                    session=session,
+                )
+                return
             selection = self.route_policy.match(
                 method=method, path=path, raw_path=raw_path
             )
@@ -250,6 +278,48 @@ class StagingGateway:
             else:
                 self._require_zero_body_headers(headers)
                 body = b""
+            if selection.worker_role == "research":
+                coordinator = self.research_coordinator
+                lease = (
+                    await coordinator.authorized_request()
+                    if coordinator is not None
+                    else None
+                )
+                if lease is None:
+                    await self._research_unavailable(
+                        send=send,
+                        headers=headers,
+                        session=session,
+                        decision=ResearchDecision(
+                            state="STOPPING",
+                            generation=0,
+                            retry_after_seconds=1,
+                            routable=False,
+                        ),
+                    )
+                    return
+                async with lease as decision:
+                    if not decision.routable:
+                        await self._research_unavailable(
+                            send=send,
+                            headers=headers,
+                            session=session,
+                            decision=decision,
+                        )
+                        return
+                    await self._proxy(
+                        receive=receive,
+                        send=send,
+                        headers=headers,
+                        method=method,
+                        path=path,
+                        query=query,
+                        body=body,
+                        session=session,
+                        selection=selection,
+                        expected_generation=decision.generation,
+                    )
+                return
             await self._proxy(
                 receive=receive,
                 send=send,
@@ -260,9 +330,19 @@ class StagingGateway:
                 body=body,
                 session=session,
                 selection=selection,
+                expected_generation=None,
             )
         except asyncio.CancelledError:
             raise
+        except ResearchWorkerUnavailable:
+            await self._respond(
+                send,
+                PlainTextResponse(
+                    "Private research unavailable",
+                    status_code=503,
+                    headers={"retry-after": "1"},
+                ),
+            )
         except StagingGatewayError:
             await self._respond(send, PlainTextResponse("Forbidden", status_code=403))
         except Exception:
@@ -358,10 +438,14 @@ class StagingGateway:
                     result = startup()
                     if inspect.isawaitable(result):
                         await result
+                if self.research_coordinator is not None:
+                    await self.research_coordinator.startup()
                 await send({"type": "lifespan.startup.complete"})
                 started = True
                 continue
             if message_type == "lifespan.shutdown" and started:
+                if self.research_coordinator is not None:
+                    await self.research_coordinator.shutdown()
                 shutdown = getattr(self.transport, "shutdown", None)
                 if callable(shutdown):
                     result = shutdown()
@@ -544,12 +628,28 @@ class StagingGateway:
         body: bytes,
         session: StagingSession,
         selection: RouteSpec,
+        expected_generation: int | None,
     ) -> None:
         # Assertion timestamps deliberately use whole seconds.  This is well
         # inside the five-second lifetime and avoids accepting sub-millisecond
         # precision that the canonical assertion format cannot represent.
         issued_at = float(int(self._wall_clock()))
-        worker_key, _ = self.worker_keyring.current(selection.worker_role)
+        try:
+            worker_key, actual_generation = self.worker_keyring.current(
+                selection.worker_role
+            )
+        except ValueError as exc:
+            if selection.worker_role == "research":
+                raise ResearchWorkerUnavailable from None
+            raise StagingGatewayError("synthetic worker key is unavailable") from exc
+        if selection.worker_role == "research":
+            if (
+                type(expected_generation) is not int
+                or actual_generation != expected_generation
+            ):
+                raise ResearchWorkerUnavailable
+        elif expected_generation is not None:
+            raise StagingGatewayError("synthetic worker generation is unexpected")
         assertion = mint_assertion(
             key=worker_key,
             worker_role=selection.worker_role,
@@ -592,15 +692,130 @@ class StagingGateway:
             selection=selection,
         )
 
-    def replace_worker_key(
+    async def _retry_research(
+        self,
+        *,
+        headers: Mapping[bytes, bytes],
+        query: bytes,
+        receive,
+        send,
+        session: StagingSession,
+    ) -> None:
+        self._validate_query(query, frozenset())
+        self._require_body_within_limit(headers, limit=1_024)
+        body = await self._read_body(receive, limit=1_024)
+        self._validate_body_framing(headers, body)
+        if (
+            "procurement.private_research.read" not in session.capabilities
+            or self._content_type(headers) != "application/x-www-form-urlencoded"
+        ):
+            raise StagingGatewayError("research retry authority differs")
+        try:
+            fields = parse_qs(
+                body.decode("utf-8"),
+                keep_blank_values=True,
+                strict_parsing=True,
+                max_num_fields=1,
+            )
+        except (UnicodeDecodeError, ValueError):
+            raise StagingGatewayError("research retry form is invalid") from None
+        if set(fields) != {_CSRF_FORM_FIELD} or len(fields[_CSRF_FORM_FIELD]) != 1:
+            raise StagingGatewayError("research retry form differs")
+        self._require_origin_and_csrf(headers, session, body=body)
+        coordinator = self.research_coordinator
+        if coordinator is None:
+            decision = ResearchDecision(
+                state="STOPPING",
+                generation=0,
+                retry_after_seconds=1,
+                routable=False,
+            )
+        else:
+            decision = await coordinator.retry_failed()
+        if decision.state == "VALIDATING":
+            await self._respond(
+                send,
+                Response(
+                    status_code=303,
+                    headers={"location": "/private-research"},
+                ),
+            )
+            return
+        if decision.state in {"STOPPED", "STOPPING"}:
+            decision = ResearchDecision(
+                state="STOPPING",
+                generation=decision.generation,
+                retry_after_seconds=1,
+                routable=False,
+            )
+        await self._research_unavailable(
+            send=send,
+            headers=headers,
+            session=session,
+            decision=decision,
+        )
+
+    async def _research_unavailable(
+        self,
+        *,
+        send,
+        headers: Mapping[bytes, bytes],
+        session: StagingSession,
+        decision: ResearchDecision,
+    ) -> None:
+        response_headers: dict[str, str] = {}
+        retry_after = decision.retry_after_seconds
+        if decision.state != "FAILED":
+            response_headers["retry-after"] = str(retry_after or 1)
+        if decision.state == "FAILED":
+            csrf_value = self._cookies(headers).get(CSRF_COOKIE, "")
+            if csrf_value and self.sessions.validate_csrf(session, csrf_value):
+                response = HTMLResponse(
+                    "<!doctype html><html><body><main>"
+                    "<h1>Private research unavailable</h1>"
+                    f'<form method="post" action="{_RESEARCH_RETRY_PATH}">'
+                    f'<input type="hidden" name="{_CSRF_FORM_FIELD}" '
+                    f'value="{html.escape(csrf_value, quote=True)}">'
+                    '<button type="submit">Retry private research</button>'
+                    "</form></main></body></html>",
+                    status_code=503,
+                    headers=response_headers,
+                )
+            else:
+                response = PlainTextResponse(
+                    "Private research unavailable",
+                    status_code=503,
+                    headers=response_headers,
+                )
+        else:
+            response = PlainTextResponse(
+                "Private research unavailable",
+                status_code=503,
+                headers=response_headers,
+            )
+        await self._respond(send, response)
+
+    def prepare_worker_key(
         self, *, worker_role: str, key: bytes, generation: int
     ) -> None:
         try:
-            self.worker_keyring.replace(
+            self.worker_keyring.prepare(
                 role=worker_role,
                 key=key,
                 generation=generation,
             )
+        except ValueError as exc:
+            raise StagingGatewayError(str(exc)) from exc
+
+    def commit_worker_key(self, *, worker_role: str, generation: int) -> None:
+        try:
+            self.worker_keyring.commit(role=worker_role, generation=generation)
+        except ValueError as exc:
+            raise StagingGatewayError(str(exc)) from exc
+
+    def disable_worker_key(self, *, worker_role: str, generation: int) -> None:
+        try:
+            self.worker_keyring.disable(role=worker_role, generation=generation)
         except ValueError as exc:
             raise StagingGatewayError(str(exc)) from exc
 

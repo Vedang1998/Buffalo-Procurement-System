@@ -13,6 +13,7 @@ from .staging_supervisor import ControlStatus
 
 INITIALIZATION_TIMEOUT_SECONDS = 2_700
 DEFAULT_RETRY_BACKOFF_SECONDS = 5
+RESEARCH_IDLE_TIMEOUT_SECONDS = 1_800
 PROCESS_PEAK_LIMIT_BYTES = 5 * 1024**3
 SERVICE_CGROUP_PEAK_LIMIT_BYTES = 6 * 1024**3
 
@@ -120,13 +121,27 @@ class ResearchLifecycleDriver(Protocol):
 
     def recover_unpublished(self) -> None: ...
 
-    def launch(self, generation: int) -> int: ...
+    def launch(self, minimum_generation: int) -> int:
+        """Launch research and return its actual staged-key generation.
+
+        Staging may have burned one or more keys before this call succeeds, so
+        the returned generation may be newer than the supplied lower bound.
+        Cleanup remains role-scoped if launch raises before returning it.
+        """
+        ...
 
     def probe(self, generation: int) -> AttemptObservation: ...
 
     def commit(self, generation: int) -> None: ...
 
-    def terminate(self, generation: int) -> None: ...
+    def terminate(self, generation: int | None) -> None:
+        """Prove all role-owned state gone; generation is only a binding hint.
+
+        ``None`` means launch may have created state before its actual key
+        generation was returned.  Concrete drivers must then clean the owned
+        research role rather than inventing or guessing a generation.
+        """
+        ...
 
 
 class ResearchLifecycleManager:
@@ -146,6 +161,7 @@ class ResearchLifecycleManager:
         expected_validation_identity: str,
         initialization_timeout_seconds: int = INITIALIZATION_TIMEOUT_SECONDS,
         retry_backoff_seconds: int = DEFAULT_RETRY_BACKOFF_SECONDS,
+        idle_timeout_seconds: int = RESEARCH_IDLE_TIMEOUT_SECONDS,
     ) -> None:
         if (
             not callable(monotonic)
@@ -156,6 +172,9 @@ class ResearchLifecycleManager:
             or type(retry_backoff_seconds) is not int
             or retry_backoff_seconds < 1
             or retry_backoff_seconds > initialization_timeout_seconds
+            or type(idle_timeout_seconds) is not int
+            or idle_timeout_seconds < 1
+            or idle_timeout_seconds > RESEARCH_IDLE_TIMEOUT_SECONDS
             or not isinstance(expected_validation_identity, str)
             or len(expected_validation_identity) != 64
             or any(
@@ -170,11 +189,13 @@ class ResearchLifecycleManager:
         self.expected_validation_identity = expected_validation_identity
         self.initialization_timeout_seconds = initialization_timeout_seconds
         self.retry_backoff_seconds = retry_backoff_seconds
+        self.idle_timeout_seconds = idle_timeout_seconds
         self._lock = threading.RLock()
         self._state = "STOPPED"
         self._generation = 0
-        self._next_generation = 0
+        self._last_worker_generation = -1
         self._active_generation: int | None = None
+        self._cleanup_required = False
         self._graph_started_at: float | None = None
         self._retry_due_at: float | None = None
         self._automatic_retries = 0
@@ -185,6 +206,7 @@ class ResearchLifecycleManager:
         self._operation_started_wall: float | None = None
         self._termination_retry_allowed = False
         self._stop_requested = False
+        self._last_authenticated_activity_at: float | None = None
 
     @property
     def transition_history(self) -> tuple[str, ...]:
@@ -192,11 +214,11 @@ class ResearchLifecycleManager:
             return tuple(self._history)
 
     def start(self) -> ControlStatus:
-        """Enqueue one graph, or coalesce with the graph/worker already owned."""
+        """Enqueue one graph, or touch the authenticated READY worker."""
 
         with self._lock:
             if self._state == "STOPPED":
-                if self._active_generation is not None:
+                if self._active_generation is not None or self._cleanup_required:
                     return self._snapshot_locked()
                 now = self._now()
                 self._graph_started_at = now
@@ -205,6 +227,8 @@ class ResearchLifecycleManager:
                 self._stop_requested = False
                 self._transition_locked("VALIDATING")
                 self._allocate_attempt_locked()
+            elif self._state == "READY":
+                self._last_authenticated_activity_at = self._now()
             return self._snapshot_locked()
 
     def stop(self) -> ControlStatus:
@@ -217,7 +241,7 @@ class ResearchLifecycleManager:
             self._retry_due_at = None
             self._transition_locked("STOPPING")
             if self._operation_in_progress is None:
-                if self._active_generation is None:
+                if not self._cleanup_required:
                     self._complete_stop_locked()
                 else:
                     self._phase = "TERMINATE"
@@ -253,7 +277,6 @@ class ResearchLifecycleManager:
                 assert generation is not None
                 self.driver.commit(generation)
             elif kind == "TERMINATE":
-                assert generation is not None
                 self.driver.terminate(generation)
             else:
                 raise ResearchLifecycleError("research lifecycle action is invalid")
@@ -274,13 +297,13 @@ class ResearchLifecycleManager:
         if self._operation_in_progress is not None:
             return None
         if self._state == "STOPPING":
-            if self._active_generation is None:
+            if not self._cleanup_required:
                 self._complete_stop_locked()
                 return None
             self._phase = "TERMINATE"
         elif self._state == "VALIDATING":
             if self._deadline_reached_locked(now):
-                if self._active_generation is None:
+                if not self._cleanup_required:
                     self._latch_failed_locked()
                     return None
                 self._termination_retry_allowed = False
@@ -291,17 +314,42 @@ class ResearchLifecycleManager:
                 self._retry_due_at = None
                 self._allocate_attempt_locked()
         elif self._state == "READY":
-            self._phase = "READY_SAMPLE"
+            if (
+                self._last_authenticated_activity_at is None
+                or now - self._last_authenticated_activity_at
+                >= self.idle_timeout_seconds
+            ):
+                self._stop_requested = True
+                self._transition_locked("STOPPING")
+                self._phase = "TERMINATE"
+            else:
+                self._phase = "READY_SAMPLE"
         else:
             return None
-        generation = self._active_generation
-        if self._phase in {"LAUNCH", "SAMPLE", "PROBE", "FINAL_SAMPLE", "COMMIT", "READY_SAMPLE", "TERMINATE"} and generation is None:
+        generation = (
+            self._generation
+            if self._phase == "LAUNCH"
+            else self._active_generation
+        )
+        if (
+            self._phase
+            in {"SAMPLE", "PROBE", "FINAL_SAMPLE", "COMMIT", "READY_SAMPLE"}
+            and generation is None
+        ):
+            self._latch_failed_locked()
+            return None
+        if self._phase == "TERMINATE" and not self._cleanup_required:
             self._latch_failed_locked()
             return None
         self._operation_serial += 1
         serial = self._operation_serial
         self._operation_in_progress = serial
         self._operation_started_wall = time.monotonic()
+        if self._phase == "LAUNCH":
+            # Once launch begins it may create a child/key before returning its
+            # actual generation.  From this point cleanup is role-scoped and
+            # mandatory even when launch raises or returns malformed data.
+            self._cleanup_required = True
         return serial, self._phase, generation
 
     def _apply_action_locked(
@@ -324,16 +372,23 @@ class ResearchLifecycleManager:
                     self._latch_failed_locked()
                 else:
                     self._active_generation = None
+                    self._cleanup_required = False
                     if self._stop_requested:
                         self._complete_stop_locked()
                     else:
                         self._latch_failed_locked()
-            elif self._active_generation is None:
+            elif not self._cleanup_required:
                 if self._stop_requested:
                     self._complete_stop_locked()
                 else:
                     self._latch_failed_locked()
             else:
+                if kind == "LAUNCH":
+                    self._adopt_launch_generation_locked(
+                        minimum_generation=generation,
+                        outcome=outcome,
+                        error=error,
+                    )
                 self._phase = "TERMINATE"
             return
         if self._state not in {"VALIDATING", "READY"}:
@@ -343,6 +398,7 @@ class ResearchLifecycleManager:
                 self._latch_failed_locked()
                 return
             self._active_generation = None
+            self._cleanup_required = False
             can_retry = (
                 self._termination_retry_allowed
                 and self._automatic_retries == 0
@@ -359,7 +415,7 @@ class ResearchLifecycleManager:
                 self._latch_failed_locked()
             return
         if self._state == "VALIDATING" and self._deadline_reached_locked(now):
-            if self._active_generation is None:
+            if not self._cleanup_required:
                 self._latch_failed_locked()
             else:
                 self._termination_retry_allowed = False
@@ -369,11 +425,14 @@ class ResearchLifecycleManager:
             if error is not None:
                 self._latch_failed_locked()
             else:
-                self._active_generation = self._generation
                 self._phase = "LAUNCH"
             return
         if kind == "LAUNCH":
-            if error is None and type(outcome) is int and outcome == generation:
+            if self._adopt_launch_generation_locked(
+                minimum_generation=generation,
+                outcome=outcome,
+                error=error,
+            ):
                 self._phase = "SAMPLE"
                 return
             retry_allowed = isinstance(error, RecoverableAttemptError)
@@ -431,16 +490,40 @@ class ResearchLifecycleManager:
             else:
                 self._phase = "IDLE"
                 self._transition_locked("READY")
+                self._last_authenticated_activity_at = now
             return
         raise ResearchLifecycleError("research lifecycle action is invalid")
 
     def _allocate_attempt_locked(self) -> None:
-        if self._active_generation is not None:
+        if self._active_generation is not None or self._cleanup_required:
             self._latch_failed_locked()
             return
-        self._generation = self._next_generation
-        self._next_generation += 1
+        self._generation = max(
+            0,
+            self._last_worker_generation + 1,
+        )
         self._phase = "RECOVER"
+
+    def _adopt_launch_generation_locked(
+        self,
+        *,
+        minimum_generation: int | None,
+        outcome: object,
+        error: BaseException | None,
+    ) -> bool:
+        if (
+            error is not None
+            or minimum_generation is None
+            or type(outcome) is not int
+            or not minimum_generation <= outcome <= (2**63 - 1)
+            or outcome <= self._last_worker_generation
+        ):
+            self._active_generation = None
+            return False
+        self._active_generation = outcome
+        self._generation = outcome
+        self._last_worker_generation = outcome
+        return True
 
     def _latch_failed_locked(self) -> None:
         self._retry_due_at = None
@@ -449,11 +532,13 @@ class ResearchLifecycleManager:
 
     def _complete_stop_locked(self) -> None:
         self._active_generation = None
+        self._cleanup_required = False
         self._graph_started_at = None
         self._retry_due_at = None
         self._automatic_retries = 0
         self._termination_retry_allowed = False
         self._stop_requested = False
+        self._last_authenticated_activity_at = None
         self._phase = "IDLE"
         self._transition_locked("STOPPED")
 
@@ -504,7 +589,7 @@ class ResearchLifecycleManager:
         with self._lock:
             self._stop_requested = False
             self._retry_due_at = None
-            if self._active_generation is None:
+            if not self._cleanup_required:
                 self._latch_failed_locked()
             else:
                 self._transition_locked("STOPPING")
@@ -535,7 +620,7 @@ class ResearchLifecycleManager:
             self._termination_retry_allowed = False
             self._transition_locked("STOPPING")
             if self._operation_in_progress is None:
-                if self._active_generation is None:
+                if not self._cleanup_required:
                     self._latch_failed_locked()
                 else:
                     self._phase = "TERMINATE"
