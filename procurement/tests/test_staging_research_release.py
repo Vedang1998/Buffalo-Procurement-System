@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import tempfile
 import unittest
@@ -130,6 +131,17 @@ class StagingResearchReleaseTests(unittest.TestCase):
             manifest_sha256=hashlib.sha256(manifest).hexdigest(),
         )
 
+    def _recovery_parent(self, name: str) -> Path:
+        parent = self.root / name
+        parent.mkdir(mode=0o700)
+        return parent
+
+    @staticmethod
+    def _crash_directory(parent: Path, prefix: str) -> Path:
+        value = Path(tempfile.mkdtemp(prefix=prefix, dir=parent))
+        value.chmod(0o700)
+        return value
+
     def test_complete_release_is_validated_then_published_once(self) -> None:
         observed_before_publish: list[set[str]] = []
         real_rename = release._rename_noreplace
@@ -151,7 +163,9 @@ class StagingResearchReleaseTests(unittest.TestCase):
                 destination_uid=os.getuid(),
                 destination_gid=os.getgid(),
                 supervisor_uid=os.geteuid(),
+                supervisor_gid=os.getegid(),
                 bundle_contract=self.bundle.contract,
+                validation_parent=self.staging,
             )
 
         self.assertEqual(
@@ -277,9 +291,534 @@ class StagingResearchReleaseTests(unittest.TestCase):
         self.assertEqual(marker.read_text(encoding="ascii"), "preserve")
         self.assertEqual(list(self.staging.iterdir()), [])
 
+    def test_recovery_removes_only_proven_partial_release_control_and_validation(self) -> None:
+        staging_recovery = self._recovery_parent("recovery-stage-pass")
+        partial_release = self._crash_directory(
+            staging_recovery, ".research-release."
+        )
+        (partial_release / "payload").mkdir(mode=0o700)
+        (partial_release / "source.git").mkdir(mode=0o700)
+        (partial_release / "source.git" / "HEAD").write_bytes(b"partial")
+        (partial_release / "source.git" / "HEAD").chmod(0o600)
+        control = self._crash_directory(staging_recovery, ".research-control.")
+        git_runtime = self._crash_directory(control, ".git-runtime.")
+        (git_runtime / "accepted.bundle").write_bytes(b"partial")
+        (git_runtime / "accepted.bundle").chmod(0o600)
+        validation_recovery = self._recovery_parent("recovery-validation-pass")
+        validation = self._crash_directory(
+            validation_recovery, ".research-release-validation."
+        )
+        (validation / "store").mkdir(mode=0o700)
+
+        with self.closure.accepted_inventory() as inventory:
+            self.assertEqual(
+                release.reconcile_unpublished_research_staging(
+                    inventory,
+                    staging_parent=staging_recovery,
+                    supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
+                    destination_uid=os.getuid(),
+                    destination_gid=os.getgid(),
+                ),
+                2,
+            )
+            self.assertEqual(
+                release.reconcile_unpublished_research_staging(
+                    inventory,
+                    staging_parent=validation_recovery,
+                    supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
+                    destination_uid=os.getuid(),
+                    destination_gid=os.getgid(),
+                ),
+                1,
+            )
+        self.assertEqual(list(staging_recovery.iterdir()), [])
+        self.assertEqual(list(validation_recovery.iterdir()), [])
+
+    def test_recovery_refuses_wrong_phase_layouts_and_duplicate_candidates(self) -> None:
+        cases = (
+            "wrong-type",
+            "nested-extra",
+            "source-extra",
+            "loose-object",
+            "pack-stems",
+            "pack-keep",
+            "multiple-install-pairs",
+            "detached-install-pair",
+            "control-extra",
+            "control-phase",
+            "duplicates",
+        )
+        with self.closure.accepted_inventory() as inventory:
+            for case in cases:
+                with self.subTest(case=case):
+                    recovery = self._recovery_parent(f"recovery-phase-{case}")
+                    if case == "wrong-type":
+                        candidate = self._crash_directory(
+                            recovery, ".research-release-validation."
+                        )
+                        (candidate / "members").write_bytes(b"not-a-directory")
+                        (candidate / "members").chmod(0o600)
+                    elif case == "nested-extra":
+                        candidate = self._crash_directory(
+                            recovery, ".research-release-validation."
+                        )
+                        store = candidate / "store"
+                        store.mkdir(mode=0o700)
+                        (store / "unrelated.private").write_bytes(b"preserve")
+                        (store / "unrelated.private").chmod(0o600)
+                    elif case == "source-extra":
+                        candidate = self._crash_directory(
+                            recovery, ".research-release."
+                        )
+                        source = candidate / "source.git"
+                        pack = source / "objects" / "pack"
+                        pack.mkdir(parents=True, mode=0o700)
+                        for path in (source, source / "objects", pack):
+                            path.chmod(0o700)
+                        (pack / "unrelated.private").write_bytes(b"preserve")
+                        (pack / "unrelated.private").chmod(0o600)
+                    elif case in {
+                        "loose-object",
+                        "pack-stems",
+                        "pack-keep",
+                        "multiple-install-pairs",
+                        "detached-install-pair",
+                    }:
+                        candidate = self._crash_directory(
+                            recovery, ".research-release."
+                        )
+                        source = candidate / "source.git"
+                        objects = source / "objects"
+                        objects.mkdir(parents=True, mode=0o700)
+                        source.chmod(0o700)
+                        objects.chmod(0o700)
+                        if case == "loose-object":
+                            loose = objects / "ab"
+                            loose.mkdir(mode=0o700)
+                            path = loose / ("c" * 38)
+                            path.write_bytes(b"preserve")
+                            path.chmod(0o400)
+                        elif case in {"pack-stems", "pack-keep"}:
+                            pack = objects / "pack"
+                            pack.mkdir(mode=0o700)
+                            if case == "pack-stems":
+                                names = (
+                                    f"pack-{'a' * 40}.pack",
+                                    f"pack-{'b' * 40}.pack",
+                                )
+                            else:
+                                names = (f"pack-{'a' * 40}.keep",)
+                            for name in names:
+                                path = pack / name
+                                path.write_bytes(b"preserve")
+                                path.chmod(0o400)
+                        else:
+                            pack = objects / "pack"
+                            pack.mkdir(mode=0o700)
+                            kinds = (
+                                ("pack", "idx")
+                                if case == "multiple-install-pairs"
+                                else ("pack",)
+                            )
+                            for kind in kinds:
+                                temporary = pack / f"tmp_{kind}_ab12cd"
+                                final = pack / f"pack-{'a' * 40}.{kind}"
+                                temporary.write_bytes(kind.encode("ascii"))
+                                temporary.chmod(0o400)
+                                if case == "multiple-install-pairs":
+                                    os.link(temporary, final)
+                                else:
+                                    final.write_bytes(b"different")
+                                    final.chmod(0o400)
+                    elif case == "control-extra":
+                        candidate = self._crash_directory(
+                            recovery, ".research-control."
+                        )
+                        extract = candidate / "extract"
+                        home = extract / "home"
+                        home.mkdir(parents=True, mode=0o700)
+                        extract.chmod(0o700)
+                        home.chmod(0o700)
+                        (home / "unrelated.private").write_bytes(b"preserve")
+                        (home / "unrelated.private").chmod(0o600)
+                    elif case == "control-phase":
+                        candidate = self._crash_directory(
+                            recovery, ".research-control."
+                        )
+                        (candidate / "extract").mkdir(mode=0o700)
+                        (candidate / "accepted-source-recheck.bundle").write_bytes(
+                            b"partial"
+                        )
+                        (candidate / "accepted-source-recheck.bundle").chmod(0o600)
+                    else:
+                        candidate = self._crash_directory(
+                            recovery, ".research-control."
+                        )
+                        self._crash_directory(recovery, ".research-control.")
+                    with self.assertRaises(ResearchReleaseError):
+                        release.reconcile_unpublished_research_staging(
+                            inventory,
+                            staging_parent=recovery,
+                            supervisor_uid=os.geteuid(),
+                            supervisor_gid=os.getegid(),
+                            destination_uid=os.getuid(),
+                            destination_gid=os.getgid(),
+                        )
+                    self.assertTrue(candidate.is_dir())
+                    shutil.rmtree(recovery)
+
+    def test_recovery_accepts_exact_git_install_links_and_temporary_names(self) -> None:
+        with self.closure.accepted_inventory() as inventory:
+            for kind in ("pack", "idx", "rev"):
+                with self.subTest(kind=kind):
+                    recovery = self._recovery_parent(f"recovery-git-install-{kind}")
+                    candidate = self._crash_directory(
+                        recovery, ".research-release."
+                    )
+                    manifest = candidate / "deployment-inventory.json"
+                    manifest.write_bytes(b"partial")
+                    manifest.chmod(0o400)
+                    source = candidate / "source.git"
+                    pack = source / "objects" / "pack"
+                    pack.mkdir(parents=True, mode=0o700)
+                    for path in (source, source / "objects", pack):
+                        path.chmod(0o700)
+                    temporary = pack / f"tmp_{kind}_ab12cd"
+                    temporary.write_bytes(kind.encode("ascii"))
+                    temporary.chmod(0o400)
+                    os.link(
+                        temporary,
+                        pack / f"pack-{'a' * 40}.{kind}",
+                    )
+                    self.assertEqual(
+                        release.reconcile_unpublished_research_staging(
+                            inventory,
+                            staging_parent=recovery,
+                            supervisor_uid=os.geteuid(),
+                            supervisor_gid=os.getegid(),
+                            destination_uid=os.getuid(),
+                            destination_gid=os.getgid(),
+                        ),
+                        1,
+                    )
+                    self.assertEqual(list(recovery.iterdir()), [])
+
+    def test_recovery_handles_only_exact_git_init_transients(self) -> None:
+        with self.closure.accepted_inventory() as inventory:
+            for case in ("config-mode-700", "config-mode-744", "filemode-probe"):
+                with self.subTest(case=case):
+                    recovery = self._recovery_parent(f"recovery-git-{case}")
+                    candidate = self._crash_directory(
+                        recovery, ".research-release."
+                    )
+                    source = candidate / "source.git"
+                    source.mkdir(mode=0o700)
+                    if case.startswith("config-mode"):
+                        transient = source / "config"
+                        transient.write_bytes(b"partial")
+                        transient.chmod(
+                            0o700 if case == "config-mode-700" else 0o744
+                        )
+                    else:
+                        transient = source / "tAb12Cd"
+                        transient.touch(mode=0o600)
+                    self.assertEqual(
+                        release.reconcile_unpublished_research_staging(
+                            inventory,
+                            staging_parent=recovery,
+                            supervisor_uid=os.geteuid(),
+                            supervisor_gid=os.getegid(),
+                            destination_uid=os.getuid(),
+                            destination_gid=os.getgid(),
+                        ),
+                        1,
+                    )
+
+            for case in (
+                "head-mode-700",
+                "head-mode-744",
+                "probe-content",
+                "probe-multiple",
+                "probe-name",
+            ):
+                with self.subTest(case=case):
+                    recovery = self._recovery_parent(f"recovery-git-{case}")
+                    candidate = self._crash_directory(
+                        recovery, ".research-release."
+                    )
+                    source = candidate / "source.git"
+                    source.mkdir(mode=0o700)
+                    if case.startswith("head-mode"):
+                        invalid = source / "HEAD"
+                        invalid.write_bytes(b"partial")
+                        invalid.chmod(0o700 if case == "head-mode-700" else 0o744)
+                    elif case == "probe-content":
+                        invalid = source / "tAb12Cd"
+                        invalid.write_bytes(b"x")
+                        invalid.chmod(0o600)
+                    elif case == "probe-multiple":
+                        invalid = source / "tAb12Cd"
+                        invalid.touch(mode=0o600)
+                        (source / "tEf34Gh").touch(mode=0o600)
+                    else:
+                        invalid = source / "tAb12C_"
+                        invalid.touch(mode=0o600)
+                    with self.assertRaises(ResearchReleaseError):
+                        release.reconcile_unpublished_research_staging(
+                            inventory,
+                            staging_parent=recovery,
+                            supervisor_uid=os.geteuid(),
+                            supervisor_gid=os.getegid(),
+                            destination_uid=os.getuid(),
+                            destination_gid=os.getgid(),
+                        )
+                    self.assertTrue(candidate.is_dir())
+                    shutil.rmtree(recovery)
+
+    def test_recovery_rejects_cross_product_owner_mode_states(self) -> None:
+        supervisor_uid = os.geteuid()
+        supervisor_gid = os.getegid()
+        destination_uid = supervisor_uid + 101
+        destination_gid = supervisor_gid + 102
+        cases = ("payload", "git-pack", "git-temp", "git-rev", "git-lock")
+        with self.closure.accepted_inventory() as inventory:
+            for case in cases:
+                with self.subTest(case=case):
+                    recovery = self._recovery_parent(f"recovery-state-{case}")
+                    candidate = self._crash_directory(
+                        recovery, ".research-release."
+                    )
+                    if case == "payload":
+                        payload = candidate / "payload"
+                        payload.mkdir(mode=0o700)
+                        target = payload / "data"
+                        target.mkdir(mode=0o700)
+                        fake_mode = stat.S_IFDIR | 0o755
+                        fake_uid = destination_uid
+                        fake_gid = destination_gid
+                    elif case != "git-lock":
+                        source = candidate / "source.git"
+                        pack = source / "objects" / "pack"
+                        pack.mkdir(parents=True, mode=0o700)
+                        for path in (source, source / "objects", pack):
+                            path.chmod(0o700)
+                        if case == "git-pack":
+                            target = pack / f"pack-{'a' * 40}.pack"
+                            fake_permissions = 0o444
+                        elif case == "git-temp":
+                            target = pack / "tmp_pack_ab12cd"
+                            fake_permissions = 0o440
+                        else:
+                            target = pack / f"pack-{'a' * 40}.rev"
+                            fake_permissions = 0o440
+                        target.write_bytes(b"partial")
+                        target.chmod(0o444)
+                        fake_mode = stat.S_IFREG | fake_permissions
+                        fake_uid = supervisor_uid
+                        fake_gid = destination_gid
+                    else:
+                        source = candidate / "source.git"
+                        source.mkdir(mode=0o700)
+                        target = source / "HEAD.lock"
+                        target.write_bytes(b"partial")
+                        target.chmod(0o600)
+                        fake_mode = stat.S_IFREG | 0o440
+                        fake_uid = supervisor_uid
+                        fake_gid = destination_gid
+                    real_stat = Path.stat
+
+                    def cross_product_stat(path: Path, *args, **kwargs):
+                        info = real_stat(path, *args, **kwargs)
+                        if path == target:
+                            values = list(info)
+                            values[0] = fake_mode
+                            values[4] = fake_uid
+                            values[5] = fake_gid
+                            return os.stat_result(values)
+                        return info
+
+                    with mock.patch.object(Path, "stat", cross_product_stat):
+                        with self.assertRaisesRegex(
+                            ResearchReleaseError, "metadata differs"
+                        ):
+                            release.reconcile_unpublished_research_staging(
+                                inventory,
+                                staging_parent=recovery,
+                                supervisor_uid=supervisor_uid,
+                                supervisor_gid=supervisor_gid,
+                                destination_uid=destination_uid,
+                                destination_gid=destination_gid,
+                            )
+                    self.assertTrue(candidate.is_dir())
+                    shutil.rmtree(recovery)
+
+    def test_recovery_accepts_release_root_between_chmod_and_chown(self) -> None:
+        recovery = self._recovery_parent("recovery-release-chmod")
+        candidate = self._crash_directory(recovery, ".research-release.")
+        candidate.chmod(0o710)
+        with self.closure.accepted_inventory() as inventory:
+            self.assertEqual(
+                release.reconcile_unpublished_research_staging(
+                    inventory,
+                    staging_parent=recovery,
+                    supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
+                    destination_uid=os.geteuid() + 101,
+                    destination_gid=os.getegid() + 102,
+                ),
+                1,
+            )
+
+    def test_recovery_retries_after_cleanup_normalized_a_0755_directory(self) -> None:
+        original_directories = self.closure.directories
+        self.closure.directories = tuple(
+            sorted((*original_directories, DirectoryContract("transitional", "0755")))
+        )
+        try:
+            recovery = self._recovery_parent("recovery-cleanup-retry")
+            candidate = self._crash_directory(recovery, ".research-release.")
+            payload = candidate / "payload"
+            payload.mkdir(mode=0o700)
+            transitional = payload / "transitional"
+            transitional.mkdir(mode=0o755)
+            transitional.chmod(0o755)
+            with self.closure.accepted_inventory() as inventory:
+                with mock.patch.object(
+                    release.source_bundle.shutil,
+                    "rmtree",
+                    side_effect=OSError("injected cleanup failure"),
+                ):
+                    with self.assertRaisesRegex(
+                        ResearchReleaseError, "staging cleanup failed"
+                    ):
+                        release.reconcile_unpublished_research_staging(
+                            inventory,
+                            staging_parent=recovery,
+                            supervisor_uid=os.geteuid(),
+                            supervisor_gid=os.getegid(),
+                            destination_uid=os.getuid(),
+                            destination_gid=os.getgid(),
+                        )
+                self.assertEqual(stat.S_IMODE(transitional.stat().st_mode), 0o700)
+                self.assertEqual(
+                    release.reconcile_unpublished_research_staging(
+                        inventory,
+                        staging_parent=recovery,
+                        supervisor_uid=os.geteuid(),
+                        supervisor_gid=os.getegid(),
+                        destination_uid=os.getuid(),
+                        destination_gid=os.getgid(),
+                    ),
+                    1,
+                )
+        finally:
+            self.closure.directories = original_directories
+
+    def test_recovery_refuses_unknown_or_unsafe_entries_without_deleting_valid_state(self) -> None:
+        cases = ("unknown", "symlink", "fifo", "hardlink", "mode", "owner")
+        with self.closure.accepted_inventory() as inventory:
+            for case in cases:
+                with self.subTest(case=case):
+                    recovery = self._recovery_parent(f"recovery-{case}")
+                    retained = self._crash_directory(
+                        recovery, ".research-control."
+                    )
+                    candidate = self._crash_directory(
+                        recovery, ".research-release."
+                    )
+                    patcher = None
+                    outside: Path | None = None
+                    if case == "unknown":
+                        (recovery / "owner-note").write_text(
+                            "preserve", encoding="ascii"
+                        )
+                    elif case == "symlink":
+                        (candidate / "payload").symlink_to(self.root)
+                    elif case == "fifo":
+                        os.mkfifo(candidate / "deployment-inventory.json", 0o600)
+                    elif case == "hardlink":
+                        outside = self.root / f"outside-{case}"
+                        outside.write_bytes(b"preserve")
+                        outside.chmod(0o600)
+                        os.link(outside, candidate / "deployment-inventory.json")
+                    elif case == "mode":
+                        candidate.chmod(0o777)
+                    else:
+                        real_stat = Path.stat
+
+                        def changed_owner(path: Path, *args, **kwargs):
+                            info = real_stat(path, *args, **kwargs)
+                            if path == candidate:
+                                values = list(info)
+                                values[4] = info.st_uid + 1
+                                return os.stat_result(values)
+                            return info
+
+                        patcher = mock.patch.object(Path, "stat", changed_owner)
+                        patcher.start()
+                    try:
+                        with self.assertRaises(ResearchReleaseError):
+                            release.reconcile_unpublished_research_staging(
+                                inventory,
+                                staging_parent=recovery,
+                                supervisor_uid=os.geteuid(),
+                                supervisor_gid=os.getegid(),
+                                destination_uid=os.getuid(),
+                                destination_gid=os.getgid(),
+                            )
+                    finally:
+                        if patcher is not None:
+                            patcher.stop()
+                    self.assertTrue(retained.is_dir())
+                    self.assertTrue(candidate.exists() or candidate.is_symlink())
+                    if outside is not None:
+                        self.assertEqual(outside.read_bytes(), b"preserve")
+                    shutil.rmtree(recovery)
+                    if outside is not None:
+                        outside.unlink()
+
+    def test_recovery_never_touches_published_release_parent(self) -> None:
+        published = self.destination / "accepted-release"
+        published.mkdir(mode=0o700)
+        marker = published / "owner-marker"
+        marker.write_text("preserve", encoding="ascii")
+        with self.closure.accepted_inventory() as inventory:
+            with self.assertRaises(ResearchReleaseError):
+                release.reconcile_unpublished_research_staging(
+                    inventory,
+                    staging_parent=self.destination,
+                    supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
+                    destination_uid=os.getuid(),
+                    destination_gid=os.getgid(),
+                )
+        self.assertEqual(marker.read_text(encoding="ascii"), "preserve")
+
+        recovery = self._recovery_parent("recovery-published")
+        self._crash_directory(recovery, ".research-control.")
+        with self.closure.accepted_inventory() as inventory:
+            self.assertEqual(
+                release.reconcile_unpublished_research_staging(
+                    inventory,
+                    staging_parent=recovery,
+                    supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
+                    destination_uid=os.getuid(),
+                    destination_gid=os.getgid(),
+                ),
+                1,
+            )
+        self.assertEqual(marker.read_text(encoding="ascii"), "preserve")
+
     def test_restart_revalidation_covers_payload_store_and_application(self) -> None:
         with self.closure.accepted_inventory() as inventory:
             final, expected_proof = self._stage(inventory)
+            stale = self._crash_directory(
+                self.staging, ".research-release-validation."
+            )
+            (stale / "store").mkdir(mode=0o700)
             manifest = inventory.canonical_bytes()
             patches = (
                 mock.patch.object(
@@ -310,9 +849,12 @@ class StagingResearchReleaseTests(unittest.TestCase):
                     destination_uid=os.getuid(),
                     destination_gid=os.getgid(),
                     supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
+                    validation_parent=self.staging,
                 )
             self.assertEqual(parsed, inventory)
             self.assertEqual(proof, expected_proof)
+            self.assertEqual(list(self.staging.iterdir()), [])
 
     def test_application_member_or_directory_drift_fails_closed(self) -> None:
         with self.closure.accepted_inventory() as inventory:
@@ -365,6 +907,7 @@ class StagingResearchReleaseTests(unittest.TestCase):
             )
 
     def test_public_stage_rechecks_image_at_publication_boundary(self) -> None:
+        self._crash_directory(self.staging, ".research-control.")
         with self.closure.accepted_inventory() as inventory:
             target = self.application / self.closure.tracked[2].deployment_path
             manifest = inventory.canonical_bytes()
@@ -506,7 +1049,9 @@ class StagingResearchReleaseTests(unittest.TestCase):
                     destination_uid=os.getuid(),
                     destination_gid=os.getgid(),
                     supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
                     bundle_contract=self.bundle.contract,
+                    validation_parent=self.staging,
                 )
             outside.unlink()
 
@@ -527,7 +1072,9 @@ class StagingResearchReleaseTests(unittest.TestCase):
                     destination_uid=os.getuid(),
                     destination_gid=os.getgid(),
                     supervisor_uid=os.geteuid(),
+                    supervisor_gid=os.getegid(),
                     bundle_contract=self.bundle.contract,
+                    validation_parent=self.staging,
                 )
 
 

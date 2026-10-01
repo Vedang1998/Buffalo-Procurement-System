@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
+import re
 import stat
 import tempfile
 from typing import Callable
@@ -13,6 +14,7 @@ from . import staging_source_bundle as source_bundle
 from .staging_research_transfer import (
     DEPLOYMENT_INVENTORY_BYTES,
     DEPLOYMENT_INVENTORY_FILE_SHA256,
+    DEPLOYMENT_AGGREGATE_BYTES,
     DeploymentInventory,
     OWNER_IMAGE,
     ResearchTransferError,
@@ -38,6 +40,19 @@ class ResearchReleaseError(ValueError):
 
 _APPLICATION_IMAGE_UID = 0
 _APPLICATION_IMAGE_GID = 0
+_RECOVERY_NAME = re.compile(
+    r"\A\.(research-release|research-control|research-release-validation)\."
+    r"[a-z0-9_]{8}\Z"
+)
+_RECOVERY_MAX_ENTRIES = 100_000
+_RECOVERY_MAX_BYTES = DEPLOYMENT_AGGREGATE_BYTES + 256 * 1024**2
+_RECOVERY_GIT_PACK = re.compile(
+    r"objects/pack/(pack-[0-9a-f]{40})\.(idx|pack|rev)\Z"
+)
+_RECOVERY_GIT_TEMP_PACK = re.compile(
+    r"objects/pack/tmp_(pack|idx|rev)_[A-Za-z0-9]{6}\Z"
+)
+_RECOVERY_GIT_FILEMODE_PROBE = re.compile(r"t[A-Za-z0-9]{6}\Z")
 
 
 def _accepted_application_root() -> Path:
@@ -332,6 +347,549 @@ def _fsync_release(root: Path) -> None:
             os.close(descriptor)
 
 
+def _collect_recovery_tree(
+    root: Path, *, aggregate: list[int]
+) -> dict[str, os.stat_result]:
+    observed: dict[str, os.stat_result] = {}
+    stack = [root]
+    while stack:
+        path = stack.pop()
+        try:
+            info = path.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise ResearchReleaseError(
+                "unpublished recovery entry is unavailable"
+            ) from exc
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        observed[relative] = info
+        aggregate[0] += 1
+        if aggregate[0] > _RECOVERY_MAX_ENTRIES:
+            raise ResearchReleaseError("unpublished recovery entry limit differs")
+        if stat.S_ISDIR(info.st_mode):
+            try:
+                stack.extend(path.iterdir())
+            except OSError as exc:
+                raise ResearchReleaseError(
+                    "unpublished recovery directory is unavailable"
+                ) from exc
+        elif stat.S_ISREG(info.st_mode):
+            aggregate[1] += info.st_size
+            if aggregate[1] > _RECOVERY_MAX_BYTES:
+                raise ResearchReleaseError("unpublished recovery byte limit differs")
+        else:
+            raise ResearchReleaseError("unpublished recovery entry type differs")
+    linked: dict[tuple[int, int], list[str]] = {}
+    for relative, info in observed.items():
+        if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+            linked.setdefault((info.st_dev, info.st_ino), []).append(relative)
+    for paths in linked.values():
+        infos = [observed[path] for path in paths]
+        if not _is_internal_git_install_link(paths, infos):
+            raise ResearchReleaseError("unpublished recovery file differs")
+    return observed
+
+
+def _is_internal_git_install_link(
+    paths: list[str], infos: list[os.stat_result]
+) -> bool:
+    if len(paths) != 2 or any(info.st_nlink != 2 for info in infos):
+        return False
+    temp_kind: str | None = None
+    final_kind: str | None = None
+    for relative in paths:
+        without_root = relative.removeprefix("source.git/")
+        if without_root == relative:
+            return False
+        temporary = _RECOVERY_GIT_TEMP_PACK.fullmatch(without_root)
+        final = _RECOVERY_GIT_PACK.fullmatch(without_root)
+        if temporary is not None:
+            if temp_kind is not None:
+                return False
+            temp_kind = temporary.group(1)
+        elif final is not None and final.group(2) in {"pack", "idx", "rev"}:
+            if final_kind is not None:
+                return False
+            final_kind = final.group(2)
+        else:
+            return False
+    return temp_kind is not None and temp_kind == final_kind
+
+
+def _require_recovery_entry(
+    info: os.stat_result,
+    *,
+    directory: bool,
+    states: set[tuple[int, int, int]],
+    maximum_bytes: int | None = None,
+) -> None:
+    expected_type = stat.S_ISDIR if directory else stat.S_ISREG
+    if (
+        not expected_type(info.st_mode)
+        or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) not in states
+        or (
+            maximum_bytes is not None
+            and not directory
+            and info.st_size > maximum_bytes
+        )
+    ):
+        raise ResearchReleaseError("unpublished recovery metadata differs")
+
+
+def _validate_payload_recovery(
+    records: dict[str, os.stat_result],
+    *,
+    inventory: DeploymentInventory,
+    supervisor_owner: tuple[int, int],
+    destination_owner: tuple[int, int],
+) -> None:
+    _require_recovery_entry(
+        records["payload"],
+        directory=True,
+        states={(*supervisor_owner, 0o700), (*destination_owner, 0o700)},
+    )
+    directories = {
+        f"payload/{item.relative_path}": int(item.mode, 8)
+        for item in inventory.directories
+        if item.relative_path != "."
+    }
+    members = {
+        f"payload/{item.deployment_path}": item
+        for item in inventory.members
+        if item.deployment_ownership_role != OWNER_IMAGE
+    }
+    for relative, info in records.items():
+        if not relative.startswith("payload/"):
+            continue
+        if relative in directories:
+            _require_recovery_entry(
+                info,
+                directory=True,
+                # mkdir(parents=True) can be interrupted before the exact
+                # inventory mode is applied; cleanup itself normalizes every
+                # directory to 0700 before removal.
+                states={
+                    (*supervisor_owner, directories[relative]),
+                    (*supervisor_owner, 0o700),
+                    (*supervisor_owner, 0o755),
+                    (*destination_owner, directories[relative]),
+                    (*destination_owner, 0o700),
+                },
+            )
+        elif relative in members:
+            _require_recovery_entry(
+                info,
+                directory=False,
+                states={(*supervisor_owner, 0o600), (*destination_owner, 0o600)},
+                maximum_bytes=members[relative].bytes,
+            )
+        else:
+            raise ResearchReleaseError("unpublished payload membership differs")
+
+
+def _git_recovery_directory_allowed(relative: str) -> bool:
+    fixed = {
+        "source.git",
+        "source.git/objects",
+        "source.git/objects/info",
+        "source.git/objects/pack",
+        "source.git/refs",
+        "source.git/refs/heads",
+        "source.git/refs/tags",
+    }
+    accepted_ref = PurePosixPath(source_bundle.ACCEPTED_REF)
+    parent = accepted_ref.parent
+    while str(parent) not in {".", "refs/heads"}:
+        fixed.add(f"source.git/{parent}")
+        parent = parent.parent
+    return relative in fixed
+
+
+def _git_recovery_file_limit(relative: str) -> int | None:
+    without_root = relative.removeprefix("source.git/")
+    if without_root in {"HEAD", "HEAD.lock", "config", "config.lock"}:
+        return 64 * 1024
+    if (
+        _RECOVERY_GIT_PACK.fullmatch(without_root)
+        or _RECOVERY_GIT_TEMP_PACK.fullmatch(without_root)
+    ):
+        return source_bundle.ACCEPTED_BUNDLE_BYTES
+    if without_root in {
+        source_bundle.ACCEPTED_REF,
+        f"{source_bundle.ACCEPTED_REF}.lock",
+    }:
+        return 64 * 1024
+    if _RECOVERY_GIT_FILEMODE_PROBE.fullmatch(without_root):
+        return 0
+    return None
+
+
+def _validate_source_store_recovery(
+    records: dict[str, os.stat_result],
+    *,
+    supervisor_uid: int,
+    supervisor_gid: int,
+    destination_gid: int,
+) -> None:
+    supervisor_owner = (supervisor_uid, supervisor_gid)
+    sealed_owner = (supervisor_uid, destination_gid)
+    final_stems: set[str] = set()
+    final_kinds: set[str] = set()
+    temporary_kinds: set[str] = set()
+    final_paths: dict[str, tuple[str, os.stat_result]] = {}
+    temporary_paths: dict[str, tuple[str, os.stat_result]] = {}
+    filemode_probes = 0
+    for relative, info in records.items():
+        if relative == "source.git" or relative.startswith("source.git/"):
+            if stat.S_ISDIR(info.st_mode):
+                if not _git_recovery_directory_allowed(relative):
+                    raise ResearchReleaseError(
+                        "unpublished source store membership differs"
+                    )
+                _require_recovery_entry(
+                    info,
+                    directory=True,
+                    states={
+                        (*supervisor_owner, 0o550),
+                        (*supervisor_owner, 0o700),
+                        (*supervisor_owner, 0o755),
+                        (*sealed_owner, 0o550),
+                        (*sealed_owner, 0o700),
+                    },
+                )
+            else:
+                maximum = _git_recovery_file_limit(relative)
+                if maximum is None:
+                    raise ResearchReleaseError(
+                        "unpublished source store membership differs"
+                    )
+                without_root = relative.removeprefix("source.git/")
+                final = _RECOVERY_GIT_PACK.fullmatch(without_root)
+                temporary = _RECOVERY_GIT_TEMP_PACK.fullmatch(without_root)
+                if final is not None:
+                    if final.group(2) in final_kinds:
+                        raise ResearchReleaseError(
+                            "unpublished source store pack state differs"
+                        )
+                    final_stems.add(final.group(1))
+                    final_kinds.add(final.group(2))
+                    final_paths[final.group(2)] = (relative, info)
+                elif temporary is not None:
+                    if temporary.group(1) in temporary_kinds:
+                        raise ResearchReleaseError(
+                            "unpublished source store pack state differs"
+                        )
+                    temporary_kinds.add(temporary.group(1))
+                    temporary_paths[temporary.group(1)] = (relative, info)
+                if temporary is not None or (
+                    final is not None and final.group(2) == "rev"
+                ):
+                    states = {
+                        (*supervisor_owner, 0o400),
+                        (*supervisor_owner, 0o444),
+                    }
+                elif final is not None:
+                    states = {
+                        (*supervisor_owner, 0o400),
+                        (*supervisor_owner, 0o440),
+                        (*supervisor_owner, 0o444),
+                        (*sealed_owner, 0o440),
+                    }
+                elif without_root.endswith(".lock"):
+                    states = {
+                        (*supervisor_owner, 0o600),
+                        (*supervisor_owner, 0o644),
+                    }
+                elif _RECOVERY_GIT_FILEMODE_PROBE.fullmatch(without_root):
+                    filemode_probes += 1
+                    if filemode_probes > 1:
+                        raise ResearchReleaseError(
+                            "unpublished source store probe state differs"
+                        )
+                    states = {(*supervisor_owner, 0o600)}
+                else:
+                    states = {
+                        (*supervisor_owner, 0o440),
+                        (*supervisor_owner, 0o600),
+                        (*supervisor_owner, 0o644),
+                        (*sealed_owner, 0o440),
+                    }
+                    if without_root == "config":
+                        states.add((*supervisor_owner, 0o700))
+                        states.add((*supervisor_owner, 0o744))
+                _require_recovery_entry(
+                    info,
+                    directory=False,
+                    states=states,
+                    maximum_bytes=maximum,
+                )
+    if len(final_stems) > 1:
+        raise ResearchReleaseError("unpublished source store pack state differs")
+    installing = final_kinds & temporary_kinds
+    if len(installing) > 1:
+        raise ResearchReleaseError("unpublished source store install state differs")
+    for kind in installing:
+        _final_path, final_info = final_paths[kind]
+        _temporary_path, temporary_info = temporary_paths[kind]
+        if (
+            (final_info.st_dev, final_info.st_ino)
+            != (temporary_info.st_dev, temporary_info.st_ino)
+            or final_info.st_nlink != 2
+            or temporary_info.st_nlink != 2
+        ):
+            raise ResearchReleaseError("unpublished source store install state differs")
+
+
+def _validate_release_recovery(
+    records: dict[str, os.stat_result],
+    *,
+    inventory: DeploymentInventory,
+    supervisor_uid: int,
+    supervisor_gid: int,
+    destination_uid: int,
+    destination_gid: int,
+) -> None:
+    supervisor_owner = (supervisor_uid, supervisor_gid)
+    _require_recovery_entry(
+        records["."],
+        directory=True,
+        states={
+            (*supervisor_owner, 0o700),
+            (*supervisor_owner, 0o710),
+            (supervisor_uid, destination_gid, 0o700),
+            (supervisor_uid, destination_gid, 0o710),
+        },
+    )
+    top_level = {relative.split("/", 1)[0] for relative in records if relative != "."}
+    if not top_level.issubset(
+        {"deployment-inventory.json", "payload", "source.git"}
+    ):
+        raise ResearchReleaseError("unpublished release membership differs")
+    manifest = records.get("deployment-inventory.json")
+    if manifest is not None:
+        _require_recovery_entry(
+            manifest,
+            directory=False,
+            states={
+                (*supervisor_owner, 0o400),
+                (*supervisor_owner, 0o440),
+                (supervisor_uid, destination_gid, 0o440),
+            },
+            maximum_bytes=len(inventory.canonical_bytes()),
+        )
+    if "payload" in records:
+        _validate_payload_recovery(
+            records,
+            inventory=inventory,
+            supervisor_owner=supervisor_owner,
+            destination_owner=(destination_uid, destination_gid),
+        )
+    if "source.git" in records:
+        _validate_source_store_recovery(
+            records,
+            supervisor_uid=supervisor_uid,
+            supervisor_gid=supervisor_gid,
+            destination_gid=destination_gid,
+        )
+
+
+def _validate_control_recovery(
+    records: dict[str, os.stat_result],
+    *,
+    supervisor_uid: int,
+    supervisor_gid: int,
+) -> None:
+    owner = (supervisor_uid, supervisor_gid)
+    _require_recovery_entry(
+        records["."], directory=True, states={(*owner, 0o700)}
+    )
+    top_level = {
+        relative.split("/", 1)[0] for relative in records if relative != "."
+    }
+    if len(top_level) > 1:
+        raise ResearchReleaseError("unpublished control phase differs")
+    if not top_level:
+        return
+    name = next(iter(top_level))
+    if name == "accepted-source-recheck.bundle":
+        if set(records) != {".", name}:
+            raise ResearchReleaseError("unpublished control membership differs")
+        _require_recovery_entry(
+            records[name],
+            directory=False,
+            states={(*owner, 0o600)},
+            maximum_bytes=source_bundle.ACCEPTED_BUNDLE_BYTES,
+        )
+        return
+    if name == "extract":
+        allowed = {".", "extract", "extract/home", "extract/home/.config"}
+    elif re.fullmatch(r"\.git-runtime\.[a-z0-9_]{8}", name):
+        allowed = {
+            ".",
+            name,
+            f"{name}/accepted.bundle",
+            f"{name}/empty-template",
+            f"{name}/home",
+            f"{name}/home/.config",
+        }
+    else:
+        raise ResearchReleaseError("unpublished control membership differs")
+    if not set(records).issubset(allowed):
+        raise ResearchReleaseError("unpublished control membership differs")
+    for relative, info in records.items():
+        if relative == ".":
+            continue
+        if relative.endswith("accepted.bundle"):
+            _require_recovery_entry(
+                info,
+                directory=False,
+                states={(*owner, 0o600)},
+                maximum_bytes=source_bundle.ACCEPTED_BUNDLE_BYTES,
+            )
+        else:
+            _require_recovery_entry(
+                info, directory=True, states={(*owner, 0o700)}
+            )
+
+
+def _validate_validation_recovery(
+    records: dict[str, os.stat_result],
+    *,
+    supervisor_uid: int,
+    supervisor_gid: int,
+) -> None:
+    owner = (supervisor_uid, supervisor_gid)
+    allowed = {
+        ".",
+        "members",
+        "members/home",
+        "members/home/.config",
+        "store",
+        "store/home",
+        "store/home/.config",
+    }
+    if not set(records).issubset(allowed):
+        raise ResearchReleaseError("release validation membership differs")
+    for info in records.values():
+        _require_recovery_entry(
+            info, directory=True, states={(*owner, 0o700)}
+        )
+
+
+def _validate_recovery_tree(
+    root: Path,
+    *,
+    kind: str,
+    inventory: DeploymentInventory,
+    supervisor_uid: int,
+    supervisor_gid: int,
+    destination_uid: int,
+    destination_gid: int,
+    aggregate: list[int],
+) -> None:
+    records = _collect_recovery_tree(root, aggregate=aggregate)
+    if kind == "research-release":
+        _validate_release_recovery(
+            records,
+            inventory=inventory,
+            supervisor_uid=supervisor_uid,
+            supervisor_gid=supervisor_gid,
+            destination_uid=destination_uid,
+            destination_gid=destination_gid,
+        )
+    elif kind == "research-control":
+        _validate_control_recovery(
+            records,
+            supervisor_uid=supervisor_uid,
+            supervisor_gid=supervisor_gid,
+        )
+    elif kind == "research-release-validation":
+        _validate_validation_recovery(
+            records,
+            supervisor_uid=supervisor_uid,
+            supervisor_gid=supervisor_gid,
+        )
+    else:
+        raise ResearchReleaseError("unpublished recovery kind differs")
+
+
+def reconcile_unpublished_research_staging(
+    inventory: DeploymentInventory,
+    *,
+    staging_parent: str | Path,
+    supervisor_uid: int,
+    supervisor_gid: int,
+    destination_uid: int,
+    destination_gid: int,
+) -> int:
+    """Remove only fully proven crash-left unpublished staging trees.
+
+    Validation covers the complete dedicated parent before the first removal,
+    so an unknown name, owner, mode, link, or object type leaves every entry in
+    place for diagnosis.  Published releases live under a different parent and
+    are never candidates for this operation.
+    """
+
+    try:
+        _validate_inventory(inventory)
+        parent = Path(staging_parent)
+        _validate_private_parent(
+            parent,
+            expected_uid=supervisor_uid,
+            expected_gid=supervisor_gid,
+        )
+    except ResearchTransferError as exc:
+        raise ResearchReleaseError(str(exc)) from exc
+    try:
+        paths = sorted(parent.iterdir(), key=lambda item: item.name)
+    except OSError as exc:
+        raise ResearchReleaseError("unpublished staging is unavailable") from exc
+    candidates: list[Path] = []
+    kinds: set[str] = set()
+    aggregate = [0, 0]
+    for path in paths:
+        match = _RECOVERY_NAME.fullmatch(path.name)
+        if match is None:
+            raise ResearchReleaseError("unpublished staging membership differs")
+        if path.is_symlink() or not path.is_dir():
+            raise ResearchReleaseError("unpublished staging entry differs")
+        kind = match.group(1)
+        if kind in kinds:
+            raise ResearchReleaseError("unpublished staging phase differs")
+        kinds.add(kind)
+        _validate_recovery_tree(
+            path,
+            kind=kind,
+            inventory=inventory,
+            supervisor_uid=supervisor_uid,
+            supervisor_gid=supervisor_gid,
+            destination_uid=destination_uid,
+            destination_gid=destination_gid,
+            aggregate=aggregate,
+        )
+        candidates.append(path)
+    if kinds not in (
+        set(),
+        {"research-release"},
+        {"research-control"},
+        {"research-release", "research-control"},
+        {"research-release-validation"},
+    ):
+        raise ResearchReleaseError("unpublished staging phase differs")
+    failures: list[Exception] = []
+    for path in candidates:
+        try:
+            source_bundle._remove_private_tree(path)
+        except Exception as exc:
+            failures.append(exc)
+    try:
+        _fsync_directory(parent)
+    except Exception as exc:
+        failures.append(exc)
+    if failures:
+        raise ResearchReleaseError("unpublished staging cleanup failed") from failures[0]
+    return len(candidates)
+
+
 def _stage_release_with_contract(
     inventory: DeploymentInventory,
     *,
@@ -586,7 +1144,9 @@ def _validate_release_with_contract(
     destination_uid: int,
     destination_gid: int,
     supervisor_uid: int,
+    supervisor_gid: int,
     bundle_contract: source_bundle._BundleContract,
+    validation_parent: str | Path,
 ) -> SourceStoreProof:
     try:
         _validate_inventory(inventory)
@@ -621,7 +1181,18 @@ def _validate_release_with_contract(
         )
     except ResearchTransferError as exc:
         raise ResearchReleaseError(str(exc)) from exc
-    runtime = Path(tempfile.mkdtemp(prefix=".research-release-validation."))
+    try:
+        validation_root = Path(validation_parent)
+        _validate_private_parent(
+            validation_root,
+            expected_uid=supervisor_uid,
+            expected_gid=supervisor_gid,
+        )
+    except ResearchTransferError as exc:
+        raise ResearchReleaseError(str(exc)) from exc
+    runtime = Path(
+        tempfile.mkdtemp(prefix=".research-release-validation.", dir=validation_root)
+    )
     try:
         os.chmod(runtime, 0o700)
         store_runtime = runtime / "store"
@@ -663,6 +1234,8 @@ def validate_accepted_research_release(
     destination_uid: int,
     destination_gid: int,
     supervisor_uid: int,
+    supervisor_gid: int,
+    validation_parent: str | Path,
 ) -> tuple[DeploymentInventory, SourceStoreProof]:
     """Revalidate the exact accepted release without trusting caller expectations."""
 
@@ -681,6 +1254,14 @@ def validate_accepted_research_release(
         inventory = parse_accepted_deployment_inventory(raw)
     except ResearchTransferError as exc:
         raise ResearchReleaseError(str(exc)) from exc
+    reconcile_unpublished_research_staging(
+        inventory,
+        staging_parent=validation_parent,
+        supervisor_uid=supervisor_uid,
+        supervisor_gid=supervisor_gid,
+        destination_uid=destination_uid,
+        destination_gid=destination_gid,
+    )
     proof = _validate_release_with_contract(
         root,
         inventory=inventory,
@@ -689,7 +1270,9 @@ def validate_accepted_research_release(
         destination_uid=destination_uid,
         destination_gid=destination_gid,
         supervisor_uid=supervisor_uid,
+        supervisor_gid=supervisor_gid,
         bundle_contract=source_bundle._ACCEPTED_CONTRACT,
+        validation_parent=validation_parent,
     )
     _validate_application_members(
         inventory,
@@ -715,6 +1298,14 @@ def stage_accepted_research_release(
 ) -> tuple[Path, SourceStoreProof]:
     """Build and atomically promote payload, inventory, and accepted Git store."""
 
+    reconcile_unpublished_research_staging(
+        inventory,
+        staging_parent=staging_parent,
+        supervisor_uid=os.geteuid(),
+        supervisor_gid=os.getegid(),
+        destination_uid=destination_uid,
+        destination_gid=destination_gid,
+    )
     _validate_application_members(
         inventory,
         application_root=_accepted_application_root(),
@@ -745,6 +1336,7 @@ def stage_accepted_research_release(
 
 
 __all__ = [
+    "reconcile_unpublished_research_staging",
     "ResearchReleaseError",
     "stage_accepted_research_release",
     "validate_accepted_research_release",
