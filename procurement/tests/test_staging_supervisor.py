@@ -15,6 +15,7 @@ import time
 import unittest
 from unittest import mock
 import struct
+import threading
 from dataclasses import replace
 
 from procurement_os import staging_process, staging_supervisor
@@ -24,6 +25,7 @@ from procurement_os.staging_supervisor import (
     ControlRateLimiter,
     ControlStatus,
     FixedChildSpec,
+    ManagedChild,
     ProcessIdentity,
     StagingChildSupervisor,
     StagingIsolationContract,
@@ -306,6 +308,15 @@ class _FakeKeyLifecycle:
 
     def destroy_all(self) -> None:
         self.staged.clear()
+
+    def destroy_role(self, role: str) -> None:
+        if role not in self.contracts:
+            raise StagingSupervisorError("fake key role is invalid")
+        self.staged = {
+            token: staged
+            for token, staged in self.staged.items()
+            if token[0] != role
+        }
 
 
 def _new_supervisor(**arguments) -> StagingChildSupervisor:
@@ -1191,6 +1202,163 @@ class SupervisorChildTests(unittest.TestCase):
                         process.kill()
                         process.wait()
 
+    def test_concurrent_research_start_is_serialized_to_one_child(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        pre_mutation_entered = threading.Event()
+        release_pre_mutation = threading.Event()
+
+        def launcher(_spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            return process
+
+        real_is_live = ProcessIdentity.is_live
+        block_once = True
+
+        def block_before_research_ownership(identity: ProcessIdentity) -> bool:
+            nonlocal block_once
+            if block_once and identity == supervisor.children["gateway"].identity:
+                block_once = False
+                pre_mutation_entered.set()
+                self.assertTrue(release_pre_mutation.wait(timeout=2))
+            return real_is_live(identity)
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            supervisor.start("gateway")
+            outcomes: list[object] = []
+
+            def start_research() -> None:
+                try:
+                    outcomes.append(supervisor.start("research"))
+                except BaseException as exc:
+                    outcomes.append(exc)
+
+            first = threading.Thread(target=start_research)
+            second = threading.Thread(target=start_research)
+            with mock.patch.object(
+                ProcessIdentity,
+                "is_live",
+                autospec=True,
+                side_effect=block_before_research_ownership,
+            ):
+                first.start()
+                self.assertTrue(pre_mutation_entered.wait(timeout=2))
+                second.start()
+                release_pre_mutation.set()
+                first.join(timeout=3)
+                second.join(timeout=3)
+            self.assertFalse(first.is_alive())
+            self.assertFalse(second.is_alive())
+            self.assertEqual(
+                sum(isinstance(value, ManagedChild) for value in outcomes), 1
+            )
+            self.assertEqual(
+                sum(isinstance(value, StagingSupervisorError) for value in outcomes),
+                1,
+            )
+            self.assertEqual(
+                [child.spec.name for child in supervisor.children.values()].count(
+                    "research"
+                ),
+                1,
+            )
+            supervisor.shutdown(timeout_seconds=2)
+        for process in launched:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+    def test_signal_during_research_start_is_drained_after_the_transaction(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        pre_mutation_entered = threading.Event()
+        release_pre_mutation = threading.Event()
+
+        def launcher(_spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            supervisor.start("gateway")
+            real_is_live = ProcessIdentity.is_live
+            block_once = True
+
+            def block_before_research_ownership(identity: ProcessIdentity) -> bool:
+                nonlocal block_once
+                if block_once and identity == supervisor.children["gateway"].identity:
+                    block_once = False
+                    pre_mutation_entered.set()
+                    self.assertTrue(release_pre_mutation.wait(timeout=2))
+                return real_is_live(identity)
+
+            outcomes: list[object] = []
+
+            def start_research() -> None:
+                try:
+                    outcomes.append(supervisor.start("research"))
+                except BaseException as exc:
+                    outcomes.append(exc)
+
+            worker = threading.Thread(target=start_research)
+            with mock.patch.object(
+                ProcessIdentity,
+                "is_live",
+                autospec=True,
+                side_effect=block_before_research_ownership,
+            ):
+                worker.start()
+                self.assertTrue(pre_mutation_entered.wait(timeout=2))
+                supervisor.signal_handler(signal.SIGTERM)
+                release_pre_mutation.set()
+                worker.join(timeout=3)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(len(outcomes), 1)
+            self.assertIsInstance(outcomes[0], ManagedChild)
+            self.assertTrue(supervisor.process_pending_signal())
+            self.assertEqual(supervisor.children, {})
+            self.assertEqual(supervisor._active_worker_keys, {})
+            self.assertFalse(supervisor.process_pending_signal())
+        for process in launched:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
     def test_real_owned_process_group_is_terminated_and_reaped(self):
         process = subprocess.Popen(
             [sys.executable, "-I", "-B", "-c", "import time; time.sleep(60)"],
@@ -1463,6 +1631,59 @@ class SupervisorChildTests(unittest.TestCase):
             self.assertFalse(research.gateway_path.exists())
             self.assertFalse(research.worker_path.exists())
 
+    def test_worker_key_lifecycle_destroys_only_the_requested_role(self):
+        with tempfile.TemporaryDirectory(prefix="buffalo-key-role-cleanup-") as raw:
+            root = Path(raw)
+            directories = [root / name for name in ("gs", "ws", "gr", "wr")]
+            for directory in directories:
+                directory.mkdir(mode=0o710)
+            values = iter(
+                (bytes.fromhex("d1" * 32), bytes.fromhex("e2" * 32))
+            )
+            lifecycle = WorkerKeyLifecycle(
+                (
+                    WorkerKeyCopyContract(
+                        "synthetic",
+                        directories[0],
+                        directories[1],
+                        os.getuid(),
+                        os.getgid(),
+                        os.getuid(),
+                        os.getgid(),
+                        os.getuid(),
+                        os.getgid(),
+                        os.getuid(),
+                        os.getgid(),
+                    ),
+                    WorkerKeyCopyContract(
+                        "research",
+                        directories[2],
+                        directories[3],
+                        os.getuid(),
+                        os.getgid(),
+                        os.getuid(),
+                        os.getgid(),
+                        os.getuid(),
+                        os.getgid(),
+                        os.getuid(),
+                        os.getgid(),
+                    ),
+                ),
+                random_bytes=lambda _: next(values),
+            )
+            synthetic = lifecycle.stage("synthetic")
+            research = lifecycle.stage("research")
+            lifecycle.destroy_role("research")
+            self.assertTrue(synthetic.gateway_path.exists())
+            self.assertTrue(synthetic.worker_path.exists())
+            self.assertFalse(research.gateway_path.exists())
+            self.assertFalse(research.worker_path.exists())
+            self.assertEqual(set(lifecycle._staged), {("synthetic", 0)})
+            lifecycle.destroy_role("research")
+            with self.assertRaisesRegex(StagingSupervisorError, "role is invalid"):
+                lifecycle.destroy_role("other")
+            lifecycle.destroy_all()
+
     def test_key_lifecycle_generations_match_gateway_keyring_rotation(self):
         with tempfile.TemporaryDirectory(prefix="buffalo-key-generations-") as raw:
             root = Path(raw)
@@ -1681,7 +1902,7 @@ class SupervisorChildTests(unittest.TestCase):
                     lifecycle.stage("synthetic")
             self.assertTrue(any(directories[0].iterdir()))
             self.assertTrue(lifecycle._staged)
-            lifecycle.destroy_all()
+            lifecycle.destroy_role("synthetic")
             self.assertFalse(any(directories[0].iterdir()))
             self.assertFalse(lifecycle._staged)
 

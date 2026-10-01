@@ -5,6 +5,7 @@ import asyncio
 from collections import deque
 import ctypes
 from dataclasses import dataclass, field as dataclass_field
+import functools
 import hmac
 import json
 import os
@@ -15,6 +16,7 @@ import socket
 import stat
 import struct
 import subprocess
+import threading
 import time
 from typing import Callable, Mapping, Protocol
 
@@ -53,6 +55,17 @@ _PR_GET_CHILD_SUBREAPER = 37
 
 class StagingSupervisorError(ValueError):
     """A supervisor control or owned-process contract differs."""
+
+
+def _serialized(method: Callable[..., object]) -> Callable[..., object]:
+    """Run one state transition under its owner's reentrant lock."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args: object, **kwargs: object) -> object:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 def enable_child_subreaper() -> None:
@@ -998,6 +1011,7 @@ class StagingChildSupervisor:
         self.worker_key_disabler = worker_key_disabler
         self.launcher = launcher
         self.final_cleanup = final_cleanup
+        self._lock = threading.RLock()
         self.children: dict[str, ManagedChild] = {}
         self._uncaptured_children: dict[
             str, tuple[FixedChildSpec, subprocess.Popen[bytes]]
@@ -1016,6 +1030,7 @@ class StagingChildSupervisor:
         self._gateway_proven_gone = False
         self._signal_requested = False
 
+    @_serialized
     def start(self, name: str) -> ManagedChild:
         if (
             self._shutdown_requested
@@ -1311,6 +1326,7 @@ class StagingChildSupervisor:
         self._shutdown_requested = True
         self._finish_shutdown_if_empty()
 
+    @_serialized
     def start_initial(self) -> None:
         """Ordinary startup includes gateway+synthetic but never research."""
 
@@ -1359,6 +1375,7 @@ class StagingChildSupervisor:
                 ) from startup_error
             raise
 
+    @_serialized
     def commit_worker(self, name: str) -> None:
         """Make a prepared worker routable only after external readiness proof."""
 
@@ -1398,6 +1415,7 @@ class StagingChildSupervisor:
             ) from exc
         self._committed_worker_keys.add(generation)
 
+    @_serialized
     def stop(self, name: str, *, timeout_seconds: float = 10.0) -> int:
         if name == "gateway" and self._has_owned_worker_state():
             raise StagingSupervisorError("gateway cannot stop before workers")
@@ -1433,6 +1451,7 @@ class StagingChildSupervisor:
             self._gateway_proven_gone = True
         return result
 
+    @_serialized
     def reap_crashed(self) -> tuple[str, ...]:
         crashed = tuple(
             name
@@ -1472,6 +1491,7 @@ class StagingChildSupervisor:
             raise StagingSupervisorError("crash cleanup did not stop every child") from failures[0]
         return crashed
 
+    @_serialized
     def shutdown(self, *, timeout_seconds: float = 10.0) -> None:
         if self._shutdown_complete:
             return
@@ -1563,6 +1583,7 @@ class StagingChildSupervisor:
         # after the current transaction reaches a stable boundary.
         self._signal_requested = True
 
+    @_serialized
     def process_pending_signal(self) -> bool:
         """Drain one recorded signal from the serialized supervisor loop."""
 
@@ -1843,6 +1864,7 @@ class WorkerKeyLifecycle:
             raise StagingSupervisorError("worker key directories are not isolated")
         self.contracts = by_role
         self.random_bytes = random_bytes
+        self._lock = threading.RLock()
         self._generations = {"synthetic": -1, "research": -1}
         self._used_digests: set[bytes] = set()
         self._staged: dict[tuple[str, int], StagedWorkerKey] = {}
@@ -1851,6 +1873,7 @@ class WorkerKeyLifecycle:
             tuple[str, int], dict[Path, tuple[int, int]]
         ] = {}
 
+    @_serialized
     def stage(self, role: str) -> StagedWorkerKey:
         try:
             contract = self.contracts[role]
@@ -1927,6 +1950,7 @@ class WorkerKeyLifecycle:
         self._generations[role] = generation
         return staged
 
+    @_serialized
     def destroy(self, staged: StagedWorkerKey) -> None:
         current = self._staged.get((staged.role, staged.generation))
         if current != staged:
@@ -1997,6 +2021,7 @@ class WorkerKeyLifecycle:
         self._incomplete_identities.pop(token)
         self._staged.pop(token)
 
+    @_serialized
     def destroy_all(self) -> None:
         failures: list[BaseException] = []
         for staged in tuple(self._staged.values()):
@@ -2007,6 +2032,25 @@ class WorkerKeyLifecycle:
         if failures:
             raise StagingSupervisorError(
                 "one or more worker key generations could not be destroyed"
+            ) from failures[0]
+
+    @_serialized
+    def destroy_role(self, role: str) -> None:
+        """Destroy every exact-owned key state for one worker role only."""
+
+        if role not in self.contracts:
+            raise StagingSupervisorError("worker key role is invalid")
+        failures: list[BaseException] = []
+        for staged in tuple(self._staged.values()):
+            if staged.role != role:
+                continue
+            try:
+                self.destroy(staged)
+            except BaseException as exc:
+                failures.append(exc)
+        if failures:
+            raise StagingSupervisorError(
+                "worker role key generations could not be destroyed"
             ) from failures[0]
 
 
