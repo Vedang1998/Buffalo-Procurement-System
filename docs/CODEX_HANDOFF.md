@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-09-30T23:01:20Z (UTC)
+**Updated:** 2026-10-01T11:26:46Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Railway staging delivery — TASK 4 IMPLEMENTATION AND STATIC GATES PASS / SEMANTIC REPLAY PENDING
+### Railway staging delivery — TASK 4 IMPLEMENTATION AND STATIC GATES PASS / SEMANTIC REPLAY FAILED CLOSED
 
 - Task 4 resumed from the owner-pinned clean commit
   `536f54d830c82395566237d7da15875248a15465`, tree
@@ -83,15 +83,36 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   Compilation and `git diff --check` passed. A supplementary same-model
   read-only review reported no remaining Task-4 P0–P2 finding; it is not an
   attributable external review.
-- The remaining Task-4 gate is one bounded full semantic replay of the existing
-  unchanged reader: one invocation, 45-minute ceiling, process peak below
-  5 GiB, cgroup peak below 6 GiB, zero OOM deltas, no network/database/browser,
-  exact workspace/artifact/population/coherence aggregates, and no private-row
-  output. The authoritative suite registration/full run remains Task 10 as the
-  approved plan specifies. Crash-left staging reconciliation remains an
-  explicit single-supervisor Task-5/Task-11 lifecycle gate. No private transfer,
-  Railway setting, deployment, database, domain, GitHub state, Replit state,
-  Shopify state, scheduled job, or purchasing state changed.
+- The bounded semantic-replay harness was independently reviewed clean on exact
+  SHA-256
+  `c977c54f86491002be2efa020bec134edcac0f0a0c0d8d95b1746b3fdcb3995c`;
+  its aggregate-only audit is SHA-256
+  `0ff0d882aff021f7dc5070ac4d8b96b8a87be7a44df0a4a0fd48af173f2aa2ca`.
+  The exact hash-pinned one-shot launch on clean implementation commit
+  `63f16d058f1b09b047c98243ed998c065ba969e7`, tree
+  `37fd0ecda28e17372d1a92546974ef43c1d37e85`, **failed closed before semantic
+  computation**: child exit `1` after 2.759 seconds, no semantic result, zero
+  stdout bytes, and 470 stderr bytes retained only as SHA-256
+  `61f995aff583a44afaebd8b7e58ced1e09114042e90ae6dd319ba2bee15eb959`.
+  The raw diagnostic text was intentionally not retained or emitted, so no
+  failure cause is asserted.
+- Failure containment passed: source closure before and after was identical at
+  `025f44429b5363ec96c833018a0e42643d1e3d7ecfbf1005f12afb5071bf9340`;
+  cgroup peak was 40,288,256 bytes; all memory high/max/OOM/OOM-kill/group-kill
+  and PID-limit deltas were zero; the dedicated cgroup was emptied and removed;
+  and the repository remained clean at the pinned commit/tree. The canonical
+  failure report is mode 0600 at the private evidence root
+  `task4-semantic-replay-63f16d0-Y5G8jN` with SHA-256
+  `f21dd8790117451a7ee2bf2854ae767e91d9cc527bd12fd8dfffa8cd7901568b`.
+  In accordance with the owner's stop-on-failed-required-check boundary, no
+  retry or substitute hash-only acceptance was performed. Task 4 therefore
+  remains open and blocked on owner direction for a bounded diagnostic and any
+  newly reviewed replay attempt.
+- The authoritative suite registration/full run remains Task 10 as the approved
+  plan specifies. Crash-left staging reconciliation remains an explicit
+  single-supervisor Task-5/Task-11 lifecycle gate. No private transfer, Railway
+  setting, deployment, database, domain, GitHub state, Replit state, Shopify
+  state, scheduled job, or purchasing state changed.
 
 ### Railway staging delivery — TASK 3 LOCAL MILESTONE PASS / NONDEPLOYABLE / NO EXTERNAL STATE CHANGED
 
