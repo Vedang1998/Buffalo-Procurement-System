@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-01T11:26:46Z (UTC)
+**Updated:** 2026-10-01T19:01:32Z (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Railway staging delivery — TASK 4 IMPLEMENTATION AND STATIC GATES PASS / SEMANTIC REPLAY FAILED CLOSED
+### Railway staging delivery — TASK 4 LOCAL IMPLEMENTATION, STATIC GATES, AND BOUNDED SEMANTIC REPLAY PASS / EXTERNAL REVIEW AND STARTUP INTEGRATION REMAIN
 
 - Task 4 resumed from the owner-pinned clean commit
   `536f54d830c82395566237d7da15875248a15465`, tree
@@ -83,36 +83,111 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   Compilation and `git diff --check` passed. A supplementary same-model
   read-only review reported no remaining Task-4 P0–P2 finding; it is not an
   attributable external review.
-- The bounded semantic-replay harness was independently reviewed clean on exact
-  SHA-256
-  `c977c54f86491002be2efa020bec134edcac0f0a0c0d8d95b1746b3fdcb3995c`;
-  its aggregate-only audit is SHA-256
-  `0ff0d882aff021f7dc5070ac4d8b96b8a87be7a44df0a4a0fd48af173f2aa2ca`.
-  The exact hash-pinned one-shot launch on clean implementation commit
+- The owner-authorized bounded diagnosis/recovery work began from the resolved,
+  clean full commit `59a20ca6288d48a43bf12488a618a69d58d3bbb1`, tree
+  `b7850c34d01c84f69f4d69d25a42fb264d235919`. The prior attempt remains
+  separately and correctly classified as **failed closed before semantic
+  computation**. It used clean commit
   `63f16d058f1b09b047c98243ed998c065ba969e7`, tree
-  `37fd0ecda28e17372d1a92546974ef43c1d37e85`, **failed closed before semantic
-  computation**: child exit `1` after 2.759 seconds, no semantic result, zero
-  stdout bytes, and 470 stderr bytes retained only as SHA-256
+  `37fd0ecda28e17372d1a92546974ef43c1d37e85`, supervisor SHA-256
+  `c977c54f86491002be2efa020bec134edcac0f0a0c0d8d95b1746b3fdcb3995c`,
+  and the unchanged audit SHA-256
+  `0ff0d882aff021f7dc5070ac4d8b96b8a87be7a44df0a4a0fd48af173f2aa2ca`.
+  Child exit was `1` after 2.759 seconds, with no semantic result, zero stdout
+  bytes, and 470 stderr bytes retained only as SHA-256
   `61f995aff583a44afaebd8b7e58ced1e09114042e90ae6dd319ba2bee15eb959`.
-  The raw diagnostic text was intentionally not retained or emitted, so no
-  failure cause is asserted.
-- Failure containment passed: source closure before and after was identical at
-  `025f44429b5363ec96c833018a0e42643d1e3d7ecfbf1005f12afb5071bf9340`;
-  cgroup peak was 40,288,256 bytes; all memory high/max/OOM/OOM-kill/group-kill
-  and PID-limit deltas were zero; the dedicated cgroup was emptied and removed;
-  and the repository remained clean at the pinned commit/tree. The canonical
-  failure report is mode 0600 at the private evidence root
-  `task4-semantic-replay-63f16d0-Y5G8jN` with SHA-256
+  Raw diagnostic text was not retained or emitted.
+  Its source closure was unchanged at
+  `025f44429b5363ec96c833018a0e42643d1e3d7ecfbf1005f12afb5071bf9340`,
+  cgroup peak was 40,288,256 bytes, all resource-event deltas were zero, and
+  cgroup cleanup completed. Its private mode-0600 report remains unchanged at
+  `task4-semantic-replay-63f16d0-Y5G8jN`, SHA-256
   `f21dd8790117451a7ee2bf2854ae767e91d9cc527bd12fd8dfffa8cd7901568b`.
-  In accordance with the owner's stop-on-failed-required-check boundary, no
-  retry or substitute hash-only acceptance was performed. Task 4 therefore
-  remains open and blocked on owner direction for a bounded diagnostic and any
-  newly reviewed replay attempt.
+- Static diagnosis was conclusive, so the authorized 120-second diagnostic
+  reproduction was not consumed. The retained stderr byte count and digest
+  exactly match the sanitized Python 3.13 traceback for `RuntimeError` at the
+  private audit's accepted-parent preflight; the semantic reader call was not
+  reached. The failed launcher used `unshare --map-root-user`, so unchanged
+  host UID/GID-1000 files appeared as UID/GID 0 inside the child namespace.
+  `accepted_parent_snapshot()` deliberately binds the numeric UID of all seven
+  directories and eight files: the code-owned UID-1000 reconstruction is the
+  accepted SHA-256
+  `61cc5ce121a244ed7d61b4a4a8a5b964cbb8581a2dc1c0431f8a4519ebe411c9`,
+  whereas the namespace-remapped UID-0 reconstruction differs. Exact outer
+  closure equality, unchanged reader code, and matching interpreter and Git
+  lineage rule out payload, reader, Git, or resource drift for that failure.
+- The minimum correction changes only private launcher setup: use
+  `--map-current-user --keep-caps`, assert UID and GID 1000 in separate
+  fail-closed shell commands, mount the 64-MiB scratch tmpfs with explicit
+  UID/GID 1000, then drop every effective, permitted, inheritable, ambient and
+  bounding capability under `no_new_privs`. The final recovery supervisor is
+  45,988 bytes, mode 0600, SHA-256
+  `b29c7f7d7e4789f09228b375b24fc5ea9e47898fa793062f1e22be867cf2a14f`;
+  the aggregate-only audit and deployment inventory remained byte-identical at
+  SHA-256 `0ff0d882aff021f7dc5070ac4d8b96b8a87be7a44df0a4a0fd48af173f2aa2ca`
+  and `97fd10669302a2158882d08102b8d306b51b6b3c61bae6941ac957ef787238b2`.
+  No accepted bytes, membership, hash, reader contract, semantic calculation,
+  trust boundary, dependency location, or resource limit changed.
+- A bounded sentinel preflight stopped at the exact expensive semantic boundary
+  without invoking it (`semantic_replay_started=false`, boundary calls `1`).
+  An earlier focused preflight self-refused at its `runtime_isolation` test
+  because that test treated the inherited sysfs network listing as a
+  namespace-scoped interface list; semantic replay did not start. The corrected
+  check uses the child namespace's socket interface set (`lo`/`sit0`) and did
+  not weaken network isolation.
+  It passed in 4.467 seconds with UID/GID 1000, all capabilities empty,
+  `no_new_privs`, read-only cgroup view, hidden host `/proc`, isolated network,
+  exact parent/manifest/module/Git-lineage checks, unchanged source closure,
+  43,688-KiB process HWM and 32,526,336-byte cgroup peak. The final preflight
+  script SHA-256 is
+  `48ff9ac9f65e57592e3f2fcfadb65ec6f203e3dd11d0f88f6abb0566ac0dd995`;
+  its canonical PASS result SHA-256 is
+  `3685ad06290eff301d222572a9ab03ddae76097fdaf3346e7a2791df3ec53a3e`.
+  The Codex same-model read-only roles `task4_recovery_diff_review`,
+  `task4_recovery_isolation_review`, and `task4_recovery_gate_review` reviewed
+  the exact diff, isolation contract, and launch/evidence gates. The diff review
+  found one fail-closed shell-assertion issue in an intermediate harness; the
+  writer fixed it before execution, and all three roles re-reviewed the final
+  hash with no P0-P2 finding. These reviews are not represented as attributable
+  external security review.
+- Exactly one newly authorized complete recovery replay then ran in the new
+  private evidence root
+  `task4-semantic-replay-recovery-59a20ca-rYWancBL` and **passed actual semantic
+  validation**, not merely process exit. It exited `0` after 1,318.02 seconds;
+  the canonical aggregate result is 1,931 bytes, mode 0600, SHA-256
+  `36e7df4512ae2c97faf794f90ab46bdc58a569a801e17eb425256872ed3ab69e`.
+  Workspace, manifest and projection identities are exactly
+  `031dfc5f8e4ed83f14184fc0d324dfc99c6af02bf3896bd493ceeaebed62451a`,
+  `1387c28db7e458e196fa1961e55db3289bbb2855eb35b39a10deb814fc673353`
+  and `650236984b3a95c7ade245b210000153bd93353ddea3cbcf9473e18851efeb3a`.
+  All four artifact sizes and hashes match the accepted manifest. Exact controls
+  are 2,009 variants, 1,365 CALCULATED, 644 NOT_APPLICABLE, 0 BLOCKED and 0
+  NOT_PROCESSED for H3/H10/H17; 1,365 sidecars; raw point/target/unique counts
+  38/136/151; and corrected point/target/unique counts 0/0/0. H3/H10/H17
+  numerical-zero counts are 871/824/821. Membership controls are current 2,009,
+  eligible 1,365, parent NOT_APPLICABLE 601, reviewed-prior BLOCKED 43,
+  corrected NOT_APPLICABLE 644, and corrected BLOCKED 0. The accepted parent
+  remained identical before and after.
+- Recovery containment passed: maximum process HWM and `wait4` RSS were
+  3,762,608 KiB (below 5 GiB); cgroup peak was 3,869,597,696 bytes (below 6
+  GiB and the unchanged 5-GiB-minus-page hard limit); child stdout and stderr
+  were both zero bytes; all memory high/max/OOM/OOM-kill/group-kill and PID-limit
+  deltas were zero. The exact 75-file physical source closure was unchanged
+  before/after at SHA-256
+  `025f44429b5363ec96c833018a0e42643d1e3d7ecfbf1005f12afb5071bf9340`;
+  the dedicated cgroup emptied and was removed; controller state was restored;
+  and the repository remained clean at the pinned commit/tree. The canonical
+  2,071-byte mode-0600 recovery report SHA-256 is
+  `ac4dde4d465ba169554358c1d0c501b5eaa773872ef6a49fb82b3a4bfe36a1f7`.
 - The authoritative suite registration/full run remains Task 10 as the approved
   plan specifies. Crash-left staging reconciliation remains an explicit
-  single-supervisor Task-5/Task-11 lifecycle gate. No private transfer, Railway
-  setting, deployment, database, domain, GitHub state, Replit state, Shopify
-  state, scheduled job, or purchasing state changed.
+  single-supervisor Task-5/Task-11 lifecycle gate. The Task-4 local
+  implementation, static, source-bundle, revised-inventory and bounded semantic
+  gates now pass, but public exposure/private-data transfer still require the
+  broader attributable independent security review and later startup/restart
+  integration gates. No private transfer, Railway setting, deployment,
+  database, domain, GitHub state, Replit state, Shopify state, scheduled job,
+  or purchasing state changed.
 
 ### Railway staging delivery — TASK 3 LOCAL MILESTONE PASS / NONDEPLOYABLE / NO EXTERNAL STATE CHANGED
 
@@ -144,14 +219,17 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   active state, research readiness, restart rotation, and on-demand lifecycle.
   Task 8 still must install the package and implement the real root bootstrap,
   container users/groups/directories/listeners/inherited FDs/signals/cleanup.
-  Tasks 4, 6, 7, 9, 10, 11, 12, and 13 and all of their acceptance gates
-  remain outstanding.
+  The current Task-4 entry above supersedes this historical Task-3 next-step
+  statement. Tasks 5-13 and all still-applicable acceptance gates remain
+  outstanding; Task 4 has only the explicitly recorded external-review and
+  startup/restart integration gates left.
 - No Railway setting, deployment, domain, volume, variable, database, bucket,
   GitHub branch/PR, Replit deployment, Shopify state, scheduled job, public
   endpoint, or purchasing state was changed by this implementation milestone,
   and no private research payload was transferred. `procurement/docs/PHASE_STATUS.md`
-  is unchanged. The next bounded operation is Task 4: implement and verify the
-  metadata-only research transfer allowlist and exact source-bundle contract.
+  is unchanged. The next previously authorized local implementation slice after
+  the current Task-4 checkpoint is Task 5; no deployment or phase advancement
+  is implied.
 
 ### Corrected-V3 memory-lifetime remediation — MACHINE VALIDATION PASS / OWNER ACCEPTANCE PENDING / OPERATIONAL AUTHORITY BLOCKED
 
