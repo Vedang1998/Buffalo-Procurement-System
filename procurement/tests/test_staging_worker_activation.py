@@ -342,6 +342,75 @@ class WorkerActivationTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_unexpected_loader_failure_poisons_server_and_invokes_fatal(self) -> None:
+        async def scenario() -> None:
+            supervisor_socket, gateway_socket = socket.socketpair(
+                socket.AF_UNIX,
+                socket.SOCK_STREAM,
+            )
+            supervisor_socket.setblocking(False)
+            fatal: list[bool] = []
+            protocol = GatewayActivationProtocol(
+                key=BOOT_KEY,
+                keyring=self.keyring,
+                load_key=lambda _role, _generation: (_ for _ in ()).throw(
+                    RuntimeError("private loader failure")
+                ),
+                wall_clock=lambda: self.now,
+            )
+            server = GatewayActivationServer(
+                channel=gateway_socket,
+                protocol=protocol,
+                fatal_handler=lambda: fatal.append(True),
+            )
+            task = asyncio.create_task(server.serve())
+            loop = asyncio.get_running_loop()
+            request = self._request("PREPARE")
+            await loop.sock_sendall(
+                supervisor_socket,
+                struct.pack("!I", len(request)) + request,
+            )
+            with self.assertRaisesRegex(WorkerActivationError, "server failed"):
+                await asyncio.wait_for(task, timeout=1)
+            self.assertEqual(fatal, [True])
+            self.assertTrue(server._closed)
+            self.assertEqual(await loop.sock_recv(supervisor_socket, 1), b"")
+            supervisor_socket.close()
+
+        asyncio.run(scenario())
+
+    def test_close_propagates_cancellation_of_the_closing_task(self) -> None:
+        async def scenario() -> None:
+            supervisor_socket, gateway_socket = socket.socketpair(
+                socket.AF_UNIX,
+                socket.SOCK_STREAM,
+            )
+            server = GatewayActivationServer(
+                channel=gateway_socket,
+                protocol=self.protocol,
+                fatal_handler=lambda: None,
+            )
+            first_cancel = asyncio.Event()
+
+            async def delayed_cancellation() -> None:
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    first_cancel.set()
+                    await asyncio.Event().wait()
+
+            serve_task = asyncio.create_task(delayed_cancellation())
+            server._serve_task = serve_task
+            close_task = asyncio.create_task(server.close())
+            await asyncio.wait_for(first_cancel.wait(), timeout=1)
+            close_task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await close_task
+            self.assertTrue(serve_task.cancelled())
+            supervisor_socket.close()
+
+        asyncio.run(scenario())
+
     def test_errors_and_reprs_do_not_expose_keys(self) -> None:
         values = [repr(self.protocol), repr(self.keyring)]
         try:

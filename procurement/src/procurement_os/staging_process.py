@@ -3,15 +3,27 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import secrets
+import socket
 import stat
+import struct
 import sys
 
 from uvicorn import Config, Server
 
 from .staging_config import load_staging_config
 from .staging_gateway import RegisteredRoutePolicy, StagingGateway
+from .staging_management_keys import (
+    derive_gateway_activation_key,
+    derive_supervisor_control_key,
+)
 from .staging_process_contract import validated_process_environment
-from .staging_uds import SocketContract
+from .staging_supervisor import SupervisorControlClient
+from .staging_uds import PeerCredentials, SocketContract
+from .staging_worker_activation import (
+    GatewayActivationProtocol,
+    GatewayActivationServer,
+)
 from .staging_worker_transport import UnixWorkerTransport, run_worker
 
 
@@ -40,15 +52,15 @@ def _run_gateway(environment: dict[str, str]) -> None:
         role: _gateway_socket_contract(environment, role)
         for role in ("synthetic", "research")
     }
-    worker_keys = {
-        role: _read_private_key(
+    key_contracts = {
+        role: (
             Path(environment[f"BUFFALO_STAGING_{role.upper()}_KEY_FILE"]),
-            parent_uid=_canonical_integer(
+            _canonical_integer(
                 environment,
                 f"BUFFALO_STAGING_{role.upper()}_KEY_DIRECTORY_UID",
                 0,
             ),
-            parent_gid=_canonical_integer(
+            _canonical_integer(
                 environment,
                 f"BUFFALO_STAGING_{role.upper()}_KEY_DIRECTORY_GID",
                 1,
@@ -56,26 +68,142 @@ def _run_gateway(environment: dict[str, str]) -> None:
         )
         for role in ("synthetic", "research")
     }
-    application = StagingGateway(
-        config=config,
-        route_policy=RegisteredRoutePolicy(),
-        transport=UnixWorkerTransport(endpoints=endpoints),
-        worker_keys=worker_keys,
+    if any(
+        path.name != f"{role}-0.key"
+        for role, (path, _parent_uid, _parent_gid) in key_contracts.items()
+    ) or len({path.parent for path, _, _ in key_contracts.values()}) != 2:
+        raise StagingProcessError("gateway worker key inventory differs")
+    worker_keys = {
+        role: _read_private_key(path, parent_uid=parent_uid, parent_gid=parent_gid)
+        for role, (path, parent_uid, parent_gid) in key_contracts.items()
+    }
+    management_path = Path(environment["BUFFALO_STAGING_CONTROL_KEY_FILE"])
+    if management_path.name != "control.key" or management_path.parent in {
+        path.parent for path, _, _ in key_contracts.values()
+    }:
+        raise StagingProcessError("gateway management key binding differs")
+    management_key = _read_private_key(
+        management_path,
+        parent_uid=_canonical_integer(
+            environment,
+            "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_UID",
+            0,
+        ),
+        parent_gid=_canonical_integer(
+            environment,
+            "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_GID",
+            1,
+        ),
     )
-    Server(
-        Config(
-            application,
-            host="0.0.0.0",
-            port=config.port,
-            proxy_headers=False,
-            access_log=False,
-            server_header=False,
-            date_header=False,
-            ws="none",
-            lifespan="on",
-            workers=1,
+    if any(
+        secrets.compare_digest(management_key, worker_key)
+        for worker_key in worker_keys.values()
+    ):
+        raise StagingProcessError("gateway management key is not independent")
+    control_contract = SocketContract(
+        path=Path(environment["BUFFALO_STAGING_CONTROL_SOCKET_PATH"]),
+        parent_uid=0,
+        parent_gid=_canonical_integer(
+            environment, "BUFFALO_STAGING_CONTROL_SOCKET_GID", 1
+        ),
+        socket_uid=0,
+        socket_gid=_canonical_integer(
+            environment, "BUFFALO_STAGING_CONTROL_SOCKET_GID", 1
+        ),
+    )
+    supervisor_peer = PeerCredentials(
+        pid=_canonical_integer(
+            environment, "BUFFALO_STAGING_SUPERVISOR_PID", 1
+        ),
+        uid=0,
+        gid=0,
+    )
+    control_client = SupervisorControlClient(
+        contract=control_contract,
+        key=derive_supervisor_control_key(management_key),
+        expected_supervisor_peer=supervisor_peer,
+    )
+    activation_fd = _canonical_integer(
+        environment, "BUFFALO_STAGING_ACTIVATION_FD", 3
+    )
+    try:
+        activation_channel = socket.socket(fileno=activation_fd)
+    except OSError as exc:
+        raise StagingProcessError("gateway activation descriptor is unavailable") from exc
+    try:
+        if _activation_peer_credentials(activation_channel) != supervisor_peer:
+            raise StagingProcessError("gateway activation peer differs")
+    except BaseException:
+        activation_channel.close()
+        raise
+    server_holder: dict[str, Server] = {}
+
+    def load_worker_key(role: str, generation: int) -> bytes:
+        if (
+            role not in key_contracts
+            or type(generation) is not int
+            or not 0 <= generation <= (2**63 - 1)
+        ):
+            raise StagingProcessError("gateway worker key binding differs")
+        initial_path, parent_uid, parent_gid = key_contracts[role]
+        path = initial_path.parent / f"{role}-{generation}.key"
+        return _read_private_key(
+            path,
+            parent_uid=parent_uid,
+            parent_gid=parent_gid,
         )
-    ).run()
+
+    def activation_factory(keyring):
+        protocol = GatewayActivationProtocol(
+            key=derive_gateway_activation_key(management_key),
+            keyring=keyring,
+            load_key=load_worker_key,
+        )
+
+        def fatal() -> None:
+            for role in ("synthetic", "research"):
+                try:
+                    status = keyring.status(role)
+                    keyring.disable(role=role, generation=status.generation)
+                except ValueError:
+                    pass
+            server = server_holder.get("server")
+            if server is not None:
+                server.should_exit = True
+
+        return GatewayActivationServer(
+            channel=activation_channel,
+            protocol=protocol,
+            fatal_handler=fatal,
+        )
+
+    try:
+        application = StagingGateway(
+            config=config,
+            route_policy=RegisteredRoutePolicy(),
+            transport=UnixWorkerTransport(endpoints=endpoints),
+            worker_keys=worker_keys,
+            research_control=control_client,
+            activation_service_factory=activation_factory,
+        )
+        server = Server(
+            Config(
+                application,
+                host="0.0.0.0",
+                port=config.port,
+                proxy_headers=False,
+                access_log=False,
+                server_header=False,
+                date_header=False,
+                ws="none",
+                lifespan="on",
+                workers=1,
+            )
+        )
+        server_holder["server"] = server
+        server.run()
+    finally:
+        activation_channel.close()
 
 
 def _run_worker(role: str, environment: dict[str, str]) -> None:
@@ -125,10 +253,12 @@ def _read_private_key(
 ) -> bytes:
     if not path.is_absolute() or any(part in {".", ".."} for part in path.parts):
         raise StagingProcessError("gateway key path is invalid")
+    _require_no_symlink_ancestors(path.parent)
     try:
         parent = path.parent.stat(follow_symlinks=False)
-    except OSError as exc:
-        raise StagingProcessError("gateway key parent is unavailable") from exc
+        before = path.stat(follow_symlinks=False)
+    except OSError:
+        raise StagingProcessError("gateway key parent is unavailable") from None
     if (
         path.parent.is_symlink()
         or not stat.S_ISDIR(parent.st_mode)
@@ -137,16 +267,25 @@ def _read_private_key(
         or parent.st_gid != parent_gid
     ):
         raise StagingProcessError("gateway key parent contract differs")
-    flags = os.O_RDONLY | os.O_CLOEXEC
+    if (
+        path.is_symlink()
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+    ):
+        raise StagingProcessError("gateway key contract differs")
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NONBLOCK", 0)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
         descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise StagingProcessError("gateway key is unavailable") from exc
+    except OSError:
+        raise StagingProcessError("gateway key is unavailable") from None
     try:
         info = os.fstat(descriptor)
         value = os.read(descriptor, 33)
+        after = path.stat(follow_symlinks=False)
+    except OSError:
+        raise StagingProcessError("gateway key is unavailable") from None
     finally:
         os.close(descriptor)
     if (
@@ -154,10 +293,56 @@ def _read_private_key(
         or stat.S_IMODE(info.st_mode) != 0o600
         or info.st_uid != os.getuid()
         or info.st_gid != os.getgid()
+        or info.st_nlink != 1
+        or (before.st_dev, before.st_ino) != (info.st_dev, info.st_ino)
+        or (after.st_dev, after.st_ino) != (info.st_dev, info.st_ino)
+        or _stable_file_metadata(before) != _stable_file_metadata(after)
+        or _stable_file_metadata(info) != _stable_file_metadata(after)
         or len(value) != 32
     ):
         raise StagingProcessError("gateway key contract differs")
     return value
+
+
+def _stable_file_metadata(info: os.stat_result) -> tuple[int, ...]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_mode,
+        info.st_nlink,
+        info.st_uid,
+        info.st_gid,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def _require_no_symlink_ancestors(path: Path) -> None:
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current /= part
+        try:
+            info = current.stat(follow_symlinks=False)
+        except OSError:
+            raise StagingProcessError("gateway key ancestor is unavailable") from None
+        if stat.S_ISLNK(info.st_mode):
+            raise StagingProcessError("gateway key ancestor is a symlink")
+
+
+def _activation_peer_credentials(channel: socket.socket) -> PeerCredentials:
+    try:
+        raw = channel.getsockopt(
+            socket.SOL_SOCKET,
+            socket.SO_PEERCRED,
+            struct.calcsize("3i"),
+        )
+        pid, uid, gid = struct.unpack("3i", raw)
+        return PeerCredentials(pid=pid, uid=uid, gid=gid)
+    except (AttributeError, OSError, struct.error, ValueError):
+        raise StagingProcessError(
+            "gateway activation peer is unavailable"
+        ) from None
 
 
 if __name__ == "__main__":

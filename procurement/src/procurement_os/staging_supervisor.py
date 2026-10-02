@@ -577,8 +577,10 @@ class ComponentIsolation:
                 or any(type(value) is not int or value < 3 for value in self.child_pass_fds)
             ):
                 raise StagingSupervisorError("child launch contract is invalid")
-            if self.name == "gateway" and self.child_pass_fds:
-                raise StagingSupervisorError("gateway cannot inherit a private listener")
+            if self.name == "gateway" and len(self.child_pass_fds) != 1:
+                raise StagingSupervisorError(
+                    "gateway activation descriptor contract differs"
+                )
             if self.name in {"synthetic", "research"} and len(self.child_pass_fds) != 1:
                 raise StagingSupervisorError("worker listener contract differs")
 
@@ -772,6 +774,27 @@ class StagingIsolationContract:
         _validate_role_environment(name, environment)
         sockets = dict(self.socket_contracts)
         if name == "gateway":
+            control = sockets["control"]
+            key_path = Path(environment.get("BUFFALO_STAGING_CONTROL_KEY_FILE", ""))
+            if (
+                environment.get("BUFFALO_STAGING_ACTIVATION_FD")
+                != str(spec.pass_fds[0])
+                or environment.get("BUFFALO_STAGING_SUPERVISOR_PID")
+                != str(os.getpid())
+                or environment.get("BUFFALO_STAGING_CONTROL_SOCKET_PATH")
+                != str(control.path)
+                or environment.get("BUFFALO_STAGING_CONTROL_SOCKET_GID")
+                != str(control.socket_gid)
+                or environment.get("BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_UID")
+                != str(identities["supervisor"].uid)
+                or environment.get("BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_GID")
+                != str(identity.gid)
+                or not key_path.is_absolute()
+                or any(part in {".", ".."} for part in key_path.parts)
+                or key_path.name != "control.key"
+                or key_path.parent.parent != self.shared_key_root
+            ):
+                raise StagingSupervisorError("gateway management binding differs")
             for role in ("synthetic", "research"):
                 contract = sockets[role]
                 prefix = f"BUFFALO_STAGING_{role.upper()}_SOCKET"

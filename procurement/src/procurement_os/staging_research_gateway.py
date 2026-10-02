@@ -146,6 +146,7 @@ class ResearchGatewayCoordinator:
             # Closed coordinators suppress touches, but each later __aexit__
             # must be able to discharge its lease without replacing request
             # cancellation with an accounting error.
+        caller_cancelled = False
         for task in (heartbeat, decision, retry, touch):
             if task is None:
                 continue
@@ -153,12 +154,16 @@ class ResearchGatewayCoordinator:
             try:
                 await task
             except asyncio.CancelledError:
-                pass
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    caller_cancelled = True
             except Exception:
                 # Teardown must retrieve and suppress any already-completed
                 # background failure.  No private control endpoint or chained
                 # transport detail is allowed to escape shutdown.
                 pass
+        if caller_cancelled:
+            raise asyncio.CancelledError
 
     async def authorized_request(self) -> ResearchLease:
         decision = await self._shared_decision(force=False)

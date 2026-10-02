@@ -86,6 +86,53 @@ class _ResearchControl:
         )
 
 
+class _ActivationService:
+    def __init__(
+        self, *, fail_immediately: bool = False, return_immediately: bool = False
+    ) -> None:
+        self.fail_immediately = fail_immediately
+        self.return_immediately = return_immediately
+        self.started = 0
+        self.closed = 0
+        self._close_event: asyncio.Event | None = None
+
+    async def serve(self) -> None:
+        self.started += 1
+        if self.fail_immediately:
+            raise RuntimeError("private activation failure")
+        if self.return_immediately:
+            return
+        self._close_event = asyncio.Event()
+        await self._close_event.wait()
+
+    async def close(self) -> None:
+        self.closed += 1
+        if self._close_event is not None:
+            self._close_event.set()
+
+
+class _CancellationBlockingActivationService:
+    def __init__(self) -> None:
+        self.started = 0
+        self.closed = 0
+        self.close_entered: asyncio.Event | None = None
+        self._serve_done: asyncio.Event | None = None
+
+    async def serve(self) -> None:
+        self.started += 1
+        self._serve_done = asyncio.Event()
+        await self._serve_done.wait()
+
+    async def close(self) -> None:
+        self.closed += 1
+        if self.closed == 1:
+            self.close_entered = asyncio.Event()
+            self.close_entered.set()
+            await asyncio.Event().wait()
+        if self._serve_done is not None:
+            self._serve_done.set()
+
+
 class StagingGatewayTests(unittest.TestCase):
     def setUp(self) -> None:
         self.credential = generate_owner_credential()
@@ -579,6 +626,217 @@ class StagingGatewayTests(unittest.TestCase):
         self.assertEqual(
             websocket_sent, [{"type": "websocket.close", "code": 1008}]
         )
+
+    def test_activation_service_is_bound_to_keyring_and_lifespan(self):
+        service = _ActivationService()
+        captured_keyrings = []
+        transport = _RecordingTransport()
+
+        def factory(keyring):
+            captured_keyrings.append(keyring)
+            return service
+
+        gateway = StagingGateway(
+            config=self.config,
+            route_policy=self.policy,
+            transport=transport,
+            worker_keys={
+                "synthetic": self.synthetic_key,
+                "research": self.research_key,
+            },
+            activation_service_factory=factory,
+        )
+        sent: list[dict[str, object]] = []
+        messages = iter(
+            ({"type": "lifespan.startup"}, {"type": "lifespan.shutdown"})
+        )
+
+        async def receive():
+            return next(messages)
+
+        async def send(message):
+            sent.append(message)
+
+        asyncio.run(gateway({"type": "lifespan"}, receive, send))
+
+        self.assertEqual(captured_keyrings, [gateway.worker_keyring])
+        self.assertEqual((service.started, service.closed), (1, 1))
+        self.assertEqual((transport.started, transport.stopped), (1, 1))
+        self.assertIsNone(gateway._activation_task)
+        self.assertEqual(
+            [message["type"] for message in sent],
+            ["lifespan.startup.complete", "lifespan.shutdown.complete"],
+        )
+
+    def test_configured_activation_factory_must_return_a_service(self):
+        with self.assertRaisesRegex(
+            StagingGatewayError, "activation service contract differs"
+        ):
+            StagingGateway(
+                config=self.config,
+                route_policy=self.policy,
+                transport=_RecordingTransport(),
+                worker_keys={
+                    "synthetic": self.synthetic_key,
+                    "research": self.research_key,
+                },
+                activation_service_factory=lambda _keyring: None,
+            )
+
+    def test_activation_service_start_failure_refuses_gateway_startup(self):
+        service = _ActivationService(fail_immediately=True)
+        transport = _RecordingTransport()
+        gateway = StagingGateway(
+            config=self.config,
+            route_policy=self.policy,
+            transport=transport,
+            worker_keys={
+                "synthetic": self.synthetic_key,
+                "research": self.research_key,
+            },
+            research_control=self.research_control,
+            activation_service_factory=lambda _keyring: service,
+        )
+        sent: list[dict[str, object]] = []
+
+        async def receive():
+            return {"type": "lifespan.startup"}
+
+        async def send(message):
+            sent.append(message)
+
+        asyncio.run(gateway({"type": "lifespan"}, receive, send))
+
+        self.assertEqual((service.started, service.closed), (1, 1))
+        self.assertEqual((transport.started, transport.stopped), (1, 1))
+        self.assertIsNone(gateway._activation_task)
+        self.assertTrue(gateway.research_coordinator._closed)
+        self.assertEqual(
+            sent,
+            [
+                {
+                    "type": "lifespan.startup.failed",
+                    "message": "gateway startup refused",
+                }
+            ],
+        )
+
+    def test_activation_service_cannot_return_during_gateway_startup(self):
+        service = _ActivationService(return_immediately=True)
+        transport = _RecordingTransport()
+        gateway = StagingGateway(
+            config=self.config,
+            route_policy=self.policy,
+            transport=transport,
+            worker_keys={
+                "synthetic": self.synthetic_key,
+                "research": self.research_key,
+            },
+            research_control=self.research_control,
+            activation_service_factory=lambda _keyring: service,
+        )
+        sent: list[dict[str, object]] = []
+
+        async def receive():
+            return {"type": "lifespan.startup"}
+
+        async def send(message):
+            sent.append(message)
+
+        asyncio.run(gateway({"type": "lifespan"}, receive, send))
+
+        self.assertEqual((service.started, service.closed), (1, 1))
+        self.assertEqual((transport.started, transport.stopped), (1, 1))
+        self.assertEqual(sent[0]["type"], "lifespan.startup.failed")
+
+    def test_lifespan_cancellation_closes_started_activation_service(self):
+        service = _ActivationService()
+        transport = _RecordingTransport()
+        gateway = StagingGateway(
+            config=self.config,
+            route_policy=self.policy,
+            transport=transport,
+            worker_keys={
+                "synthetic": self.synthetic_key,
+                "research": self.research_key,
+            },
+            research_control=self.research_control,
+            activation_service_factory=lambda _keyring: service,
+        )
+
+        async def exercise() -> None:
+            startup_sent = asyncio.Event()
+            block_receive = asyncio.Event()
+            receive_calls = 0
+
+            async def receive():
+                nonlocal receive_calls
+                receive_calls += 1
+                if receive_calls == 1:
+                    return {"type": "lifespan.startup"}
+                await block_receive.wait()
+                raise AssertionError("blocked lifespan receive resumed")
+
+            async def send(message):
+                if message["type"] == "lifespan.startup.complete":
+                    startup_sent.set()
+
+            task = asyncio.create_task(
+                gateway({"type": "lifespan"}, receive, send)
+            )
+            await asyncio.wait_for(startup_sent.wait(), timeout=1)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
+        asyncio.run(exercise())
+
+        self.assertEqual((service.started, service.closed), (1, 1))
+        self.assertEqual((transport.started, transport.stopped), (1, 1))
+        self.assertIsNone(gateway._activation_task)
+        self.assertTrue(gateway.research_coordinator._closed)
+
+    def test_shutdown_cancellation_finishes_component_cleanup(self):
+        service = _CancellationBlockingActivationService()
+        transport = _RecordingTransport()
+        gateway = StagingGateway(
+            config=self.config,
+            route_policy=self.policy,
+            transport=transport,
+            worker_keys={
+                "synthetic": self.synthetic_key,
+                "research": self.research_key,
+            },
+            activation_service_factory=lambda _keyring: service,
+        )
+
+        async def exercise() -> None:
+            messages = iter(
+                ({"type": "lifespan.startup"}, {"type": "lifespan.shutdown"})
+            )
+
+            async def receive():
+                return next(messages)
+
+            async def send(_message):
+                return None
+
+            task = asyncio.create_task(
+                gateway({"type": "lifespan"}, receive, send)
+            )
+            while service.close_entered is None:
+                await asyncio.sleep(0)
+            await service.close_entered.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+
+        asyncio.run(exercise())
+
+        self.assertEqual(service.started, 1)
+        self.assertEqual(service.closed, 1)
+        self.assertEqual((transport.started, transport.stopped), (1, 1))
+        self.assertIsNone(gateway._activation_task)
 
     def test_worker_keys_must_be_distinct(self):
         with self.assertRaisesRegex(StagingGatewayError, "independently"):

@@ -177,6 +177,25 @@ class ResearchGatewayCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(lease.decision.routable)
         self.assertEqual(self.control.calls, [])
 
+    async def test_shutdown_preserves_caller_cancellation(self) -> None:
+        first_cancel = asyncio.Event()
+
+        async def delayed_cancellation() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                first_cancel.set()
+                await asyncio.Event().wait()
+
+        background = asyncio.create_task(delayed_cancellation())
+        self.coordinator._heartbeat_task = background
+        shutdown = asyncio.create_task(self.coordinator.shutdown())
+        await asyncio.wait_for(first_cancel.wait(), timeout=1)
+        shutdown.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await shutdown
+        self.assertTrue(background.cancelled())
+
     async def test_in_flight_lease_releases_cleanly_after_shutdown(self) -> None:
         self.control.state = "READY"
         self._activate()

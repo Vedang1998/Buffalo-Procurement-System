@@ -18,7 +18,12 @@ import struct
 import threading
 from dataclasses import replace
 
-from procurement_os import staging_process, staging_supervisor
+from procurement_os import staging_config, staging_process, staging_supervisor
+from procurement_os.staging_access import generate_owner_credential
+from procurement_os.staging_management_keys import (
+    derive_gateway_activation_key,
+    derive_supervisor_control_key,
+)
 from procurement_os.staging_supervisor import (
     CONTROL_VERSION,
     ComponentIsolation,
@@ -45,7 +50,7 @@ from procurement_os.staging_supervisor import (
     write_private_key_copy,
 )
 from procurement_os.staging_process_contract import child_argv
-from procurement_os.staging_worker_types import WorkerKeyring
+from procurement_os.staging_worker_types import WorkerKeyState, WorkerKeyring
 from procurement_os.staging_worker_transport import PeerCredentials, SocketContract
 
 
@@ -63,9 +68,15 @@ def _isolation_fixture() -> tuple[
             "uid": 1101,
             "gid": 1201,
             "groups": tuple(sorted(groups)),
-            "fds": (),
+            "fds": (10,),
             "environment": {
                 "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+                "BUFFALO_STAGING_ACTIVATION_FD": "10",
+                "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_GID": "1201",
+                "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_UID": "0",
+                "BUFFALO_STAGING_CONTROL_KEY_FILE": str(base / "keys" / "gateway-control" / "control.key"),
+                "BUFFALO_STAGING_CONTROL_SOCKET_GID": "2303",
+                "BUFFALO_STAGING_CONTROL_SOCKET_PATH": str(base / "sockets" / "control" / "control.sock"),
                 "BUFFALO_STAGING_ENABLED": "1",
                 "BUFFALO_STAGING_EXPECTED_COMMIT": "a" * 40,
                 "BUFFALO_STAGING_EXTERNAL_HOST": "staging.example.test",
@@ -84,6 +95,7 @@ def _isolation_fixture() -> tuple[
                 "BUFFALO_STAGING_SYNTHETIC_SOCKET_GID": "2301",
                 "BUFFALO_STAGING_SYNTHETIC_SOCKET_PATH": str(base / "sockets" / "synthetic" / "worker.sock"),
                 "BUFFALO_STAGING_SYNTHETIC_SOCKET_UID": "1102",
+                "BUFFALO_STAGING_SUPERVISOR_PID": str(os.getpid()),
                 "BUFFALO_STAGING_VOLUME_ROOT": "/data",
                 "HOME": str(base / "gateway"),
                 "LANG": "C.UTF-8",
@@ -655,6 +667,184 @@ class SupervisorChildTests(unittest.TestCase):
         ) as run_worker:
             self.assertEqual(staging_process.main(["synthetic"]), 0)
             run_worker.assert_called_once()
+
+    def test_gateway_entrypoint_wires_disabled_keys_and_management_channels(self):
+        class FakeServer:
+            instances: list["FakeServer"] = []
+
+            def __init__(self, config) -> None:
+                self.config = config
+                self.should_exit = False
+                self.ran = False
+                self.instances.append(self)
+
+            def run(self) -> None:
+                self.ran = True
+
+        with tempfile.TemporaryDirectory(prefix="buffalo-gateway-wiring-") as raw:
+            root = Path(raw)
+            directories = {
+                name: root / name
+                for name in ("gateway-synthetic", "gateway-research", "gateway-control")
+            }
+            for directory in directories.values():
+                directory.mkdir(mode=0o710)
+                directory.chmod(0o710)
+            paths = {
+                "synthetic": directories["gateway-synthetic"] / "synthetic-0.key",
+                "research": directories["gateway-research"] / "research-0.key",
+                "control": directories["gateway-control"] / "control.key",
+            }
+            values = {
+                "synthetic": bytes.fromhex("41" * 32),
+                "research": bytes.fromhex("52" * 32),
+                "control": bytes.fromhex("63" * 32),
+            }
+            for name, path in paths.items():
+                path.write_bytes(values[name])
+                path.chmod(0o600)
+
+            _, specs = _isolation_fixture()
+            environment = dict(specs[0].environment)
+            environment.update(
+                {
+                    "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_GID": str(os.getgid()),
+                    "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_UID": str(os.getuid()),
+                    "BUFFALO_STAGING_CONTROL_KEY_FILE": str(paths["control"]),
+                    "BUFFALO_STAGING_CONTROL_SOCKET_GID": str(os.getgid()),
+                    "BUFFALO_STAGING_CONTROL_SOCKET_PATH": str(
+                        root / "control" / "control.sock"
+                    ),
+                    "BUFFALO_STAGING_OWNER_VERIFIER": generate_owner_credential().verifier,
+                    "BUFFALO_STAGING_POSTGRES_SERVICE_ID": (
+                        staging_config.EXPECTED_POSTGRES_SERVICE_ID
+                    ),
+                    "BUFFALO_STAGING_RESEARCH_KEY_DIRECTORY_GID": str(os.getgid()),
+                    "BUFFALO_STAGING_RESEARCH_KEY_DIRECTORY_UID": str(os.getuid()),
+                    "BUFFALO_STAGING_RESEARCH_KEY_FILE": str(paths["research"]),
+                    "BUFFALO_STAGING_SUPERVISOR_PID": str(os.getpid()),
+                    "BUFFALO_STAGING_SYNTHETIC_KEY_DIRECTORY_GID": str(os.getgid()),
+                    "BUFFALO_STAGING_SYNTHETIC_KEY_DIRECTORY_UID": str(os.getuid()),
+                    "BUFFALO_STAGING_SYNTHETIC_KEY_FILE": str(paths["synthetic"]),
+                    "RAILWAY_ENVIRONMENT_ID": staging_config.EXPECTED_ENVIRONMENT_ID,
+                    "RAILWAY_PROJECT_ID": staging_config.EXPECTED_PROJECT_ID,
+                    "RAILWAY_SERVICE_ID": staging_config.EXPECTED_APP_SERVICE_ID,
+                }
+            )
+            supervisor_socket, gateway_socket = socket.socketpair(
+                socket.AF_UNIX, socket.SOCK_STREAM
+            )
+            environment["BUFFALO_STAGING_ACTIVATION_FD"] = str(
+                gateway_socket.detach()
+            )
+            self.addCleanup(supervisor_socket.close)
+
+            with mock.patch.object(
+                staging_process, "Server", FakeServer
+            ), mock.patch.object(
+                staging_process,
+                "_activation_peer_credentials",
+                return_value=PeerCredentials(pid=os.getpid(), uid=0, gid=0),
+            ):
+                staging_process._run_gateway(environment)
+
+            self.assertEqual(len(FakeServer.instances), 1)
+            server = FakeServer.instances[0]
+            self.assertTrue(server.ran)
+            application = server.config.app
+            for role in ("synthetic", "research"):
+                self.assertIs(
+                    application.worker_keyring.status(role).state,
+                    WorkerKeyState.DISABLED,
+                )
+            control = application.research_coordinator.control
+            self.assertEqual(
+                control._key,
+                derive_supervisor_control_key(values["control"]),
+            )
+            self.assertEqual(
+                control.expected_supervisor_peer,
+                PeerCredentials(pid=os.getpid(), uid=0, gid=0),
+            )
+            activation = application._activation_service
+            self.assertEqual(
+                activation.protocol._key,
+                derive_gateway_activation_key(values["control"]),
+            )
+            self.assertNotEqual(control._key, activation.protocol._key)
+
+            generation_one = directories["gateway-research"] / "research-1.key"
+            generation_one.write_bytes(bytes.fromhex("74" * 32))
+            generation_one.chmod(0o600)
+            self.assertEqual(
+                activation.protocol.load_key("research", 1),
+                bytes.fromhex("74" * 32),
+            )
+            with self.assertRaisesRegex(
+                staging_process.StagingProcessError, "binding differs"
+            ):
+                activation.protocol.load_key("unknown", 1)
+
+            application.prepare_worker_key(
+                worker_role="research",
+                key=values["research"],
+                generation=0,
+            )
+            application.commit_worker_key(
+                worker_role="research", generation=0
+            )
+            activation.fatal_handler()
+            self.assertTrue(server.should_exit)
+            self.assertIs(
+                application.worker_keyring.status("research").state,
+                WorkerKeyState.DISABLED,
+            )
+            supervisor_socket.settimeout(0.1)
+            self.assertEqual(supervisor_socket.recv(1), b"")
+
+            paths["control"].write_bytes(values["research"])
+            paths["control"].chmod(0o600)
+            bad_supervisor, bad_gateway = socket.socketpair(
+                socket.AF_UNIX, socket.SOCK_STREAM
+            )
+            bad_fd = bad_gateway.detach()
+            environment["BUFFALO_STAGING_ACTIVATION_FD"] = str(bad_fd)
+            try:
+                with self.assertRaisesRegex(
+                    staging_process.StagingProcessError,
+                    "management key is not independent",
+                ):
+                    staging_process._run_gateway(environment)
+            finally:
+                os.close(bad_fd)
+                bad_supervisor.close()
+
+    def test_gateway_management_subkeys_are_fixed_and_domain_separated(self):
+        master = bytes.fromhex("85" * 32)
+        activation = derive_gateway_activation_key(master)
+        control = derive_supervisor_control_key(master)
+        self.assertEqual(activation, derive_gateway_activation_key(master))
+        self.assertEqual(control, derive_supervisor_control_key(master))
+        self.assertEqual((len(activation), len(control)), (32, 32))
+        self.assertNotEqual(activation, control)
+        self.assertNotIn(master, (activation, control))
+        for invalid in (b"", bytes(31), bytes(33), bytearray(32)):
+            with self.subTest(invalid_type=type(invalid), length=len(invalid)):
+                with self.assertRaisesRegex(ValueError, "management key"):
+                    derive_gateway_activation_key(invalid)
+
+    def test_gateway_activation_socket_observes_its_exact_peer(self):
+        first, second = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            self.assertEqual(
+                staging_process._activation_peer_credentials(first),
+                PeerCredentials(
+                    pid=os.getpid(), uid=os.getuid(), gid=os.getgid()
+                ),
+            )
+        finally:
+            first.close()
+            second.close()
 
     def test_fixed_role_entrypoint_refuses_root_child_identity(self):
         _, specs = _isolation_fixture()
@@ -1613,6 +1803,18 @@ class SupervisorChildTests(unittest.TestCase):
                 ),
                 synthetic.key,
             )
+            extra_link = root / "synthetic-key-link"
+            os.link(synthetic.gateway_path, extra_link)
+            with self.assertRaisesRegex(
+                staging_process.StagingProcessError,
+                "key contract differs",
+            ):
+                staging_process._read_private_key(
+                    synthetic.gateway_path,
+                    parent_uid=os.getuid(),
+                    parent_gid=os.getgid(),
+                )
+            extra_link.unlink()
             with self.assertRaisesRegex(
                 staging_process.StagingProcessError,
                 "key parent contract differs",

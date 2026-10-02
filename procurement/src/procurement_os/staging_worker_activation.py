@@ -558,7 +558,7 @@ class GatewayActivationServer:
         except _ActivationChannelClosed:
             if not self._closed:
                 raise WorkerActivationError("activation server failed") from None
-        except (asyncio.TimeoutError, OSError, struct.error, WorkerActivationError) as exc:
+        except Exception:
             if not self._closed:
                 self._poison_and_fail()
                 raise WorkerActivationError("activation server failed") from None
@@ -574,7 +574,9 @@ class GatewayActivationServer:
                 try:
                     await task
                 except asyncio.CancelledError:
-                    pass
+                    current = asyncio.current_task()
+                    if current is not None and current.cancelling():
+                        raise
             else:
                 await asyncio.sleep(0)
 

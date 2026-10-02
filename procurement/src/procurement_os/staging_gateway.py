@@ -18,7 +18,7 @@ import inspect
 import re
 import secrets
 import time
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, Protocol
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
@@ -138,6 +138,14 @@ class ResearchWorkerUnavailable(RuntimeError):
     """A previously admitted research generation became unroutable."""
 
 
+class GatewayActivationService(Protocol):
+    """One boot-scoped supervisor-to-gateway activation endpoint."""
+
+    async def serve(self) -> None: ...
+
+    async def close(self) -> None: ...
+
+
 class RegisteredRoutePolicy:
     """The reviewed static registry; each worker validates its own live routes."""
 
@@ -159,6 +167,9 @@ class StagingGateway:
         transport: WorkerTransport,
         worker_keys: Mapping[str, bytes],
         research_control: ResearchControlClient | None = None,
+        activation_service_factory: (
+            Callable[[WorkerKeyring], GatewayActivationService] | None
+        ) = None,
         wall_clock: Any = time.time,
     ) -> None:
         try:
@@ -177,6 +188,16 @@ class StagingGateway:
             if research_control is not None
             else None
         )
+        activation_service = None
+        if activation_service_factory is not None:
+            activation_service = activation_service_factory(keyring)
+            if activation_service is None or (
+                not callable(getattr(activation_service, "serve", None))
+                or not callable(getattr(activation_service, "close", None))
+            ):
+                raise StagingGatewayError("activation service contract differs")
+        self._activation_service = activation_service
+        self._activation_task: asyncio.Task[None] | None = None
         self.authenticator = OwnerPasswordAuthenticator(config.owner_verifier)
         self.sessions = StagingSessionStore()
         self.login_challenges = LoginChallengeStore()
@@ -429,37 +450,138 @@ class StagingGateway:
 
     async def _lifespan(self, receive, send) -> None:
         started = False
-        while True:
-            message = await receive()
-            message_type = message.get("type")
-            if message_type == "lifespan.startup" and not started:
-                startup = getattr(self.transport, "startup", None)
-                if callable(startup):
-                    result = startup()
-                    if inspect.isawaitable(result):
-                        await result
-                if self.research_coordinator is not None:
-                    await self.research_coordinator.startup()
-                await send({"type": "lifespan.startup.complete"})
-                started = True
-                continue
-            if message_type == "lifespan.shutdown" and started:
-                if self.research_coordinator is not None:
-                    await self.research_coordinator.shutdown()
-                shutdown = getattr(self.transport, "shutdown", None)
-                if callable(shutdown):
-                    result = shutdown()
-                    if inspect.isawaitable(result):
-                        await result
-                await send({"type": "lifespan.shutdown.complete"})
+        components_active = False
+
+        async def cleanup() -> None:
+            nonlocal components_active
+            if components_active:
+                try:
+                    await self._shutdown_lifespan_components()
+                finally:
+                    components_active = False
+
+        try:
+            while True:
+                message = await receive()
+                message_type = message.get("type")
+                if message_type == "lifespan.startup" and not started:
+                    components_active = True
+                    try:
+                        startup = getattr(self.transport, "startup", None)
+                        if callable(startup):
+                            result = startup()
+                            if inspect.isawaitable(result):
+                                await result
+                        if self.research_coordinator is not None:
+                            await self.research_coordinator.startup()
+                        if self._activation_service is not None:
+                            task = asyncio.create_task(
+                                self._activation_service.serve(),
+                                name="buffalo-gateway-worker-activation",
+                            )
+                            self._activation_task = task
+                            task.add_done_callback(self._activation_done)
+                            await asyncio.sleep(0)
+                            if task.done():
+                                if task.cancelled():
+                                    raise StagingGatewayError(
+                                        "activation service stopped"
+                                    )
+                                failure = task.exception()
+                                if failure is not None:
+                                    raise failure
+                                raise StagingGatewayError(
+                                    "activation service stopped"
+                                )
+                    except Exception:
+                        await cleanup()
+                        await send(
+                            {
+                                "type": "lifespan.startup.failed",
+                                "message": "gateway startup refused",
+                            }
+                        )
+                        return
+                    await send({"type": "lifespan.startup.complete"})
+                    started = True
+                    continue
+                if message_type == "lifespan.shutdown" and started:
+                    await cleanup()
+                    await send({"type": "lifespan.shutdown.complete"})
+                    return
+                failure_type = (
+                    "lifespan.shutdown.failed"
+                    if started
+                    else "lifespan.startup.failed"
+                )
+                await cleanup()
+                await send(
+                    {"type": failure_type, "message": "invalid lifespan sequence"}
+                )
                 return
-            failure_type = (
-                "lifespan.shutdown.failed" if started else "lifespan.startup.failed"
-            )
-            await send(
-                {"type": failure_type, "message": "invalid lifespan sequence"}
-            )
+        except BaseException:
+            await cleanup()
+            raise
+
+    def _activation_done(self, task: asyncio.Task[None]) -> None:
+        # Retrieve every detached-task result.  The activation server's own
+        # fatal callback is responsible for making the process exit if this
+        # was not an orderly close.
+        if task.cancelled():
             return
+        try:
+            task.exception()
+        except BaseException:
+            pass
+
+    async def _shutdown_lifespan_components(self) -> None:
+        activation = self._activation_service
+        task = self._activation_task
+        failures: list[BaseException] = []
+        caller_cancelled = False
+        if activation is not None:
+            try:
+                await activation.close()
+            except asyncio.CancelledError:
+                caller_cancelled = True
+            except Exception as exc:
+                failures.append(exc)
+        if task is not None and not task.done():
+            task.cancel()
+        if task is not None:
+            try:
+                await task
+            except asyncio.CancelledError:
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    caller_cancelled = True
+            except Exception:
+                pass
+        if self.research_coordinator is not None:
+            try:
+                await self.research_coordinator.shutdown()
+            except asyncio.CancelledError:
+                caller_cancelled = True
+            except Exception as exc:
+                failures.append(exc)
+        shutdown = getattr(self.transport, "shutdown", None)
+        if callable(shutdown):
+            try:
+                result = shutdown()
+                if inspect.isawaitable(result):
+                    await result
+            except asyncio.CancelledError:
+                caller_cancelled = True
+            except Exception as exc:
+                failures.append(exc)
+        if task is None or task.done():
+            self._activation_task = None
+        else:
+            failures.append(StagingGatewayError("activation task did not stop"))
+        if caller_cancelled:
+            raise asyncio.CancelledError
+        if failures:
+            raise StagingGatewayError("gateway component shutdown failed")
 
     async def _login_page(self, send) -> None:
         challenge = self.login_challenges.create()

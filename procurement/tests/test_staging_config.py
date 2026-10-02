@@ -18,6 +18,12 @@ from procurement_os.staging_config import (
 class StagingConfigTests(unittest.TestCase):
     def setUp(self) -> None:
         self.environment = {
+            "BUFFALO_STAGING_ACTIVATION_FD": "10",
+            "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_GID": "1201",
+            "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_UID": "0",
+            "BUFFALO_STAGING_CONTROL_KEY_FILE": "/run/buffalo/keys/gateway-control/control.key",
+            "BUFFALO_STAGING_CONTROL_SOCKET_GID": "2303",
+            "BUFFALO_STAGING_CONTROL_SOCKET_PATH": "/run/buffalo/sockets/control/control.sock",
             "BUFFALO_STAGING_ENABLED": "1",
             "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
             "BUFFALO_STAGING_EXTERNAL_HOST": "buffalo-staging.example.test",
@@ -42,6 +48,7 @@ class StagingConfigTests(unittest.TestCase):
             "BUFFALO_STAGING_SYNTHETIC_SOCKET_GID": "2301",
             "BUFFALO_STAGING_SYNTHETIC_SOCKET_PATH": "/run/buffalo/sockets/synthetic/worker.sock",
             "BUFFALO_STAGING_SYNTHETIC_SOCKET_UID": "1102",
+            "BUFFALO_STAGING_SUPERVISOR_PID": "1",
             "RAILWAY_REPLICA_ID": "replica-01",
             "PORT": "8080",
             "HOME": "/run/buffalo/gateway",
@@ -80,6 +87,24 @@ class StagingConfigTests(unittest.TestCase):
         values = dict(self.environment, RAILWAY_SERVICE_ID="wrong-service")
         with self.assertRaisesRegex(StagingConfigError, "scope"):
             load_staging_config(values)
+
+    def test_gateway_management_contract_is_complete(self):
+        for key in (
+            "BUFFALO_STAGING_ACTIVATION_FD",
+            "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_GID",
+            "BUFFALO_STAGING_CONTROL_KEY_DIRECTORY_UID",
+            "BUFFALO_STAGING_CONTROL_KEY_FILE",
+            "BUFFALO_STAGING_CONTROL_SOCKET_GID",
+            "BUFFALO_STAGING_CONTROL_SOCKET_PATH",
+            "BUFFALO_STAGING_SUPERVISOR_PID",
+        ):
+            with self.subTest(key=key):
+                values = dict(self.environment)
+                values.pop(key)
+                with self.assertRaisesRegex(
+                    StagingConfigError, "gateway process environment"
+                ):
+                    load_staging_config(values)
 
     def test_runtime_mode_and_explicit_enablement_are_required(self):
         for changes in (
