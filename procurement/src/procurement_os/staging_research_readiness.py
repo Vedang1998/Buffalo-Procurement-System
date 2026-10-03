@@ -23,6 +23,10 @@ class ResearchReadinessError(ValueError):
     """The fixed readiness channel or its terminal proof differs."""
 
 
+class ResearchReadinessAbsent(ResearchReadinessError):
+    """The exact worker closed its channel without sending any proof bytes."""
+
+
 def _canonical_json(value: dict[str, object]) -> bytes:
     return json.dumps(
         value,
@@ -411,6 +415,9 @@ class ResearchReadinessReader:
             self._poisoned = True
             raise
         self._check_prefix_and_bound()
+        if not self._buffer:
+            self._poisoned = True
+            raise ResearchReadinessAbsent("readiness proof is absent")
         if (
             self._payload_bytes is None
             or len(self._buffer) != 4 + self._payload_bytes
@@ -435,6 +442,7 @@ __all__ = [
     "MAX_READINESS_PAYLOAD_BYTES",
     "READINESS_VERSION",
     "ReadinessProcessIdentity",
+    "ResearchReadinessAbsent",
     "ResearchReadinessError",
     "ResearchReadinessProof",
     "ResearchReadinessReader",

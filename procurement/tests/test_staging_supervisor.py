@@ -24,6 +24,11 @@ from procurement_os.staging_management_keys import (
     derive_gateway_activation_key,
     derive_supervisor_control_key,
 )
+from procurement_os.staging_research_readiness import (
+    ReadinessProcessIdentity,
+    ResearchReadinessError,
+    mint_readiness_frame,
+)
 from procurement_os.staging_supervisor import (
     CONTROL_VERSION,
     ComponentIsolation,
@@ -32,6 +37,8 @@ from procurement_os.staging_supervisor import (
     FixedChildSpec,
     ManagedChild,
     ProcessIdentity,
+    ResearchChildCrashed,
+    ResearchChildSnapshot,
     StagingChildSupervisor,
     StagingIsolationContract,
     StagingSupervisorError,
@@ -332,12 +339,49 @@ class _FakeKeyLifecycle:
 
 
 def _new_supervisor(**arguments) -> StagingChildSupervisor:
+    arguments.setdefault("research_validation_identity", "ab" * 32)
     with mock.patch(
         "procurement_os.staging_supervisor.os.geteuid", return_value=0
     ), mock.patch(
         "procurement_os.staging_supervisor.os.getegid", return_value=0
     ):
         return StagingChildSupervisor(**arguments)
+
+
+def _emit_ready_proof(
+    spec: FixedChildSpec,
+    process: subprocess.Popen[bytes],
+    *,
+    validation_identity: str = "ab" * 32,
+    state: str = "READY",
+    failure: str | None = None,
+    key: bytes | None = None,
+) -> None:
+    if spec.name != "research":
+        return
+    environment = dict(spec.environment)
+    generation = int(environment["BUFFALO_STAGING_KEY_GENERATION"])
+    descriptor = int(environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"])
+    identity = ProcessIdentity.capture(process.pid)
+    frame = mint_readiness_frame(
+        key=(
+            hashlib.sha256(f"research:{generation}".encode()).digest()
+            if key is None
+            else key
+        ),
+        generation=generation,
+        identity=ReadinessProcessIdentity(
+            pid=identity.pid,
+            start_ticks=identity.start_ticks,
+            process_group=identity.process_group,
+            session_id=identity.session_id,
+        ),
+        state=state,
+        failure=failure,
+        validation_identity=(validation_identity if state == "READY" else None),
+    )
+    if os.write(descriptor, frame) != len(frame):
+        raise AssertionError("readiness frame was not written atomically")
 
 
 class _Hooks:
@@ -569,6 +613,7 @@ class SupervisorChildTests(unittest.TestCase):
                 worker_key_preparer=lambda _staged, _gateway: None,
                 worker_key_committer=lambda _staged, _gateway, _worker: None,
                 worker_key_disabler=lambda _staged: None,
+                research_validation_identity="ab" * 32,
             )
 
     def test_key_lifecycle_is_bound_to_exact_role_roots_and_identities(self):
@@ -952,13 +997,13 @@ class SupervisorChildTests(unittest.TestCase):
                 launcher=launcher,
             )
             supervisor.start_initial()
-            supervisor.start("research")
+            snapshot = supervisor.start_research(0)
             with mock.patch(
                 "procurement_os.staging_supervisor.terminate_owned_process_group",
                 side_effect=StagingSupervisorError("injected cleanup failure"),
             ):
                 with self.assertRaises(StagingSupervisorError):
-                    supervisor.stop("research")
+                    supervisor.terminate_research(snapshot.generation)
             self.assertIn("research", supervisor.children)
 
             real_terminate = terminate_owned_process_group
@@ -1032,7 +1077,7 @@ class SupervisorChildTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     StagingSupervisorError, "start transition is invalid"
                 ):
-                    supervisor.start("research")
+                    supervisor.start_research(0)
                 with self.assertRaisesRegex(
                     StagingSupervisorError, "cannot be committed"
                 ):
@@ -1304,6 +1349,208 @@ class SupervisorChildTests(unittest.TestCase):
             self.assertEqual(disabled, [])
             self.assertTrue(all(process.poll() is not None for process in launched))
 
+    def test_research_role_requires_fresh_readiness_fd_and_rejects_generic_bypass(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        held_writers: list[int] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            if spec.name == "research":
+                held_writers.append(
+                    os.dup(
+                        int(
+                            dict(spec.environment)[
+                                "BUFFALO_STAGING_RESEARCH_READINESS_FD"
+                            ]
+                        )
+                    )
+                )
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation-bound readiness launch"
+                ):
+                    supervisor.start("research")
+                snapshot = supervisor.start_research(0)
+                child = supervisor.children["research"]
+                environment = dict(child.spec.environment)
+                readiness_fd = int(
+                    environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"]
+                )
+                self.assertIn(readiness_fd, child.spec.pass_fds)
+                self.assertEqual(
+                    set(child.spec.pass_fds) - set(specs[2].pass_fds),
+                    {readiness_fd},
+                )
+                self.assertEqual(supervisor.research_snapshot(), snapshot)
+                self.assertIsNone(supervisor.probe_research(snapshot.generation))
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation-bound readiness commit"
+                ):
+                    supervisor.commit_worker("research")
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation-bound termination"
+                ):
+                    supervisor.stop("research")
+                supervisor.terminate_research(snapshot.generation, timeout_seconds=2)
+                self.assertIsNone(supervisor.research_snapshot())
+                supervisor.shutdown(timeout_seconds=2)
+            finally:
+                for descriptor in held_writers:
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        pass
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_research_probe_accepts_signed_failure_and_rejects_tampered_proof(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            if spec.name == "research":
+                generation = int(
+                    dict(spec.environment)["BUFFALO_STAGING_KEY_GENERATION"]
+                )
+                if generation == 0:
+                    _emit_ready_proof(
+                        spec,
+                        process,
+                        state="FAILED",
+                        failure="SEMANTIC",
+                    )
+                else:
+                    _emit_ready_proof(spec, process, key=bytes.fromhex("ff" * 32))
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                failed = supervisor.start_research(0)
+                proof = supervisor.probe_research(failed.generation)
+                self.assertIsNotNone(proof)
+                self.assertEqual((proof.state, proof.failure), ("FAILED", "SEMANTIC"))
+                with self.assertRaisesRegex(StagingSupervisorError, "not ready"):
+                    supervisor.commit_research(failed.generation)
+                supervisor.terminate_research(failed.generation, timeout_seconds=2)
+                tampered = supervisor.start_research(failed.generation + 1)
+                with self.assertRaisesRegex(
+                    ResearchReadinessError, "signature differs"
+                ):
+                    supervisor.probe_research(tampered.generation)
+                supervisor.terminate_research(tampered.generation, timeout_seconds=2)
+                supervisor.shutdown(timeout_seconds=2)
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_research_crash_is_role_scoped_until_generation_cleanup(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        held_writer: int | None = None
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            nonlocal held_writer
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            if spec.name == "research":
+                held_writer = os.dup(
+                    int(
+                        dict(spec.environment)[
+                            "BUFFALO_STAGING_RESEARCH_READINESS_FD"
+                        ]
+                    )
+                )
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start_initial()
+                snapshot = supervisor.start_research(0)
+                research = supervisor.children["research"].process
+                research.kill()
+                research.wait(timeout=2)
+                assert held_writer is not None
+                os.close(held_writer)
+                held_writer = None
+                self.assertEqual(supervisor.reap_crashed(), ())
+                self.assertFalse(supervisor._shutdown_requested)
+                with self.assertRaises(ResearchChildCrashed):
+                    supervisor.probe_research(snapshot.generation)
+                supervisor.terminate_research(snapshot.generation, timeout_seconds=2)
+                self.assertEqual(set(supervisor.children), {"gateway", "synthetic"})
+                supervisor.shutdown(timeout_seconds=2)
+            finally:
+                if held_writer is not None:
+                    os.close(held_writer)
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
     def test_research_restart_prepares_commits_and_disables_fresh_key_generations(self):
         contract, specs = _isolation_fixture()
         launched: list[subprocess.Popen[bytes]] = []
@@ -1321,6 +1568,7 @@ class SupervisorChildTests(unittest.TestCase):
                 stderr=subprocess.DEVNULL,
             )
             launched.append(process)
+            _emit_ready_proof(spec, process)
             return process
 
         def activate(staged: StagedWorkerKey, _gateway) -> None:
@@ -1351,16 +1599,26 @@ class SupervisorChildTests(unittest.TestCase):
             )
             try:
                 supervisor.start("gateway")
-                first = supervisor.start("research")
-                supervisor.commit_worker("research")
-                with self.assertRaisesRegex(StagingSupervisorError, "already committed"):
-                    supervisor.commit_worker("research")
-                supervisor.stop("research", timeout_seconds=2)
-                second = supervisor.start("research")
-                supervisor.commit_worker("research")
+                first = supervisor.start_research(0)
+                first_key_path = dict(
+                    supervisor.children["research"].spec.environment
+                )["BUFFALO_STAGING_ASSERTION_KEY_FILE"]
+                self.assertTrue(supervisor.probe_research(first.generation).ready)
+                supervisor.commit_research(first.generation)
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "already committed"
+                ):
+                    supervisor.commit_research(first.generation)
+                supervisor.terminate_research(first.generation, timeout_seconds=2)
+                second = supervisor.start_research(first.generation + 1)
+                second_key_path = dict(
+                    supervisor.children["research"].spec.environment
+                )["BUFFALO_STAGING_ASSERTION_KEY_FILE"]
+                self.assertTrue(supervisor.probe_research(second.generation).ready)
+                supervisor.commit_research(second.generation)
                 self.assertNotEqual(
-                    dict(first.spec.environment)["BUFFALO_STAGING_ASSERTION_KEY_FILE"],
-                    dict(second.spec.environment)["BUFFALO_STAGING_ASSERTION_KEY_FILE"],
+                    first_key_path,
+                    second_key_path,
                 )
                 self.assertEqual(
                     [(role, generation) for role, generation, _ in activated],
@@ -1437,7 +1695,7 @@ class SupervisorChildTests(unittest.TestCase):
 
             def start_research() -> None:
                 try:
-                    outcomes.append(supervisor.start("research"))
+                    outcomes.append(supervisor.start_research(0))
                 except BaseException as exc:
                     outcomes.append(exc)
 
@@ -1458,7 +1716,7 @@ class SupervisorChildTests(unittest.TestCase):
             self.assertFalse(first.is_alive())
             self.assertFalse(second.is_alive())
             self.assertEqual(
-                sum(isinstance(value, ManagedChild) for value in outcomes), 1
+                sum(isinstance(value, ResearchChildSnapshot) for value in outcomes), 1
             )
             self.assertEqual(
                 sum(isinstance(value, StagingSupervisorError) for value in outcomes),
@@ -1521,7 +1779,7 @@ class SupervisorChildTests(unittest.TestCase):
 
             def start_research() -> None:
                 try:
-                    outcomes.append(supervisor.start("research"))
+                    outcomes.append(supervisor.start_research(0))
                 except BaseException as exc:
                     outcomes.append(exc)
 
@@ -1539,7 +1797,7 @@ class SupervisorChildTests(unittest.TestCase):
                 worker.join(timeout=3)
             self.assertFalse(worker.is_alive())
             self.assertEqual(len(outcomes), 1)
-            self.assertIsInstance(outcomes[0], ManagedChild)
+            self.assertIsInstance(outcomes[0], ResearchChildSnapshot)
             self.assertTrue(supervisor.process_pending_signal())
             self.assertEqual(supervisor.children, {})
             self.assertEqual(supervisor._active_worker_keys, {})

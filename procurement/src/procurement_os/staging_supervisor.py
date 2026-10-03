@@ -29,6 +29,12 @@ from .staging_process_contract import (
     child_argv,
     validated_process_environment,
 )
+from .staging_research_readiness import (
+    ReadinessProcessIdentity,
+    ResearchReadinessAbsent,
+    ResearchReadinessProof,
+    ResearchReadinessReader,
+)
 from .staging_uds import (
     PeerCredentials,
     SocketContract,
@@ -55,6 +61,10 @@ _PR_GET_CHILD_SUBREAPER = 37
 
 class StagingSupervisorError(ValueError):
     """A supervisor control or owned-process contract differs."""
+
+
+class ResearchChildCrashed(StagingSupervisorError):
+    """The exact research child exited without an accepted failure proof."""
 
 
 def _serialized(method: Callable[..., object]) -> Callable[..., object]:
@@ -820,6 +830,41 @@ class StagingIsolationContract:
             ):
                 raise StagingSupervisorError(f"{name} listener binding differs")
 
+    def validate_research_launch(
+        self,
+        *,
+        template: FixedChildSpec,
+        spec: FixedChildSpec,
+        readiness_fd: int,
+    ) -> None:
+        """Validate the sole per-attempt delta to the static research spec."""
+
+        self.validate_child(template)
+        if (
+            template.name != "research"
+            or spec.name != "research"
+            or type(readiness_fd) is not int
+            or readiness_fd < 3
+            or readiness_fd in template.pass_fds
+        ):
+            raise StagingSupervisorError("research launch contract differs")
+        expected_environment = dict(template.environment)
+        expected_environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"] = str(
+            readiness_fd
+        )
+        expected_fds = tuple(sorted((*template.pass_fds, readiness_fd)))
+        if (
+            spec.argv != template.argv
+            or spec.uid != template.uid
+            or spec.gid != template.gid
+            or spec.extra_groups != template.extra_groups
+            or spec.pass_fds != expected_fds
+            or dict(spec.environment) != expected_environment
+        ):
+            raise StagingSupervisorError("research launch contract differs")
+        spec.validate()
+        _validate_role_environment("research", expected_environment)
+
     def validate_runtime_roots(self) -> None:
         """Verify each already-created root without following a symlink."""
 
@@ -980,6 +1025,20 @@ class ManagedChild:
     identity: ProcessIdentity
 
 
+@dataclass(frozen=True)
+class ResearchChildSnapshot:
+    generation: int
+    identity: ProcessIdentity
+
+
+@dataclass
+class _ResearchAttempt:
+    snapshot: ResearchChildSnapshot
+    reader: ResearchReadinessReader
+    proof: ResearchReadinessProof | None = None
+    committed: bool = False
+
+
 class StagingChildSupervisor:
     """Start fixed children and own each process/key generation to cleanup."""
 
@@ -995,6 +1054,7 @@ class StagingChildSupervisor:
             ["StagedWorkerKey", ManagedChild, ManagedChild], None
         ],
         worker_key_disabler: Callable[["StagedWorkerKey"], None],
+        research_validation_identity: str,
         launcher: Callable[[FixedChildSpec], subprocess.Popen[bytes]] = launch_fixed_child,
         final_cleanup: Callable[[], None] = lambda: None,
     ) -> None:
@@ -1025,6 +1085,15 @@ class StagingChildSupervisor:
             isolation.validate_child(template)
         if gateway_spec.name != "gateway":
             raise StagingSupervisorError("gateway child contract differs")
+        if (
+            not isinstance(research_validation_identity, str)
+            or len(research_validation_identity) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in research_validation_identity
+            )
+        ):
+            raise StagingSupervisorError("research validation identity differs")
         self.isolation = isolation
         self.gateway_spec = gateway_spec
         self.key_lifecycle = key_lifecycle
@@ -1032,6 +1101,7 @@ class StagingChildSupervisor:
         self.worker_key_preparer = worker_key_preparer
         self.worker_key_committer = worker_key_committer
         self.worker_key_disabler = worker_key_disabler
+        self.research_validation_identity = research_validation_identity
         self.launcher = launcher
         self.final_cleanup = final_cleanup
         self._lock = threading.RLock()
@@ -1047,6 +1117,7 @@ class StagingChildSupervisor:
         self._prepared_worker_keys: set[tuple[str, int]] = set()
         self._committed_worker_keys: set[tuple[str, int]] = set()
         self._deactivated_worker_keys: set[tuple[str, int]] = set()
+        self._research_attempt: _ResearchAttempt | None = None
         self._shutdown_requested = False
         self._shutdown_complete = False
         self._final_cleanup_done = False
@@ -1055,6 +1126,18 @@ class StagingChildSupervisor:
 
     @_serialized
     def start(self, name: str) -> ManagedChild:
+        if name == "research":
+            raise StagingSupervisorError(
+                "research requires the generation-bound readiness launch"
+            )
+        return self._start_child_locked(name)
+
+    def _start_child_locked(
+        self,
+        name: str,
+        *,
+        readiness_fd: int | None = None,
+    ) -> ManagedChild:
         if (
             self._shutdown_requested
             or self._signal_requested
@@ -1065,6 +1148,8 @@ class StagingChildSupervisor:
             or name not in {"gateway", "synthetic", "research"}
         ):
             raise StagingSupervisorError("child start transition is invalid")
+        if (name == "research") != (readiness_fd is not None):
+            raise StagingSupervisorError("research readiness binding differs")
         if name == "gateway":
             if self._has_owned_worker_state():
                 raise StagingSupervisorError("gateway start transition is invalid")
@@ -1103,17 +1188,44 @@ class StagingChildSupervisor:
             self._active_worker_keys[name] = staged_key
             activation_attempted = False
             try:
-                spec = self._build_worker_spec(
+                base_spec = self._build_worker_spec(
                     name=name,
                     gateway=gateway,
                     staged_key=staged_key,
                 )
                 self._validate_worker_spec(
                     name=name,
-                    spec=spec,
+                    spec=base_spec,
                     gateway=gateway,
                     staged_key=staged_key,
                 )
+                if name == "research":
+                    if readiness_fd is None:
+                        raise StagingSupervisorError(
+                            "research readiness binding differs"
+                        )
+                    environment = dict(base_spec.environment)
+                    environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"] = str(
+                        readiness_fd
+                    )
+                    spec = FixedChildSpec(
+                        name=base_spec.name,
+                        argv=base_spec.argv,
+                        environment=tuple(sorted(environment.items())),
+                        uid=base_spec.uid,
+                        gid=base_spec.gid,
+                        extra_groups=base_spec.extra_groups,
+                        pass_fds=tuple(
+                            sorted((*base_spec.pass_fds, readiness_fd))
+                        ),
+                    )
+                    self.isolation.validate_research_launch(
+                        template=base_spec,
+                        spec=spec,
+                        readiness_fd=readiness_fd,
+                    )
+                else:
+                    spec = base_spec
                 self.isolation.validate_runtime_roots()
                 self.isolation.validate_private_sockets()
                 if gateway.process.poll() is not None or not gateway.identity.is_live():
@@ -1159,7 +1271,8 @@ class StagingChildSupervisor:
                 _kill_uncaptured_process_group(process)
             except BaseException as exc:
                 self._uncaptured_children[name] = (spec, process)
-                self._shutdown_requested = True
+                if name != "research":
+                    self._shutdown_requested = True
                 raise StagingSupervisorError(
                     "child identity and cleanup failed"
                 ) from identity_error
@@ -1205,6 +1318,98 @@ class StagingChildSupervisor:
         if name == "gateway":
             self._gateway_started = True
         return child
+
+    @_serialized
+    def start_research(self, minimum_generation: int) -> ResearchChildSnapshot:
+        """Launch one research attempt with a fresh authenticated readiness pipe."""
+
+        if (
+            type(minimum_generation) is not int
+            or not 0 <= minimum_generation <= 2**63 - 1
+            or self._research_attempt is not None
+        ):
+            raise StagingSupervisorError("research launch request differs")
+        reserved = self._reserved_worker_keys.get("research")
+        next_generation = (
+            reserved.generation
+            if reserved is not None
+            else self._worker_generations["research"]
+        )
+        if not minimum_generation <= next_generation <= 2**63 - 1:
+            raise StagingSupervisorError("research key generation is below minimum")
+        try:
+            read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
+        except OSError as exc:
+            raise StagingSupervisorError(
+                "research readiness pipe creation failed"
+            ) from exc
+        reader_owned = False
+        child: ManagedChild | None = None
+        try:
+            static_fds = {
+                descriptor
+                for template in self.worker_templates.values()
+                for descriptor in template.pass_fds
+            } | set(self.gateway_spec.pass_fds)
+            if (
+                read_fd < 3
+                or write_fd < 3
+                or read_fd == write_fd
+                or read_fd in static_fds
+                or write_fd in static_fds
+            ):
+                raise StagingSupervisorError("research readiness pipe differs")
+            child = self._start_child_locked("research", readiness_fd=write_fd)
+            staged_key = self._active_worker_keys["research"]
+            if staged_key.generation < minimum_generation:
+                raise StagingSupervisorError(
+                    "research key generation is below minimum"
+                )
+            snapshot = ResearchChildSnapshot(
+                generation=staged_key.generation,
+                identity=child.identity,
+            )
+            readiness_identity = ReadinessProcessIdentity(
+                pid=child.identity.pid,
+                start_ticks=child.identity.start_ticks,
+                process_group=child.identity.process_group,
+                session_id=child.identity.session_id,
+            )
+            reader = ResearchReadinessReader(
+                read_fd,
+                key=staged_key.key,
+                expected_generation=staged_key.generation,
+                expected_identity=readiness_identity,
+                expected_validation_identity=self.research_validation_identity,
+            )
+            reader_owned = True
+            self._research_attempt = _ResearchAttempt(
+                snapshot=snapshot,
+                reader=reader,
+            )
+            return snapshot
+        except BaseException as startup_error:
+            cleanup_error: BaseException | None = None
+            if child is not None and "research" in self.children:
+                try:
+                    self._stop_owned("research", timeout_seconds=10.0)
+                except BaseException as exc:
+                    cleanup_error = exc
+            if cleanup_error is not None:
+                raise StagingSupervisorError(
+                    "research launch and cleanup failed"
+                ) from startup_error
+            raise
+        finally:
+            try:
+                os.close(write_fd)
+            except OSError:
+                pass
+            if not reader_owned:
+                try:
+                    os.close(read_fd)
+                except OSError:
+                    pass
 
     def _ensure_initial_worker_keys(self) -> None:
         if self._reserved_worker_keys:
@@ -1402,6 +1607,18 @@ class StagingChildSupervisor:
     def commit_worker(self, name: str) -> None:
         """Make a prepared worker routable only after external readiness proof."""
 
+        if name == "research":
+            raise StagingSupervisorError(
+                "research requires the generation-bound readiness commit"
+            )
+        self._commit_worker_locked(name, terminal_on_unknown=True)
+
+    def _commit_worker_locked(
+        self,
+        name: str,
+        *,
+        terminal_on_unknown: bool,
+    ) -> None:
         if name not in {"synthetic", "research"}:
             raise StagingSupervisorError("worker commit role is invalid")
         if self._shutdown_requested or self._shutdown_complete or self._signal_requested:
@@ -1432,14 +1649,98 @@ class StagingChildSupervisor:
             # A lost/failed acknowledgement cannot prove whether the gateway
             # made the generation routable.  Enter terminal cleanup rather
             # than retrying COMMIT or serving with ambiguous state.
-            self._shutdown_requested = True
+            if terminal_on_unknown:
+                self._shutdown_requested = True
             raise StagingSupervisorError(
                 "worker commit acknowledgement is unknown"
             ) from exc
         self._committed_worker_keys.add(generation)
 
+    def _research_process_is_live(self, attempt: _ResearchAttempt) -> bool:
+        child = self.children.get("research")
+        staged_key = self._active_worker_keys.get("research")
+        return bool(
+            child is not None
+            and staged_key is not None
+            and child.identity == attempt.snapshot.identity
+            and staged_key.generation == attempt.snapshot.generation
+            and child.process.poll() is None
+            and child.identity.is_live()
+        )
+
+    def _probe_research_locked(
+        self, generation: int
+    ) -> ResearchReadinessProof | None:
+        attempt = self._research_attempt
+        if (
+            type(generation) is not int
+            or attempt is None
+            or attempt.snapshot.generation != generation
+        ):
+            raise StagingSupervisorError("research readiness generation differs")
+        proof = attempt.proof
+        if proof is None:
+            try:
+                proof = attempt.reader.poll()
+            except ResearchReadinessAbsent:
+                if not self._research_process_is_live(attempt):
+                    raise ResearchChildCrashed(
+                        "research child exited without an accepted failure proof"
+                    ) from None
+                raise
+            if proof is not None:
+                attempt.proof = proof
+        if proof is not None and not proof.ready:
+            return proof
+        if not self._research_process_is_live(attempt):
+            raise ResearchChildCrashed(
+                "research child exited without an accepted failure proof"
+            )
+        gateway = self.children.get("gateway")
+        if (
+            gateway is None
+            or gateway.process.poll() is not None
+            or not gateway.identity.is_live()
+        ):
+            raise StagingSupervisorError("research readiness lost the gateway")
+        return proof
+
+    @_serialized
+    def probe_research(
+        self, generation: int
+    ) -> ResearchReadinessProof | None:
+        """Poll only the fresh readiness channel bound to this generation."""
+
+        return self._probe_research_locked(generation)
+
+    @_serialized
+    def commit_research(self, generation: int) -> None:
+        """Commit the exact live generation only after its signed READY proof."""
+
+        proof = self._probe_research_locked(generation)
+        if proof is None or not proof.ready:
+            raise StagingSupervisorError("research worker is not ready")
+        attempt = self._research_attempt
+        if attempt is None:
+            raise StagingSupervisorError("research readiness generation differs")
+        if attempt.committed:
+            raise StagingSupervisorError("worker is already committed")
+        self._commit_worker_locked("research", terminal_on_unknown=False)
+        if not self._research_process_is_live(attempt):
+            raise ResearchChildCrashed("research child exited during commit")
+        attempt.committed = True
+
+    @_serialized
+    def research_snapshot(self) -> ResearchChildSnapshot | None:
+        attempt = self._research_attempt
+        return None if attempt is None else attempt.snapshot
+
     @_serialized
     def stop(self, name: str, *, timeout_seconds: float = 10.0) -> int:
+        if name == "research":
+            raise StagingSupervisorError(
+                "research requires the generation-bound termination"
+            )
         if name == "gateway" and self._has_owned_worker_state():
             raise StagingSupervisorError("gateway cannot stop before workers")
         return self._stop_owned(name, timeout_seconds=timeout_seconds)
@@ -1472,16 +1773,105 @@ class StagingChildSupervisor:
         self.children.pop(name)
         if name == "gateway":
             self._gateway_proven_gone = True
+        elif name == "research":
+            self._close_research_attempt()
         return result
+
+    def _close_research_attempt(self) -> None:
+        attempt = self._research_attempt
+        if attempt is None:
+            return
+        attempt.reader.close()
+        self._research_attempt = None
+
+    @_serialized
+    def terminate_research(
+        self,
+        generation: int | None,
+        *,
+        timeout_seconds: float = 10.0,
+    ) -> None:
+        """Disable and remove every exact-owned state for one research attempt."""
+
+        if generation is not None and (
+            type(generation) is not int or not 0 <= generation <= 2**63 - 1
+        ):
+            raise StagingSupervisorError("research termination generation differs")
+        if timeout_seconds <= 0 or timeout_seconds > 60:
+            raise StagingSupervisorError("owned process timeout is invalid")
+        attempt = self._research_attempt
+        binding_differs = bool(
+            generation is not None
+            and attempt is not None
+            and generation != attempt.snapshot.generation
+        )
+        if "research" in self.children:
+            self._stop_owned("research", timeout_seconds=timeout_seconds)
+        else:
+            staged_key = self._active_worker_keys.get("research")
+            token: tuple[str, int] | None = None
+            if staged_key is not None:
+                token = (staged_key.role, staged_key.generation)
+                if token not in self._deactivated_worker_keys:
+                    if not self._gateway_proven_gone:
+                        try:
+                            self.worker_key_disabler(staged_key)
+                        except BaseException as exc:
+                            raise StagingSupervisorError(
+                                "worker key disable was not acknowledged"
+                            ) from exc
+                    self._deactivated_worker_keys.add(token)
+            uncaptured = self._uncaptured_children.get("research")
+            if uncaptured is not None:
+                try:
+                    _kill_uncaptured_process_group(uncaptured[1])
+                except BaseException as exc:
+                    raise StagingSupervisorError(
+                        "research uncaptured process cleanup failed"
+                    ) from exc
+                self._uncaptured_children.pop("research")
+            if staged_key is not None and token is not None:
+                try:
+                    self.key_lifecycle.destroy(staged_key)
+                except BaseException as exc:
+                    raise StagingSupervisorError(
+                        "worker key destruction failed"
+                    ) from exc
+                self._active_worker_keys.pop("research")
+                self._prepared_worker_keys.discard(token)
+                self._deactivated_worker_keys.discard(token)
+                self._committed_worker_keys.discard(token)
+            self._close_research_attempt()
+        reserved = self._reserved_worker_keys.get("research")
+        if reserved is not None:
+            try:
+                self.key_lifecycle.destroy(reserved)
+            except BaseException as exc:
+                raise StagingSupervisorError(
+                    "reserved research key destruction failed"
+                ) from exc
+            self._reserved_worker_keys.pop("research")
+        try:
+            self.key_lifecycle.destroy_role("research")
+        except BaseException as exc:
+            raise StagingSupervisorError(
+                "research role key cleanup failed"
+            ) from exc
+        if binding_differs:
+            raise StagingSupervisorError("research termination generation differs")
 
     @_serialized
     def reap_crashed(self) -> tuple[str, ...]:
         crashed = tuple(
             name
             for name, child in self.children.items()
+            if name != "research"
             if child.process.poll() is not None
         )
-        if not crashed and not self._uncaptured_children:
+        uncaptured_terminal = any(
+            name != "research" for name in self._uncaptured_children
+        )
+        if not crashed and not uncaptured_terminal:
             return crashed
         self._shutdown_requested = True
         failures: list[BaseException] = []
@@ -1507,6 +1897,16 @@ class StagingChildSupervisor:
                     self._stop_owned(name, timeout_seconds=10.0)
                 else:
                     self._abort_worker_key(name, activation_attempted=False)
+            except BaseException as exc:
+                failures.append(exc)
+        if (
+            self._research_attempt is not None
+            and "research" not in self.children
+            and "research" not in self._active_worker_keys
+            and "research" not in self._uncaptured_children
+        ):
+            try:
+                self._close_research_attempt()
             except BaseException as exc:
                 failures.append(exc)
         self._finish_shutdown_if_empty()
@@ -1543,12 +1943,27 @@ class StagingChildSupervisor:
                         self._abort_worker_key(name, activation_attempted=False)
                 except BaseException as exc:
                     failures.append(exc)
+        if (
+            self._research_attempt is not None
+            and "research" not in self.children
+            and "research" not in self._active_worker_keys
+            and "research" not in self._uncaptured_children
+        ):
+            try:
+                self._close_research_attempt()
+            except BaseException as exc:
+                failures.append(exc)
         self._finish_shutdown_if_empty()
         if failures:
             raise StagingSupervisorError("one or more child groups did not stop") from failures[0]
 
     def _finish_shutdown_if_empty(self) -> None:
-        if self.children or self._uncaptured_children or self._active_worker_keys:
+        if (
+            self.children
+            or self._uncaptured_children
+            or self._active_worker_keys
+            or self._research_attempt is not None
+        ):
             return
         if not self._final_cleanup_done:
             self.key_lifecycle.destroy_all()
@@ -1573,6 +1988,18 @@ class StagingChildSupervisor:
             if record is None:
                 continue
             _, process = record
+            if name in {"synthetic", "research"}:
+                staged_key = self._active_worker_keys.get(name)
+                if staged_key is not None:
+                    generation = (staged_key.role, staged_key.generation)
+                    if generation not in self._deactivated_worker_keys:
+                        if not self._gateway_proven_gone:
+                            try:
+                                self.worker_key_disabler(staged_key)
+                            except BaseException as exc:
+                                failures.append(exc)
+                                continue
+                        self._deactivated_worker_keys.add(generation)
             try:
                 _kill_uncaptured_process_group(process)
             except BaseException as exc:
