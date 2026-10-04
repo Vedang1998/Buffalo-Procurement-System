@@ -301,6 +301,8 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
                     "2; 3079 2 EXTENSION - pgcrypto owner\n"
                 ),
             )
+        if "--file" in argv:
+            return mock.Mock(returncode=0)
         output = kwargs["stdout"]
         mode = stat.S_IMODE(os.fstat(output.fileno()).st_mode)
         if mode != 0o600:
@@ -545,9 +547,14 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
         commands = [call.args[0] for call in run.call_args_list]
         dump_argv = next(argv for argv in commands if "--format=custom" in argv)
         restore_argv = next(argv for argv in commands if "--list" in argv)
+        materialize_argv = next(
+            argv for argv in commands if "--file" in argv
+        )
         self.assertNotIn("--file", dump_argv)
         self.assertNotIn("password", " ".join(dump_argv).lower())
         self.assertEqual(restore_argv[-1], str(manifest_path.parent / "database.dump"))
+        self.assertEqual(materialize_argv[-1], str(manifest_path.parent / "database.dump"))
+        self.assertEqual(materialize_argv[-3:-1], ["--file", os.devnull])
         self.assertNotIn(self.raw.decode().strip(), json.dumps(manifest))
 
     def test_operator_producer_refuses_drift_and_cleans_exact_destination(self):
@@ -717,6 +724,14 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
 
         def invalid_dump(argv, **kwargs):
             if "--list" in argv:
+                return mock.Mock(
+                    returncode=0,
+                    stdout=(
+                        "1; 2615 1 SCHEMA - qa_mapping_test owner\n"
+                        "2; 3079 2 EXTENSION - pgcrypto owner\n"
+                    ),
+                )
+            if "--file" in argv:
                 raise subprocess.CalledProcessError(1, argv)
             kwargs["stdout"].write(b"not-a-postgresql-archive")
             return mock.Mock(returncode=0)
@@ -745,7 +760,7 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
             staging_backup.subprocess, "run", side_effect=invalid_dump
         ):
             with self.assertRaisesRegex(
-                SyntheticStagingBackupError, "dump archive differs"
+                SyntheticStagingBackupError, "dump archive is unreadable"
             ):
                 create_staging_backup_v2(
                     runtime_url=self.target.database_url,

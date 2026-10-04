@@ -695,6 +695,19 @@ def _validate_dump_archive(pg_restore: str, dump_path: Path) -> None:
         raise SyntheticStagingBackupError(
             "staging database dump archive differs"
         )
+    try:
+        subprocess.run(
+            [pg_restore, "--file", os.devnull, str(dump_path)],
+            check=True,
+            env={"PATH": os.path.dirname(pg_restore), "LANG": "C.UTF-8"},
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SyntheticStagingBackupError(
+            "staging database dump archive is unreadable"
+        ) from exc
 
 
 def create_staging_backup_v2(
