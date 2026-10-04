@@ -86,6 +86,11 @@ WORKER_REQUIRED_ENVIRONMENT_NAMES = {
     | frozenset(
         {
             "BUFFALO_RUNTIME_MODE",
+            "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT",
+            "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS",
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST",
             "BUFFALO_STAGING_POSTGRES_SERVICE_ID",
             "DATABASE_URL",
             "PGPASSFILE",
@@ -108,11 +113,22 @@ WORKER_REQUIRED_ENVIRONMENT_NAMES = {
 RESEARCH_LAUNCH_ENVIRONMENT_NAMES = frozenset(
     {"BUFFALO_STAGING_RESEARCH_READINESS_FD"}
 )
+SYNTHETIC_LAUNCH_ENVIRONMENT_NAMES = frozenset(
+    {
+        "BUFFALO_STAGING_SYNTHETIC_READINESS_FD",
+        "BUFFALO_STAGING_LOCAL_ACCEPTANCE",
+        "BUFFALO_STAGING_OWNED_LOCAL_PORT",
+    }
+)
 WORKER_ENVIRONMENT_NAMES = {
     role: required
     | PROCESS_RUNTIME_ENVIRONMENT_NAMES
     | OPTIONAL_CERTIFICATE_ENVIRONMENT_NAMES
-    | (RESEARCH_LAUNCH_ENVIRONMENT_NAMES if role == "research" else frozenset())
+    | (
+        RESEARCH_LAUNCH_ENVIRONMENT_NAMES
+        if role == "research"
+        else SYNTHETIC_LAUNCH_ENVIRONMENT_NAMES
+    )
     for role, required in WORKER_REQUIRED_ENVIRONMENT_NAMES.items()
 }
 
@@ -149,6 +165,28 @@ def validated_process_environment(
         copied[name] = value
     if role != "gateway" and copied["BUFFALO_STAGING_WORKER_ROLE"] != role:
         raise StagingProcessContractError("staging worker role differs")
+    if role == "synthetic":
+        capability_names = {
+            "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT",
+            "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS",
+        }
+        if copied["BUFFALO_RUNTIME_MODE"] != "SYNTHETIC_DEMO" or any(
+            copied[name] != "1" for name in capability_names
+        ):
+            raise StagingProcessContractError(
+                "synthetic capability contract differs"
+            )
+        local_names = {
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE",
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT",
+        }
+        present = local_names & names
+        if present and present != local_names:
+            raise StagingProcessContractError(
+                "synthetic local database authority is incomplete"
+            )
     return copied
 
 

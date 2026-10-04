@@ -35,6 +35,11 @@ from .staging_research_readiness import (
     ResearchReadinessProof,
     ResearchReadinessReader,
 )
+from .staging_synthetic_readiness import (
+    SyntheticReadinessAbsent,
+    SyntheticReadinessProof,
+    SyntheticReadinessReader,
+)
 from .staging_uds import (
     PeerCredentials,
     SocketContract,
@@ -65,6 +70,14 @@ class StagingSupervisorError(ValueError):
 
 class ResearchChildCrashed(StagingSupervisorError):
     """The exact research child exited without an accepted failure proof."""
+
+
+class SyntheticChildCrashed(StagingSupervisorError):
+    """The exact synthetic child exited without an accepted failure proof."""
+
+
+class SyntheticReadinessTimeout(StagingSupervisorError):
+    """The exact synthetic generation did not prove readiness in time."""
 
 
 def _serialized(method: Callable[..., object]) -> Callable[..., object]:
@@ -839,19 +852,37 @@ class StagingIsolationContract:
     ) -> None:
         """Validate the sole per-attempt delta to the static research spec."""
 
+        self.validate_readiness_launch(
+            role="research",
+            template=template,
+            spec=spec,
+            readiness_fd=readiness_fd,
+        )
+
+    def validate_readiness_launch(
+        self,
+        *,
+        role: str,
+        template: FixedChildSpec,
+        spec: FixedChildSpec,
+        readiness_fd: int,
+    ) -> None:
+        """Validate the sole per-attempt delta to one static worker spec."""
+
         self.validate_child(template)
         if (
-            template.name != "research"
-            or spec.name != "research"
+            role not in {"synthetic", "research"}
+            or template.name != role
+            or spec.name != role
             or type(readiness_fd) is not int
             or readiness_fd < 3
             or readiness_fd in template.pass_fds
         ):
-            raise StagingSupervisorError("research launch contract differs")
+            raise StagingSupervisorError(f"{role} launch contract differs")
         expected_environment = dict(template.environment)
-        expected_environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"] = str(
-            readiness_fd
-        )
+        expected_environment[
+            f"BUFFALO_STAGING_{role.upper()}_READINESS_FD"
+        ] = str(readiness_fd)
         expected_fds = tuple(sorted((*template.pass_fds, readiness_fd)))
         if (
             spec.argv != template.argv
@@ -861,9 +892,9 @@ class StagingIsolationContract:
             or spec.pass_fds != expected_fds
             or dict(spec.environment) != expected_environment
         ):
-            raise StagingSupervisorError("research launch contract differs")
+            raise StagingSupervisorError(f"{role} launch contract differs")
         spec.validate()
-        _validate_role_environment("research", expected_environment)
+        _validate_role_environment(role, expected_environment)
 
     def validate_runtime_roots(self) -> None:
         """Verify each already-created root without following a symlink."""
@@ -1031,11 +1062,25 @@ class ResearchChildSnapshot:
     identity: ProcessIdentity
 
 
+@dataclass(frozen=True)
+class SyntheticChildSnapshot:
+    generation: int
+    identity: ProcessIdentity
+
+
 @dataclass
 class _ResearchAttempt:
     snapshot: ResearchChildSnapshot
     reader: ResearchReadinessReader
     proof: ResearchReadinessProof | None = None
+    committed: bool = False
+
+
+@dataclass
+class _SyntheticAttempt:
+    snapshot: SyntheticChildSnapshot
+    reader: SyntheticReadinessReader
+    proof: SyntheticReadinessProof | None = None
     committed: bool = False
 
 
@@ -1055,6 +1100,7 @@ class StagingChildSupervisor:
         ],
         worker_key_disabler: Callable[["StagedWorkerKey"], None],
         research_validation_identity: str,
+        synthetic_validation_identity: str,
         launcher: Callable[[FixedChildSpec], subprocess.Popen[bytes]] = launch_fixed_child,
         final_cleanup: Callable[[], None] = lambda: None,
     ) -> None:
@@ -1085,15 +1131,21 @@ class StagingChildSupervisor:
             isolation.validate_child(template)
         if gateway_spec.name != "gateway":
             raise StagingSupervisorError("gateway child contract differs")
-        if (
-            not isinstance(research_validation_identity, str)
-            or len(research_validation_identity) != 64
-            or any(
-                character not in "0123456789abcdef"
-                for character in research_validation_identity
-            )
+        for role, validation_identity in (
+            ("research", research_validation_identity),
+            ("synthetic", synthetic_validation_identity),
         ):
-            raise StagingSupervisorError("research validation identity differs")
+            if (
+                not isinstance(validation_identity, str)
+                or len(validation_identity) != 64
+                or any(
+                    character not in "0123456789abcdef"
+                    for character in validation_identity
+                )
+            ):
+                raise StagingSupervisorError(
+                    f"{role} validation identity differs"
+                )
         self.isolation = isolation
         self.gateway_spec = gateway_spec
         self.key_lifecycle = key_lifecycle
@@ -1102,6 +1154,7 @@ class StagingChildSupervisor:
         self.worker_key_committer = worker_key_committer
         self.worker_key_disabler = worker_key_disabler
         self.research_validation_identity = research_validation_identity
+        self.synthetic_validation_identity = synthetic_validation_identity
         self.launcher = launcher
         self.final_cleanup = final_cleanup
         self._lock = threading.RLock()
@@ -1118,6 +1171,7 @@ class StagingChildSupervisor:
         self._committed_worker_keys: set[tuple[str, int]] = set()
         self._deactivated_worker_keys: set[tuple[str, int]] = set()
         self._research_attempt: _ResearchAttempt | None = None
+        self._synthetic_attempt: _SyntheticAttempt | None = None
         self._shutdown_requested = False
         self._shutdown_complete = False
         self._final_cleanup_done = False
@@ -1127,9 +1181,9 @@ class StagingChildSupervisor:
 
     @_serialized
     def start(self, name: str) -> ManagedChild:
-        if name == "research":
+        if name in {"synthetic", "research"}:
             raise StagingSupervisorError(
-                "research requires the generation-bound readiness launch"
+                f"{name} requires the generation-bound readiness launch"
             )
         return self._start_child_locked(name)
 
@@ -1149,8 +1203,8 @@ class StagingChildSupervisor:
             or name not in {"gateway", "synthetic", "research"}
         ):
             raise StagingSupervisorError("child start transition is invalid")
-        if (name == "research") != (readiness_fd is not None):
-            raise StagingSupervisorError("research readiness binding differs")
+        if (name in {"synthetic", "research"}) != (readiness_fd is not None):
+            raise StagingSupervisorError(f"{name} readiness binding differs")
         if name == "gateway":
             if self._has_owned_worker_state():
                 raise StagingSupervisorError("gateway start transition is invalid")
@@ -1200,15 +1254,15 @@ class StagingChildSupervisor:
                     gateway=gateway,
                     staged_key=staged_key,
                 )
-                if name == "research":
+                if name in {"synthetic", "research"}:
                     if readiness_fd is None:
                         raise StagingSupervisorError(
-                            "research readiness binding differs"
+                            f"{name} readiness binding differs"
                         )
                     environment = dict(base_spec.environment)
-                    environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"] = str(
-                        readiness_fd
-                    )
+                    environment[
+                        f"BUFFALO_STAGING_{name.upper()}_READINESS_FD"
+                    ] = str(readiness_fd)
                     spec = FixedChildSpec(
                         name=base_spec.name,
                         argv=base_spec.argv,
@@ -1220,7 +1274,8 @@ class StagingChildSupervisor:
                             sorted((*base_spec.pass_fds, readiness_fd))
                         ),
                     )
-                    self.isolation.validate_research_launch(
+                    self.isolation.validate_readiness_launch(
+                        role=name,
                         template=base_spec,
                         spec=spec,
                         readiness_fd=readiness_fd,
@@ -1321,6 +1376,98 @@ class StagingChildSupervisor:
         if name == "gateway":
             self._gateway_started = True
         return child
+
+    @_serialized
+    def start_synthetic(self, minimum_generation: int) -> SyntheticChildSnapshot:
+        """Launch one synthetic attempt with a fresh authenticated readiness pipe."""
+
+        if (
+            type(minimum_generation) is not int
+            or not 0 <= minimum_generation <= 2**63 - 1
+            or self._synthetic_attempt is not None
+        ):
+            raise StagingSupervisorError("synthetic launch request differs")
+        reserved = self._reserved_worker_keys.get("synthetic")
+        next_generation = (
+            reserved.generation
+            if reserved is not None
+            else self._worker_generations["synthetic"]
+        )
+        if not minimum_generation <= next_generation <= 2**63 - 1:
+            raise StagingSupervisorError("synthetic key generation is below minimum")
+        try:
+            read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
+        except OSError as exc:
+            raise StagingSupervisorError(
+                "synthetic readiness pipe creation failed"
+            ) from exc
+        reader_owned = False
+        child: ManagedChild | None = None
+        try:
+            static_fds = {
+                descriptor
+                for template in self.worker_templates.values()
+                for descriptor in template.pass_fds
+            } | set(self.gateway_spec.pass_fds)
+            if (
+                read_fd < 3
+                or write_fd < 3
+                or read_fd == write_fd
+                or read_fd in static_fds
+                or write_fd in static_fds
+            ):
+                raise StagingSupervisorError("synthetic readiness pipe differs")
+            child = self._start_child_locked("synthetic", readiness_fd=write_fd)
+            staged_key = self._active_worker_keys["synthetic"]
+            if staged_key.generation < minimum_generation:
+                raise StagingSupervisorError(
+                    "synthetic key generation is below minimum"
+                )
+            snapshot = SyntheticChildSnapshot(
+                generation=staged_key.generation,
+                identity=child.identity,
+            )
+            readiness_identity = ReadinessProcessIdentity(
+                pid=child.identity.pid,
+                start_ticks=child.identity.start_ticks,
+                process_group=child.identity.process_group,
+                session_id=child.identity.session_id,
+            )
+            reader = SyntheticReadinessReader(
+                read_fd,
+                key=staged_key.key,
+                expected_generation=staged_key.generation,
+                expected_identity=readiness_identity,
+                expected_validation_identity=self.synthetic_validation_identity,
+            )
+            reader_owned = True
+            self._synthetic_attempt = _SyntheticAttempt(
+                snapshot=snapshot,
+                reader=reader,
+            )
+            return snapshot
+        except BaseException as startup_error:
+            cleanup_error: BaseException | None = None
+            if child is not None and "synthetic" in self.children:
+                try:
+                    self._stop_owned("synthetic", timeout_seconds=10.0)
+                except BaseException as exc:
+                    cleanup_error = exc
+            if cleanup_error is not None:
+                raise StagingSupervisorError(
+                    "synthetic launch and cleanup failed"
+                ) from startup_error
+            raise
+        finally:
+            try:
+                os.close(write_fd)
+            except OSError:
+                pass
+            if not reader_owned:
+                try:
+                    os.close(read_fd)
+                except OSError:
+                    pass
 
     @_serialized
     def start_research(self, minimum_generation: int) -> ResearchChildSnapshot:
@@ -1564,9 +1711,10 @@ class StagingChildSupervisor:
 
         started: list[str] = []
         try:
-            for name in ("gateway", "synthetic"):
-                self.start(name)
-                started.append(name)
+            self.start("gateway")
+            started.append("gateway")
+            self.start_synthetic(0)
+            started.append("synthetic")
         except BaseException as startup_error:
             self._shutdown_requested = True
             cleanup_failures: list[BaseException] = []
@@ -1601,6 +1749,19 @@ class StagingChildSupervisor:
                 except BaseException as exc:
                     cleanup_failures.append(exc)
             self._finish_shutdown_if_empty()
+            if (
+                cleanup_failures
+                and self._activation_channel_ambiguous
+                and not self._gateway_proven_gone
+            ):
+                try:
+                    self.shutdown(timeout_seconds=10.0)
+                except BaseException:
+                    raise StagingSupervisorError(
+                        "initial child startup and cleanup failed"
+                    ) from startup_error
+                if self._shutdown_complete:
+                    raise
             if cleanup_failures:
                 raise StagingSupervisorError(
                     "initial child startup and cleanup failed"
@@ -1611,9 +1772,9 @@ class StagingChildSupervisor:
     def commit_worker(self, name: str) -> None:
         """Make a prepared worker routable only after external readiness proof."""
 
-        if name == "research":
+        if name in {"synthetic", "research"}:
             raise StagingSupervisorError(
-                "research requires the generation-bound readiness commit"
+                f"{name} requires the generation-bound readiness commit"
             )
         self._commit_worker_locked(name, terminal_on_unknown=True)
 
@@ -1660,6 +1821,225 @@ class StagingChildSupervisor:
                 "worker commit acknowledgement is unknown"
             ) from exc
         self._committed_worker_keys.add(generation)
+
+    def _synthetic_process_is_live(self, attempt: _SyntheticAttempt) -> bool:
+        child = self.children.get("synthetic")
+        staged_key = self._active_worker_keys.get("synthetic")
+        state: str | None = None
+        identity_values: tuple[int, int, int] | None = None
+        if child is not None:
+            try:
+                state, start_ticks, process_group, session_id = _proc_record(
+                    child.identity.pid
+                )
+                identity_values = (start_ticks, process_group, session_id)
+            except (ProcessLookupError, StagingSupervisorError):
+                pass
+        return bool(
+            child is not None
+            and staged_key is not None
+            and child.identity == attempt.snapshot.identity
+            and staged_key.generation == attempt.snapshot.generation
+            and state not in {None, "Z", "X", "x"}
+            and identity_values
+            == (
+                child.identity.start_ticks,
+                child.identity.process_group,
+                child.identity.session_id,
+            )
+        )
+
+    def _probe_synthetic_locked(
+        self, generation: int
+    ) -> SyntheticReadinessProof | None:
+        attempt = self._synthetic_attempt
+        if (
+            type(generation) is not int
+            or attempt is None
+            or attempt.snapshot.generation != generation
+        ):
+            raise StagingSupervisorError("synthetic readiness generation differs")
+        proof = attempt.proof
+        if proof is None:
+            try:
+                proof = attempt.reader.poll()
+            except SyntheticReadinessAbsent:
+                if not self._synthetic_process_is_live(attempt):
+                    raise SyntheticChildCrashed(
+                        "synthetic child exited without an accepted failure proof"
+                    ) from None
+                raise
+            if proof is not None:
+                attempt.proof = proof
+        if proof is not None and not proof.ready:
+            return proof
+        if not self._synthetic_process_is_live(attempt):
+            raise SyntheticChildCrashed(
+                "synthetic child exited without an accepted failure proof"
+            )
+        gateway = self.children.get("gateway")
+        if (
+            gateway is None
+            or gateway.process.poll() is not None
+            or not gateway.identity.is_live()
+        ):
+            raise StagingSupervisorError("synthetic readiness lost the gateway")
+        return proof
+
+    @_serialized
+    def probe_synthetic(
+        self, generation: int
+    ) -> SyntheticReadinessProof | None:
+        """Poll only the fresh database-readiness channel for this generation."""
+
+        return self._probe_synthetic_locked(generation)
+
+    @_serialized
+    def commit_synthetic(self, generation: int) -> None:
+        """Commit the exact live generation only after signed database READY."""
+
+        pending_attempt = self._synthetic_attempt
+        matching_pending_attempt = bool(
+            pending_attempt is not None
+            and pending_attempt.snapshot.generation == generation
+            and not pending_attempt.committed
+        )
+        try:
+            proof = self._probe_synthetic_locked(generation)
+        except BaseException as readiness_error:
+            if matching_pending_attempt:
+                self._shutdown_requested = True
+                try:
+                    self.shutdown()
+                except BaseException:
+                    raise StagingSupervisorError(
+                        "synthetic pre-commit readiness and terminal cleanup failed"
+                    ) from readiness_error
+            raise
+        if proof is None or not proof.ready:
+            raise StagingSupervisorError("synthetic worker is not ready")
+        attempt = self._synthetic_attempt
+        if attempt is None:
+            raise StagingSupervisorError("synthetic readiness generation differs")
+        if attempt.committed:
+            raise StagingSupervisorError("worker is already committed")
+        try:
+            self._commit_worker_locked("synthetic", terminal_on_unknown=True)
+        except BaseException as commit_error:
+            self._shutdown_requested = True
+            try:
+                self.shutdown()
+            except BaseException:
+                raise StagingSupervisorError(
+                    "synthetic commit and terminal cleanup failed"
+                ) from commit_error
+            raise
+        if not self._synthetic_process_is_live(attempt):
+            self._shutdown_requested = True
+            crash = SyntheticChildCrashed("synthetic child exited during commit")
+            try:
+                self.shutdown()
+            except BaseException:
+                raise StagingSupervisorError(
+                    "synthetic commit liveness and terminal cleanup failed"
+                ) from crash
+            raise crash
+        attempt.committed = True
+
+    def _cleanup_failed_synthetic_readiness(
+        self,
+        generation: int,
+        primary_error: BaseException,
+    ) -> None:
+        try:
+            self.terminate_synthetic(generation)
+        except BaseException:
+            self._shutdown_requested = True
+            try:
+                self.shutdown()
+            except BaseException:
+                raise StagingSupervisorError(
+                    "synthetic readiness and terminal cleanup failed"
+                ) from primary_error
+            raise StagingSupervisorError(
+                "synthetic readiness required terminal cleanup"
+            ) from primary_error
+
+    @_serialized
+    def await_synthetic_ready(
+        self,
+        generation: int,
+        *,
+        timeout_seconds: float = 15.0,
+        poll_interval_seconds: float = 0.02,
+    ) -> SyntheticReadinessProof:
+        """Wait, verify, and commit one generation or remove all of its state."""
+
+        if (
+            type(generation) is not int
+            or not 0 <= generation <= 2**63 - 1
+            or not isinstance(timeout_seconds, (int, float))
+            or isinstance(timeout_seconds, bool)
+            or not 0 < timeout_seconds <= 60
+            or not isinstance(poll_interval_seconds, (int, float))
+            or isinstance(poll_interval_seconds, bool)
+            or not 0 < poll_interval_seconds <= 0.25
+        ):
+            raise StagingSupervisorError("synthetic readiness wait differs")
+        deadline = time.monotonic() + float(timeout_seconds)
+        while True:
+            if (
+                self._signal_requested
+                or self._shutdown_requested
+                or self._shutdown_complete
+            ):
+                readiness_error = StagingSupervisorError(
+                    "synthetic readiness was interrupted"
+                )
+                self._shutdown_requested = True
+                try:
+                    self.shutdown()
+                except BaseException:
+                    raise StagingSupervisorError(
+                        "synthetic readiness interruption cleanup failed"
+                    ) from readiness_error
+                raise readiness_error
+            try:
+                proof = self._probe_synthetic_locked(generation)
+            except BaseException as readiness_error:
+                self._cleanup_failed_synthetic_readiness(
+                    generation,
+                    readiness_error,
+                )
+                raise
+            if proof is not None:
+                if not proof.ready:
+                    readiness_error = StagingSupervisorError(
+                        f"synthetic readiness failed: {proof.failure}"
+                    )
+                    self._cleanup_failed_synthetic_readiness(
+                        generation,
+                        readiness_error,
+                    )
+                    raise readiness_error
+                self.commit_synthetic(generation)
+                return proof
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                readiness_error = SyntheticReadinessTimeout(
+                    "synthetic readiness timed out"
+                )
+                self._cleanup_failed_synthetic_readiness(
+                    generation,
+                    readiness_error,
+                )
+                raise readiness_error
+            time.sleep(min(float(poll_interval_seconds), remaining))
+
+    @_serialized
+    def synthetic_snapshot(self) -> SyntheticChildSnapshot | None:
+        attempt = self._synthetic_attempt
+        return None if attempt is None else attempt.snapshot
 
     def _research_process_is_live(self, attempt: _ResearchAttempt) -> bool:
         child = self.children.get("research")
@@ -1770,9 +2150,9 @@ class StagingChildSupervisor:
 
     @_serialized
     def stop(self, name: str, *, timeout_seconds: float = 10.0) -> int:
-        if name == "research":
+        if name in {"synthetic", "research"}:
             raise StagingSupervisorError(
-                "research requires the generation-bound termination"
+                f"{name} requires the generation-bound termination"
             )
         if name == "gateway" and self._has_owned_worker_state():
             raise StagingSupervisorError("gateway cannot stop before workers")
@@ -1812,7 +2192,16 @@ class StagingChildSupervisor:
             self._gateway_proven_gone = True
         elif name == "research":
             self._close_research_attempt()
+        elif name == "synthetic":
+            self._close_synthetic_attempt()
         return result
+
+    def _close_synthetic_attempt(self) -> None:
+        attempt = self._synthetic_attempt
+        if attempt is None:
+            return
+        attempt.reader.close()
+        self._synthetic_attempt = None
 
     def _close_research_attempt(self) -> None:
         attempt = self._research_attempt
@@ -1820,6 +2209,83 @@ class StagingChildSupervisor:
             return
         attempt.reader.close()
         self._research_attempt = None
+
+    @_serialized
+    def terminate_synthetic(
+        self,
+        generation: int | None,
+        *,
+        timeout_seconds: float = 10.0,
+    ) -> None:
+        """Disable and remove every exact-owned state for one synthetic attempt."""
+
+        if generation is not None and (
+            type(generation) is not int or not 0 <= generation <= 2**63 - 1
+        ):
+            raise StagingSupervisorError("synthetic termination generation differs")
+        if timeout_seconds <= 0 or timeout_seconds > 60:
+            raise StagingSupervisorError("owned process timeout is invalid")
+        attempt = self._synthetic_attempt
+        binding_differs = bool(
+            generation is not None
+            and attempt is not None
+            and generation != attempt.snapshot.generation
+        )
+        if "synthetic" in self.children:
+            self._stop_owned("synthetic", timeout_seconds=timeout_seconds)
+        else:
+            staged_key = self._active_worker_keys.get("synthetic")
+            token: tuple[str, int] | None = None
+            if staged_key is not None:
+                token = (staged_key.role, staged_key.generation)
+                if token not in self._deactivated_worker_keys:
+                    if not self._gateway_proven_gone:
+                        try:
+                            self.worker_key_disabler(staged_key)
+                        except BaseException as exc:
+                            self._activation_channel_ambiguous = True
+                            raise StagingSupervisorError(
+                                "worker key disable was not acknowledged"
+                            ) from exc
+                    self._deactivated_worker_keys.add(token)
+            uncaptured = self._uncaptured_children.get("synthetic")
+            if uncaptured is not None:
+                try:
+                    _kill_uncaptured_process_group(uncaptured[1])
+                except BaseException as exc:
+                    raise StagingSupervisorError(
+                        "synthetic uncaptured process cleanup failed"
+                    ) from exc
+                self._uncaptured_children.pop("synthetic")
+            if staged_key is not None and token is not None:
+                try:
+                    self.key_lifecycle.destroy(staged_key)
+                except BaseException as exc:
+                    raise StagingSupervisorError(
+                        "worker key destruction failed"
+                    ) from exc
+                self._active_worker_keys.pop("synthetic")
+                self._prepared_worker_keys.discard(token)
+                self._deactivated_worker_keys.discard(token)
+                self._committed_worker_keys.discard(token)
+            self._close_synthetic_attempt()
+        reserved = self._reserved_worker_keys.get("synthetic")
+        if reserved is not None:
+            try:
+                self.key_lifecycle.destroy(reserved)
+            except BaseException as exc:
+                raise StagingSupervisorError(
+                    "reserved synthetic key destruction failed"
+                ) from exc
+            self._reserved_worker_keys.pop("synthetic")
+        try:
+            self.key_lifecycle.destroy_role("synthetic")
+        except BaseException as exc:
+            raise StagingSupervisorError(
+                "synthetic role key cleanup failed"
+            ) from exc
+        if binding_differs:
+            raise StagingSupervisorError("synthetic termination generation differs")
 
     @_serialized
     def terminate_research(
@@ -1938,6 +2404,16 @@ class StagingChildSupervisor:
             except BaseException as exc:
                 failures.append(exc)
         if (
+            self._synthetic_attempt is not None
+            and "synthetic" not in self.children
+            and "synthetic" not in self._active_worker_keys
+            and "synthetic" not in self._uncaptured_children
+        ):
+            try:
+                self._close_synthetic_attempt()
+            except BaseException as exc:
+                failures.append(exc)
+        if (
             self._research_attempt is not None
             and "research" not in self.children
             and "research" not in self._active_worker_keys
@@ -1948,6 +2424,19 @@ class StagingChildSupervisor:
             except BaseException as exc:
                 failures.append(exc)
         self._finish_shutdown_if_empty()
+        if (
+            failures
+            and self._activation_channel_ambiguous
+            and not self._gateway_proven_gone
+        ):
+            try:
+                self.shutdown(timeout_seconds=10.0)
+            except BaseException as exc:
+                raise StagingSupervisorError(
+                    "crash cleanup did not stop every child"
+                ) from exc
+            if self._shutdown_complete:
+                return crashed
         if failures:
             raise StagingSupervisorError("crash cleanup did not stop every child") from failures[0]
         return crashed
@@ -1982,6 +2471,16 @@ class StagingChildSupervisor:
                 except BaseException as exc:
                     failures.append(exc)
         if (
+            self._synthetic_attempt is not None
+            and "synthetic" not in self.children
+            and "synthetic" not in self._active_worker_keys
+            and "synthetic" not in self._uncaptured_children
+        ):
+            try:
+                self._close_synthetic_attempt()
+            except BaseException as exc:
+                failures.append(exc)
+        if (
             self._research_attempt is not None
             and "research" not in self.children
             and "research" not in self._active_worker_keys
@@ -2009,6 +2508,16 @@ class StagingChildSupervisor:
                         self._stop_owned(name, timeout_seconds=timeout_seconds)
                     elif name in self._active_worker_keys:
                         self._abort_worker_key(name, activation_attempted=False)
+                except BaseException as exc:
+                    fallback_failures.append(exc)
+            if (
+                self._synthetic_attempt is not None
+                and "synthetic" not in self.children
+                and "synthetic" not in self._active_worker_keys
+                and "synthetic" not in self._uncaptured_children
+            ):
+                try:
+                    self._close_synthetic_attempt()
                 except BaseException as exc:
                     fallback_failures.append(exc)
             if (
@@ -2062,6 +2571,7 @@ class StagingChildSupervisor:
             self.children
             or self._uncaptured_children
             or self._active_worker_keys
+            or self._synthetic_attempt is not None
             or self._research_attempt is not None
         ):
             return

@@ -16,6 +16,10 @@ from procurement_os.staging_routes import (
     validate_worker_application_routes,
 )
 from procurement_os.staging_composition import load_staging_worker_boundary_config
+from procurement_os.staging_process_contract import (
+    StagingProcessContractError,
+    validated_process_environment,
+)
 from procurement_os.staging_config import (
     EXPECTED_APP_SERVICE_ID,
     EXPECTED_ENVIRONMENT_ID,
@@ -65,8 +69,13 @@ def _worker_environment(*, role: str, key_file: Path) -> dict[str, str]:
         environment.update(
             {
                 "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+                "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+                "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "postgres.railway.internal",
                 "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
-                "DATABASE_URL": "postgresql://qa_release_login@postgres.railway.internal/staging_demo",
+                "DATABASE_URL": "postgresql://buffalo_synthetic_runtime@postgres.railway.internal/buffalo_synthetic_staging_demo",
                 "PGPASSFILE": "/run/buffalo/synthetic/private/pgpass",
                 "PROCUREMENT_STORAGE_ROOT": "/data/synthetic",
                 "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
@@ -239,6 +248,88 @@ class StagingCompositionTests(unittest.TestCase):
                     StagingWorkerBoundaryError, "unapproved entry"
                 ):
                     load_staging_worker_boundary_config("research")
+
+    def test_synthetic_local_database_authority_is_an_all_or_none_pair(self):
+        with tempfile.TemporaryDirectory(prefix="buffalo-worker-env-") as raw:
+            key_file = Path(raw) / "worker.key"
+            environment = _worker_environment(role="synthetic", key_file=key_file)
+            self.assertEqual(
+                validated_process_environment(role="synthetic", environ=environment),
+                environment,
+            )
+            local = {
+                **environment,
+                "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+                "BUFFALO_STAGING_OWNED_LOCAL_PORT": "55432",
+            }
+            self.assertEqual(
+                validated_process_environment(role="synthetic", environ=local),
+                local,
+            )
+            for name in (
+                "BUFFALO_STAGING_LOCAL_ACCEPTANCE",
+                "BUFFALO_STAGING_OWNED_LOCAL_PORT",
+            ):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    StagingProcessContractError,
+                    "local database authority is incomplete",
+                ):
+                    validated_process_environment(
+                        role="synthetic",
+                        environ={**environment, name: "1"},
+                    )
+
+    def test_synthetic_mode_and_every_canonical_capability_are_exact(self):
+        with tempfile.TemporaryDirectory(prefix="buffalo-worker-env-") as raw:
+            environment = _worker_environment(
+                role="synthetic",
+                key_file=Path(raw) / "worker.key",
+            )
+            changes = (
+                ("BUFFALO_RUNTIME_MODE", "LOCAL"),
+                ("BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST", "0"),
+                ("BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO", "true"),
+                ("BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT", "0"),
+                ("BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS", "yes"),
+            )
+            for name, value in changes:
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    StagingProcessContractError,
+                    "synthetic capability contract differs",
+                ):
+                    validated_process_environment(
+                        role="synthetic",
+                        environ={**environment, name: value},
+                    )
+
+    def test_readiness_descriptors_cannot_cross_worker_roles(self):
+        with tempfile.TemporaryDirectory(prefix="buffalo-worker-env-") as raw:
+            key_file = Path(raw) / "worker.key"
+            for role, own, other in (
+                (
+                    "synthetic",
+                    "BUFFALO_STAGING_SYNTHETIC_READINESS_FD",
+                    "BUFFALO_STAGING_RESEARCH_READINESS_FD",
+                ),
+                (
+                    "research",
+                    "BUFFALO_STAGING_RESEARCH_READINESS_FD",
+                    "BUFFALO_STAGING_SYNTHETIC_READINESS_FD",
+                ),
+            ):
+                environment = _worker_environment(role=role, key_file=key_file)
+                accepted = {**environment, own: "19"}
+                self.assertEqual(
+                    validated_process_environment(role=role, environ=accepted),
+                    accepted,
+                )
+                with self.subTest(role=role), self.assertRaisesRegex(
+                    StagingProcessContractError, "unapproved entry"
+                ):
+                    validated_process_environment(
+                        role=role,
+                        environ={**environment, other: "19"},
+                    )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Fixed child entrypoints for the Railway staging process topology."""
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 import secrets
@@ -8,6 +9,8 @@ import socket
 import stat
 import struct
 import sys
+from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from uvicorn import Config, Server
 
@@ -23,6 +26,7 @@ from .staging_research_readiness import (
     ResearchReadinessError,
     ResearchReadinessWriter,
 )
+from .staging_synthetic_readiness import SyntheticReadinessWriter
 from .staging_research_validation import StagingResearchValidationError
 from .staging_supervisor import SupervisorControlClient
 from .staging_uds import PeerCredentials, SocketContract
@@ -32,9 +36,16 @@ from .staging_worker_activation import (
 )
 from .staging_worker_transport import UnixWorkerTransport, run_worker
 
+if TYPE_CHECKING:
+    from .synthetic_staging_database import SyntheticStagingTarget
+
 
 class StagingProcessError(ValueError):
     """A fixed child process cannot prove its launch contract."""
+
+
+class SyntheticCredentialError(StagingProcessError):
+    """The synthetic worker's private libpq credential file differs."""
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -223,31 +234,39 @@ def _run_worker(role: str, environment: dict[str, str]) -> None:
         socket_uid=os.getuid(),
         socket_gid=socket_gid,
     )
-    if role != "research":
-        run_worker(
-            worker_role=role,
-            listen_fd=listen_fd,
-            socket_contract=socket_contract,
-        )
-        return
-    boundary = load_staging_worker_boundary_config("research")
-    readiness_fd = _canonical_integer(
-        environment, "BUFFALO_STAGING_RESEARCH_READINESS_FD", 3
-    )
+    boundary = load_staging_worker_boundary_config(role)
+    readiness_name = f"BUFFALO_STAGING_{role.upper()}_READINESS_FD"
+    readiness_fd = _canonical_integer(environment, readiness_name, 3)
     generation = _canonical_integer(
         environment, "BUFFALO_STAGING_KEY_GENERATION", 0
     )
     try:
-        writer = ResearchReadinessWriter(
-            readiness_fd,
-            key=boundary.assertion_key,
-            generation=generation,
+        writer = (
+            ResearchReadinessWriter(
+                readiness_fd,
+                key=boundary.assertion_key,
+                generation=generation,
+            )
+            if role == "research"
+            else SyntheticReadinessWriter(
+                readiness_fd,
+                key=boundary.assertion_key,
+                generation=generation,
+            )
         )
     except ResearchReadinessError as exc:
-        raise StagingProcessError("research readiness writer is unavailable") from exc
+        raise StagingProcessError(
+            f"{role} readiness writer is unavailable"
+        ) from exc
 
     def server_factory(config: Config) -> Server:
-        return _ResearchReadinessServer(config, readiness=writer)
+        if role == "research":
+            return _ResearchReadinessServer(config, readiness=writer)
+        return _SyntheticReadinessServer(
+            config,
+            readiness=writer,
+            environment=environment,
+        )
 
     try:
         run_worker(
@@ -346,6 +365,251 @@ class _ResearchReadinessServer(Server):
                 except ResearchReadinessError:
                     pass
             return
+
+
+class _SyntheticReadinessServer(Server):
+    """Emit READY only after Uvicorn and an exact runtime-role DB attestation."""
+
+    def __init__(
+        self,
+        config: Config,
+        *,
+        readiness: SyntheticReadinessWriter,
+        environment: dict[str, str],
+    ) -> None:
+        super().__init__(config)
+        self._readiness = readiness
+        self._environment = dict(environment)
+
+    def _attest_database(self) -> str:
+        import psycopg
+
+        from .synthetic_staging_database import (
+            attest_runtime_connection,
+            target_from_environment,
+        )
+
+        target = target_from_environment(self._environment)
+        passfile = _validated_synthetic_pgpass(self._environment, target)
+        with psycopg.connect(
+            self._environment["DATABASE_URL"],
+            connect_timeout=5,
+            autocommit=False,
+            passfile=passfile,
+        ) as conn:
+            conn.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            conn.execute("SET LOCAL statement_timeout = '10000ms'")
+            conn.execute("SET LOCAL lock_timeout = '2000ms'")
+            conn.execute("SET LOCAL idle_in_transaction_session_timeout = '15000ms'")
+            identity = attest_runtime_connection(conn, target)
+            conn.rollback()
+        return identity
+
+    async def startup(self, sockets=None) -> None:
+        try:
+            await super().startup(sockets=sockets)
+        except MemoryError:
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("OOM")
+                except ResearchReadinessError:
+                    pass
+            raise
+        except BaseException:
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("ACTIVATION")
+                except ResearchReadinessError:
+                    pass
+            raise
+        if self.should_exit or not self.started:
+            if not self._readiness.closed:
+                self._readiness.emit_failure("ACTIVATION")
+            return
+        try:
+            validation_identity = await asyncio.to_thread(self._attest_database)
+            if self.should_exit or not self.started:
+                if not self._readiness.closed:
+                    self._readiness.emit_failure("ACTIVATION")
+                return
+            self._readiness.emit_ready(validation_identity)
+        except asyncio.CancelledError:
+            self.should_exit = True
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("ACTIVATION")
+                except ResearchReadinessError:
+                    pass
+            raise
+        except MemoryError:
+            self.should_exit = True
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("OOM")
+                except ResearchReadinessError:
+                    pass
+        except BaseException as exc:
+            self.should_exit = True
+            failure = "ACTIVATION"
+            try:
+                import psycopg
+
+                from .synthetic_staging_database import (
+                    SyntheticStagingDatabaseError,
+                )
+
+                if isinstance(exc, psycopg.OperationalError):
+                    failure = "DATABASE"
+                elif isinstance(
+                    exc,
+                    (
+                        SyntheticCredentialError,
+                        SyntheticStagingDatabaseError,
+                        psycopg.Error,
+                    ),
+                ):
+                    failure = "INTEGRITY"
+            except BaseException:
+                failure = "ACTIVATION"
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure(failure)
+                except ResearchReadinessError:
+                    pass
+
+
+def _split_pgpass_record(record: str) -> tuple[str, str, str, str, str]:
+    fields: list[str] = []
+    value: list[str] = []
+    escaped = False
+    for character in record:
+        if escaped:
+            if character not in {":", "\\"}:
+                raise SyntheticCredentialError(
+                    "synthetic credential record is malformed"
+                )
+            value.append(character)
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == ":":
+            fields.append("".join(value))
+            value = []
+        else:
+            value.append(character)
+    if escaped:
+        raise SyntheticCredentialError("synthetic credential record is malformed")
+    fields.append("".join(value))
+    if len(fields) != 5:
+        raise SyntheticCredentialError("synthetic credential record is malformed")
+    return tuple(fields)  # type: ignore[return-value]
+
+
+def _validated_synthetic_pgpass(
+    environment: dict[str, str],
+    target: "SyntheticStagingTarget",
+) -> str:
+    """Prove one exact runtime credential in a private role-local file."""
+
+    runtime_root = Path(environment.get("BUFFALO_STAGING_RUNTIME_ROOT", ""))
+    passfile = Path(environment.get("PGPASSFILE", ""))
+    if (
+        not runtime_root.is_absolute()
+        or not passfile.is_absolute()
+        or passfile == runtime_root
+        or not passfile.is_relative_to(runtime_root)
+        or any(part in {"", ".", ".."} for part in passfile.parts)
+    ):
+        raise SyntheticCredentialError("synthetic credential path differs")
+    uid = os.getuid()
+    gid = os.getgid()
+    current = passfile.parent
+    while True:
+        try:
+            info = current.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise SyntheticCredentialError(
+                "synthetic credential directory is unavailable"
+            ) from exc
+        if (
+            current.is_symlink()
+            or not stat.S_ISDIR(info.st_mode)
+            or stat.S_IMODE(info.st_mode) != 0o700
+            or info.st_uid != uid
+            or info.st_gid != gid
+        ):
+            raise SyntheticCredentialError(
+                "synthetic credential directory differs"
+            )
+        if current == runtime_root:
+            break
+        current = current.parent
+    flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(passfile, flags)
+    except OSError as exc:
+        raise SyntheticCredentialError(
+            "synthetic credential file is unavailable"
+        ) from exc
+    try:
+        info = os.fstat(descriptor)
+        link_info = passfile.stat(follow_symlinks=False)
+        if (
+            passfile.is_symlink()
+            or not stat.S_ISREG(info.st_mode)
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_uid != uid
+            or info.st_gid != gid
+            or info.st_nlink != 1
+            or not 0 < info.st_size <= 4_096
+            or (info.st_dev, info.st_ino) != (link_info.st_dev, link_info.st_ino)
+        ):
+            raise SyntheticCredentialError("synthetic credential file differs")
+        raw_record = os.read(descriptor, 4_097)
+        final_info = os.fstat(descriptor)
+        final_link_info = passfile.stat(follow_symlinks=False)
+        if (
+            len(raw_record) != info.st_size
+            or final_info.st_size != info.st_size
+            or (final_info.st_dev, final_info.st_ino)
+            != (info.st_dev, info.st_ino)
+            or (final_link_info.st_dev, final_link_info.st_ino)
+            != (info.st_dev, info.st_ino)
+        ):
+            raise SyntheticCredentialError("synthetic credential file differs")
+        try:
+            text = raw_record.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise SyntheticCredentialError(
+                "synthetic credential record is malformed"
+            ) from exc
+        if not text.endswith("\n") or text.count("\n") != 1 or "\r" in text:
+            raise SyntheticCredentialError(
+                "synthetic credential record is malformed"
+            )
+        fields = _split_pgpass_record(text[:-1])
+        parsed = urlparse(target.database_url)
+        expected = (
+            parsed.hostname or "",
+            str(parsed.port or 5432),
+            parsed.path.removeprefix("/"),
+            parsed.username or "",
+        )
+        if (
+            fields[:4] != expected
+            or not fields[4]
+            or any(value == "*" for value in fields[:4])
+        ):
+            raise SyntheticCredentialError(
+                "synthetic credential record differs"
+            )
+    finally:
+        os.close(descriptor)
+    return str(passfile)
 
 
 def _gateway_socket_contract(

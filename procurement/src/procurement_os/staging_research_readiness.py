@@ -141,6 +141,7 @@ def _validate_values(
     state: str,
     failure: str | None,
     validation_identity: str | None,
+    failures: frozenset[str] = _FAILURES,
 ) -> None:
     if (
         type(generation) is not int
@@ -156,10 +157,26 @@ def _validate_values(
             raise ResearchReadinessError("ready proof values differ")
     elif (
         type(failure) is not str
-        or failure not in _FAILURES
+        or failure not in failures
         or validation_identity is not None
     ):
         raise ResearchReadinessError("failed proof values differ")
+
+
+def _validate_contract(
+    *, role: str, version: str, domain: bytes, failures: frozenset[str]
+) -> None:
+    if (
+        role not in {"research", "synthetic"}
+        or not isinstance(version, str)
+        or not version
+        or not isinstance(domain, bytes)
+        or not domain.endswith(b"\x00")
+        or not isinstance(failures, frozenset)
+        or not failures
+        or any(not isinstance(value, str) or not value for value in failures)
+    ):
+        raise ResearchReadinessError("readiness contract differs")
 
 
 def mint_readiness_payload(
@@ -170,29 +187,40 @@ def mint_readiness_payload(
     state: str,
     failure: str | None = None,
     validation_identity: str | None = None,
+    _role: str = "research",
+    _version: str = READINESS_VERSION,
+    _domain: bytes = _READINESS_DOMAIN,
+    _failures: frozenset[str] = _FAILURES,
 ) -> bytes:
     """Mint one canonical, generation- and process-bound terminal proof."""
 
     _validate_key(key)
+    _validate_contract(
+        role=_role,
+        version=_version,
+        domain=_domain,
+        failures=_failures,
+    )
     _validate_values(
         generation=generation,
         identity=identity,
         state=state,
         failure=failure,
         validation_identity=validation_identity,
+        failures=_failures,
     )
     unsigned: dict[str, object] = {
         "failure": failure,
         "generation": generation,
         "identity": identity.to_dict(),
-        "role": "research",
+        "role": _role,
         "state": state,
         "validation_identity": validation_identity,
-        "version": READINESS_VERSION,
+        "version": _version,
     }
     message = dict(unsigned)
     message["signature"] = hmac.digest(
-        key, _READINESS_DOMAIN + _canonical_json(unsigned), "sha256"
+        key, _domain + _canonical_json(unsigned), "sha256"
     ).hex()
     encoded = _canonical_json(message)
     if len(encoded) > MAX_READINESS_PAYLOAD_BYTES:
@@ -208,6 +236,10 @@ def mint_readiness_frame(
     state: str,
     failure: str | None = None,
     validation_identity: str | None = None,
+    _role: str = "research",
+    _version: str = READINESS_VERSION,
+    _domain: bytes = _READINESS_DOMAIN,
+    _failures: frozenset[str] = _FAILURES,
 ) -> bytes:
     payload = mint_readiness_payload(
         key=key,
@@ -216,6 +248,10 @@ def mint_readiness_frame(
         state=state,
         failure=failure,
         validation_identity=validation_identity,
+        _role=_role,
+        _version=_version,
+        _domain=_domain,
+        _failures=_failures,
     )
     return struct.pack("!I", len(payload)) + payload
 
@@ -227,10 +263,20 @@ def parse_readiness_payload(
     expected_generation: int,
     expected_identity: ReadinessProcessIdentity,
     expected_validation_identity: str,
+    _role: str = "research",
+    _version: str = READINESS_VERSION,
+    _domain: bytes = _READINESS_DOMAIN,
+    _failures: frozenset[str] = _FAILURES,
 ) -> ResearchReadinessProof:
     """Verify one terminal proof against the exact owned launch."""
 
     _validate_key(key)
+    _validate_contract(
+        role=_role,
+        version=_version,
+        domain=_domain,
+        failures=_failures,
+    )
     if (
         type(expected_generation) is not int
         or not 0 <= expected_generation <= _MAX_GENERATION
@@ -256,7 +302,7 @@ def parse_readiness_payload(
         signature,
         hmac.digest(
             key,
-            _READINESS_DOMAIN + _canonical_json(envelope),
+            _domain + _canonical_json(envelope),
             "sha256",
         ).hex(),
     ):
@@ -285,10 +331,11 @@ def parse_readiness_payload(
         state=state,  # type: ignore[arg-type]
         failure=failure,  # type: ignore[arg-type]
         validation_identity=validation_identity,  # type: ignore[arg-type]
+        failures=_failures,
     )
     if (
-        envelope.get("version") != READINESS_VERSION
-        or envelope.get("role") != "research"
+        envelope.get("version") != _version
+        or envelope.get("role") != _role
         or generation != expected_generation
         or identity != expected_identity
         or (state == "READY" and validation_identity != expected_validation_identity)
@@ -314,8 +361,18 @@ class ResearchReadinessReader:
         expected_generation: int,
         expected_identity: ReadinessProcessIdentity,
         expected_validation_identity: str,
+        _role: str = "research",
+        _version: str = READINESS_VERSION,
+        _domain: bytes = _READINESS_DOMAIN,
+        _failures: frozenset[str] = _FAILURES,
     ) -> None:
         _validate_key(key)
+        _validate_contract(
+            role=_role,
+            version=_version,
+            domain=_domain,
+            failures=_failures,
+        )
         if type(descriptor) is not int or descriptor < 0:
             raise ResearchReadinessError("readiness descriptor is invalid")
         # Validate all public expectations before touching or assuming ownership
@@ -351,6 +408,10 @@ class ResearchReadinessReader:
         self._expected_generation = expected_generation
         self._expected_identity = expected_identity
         self._expected_validation_identity = expected_validation_identity
+        self._role = _role
+        self._version = _version
+        self._domain = _domain
+        self._failures = _failures
         self._buffer = bytearray()
         self._payload_bytes: int | None = None
         self._proof: ResearchReadinessProof | None = None
@@ -431,6 +492,10 @@ class ResearchReadinessReader:
                 expected_generation=self._expected_generation,
                 expected_identity=self._expected_identity,
                 expected_validation_identity=self._expected_validation_identity,
+                _role=self._role,
+                _version=self._version,
+                _domain=self._domain,
+                _failures=self._failures,
             )
         except ResearchReadinessError:
             self._poisoned = True
@@ -467,8 +532,24 @@ def current_readiness_process_identity() -> ReadinessProcessIdentity:
 class ResearchReadinessWriter:
     """Own one anonymous-pipe writer and emit exactly one terminal frame."""
 
-    def __init__(self, descriptor: int, *, key: bytes, generation: int) -> None:
+    def __init__(
+        self,
+        descriptor: int,
+        *,
+        key: bytes,
+        generation: int,
+        _role: str = "research",
+        _version: str = READINESS_VERSION,
+        _domain: bytes = _READINESS_DOMAIN,
+        _failures: frozenset[str] = _FAILURES,
+    ) -> None:
         _validate_key(key)
+        _validate_contract(
+            role=_role,
+            version=_version,
+            domain=_domain,
+            failures=_failures,
+        )
         if type(descriptor) is not int or descriptor < 3:
             raise ResearchReadinessError("readiness descriptor is invalid")
         if type(generation) is not int or not 0 <= generation <= _MAX_GENERATION:
@@ -493,6 +574,10 @@ class ResearchReadinessWriter:
         self._descriptor: int | None = descriptor
         self._key = bytes(key)
         self._generation = generation
+        self._role = _role
+        self._version = _version
+        self._domain = _domain
+        self._failures = _failures
         self._identity = current_readiness_process_identity()
         self._emitted = False
 
@@ -538,6 +623,10 @@ class ResearchReadinessWriter:
             state=state,
             failure=failure,
             validation_identity=validation_identity,
+            _role=self._role,
+            _version=self._version,
+            _domain=self._domain,
+            _failures=self._failures,
         )
         self._emitted = True
         try:

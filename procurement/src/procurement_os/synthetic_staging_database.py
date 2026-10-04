@@ -416,6 +416,9 @@ STAGING_RETIREMENT_CATALOG_SHA256 = (
 STAGING_PRICE_CATALOG_SHA256 = (
     "17605263963002022223a06b7e7a32ce6838eeb3f1e714098406b43c9f5bcc30"
 )
+EXPECTED_RUNTIME_ATTESTATION_IDENTITY = (
+    "be472ebbad9b26e3fa7feb0c22ed5c82ad9001c21f53694bf6c53f122b817168"
+)
 
 
 class SyntheticStagingDatabaseError(RuntimeError):
@@ -561,6 +564,7 @@ def _require_source_hashes() -> None:
             STAGING_RETIREMENT_CATALOG_SHA256,
             STAGING_PRICE_CATALOG_SHA256,
             IMMUTABLE_FIXTURE_MANIFEST_SHA256,
+            EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
         )
     ):
         raise SyntheticStagingDatabaseError(
@@ -1834,4 +1838,8 @@ def attest_runtime_connection(
             }
         )
     ).hexdigest()
-    return identity
+    if identity != EXPECTED_RUNTIME_ATTESTATION_IDENTITY:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging readiness identity differs"
+        )
+    return EXPECTED_RUNTIME_ATTESTATION_IDENTITY

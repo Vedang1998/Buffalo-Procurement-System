@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
+import hashlib
 import io
+import json
 import os
 from pathlib import Path
 import shutil
@@ -47,6 +49,30 @@ class SyntheticStagingDatabaseContractTests(unittest.TestCase):
     def test_exact_target_is_accepted_without_connecting(self):
         self.target().validate_static()
         self.assertRegex(PERMISSION_MATRIX_SHA256, r"^[0-9a-f]{64}$")
+
+    def test_runtime_attestation_identity_is_source_pinned(self):
+        payload = {
+            "catalog": staging_database.SUCCESSOR_CATALOG_SHA256,
+            "contract": staging_database.CONTRACT_VERSION,
+            "database": staging_database.EXPECTED_DATABASE,
+            "fixture": staging_database.DEVELOPMENT_FIXTURE_CONTRACT,
+            "permission_matrix": staging_database.PERMISSION_MATRIX_SHA256,
+            "postgres_major": staging_database.EXPECTED_POSTGRES_MAJOR,
+            "schema": staging_database.SCHEMA,
+        }
+        observed = hashlib.sha256(
+            json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            ).encode("ascii")
+        ).hexdigest()
+        self.assertEqual(
+            observed,
+            staging_database.EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+        )
 
     def test_wrong_scope_host_database_and_login_are_refused(self):
         changes = (

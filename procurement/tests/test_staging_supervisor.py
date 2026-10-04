@@ -29,6 +29,13 @@ from procurement_os.staging_research_readiness import (
     ResearchReadinessError,
     mint_readiness_frame,
 )
+from procurement_os.staging_synthetic_readiness import (
+    SyntheticReadinessError,
+    mint_readiness_frame as mint_synthetic_readiness_frame,
+)
+from procurement_os.synthetic_staging_database import (
+    EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+)
 from procurement_os.staging_supervisor import (
     CONTROL_VERSION,
     ComponentIsolation,
@@ -39,6 +46,9 @@ from procurement_os.staging_supervisor import (
     ProcessIdentity,
     ResearchChildCrashed,
     ResearchChildSnapshot,
+    SyntheticChildCrashed,
+    SyntheticChildSnapshot,
+    SyntheticReadinessTimeout,
     StagingChildSupervisor,
     StagingIsolationContract,
     StagingSupervisorError,
@@ -126,6 +136,10 @@ def _isolation_fixture() -> tuple[
             "fds": (11,),
             "environment": {
                 "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+                "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+                "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
                 "BUFFALO_STAGING_ASSERTION_KEY_FILE": str(base / "synthetic" / "worker.key"),
                 "BUFFALO_STAGING_EXTERNAL_ORIGIN": "https://staging.example.test",
                 "BUFFALO_STAGING_GATEWAY_GID": "1201",
@@ -135,6 +149,7 @@ def _isolation_fixture() -> tuple[
                 "BUFFALO_STAGING_KEY_DIRECTORY_GID": "1202",
                 "BUFFALO_STAGING_KEY_DIRECTORY_UID": "0",
                 "BUFFALO_STAGING_LISTEN_FD": "11",
+                "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "postgres.railway.internal",
                 "BUFFALO_STAGING_POSTGRES_SERVICE_ID": "postgres-service",
                 "BUFFALO_STAGING_RUNTIME_ROOT": str(base / "synthetic"),
                 "BUFFALO_STAGING_SOCKET_GID": "2301",
@@ -340,6 +355,9 @@ class _FakeKeyLifecycle:
 
 def _new_supervisor(**arguments) -> StagingChildSupervisor:
     arguments.setdefault("research_validation_identity", "ab" * 32)
+    arguments.setdefault(
+        "synthetic_validation_identity", EXPECTED_RUNTIME_ATTESTATION_IDENTITY
+    )
     with mock.patch(
         "procurement_os.staging_supervisor.os.geteuid", return_value=0
     ), mock.patch(
@@ -357,15 +375,27 @@ def _emit_ready_proof(
     failure: str | None = None,
     key: bytes | None = None,
 ) -> None:
-    if spec.name != "research":
+    if spec.name not in {"synthetic", "research"}:
         return
     environment = dict(spec.environment)
     generation = int(environment["BUFFALO_STAGING_KEY_GENERATION"])
-    descriptor = int(environment["BUFFALO_STAGING_RESEARCH_READINESS_FD"])
+    descriptor = int(
+        environment[f"BUFFALO_STAGING_{spec.name.upper()}_READINESS_FD"]
+    )
     identity = ProcessIdentity.capture(process.pid)
-    frame = mint_readiness_frame(
+    expected_validation_identity = (
+        EXPECTED_RUNTIME_ATTESTATION_IDENTITY
+        if spec.name == "synthetic" and validation_identity == "ab" * 32
+        else validation_identity
+    )
+    mint = (
+        mint_synthetic_readiness_frame
+        if spec.name == "synthetic"
+        else mint_readiness_frame
+    )
+    frame = mint(
         key=(
-            hashlib.sha256(f"research:{generation}".encode()).digest()
+            hashlib.sha256(f"{spec.name}:{generation}".encode()).digest()
             if key is None
             else key
         ),
@@ -378,7 +408,9 @@ def _emit_ready_proof(
         ),
         state=state,
         failure=failure,
-        validation_identity=(validation_identity if state == "READY" else None),
+        validation_identity=(
+            expected_validation_identity if state == "READY" else None
+        ),
     )
     if os.write(descriptor, frame) != len(frame):
         raise AssertionError("readiness frame was not written atomically")
@@ -614,6 +646,7 @@ class SupervisorChildTests(unittest.TestCase):
                 worker_key_committer=lambda _staged, _gateway, _worker: None,
                 worker_key_disabler=lambda _staged: None,
                 research_validation_identity="ab" * 32,
+                synthetic_validation_identity=EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
             )
 
     def test_key_lifecycle_is_bound_to_exact_role_roots_and_identities(self):
@@ -914,7 +947,7 @@ class SupervisorChildTests(unittest.TestCase):
             launcher=launcher,
         )
         with self.assertRaisesRegex(StagingSupervisorError, "live gateway"):
-            supervisor.start("synthetic")
+            supervisor.start_synthetic(0)
         with self.assertRaisesRegex(StagingSupervisorError, "unavailable"):
             supervisor.start("gateway")
         launcher.assert_not_called()
@@ -973,7 +1006,7 @@ class SupervisorChildTests(unittest.TestCase):
         contract, specs = _isolation_fixture()
         launched: list[subprocess.Popen[bytes]] = []
 
-        def launcher(_spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
             process = subprocess.Popen(
                 [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
                 start_new_session=True,
@@ -981,6 +1014,7 @@ class SupervisorChildTests(unittest.TestCase):
                 stderr=subprocess.DEVNULL,
             )
             launched.append(process)
+            _emit_ready_proof(spec, process)
             return process
 
         with mock.patch.object(
@@ -1041,7 +1075,7 @@ class SupervisorChildTests(unittest.TestCase):
         launched: list[subprocess.Popen[bytes]] = []
         committer = mock.Mock()
 
-        def launcher(_spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
             process = subprocess.Popen(
                 [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
                 start_new_session=True,
@@ -1049,6 +1083,7 @@ class SupervisorChildTests(unittest.TestCase):
                 stderr=subprocess.DEVNULL,
             )
             launched.append(process)
+            _emit_ready_proof(spec, process)
             return process
 
         with mock.patch.object(
@@ -1066,15 +1101,13 @@ class SupervisorChildTests(unittest.TestCase):
             )
             try:
                 supervisor.start_initial()
+                synthetic = supervisor.synthetic_snapshot()
+                self.assertIsNotNone(synthetic)
                 supervisor.signal_handler(signal.SIGTERM)
                 with self.assertRaisesRegex(
                     StagingSupervisorError, "start transition is invalid"
                 ):
                     supervisor.start_research(0)
-                with self.assertRaisesRegex(
-                    StagingSupervisorError, "cannot be committed"
-                ):
-                    supervisor.commit_worker("synthetic")
                 real_terminate = terminate_owned_process_group
                 failed_once = False
 
@@ -1095,15 +1128,12 @@ class SupervisorChildTests(unittest.TestCase):
                     side_effect=fail_synthetic_once,
                 ):
                     with self.assertRaisesRegex(
-                        StagingSupervisorError, "did not stop"
+                        StagingSupervisorError,
+                        "synthetic commit and terminal cleanup failed",
                     ):
-                        supervisor.process_pending_signal()
+                        supervisor.commit_synthetic(synthetic.generation)
                 self.assertTrue(supervisor._signal_requested)
                 self.assertIn("synthetic", supervisor.children)
-                with self.assertRaisesRegex(
-                    StagingSupervisorError, "cannot be committed"
-                ):
-                    supervisor.commit_worker("synthetic")
                 self.assertTrue(supervisor.process_pending_signal())
                 self.assertEqual(supervisor.children, {})
                 committer.assert_not_called()
@@ -1118,7 +1148,7 @@ class SupervisorChildTests(unittest.TestCase):
         launched: list[subprocess.Popen[bytes]] = []
         disabled: list[tuple[str, int]] = []
 
-        def launcher(_spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
             process = subprocess.Popen(
                 [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
                 start_new_session=True,
@@ -1126,6 +1156,7 @@ class SupervisorChildTests(unittest.TestCase):
                 stderr=subprocess.DEVNULL,
             )
             launched.append(process)
+            _emit_ready_proof(spec, process)
             return process
 
         def unknown_commit(*_arguments) -> None:
@@ -1148,17 +1179,14 @@ class SupervisorChildTests(unittest.TestCase):
             )
             try:
                 supervisor.start_initial()
+                synthetic = supervisor.synthetic_snapshot()
+                self.assertIsNotNone(synthetic)
                 with self.assertRaisesRegex(
                     StagingSupervisorError, "acknowledgement is unknown"
                 ):
-                    supervisor.commit_worker("synthetic")
+                    supervisor.commit_synthetic(synthetic.generation)
                 self.assertTrue(supervisor._shutdown_requested)
-                self.assertIn("synthetic", supervisor.children)
-                with self.assertRaisesRegex(
-                    StagingSupervisorError, "cannot be committed"
-                ):
-                    supervisor.commit_worker("synthetic")
-                supervisor.shutdown(timeout_seconds=2)
+                self.assertTrue(supervisor._shutdown_complete)
                 self.assertEqual(disabled, [("synthetic", 0)])
                 self.assertEqual(supervisor.children, {})
             finally:
@@ -1273,7 +1301,7 @@ class SupervisorChildTests(unittest.TestCase):
                     with self.assertRaisesRegex(
                         StagingSupervisorError, "identity and cleanup failed"
                     ):
-                        supervisor.start("synthetic")
+                        supervisor.start_synthetic(0)
                 self.assertIn("synthetic", supervisor._uncaptured_children)
                 self.assertIn("synthetic", supervisor._active_worker_keys)
                 self.assertIsNone(launched[-1].poll())
@@ -1343,6 +1371,77 @@ class SupervisorChildTests(unittest.TestCase):
                 self.assertEqual(supervisor.children, {})
                 self.assertEqual(supervisor._uncaptured_children, {})
                 self.assertEqual(supervisor._active_worker_keys, {})
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_initial_start_poisoned_disable_kills_gateway_before_key_cleanup(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        events: list[str] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            if spec.name == "synthetic":
+                raise RuntimeError("injected synthetic launch failure")
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            return process
+
+        def poisoned_disable(_staged) -> None:
+            events.append("disable:unknown")
+            raise StagingSupervisorError("injected poisoned activation channel")
+
+        key_lifecycle = _FakeKeyLifecycle(specs)
+        real_destroy = key_lifecycle.destroy
+
+        def tracked_destroy(staged: StagedWorkerKey) -> None:
+            events.append(f"destroy:{staged.role}")
+            real_destroy(staged)
+
+        key_lifecycle.destroy = tracked_destroy
+        real_terminate = terminate_owned_process_group
+
+        def tracked_terminate(process, identity, *, timeout_seconds):
+            events.append("terminate:gateway")
+            return real_terminate(
+                process, identity, timeout_seconds=timeout_seconds
+            )
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=key_lifecycle,
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=poisoned_disable,
+                launcher=launcher,
+            )
+            try:
+                with mock.patch(
+                    "procurement_os.staging_supervisor.terminate_owned_process_group",
+                    side_effect=tracked_terminate,
+                ), self.assertRaisesRegex(
+                    StagingSupervisorError, "worker launch and key cleanup failed"
+                ):
+                    supervisor.start_initial()
+                self.assertEqual(supervisor.children, {})
+                self.assertEqual(supervisor._active_worker_keys, {})
+                self.assertTrue(supervisor._shutdown_complete)
+                self.assertLess(
+                    events.index("terminate:gateway"),
+                    events.index("destroy:synthetic"),
+                )
             finally:
                 for process in launched:
                     if process.poll() is None:
@@ -1501,6 +1600,513 @@ class SupervisorChildTests(unittest.TestCase):
                         os.close(descriptor)
                     except OSError:
                         pass
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_synthetic_role_requires_fresh_database_readiness_and_rejects_bypass(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        committed: list[tuple[str, int]] = []
+        disabled: list[tuple[str, int]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            _emit_ready_proof(spec, process)
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda staged, _gateway, _worker: committed.append(
+                    (staged.role, staged.generation)
+                ),
+                worker_key_disabler=lambda staged: disabled.append(
+                    (staged.role, staged.generation)
+                ),
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation-bound readiness launch"
+                ):
+                    supervisor.start("synthetic")
+                snapshot = supervisor.start_synthetic(0)
+                child = supervisor.children["synthetic"]
+                environment = dict(child.spec.environment)
+                readiness_fd = int(
+                    environment["BUFFALO_STAGING_SYNTHETIC_READINESS_FD"]
+                )
+                self.assertIn(readiness_fd, child.spec.pass_fds)
+                self.assertEqual(
+                    set(child.spec.pass_fds) - set(specs[1].pass_fds),
+                    {readiness_fd},
+                )
+                self.assertEqual(supervisor.synthetic_snapshot(), snapshot)
+                self.assertIsInstance(snapshot, SyntheticChildSnapshot)
+                proof = supervisor.probe_synthetic(snapshot.generation)
+                self.assertIsNotNone(proof)
+                assert proof is not None
+                self.assertTrue(proof.ready)
+                self.assertEqual(
+                    proof.validation_identity,
+                    EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+                )
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation-bound readiness commit"
+                ):
+                    supervisor.commit_worker("synthetic")
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation differs"
+                ):
+                    supervisor.commit_synthetic(snapshot.generation + 1)
+                accepted = supervisor.await_synthetic_ready(snapshot.generation)
+                self.assertIs(accepted, proof)
+                self.assertEqual(committed, [("synthetic", 0)])
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "generation-bound termination"
+                ):
+                    supervisor.stop("synthetic")
+                supervisor.terminate_synthetic(snapshot.generation, timeout_seconds=2)
+                self.assertEqual(disabled, [("synthetic", 0)])
+                self.assertIsNone(supervisor.synthetic_snapshot())
+                supervisor.shutdown(timeout_seconds=2)
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_synthetic_failure_and_tampered_proof_never_commit(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        committed: list[tuple[str, int]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            if spec.name == "synthetic":
+                generation = int(
+                    dict(spec.environment)["BUFFALO_STAGING_KEY_GENERATION"]
+                )
+                if generation == 0:
+                    _emit_ready_proof(
+                        spec,
+                        process,
+                        state="FAILED",
+                        failure="DATABASE",
+                    )
+                else:
+                    _emit_ready_proof(spec, process, key=bytes.fromhex("ff" * 32))
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda staged, _gateway, _worker: committed.append(
+                    (staged.role, staged.generation)
+                ),
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                failed = supervisor.start_synthetic(0)
+                proof = supervisor.probe_synthetic(failed.generation)
+                self.assertIsNotNone(proof)
+                assert proof is not None
+                self.assertEqual((proof.state, proof.failure), ("FAILED", "DATABASE"))
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "readiness failed: DATABASE"
+                ):
+                    supervisor.await_synthetic_ready(failed.generation)
+                self.assertNotIn("synthetic", supervisor.children)
+                self.assertIsNone(supervisor.synthetic_snapshot())
+                tampered = supervisor.start_synthetic(failed.generation + 1)
+                with self.assertRaisesRegex(
+                    SyntheticReadinessError, "signature differs"
+                ):
+                    supervisor.await_synthetic_ready(tampered.generation)
+                self.assertNotIn("synthetic", supervisor.children)
+                self.assertEqual(committed, [])
+                supervisor.shutdown(timeout_seconds=2)
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_synthetic_crash_is_terminal_for_the_whole_required_service(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            supervisor.start("gateway")
+            snapshot = supervisor.start_synthetic(0)
+            synthetic = supervisor.children["synthetic"].process
+            synthetic.kill()
+            synthetic.wait(timeout=2)
+            with self.assertRaises(SyntheticChildCrashed):
+                supervisor.probe_synthetic(snapshot.generation)
+            self.assertEqual(supervisor.reap_crashed(), ("synthetic",))
+            self.assertEqual(supervisor.children, {})
+            self.assertTrue(supervisor._shutdown_complete)
+        for process in launched:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+
+    def test_synthetic_crash_with_poisoned_disable_kills_gateway_first(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        events: list[str] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            return process
+
+        def poisoned_disable(_staged) -> None:
+            events.append("disable:unknown")
+            raise StagingSupervisorError("injected poisoned activation channel")
+
+        real_terminate = terminate_owned_process_group
+
+        def tracked_terminate(process, identity, *, timeout_seconds):
+            role = next(
+                name
+                for name, child in supervisor.children.items()
+                if child.process is process
+            )
+            events.append(f"terminate:{role}")
+            return real_terminate(
+                process, identity, timeout_seconds=timeout_seconds
+            )
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=poisoned_disable,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start_initial()
+                synthetic = supervisor.children["synthetic"].process
+                synthetic.kill()
+                synthetic.wait(timeout=2)
+                with mock.patch(
+                    "procurement_os.staging_supervisor.terminate_owned_process_group",
+                    side_effect=tracked_terminate,
+                ):
+                    self.assertEqual(supervisor.reap_crashed(), ("synthetic",))
+                self.assertEqual(supervisor.children, {})
+                self.assertTrue(supervisor._shutdown_complete)
+                self.assertTrue(supervisor._gateway_proven_gone)
+                self.assertLess(
+                    events.index("terminate:gateway"),
+                    events.index("terminate:synthetic"),
+                )
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_synthetic_death_between_ready_and_commit_is_terminally_cleaned(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        disabled: list[tuple[str, int]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            _emit_ready_proof(spec, process)
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda staged: disabled.append(
+                    (staged.role, staged.generation)
+                ),
+                launcher=launcher,
+            )
+            try:
+                supervisor.start_initial()
+                snapshot = supervisor.synthetic_snapshot()
+                self.assertIsNotNone(snapshot)
+                assert snapshot is not None
+                with mock.patch.object(
+                    supervisor,
+                    "_synthetic_process_is_live",
+                    side_effect=(True, False),
+                ), self.assertRaises(SyntheticChildCrashed):
+                    supervisor.await_synthetic_ready(snapshot.generation)
+                self.assertEqual(disabled, [("synthetic", 0)])
+                self.assertEqual(supervisor.children, {})
+                self.assertEqual(supervisor._active_worker_keys, {})
+                self.assertTrue(supervisor._shutdown_complete)
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_synthetic_readiness_timeout_disables_and_removes_only_that_attempt(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        held_writer: int | None = None
+        disabled: list[tuple[str, int]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            nonlocal held_writer
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            if spec.name == "synthetic":
+                held_writer = os.dup(
+                    int(
+                        dict(spec.environment)[
+                            "BUFFALO_STAGING_SYNTHETIC_READINESS_FD"
+                        ]
+                    )
+                )
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda staged: disabled.append(
+                    (staged.role, staged.generation)
+                ),
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                snapshot = supervisor.start_synthetic(0)
+                with self.assertRaisesRegex(
+                    SyntheticReadinessTimeout, "timed out"
+                ):
+                    supervisor.await_synthetic_ready(
+                        snapshot.generation,
+                        timeout_seconds=0.01,
+                        poll_interval_seconds=0.005,
+                    )
+                self.assertEqual(disabled, [("synthetic", 0)])
+                self.assertNotIn("synthetic", supervisor.children)
+                self.assertIn("gateway", supervisor.children)
+                self.assertIsNone(supervisor.synthetic_snapshot())
+                supervisor.shutdown(timeout_seconds=2)
+            finally:
+                if held_writer is not None:
+                    os.close(held_writer)
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_signal_interrupts_pending_synthetic_readiness_without_waiting(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        held_writer: int | None = None
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            nonlocal held_writer
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            if spec.name == "synthetic":
+                held_writer = os.dup(
+                    int(
+                        dict(spec.environment)[
+                            "BUFFALO_STAGING_SYNTHETIC_READINESS_FD"
+                        ]
+                    )
+                )
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=lambda _staged: None,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                snapshot = supervisor.start_synthetic(0)
+                supervisor.signal_handler(signal.SIGTERM)
+                before = time.monotonic()
+                with self.assertRaisesRegex(
+                    StagingSupervisorError, "readiness was interrupted"
+                ):
+                    supervisor.await_synthetic_ready(
+                        snapshot.generation,
+                        timeout_seconds=15,
+                    )
+                self.assertLess(time.monotonic() - before, 1)
+                self.assertEqual(supervisor.children, {})
+                self.assertTrue(supervisor._shutdown_complete)
+            finally:
+                if held_writer is not None:
+                    os.close(held_writer)
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_synthetic_restart_requires_fresh_generation_and_proof(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        prepared: list[tuple[str, int]] = []
+        committed: list[tuple[str, int]] = []
+        disabled: list[tuple[str, int]] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            _emit_ready_proof(spec, process)
+            return process
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda staged, _gateway: prepared.append(
+                    (staged.role, staged.generation)
+                ),
+                worker_key_committer=lambda staged, _gateway, _worker: committed.append(
+                    (staged.role, staged.generation)
+                ),
+                worker_key_disabler=lambda staged: disabled.append(
+                    (staged.role, staged.generation)
+                ),
+                launcher=launcher,
+            )
+            try:
+                supervisor.start("gateway")
+                first = supervisor.start_synthetic(0)
+                first_path = dict(
+                    supervisor.children["synthetic"].spec.environment
+                )["BUFFALO_STAGING_ASSERTION_KEY_FILE"]
+                self.assertTrue(supervisor.probe_synthetic(first.generation).ready)
+                supervisor.commit_synthetic(first.generation)
+                supervisor.terminate_synthetic(first.generation, timeout_seconds=2)
+                second = supervisor.start_synthetic(first.generation + 1)
+                second_path = dict(
+                    supervisor.children["synthetic"].spec.environment
+                )["BUFFALO_STAGING_ASSERTION_KEY_FILE"]
+                self.assertTrue(supervisor.probe_synthetic(second.generation).ready)
+                supervisor.commit_synthetic(second.generation)
+                self.assertEqual((first.generation, second.generation), (0, 1))
+                self.assertNotEqual(first_path, second_path)
+                self.assertEqual(prepared, [("synthetic", 0), ("synthetic", 1)])
+                self.assertEqual(committed, [("synthetic", 0), ("synthetic", 1)])
+                self.assertEqual(disabled, [("synthetic", 0)])
+                supervisor.shutdown(timeout_seconds=2)
+                self.assertEqual(disabled, [("synthetic", 0), ("synthetic", 1)])
+            finally:
                 for process in launched:
                     if process.poll() is None:
                         process.kill()

@@ -66,6 +66,26 @@ class StagingResearchReadinessTests(unittest.TestCase):
         values.update(overrides)
         return ResearchReadinessReader(descriptor, **values)
 
+    def test_v1_wire_payload_remains_source_pinned(self) -> None:
+        self.assertEqual(
+            mint_readiness_payload(
+                key=self.key,
+                generation=3,
+                identity=self.identity,
+                state="READY",
+                validation_identity=self.validation_identity,
+            ),
+            (
+                b'{"failure":null,"generation":3,"identity":{"pid":401,'
+                b'"process_group":401,"session_id":401,"start_ticks":9001},'
+                b'"role":"research","signature":"01f805cc4157d96ff31001a5b49e7e8e'
+                b'9ace6ddb038c261c4c1f182189f0fadc","state":"READY",'
+                b'"validation_identity":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+                b'aaaaaaaaaaaaaaaaaaaaaaaa","version":'
+                b'"BUFFALO_STAGING_RESEARCH_READINESS_V1"}'
+            ),
+        )
+
     def test_ready_frame_is_fragmented_and_accepted_only_after_eof(self) -> None:
         read_descriptor, write_descriptor = os.pipe()
         reader = self._reader(read_descriptor)
