@@ -10,6 +10,59 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### Synthetic worker database readiness — LOCAL PRIMITIVE PASS / ROOT COMPOSITION PENDING
+
+- The exact local code checkpoint is
+  `c42928937774925a32d64917b540017ae38e0979`, tree
+  `7cb11e4637731355db55d81b2d38c5b5520de360`, on the sole-writer branch
+  `codex/railway-staging-delivery`. It is an additive child of the verified
+  staging-database milestone and is not published, deployable, or accepted as
+  a service candidate.
+- Synthetic launch now receives a fresh anonymous readiness pipe and a
+  role-specific, HMAC-authenticated terminal proof bound to worker role, key
+  generation, PID/start ticks/process group/session, and the exact pinned
+  staging database attestation identity. Research V1 wire bytes remain pinned
+  and synthetic/research proofs cannot cross roles.
+- The synthetic child starts Uvicorn but cannot prove `READY` until a real
+  `buffalo_synthetic_runtime` connection passes the complete database
+  attestation in one bounded `REPEATABLE READ READ ONLY` transaction. The
+  connection uses explicit `passfile=`, a five-second connect timeout,
+  ten-second statement timeout, two-second lock timeout, and 15-second
+  idle-in-transaction timeout. Shutdown/cancellation, database, integrity,
+  resource, OOM, and activation failures remain sanitized and never emit
+  `READY`.
+- The private pgpass boundary now requires one absolute role-local path below
+  the synthetic 0700 runtime root, no symlink, a regular single-link 0600 file
+  owned by the exact synthetic UID/GID, stable inode and size, and exactly one
+  well-formed record for the reviewed host/port/database and
+  `buffalo_synthetic_runtime`. Wildcards, extra records, owner/provisioner
+  users, blank credentials, path escape, and mode drift fail closed. Gateway
+  and research environment contracts still contain no database credential.
+- Supervisor APIs refuse generic synthetic start/commit/stop bypasses. The
+  exact generation must produce signed `READY` before COMMIT. Missing,
+  malformed, wrong-generation, stale-process, failed, timed-out, or
+  READY-to-COMMIT-raced attempts are disabled and reaped with their keys.
+  Ambiguous DISABLE state forces gateway-first terminal shutdown before worker
+  or key cleanup, including initial-launch and crash paths. Signals interrupt
+  the bounded readiness wait without waiting for its deadline.
+- Exact checkpoint validation passed **146/146** focused tests. The full
+  discovery inventory is exactly **1,336** tests, equal to the registered
+  floor, with no missing, deficient, or unregistered module. Python
+  compilation and `git diff --check` passed. The bounded changed-file
+  credential scan found only two deliberate `:x@` negative URL fixtures; no
+  credential, private key, token, payload, dump, or evidence bundle was added.
+  A separate same-model read-only review found no remaining P0/P1 defect in
+  this primitive; it is not a substitute for the required qualified external
+  review.
+- Production composition is still absent. `start_initial()` deliberately
+  leaves synthetic pending, and no root entrypoint yet performs
+  launch → bounded await/COMMIT → continuous signal/crash monitoring. No
+  actual gateway + synthetic + PostgreSQL process-isolation run, cross-UID
+  credential denial proof, container startup, browser acceptance, full suite,
+  or frozen startup suite has been claimed. The immediate implementation
+  boundary is the root bootstrap/composition and its actual-process tests;
+  ordinary startup must not migrate, seed, restore, or start research.
+
 ### Synthetic staging database contract — TASK 6/7 LOCAL TRANSITION AND RESTRICTED-RUNTIME PROOF PASS / LIFECYCLE GATES PENDING
 
 - Work resumed from the owner-pinned clean checkpoint
@@ -58,10 +111,11 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   except an expected stale full-source SHA pin, which was updated to the exact
   reviewed staging-dispatch source and then passed on rerun. Compilation,
   `git diff --check`, and the bounded credential scan passed. The registered
-  floor is now 1,306 tests. This is not a full-suite result.
+  floor is now 1,336 tests. This is not a full-suite result.
 - Remaining gates are staging-compatible Backup V2 plus private dump/restore;
-  generation-bound synthetic database readiness and supervisor cleanup;
-  root composition and portable container startup; authenticated browser,
+  production integration of the now-tested generation-bound synthetic
+  readiness primitive; root composition and portable container startup;
+  authenticated browser,
   restart, research-closure, and resource acceptance; authoritative full suite
   and 10 startup tests; attributable independent review; clean freeze and
   non-force WIP publication. External Claude review is unavailable because
