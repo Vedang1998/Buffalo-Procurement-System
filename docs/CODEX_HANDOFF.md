@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-01T19:01:32Z (UTC)
+**Updated:** 2026-10-04 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,50 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Railway staging source recovery — EXACT SOURCE PRESERVED / WIP TRANSFER ONLY / NOT ACCEPTED OR DEPLOYABLE
+
+- The original source worktree was recovered at
+  `/home/runner/workspace/.ai-auth/codex/worktrees/railway-staging-delivery.20260929/repo`.
+  It shares the Git common directory of the private-V3 source repository and
+  was on `codex/railway-staging-delivery` at clean committed parent
+  `6269bf29b8d70079a9a224025443ffac38f17192`, tree
+  `c0826857494ef54d48fd4adb1fa1336185f02b6e`, plus 16 modified tracked files
+  and five untracked source/test files. No reset, cleanup, pruning, stash,
+  reconstruction, or private-payload scan was performed.
+- The exact recovered dirty source was preserved without semantic edits as
+  implementation commit `d7918edd19f97d67f0e066aa84d06cbda9ccfc8c`,
+  tree `f726a3839a7e307a8123aea18cc71b204c4a16b8`. It contains the gateway,
+  synthetic/research worker transport, lifecycle, readiness, validation,
+  runtime, supervisor, approved staging design/plan, and registered tests.
+  Its runner declares an exact 1,295-test population.
+- The interrupted 1,295-test execution remains incomplete and non-green. No
+  retained textual execution log or source-to-evidence manifest was found, so
+  its exact pre-preservation dirty-tree identity and the reported 59/59,
+  197/197, and research-readiness review target/scope remain **UNVERIFIED**.
+  They must not be attributed to `6269bf29...` or `d7918edd...` as proven
+  execution/review evidence.
+- The hook failure is resolved diagnostically, not by changing source: the
+  worktree held the exact inert hook bytes but materialized
+  `scripts/post-merge.sh` as mode `0700`; Git records the same blob as
+  executable mode `100755`. A fresh transfer must verify mode `0755` and run
+  the unchanged exactness test. The hook contents/test expectation were not
+  loosened and no post-merge action was activated.
+- The public destination is the dedicated WIP branch
+  `codex/railway-staging-delivery`. Before transfer it did not exist remotely.
+  The sole workflow has read-only contents permission and triggers only for
+  pushes to `main` or pull requests targeting `main`; a WIP branch push has no
+  deployment-capable trigger. The newly publishable lineage and recovered
+  delta contain source/text only; bounded scans found no credentialed URL,
+  private key, live verifier, private payload/archive/dump/evidence bundle, or
+  unrelated file. Synthetic Argon2 assertions remain test data only.
+- This recovery grants no acceptance, merge, deployment, database, private
+  transfer, Shopify, supplier, purchasing, or PO authority. The next writer
+  must implement and test the separately approved synthetic-staging database
+  contract, rerun focused/startup/authoritative validation, and obtain the
+  required independent review. It must preserve the incomplete 1,295-run
+  classification and re-run the affected hook safety test in its own clean
+  checkout.
 
 ### Railway staging delivery — TASK 4 LOCAL IMPLEMENTATION, STATIC GATES, AND BOUNDED SEMANTIC REPLAY PASS / EXTERNAL REVIEW AND STARTUP INTEGRATION REMAIN
 
