@@ -10,6 +10,69 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### Staging database Backup V2 and exact startup binding — LOCAL CHECKPOINT PASS / INITIAL TRANSFER-RESTORE PENDING
+
+- The recoverable local checkpoint is
+  `91a0530e2888497dd48674fbea0754f92dcd2438`, tree
+  `2a1191861c7999a185d30fa5a31ba684f322ee9b`, on the sole-writer branch
+  `codex/railway-staging-delivery`. The worktree was clean immediately after
+  the commit. This is a WIP checkpoint, not a deployment candidate, and it has
+  not yet been published during this continuation.
+- Migration 017 now includes the staging-only, hash/facts-only Backup V2 state
+  facade. The exact transition identities are: SQL/source SHA-256
+  `a883c6048f94580e6a83b67e0d4f14b54de1158fa595d4c3c464afc0a25da359`,
+  156 permission records / 46 routine signatures with matrix SHA-256
+  `14c6d54c55b51b6b1dd42ff67645318411d3cbabc3cbe415c070e7cefc51f289`,
+  global successor
+  `0690b5c784b48b1bb82fc7022bc7695d8eb5195f8da0edd90a5437a2bb1089fc`,
+  runtime attestation
+  `517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a`,
+  and Backup V2 release identity
+  `bee94df327bcfe2f761fae59ea4bc843a5cd9b43f5f08267f52437ebb0f21cf1`.
+  Independently initialized PostgreSQL 16 fixtures reproduced the global and
+  scoped successor identities; the scoped 014/015/016 successors remained
+  `7200d33604f1c4e6273a266eee403063c57c06e6f5a642835fd279d55b4a3dd4`,
+  `bf3df233d9e3cc5f757076f755890cdfefca5eee5b8acecac208cc4eef27a61a`,
+  and `17605263963002022223a06b7e7a32ce6838eeb3f1e714098406b43c9f5bcc30`
+  respectively.
+- The operator-only Backup V2 producer now captures an actual PG16 custom dump,
+  a database-derived storage allowlist, complete relation/sequence evidence,
+  exact pre-APPLY price scope, clean source commit/tree, and the staging release
+  identity. It uses pre-opened 0600 output, trusted PG16 tools, exact private
+  directories, no credential in argv/manifest/output, bounded hashing, and
+  exact-inode cleanup. The runtime verifies the same bytes through the
+  least-privilege facade; a post-preflight global-ACL drift is re-attested and
+  refused inside every deciding SERIALIZABLE APPLY attempt before mutation.
+  A real restricted runtime APPLY/replay and downstream DRAFT/packet consumed
+  the applied `$30.00` case tier and produced six cases / `$180.00`, with no
+  release or Shopify authority.
+- Portable startup can remain unbound, in which case price APPLY fails closed.
+  When selected, root accepts only one exact backup label, caller-pinned
+  manifest digest, and source tree; resolves a fixed persistent
+  `synthetic-recovery/backups` path; verifies the current source in a bounded
+  credential-free subprocess running as UID/GID 1102/1202 with no supplementary
+  groups; and derives five immutable values visible only to the synthetic
+  worker. Gateway and research receive none. Persistent recovery bytes are
+  excluded from bootstrap cleanup.
+- Exact current discovery is **1,388/1,388** across the registered inventory,
+  with no registration/minimum errors. The four directly affected modules
+  passed **67/67** (15 Backup V2, 15 staging database including real PG16, 25
+  bootstrap, 12 composition); the real APPLY/retry test was independently
+  rerun and passed. Compilation, `git diff --check`, and the bounded credential
+  scan passed. Read-only same-model review found no remaining concrete P0/P1 in
+  this slice and independently passed the 52 backup/bootstrap/composition plus
+  33 runner/conformance tests. This is not the authoritative full-suite result
+  or qualified external review.
+- Task 7 initial transfer remains open and is separate from this pre-APPLY
+  recovery artifact. `pg_restore --list` accepts a deliberately truncated
+  custom archive, so list validation is not a restore proof. Required next is
+  a private source-manifest/custom-dump workflow, restore into a physically
+  distinct empty PG16 target, exact post-restore fixture/state comparison, then
+  the existing bootstrap/provision/runtime attestations. Actual root/container
+  UID traversal, PID 1/cgroup, browser, restart, resource, full-suite, startup,
+  and qualified external-review gates also remain open. No external database,
+  deployment, Shopify, or purchasing action occurred.
+
 ### Root staging service bootstrap — LOCAL COMPOSITION PASS / ACTUAL-PROCESS AND CONTAINER ACCEPTANCE PENDING
 
 - The exact local code checkpoint is
@@ -142,15 +205,15 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   staging successors for the integrity consumers derived from 014, 015, and
   016; and refuses partial/conflicting state rather than repairing it.
 - The exact matrix is 60 readable application relations, 28 writable
-  relations / 36 operations, 14 `USAGE`-only sequences, 45 routine
-  signatures, and 155 canonical records. Matrix SHA-256 is
-  `d58ed105c7eb6446c4b6d4694b2a3d8a12fc304454e8622f1de2d4a06dfeabb6`.
+  relations / 36 operations, 14 `USAGE`-only sequences, 46 routine
+  signatures, and 156 canonical records. Matrix SHA-256 is
+  `14c6d54c55b51b6b1dd42ff67645318411d3cbabc3cbe415c070e7cefc51f289`.
   The immutable development-v2 fixture manifest is
   `08fd401f70ad55f7957b09bd47e99797a648d1f7ba2c0c86e24f5d0034683ec1`.
   Exact post-bootstrap predecessor and successor catalogs are
   `59ebe68a203511cb54d2d02d7c73ef44cb1ee3887f2c85effbaa08f7276cceda`
   and
-  `af02588dee120940bd34a44c6d1fbc4b66062082eaeda36e268344ae992eaea3`.
+  `0690b5c784b48b1bb82fc7022bc7695d8eb5195f8da0edd90a5437a2bb1089fc`.
 - Two independently initialized PostgreSQL 16 databases with distinct
   administrator identities reproduced the same fixture, predecessor,
   successor, and 014/015/016 staging identities. Python and SQL global
@@ -167,15 +230,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   was six cases at `$9.50` = `$57`; the packet had 13 members; terminal state
   was `RUNNING / PACKET_BUILT / INTERNAL_DRAFT_ONLY`; non-DRAFT POs, release,
   and Shopify calls were zero. Runtime attestation remained
-  `be472ebbad9b26e3fa7feb0c22ed5c82ad9001c21f53694bf6c53f122b817168`
+  `517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a`
   and the immutable fixture hash did not change.
-- The focused database/contract module passed `11/11`; the combined staging,
-  population-contract, conformance, and runner selection passed all cases
-  except an expected stale full-source SHA pin, which was updated to the exact
-  reviewed staging-dispatch source and then passed on rerun. Compilation,
-  `git diff --check`, and the bounded credential scan passed. The registered
-  floor is now 1,365 tests. This is not a full-suite result.
-- Remaining gates are staging-compatible Backup V2 plus private dump/restore;
+- The original database checkpoint passed `11/11`; it is superseded by the
+  **15/15** real-PG database module and exact **1,388**-test registered
+  discovery recorded above. Compilation, `git diff --check`, and the bounded
+  credential scan passed. This is not a full-suite result.
+- Remaining gates are private initial-transfer dump/restore;
   actual-process integration of the now-tested generation-bound synthetic
   readiness and root-composition primitives; portable container startup;
   authenticated browser,
