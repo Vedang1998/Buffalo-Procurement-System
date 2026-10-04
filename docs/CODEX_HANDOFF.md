@@ -46,6 +46,20 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   delta contain source/text only; bounded scans found no credentialed URL,
   private key, live verifier, private payload/archive/dump/evidence bundle, or
   unrelated file. Synthetic Argon2 assertions remain test data only.
+- The first non-force publication and an independent fresh clone verified WIP
+  tip `56d51b24361065ce300a09ae39bed38073253c03`, tree
+  `089f3da45d23cb1f26ee49cf3347590ae0fca125`, before this final
+  documentation-only verification child. `git fsck --full` passed; the source
+  and fresh-clone 439-path raw tree manifests both hashed to
+  `760df3175502f51c04b9270c1fcb401f0cd329230e53c13c3db9faac9b21e952`.
+  The fresh checkout materialized the unchanged 76-byte inert hook as mode
+  `0755`, and every sampled gateway, worker, runtime, validation, design and
+  test path was present. The recovered branch is 19 commits after exact PR #24
+  head `e25704e117a3c5bede843cac65ddfdeb7f30024f`. The paused receiving checkout
+  `5d5c9a22a56f599f023e0e440eead6a99ef39440` has 314 tracked paths and zero
+  `staging_*` paths; the recovered source has 439 tracked paths and 23
+  `staging_*` paths. Their merge base is `5f86eee6...`; the receiving checkout
+  is not the staging source and was not modified.
 - This recovery grants no acceptance, merge, deployment, database, private
   transfer, Shopify, supplier, purchasing, or PO authority. The next writer
   must implement and test the separately approved synthetic-staging database
