@@ -10,7 +10,62 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Synthetic worker database readiness — LOCAL PRIMITIVE PASS / ROOT COMPOSITION PENDING
+### Root staging service bootstrap — LOCAL COMPOSITION PASS / ACTUAL-PROCESS AND CONTAINER ACCEPTANCE PENDING
+
+- The exact local code checkpoint is
+  `52a6d2973788981cf0a891b3c68599fad2ae906f`, tree
+  `d7d473a026236a18508d20addb91b732565f4a90`, on the sole-writer branch
+  `codex/railway-staging-delivery`. The material bootstrap commit is
+  `8a7de04f82a7492598f93bc5df7a3a71a3b17ffb`; the current child bounds every
+  activation-test frame read and removes a cancellation-before-READY race.
+  The remote WIP branch remains at
+  `bfcd2bc8f0da5c33b1f63bae59737ad19057a3dc`, so this local branch is eight
+  commits ahead and this checkpoint is not published, deployable, or accepted.
+- The new root-only composition validates the exact root/gateway/synthetic/
+  research accounts, protected socket groups, ephemeral runtime layout,
+  persistent volume layout, fixed child commands, inherited descriptors, and
+  per-role environments. It selects a purpose-named credential-free synthetic
+  database URL and password from the root input boundary, converts the password
+  to one exact synthetic-owned `0600` pgpass record, removes the password from
+  the root environment before any child launch, and never places database
+  authority in gateway or research environments.
+- Startup now launches the gateway first, waits for a fresh domain-separated
+  HMAC proof bound to the exact gateway PID, starts the bounded research
+  lifecycle/control plane without starting a research worker, launches the
+  synthetic worker, and waits for its generation/PID/database-attestation
+  proof before COMMIT and before opening the research start gate. Ordinary
+  startup performs no migration, seed, restore, deployment, research start,
+  Shopify action, purchase, or PO release.
+- Lifecycle cleanup is fail closed and best effort across every stage. Repeated
+  signals remain handled through teardown; ambiguous activation state forces
+  gateway-first terminal cleanup; partially started research threads are
+  stopped or their runtime resources are retained; pgpass, management key, and
+  socket paths are registered at creation and removed only after exact
+  inode/type/owner/mode proof. Persistent synthetic state and the accepted
+  private research release are never cleanup targets.
+- Exact current focused validation passed **209/209** tests. The activation
+  module also passed 50 consecutive bounded invocations (**1,100** individual
+  test executions) after the stale pre-fix process was identified by start
+  time, terminated, and replaced by the race-free test. Current discovery is
+  exactly **1,365** tests across 82 registered modules, equal to the encoded
+  floor. Python compilation and `git diff --check` passed. Independent
+  same-model read-only review reproduced the earlier lifecycle/credential/
+  activation findings, verified their repairs with **136/136** affected tests,
+  and found no remaining concrete P0/P1 in the unit-level bootstrap paths.
+  This is not the authoritative full suite or qualified external review.
+- Remaining acceptance work is material: prove physical runtime/volume mount
+  separation and one replica from deployment evidence; run the real root
+  composition across distinct UIDs and inspect child `/proc` environment and
+  descriptors; prove PID 1, cgroup, abrupt-death, PostgreSQL, browser, restart,
+  and resource behavior in the final container; add the authenticated coarse
+  readiness/source-identity view and sanitized request logs; and supply source
+  Railway/container configuration. Before that acceptance, the database path
+  still needs staging-compatible Backup V2 authority, the declared price
+  APPLY, private transfer/restore proof, and independently reproduced successor
+  identities. The next implementation boundary is that Backup V2/database
+  work; no deployment or external mutation is authorized.
+
+### Synthetic worker database readiness — LOCAL PRIMITIVE PASS / ROOT COMPOSITION RECORDED ABOVE
 
 - The exact local code checkpoint is
   `1c908d2f910d2fc99fa5344f635a6778670c808a`, tree
@@ -64,14 +119,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   unrelated clone refused). The reviewer found no further concrete P0/P1
   defect in the repaired primitive. This is not a substitute for the required
   qualified external review.
-- Production composition is still absent. `start_initial()` deliberately
-  leaves synthetic pending, and no root entrypoint yet performs
+- The subsequent root checkpoint above now composes the primitive through
   launch → bounded await/COMMIT → continuous signal/crash monitoring. No
-  actual gateway + synthetic + PostgreSQL process-isolation run, cross-UID
-  credential denial proof, container startup, browser acceptance, full suite,
-  or frozen startup suite has been claimed. The immediate implementation
-  boundary is the root bootstrap/composition and its actual-process tests;
-  ordinary startup must not migrate, seed, restore, or start research.
+  actual gateway + synthetic + PostgreSQL composition run, cross-UID
+  credential-denial proof, container startup, browser acceptance, full suite,
+  or frozen startup suite has been claimed. Ordinary startup remains forbidden
+  from migrating, seeding, restoring, or starting research.
 
 ### Synthetic staging database contract — TASK 6/7 LOCAL TRANSITION AND RESTRICTED-RUNTIME PROOF PASS / LIFECYCLE GATES PENDING
 
@@ -121,10 +174,10 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   except an expected stale full-source SHA pin, which was updated to the exact
   reviewed staging-dispatch source and then passed on rerun. Compilation,
   `git diff --check`, and the bounded credential scan passed. The registered
-  floor is now 1,336 tests. This is not a full-suite result.
+  floor is now 1,365 tests. This is not a full-suite result.
 - Remaining gates are staging-compatible Backup V2 plus private dump/restore;
-  production integration of the now-tested generation-bound synthetic
-  readiness primitive; root composition and portable container startup;
+  actual-process integration of the now-tested generation-bound synthetic
+  readiness and root-composition primitives; portable container startup;
   authenticated browser,
   restart, research-closure, and resource acceptance; authoritative full suite
   and 10 startup tests; attributable independent review; clean freeze and
