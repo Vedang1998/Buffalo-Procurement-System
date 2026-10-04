@@ -7,6 +7,8 @@ import hashlib
 import hmac
 import json
 import math
+import os
+import select
 import secrets
 import socket
 import struct
@@ -24,6 +26,7 @@ MAX_ACTIVATION_FRAME_BYTES = 2_048
 _REQUEST_DOMAIN = b"BUFFALO_STAGING_ACTIVATION_REQUEST_V1\x00"
 _RESPONSE_DOMAIN = b"BUFFALO_STAGING_ACTIVATION_RESPONSE_V1\x00"
 _KEY_PROOF_DOMAIN = b"BUFFALO_STAGING_ACTIVATION_KEY_PROOF_V1\x00"
+_READY_DOMAIN = b"BUFFALO_STAGING_ACTIVATION_READY_V1\x00"
 _ROLES = frozenset({"synthetic", "research"})
 _MAX_GENERATION = 2**63 - 1
 
@@ -145,6 +148,91 @@ def mint_activation_request(
     return _signed_payload(key=key, domain=_REQUEST_DOMAIN, unsigned=unsigned)
 
 
+def mint_gateway_activation_ready(
+    *,
+    key: bytes,
+    gateway_pid: int,
+    issued_ms: int,
+    nonce: str | None = None,
+) -> bytes:
+    """Create the gateway's boot-scoped proof that activation is serving."""
+
+    selected_nonce = secrets.token_hex(32) if nonce is None else nonce
+    if (
+        not isinstance(key, bytes)
+        or len(key) != 32
+        or type(gateway_pid) is not int
+        or gateway_pid < 1
+        or type(issued_ms) is not int
+        or issued_ms < 0
+        or not _valid_hex(selected_nonce)
+    ):
+        raise WorkerActivationError("activation readiness values differ")
+    unsigned: dict[str, object] = {
+        "expires_ms": issued_ms + ACTIVATION_TTL_MILLISECONDS,
+        "gateway_pid": gateway_pid,
+        "issued_ms": issued_ms,
+        "nonce": selected_nonce,
+        "state": "GATEWAY_READY",
+        "version": ACTIVATION_VERSION,
+    }
+    return _signed_payload(key=key, domain=_READY_DOMAIN, unsigned=unsigned)
+
+
+def parse_gateway_activation_ready(
+    *,
+    message: bytes,
+    key: bytes,
+    expected_gateway_pid: int,
+    now_ms: int,
+) -> None:
+    """Verify the first and only gateway-to-supervisor readiness frame."""
+
+    if (
+        not isinstance(key, bytes)
+        or len(key) != 32
+        or type(expected_gateway_pid) is not int
+        or expected_gateway_pid < 1
+        or type(now_ms) is not int
+    ):
+        raise WorkerActivationError("activation readiness expectation differs")
+    envelope = _parse_canonical(message)
+    if set(envelope) != {
+        "expires_ms",
+        "gateway_pid",
+        "issued_ms",
+        "nonce",
+        "signature",
+        "state",
+        "version",
+    }:
+        raise WorkerActivationError("activation readiness contract differs")
+    signature = envelope.pop("signature")
+    issued_ms = envelope.get("issued_ms")
+    expires_ms = envelope.get("expires_ms")
+    if (
+        not _valid_hex(signature)
+        or not hmac.compare_digest(
+            signature,
+            hmac.digest(
+                key,
+                _READY_DOMAIN + _canonical_json(envelope),
+                "sha256",
+            ).hex(),
+        )
+        or envelope.get("version") != ACTIVATION_VERSION
+        or envelope.get("state") != "GATEWAY_READY"
+        or envelope.get("gateway_pid") != expected_gateway_pid
+        or not _valid_hex(envelope.get("nonce"))
+        or type(issued_ms) is not int
+        or type(expires_ms) is not int
+        or expires_ms - issued_ms != ACTIVATION_TTL_MILLISECONDS
+        or issued_ms > now_ms + 1_000
+        or now_ms > expires_ms
+    ):
+        raise WorkerActivationError("activation readiness proof differs")
+
+
 def _key_proof(
     *, key: bytes, nonce: str, role: str, generation: int
 ) -> str:
@@ -188,6 +276,13 @@ class GatewayActivationProtocol:
         self.wall_clock = wall_clock
         self.replay_entries = replay_entries
         self._responses: OrderedDict[str, tuple[int, bytes, bytes]] = OrderedDict()
+
+    def ready_proof(self) -> bytes:
+        return mint_gateway_activation_ready(
+            key=self._key,
+            gateway_pid=os.getpid(),
+            issued_ms=_clock_milliseconds(self.wall_clock),
+        )
 
     def dispatch(self, message: bytes) -> bytes:
         envelope = _parse_canonical(message)
@@ -420,9 +515,99 @@ class SupervisorActivationClient:
         self._channel = channel
         self._channel.settimeout(float(timeout_seconds))
         self._key = bytes(key)
+        self._timeout_seconds = float(timeout_seconds)
         self.wall_clock = wall_clock
         self._lock = threading.Lock()
         self._closed = False
+        self._ready = False
+
+    def await_gateway_ready(
+        self,
+        *,
+        expected_gateway_pid: int,
+        timeout_seconds: float = 30.0,
+        should_abort: Callable[[], bool] = lambda: False,
+        peer_is_live: Callable[[], bool] = lambda: True,
+    ) -> None:
+        """Wait for a signed ready frame without consuming exchange timeout."""
+
+        if (
+            not isinstance(timeout_seconds, (int, float))
+            or not 0.1 <= float(timeout_seconds) <= 60.0
+            or type(expected_gateway_pid) is not int
+            or expected_gateway_pid < 1
+            or not callable(should_abort)
+            or not callable(peer_is_live)
+        ):
+            raise WorkerActivationError("activation readiness wait is invalid")
+        deadline = time.monotonic() + float(timeout_seconds)
+        with self._lock:
+            if self._closed:
+                raise WorkerActivationError("activation readiness transition differs")
+            if self._ready:
+                self._poison_locked()
+                raise WorkerActivationError("activation readiness transition differs")
+            try:
+                prefix = self._receive_ready_exact(
+                    4,
+                    deadline=deadline,
+                    should_abort=should_abort,
+                    peer_is_live=peer_is_live,
+                )
+                length = struct.unpack("!I", prefix)[0]
+                if length < 1 or length > MAX_ACTIVATION_FRAME_BYTES:
+                    raise WorkerActivationError(
+                        "activation readiness length is invalid"
+                    )
+                proof = self._receive_ready_exact(
+                    length,
+                    deadline=deadline,
+                    should_abort=should_abort,
+                    peer_is_live=peer_is_live,
+                )
+                parse_gateway_activation_ready(
+                    message=proof,
+                    key=self._key,
+                    expected_gateway_pid=expected_gateway_pid,
+                    now_ms=_clock_milliseconds(self.wall_clock),
+                )
+                self._channel.settimeout(self._timeout_seconds)
+                self._ready = True
+                return
+            except Exception:
+                self._poison_locked()
+                raise WorkerActivationError(
+                    "activation readiness failed"
+                ) from None
+
+    def _receive_ready_exact(
+        self,
+        length: int,
+        *,
+        deadline: float,
+        should_abort: Callable[[], bool],
+        peer_is_live: Callable[[], bool],
+    ) -> bytes:
+        chunks = bytearray()
+        while len(chunks) < length:
+            if should_abort() or not peer_is_live():
+                raise WorkerActivationError("activation readiness was interrupted")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise WorkerActivationError("activation readiness timed out")
+            readable, _, _ = select.select(
+                (self._channel,),
+                (),
+                (),
+                min(remaining, 0.05),
+            )
+            if not readable:
+                continue
+            chunk = self._channel.recv(length - len(chunks))
+            if not chunk:
+                raise WorkerActivationError("activation channel closed early")
+            chunks.extend(chunk)
+        return bytes(chunks)
 
     def prepare(self, *, role: str, generation: int, worker_key: bytes) -> None:
         self._exchange(
@@ -463,6 +648,8 @@ class SupervisorActivationClient:
         with self._lock:
             if self._closed:
                 raise WorkerActivationError("activation channel is closed")
+            if not self._ready:
+                raise WorkerActivationError("activation gateway is not ready")
             try:
                 self._channel.sendall(struct.pack("!I", len(request)) + request)
                 length = struct.unpack("!I", self._receive_exact(4))[0]
@@ -534,6 +721,14 @@ class GatewayActivationServer:
         self._serve_task = current
         loop = asyncio.get_running_loop()
         try:
+            ready = self.protocol.ready_proof()
+            await asyncio.wait_for(
+                loop.sock_sendall(
+                    self._channel,
+                    struct.pack("!I", len(ready)) + ready,
+                ),
+                timeout=self.timeout_seconds,
+            )
             while not self._closed:
                 first = await loop.sock_recv(self._channel, 1)
                 if not first:
@@ -557,6 +752,7 @@ class GatewayActivationServer:
                 raise
         except _ActivationChannelClosed:
             if not self._closed:
+                self._poison_and_fail()
                 raise WorkerActivationError("activation server failed") from None
         except Exception:
             if not self._closed:

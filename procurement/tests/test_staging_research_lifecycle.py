@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 import threading
 import time
 import unittest
+from unittest import mock
 
 from procurement_os.staging_research_lifecycle import (
     AggregateResourceSample,
@@ -757,6 +758,41 @@ class ResearchLifecycleTests(unittest.TestCase):
             self.assertEqual(self.manager.status().state, "READY")
         finally:
             runner.shutdown()
+
+    def test_partial_runner_thread_start_is_rolled_back(self) -> None:
+        runner = ResearchLifecycleRunner(
+            self.manager,
+            interval_seconds=0.01,
+            join_timeout_seconds=0.2,
+            fatal_handler=lambda: None,
+        )
+        original_start = threading.Thread.start
+        starts = 0
+
+        def fail_second_start(thread: threading.Thread) -> None:
+            nonlocal starts
+            starts += 1
+            if starts == 2:
+                raise RuntimeError("fixture lifecycle thread start failure")
+            original_start(thread)
+
+        with mock.patch.object(
+            threading.Thread, "start", new=fail_second_start
+        ), self.assertRaisesRegex(
+            ResearchLifecycleError, "failed to start"
+        ):
+            runner.start()
+        self.assertIsNone(runner._thread)
+        self.assertIsNone(runner._watchdog_thread)
+        self.assertFalse(runner._stop.is_set())
+        self.assertFalse(
+            any(
+                thread.name
+                in {"buffalo-research-lifecycle", "buffalo-research-watchdog"}
+                and thread.is_alive()
+                for thread in threading.enumerate()
+            )
+        )
 
     def test_unexpected_runner_failure_cannot_leave_ready_worker_routable(self) -> None:
         self._launch()

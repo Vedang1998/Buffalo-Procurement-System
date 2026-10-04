@@ -816,6 +816,7 @@ class ResearchLifecycleRunner:
         self._fatal_invoked = False
 
     def start(self) -> None:
+        watchdog_started = False
         with self._lock:
             if self._thread is not None:
                 raise ResearchLifecycleError("research lifecycle runner already started")
@@ -831,8 +832,33 @@ class ResearchLifecycleRunner:
             )
             self._thread = thread
             self._watchdog_thread = watchdog
-            thread.start()
-            watchdog.start()
+            try:
+                # Start the passive watchdog first.  If the lifecycle ticker
+                # cannot be created, the watchdog can be stopped without any
+                # manager mutation having occurred on the failed path.
+                watchdog.start()
+                watchdog_started = True
+                thread.start()
+            except BaseException as exc:
+                self._stop.set()
+                self._wake.set()
+                startup_error = exc
+            else:
+                return
+        if watchdog_started:
+            watchdog.join(timeout=self.join_timeout_seconds)
+        if watchdog_started and watchdog.is_alive():
+            raise ResearchLifecycleError(
+                "research lifecycle partial startup did not stop"
+            ) from startup_error
+        with self._lock:
+            self._thread = None
+            self._watchdog_thread = None
+            self._stop.clear()
+            self._wake.clear()
+        raise ResearchLifecycleError(
+            "research lifecycle runner failed to start"
+        ) from startup_error
 
     def check(self) -> None:
         with self._lock:

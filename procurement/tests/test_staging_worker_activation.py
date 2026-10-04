@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import socket
 import struct
+import time
 import traceback
 import unittest
 
@@ -15,7 +17,9 @@ from procurement_os.staging_worker_activation import (
     SupervisorActivationClient,
     WorkerActivationError,
     mint_activation_request,
+    mint_gateway_activation_ready,
     parse_activation_response,
+    parse_gateway_activation_ready,
 )
 from procurement_os.staging_worker_types import WorkerKeyState, WorkerKeyring
 
@@ -24,6 +28,43 @@ BOOT_KEY = bytes.fromhex("91" * 32)
 SYNTHETIC_KEY = bytes.fromhex("11" * 32)
 RESEARCH_KEY = bytes.fromhex("22" * 32)
 NONCE = "ab" * 32
+
+
+def _receive_frame(channel: socket.socket) -> bytes:
+    prefix = bytearray()
+    while len(prefix) < 4:
+        chunk = channel.recv(4 - len(prefix))
+        if not chunk:
+            raise AssertionError("frame closed before prefix")
+        prefix.extend(chunk)
+    length = struct.unpack("!I", prefix)[0]
+    payload = bytearray()
+    while len(payload) < length:
+        chunk = channel.recv(length - len(payload))
+        if not chunk:
+            raise AssertionError("frame closed before payload")
+        payload.extend(chunk)
+    return bytes(payload)
+
+
+async def _receive_frame_async(
+    loop: asyncio.AbstractEventLoop,
+    channel: socket.socket,
+) -> bytes:
+    prefix = bytearray()
+    while len(prefix) < 4:
+        chunk = await loop.sock_recv(channel, 4 - len(prefix))
+        if not chunk:
+            raise AssertionError("frame closed before prefix")
+        prefix.extend(chunk)
+    length = struct.unpack("!I", prefix)[0]
+    payload = bytearray()
+    while len(payload) < length:
+        chunk = await loop.sock_recv(channel, length - len(payload))
+        if not chunk:
+            raise AssertionError("frame closed before payload")
+        payload.extend(chunk)
+    return bytes(payload)
 
 
 class WorkerActivationTests(unittest.TestCase):
@@ -180,6 +221,47 @@ class WorkerActivationTests(unittest.TestCase):
                         issued_ms=int(self.now * 1_000),
                     )
 
+    def test_gateway_ready_proof_is_boot_keyed_canonical_and_fresh(self) -> None:
+        proof = mint_gateway_activation_ready(
+            key=BOOT_KEY,
+            gateway_pid=4321,
+            issued_ms=int(self.now * 1_000),
+            nonce=NONCE,
+        )
+        parse_gateway_activation_ready(
+            message=proof,
+            key=BOOT_KEY,
+            expected_gateway_pid=4321,
+            now_ms=int(self.now * 1_000),
+        )
+        for changed in (
+            proof + b" ",
+            proof.replace(b'"GATEWAY_READY"', b'"NOT_READY"'),
+        ):
+            with self.subTest(changed=changed[-20:]), self.assertRaises(
+                WorkerActivationError
+            ):
+                parse_gateway_activation_ready(
+                    message=changed,
+                    key=BOOT_KEY,
+                    expected_gateway_pid=4321,
+                    now_ms=int(self.now * 1_000),
+                )
+        with self.assertRaises(WorkerActivationError):
+            parse_gateway_activation_ready(
+                message=proof,
+                key=bytes.fromhex("55" * 32),
+                expected_gateway_pid=4321,
+                now_ms=int(self.now * 1_000),
+            )
+        with self.assertRaises(WorkerActivationError):
+            parse_gateway_activation_ready(
+                message=proof,
+                key=BOOT_KEY,
+                expected_gateway_pid=4322,
+                now_ms=int(self.now * 1_000),
+            )
+
     def test_real_connected_socket_round_trip_and_clean_shutdown(self) -> None:
         async def scenario() -> None:
             supervisor_socket, gateway_socket = socket.socketpair(
@@ -198,6 +280,11 @@ class WorkerActivationTests(unittest.TestCase):
             )
             task = asyncio.create_task(server.serve())
             try:
+                await asyncio.to_thread(
+                    client.await_gateway_ready,
+                    expected_gateway_pid=os.getpid(),
+                    timeout_seconds=1.0,
+                )
                 await asyncio.to_thread(
                     client.prepare,
                     role="research",
@@ -262,6 +349,11 @@ class WorkerActivationTests(unittest.TestCase):
             )
             task = asyncio.create_task(server.serve())
             try:
+                await asyncio.to_thread(
+                    client.await_gateway_ready,
+                    expected_gateway_pid=os.getpid(),
+                    timeout_seconds=1.0,
+                )
                 await asyncio.sleep(0.08)
                 self.assertFalse(task.done())
                 await asyncio.to_thread(
@@ -286,6 +378,17 @@ class WorkerActivationTests(unittest.TestCase):
             timeout_seconds=0.05,
         )
         try:
+            ready = mint_gateway_activation_ready(
+                key=BOOT_KEY,
+                gateway_pid=4321,
+                issued_ms=int(self.now * 1_000),
+                nonce=NONCE,
+            )
+            peer.sendall(struct.pack("!I", len(ready)) + ready)
+            client.await_gateway_ready(
+                expected_gateway_pid=4321,
+                timeout_seconds=0.2,
+            )
             with self.assertRaisesRegex(WorkerActivationError, "exchange failed"):
                 client.commit(role="research", generation=0)
             with self.assertRaisesRegex(WorkerActivationError, "closed"):
@@ -295,6 +398,182 @@ class WorkerActivationTests(unittest.TestCase):
             self.assertEqual(len(first), 4)
             length = struct.unpack("!I", first)[0]
             self.assertEqual(len(peer.recv(length)), length)
+            self.assertEqual(peer.recv(1), b"")
+        finally:
+            client.close()
+            peer.close()
+
+    def test_gateway_readiness_wait_outlives_exchange_timeout(self) -> None:
+        async def scenario() -> None:
+            supervisor_socket, gateway_socket = socket.socketpair(
+                socket.AF_UNIX,
+                socket.SOCK_STREAM,
+            )
+            client = SupervisorActivationClient(
+                channel=supervisor_socket,
+                key=BOOT_KEY,
+                wall_clock=lambda: self.now,
+                timeout_seconds=0.05,
+            )
+            waiter = asyncio.create_task(
+                asyncio.to_thread(
+                    client.await_gateway_ready,
+                    expected_gateway_pid=os.getpid(),
+                    timeout_seconds=0.5,
+                )
+            )
+            await asyncio.sleep(0.1)
+            self.assertFalse(waiter.done())
+            server = GatewayActivationServer(
+                channel=gateway_socket,
+                protocol=self.protocol,
+                fatal_handler=lambda: None,
+            )
+            task = asyncio.create_task(server.serve())
+            try:
+                await asyncio.wait_for(waiter, timeout=1)
+                await asyncio.to_thread(
+                    client.prepare,
+                    role="research",
+                    generation=0,
+                    worker_key=RESEARCH_KEY,
+                )
+            finally:
+                client.close()
+                await server.close()
+                await task
+
+        asyncio.run(scenario())
+
+    def test_gateway_readiness_signal_or_peer_death_poisons_channel(self) -> None:
+        for reason in ("signal", "death"):
+            with self.subTest(reason=reason):
+                supervisor_socket, peer = socket.socketpair(
+                    socket.AF_UNIX, socket.SOCK_STREAM
+                )
+                client = SupervisorActivationClient(
+                    channel=supervisor_socket,
+                    key=BOOT_KEY,
+                    wall_clock=lambda: self.now,
+                    timeout_seconds=0.05,
+                )
+                try:
+                    with self.assertRaisesRegex(
+                        WorkerActivationError, "readiness failed"
+                    ):
+                        client.await_gateway_ready(
+                            expected_gateway_pid=4321,
+                            timeout_seconds=0.2,
+                            should_abort=lambda: reason == "signal",
+                            peer_is_live=lambda: reason != "death",
+                        )
+                    peer.settimeout(0.1)
+                    self.assertEqual(peer.recv(1), b"")
+                finally:
+                    client.close()
+                    peer.close()
+
+    def test_gateway_readiness_without_server_times_out_and_poison_closes(self) -> None:
+        supervisor_socket, peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        client = SupervisorActivationClient(
+            channel=supervisor_socket,
+            key=BOOT_KEY,
+            wall_clock=lambda: self.now,
+            timeout_seconds=0.05,
+        )
+        started = time.monotonic()
+        try:
+            with self.assertRaisesRegex(WorkerActivationError, "readiness failed"):
+                client.await_gateway_ready(
+                    expected_gateway_pid=4321,
+                    timeout_seconds=0.1,
+                )
+            self.assertLess(time.monotonic() - started, 0.5)
+            peer.settimeout(0.1)
+            self.assertEqual(peer.recv(1), b"")
+        finally:
+            client.close()
+            peer.close()
+
+    def test_gateway_ready_send_failure_poison_invokes_fatal(self) -> None:
+        async def scenario() -> None:
+            supervisor_socket, gateway_socket = socket.socketpair(
+                socket.AF_UNIX,
+                socket.SOCK_STREAM,
+            )
+            supervisor_socket.close()
+            fatal: list[bool] = []
+            server = GatewayActivationServer(
+                channel=gateway_socket,
+                protocol=self.protocol,
+                fatal_handler=lambda: fatal.append(True),
+            )
+            with self.assertRaisesRegex(WorkerActivationError, "server failed"):
+                await server.serve()
+            self.assertEqual(fatal, [True])
+            self.assertTrue(server._closed)
+
+        asyncio.run(scenario())
+
+    def test_activation_peer_eof_after_ready_poison_invokes_fatal(self) -> None:
+        async def scenario() -> None:
+            supervisor_socket, gateway_socket = socket.socketpair(
+                socket.AF_UNIX,
+                socket.SOCK_STREAM,
+            )
+            supervisor_socket.setblocking(False)
+            fatal: list[bool] = []
+            server = GatewayActivationServer(
+                channel=gateway_socket,
+                protocol=self.protocol,
+                fatal_handler=lambda: fatal.append(True),
+            )
+            task = asyncio.create_task(server.serve())
+            loop = asyncio.get_running_loop()
+            await _receive_frame_async(loop, supervisor_socket)
+            supervisor_socket.close()
+            with self.assertRaisesRegex(WorkerActivationError, "server failed"):
+                await asyncio.wait_for(task, timeout=1)
+            self.assertEqual(fatal, [True])
+            self.assertTrue(server._closed)
+
+        asyncio.run(scenario())
+
+    def test_pre_ready_exchange_is_refused_and_duplicate_ready_poisons(self) -> None:
+        supervisor_socket, peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        client = SupervisorActivationClient(
+            channel=supervisor_socket,
+            key=BOOT_KEY,
+            wall_clock=lambda: self.now,
+            timeout_seconds=0.05,
+        )
+        try:
+            with self.assertRaisesRegex(WorkerActivationError, "not ready"):
+                client.prepare(
+                    role="research",
+                    generation=0,
+                    worker_key=RESEARCH_KEY,
+                )
+            ready = mint_gateway_activation_ready(
+                key=BOOT_KEY,
+                gateway_pid=4321,
+                issued_ms=int(self.now * 1_000),
+                nonce=NONCE,
+            )
+            frame = struct.pack("!I", len(ready)) + ready
+            peer.sendall(frame + frame)
+            client.await_gateway_ready(
+                expected_gateway_pid=4321,
+                timeout_seconds=0.2,
+            )
+            with self.assertRaisesRegex(WorkerActivationError, "exchange failed"):
+                client.prepare(
+                    role="research",
+                    generation=0,
+                    worker_key=RESEARCH_KEY,
+                )
+            peer.settimeout(0.1)
+            _receive_frame(peer)
             self.assertEqual(peer.recv(1), b"")
         finally:
             client.close()
@@ -337,6 +616,13 @@ class WorkerActivationTests(unittest.TestCase):
             self.assertEqual(fatal, [True])
             self.assertTrue(server._closed)
             supervisor_socket.settimeout(0.1)
+            ready = _receive_frame(supervisor_socket)
+            parse_gateway_activation_ready(
+                message=ready,
+                key=BOOT_KEY,
+                expected_gateway_pid=os.getpid(),
+                now_ms=int(self.now * 1_000),
+            )
             self.assertEqual(supervisor_socket.recv(1), b"")
             supervisor_socket.close()
 
@@ -365,6 +651,13 @@ class WorkerActivationTests(unittest.TestCase):
             )
             task = asyncio.create_task(server.serve())
             loop = asyncio.get_running_loop()
+            ready = await _receive_frame_async(loop, supervisor_socket)
+            parse_gateway_activation_ready(
+                message=ready,
+                key=BOOT_KEY,
+                expected_gateway_pid=os.getpid(),
+                now_ms=int(self.now * 1_000),
+            )
             request = self._request("PREPARE")
             await loop.sock_sendall(
                 supervisor_socket,

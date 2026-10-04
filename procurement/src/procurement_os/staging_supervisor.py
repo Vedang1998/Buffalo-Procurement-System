@@ -2792,7 +2792,20 @@ def write_private_key_copy(
     )
     created_identity: tuple[int, int] | None = None
     try:
-        created = os.fstat(descriptor)
+        try:
+            created = os.fstat(descriptor)
+        except BaseException:
+            # O_EXCL created this exact pathname.  Recover its identity so a
+            # descriptor-inspection failure cannot strand private key bytes.
+            created = path.stat(follow_symlinks=False)
+            if not stat.S_ISREG(created.st_mode) or created.st_nlink != 1:
+                raise StagingSupervisorError(
+                    "private key-copy provisional inode differs"
+                ) from None
+            created_identity = (created.st_dev, created.st_ino)
+            if on_created is not None:
+                on_created(created_identity)
+            raise
         created_identity = (created.st_dev, created.st_ino)
         if on_created is not None:
             on_created(created_identity)
@@ -2823,7 +2836,16 @@ def write_private_key_copy(
             pass
         raise
     finally:
-        os.close(descriptor)
+        try:
+            os.close(descriptor)
+        except BaseException:
+            try:
+                current = path.stat(follow_symlinks=False)
+                if created_identity == (current.st_dev, current.st_ino):
+                    path.unlink()
+            except (FileNotFoundError, OSError):
+                pass
+            raise
 
 
 @dataclass(frozen=True)
