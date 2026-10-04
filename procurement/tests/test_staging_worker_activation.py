@@ -31,36 +31,58 @@ NONCE = "ab" * 32
 
 
 def _receive_frame(channel: socket.socket) -> bytes:
-    prefix = bytearray()
-    while len(prefix) < 4:
-        chunk = channel.recv(4 - len(prefix))
-        if not chunk:
-            raise AssertionError("frame closed before prefix")
-        prefix.extend(chunk)
-    length = struct.unpack("!I", prefix)[0]
-    payload = bytearray()
-    while len(payload) < length:
-        chunk = channel.recv(length - len(payload))
-        if not chunk:
-            raise AssertionError("frame closed before payload")
-        payload.extend(chunk)
-    return bytes(payload)
+    prior_timeout = channel.gettimeout()
+    if prior_timeout is None:
+        channel.settimeout(1.0)
+    try:
+        prefix = bytearray()
+        while len(prefix) < 4:
+            chunk = channel.recv(4 - len(prefix))
+            if not chunk:
+                raise AssertionError("frame closed before prefix")
+            prefix.extend(chunk)
+        length = struct.unpack("!I", prefix)[0]
+        payload = bytearray()
+        while len(payload) < length:
+            chunk = channel.recv(length - len(payload))
+            if not chunk:
+                raise AssertionError("frame closed before payload")
+            payload.extend(chunk)
+        return bytes(payload)
+    finally:
+        channel.settimeout(prior_timeout)
 
 
 async def _receive_frame_async(
     loop: asyncio.AbstractEventLoop,
     channel: socket.socket,
+    *,
+    timeout_seconds: float = 1.0,
 ) -> bytes:
+    deadline = loop.time() + timeout_seconds
+
+    async def receive(length: int) -> bytes:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise AssertionError("frame receive timed out")
+        try:
+            return await asyncio.wait_for(
+                loop.sock_recv(channel, length),
+                timeout=remaining,
+            )
+        except TimeoutError as exc:
+            raise AssertionError("frame receive timed out") from exc
+
     prefix = bytearray()
     while len(prefix) < 4:
-        chunk = await loop.sock_recv(channel, 4 - len(prefix))
+        chunk = await receive(4 - len(prefix))
         if not chunk:
             raise AssertionError("frame closed before prefix")
         prefix.extend(chunk)
     length = struct.unpack("!I", prefix)[0]
     payload = bytearray()
     while len(payload) < length:
-        chunk = await loop.sock_recv(channel, length - len(payload))
+        chunk = await receive(length - len(payload))
         if not chunk:
             raise AssertionError("frame closed before payload")
         payload.extend(chunk)
@@ -602,6 +624,7 @@ class WorkerActivationTests(unittest.TestCase):
                 socket.AF_UNIX,
                 socket.SOCK_STREAM,
             )
+            supervisor_socket.setblocking(False)
             fatal: list[bool] = []
             server = GatewayActivationServer(
                 channel=gateway_socket,
@@ -609,21 +632,26 @@ class WorkerActivationTests(unittest.TestCase):
                 fatal_handler=lambda: fatal.append(True),
             )
             task = asyncio.create_task(server.serve())
-            await asyncio.sleep(0)
-            task.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await task
-            self.assertEqual(fatal, [True])
-            self.assertTrue(server._closed)
-            supervisor_socket.settimeout(0.1)
-            ready = _receive_frame(supervisor_socket)
+            loop = asyncio.get_running_loop()
+            ready = await _receive_frame_async(loop, supervisor_socket)
             parse_gateway_activation_ready(
                 message=ready,
                 key=BOOT_KEY,
                 expected_gateway_pid=os.getpid(),
                 now_ms=int(self.now * 1_000),
             )
-            self.assertEqual(supervisor_socket.recv(1), b"")
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual(fatal, [True])
+            self.assertTrue(server._closed)
+            self.assertEqual(
+                await asyncio.wait_for(
+                    loop.sock_recv(supervisor_socket, 1),
+                    timeout=1.0,
+                ),
+                b"",
+            )
             supervisor_socket.close()
 
         asyncio.run(scenario())
@@ -667,7 +695,13 @@ class WorkerActivationTests(unittest.TestCase):
                 await asyncio.wait_for(task, timeout=1)
             self.assertEqual(fatal, [True])
             self.assertTrue(server._closed)
-            self.assertEqual(await loop.sock_recv(supervisor_socket, 1), b"")
+            self.assertEqual(
+                await asyncio.wait_for(
+                    loop.sock_recv(supervisor_socket, 1),
+                    timeout=1.0,
+                ),
+                b"",
+            )
             supervisor_socket.close()
 
         asyncio.run(scenario())
