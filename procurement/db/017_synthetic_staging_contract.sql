@@ -396,6 +396,136 @@ BEGIN
 END
 $lock_recommendation$;
 
+-- Backup V2 needs a complete pre-mutation database commitment, but the
+-- non-owner runtime must not receive SELECT on every relation or sequence.
+-- Return only counts and hashes through one owner-executed, runtime-guarded
+-- projection.  Python retains the existing compact canonical outer SHA-256 so
+-- legacy Backup V2 bytes and semantics do not change.
+CREATE FUNCTION "qa_mapping_test".synthetic_staging_backup_v2_state_facts()
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $backup_state$
+DECLARE
+    facts JSONB;
+    relation_inventory JSONB := '[]'::JSONB;
+    sequence_inventory JSONB := '[]'::JSONB;
+    relation_name TEXT;
+    relation_payloads TEXT[];
+    sequence_name TEXT;
+    sequence_last_value BIGINT;
+    sequence_is_called BOOLEAN;
+BEGIN
+    IF session_user::text IS DISTINCT FROM 'buffalo_synthetic_runtime'
+       OR current_user::text IS DISTINCT FROM 'buffalo_synthetic_owner'
+       OR current_database() IS DISTINCT FROM 'buffalo_synthetic_staging_demo'
+       OR current_setting('server_version_num')::INTEGER / 10000<>16 THEN
+        RAISE EXCEPTION 'synthetic staging Backup V2 identity differs';
+    END IF;
+    PERFORM "qa_mapping_test".persistent_mapping_assert_safe_role_topology();
+
+    facts := jsonb_build_object(
+        'review_batches',(
+            SELECT count(*) FROM "qa_mapping_test".supplier_mapping_review_batches
+        ),
+        'review_candidates',(
+            SELECT count(*) FROM "qa_mapping_test".supplier_mapping_review_candidates
+        ),
+        'mapping_decisions',(
+            SELECT count(*) FROM "qa_mapping_test".supplier_mapping_decisions
+        ),
+        'selection_events',(
+            SELECT count(*) FROM "qa_mapping_test".supplier_offer_selection_events
+        ),
+        'selection_heads',(
+            SELECT count(*) FROM "qa_mapping_test".supplier_offer_selection_heads
+        ),
+        'runs',(SELECT count(*) FROM "qa_mapping_test".runs),
+        'purchase_orders',(
+            SELECT count(*) FROM "qa_mapping_test".purchase_orders
+        ),
+        'artifacts',(
+            SELECT count(*) FROM "qa_mapping_test".monday_run_artifacts
+        ),
+        'decision_payloads',COALESCE((
+            SELECT string_agg(payload_sha256,'|' ORDER BY payload_sha256)
+              FROM "qa_mapping_test".supplier_mapping_decisions
+        ),''),
+        'selection_payloads',COALESCE((
+            SELECT string_agg(payload_sha256,'|' ORDER BY payload_sha256)
+              FROM "qa_mapping_test".supplier_offer_selection_events
+        ),''),
+        'run_fingerprints',COALESCE((
+            SELECT string_agg(input_fingerprint,'|' ORDER BY run_id)
+              FROM "qa_mapping_test".runs
+        ),''),
+        'artifact_hashes',COALESCE((
+            SELECT string_agg(sha256,'|' ORDER BY monday_run_artifact_id)
+              FROM "qa_mapping_test".monday_run_artifacts
+        ),'')
+    );
+
+    FOR relation_name IN
+        SELECT c.relname
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+         WHERE n.nspname='qa_mapping_test' AND c.relkind IN ('r','p')
+         ORDER BY c.relname
+    LOOP
+        EXECUTE format(
+            'SELECT array_agg(to_jsonb(t)::text ORDER BY to_jsonb(t)::text) '
+            'FROM %I.%I t',
+            'qa_mapping_test',relation_name
+        ) INTO relation_payloads;
+        relation_inventory := relation_inventory || jsonb_build_array(
+            jsonb_build_object(
+                'relation',relation_name,
+                'row_count',COALESCE(cardinality(relation_payloads),0),
+                'sha256',encode(
+                    "qa_mapping_test".digest(
+                        convert_to(
+                            array_to_string(
+                                COALESCE(relation_payloads,ARRAY[]::TEXT[]),E'\n'
+                            ),
+                            'UTF8'
+                        ),
+                        'sha256'
+                    ),
+                    'hex'
+                )
+            )
+        );
+    END LOOP;
+
+    FOR sequence_name IN
+        SELECT c.relname
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid=c.relnamespace
+         WHERE n.nspname='qa_mapping_test' AND c.relkind='S'
+         ORDER BY c.relname
+    LOOP
+        EXECUTE format(
+            'SELECT last_value,is_called FROM %I.%I',
+            'qa_mapping_test',sequence_name
+        ) INTO sequence_last_value,sequence_is_called;
+        sequence_inventory := sequence_inventory || jsonb_build_array(
+            jsonb_build_object(
+                'sequence',sequence_name,
+                'last_value',sequence_last_value,
+                'is_called',sequence_is_called
+            )
+        );
+    END LOOP;
+
+    RETURN facts || jsonb_build_object(
+        'relation_inventory',relation_inventory,
+        'sequence_inventory',sequence_inventory
+    );
+END
+$backup_state$;
+
 -- Row locks in these trusted validation roots must not require UPDATE on
 -- immutable canonical evidence.  Their bodies are inherited unchanged from
 -- the preflighted 014/016 source; only execution identity/path changes.
@@ -500,5 +630,6 @@ REVOKE ALL ON FUNCTION
     "qa_mapping_test".persistent_mapping_lock_supplier_offers(BIGINT[]),
     "qa_mapping_test".synthetic_staging_lock_exception(BIGINT),
     "qa_mapping_test".synthetic_staging_lock_recommendation(BIGINT),
+    "qa_mapping_test".synthetic_staging_backup_v2_state_facts(),
     "qa_mapping_test".assert_synthetic_staging_contract()
 FROM PUBLIC;

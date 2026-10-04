@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+import hashlib
 from pathlib import Path
 import os
 from types import SimpleNamespace
 import stat
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -21,6 +24,7 @@ from procurement_os.staging_config import (
 from procurement_os.staging_process_contract import (
     GATEWAY_ENVIRONMENT_NAMES,
     OPTIONAL_CERTIFICATE_ENVIRONMENT_NAMES,
+    SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES,
     WORKER_ENVIRONMENT_NAMES,
 )
 from procurement_os.staging_supervisor import ControlStatus
@@ -128,6 +132,48 @@ class StagingBootstrapContractTests(unittest.TestCase):
             ):
                 bootstrap.load_bootstrap_inputs(changed)
 
+    def test_price_backup_selection_is_absent_or_one_exact_label_and_tree(self):
+        environment = {
+            **self._environment(),
+            bootstrap.BACKUP_LABEL_ENV: (
+                "staging-v2-20261004T120000Z-0123456789ab"
+            ),
+            bootstrap.STAGING_MANIFEST_SHA_ENV: "c" * 64,
+            bootstrap.EXPECTED_TREE_ENV: "b" * 40,
+        }
+        inputs, _password = bootstrap.load_bootstrap_inputs(environment)
+        self.assertEqual(
+            inputs.backup_label,
+            "staging-v2-20261004T120000Z-0123456789ab",
+        )
+        self.assertEqual(inputs.expected_manifest_sha256, "c" * 64)
+        self.assertEqual(inputs.expected_tree, "b" * 40)
+        for missing in bootstrap._BACKUP_INPUT_NAMES:
+            partial = dict(environment)
+            partial.pop(missing)
+            with self.subTest(missing=missing), self.assertRaisesRegex(
+                bootstrap.StagingBootstrapError, "selection is incomplete"
+            ):
+                bootstrap.load_bootstrap_inputs(partial)
+        for name, value in (
+            (bootstrap.BACKUP_LABEL_ENV, "../selected"),
+            (bootstrap.STAGING_MANIFEST_SHA_ENV, "C" * 64),
+            (bootstrap.EXPECTED_TREE_ENV, "B" * 40),
+        ):
+            with self.subTest(name=name), self.assertRaisesRegex(
+                bootstrap.StagingBootstrapError, "selection differs"
+            ):
+                bootstrap.load_bootstrap_inputs({**environment, name: value})
+        with self.assertRaisesRegex(
+            bootstrap.StagingBootstrapError, "path authority is not accepted"
+        ):
+            bootstrap.load_bootstrap_inputs(
+                {
+                    **environment,
+                    "BUFFALO_STAGING_PRICE_BACKUP_ROOT": "/data/forged",
+                }
+            )
+
     def test_layout_is_fixed_and_separates_ephemeral_and_persistent_roots(self):
         layout = bootstrap.StagingBootstrapLayout.build(
             volume_root=Path("/data"),
@@ -142,6 +188,13 @@ class StagingBootstrapContractTests(unittest.TestCase):
             Path("/run/buffalo-staging/synthetic/private/pgpass"),
         )
         self.assertEqual(layout.synthetic_storage, Path("/data/synthetic"))
+        self.assertEqual(
+            layout.synthetic_recovery, Path("/data/synthetic-recovery")
+        )
+        self.assertEqual(
+            layout.synthetic_backup_root,
+            Path("/data/synthetic-recovery/backups"),
+        )
         self.assertEqual(layout.research_release, Path("/data/research-release"))
         self.assertEqual(layout.transfer_root, Path("/data/transfer"))
         runtime_paths = {
@@ -197,6 +250,30 @@ class StagingBootstrapContractTests(unittest.TestCase):
                 _mountinfo_path=mountinfo,
             )
 
+    def test_synthetic_recovery_directories_are_persistent_cleanup_exclusions(self):
+        with tempfile.TemporaryDirectory(prefix="buffalo-persistent-backup-") as raw:
+            volume = Path(raw) / "volume"
+            volume.mkdir(mode=0o755)
+            resources = bootstrap.BootstrapResources()
+            recovery = volume / "synthetic-recovery"
+            backups = recovery / "backups"
+            for path in (recovery, backups):
+                bootstrap._require_directory(
+                    path,
+                    mode=0o700,
+                    uid=os.getuid(),
+                    gid=os.getgid(),
+                    create=True,
+                    resources=resources,
+                    persistent=True,
+                )
+            sentinel = backups / "retained"
+            sentinel.write_text("fixture", encoding="ascii")
+            resources.cleanup()
+            self.assertTrue(recovery.is_dir())
+            self.assertTrue(backups.is_dir())
+            self.assertEqual(sentinel.read_text(encoding="ascii"), "fixture")
+
     def test_child_contracts_bind_exact_identities_groups_fds_and_environments(self):
         layout = bootstrap.StagingBootstrapLayout.build(volume_root=Path("/data"))
         contracts = bootstrap.build_child_contracts(
@@ -239,6 +316,7 @@ class StagingBootstrapContractTests(unittest.TestCase):
                 "BUFFALO_STAGING_LOCAL_ACCEPTANCE",
                 "BUFFALO_STAGING_OWNED_LOCAL_PORT",
             }
+            - SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES
             - OPTIONAL_CERTIFICATE_ENVIRONMENT_NAMES,
         )
         self.assertEqual(
@@ -260,6 +338,156 @@ class StagingBootstrapContractTests(unittest.TestCase):
             )
         )
         contracts.isolation.validate_children(tuple(specs.values()))
+
+    def test_selected_price_backup_is_verified_and_reaches_only_synthetic(self):
+        label = "staging-v2-20261004T120000Z-0123456789ab"
+        inputs = replace(
+            self._inputs(),
+            backup_label=label,
+            expected_manifest_sha256="c" * 64,
+            expected_tree="b" * 40,
+        )
+        layout = bootstrap.StagingBootstrapLayout.build(
+            volume_root=Path("/data")
+        )
+        binding = bootstrap.StagingPriceBackupBinding(
+            root=layout.synthetic_recovery,
+            manifest=layout.synthetic_backup_root / label / "manifest.json",
+            manifest_sha256="c" * 64,
+            source_commit=inputs.expected_commit,
+            source_tree=inputs.expected_tree,
+        )
+        contracts = bootstrap.build_child_contracts(
+            inputs=inputs,
+            layout=layout,
+            python_executable="/usr/bin/python3",
+            activation_fd=10,
+            synthetic_listener_fd=11,
+            research_listener_fd=12,
+            supervisor_pid=os.getpid(),
+            backup_binding=binding,
+        )
+        environments = {
+            spec.name: dict(spec.environment)
+            for spec in (
+                contracts.gateway_spec,
+                contracts.synthetic_spec,
+                contracts.research_spec,
+            )
+        }
+        self.assertEqual(
+            {
+                name: environments["synthetic"][name]
+                for name in SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES
+            },
+            {
+                "BUFFALO_STAGING_PRICE_BACKUP_ROOT": str(binding.root),
+                "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST": str(binding.manifest),
+                "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST_SHA256": "c" * 64,
+                "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_COMMIT": "a" * 40,
+                "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE": "b" * 40,
+            },
+        )
+        for role in ("gateway", "research"):
+            self.assertFalse(
+                SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES
+                & set(environments[role])
+            )
+        with self.assertRaisesRegex(
+            bootstrap.StagingBootstrapError, "backup binding differs"
+        ):
+            bootstrap.build_child_contracts(
+                inputs=inputs,
+                layout=layout,
+                python_executable="/usr/bin/python3",
+                activation_fd=10,
+                synthetic_listener_fd=11,
+                research_listener_fd=12,
+                supervisor_pid=os.getpid(),
+            )
+
+    def test_root_resolves_one_owned_backup_and_rejects_hardlinked_manifest(self):
+        label = "staging-v2-20261004T120000Z-0123456789ab"
+        with tempfile.TemporaryDirectory(prefix="buffalo-backup-binding-") as raw:
+            volume = Path(raw) / "volume"
+            backup_root = volume / "synthetic-recovery" / "backups"
+            destination = backup_root / label
+            destination.mkdir(parents=True, mode=0o700)
+            for path in (volume / "synthetic-recovery", backup_root, destination):
+                path.chmod(0o700)
+            manifest = destination / "manifest.json"
+            manifest.write_bytes(b'{"fixture":true}\n')
+            manifest.chmod(0o600)
+            inputs = replace(
+                self._inputs(),
+                volume_root=volume,
+                backup_label=label,
+                expected_manifest_sha256=hashlib.sha256(
+                    manifest.read_bytes()
+                ).hexdigest(),
+                expected_tree="b" * 40,
+            )
+            layout = bootstrap.StagingBootstrapLayout.build(volume_root=volume)
+            account = bootstrap.ProcessAccount(
+                "buffalo-synthetic", os.getuid(), os.getgid()
+            )
+            with mock.patch.object(
+                bootstrap, "SYNTHETIC_ACCOUNT", account
+            ), mock.patch.object(
+                bootstrap.subprocess, "run"
+            ) as verify:
+                binding = bootstrap._resolve_price_backup_binding(
+                    inputs=inputs,
+                    layout=layout,
+                    python_executable="/usr/bin/python3",
+                )
+            self.assertEqual(binding.manifest, manifest)
+            self.assertEqual(
+                binding.manifest_sha256,
+                hashlib.sha256(manifest.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(verify.call_args.kwargs["user"], os.getuid())
+            self.assertEqual(verify.call_args.kwargs["group"], os.getgid())
+            self.assertEqual(verify.call_args.kwargs["extra_groups"], ())
+            self.assertIs(verify.call_args.kwargs["stdin"], subprocess.DEVNULL)
+            self.assertIs(verify.call_args.kwargs["stdout"], subprocess.DEVNULL)
+            self.assertIs(verify.call_args.kwargs["stderr"], subprocess.DEVNULL)
+            self.assertTrue(verify.call_args.kwargs["close_fds"])
+            self.assertTrue(verify.call_args.kwargs["start_new_session"])
+            verifier_environment = verify.call_args.kwargs["env"]
+            self.assertEqual(
+                verifier_environment[bootstrap.STAGING_MANIFEST_SHA_ENV],
+                binding.manifest_sha256,
+            )
+            self.assertNotIn(bootstrap.DATABASE_PASSWORD_ENV, verifier_environment)
+            self.assertNotIn("PGPASSFILE", verifier_environment)
+            self.assertFalse(
+                any("RESEARCH" in name for name in verifier_environment)
+            )
+            for failure in (
+                subprocess.CalledProcessError(1, ("fixture",)),
+                subprocess.TimeoutExpired(("fixture",), 300),
+            ):
+                with self.subTest(failure=type(failure).__name__), mock.patch.object(
+                    bootstrap, "SYNTHETIC_ACCOUNT", account
+                ), mock.patch.object(
+                    bootstrap.subprocess, "run", side_effect=failure
+                ), self.assertRaisesRegex(
+                    bootstrap.StagingBootstrapError, "backup differs"
+                ):
+                    bootstrap._resolve_price_backup_binding(
+                        inputs=inputs,
+                        layout=layout,
+                        python_executable="/usr/bin/python3",
+                    )
+            alias = destination / "manifest-hardlink.json"
+            os.link(manifest, alias)
+            with mock.patch.object(
+                bootstrap, "SYNTHETIC_ACCOUNT", account
+            ), self.assertRaisesRegex(
+                bootstrap.StagingBootstrapError, "manifest differs"
+            ):
+                bootstrap._hash_selected_backup_manifest(manifest)
 
     def test_child_descriptor_reuse_and_foreign_supervisor_pid_are_refused(self):
         arguments = {

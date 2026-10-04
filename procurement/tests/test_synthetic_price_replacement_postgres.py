@@ -31,6 +31,7 @@ from procurement_os.development_forecast import (
 )
 from procurement_os.emergency_packet import build_emergency_review_packet
 from procurement_os.local_backup_v2 import (
+    LocalBackupV2Error,
     VerifiedPriceApplyBackup,
     database_state_evidence,
 )
@@ -1497,6 +1498,26 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
     def test_recovery_state_drift_refuses_before_apply(self):
         batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
         backup = self._backup(batch_id)
+        with mock.patch(
+            "procurement_os.synthetic_price_replacement."
+            "verify_bound_price_apply_backup",
+            return_value=backup,
+        ), mock.patch(
+            "procurement_os.synthetic_price_replacement.database_state_evidence",
+            side_effect=LocalBackupV2Error("injected staging facade refusal"),
+        ):
+            with self._connection() as conn:
+                with self.assertRaisesRegex(
+                    SyntheticPriceReplacementError,
+                    "price APPLY recovery proof differs",
+                ):
+                    preview_price_replacement(
+                        conn,
+                        self.storage,
+                        batch_id=batch_id,
+                        apply_idempotency_key="focused-facade-refusal-v1",
+                        principal=self.price_principal,
+                    )
         with self._connection() as conn:
             conn.execute(
                 "INSERT INTO meta(key,value) VALUES "

@@ -18,6 +18,10 @@ from psycopg import sql
 
 
 CONTRACT_VERSION = "BUFFALO_SYNTHETIC_STAGING_DATABASE_V2"
+MIGRATION_NAME = "017_synthetic_staging_contract.sql"
+MIGRATION_SHA256 = (
+    "a883c6048f94580e6a83b67e0d4f14b54de1158fa595d4c3c464afc0a25da359"
+)
 SCHEMA = "qa_mapping_test"
 LEGACY_OWNER = "qa_mapping_owner"
 LEGACY_LOGIN = "qa_release_login"
@@ -345,6 +349,7 @@ EXECUTE_ROUTINES = (
     "supplier_price_scope_current_payload(uuid)",
     "supplier_price_scope_current_sha256(uuid)",
     "supplier_price_unaffected_state_sha256(uuid)",
+    "synthetic_staging_backup_v2_state_facts()",
     "synthetic_staging_lock_exception(bigint)",
     "synthetic_staging_lock_recommendation(bigint)",
 )
@@ -406,7 +411,7 @@ PREDECESSOR_CATALOG_SHA256 = (
     "59ebe68a203511cb54d2d02d7c73ef44cb1ee3887f2c85effbaa08f7276cceda"
 )
 SUCCESSOR_CATALOG_SHA256 = (
-    "af02588dee120940bd34a44c6d1fbc4b66062082eaeda36e268344ae992eaea3"
+    "0690b5c784b48b1bb82fc7022bc7695d8eb5195f8da0edd90a5437a2bb1089fc"
 )
 STAGING_PERSISTENT_MAPPING_CATALOG_SHA256 = (
     "7200d33604f1c4e6273a266eee403063c57c06e6f5a642835fd279d55b4a3dd4"
@@ -418,8 +423,59 @@ STAGING_PRICE_CATALOG_SHA256 = (
     "17605263963002022223a06b7e7a32ce6838eeb3f1e714098406b43c9f5bcc30"
 )
 EXPECTED_RUNTIME_ATTESTATION_IDENTITY = (
-    "be472ebbad9b26e3fa7feb0c22ed5c82ad9001c21f53694bf6c53f122b817168"
+    "517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a"
 )
+STAGING_BACKUP_RELEASE_CONTRACT = "BUFFALO_SYNTHETIC_STAGING_BACKUP_RELEASE_V1"
+
+
+def staging_backup_release(target: Any | None = None) -> dict[str, object]:
+    """Return the source-defined delivery binding embedded in Backup V2."""
+
+    from .staging_config import (
+        EXPECTED_APP_SERVICE_ID,
+        EXPECTED_ENVIRONMENT_ID,
+        EXPECTED_POSTGRES_SERVICE_ID,
+        EXPECTED_PROJECT_ID,
+    )
+
+    if target is not None:
+        target.validate_static()
+
+    return {
+        "contract": STAGING_BACKUP_RELEASE_CONTRACT,
+        "database": EXPECTED_DATABASE,
+        "database_contract": CONTRACT_VERSION,
+        "fixture_contract": DEVELOPMENT_FIXTURE_CONTRACT,
+        "fixture_profile": DEVELOPMENT_FIXTURE_PROFILE,
+        "fixture_manifest_sha256": IMMUTABLE_FIXTURE_MANIFEST_SHA256,
+        "migration": MIGRATION_NAME,
+        "migration_sha256": MIGRATION_SHA256,
+        "object_owner": OBJECT_OWNER,
+        "permission_matrix_sha256": PERMISSION_MATRIX_SHA256,
+        "postgres_major": EXPECTED_POSTGRES_MAJOR,
+        "private_host": EXPECTED_PRIVATE_HOST,
+        "provisioner": PROVISIONER,
+        "catalog_sha256": SUCCESSOR_CATALOG_SHA256,
+        "runtime_login": RUNTIME_LOGIN,
+        "schema": SCHEMA,
+        "persistent_mapping_catalog_sha256": (
+            STAGING_PERSISTENT_MAPPING_CATALOG_SHA256
+        ),
+        "retirement_catalog_sha256": STAGING_RETIREMENT_CATALOG_SHA256,
+        "price_catalog_sha256": STAGING_PRICE_CATALOG_SHA256,
+        "runtime_attestation_identity": EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+        "target": {
+            "app_service_id": EXPECTED_APP_SERVICE_ID,
+            "environment_id": EXPECTED_ENVIRONMENT_ID,
+            "postgres_service_id": EXPECTED_POSTGRES_SERVICE_ID,
+            "project_id": EXPECTED_PROJECT_ID,
+        },
+    }
+
+
+STAGING_BACKUP_RELEASE_SHA256 = hashlib.sha256(
+    _canonical(staging_backup_release())
+).hexdigest()
 
 
 class SyntheticStagingDatabaseError(RuntimeError):
@@ -556,11 +612,13 @@ def _require_source_hashes() -> None:
         for value in (
             PREDECESSOR_CATALOG_SHA256,
             SUCCESSOR_CATALOG_SHA256,
+            MIGRATION_SHA256,
             STAGING_PERSISTENT_MAPPING_CATALOG_SHA256,
             STAGING_RETIREMENT_CATALOG_SHA256,
             STAGING_PRICE_CATALOG_SHA256,
             IMMUTABLE_FIXTURE_MANIFEST_SHA256,
             EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+            STAGING_BACKUP_RELEASE_SHA256,
         )
     ):
         raise SyntheticStagingDatabaseError(
@@ -1499,6 +1557,33 @@ def provision_contract(conn: Any, *, sql_path: Path | None = None) -> bool:
         raise SyntheticStagingDatabaseError(
             "synthetic staging provisioner identity differs"
         )
+    contract_path = (
+        sql_path
+        or Path(__file__).resolve().parents[2]
+        / "db"
+        / MIGRATION_NAME
+    )
+    try:
+        contract_bytes = contract_path.read_bytes()
+        contract_sql = contract_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging SQL source is unavailable"
+        ) from exc
+    if hashlib.sha256(contract_bytes).hexdigest() != MIGRATION_SHA256:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging SQL source hash differs"
+        )
+    bindings = {
+        "__PERMISSION_MATRIX_SHA256__": PERMISSION_MATRIX_SHA256,
+        "__FIXTURE_MANIFEST_SHA256__": IMMUTABLE_FIXTURE_MANIFEST_SHA256,
+    }
+    if any(contract_sql.count(token) != 1 for token in bindings):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging SQL source binding differs"
+        )
+    for token, value in bindings.items():
+        contract_sql = contract_sql.replace(token, value)
     conn.execute(
         "SELECT pg_catalog.pg_advisory_xact_lock("
         "pg_catalog.hashtextextended(%s,0))",
@@ -1520,23 +1605,6 @@ def provision_contract(conn: Any, *, sql_path: Path | None = None) -> bool:
         )
     _alter_application_owners(conn)
     conn.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(OBJECT_OWNER)))
-    contract_path = (
-        sql_path
-        or Path(__file__).resolve().parents[2]
-        / "db"
-        / "017_synthetic_staging_contract.sql"
-    )
-    contract_sql = contract_path.read_text(encoding="utf-8")
-    bindings = {
-        "__PERMISSION_MATRIX_SHA256__": PERMISSION_MATRIX_SHA256,
-        "__FIXTURE_MANIFEST_SHA256__": IMMUTABLE_FIXTURE_MANIFEST_SHA256,
-    }
-    if any(contract_sql.count(token) != 1 for token in bindings):
-        raise SyntheticStagingDatabaseError(
-            "synthetic staging SQL source binding differs"
-        )
-    for token, value in bindings.items():
-        contract_sql = contract_sql.replace(token, value)
     conn.execute(contract_sql)
     conn.execute("RESET ROLE")
     _apply_permissions(conn)
@@ -1722,6 +1790,61 @@ def _audit_runtime_privileges(conn: Any) -> None:
         raise SyntheticStagingDatabaseError(
             "synthetic staging column or grant-option privilege differs"
         )
+
+
+def attest_provisioner_connection(
+    conn: Any, target: SyntheticStagingTarget
+) -> str:
+    """Read-only proof for the offline dump/backup operator connection."""
+
+    _require_source_hashes()
+    target.validate_static()
+    row = conn.execute(
+        "SELECT current_database(),current_setting('server_version_num')::int/10000,"
+        "session_user::text,current_user::text,"
+        "pg_catalog.pg_get_userbyid(d.datdba) "
+        "FROM pg_catalog.pg_database d WHERE d.datname=current_database()"
+    ).fetchone()
+    if row != (
+        EXPECTED_DATABASE,
+        EXPECTED_POSTGRES_MAJOR,
+        PROVISIONER,
+        PROVISIONER,
+        OBJECT_OWNER,
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging provisioner connection differs"
+        )
+    _verify_role_topology(conn, bootstrapped=True)
+    _verify_fixture_provenance(conn)
+    if (
+        _observed_staging_markers(conn) != _staging_markers()
+        or compute_catalog_sha256(conn) != SUCCESSOR_CATALOG_SHA256
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging provisioner catalog differs"
+        )
+    persistent = conn.execute(
+        sql.SQL(
+            "SELECT {}.compute_synthetic_staging_persistent_mapping_sha256()"
+        ).format(sql.Identifier(SCHEMA))
+    ).fetchone()[0]
+    from .monday_forecast_retirement import compute_retirement_catalog_sha256
+    from .synthetic_price_replacement_contract import (
+        compute_synthetic_price_catalog_sha256,
+    )
+
+    if (
+        persistent != STAGING_PERSISTENT_MAPPING_CATALOG_SHA256
+        or compute_retirement_catalog_sha256(conn, SCHEMA)
+        != STAGING_RETIREMENT_CATALOG_SHA256
+        or compute_synthetic_price_catalog_sha256(conn, SCHEMA)
+        != STAGING_PRICE_CATALOG_SHA256
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging provisioner derived catalog differs"
+        )
+    return STAGING_BACKUP_RELEASE_SHA256
 
 
 def attest_runtime_connection(

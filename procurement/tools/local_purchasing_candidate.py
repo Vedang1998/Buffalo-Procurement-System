@@ -61,6 +61,7 @@ from procurement_os.local_backup_v2 import (
     LocalBackupV2Error,
     VerifiedPriceApplyBackup,
     canonical_sha256,
+    database_state_evidence,
     verify_price_apply_backup,
 )
 from procurement_os.synthetic_price_replacement_contract import (
@@ -1330,99 +1331,7 @@ def stop_local_database(runtime_root: Path) -> dict[str, Any]:
 
 def _state_evidence(database_url: str) -> dict[str, Any]:
     with psycopg.connect(database_url, connect_timeout=5) as conn:
-        target = sql.Identifier(SCHEMA)
-        row = conn.execute(
-            sql.SQL(
-                "SELECT "
-                "(SELECT count(*) FROM {}.supplier_mapping_review_batches),"
-                "(SELECT count(*) FROM {}.supplier_mapping_review_candidates),"
-                "(SELECT count(*) FROM {}.supplier_mapping_decisions),"
-                "(SELECT count(*) FROM {}.supplier_offer_selection_events),"
-                "(SELECT count(*) FROM {}.supplier_offer_selection_heads),"
-                "(SELECT count(*) FROM {}.runs),"
-                "(SELECT count(*) FROM {}.purchase_orders),"
-                "(SELECT count(*) FROM {}.monday_run_artifacts),"
-                "COALESCE((SELECT string_agg(payload_sha256,'|' ORDER BY payload_sha256) FROM {}.supplier_mapping_decisions),''),"
-                "COALESCE((SELECT string_agg(payload_sha256,'|' ORDER BY payload_sha256) FROM {}.supplier_offer_selection_events),''),"
-                "COALESCE((SELECT string_agg(input_fingerprint,'|' ORDER BY run_id) FROM {}.runs),''),"
-                "COALESCE((SELECT string_agg(sha256,'|' ORDER BY monday_run_artifact_id) FROM {}.monday_run_artifacts),'')"
-            ).format(*(target for _ in range(12)))
-        ).fetchone()
-        relation_names = [
-            str(item[0])
-            for item in conn.execute(
-                "SELECT c.relname FROM pg_catalog.pg_class c "
-                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
-                "WHERE n.nspname=%s AND c.relkind IN ('r','p') "
-                "ORDER BY c.relname",
-                (SCHEMA,),
-            ).fetchall()
-        ]
-        relation_inventory = []
-        for relation_name in relation_names:
-            payloads = [
-                str(item[0])
-                for item in conn.execute(
-                    sql.SQL(
-                        "SELECT pg_catalog.to_jsonb(t)::text FROM {}.{} t "
-                        "ORDER BY pg_catalog.to_jsonb(t)::text"
-                    ).format(
-                        sql.Identifier(SCHEMA), sql.Identifier(relation_name)
-                    )
-                ).fetchall()
-            ]
-            relation_inventory.append(
-                {
-                    "relation": relation_name,
-                    "row_count": len(payloads),
-                    "sha256": hashlib.sha256(
-                        "\n".join(payloads).encode("utf-8")
-                    ).hexdigest(),
-                }
-            )
-        sequence_names = [
-            str(item[0])
-            for item in conn.execute(
-                "SELECT c.relname FROM pg_catalog.pg_class c "
-                "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
-                "WHERE n.nspname=%s AND c.relkind='S' ORDER BY c.relname",
-                (SCHEMA,),
-            ).fetchall()
-        ]
-        sequence_inventory = []
-        for sequence_name in sequence_names:
-            sequence_value = conn.execute(
-                sql.SQL("SELECT last_value,is_called FROM {}.{}").format(
-                    sql.Identifier(SCHEMA), sql.Identifier(sequence_name)
-                )
-            ).fetchone()
-            sequence_inventory.append(
-                {
-                    "sequence": sequence_name,
-                    "last_value": int(sequence_value[0]),
-                    "is_called": bool(sequence_value[1]),
-                }
-            )
-    assert row is not None
-    names = (
-        "review_batches",
-        "review_candidates",
-        "mapping_decisions",
-        "selection_events",
-        "selection_heads",
-        "runs",
-        "purchase_orders",
-        "artifacts",
-        "decision_payloads",
-        "selection_payloads",
-        "run_fingerprints",
-        "artifact_hashes",
-    )
-    evidence = dict(zip(names, row, strict=True))
-    evidence["relation_inventory"] = relation_inventory
-    evidence["sequence_inventory"] = sequence_inventory
-    encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
-    return {"facts": evidence, "sha256": hashlib.sha256(encoded).hexdigest()}
+        return database_state_evidence(conn, schema=SCHEMA)
 
 
 def _price_replacement_backup_evidence(

@@ -415,6 +415,22 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             self.assertFalse(provision_contract(conn))
             self.assertEqual(compute_catalog_sha256(conn), SUCCESSOR_CATALOG_SHA256)
             conn.commit()
+        source = (
+            Path(staging_database.__file__).resolve().parents[2]
+            / "db"
+            / staging_database.MIGRATION_NAME
+        ).read_bytes()
+        with tempfile.TemporaryDirectory(
+            prefix="buffalo-staging-contract-source-"
+        ) as directory:
+            altered = Path(directory) / staging_database.MIGRATION_NAME
+            altered.write_bytes(source + b"\n")
+            with psycopg.connect(self._provisioner_url) as conn:
+                with self.assertRaisesRegex(
+                    SyntheticStagingDatabaseError, "source hash differs"
+                ):
+                    provision_contract(conn, sql_path=altered)
+                conn.rollback()
 
     def test_03_sql_assertion_rejects_missing_wrong_and_malformed_markers(self):
         mutations = (
@@ -489,7 +505,491 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
     def test_05_unrelated_database_role_and_objects_are_unchanged(self):
         self.assertEqual(self._sentinel_snapshot(), self._sentinel_before)
 
-    def test_06_restricted_runtime_completes_selected_price_draft_packet(self):
+    def test_06_runtime_backup_state_facade_matches_owner_projection(self):
+        from procurement_os.local_backup_v2 import database_state_evidence
+
+        with psycopg.connect(self._provisioner_url) as conn:
+            owner_projection = database_state_evidence(
+                conn, schema=staging_database.SCHEMA
+            )
+            definition = conn.execute(
+                "SELECT pg_catalog.pg_get_userbyid(p.proowner),p.provolatile,"
+                "p.prosecdef,p.proconfig "
+                "FROM pg_catalog.pg_proc p "
+                "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+                "WHERE n.nspname=%s "
+                "AND p.proname='synthetic_staging_backup_v2_state_facts' "
+                "AND p.pronargs=0",
+                (staging_database.SCHEMA,),
+            ).fetchone()
+            self.assertEqual(
+                definition,
+                (staging_database.OBJECT_OWNER, "s", True, ["search_path=pg_catalog"]),
+            )
+            with self.assertRaises(psycopg.Error):
+                conn.execute(
+                    "SELECT qa_mapping_test."
+                    "synthetic_staging_backup_v2_state_facts()"
+                )
+            conn.rollback()
+        with psycopg.connect(self._runtime_url) as conn:
+            conn.execute("SET LOCAL search_path=pg_catalog")
+            runtime_projection = database_state_evidence(
+                conn,
+                schema=staging_database.SCHEMA,
+                staging_runtime=True,
+            )
+            conn.rollback()
+
+        self.assertEqual(runtime_projection, owner_projection)
+        relation_counts = {
+            item["relation"]: item["row_count"]
+            for item in runtime_projection["facts"]["relation_inventory"]
+        }
+        self.assertEqual(relation_counts["purchase_orders"], 0)
+        self.assertGreater(relation_counts["variants"], 0)
+        empty_hash = next(
+            item["sha256"]
+            for item in runtime_projection["facts"]["relation_inventory"]
+            if item["relation"] == "purchase_orders"
+        )
+        self.assertEqual(
+            empty_hash,
+            hashlib.sha256(b"").hexdigest(),
+        )
+
+    def test_07_price_preflight_rechecks_full_target_attestation(self):
+        from procurement_os.local_backup_v2 import VerifiedPriceApplyBackup
+        from procurement_os.synthetic_price_replacement import (
+            SyntheticPriceReplacementError,
+            _apply_preflight,
+        )
+        from procurement_os.synthetic_price_replacement_contract import (
+            CATALOG_SHA256,
+            MIGRATION_SHA256,
+        )
+
+        drift_database = "staging_attestation_drift"
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+            "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+            "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+            "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "1",
+        }
+        backup = VerifiedPriceApplyBackup(
+            manifest_ref="staging-attestation-test",
+            manifest_sha256="1" * 64,
+            dump_sha256="2" * 64,
+            storage_sha256="3" * 64,
+            prechange_scope_sha256="4" * 64,
+            database=EXPECTED_DATABASE,
+            batch_id="11111111-1111-4111-8111-111111111111",
+            vendor_id="22222222-2222-4222-8222-222222222222",
+            price_scope_key="COMPLETE_VENDOR",
+            prior_event_id="33333333-3333-4333-8333-333333333333",
+            prior_head_version=1,
+            raw_content_sha256="5" * 64,
+            raw_storage_key="price-books/raw/" + "5" * 64 + ".csv",
+            migration_sha256=MIGRATION_SHA256,
+            catalog_sha256=CATALOG_SHA256,
+            state={},
+            target_kind="staging",
+            staging_release_sha256=staging_database.STAGING_BACKUP_RELEASE_SHA256,
+            runtime_attestation_identity=self._runtime_generation,
+        )
+        with psycopg.connect(self._runtime_url) as conn:
+            before = conn.execute(
+                "SELECT (SELECT count(*) FROM price_book_promotion_events),"
+                "(SELECT count(*) FROM supplier_price_authority_heads),"
+                "(SELECT count(*) FROM prices)"
+            ).fetchone()
+        try:
+            with psycopg.connect(self._postgres_admin_url, autocommit=True) as conn:
+                conn.execute(
+                    sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                        sql.Identifier(drift_database), sql.Identifier(self.ADMIN)
+                    )
+                )
+                conn.execute(
+                    sql.SQL("REVOKE CONNECT ON DATABASE {} FROM PUBLIC").format(
+                        sql.Identifier(drift_database)
+                    )
+                )
+                conn.execute(
+                    sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                        sql.Identifier(drift_database), sql.Identifier(RUNTIME_LOGIN)
+                    )
+                )
+            with mock.patch.dict(os.environ, environment, clear=False), psycopg.connect(
+                self._runtime_url
+            ) as conn:
+                with self.assertRaisesRegex(
+                    SyntheticPriceReplacementError,
+                    "price APPLY recovery target differs",
+                ):
+                    _apply_preflight(
+                        conn,
+                        batch_id=backup.batch_id,
+                        backup=backup,
+                    )
+                conn.rollback()
+        finally:
+            with psycopg.connect(self._postgres_admin_url, autocommit=True) as conn:
+                conn.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                        sql.Identifier(drift_database)
+                    )
+                )
+        with psycopg.connect(self._runtime_url) as conn:
+            after = conn.execute(
+                "SELECT (SELECT count(*) FROM price_book_promotion_events),"
+                "(SELECT count(*) FROM supplier_price_authority_heads),"
+                "(SELECT count(*) FROM prices)"
+            ).fetchone()
+        self.assertEqual(after, before)
+
+    def test_08_runtime_backup_v2_price_apply_and_retry_attestation(self):
+        from procurement_os import synthetic_price_replacement as price_service
+        from procurement_os.staging_identity import (
+            OWNER_PRINCIPAL_REF,
+            OWNER_ROLE_REF,
+            StagingRequestIdentity,
+        )
+        from procurement_os.storage import LocalFilesystemStorage
+        from procurement_os.synthetic_price_replacement import (
+            SyntheticPriceReplacementError,
+            apply_price_replacement,
+            confirm_declared_price_book,
+            preview_declared_price_confirmation,
+            preview_price_replacement,
+            registered_target_declaration,
+            stage_and_validate_declared_price_book,
+        )
+        from procurement_os.synthetic_staging_backup_v2 import (
+            create_staging_backup_v2,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+            "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
+            "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
+            "BUFFALO_ENABLE_SYNTHETIC_DEVELOPMENT_FORECAST": "1",
+        }
+        identity = StagingRequestIdentity(
+            session_digest="02" * 32,
+            principal_ref=OWNER_PRINCIPAL_REF,
+            role_ref=OWNER_ROLE_REF,
+            capabilities=frozenset({"procurement.price.approve"}),
+            worker_role="synthetic",
+        )
+        principal = identity.principal_for("procurement.price.approve")
+        book_path = (
+            Path(__file__).resolve().parents[1]
+            / "config"
+            / "synthetic_price_replacement_book.csv"
+        )
+        book = book_path.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(book).hexdigest(),
+            "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c",
+        )
+        source_root = Path(__file__).resolve().parents[2]
+        source_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=source_root, text=True
+        ).strip()
+        source_tree = subprocess.check_output(
+            ["git", "rev-parse", "HEAD^{tree}"], cwd=source_root, text=True
+        ).strip()
+        warning_reason = "Reviewed four fabricated synthetic price changes."
+
+        with tempfile.TemporaryDirectory(
+            prefix="buffalo-staging-price-backup-"
+        ) as temporary:
+            root = Path(temporary)
+            root.chmod(0o700)
+            recovery_root = root / "recovery"
+            backup_root = recovery_root / "backups"
+            storage_root = root / "storage"
+            recovery_root.mkdir(mode=0o700)
+            backup_root.mkdir(mode=0o700)
+            storage_root.mkdir(mode=0o700)
+            storage = LocalFilesystemStorage(storage_root)
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with psycopg.connect(self._runtime_url) as conn:
+                    declaration = registered_target_declaration(conn)
+                    conn.commit()
+                    staged = stage_and_validate_declared_price_book(
+                        conn,
+                        storage,
+                        csv_bytes=book,
+                        principal=principal,
+                        expected_declaration_sha256=declaration[
+                            "declaration_sha256"
+                        ],
+                    )
+                    confirmation_preview = preview_declared_price_confirmation(
+                        conn,
+                        storage,
+                        batch_id=staged["price_book_batch_id"],
+                        confirmation_idempotency_key=(
+                            "staging-price-confirmation-v1"
+                        ),
+                        warning_review_reason=warning_reason,
+                        principal=principal,
+                    )
+                    confirmed = confirm_declared_price_book(
+                        conn,
+                        storage,
+                        batch_id=staged["price_book_batch_id"],
+                        confirmation_idempotency_key=(
+                            "staging-price-confirmation-v1"
+                        ),
+                        expected_preview_sha256=confirmation_preview[
+                            "preview_sha256"
+                        ],
+                        confirm="CONFIRM",
+                        warning_review_reason=warning_reason,
+                        principal=principal,
+                    )
+                self.assertEqual(confirmed["status"], "VERIFIED_FUTURE")
+                with mock.patch(
+                    "procurement_os.synthetic_staging_backup_v2._source_identity",
+                    return_value={"commit": source_commit, "tree": source_tree},
+                ):
+                    manifest_path = create_staging_backup_v2(
+                        runtime_url=self._runtime_url,
+                        provisioner_url=self._provisioner_url,
+                        target=self._target,
+                        recovery_root=recovery_root,
+                        storage_root=storage_root,
+                        source_root=source_root,
+                        batch_id=staged["price_book_batch_id"],
+                    )
+                manifest_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                binding = {
+                    **environment,
+                    "BUFFALO_STAGING_PRICE_BACKUP_ROOT": str(recovery_root),
+                    "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST": str(manifest_path),
+                    "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST_SHA256": manifest_sha,
+                    "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_COMMIT": source_commit,
+                    "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE": source_tree,
+                }
+
+                with psycopg.connect(self._provisioner_url) as conn:
+                    conn.execute(
+                        "INSERT INTO qa_mapping_test.meta(key,value) VALUES "
+                        "('staging_backup_drift_probe','intentional')"
+                    )
+                    conn.commit()
+                with mock.patch.dict(os.environ, binding, clear=False), psycopg.connect(
+                    self._runtime_url
+                ) as conn:
+                    with self.assertRaisesRegex(
+                        SyntheticPriceReplacementError,
+                        "price APPLY recovery proof differs",
+                    ):
+                        preview_price_replacement(
+                            conn,
+                            storage,
+                            batch_id=staged["price_book_batch_id"],
+                            apply_idempotency_key="staging-price-apply-v1",
+                            principal=principal,
+                        )
+                    conn.rollback()
+                with psycopg.connect(self._provisioner_url) as conn:
+                    conn.execute(
+                        "DELETE FROM qa_mapping_test.meta "
+                        "WHERE key='staging_backup_drift_probe'"
+                    )
+                    conn.commit()
+
+                with mock.patch.dict(os.environ, binding, clear=False), psycopg.connect(
+                    self._runtime_url
+                ) as conn:
+                    apply_preview = preview_price_replacement(
+                        conn,
+                        storage,
+                        batch_id=staged["price_book_batch_id"],
+                        apply_idempotency_key="staging-price-apply-v1",
+                        principal=principal,
+                    )
+                with psycopg.connect(self._runtime_url) as conn:
+                    before = conn.execute(
+                        "SELECT b.status,h.head_version,"
+                        "(SELECT count(*) FROM supplier_price_authority_events "
+                        " WHERE apply_idempotency_key='staging-price-apply-v1') "
+                        "FROM price_book_batches b "
+                        "JOIN supplier_price_authority_heads h "
+                        "ON h.vendor_id=b.vendor_id "
+                        "AND h.price_scope_key=b.price_scope_key "
+                        "WHERE b.price_book_batch_id=%s",
+                        (staged["price_book_batch_id"],),
+                    ).fetchone()
+                real_preflight = price_service._apply_preflight
+                drift_database = "staging_apply_retry_drift"
+
+                def preflight_then_drift(*args, **kwargs):
+                    result = real_preflight(*args, **kwargs)
+                    with psycopg.connect(
+                        self._postgres_admin_url, autocommit=True
+                    ) as admin:
+                        admin.execute(
+                            sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                                sql.Identifier(drift_database),
+                                sql.Identifier(self.ADMIN),
+                            )
+                        )
+                        admin.execute(
+                            sql.SQL(
+                                "REVOKE CONNECT ON DATABASE {} FROM PUBLIC"
+                            ).format(sql.Identifier(drift_database))
+                        )
+                        admin.execute(
+                            sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                                sql.Identifier(drift_database),
+                                sql.Identifier(RUNTIME_LOGIN),
+                            )
+                        )
+                    return result
+
+                try:
+                    with mock.patch.dict(
+                        os.environ, binding, clear=False
+                    ), mock.patch.object(
+                        price_service,
+                        "_apply_preflight",
+                        side_effect=preflight_then_drift,
+                    ), psycopg.connect(self._runtime_url) as conn:
+                        with self.assertRaisesRegex(
+                            SyntheticPriceReplacementError,
+                            "price APPLY recovery target differs",
+                        ):
+                            apply_price_replacement(
+                                conn,
+                                storage,
+                                batch_id=staged["price_book_batch_id"],
+                                apply_idempotency_key="staging-price-apply-v1",
+                                expected_preview_sha256=apply_preview[
+                                    "preview_sha256"
+                                ],
+                                confirm="CONFIRM",
+                                principal=principal,
+                            )
+                        conn.rollback()
+                finally:
+                    with psycopg.connect(
+                        self._postgres_admin_url, autocommit=True
+                    ) as admin:
+                        admin.execute(
+                            sql.SQL("DROP DATABASE IF EXISTS {}").format(
+                                sql.Identifier(drift_database)
+                            )
+                        )
+                with psycopg.connect(self._runtime_url) as conn:
+                    after_refusal = conn.execute(
+                        "SELECT b.status,h.head_version,"
+                        "(SELECT count(*) FROM supplier_price_authority_events "
+                        " WHERE apply_idempotency_key='staging-price-apply-v1') "
+                        "FROM price_book_batches b "
+                        "JOIN supplier_price_authority_heads h "
+                        "ON h.vendor_id=b.vendor_id "
+                        "AND h.price_scope_key=b.price_scope_key "
+                        "WHERE b.price_book_batch_id=%s",
+                        (staged["price_book_batch_id"],),
+                    ).fetchone()
+                self.assertEqual(after_refusal, before)
+
+                with mock.patch.dict(os.environ, binding, clear=False):
+                    with psycopg.connect(self._runtime_url) as conn:
+                        applied = apply_price_replacement(
+                            conn,
+                            storage,
+                            batch_id=staged["price_book_batch_id"],
+                            apply_idempotency_key="staging-price-apply-v1",
+                            expected_preview_sha256=apply_preview["preview_sha256"],
+                            confirm="CONFIRM",
+                            principal=principal,
+                        )
+                    with psycopg.connect(self._runtime_url) as conn:
+                        replay = apply_price_replacement(
+                            conn,
+                            storage,
+                            batch_id=staged["price_book_batch_id"],
+                            apply_idempotency_key="staging-price-apply-v1",
+                            expected_preview_sha256=apply_preview["preview_sha256"],
+                            confirm="CONFIRM",
+                            principal=principal,
+                        )
+                self.assertFalse(applied["idempotent_replay"])
+                self.assertTrue(replay["idempotent_replay"])
+                self.assertEqual(
+                    replay["supplier_price_authority_event_id"],
+                    applied["supplier_price_authority_event_id"],
+                )
+                with psycopg.connect(self._runtime_url) as conn:
+                    result = conn.execute(
+                        "SELECT b.status,h.head_version,e.evidence_json "
+                        "FROM price_book_batches b "
+                        "JOIN supplier_price_authority_heads h "
+                        "ON h.vendor_id=b.vendor_id "
+                        "AND h.price_scope_key=b.price_scope_key "
+                        "JOIN supplier_price_authority_events e "
+                        "ON e.supplier_price_authority_event_id="
+                        "h.supplier_price_authority_event_id "
+                        "WHERE b.price_book_batch_id=%s",
+                        (staged["price_book_batch_id"],),
+                    ).fetchone()
+                    prices = conn.execute(
+                        "SELECT o.supplier_sku,p.level_type,p.break_qty,"
+                        "p.break_unit,p.case_price,p.price_state "
+                        "FROM prices p JOIN supplier_offers o USING(offer_id) "
+                        "WHERE p.source_price_book_batch_id=%s "
+                        "ORDER BY p.source_price_book_row_number",
+                        (staged["price_book_batch_id"],),
+                    ).fetchall()
+                self.assertEqual(result[:2], ("APPLIED_CURRENT", 2))
+                self.assertEqual(
+                    result[2]["staging_backup_release_sha256"],
+                    staging_database.STAGING_BACKUP_RELEASE_SHA256,
+                )
+                self.assertEqual(
+                    result[2]["staging_runtime_attestation_identity"],
+                    self._runtime_generation,
+                )
+                self.assertEqual(len(prices), 4)
+                self.assertTrue(all(row[5] == "current" for row in prices))
+                southern_break = next(
+                    row
+                    for row in prices
+                    if row[0] == "SUP-001" and row[1] == "BREAK"
+                )
+                self.assertEqual(
+                    southern_break[2:5],
+                    (Decimal("2"), "CS", Decimal("30")),
+                )
+                type(self)._applied_price_batch_id = staged[
+                    "price_book_batch_id"
+                ]
+
+    def test_09_restricted_runtime_completes_selected_price_draft_packet(self):
         from procurement_os.draft_po import build_vendor_drafts, preview_vendor_drafts
         from procurement_os.emergency_packet import build_emergency_review_packet
         from procurement_os.persistent_mapping import (
@@ -700,7 +1200,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             self.assertEqual(review["final_price_tier"]["level_type"], "BREAK")
             self.assertEqual(
                 Decimal(str(review["final_price_tier"]["case_price"])),
-                Decimal("9.5"),
+                Decimal("30"),
             )
 
             with tempfile.TemporaryDirectory(
@@ -742,7 +1242,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             self.assertEqual(len(drafts["drafts"]), 1)
             self.assertEqual(len(drafts["drafts"][0]["lines"]), 1)
             self.assertEqual(
-                Decimal(str(drafts["drafts"][0]["po_total"])), Decimal("57")
+                Decimal(str(drafts["drafts"][0]["po_total"])), Decimal("180")
             )
 
         run_id = str(run["run_id"])

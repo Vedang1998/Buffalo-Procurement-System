@@ -17,6 +17,7 @@ from procurement_os.staging_routes import (
 )
 from procurement_os.staging_composition import load_staging_worker_boundary_config
 from procurement_os.staging_process_contract import (
+    SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES,
     StagingProcessContractError,
     validated_process_environment,
 )
@@ -278,6 +279,78 @@ class StagingCompositionTests(unittest.TestCase):
                         role="synthetic",
                         environ={**environment, name: "1"},
                     )
+
+    def test_synthetic_price_backup_binding_is_optional_exact_and_role_local(self):
+        with tempfile.TemporaryDirectory(prefix="buffalo-worker-env-") as raw:
+            key_file = Path(raw) / "worker.key"
+            synthetic = _worker_environment(
+                role="synthetic", key_file=key_file
+            )
+            binding = {
+                "BUFFALO_STAGING_PRICE_BACKUP_ROOT": "/data/synthetic-recovery",
+                "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST": (
+                    "/data/synthetic-recovery/backups/"
+                    "staging-v2-20261004T120000Z-0123456789ab/manifest.json"
+                ),
+                "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST_SHA256": "1" * 64,
+                "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_COMMIT": "2" * 40,
+                "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE": "3" * 40,
+            }
+            self.assertEqual(
+                set(binding), SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES
+            )
+            self.assertEqual(
+                validated_process_environment(
+                    role="synthetic", environ={**synthetic, **binding}
+                ),
+                {**synthetic, **binding},
+            )
+            for missing in sorted(binding):
+                partial = {**synthetic, **binding}
+                partial.pop(missing)
+                with self.subTest(missing=missing), self.assertRaisesRegex(
+                    StagingProcessContractError,
+                    "price backup binding is incomplete",
+                ):
+                    validated_process_environment(
+                        role="synthetic", environ=partial
+                    )
+            empty = {**synthetic, **binding}
+            empty["BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE"] = ""
+            with self.assertRaisesRegex(
+                StagingProcessContractError,
+                "price backup binding is incomplete",
+            ):
+                validated_process_environment(role="synthetic", environ=empty)
+            for name, value in (
+                ("BUFFALO_STAGING_PRICE_BACKUP_ROOT", "relative"),
+                (
+                    "BUFFALO_STAGING_PRICE_BACKUP_ROOT",
+                    "/data/other-recovery",
+                ),
+                (
+                    "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST",
+                    "/data/synthetic-recovery/other/manifest.json",
+                ),
+                ("BUFFALO_STAGING_PRICE_BACKUP_MANIFEST_SHA256", "A" * 64),
+                ("BUFFALO_STAGING_PRICE_BACKUP_SOURCE_COMMIT", "2" * 39),
+                ("BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE", "3" * 41),
+            ):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    StagingProcessContractError,
+                    "price backup binding differs",
+                ):
+                    validated_process_environment(
+                        role="synthetic",
+                        environ={**synthetic, **binding, name: value},
+                    )
+            research = _worker_environment(role="research", key_file=key_file)
+            with self.assertRaisesRegex(
+                StagingProcessContractError, "unapproved entry"
+            ):
+                validated_process_environment(
+                    role="research", environ={**research, **binding}
+                )
 
     def test_synthetic_mode_and_every_canonical_capability_are_exact(self):
         with tempfile.TemporaryDirectory(prefix="buffalo-worker-env-") as raw:

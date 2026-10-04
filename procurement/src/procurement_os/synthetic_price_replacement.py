@@ -1400,8 +1400,19 @@ def _apply_snapshot(
         or backup.prechange_scope_sha256 != state["current_scope_sha256"]
         or backup.migration_sha256 != MIGRATION_SHA256
         or backup.catalog_sha256 != CATALOG_SHA256
-        or database_state_evidence(conn, schema=SCHEMA) != backup.state
     ):
+        raise SyntheticPriceReplacementError("price APPLY recovery proof differs")
+    try:
+        current_state = database_state_evidence(
+            conn,
+            schema=SCHEMA,
+            staging_runtime=backup.target_kind == "staging",
+        )
+    except LocalBackupV2Error as exc:
+        raise SyntheticPriceReplacementError(
+            "price APPLY recovery proof differs"
+        ) from exc
+    if current_state != backup.state:
         raise SyntheticPriceReplacementError("price APPLY recovery proof differs")
     variant_ids = tuple(
         str(row[0])
@@ -1467,6 +1478,13 @@ def _apply_snapshot(
         "commercial_authority": False,
         "real_price_approval": False,
     }
+    if backup.target_kind == "staging":
+        intent.update(
+            staging_backup_release_sha256=backup.staging_release_sha256,
+            staging_runtime_attestation_identity=(
+                backup.runtime_attestation_identity
+            ),
+        )
     state.update(
         variant_ids=variant_ids,
         expected_current_row_count=expected_current_row_count,
@@ -1531,6 +1549,50 @@ def _price_apply_locks(
                 raise
 
 
+def _attest_apply_target(
+    conn: Any, backup: VerifiedPriceApplyBackup
+) -> None:
+    from .synthetic_staging_database import (
+        STAGING_BACKUP_RELEASE_SHA256,
+        SyntheticStagingDatabaseError,
+        attest_runtime_connection,
+        is_staging_runtime_connection,
+        target_from_environment,
+    )
+
+    staging_runtime = is_staging_runtime_connection(conn)
+    runtime_attestation_identity: str | None = None
+    if staging_runtime:
+        try:
+            runtime_attestation_identity = attest_runtime_connection(
+                conn, target_from_environment(os.environ)
+            )
+        except (SyntheticStagingDatabaseError, ValueError) as exc:
+            raise SyntheticPriceReplacementError(
+                "price APPLY recovery target differs"
+            ) from exc
+    if (
+        staging_runtime
+        and (
+            backup.target_kind != "staging"
+            or backup.staging_release_sha256
+            != STAGING_BACKUP_RELEASE_SHA256
+            or backup.runtime_attestation_identity
+            != runtime_attestation_identity
+        )
+    ) or (
+        not staging_runtime
+        and (
+            backup.target_kind != "legacy-local"
+            or backup.staging_release_sha256 is not None
+            or backup.runtime_attestation_identity is not None
+        )
+    ):
+        raise SyntheticPriceReplacementError(
+            "price APPLY recovery target differs"
+        )
+
+
 def _apply_preflight(
     conn: Any,
     *,
@@ -1540,6 +1602,7 @@ def _apply_preflight(
     with conn.transaction():
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         require_attested_database(conn)
+        _attest_apply_target(conn, backup)
         rows = conn.execute(
             "SELECT vendor_id::text,variant_id FROM price_book_scope_memberships "
             "WHERE price_book_batch_id=%s ORDER BY variant_id", (batch_id,)
@@ -1776,6 +1839,7 @@ def apply_price_replacement(
         def operation() -> dict[str, Any]:
             _reverify_bound_backup(backup)
             require_attested_database(conn)
+            _attest_apply_target(conn, backup)
             confirmation = {
                 "contract": "BUFFALO_SYNTHETIC_PRICE_APPLY_CONFIRMATION_V1",
                 "preview_sha256": expected_preview_sha256,

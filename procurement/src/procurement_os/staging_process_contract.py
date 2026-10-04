@@ -1,6 +1,8 @@
 """Dependency-light process and environment contract for Railway staging."""
 from __future__ import annotations
 
+from pathlib import Path
+import re
 from typing import Mapping
 
 
@@ -113,13 +115,22 @@ WORKER_REQUIRED_ENVIRONMENT_NAMES = {
 RESEARCH_LAUNCH_ENVIRONMENT_NAMES = frozenset(
     {"BUFFALO_STAGING_RESEARCH_READINESS_FD"}
 )
+SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES = frozenset(
+    {
+        "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST",
+        "BUFFALO_STAGING_PRICE_BACKUP_MANIFEST_SHA256",
+        "BUFFALO_STAGING_PRICE_BACKUP_ROOT",
+        "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_COMMIT",
+        "BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE",
+    }
+)
 SYNTHETIC_LAUNCH_ENVIRONMENT_NAMES = frozenset(
     {
         "BUFFALO_STAGING_SYNTHETIC_READINESS_FD",
         "BUFFALO_STAGING_LOCAL_ACCEPTANCE",
         "BUFFALO_STAGING_OWNED_LOCAL_PORT",
     }
-)
+) | SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES
 WORKER_ENVIRONMENT_NAMES = {
     role: required
     | PROCESS_RUNTIME_ENVIRONMENT_NAMES
@@ -187,6 +198,58 @@ def validated_process_environment(
             raise StagingProcessContractError(
                 "synthetic local database authority is incomplete"
             )
+        backup_names = SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES & names
+        if backup_names and (
+            backup_names != SYNTHETIC_PRICE_BACKUP_ENVIRONMENT_NAMES
+            or any(not copied[name] for name in backup_names)
+        ):
+            raise StagingProcessContractError(
+                "synthetic price backup binding is incomplete"
+            )
+        if backup_names:
+            root = Path(copied["BUFFALO_STAGING_PRICE_BACKUP_ROOT"])
+            manifest = Path(copied["BUFFALO_STAGING_PRICE_BACKUP_MANIFEST"])
+            try:
+                relative = manifest.relative_to(root / "backups")
+            except ValueError as exc:
+                raise StagingProcessContractError(
+                    "synthetic price backup binding differs"
+                ) from exc
+            if (
+                not root.is_absolute()
+                or root == Path("/")
+                or any(part in {"", ".", ".."} for part in root.parts)
+                or root
+                != Path(copied["PROCUREMENT_STORAGE_ROOT"]).parent
+                / "synthetic-recovery"
+                or not manifest.is_absolute()
+                or any(part in {"", ".", ".."} for part in manifest.parts)
+                or len(relative.parts) != 2
+                or relative.name != "manifest.json"
+                or re.fullmatch(
+                    r"staging-v2-\d{8}T\d{6}Z-[0-9a-f]{12}",
+                    relative.parent.name,
+                )
+                is None
+                or re.fullmatch(
+                    r"[0-9a-f]{64}",
+                    copied["BUFFALO_STAGING_PRICE_BACKUP_MANIFEST_SHA256"],
+                )
+                is None
+                or re.fullmatch(
+                    r"[0-9a-f]{40}",
+                    copied["BUFFALO_STAGING_PRICE_BACKUP_SOURCE_COMMIT"],
+                )
+                is None
+                or re.fullmatch(
+                    r"[0-9a-f]{40}",
+                    copied["BUFFALO_STAGING_PRICE_BACKUP_SOURCE_TREE"],
+                )
+                is None
+            ):
+                raise StagingProcessContractError(
+                    "synthetic price backup binding differs"
+                )
     return copied
 
 

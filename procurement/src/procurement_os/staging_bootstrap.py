@@ -12,13 +12,16 @@ import asyncio
 from dataclasses import dataclass, field
 import errno
 import grp
+import hashlib
 import os
 from pathlib import Path
 import pwd
+import re
 import secrets
 import signal
 import socket
 import stat
+import subprocess
 import sys
 import threading
 from typing import Awaitable, Callable, Mapping, MutableMapping
@@ -62,6 +65,13 @@ from .staging_supervisor import (
 )
 from .staging_uds import PeerCredentials, SocketContract
 from .staging_worker_activation import SupervisorActivationClient
+from .local_backup_v2 import (
+    STAGING_MANIFEST_ENV,
+    STAGING_MANIFEST_SHA_ENV,
+    STAGING_RUNTIME_ROOT_ENV,
+    STAGING_SOURCE_COMMIT_ENV,
+    STAGING_SOURCE_TREE_ENV,
+)
 from .synthetic_staging_database import (
     EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
     RUNTIME_LOGIN,
@@ -75,6 +85,15 @@ RUNTIME_ROOT = Path("/run/buffalo-staging")
 DATABASE_URL_ENV = "BUFFALO_STAGING_SYNTHETIC_DATABASE_URL"
 DATABASE_PASSWORD_ENV = "BUFFALO_STAGING_SYNTHETIC_DATABASE_PASSWORD"
 REPLICA_COUNT_ENV = "BUFFALO_STAGING_REPLICA_COUNT"
+BACKUP_LABEL_ENV = "BUFFALO_STAGING_PRICE_BACKUP_LABEL"
+EXPECTED_TREE_ENV = STAGING_SOURCE_TREE_ENV
+_BACKUP_INPUT_NAMES = frozenset(
+    {BACKUP_LABEL_ENV, STAGING_MANIFEST_SHA_ENV, EXPECTED_TREE_ENV}
+)
+_BACKUP_LABEL = re.compile(r"^staging-v2-\d{8}T\d{6}Z-[0-9a-f]{12}$")
+_GIT_ID = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_MAX_BACKUP_MANIFEST_BYTES = 4 * 1024 * 1024
 
 
 class StagingBootstrapError(RuntimeError):
@@ -171,6 +190,9 @@ class StagingBootstrapInputs:
     database_url: str
     postgres_private_host: str
     local_port: str | None = None
+    backup_label: str | None = None
+    expected_manifest_sha256: str | None = None
+    expected_tree: str | None = None
 
     @property
     def external_origin(self) -> str:
@@ -202,6 +224,8 @@ class StagingBootstrapLayout:
     validation_parent: Path
     volume_root: Path
     synthetic_storage: Path
+    synthetic_recovery: Path
+    synthetic_backup_root: Path
     research_release: Path
     research_payload: Path
     research_manifest: Path
@@ -246,6 +270,8 @@ class StagingBootstrapLayout:
             / "research-validation",
             volume_root=volume_root,
             synthetic_storage=volume_root / "synthetic",
+            synthetic_recovery=volume_root / "synthetic-recovery",
+            synthetic_backup_root=volume_root / "synthetic-recovery" / "backups",
             research_release=release,
             research_payload=payload,
             research_manifest=release / "deployment-inventory.json",
@@ -256,6 +282,15 @@ class StagingBootstrapLayout:
             / ACCEPTED_TARGET_WORKSPACE_ID,
             transfer_root=volume_root / "transfer",
         )
+
+
+@dataclass(frozen=True)
+class StagingPriceBackupBinding:
+    root: Path
+    manifest: Path
+    manifest_sha256: str
+    source_commit: str
+    source_tree: str
 
 
 @dataclass(frozen=True)
@@ -400,6 +435,27 @@ class StagingBootstrapComposition:
     control_listener: socket.socket = field(repr=False)
 
 
+def _database_target_environment(
+    inputs: StagingBootstrapInputs,
+) -> dict[str, str]:
+    environment = {
+        "DATABASE_URL": inputs.database_url,
+        "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": inputs.postgres_private_host,
+        "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+        "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+        "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+        "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+    }
+    if inputs.local_port is not None:
+        environment.update(
+            {
+                "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+                "BUFFALO_STAGING_OWNED_LOCAL_PORT": inputs.local_port,
+            }
+        )
+    return environment
+
+
 def load_bootstrap_inputs(
     environment: Mapping[str, str],
 ) -> tuple[StagingBootstrapInputs, str]:
@@ -411,14 +467,31 @@ def load_bootstrap_inputs(
     local = names & _LOCAL_INPUT_NAMES
     if local and local != _LOCAL_INPUT_NAMES:
         raise StagingBootstrapError("local staging authority is incomplete")
+    backup = names & _BACKUP_INPUT_NAMES
+    if backup and backup != _BACKUP_INPUT_NAMES:
+        raise StagingBootstrapError("staging price backup selection is incomplete")
+    if any(
+        name.startswith("BUFFALO_STAGING_PRICE_BACKUP_")
+        and name not in _BACKUP_INPUT_NAMES
+        and environment.get(name)
+        for name in names
+    ):
+        raise StagingBootstrapError(
+            "staging price backup path authority is not accepted"
+        )
     if any(
         _root_entry_carries_unreviewed_authority(name, str(environment[name]))
-        for name in names - _REQUIRED_INPUT_NAMES - _LOCAL_INPUT_NAMES
+        for name in (
+            names
+            - _REQUIRED_INPUT_NAMES
+            - _LOCAL_INPUT_NAMES
+            - _BACKUP_INPUT_NAMES
+        )
         if environment.get(name)
     ):
         raise StagingBootstrapError("production or ambient authority is present")
     selected: dict[str, str] = {}
-    for name in sorted(_REQUIRED_INPUT_NAMES | local):
+    for name in sorted(_REQUIRED_INPUT_NAMES | local | backup):
         value = environment.get(name)
         if not isinstance(value, str) or not value or "\x00" in value:
             raise StagingBootstrapError("staging bootstrap input is invalid")
@@ -443,6 +516,12 @@ def load_bootstrap_inputs(
         != EXPECTED_POSTGRES_SERVICE_ID
     ):
         raise StagingBootstrapError("staging bootstrap scope differs")
+    if backup and (
+        _BACKUP_LABEL.fullmatch(selected[BACKUP_LABEL_ENV]) is None
+        or _SHA256.fullmatch(selected[STAGING_MANIFEST_SHA_ENV]) is None
+        or _GIT_ID.fullmatch(selected[EXPECTED_TREE_ENV]) is None
+    ):
+        raise StagingBootstrapError("staging price backup selection differs")
     password = selected.pop(DATABASE_PASSWORD_ENV)
     if len(password.encode("utf-8")) > 2_048 or any(
         character in password for character in ("\x00", "\r", "\n")
@@ -471,31 +550,174 @@ def load_bootstrap_inputs(
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST"
         ],
         local_port=selected.get("BUFFALO_STAGING_OWNED_LOCAL_PORT"),
+        backup_label=selected.get(BACKUP_LABEL_ENV),
+        expected_manifest_sha256=selected.get(STAGING_MANIFEST_SHA_ENV),
+        expected_tree=selected.get(EXPECTED_TREE_ENV),
     )
     # The exact child environment is constructed below, but reject a malformed
     # destination before touching the filesystem.
-    target_environment = {
-        "DATABASE_URL": inputs.database_url,
-        "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": inputs.postgres_private_host,
-        "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
-        "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
-        "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
-        "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
-    }
-    if inputs.local_port is not None:
-        target_environment.update(
-            {
-                "BUFFALO_STAGING_LOCAL_ACCEPTANCE": selected[
-                    "BUFFALO_STAGING_LOCAL_ACCEPTANCE"
-                ],
-                "BUFFALO_STAGING_OWNED_LOCAL_PORT": inputs.local_port,
-            }
-        )
     try:
-        target_from_environment(target_environment)
+        target_from_environment(_database_target_environment(inputs))
     except SyntheticStagingDatabaseError as exc:
         raise StagingBootstrapError("synthetic database target differs") from exc
     return inputs, password
+
+
+def _hash_selected_backup_manifest(path: Path) -> str:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+        )
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or stat.S_IMODE(before.st_mode) != 0o600
+            or (before.st_uid, before.st_gid)
+            != (SYNTHETIC_ACCOUNT.uid, SYNTHETIC_ACCOUNT.gid)
+            or before.st_nlink != 1
+            or not 0 < before.st_size <= _MAX_BACKUP_MANIFEST_BYTES
+        ):
+            raise StagingBootstrapError(
+                "selected staging price backup manifest differs"
+            )
+        digest = hashlib.sha256()
+        observed = 0
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            observed += len(block)
+            if observed > _MAX_BACKUP_MANIFEST_BYTES:
+                raise StagingBootstrapError(
+                    "selected staging price backup manifest differs"
+                )
+            digest.update(block)
+        after = os.fstat(descriptor)
+        named = path.stat(follow_symlinks=False)
+        if (
+            observed != before.st_size
+            or (before.st_dev, before.st_ino, before.st_size)
+            != (after.st_dev, after.st_ino, after.st_size)
+            or (before.st_dev, before.st_ino)
+            != (named.st_dev, named.st_ino)
+        ):
+            raise StagingBootstrapError(
+                "selected staging price backup manifest changed"
+            )
+        return digest.hexdigest()
+    except StagingBootstrapError:
+        raise
+    except OSError as exc:
+        raise StagingBootstrapError(
+            "selected staging price backup manifest is unavailable"
+        ) from exc
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise StagingBootstrapError(
+                    "selected staging price backup manifest could not be closed"
+                ) from exc
+
+
+def _price_backup_verifier_argv(python_executable: str) -> tuple[str, ...]:
+    if not Path(python_executable).is_absolute():
+        raise StagingBootstrapError("staging Python executable is invalid")
+    source_root = Path(__file__).resolve().parents[1]
+    if not source_root.is_absolute() or "\x00" in str(source_root):
+        raise StagingBootstrapError("staging verifier source root differs")
+    return (
+        python_executable,
+        "-I",
+        "-B",
+        "-c",
+        (
+            "import sys;"
+            f"sys.path.insert(0,{str(source_root)!r});"
+            "from procurement_os.local_backup_v2 import "
+            "verify_bound_price_apply_backup as v;v()"
+        ),
+    )
+
+
+def _resolve_price_backup_binding(
+    *,
+    inputs: StagingBootstrapInputs,
+    layout: StagingBootstrapLayout,
+    python_executable: str,
+) -> StagingPriceBackupBinding | None:
+    values = (
+        inputs.backup_label,
+        inputs.expected_manifest_sha256,
+        inputs.expected_tree,
+    )
+    if all(value is None for value in values):
+        return None
+    if (
+        inputs.backup_label is None
+        or inputs.expected_manifest_sha256 is None
+        or inputs.expected_tree is None
+        or _BACKUP_LABEL.fullmatch(inputs.backup_label) is None
+        or _SHA256.fullmatch(inputs.expected_manifest_sha256) is None
+        or _GIT_ID.fullmatch(inputs.expected_tree) is None
+    ):
+        raise StagingBootstrapError("staging price backup selection differs")
+    manifest = (
+        layout.synthetic_backup_root
+        / inputs.backup_label
+        / "manifest.json"
+    )
+    observed_manifest_sha = _hash_selected_backup_manifest(manifest)
+    if observed_manifest_sha != inputs.expected_manifest_sha256:
+        raise StagingBootstrapError(
+            "selected staging price backup manifest digest differs"
+        )
+    binding = StagingPriceBackupBinding(
+        root=layout.synthetic_recovery,
+        manifest=manifest,
+        manifest_sha256=inputs.expected_manifest_sha256,
+        source_commit=inputs.expected_commit,
+        source_tree=inputs.expected_tree,
+    )
+    verifier_argv = _price_backup_verifier_argv(python_executable)
+    verifier_environment = {
+        **_database_target_environment(inputs),
+        "HOME": str(layout.synthetic_root),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": _COMMON_PATH,
+        "PYTHONUNBUFFERED": "1",
+        "TMPDIR": str(layout.synthetic_root / "tmp"),
+        "TZ": "UTC",
+        STAGING_RUNTIME_ROOT_ENV: str(binding.root),
+        STAGING_MANIFEST_ENV: str(binding.manifest),
+        STAGING_MANIFEST_SHA_ENV: binding.manifest_sha256,
+        STAGING_SOURCE_COMMIT_ENV: binding.source_commit,
+        STAGING_SOURCE_TREE_ENV: binding.source_tree,
+    }
+    try:
+        subprocess.run(
+            verifier_argv,
+            check=True,
+            close_fds=True,
+            env=verifier_environment,
+            extra_groups=(),
+            group=SYNTHETIC_ACCOUNT.gid,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            timeout=300,
+            user=SYNTHETIC_ACCOUNT.uid,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise StagingBootstrapError(
+            "selected staging price backup differs"
+        ) from exc
+    return binding
 
 
 def build_child_contracts(
@@ -507,6 +729,7 @@ def build_child_contracts(
     synthetic_listener_fd: int,
     research_listener_fd: int,
     supervisor_pid: int,
+    backup_binding: StagingPriceBackupBinding | None = None,
 ) -> BootstrapChildContracts:
     """Build the exact child inventory without reading ambient environment."""
 
@@ -520,6 +743,26 @@ def build_child_contracts(
         or len(set(descriptors)) != 3
     ):
         raise StagingBootstrapError("staging child descriptor contract differs")
+    backup_values = (
+        inputs.backup_label,
+        inputs.expected_manifest_sha256,
+        inputs.expected_tree,
+    )
+    backup_selected = all(value is not None for value in backup_values)
+    if (
+        any(value is not None for value in backup_values) != backup_selected
+        or backup_selected != (backup_binding is not None)
+    ):
+        raise StagingBootstrapError("staging price backup binding differs")
+    if backup_binding is not None and (
+        backup_binding.root != layout.synthetic_recovery
+        or backup_binding.manifest
+        != layout.synthetic_backup_root / inputs.backup_label / "manifest.json"
+        or backup_binding.source_commit != inputs.expected_commit
+        or backup_binding.source_tree != inputs.expected_tree
+        or backup_binding.manifest_sha256 != inputs.expected_manifest_sha256
+    ):
+        raise StagingBootstrapError("staging price backup binding differs")
     sockets: dict[str, SocketContract] = {
         "synthetic": SocketContract(
             path=layout.synthetic_socket,
@@ -633,6 +876,16 @@ def build_child_contracts(
             {
                 "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
                 "BUFFALO_STAGING_OWNED_LOCAL_PORT": inputs.local_port,
+            }
+        )
+    if backup_binding is not None:
+        synthetic_environment.update(
+            {
+                STAGING_RUNTIME_ROOT_ENV: str(backup_binding.root),
+                STAGING_MANIFEST_ENV: str(backup_binding.manifest),
+                STAGING_MANIFEST_SHA_ENV: backup_binding.manifest_sha256,
+                STAGING_SOURCE_COMMIT_ENV: backup_binding.source_commit,
+                STAGING_SOURCE_TREE_ENV: backup_binding.source_tree,
             }
         )
     research_environment = {
@@ -766,6 +1019,11 @@ def prepare_bootstrap(
             local_acceptance=inputs.local_port is not None,
         )
         _prepare_layout(layout, resources=resources)
+        backup_binding = _resolve_price_backup_binding(
+            inputs=inputs,
+            layout=layout,
+            python_executable=python_executable,
+        )
         _write_pgpass(
             layout.pgpass,
             database_url=inputs.database_url,
@@ -805,6 +1063,7 @@ def prepare_bootstrap(
             synthetic_listener_fd=listeners["synthetic"].fileno(),
             research_listener_fd=listeners["research"].fileno(),
             supervisor_pid=os.getpid(),
+            backup_binding=backup_binding,
         )
         key_lifecycle = WorkerKeyLifecycle(
             tuple(
@@ -1249,6 +1508,24 @@ def _prepare_layout(
         raise StagingBootstrapError("staging transfer root was not removed")
     _require_directory(
         layout.synthetic_storage,
+        mode=0o700,
+        uid=SYNTHETIC_ACCOUNT.uid,
+        gid=SYNTHETIC_ACCOUNT.gid,
+        create=True,
+        resources=resources,
+        persistent=True,
+    )
+    _require_directory(
+        layout.synthetic_recovery,
+        mode=0o700,
+        uid=SYNTHETIC_ACCOUNT.uid,
+        gid=SYNTHETIC_ACCOUNT.gid,
+        create=True,
+        resources=resources,
+        persistent=True,
+    )
+    _require_directory(
+        layout.synthetic_backup_root,
         mode=0o700,
         uid=SYNTHETIC_ACCOUNT.uid,
         gid=SYNTHETIC_ACCOUNT.gid,
