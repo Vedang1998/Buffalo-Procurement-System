@@ -10,6 +10,30 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### Synthetic staging database contract — LOCAL IMPLEMENTATION CHECKPOINT / DATABASE GATES PENDING
+
+- A fresh complete-history checkout began clean at exact recovered source
+  `c0a04c1b18e41cd249aa3739ab582d03a61267bb`, tree
+  `7e1a6b285d12fa0b5c05fa9dfeab736cbf48e8e8`. The paused `5d5c9a22...`
+  checkout was not used or changed.
+- Fresh hook safety passed `10/10`; filesystem mode was `0755`, Git mode was
+  `100755`, and the unchanged inert hook invoked no sentinel. No-database test
+  discovery observed 1,235 tests and three unavailable database-dependent
+  modules against the declared 1,295 floor. This is discovery evidence only,
+  not a suite pass; all earlier unbound claims remain UNVERIFIED.
+- The additive V1 implementation defines three separated roles, an explicit
+  per-object operation matrix and hash, dedicated destination identity,
+  recursive role-topology and effective-ACL attestation, immutable fixture and
+  contract markers, a SQL-side assertion, and an operator-only provisioning
+  command. Gateway and research worker environment allowlists remain free of
+  database credentials. Legacy loopback test validation is unchanged.
+- Pure contract plus unchanged hook tests passed `14/14`; compilation and
+  `git diff --check` passed. Disposable PostgreSQL role/ACL execution,
+  dump/restore, real runtime-role workflow, lifecycle integration, full suite,
+  startup, browser/resource acceptance, and independent review remain pending.
+  This checkpoint is not final, accepted, deployable, or evidence that the
+  interrupted 1,295-test run passed.
+
 ### Railway staging source recovery — EXACT SOURCE PRESERVED / WIP TRANSFER ONLY / NOT ACCEPTED OR DEPLOYABLE
 
 - The original source worktree was recovered at
