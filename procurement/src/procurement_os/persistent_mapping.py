@@ -141,6 +141,28 @@ def _validate_synthetic_database_url(database_url: str) -> str:
         raise PersistentMappingError(
             "synthetic mapping database query is malformed"
         ) from exc
+    staging_signal = (
+        parsed.username == "buffalo_synthetic_runtime"
+        or database == "buffalo_synthetic_staging_demo"
+    )
+    if staging_signal:
+        try:
+            from .synthetic_staging_database import (
+                EXPECTED_DATABASE,
+                SyntheticStagingDatabaseError,
+                target_from_environment,
+            )
+
+            target = target_from_environment(os.environ)
+            if target.database_url != database_url:
+                raise SyntheticStagingDatabaseError(
+                    "synthetic staging database URL differs"
+                )
+            return EXPECTED_DATABASE
+        except Exception as exc:
+            raise PersistentMappingError(
+                "persistent mapping staging database identity differs"
+            ) from exc
     if (
         parsed.scheme not in {"postgres", "postgresql"}
         or parsed.hostname not in {"127.0.0.1", "::1"}
@@ -169,6 +191,21 @@ def _verify_connected_synthetic_database(conn: Any, expected_database: str) -> N
     ).fetchone()
     if row is None:
         raise PersistentMappingError("synthetic mapping database identity is absent")
+    if expected_database == "buffalo_synthetic_staging_demo":
+        try:
+            from .synthetic_staging_database import is_staging_runtime_connection
+
+            if not is_staging_runtime_connection(conn):
+                raise PersistentMappingError(
+                    "connected synthetic mapping database identity differs"
+                )
+            return
+        except PersistentMappingError:
+            raise
+        except Exception as exc:
+            raise PersistentMappingError(
+                "connected synthetic mapping database identity differs"
+            ) from exc
     try:
         from ipaddress import ip_interface
 
@@ -1585,16 +1622,27 @@ def record_mapping_decision(
             }
         )
         if lock_ids:
-            locked_ids = [
-                int(row[0])
-                for row in conn.execute(
+            from .synthetic_staging_database import is_staging_runtime_connection
+
+            if is_staging_runtime_connection(conn):
+                locked = conn.execute(
                     sql.SQL(
-                        "SELECT offer_id FROM {} WHERE offer_id=ANY(%s) "
-                        "ORDER BY offer_id FOR UPDATE"
-                    ).format(_qualified("supplier_offers")),
+                        "SELECT {}.persistent_mapping_lock_supplier_offers(%s)"
+                    ).format(sql.Identifier(SCHEMA)),
                     (lock_ids,),
-                ).fetchall()
-            ]
+                ).fetchone()[0]
+                locked_ids = [int(value) for value in locked]
+            else:
+                locked_ids = [
+                    int(row[0])
+                    for row in conn.execute(
+                        sql.SQL(
+                            "SELECT offer_id FROM {} WHERE offer_id=ANY(%s) "
+                            "ORDER BY offer_id FOR UPDATE"
+                        ).format(_qualified("supplier_offers")),
+                        (lock_ids,),
+                    ).fetchall()
+                ]
             if locked_ids != lock_ids:
                 raise PersistentMappingError("linked supplier offer does not exist")
         if record["offer_link_kind"] == "CREATED_INACTIVE":

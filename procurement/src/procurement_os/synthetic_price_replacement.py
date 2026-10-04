@@ -174,12 +174,13 @@ def require_process_policy() -> tuple[str, str, int]:
                 "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
             )
         parsed = urlparse(database_url)
-        if parsed.port is None:
+        expected_port = parsed.port or 5432
+        if not 1 <= expected_port <= 65535:
             raise SyntheticPriceReplacementError(
                 "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
             )
         _fixture()
-        return mode, expected_database, parsed.port
+        return mode, expected_database, expected_port
     except SyntheticPriceReplacementError:
         raise
     except (PersistentMappingError, OSError, ValueError) as exc:
@@ -194,6 +195,12 @@ def require_attested_database(conn: Any) -> None:
     try:
         mode, expected_database, expected_port = require_process_policy()
         _verify_connected_synthetic_database(conn, expected_database)
+        from .synthetic_staging_database import (
+            is_staging_runtime_connection,
+            verify_staging_persistent_mapping_contract,
+        )
+
+        staging_runtime = is_staging_runtime_connection(conn)
         facts = conn.execute(
             "SELECT current_schema(),current_database(),inet_server_port(),"
             "session_user::text,current_user::text"
@@ -208,13 +215,18 @@ def require_attested_database(conn: Any) -> None:
             SCHEMA,
             expected_database,
             expected_port,
-            "qa_release_login",
-            "qa_mapping_owner",
+            "buffalo_synthetic_runtime" if staging_runtime else "qa_release_login",
+            "buffalo_synthetic_runtime" if staging_runtime else "qa_mapping_owner",
         ):
             raise SyntheticPriceReplacementError(
                 "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
             )
-        conn.execute(f'SELECT "{SCHEMA}".assert_persistent_mapping_foundation_contract()')
+        if staging_runtime:
+            verify_staging_persistent_mapping_contract(conn)
+        else:
+            conn.execute(
+                f'SELECT "{SCHEMA}".assert_persistent_mapping_foundation_contract()'
+            )
         verify_monday_forecast_v2_retirement_contract(conn)
         verify_synthetic_price_replacement_contract(conn)
         markers = dict(

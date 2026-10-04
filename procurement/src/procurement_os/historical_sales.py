@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import re
 from typing import Any, Iterable
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .catalog import authoritative_catalog_gate, numeric_shopify_id
@@ -718,6 +719,7 @@ def create_sales_backfill_run(
     store_timezone: str,
     chunk_days: int = DEFAULT_CHUNK_DAYS,
     page_size: int = DEFAULT_PAGE_SIZE,
+    fixture_sales_backfill_id: str | None = None,
 ) -> str:
     if start_date != AUTHORITATIVE_START_DATE:
         raise ValueError(f"historical sales must start at {AUTHORITATIVE_START_DATE.isoformat()}")
@@ -725,6 +727,15 @@ def create_sales_backfill_run(
         raise ValueError("historical sales end date precedes start date")
     if chunk_days <= 0 or page_size <= 0:
         raise ValueError("chunk_days and page_size must be positive")
+    if fixture_sales_backfill_id is not None:
+        # Production callers omit this argument and retain PostgreSQL-generated
+        # identities.  The registered synthetic fixture uses a source-owned
+        # UUID so independently initialized acceptance databases carry the
+        # same immutable provenance rather than a random value.
+        try:
+            fixture_sales_backfill_id = str(UUID(fixture_sales_backfill_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError("fixture sales backfill identity is malformed") from exc
     ZoneInfo(store_timezone)
     chunks = list(date_chunks(start_date, end_date, days=chunk_days))
     contract_hash = query_contract_hash()
@@ -733,11 +744,11 @@ def create_sales_backfill_run(
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO sales_backfill_runs(
-                     start_date,end_date,query_version,status,store_timezone,chunk_days,page_size,
+                     sales_backfill_id,start_date,end_date,query_version,status,store_timezone,chunk_days,page_size,
                      expected_chunks,query_contract_hash,last_checkpoint_at,notes
-                   ) VALUES (%s,%s,%s,'RUNNING',%s,%s,%s,%s,%s,now(),%s)
+                   ) VALUES (COALESCE(%s::uuid,gen_random_uuid()),%s,%s,%s,'RUNNING',%s,%s,%s,%s,%s,now(),%s)
                    RETURNING sales_backfill_id""",
-                (start_date, end_date, QUERY_VERSION, store_timezone, chunk_days, page_size,
+                (fixture_sales_backfill_id, start_date, end_date, QUERY_VERSION, store_timezone, chunk_days, page_size,
                  len(chunks), contract_hash, "Phase 4 durable raw-first ShopifyQL backfill"),
             )
             run_id = str(cur.fetchone()[0])

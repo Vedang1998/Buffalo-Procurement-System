@@ -282,7 +282,26 @@ def _request_runtime_mode() -> str:
 def _db_conn():
     db = _database_url()
     import psycopg
-    return psycopg.connect(db)
+    from urllib.parse import urlparse
+
+    conn = psycopg.connect(db)
+    parsed = urlparse(db)
+    if (
+        parsed.username == "buffalo_synthetic_runtime"
+        or parsed.path == "/buffalo_synthetic_staging_demo"
+    ):
+        try:
+            from .synthetic_staging_database import (
+                attest_runtime_connection,
+                target_from_environment,
+            )
+
+            attest_runtime_connection(conn, target_from_environment(os.environ))
+            conn.commit()
+        except Exception:
+            conn.close()
+            raise
+    return conn
 
 
 def _database_url() -> str:

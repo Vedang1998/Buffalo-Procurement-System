@@ -83,6 +83,27 @@ _REVIEW_CONTEXT_SQL = """SELECT r.run_id,r.input_fingerprint,r.recommended_cases
     WHERE r.recommendation_id=%s"""
 
 
+def _locked_review_context(conn: Any, recommendation_id: int) -> Any:
+    from .synthetic_staging_database import is_staging_runtime_connection
+
+    if is_staging_runtime_connection(conn):
+        locked = conn.execute(
+            "SELECT synthetic_staging_lock_recommendation(%s)",
+            (recommendation_id,),
+        ).fetchone()[0]
+        row = conn.execute(
+            _REVIEW_CONTEXT_SQL + " FOR UPDATE OF ru", (recommendation_id,)
+        ).fetchone()
+        if bool(locked) != (row is not None):
+            raise ProcurementReviewError(
+                "recommendation changed while acquiring its review lock"
+            )
+        return row
+    return conn.execute(
+        _REVIEW_CONTEXT_SQL + " FOR UPDATE OF r,ru", (recommendation_id,)
+    ).fetchone()
+
+
 def _validate_review_request(
     *, action: str, actor: str, expected_input_fingerprint: str, comment: str
 ) -> tuple[str, str, str]:
@@ -512,12 +533,29 @@ def acknowledge_and_exclude_blocked_item(
             raise ProcurementReviewError(
                 "material recommendation inputs changed; prepare a new run"
             )
-        blocker = conn.execute(
-            """SELECT exception_id,variant_id,vendor_id,exception_type,severity,
-                      message,status
-                 FROM exceptions WHERE exception_id=%s FOR UPDATE""",
-            (exception_id,),
-        ).fetchone()
+        from .synthetic_staging_database import is_staging_runtime_connection
+
+        if is_staging_runtime_connection(conn):
+            locked = conn.execute(
+                "SELECT synthetic_staging_lock_exception(%s)", (exception_id,)
+            ).fetchone()[0]
+            blocker = conn.execute(
+                """SELECT exception_id,variant_id,vendor_id,exception_type,severity,
+                          message,status
+                     FROM exceptions WHERE exception_id=%s""",
+                (exception_id,),
+            ).fetchone()
+            if bool(locked) != (blocker is not None):
+                raise ProcurementReviewError(
+                    "blocked item changed while acquiring its review lock"
+                )
+        else:
+            blocker = conn.execute(
+                """SELECT exception_id,variant_id,vendor_id,exception_type,severity,
+                          message,status
+                     FROM exceptions WHERE exception_id=%s FOR UPDATE""",
+                (exception_id,),
+            ).fetchone()
         if (
             blocker is None
             or blocker[3] != "MONDAY_INPUT_BLOCKER"
@@ -611,9 +649,7 @@ def confirm_material_recommendation_edit(
             "SELECT pg_try_advisory_xact_lock(%s)", (REVIEW_LOCK,)
         ).fetchone()[0]:
             raise ProcurementReviewError("review lock is unavailable")
-        row = conn.execute(
-            _REVIEW_CONTEXT_SQL + " FOR UPDATE OF r,ru", (recommendation_id,)
-        ).fetchone()
+        row = _locked_review_context(conn, recommendation_id)
         _validate_review_context(
             conn, row, expected_input_fingerprint=expected_input_fingerprint
         )
@@ -719,9 +755,7 @@ def record_recommendation_review(
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         if not conn.execute("SELECT pg_try_advisory_xact_lock(%s)", (REVIEW_LOCK,)).fetchone()[0]:
             raise ProcurementReviewError("review lock is unavailable")
-        row = conn.execute(
-            _REVIEW_CONTEXT_SQL + " FOR UPDATE OF r,ru", (recommendation_id,)
-        ).fetchone()
+        row = _locked_review_context(conn, recommendation_id)
         _validate_review_context(
             conn, row, expected_input_fingerprint=expected_input_fingerprint
         )

@@ -39,6 +39,7 @@ from .persistent_mapping import (
     TOTAL_OPERATION_SECONDS,
     _try_session_lock,
     _unlock_session_locks,
+    _validate_synthetic_database_url,
     _verify_connected_synthetic_database,
     require_synthetic_mapping_capability,
 )
@@ -464,6 +465,17 @@ def _environment_database_endpoint(mode: str) -> tuple[str, int, str]:
         ) from exc
     database = parsed.path.removeprefix("/")
     if (
+        parsed.username == "buffalo_synthetic_runtime"
+        or database == "buffalo_synthetic_staging_demo"
+    ):
+        try:
+            expected = _validate_synthetic_database_url(raw)
+        except PersistentMappingError as exc:
+            raise SyntheticSelectedOfferError(
+                "SYNTHETIC_SELECTED_OFFER_INPUTS_NOT_AUTHORIZED"
+            ) from exc
+        return str(parsed.hostname), port or 5432, expected
+    if (
         parsed.scheme not in {"postgres", "postgresql"}
         or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}
         or port is None
@@ -530,6 +542,12 @@ def require_attested_selected_mode(conn: Any) -> None:
     try:
         mode, expected_database, expected_port = require_selected_mode_process_policy()
         _verify_connected_synthetic_database(conn, expected_database)
+        from .synthetic_staging_database import (
+            is_staging_runtime_connection,
+            verify_staging_persistent_mapping_contract,
+        )
+
+        staging_runtime = is_staging_runtime_connection(conn)
         facts = conn.execute(
             "SELECT pg_catalog.current_schema(),pg_catalog.current_database(),"
             "pg_catalog.inet_server_port()"
@@ -543,7 +561,12 @@ def require_attested_selected_mode(conn: Any) -> None:
             raise SyntheticSelectedOfferError(
                 "SYNTHETIC_SELECTED_OFFER_INPUTS_NOT_AUTHORIZED"
             )
-        conn.execute(f'SELECT "{SCHEMA}".assert_persistent_mapping_foundation_contract()')
+        if staging_runtime:
+            verify_staging_persistent_mapping_contract(conn)
+        else:
+            conn.execute(
+                f'SELECT "{SCHEMA}".assert_persistent_mapping_foundation_contract()'
+            )
         verify_monday_forecast_v2_retirement_contract(conn)
         if mode == "SYNTHETIC_DEMO":
             marker = conn.execute(

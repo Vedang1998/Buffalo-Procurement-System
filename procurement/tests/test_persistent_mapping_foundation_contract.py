@@ -38,7 +38,7 @@ IMPLEMENTATION_SPEC = (
     / "2026-09-10-persistent-mapping-foundation-implementation-spec.md"
 )
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 1295
+EXPECTED_GLOBAL_TEST_POPULATION = 1306
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
         source = SERVICE.read_text(encoding="utf-8")
         self.assertEqual(
             hashlib.sha256(source.encode("utf-8")).hexdigest(),
-            "5c47db4e51af91c1d84f74462959143170670700a408deabd2709ffbb8ca76dd",
+            "9325cc1f22cf383f08843fae7a6800ef0cb23186b34f29e3e9b31c144f354c4a",
         )
         tree = ast.parse(source)
         import_contract = set()
@@ -123,6 +123,34 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                     "PACKET_SHA256",
                     None,
                 ),
+                (
+                    "from",
+                    1,
+                    "synthetic_staging_database",
+                    "EXPECTED_DATABASE",
+                    None,
+                ),
+                (
+                    "from",
+                    1,
+                    "synthetic_staging_database",
+                    "SyntheticStagingDatabaseError",
+                    None,
+                ),
+                (
+                    "from",
+                    1,
+                    "synthetic_staging_database",
+                    "is_staging_runtime_connection",
+                    None,
+                ),
+                (
+                    "from",
+                    1,
+                    "synthetic_staging_database",
+                    "target_from_environment",
+                    None,
+                ),
             },
         )
         self.assertEqual(
@@ -133,7 +161,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 and isinstance(node.value, ast.Name)
                 and node.value.id == "os"
             ),
-            [("getenv", 73), ("getenv", 74)],
+            [("environ", 156), ("getenv", 73), ("getenv", 74)],
         )
         for forbidden_builtin in (
             "open",

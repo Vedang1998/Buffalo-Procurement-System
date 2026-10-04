@@ -294,6 +294,29 @@ def verify_synthetic_price_replacement_contract(
     require_marker: bool = True,
 ) -> str:
     try:
+        from .synthetic_staging_database import (
+            STAGING_PRICE_CATALOG_SHA256,
+            is_staging_runtime_connection,
+        )
+
+        if is_staging_runtime_connection(conn):
+            computed = compute_synthetic_price_catalog_sha256(conn, schema)
+            if computed != STAGING_PRICE_CATALOG_SHA256:
+                raise SyntheticPriceReplacementContractError(
+                    "staging synthetic-price successor catalog differs"
+                )
+            conn.execute(
+                sql.SQL("SELECT {}.assert_synthetic_staging_contract()").format(
+                    sql.Identifier(schema)
+                )
+            )
+            if compute_synthetic_price_catalog_sha256(
+                conn, schema
+            ) != STAGING_PRICE_CATALOG_SHA256:
+                raise SyntheticPriceReplacementContractError(
+                    "staging synthetic-price successor changed during assertion"
+                )
+            return computed
         wanted = [
             "synthetic_price_replacement_contract",
             "synthetic_price_replacement_catalog_sha256",

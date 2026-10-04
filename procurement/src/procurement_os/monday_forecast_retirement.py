@@ -308,6 +308,29 @@ def _verify_monday_forecast_v2_retirement_contract(
         raise MondayForecastRetirementContractError("retirement schema name is malformed")
     if target_schema != TARGET_SCHEMA:
         raise MondayForecastRetirementContractError("retirement target schema differs")
+    from .synthetic_staging_database import (
+        STAGING_RETIREMENT_CATALOG_SHA256,
+        is_staging_runtime_connection,
+    )
+
+    if is_staging_runtime_connection(conn):
+        computed = compute_retirement_catalog_sha256(conn, target_schema)
+        if computed != STAGING_RETIREMENT_CATALOG_SHA256:
+            raise MondayForecastRetirementContractError(
+                "staging retirement successor catalog differs"
+            )
+        conn.execute(
+            sql.SQL("SELECT {}.assert_synthetic_staging_contract()").format(
+                sql.Identifier(target_schema)
+            )
+        )
+        if compute_retirement_catalog_sha256(
+            conn, target_schema
+        ) != STAGING_RETIREMENT_CATALOG_SHA256:
+            raise MondayForecastRetirementContractError(
+                "staging retirement successor changed during assertion"
+            )
+        return computed
     expected_marker = f"sha256:{MIGRATION_SHA256}"
     wanted = [
         "monday_forecast_v2_retirement_contract",

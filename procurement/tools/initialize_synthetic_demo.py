@@ -59,6 +59,9 @@ BASELINE_PROFILE = "baseline-v1"
 WESTERN_VENDOR_ID = "00000000-0000-4000-8000-000000000003"
 WESTERN_VARIANT_IDS = ("4001", "4002", "4003", "4004", "4005")
 STALE_V1_RUN_ID = "00000000-0000-4000-8000-000000000901"
+DEVELOPMENT_FORECAST_V2_SALES_BACKFILL_ID = (
+    "cdf2ca35-1038-4ae5-92e2-265976b1587e"
+)
 
 
 def _registered_business_date() -> date:
@@ -665,6 +668,11 @@ def _seed_evidence(
         store_timezone="America/New_York",
         chunk_days=10000,
         page_size=1000,
+        fixture_sales_backfill_id=(
+            DEVELOPMENT_FORECAST_V2_SALES_BACKFILL_ID
+            if development_profile == DEVELOPMENT_FORECAST_V2_PROFILE
+            else None
+        ),
     )
     synthetic_started_at = datetime.combine(
         sales_end_date, datetime.min.time(), tzinfo=timezone.utc
