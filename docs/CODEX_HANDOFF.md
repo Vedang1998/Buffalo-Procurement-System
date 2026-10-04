@@ -13,8 +13,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ### Synthetic worker database readiness — LOCAL PRIMITIVE PASS / ROOT COMPOSITION PENDING
 
 - The exact local code checkpoint is
-  `c42928937774925a32d64917b540017ae38e0979`, tree
-  `7cb11e4637731355db55d81b2d38c5b5520de360`, on the sole-writer branch
+  `1c908d2f910d2fc99fa5344f635a6778670c808a`, tree
+  `2f8846c561ad141df25e6e62cb4e506d18ff7e36`, on the sole-writer branch
   `codex/railway-staging-delivery`. It is an additive child of the verified
   staging-database milestone and is not published, deployable, or accepted as
   a service candidate.
@@ -31,6 +31,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   idle-in-transaction timeout. Shutdown/cancellation, database, integrity,
   resource, OOM, and activation failures remain sanitized and never emit
   `READY`.
+- Remote staging additionally pins the only accepted PostgreSQL private host
+  to the source-defined `postgres.railway.internal`; changing both the
+  credential-free URL and its expected-host environment value to another
+  `*.railway.internal` name is refused even when the separately pinned
+  PostgreSQL service ID is left unchanged. Owned local acceptance remains
+  limited to the exact loopback host and declared local port.
 - The private pgpass boundary now requires one absolute role-local path below
   the synthetic 0700 runtime root, no symlink, a regular single-link 0600 file
   owned by the exact synthetic UID/GID, stable inode and size, and exactly one
@@ -51,9 +57,13 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   compilation and `git diff --check` passed. The bounded changed-file
   credential scan found only two deliberate `:x@` negative URL fixtures; no
   credential, private key, token, payload, dump, or evidence bundle was added.
-  A separate same-model read-only review found no remaining P0/P1 defect in
-  this primitive; it is not a substitute for the required qualified external
-  review.
+  A separate same-model read-only review first identified the paired
+  URL/expected-host substitution defect above. The source pin and its negative
+  regression then passed **29/29** affected contract/process/composition
+  tests, `git diff --check`, and reviewer reproduction (reviewed host accepted,
+  unrelated clone refused). The reviewer found no further concrete P0/P1
+  defect in the repaired primitive. This is not a substitute for the required
+  qualified external review.
 - Production composition is still absent. `start_initial()` deliberately
   leaves synthetic pending, and no root entrypoint yet performs
   launch → bounded await/COMMIT → continuous signal/crash monitoring. No
