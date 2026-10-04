@@ -758,6 +758,99 @@ class PrivateResearchAppTests(unittest.TestCase):
             result.stderr,
         )
 
+    def test_staging_artifacts_stream_from_retained_descriptors_in_bounded_chunks(self):
+        workspace_path = Path(self.temporary.name) / "stream-workspace"
+        workspace_path.mkdir(mode=0o700)
+        payloads = {
+            "coverage.json": b"c" * (private_research_app._ARTIFACT_CHUNK_BYTES + 7),
+            "owner-preview.html": b"preview",
+            "owner-worksheet.csv": b"worksheet",
+            "projection.json": b"projection",
+        }
+        records = []
+        import hashlib
+
+        for name, payload in payloads.items():
+            path = workspace_path / name
+            path.write_bytes(payload)
+            path.chmod(0o600)
+            records.append(
+                {
+                    "name": name,
+                    "path": name,
+                    "bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "media_type": "application/octet-stream",
+                }
+            )
+        handles = private_research_app._open_artifact_handles(
+            workspace_path, {"artifacts": records}
+        )
+        self.addCleanup(private_research_app._close_artifact_handles, handles)
+        chunks = list(private_research_app._stream_artifact(handles["coverage.json"]))
+        self.assertEqual(b"".join(chunks), payloads["coverage.json"])
+        self.assertEqual(
+            [len(value) for value in chunks],
+            [private_research_app._ARTIFACT_CHUNK_BYTES, 7],
+        )
+
+    def test_staging_artifact_tamper_fails_before_delivery_and_shutdown_closes_fds(self):
+        workspace_path = Path(self.temporary.name) / "tamper-workspace"
+        workspace_path.mkdir(mode=0o700)
+        import hashlib
+
+        records = []
+        for name in (
+            "coverage.json",
+            "owner-preview.html",
+            "owner-worksheet.csv",
+            "projection.json",
+        ):
+            payload = name.encode("ascii")
+            path = workspace_path / name
+            path.write_bytes(payload)
+            path.chmod(0o600)
+            records.append(
+                {
+                    "name": name,
+                    "path": name,
+                    "bytes": len(payload),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "media_type": "application/octet-stream",
+                }
+            )
+        handles = private_research_app._open_artifact_handles(
+            workspace_path, {"artifacts": records}
+        )
+        descriptor = handles["coverage.json"].descriptor
+        (workspace_path / "coverage.json").write_bytes(b"x" * len("coverage.json"))
+        with self.assertRaises(OSError):
+            list(private_research_app._stream_artifact(handles["coverage.json"]))
+        private_research_app._CACHED_WORKSPACE = (
+            private_research_app._ValidatedWorkspaceSnapshot(
+                path=str(workspace_path),
+                workspace={"artifacts": {}},
+                projection={},
+                artifact_handles=handles,
+                semantic_proof=private_research_app.ResearchSemanticProof(
+                    validation_identity="a" * 64,
+                    workspace_id="b" * 64,
+                    manifest_sha256="c" * 64,
+                    projection_sha256="d" * 64,
+                ),
+            )
+        )
+        with mock.patch.dict(
+            os.environ,
+            {"BUFFALO_STAGING_WORKER_ROLE": "research"},
+            clear=False,
+        ), self.assertRaises(private_research_app.StagingResearchValidationError):
+            private_research_app.staging_research_validation_identity()
+        private_research_app.release_workspace_at_shutdown()
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+        self.assertIsNone(private_research_app._CACHED_WORKSPACE)
+
 
 if __name__ == "__main__":
     unittest.main()

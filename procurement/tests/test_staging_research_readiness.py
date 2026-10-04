@@ -3,15 +3,21 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
+import subprocess
 import struct
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from procurement_os.staging_research_readiness import (
     MAX_READINESS_PAYLOAD_BYTES,
     ReadinessProcessIdentity,
     ResearchReadinessError,
     ResearchReadinessReader,
+    ResearchReadinessWriter,
+    current_readiness_process_identity,
     mint_readiness_frame,
     mint_readiness_payload,
     parse_readiness_payload,
@@ -252,6 +258,66 @@ class StagingResearchReadinessTests(unittest.TestCase):
                     self._reader(fifo_descriptor)
             finally:
                 os.close(fifo_descriptor)
+
+    def test_writer_emits_one_bound_frame_and_closes_its_pipe(self) -> None:
+        read_descriptor, write_descriptor = os.pipe()
+        reader = self._reader(read_descriptor)
+        with mock.patch(
+            "procurement_os.staging_research_readiness.current_readiness_process_identity",
+            return_value=self.identity,
+        ):
+            writer = ResearchReadinessWriter(
+                write_descriptor, key=self.key, generation=3
+            )
+        writer.emit_ready(self.validation_identity)
+        proof = reader.poll()
+        self.assertIsNotNone(proof)
+        assert proof is not None
+        self.assertTrue(proof.ready)
+        self.assertTrue(writer.closed)
+        with self.assertRaisesRegex(
+            ResearchReadinessError, "already emitted"
+        ):
+            writer.emit_ready(self.validation_identity)
+        reader.close()
+
+    def test_writer_rejects_a_read_endpoint_without_consuming_it(self) -> None:
+        read_descriptor, write_descriptor = os.pipe()
+        try:
+            with self.assertRaisesRegex(
+                ResearchReadinessError, "descriptor differs"
+            ):
+                ResearchReadinessWriter(
+                    read_descriptor, key=self.key, generation=3
+                )
+            os.write(write_descriptor, b"x")
+            self.assertEqual(os.read(read_descriptor, 1), b"x")
+        finally:
+            os.close(read_descriptor)
+            os.close(write_descriptor)
+
+    def test_real_session_leader_identity_is_captured(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "src"
+        script = (
+            "import json,sys;"
+            f"sys.path.insert(0,{str(source)!r});"
+            "from procurement_os.staging_research_readiness import "
+            "current_readiness_process_identity as capture;"
+            "v=capture();print(json.dumps([v.pid,v.start_ticks,v.process_group,v.session_id]))"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", script],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        pid, start_ticks, process_group, session_id = json.loads(completed.stdout)
+        self.assertGreater(start_ticks, 0)
+        self.assertEqual((process_group, session_id), (pid, pid))
 
     def test_invalid_expectation_does_not_mutate_the_caller_descriptor(self) -> None:
         read_descriptor, write_descriptor = os.pipe()

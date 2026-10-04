@@ -1484,6 +1484,56 @@ def corrected_input_manifest_key(input_id: str) -> str:
 def _verify_lineage_objects(repo_root: str | Path, lineage: Mapping[str, Any]) -> None:
     value = _validate_lineage(lineage)
     root = Path(repo_root).resolve(strict=True)
+    bare = (
+        root.name == "source.git"
+        and (root / "HEAD").is_file()
+        and (root / "objects").is_dir()
+        and (root / "refs").is_dir()
+        and not (root / ".git").exists()
+    )
+    executable = "/usr/bin/git"
+    command_prefix = [
+        executable,
+        "-c",
+        f"safe.directory={root}",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "protocol.file.allow=never",
+        "-c",
+        "protocol.ext.allow=never",
+    ]
+    cwd = root
+    if bare:
+        command_prefix.extend(("--git-dir", str(root)))
+        cwd = root.parent
+    environment = {
+        "GIT_ASKPASS": "/bin/false",
+        "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_NO_REPLACE_OBJECTS": "1",
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+        "HOME": "/nonexistent",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/usr/bin:/bin",
+        "TZ": "UTC",
+    }
+
+    def run(*arguments: str, text: bool = False) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [*command_prefix, *arguments],
+            cwd=cwd,
+            env=environment,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=text,
+            timeout=30,
+        )
+
     try:
         pairs = (
             ("accepted_commit", "accepted_tree"),
@@ -1492,45 +1542,30 @@ def _verify_lineage_objects(repo_root: str | Path, lineage: Mapping[str, Any]) -
             ("implementation_commit", "implementation_tree"),
         )
         for commit_key, tree_key in pairs:
-            commit_type = subprocess.run(
-                ["git", "cat-file", "-t", value[commit_key]], cwd=root,
-                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True,
-            ).stdout.strip()
-            tree_type = subprocess.run(
-                ["git", "cat-file", "-t", value[tree_key]], cwd=root,
-                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True,
-            ).stdout.strip()
-            resolved = subprocess.run(
-                ["git", "rev-parse", f"{value[commit_key]}^{{tree}}"], cwd=root,
-                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True,
+            commit_type = run("cat-file", "-t", value[commit_key], text=True).stdout.strip()
+            tree_type = run("cat-file", "-t", value[tree_key], text=True).stdout.strip()
+            resolved = run(
+                "rev-parse", f"{value[commit_key]}^{{tree}}", text=True
             ).stdout.strip()
             if commit_type != "commit" or tree_type != "tree" or resolved != value[tree_key]:
                 raise PrivateResearchV3CorrectedError(
                     "implementation lineage commit/tree pair differs"
                 )
-        design_type = subprocess.run(
-            ["git", "cat-file", "-t", DESIGN_COMMIT], cwd=root, check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        ).stdout.strip()
-        design_tree = subprocess.run(
-            ["git", "rev-parse", f"{DESIGN_COMMIT}^{{tree}}"], cwd=root,
-            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True,
+        design_type = run("cat-file", "-t", DESIGN_COMMIT, text=True).stdout.strip()
+        design_tree = run(
+            "rev-parse", f"{DESIGN_COMMIT}^{{tree}}", text=True
         ).stdout.strip()
         if design_type != "commit" or design_tree != DESIGN_TREE:
             raise PrivateResearchV3CorrectedError("committed design lineage differs")
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", ACCEPTED_COMMIT, value["implementation_commit"]],
-            cwd=root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        run(
+            "merge-base", "--is-ancestor", ACCEPTED_COMMIT,
+            value["implementation_commit"]
         )
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", DESIGN_COMMIT, value["implementation_commit"]],
-            cwd=root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        run(
+            "merge-base", "--is-ancestor", DESIGN_COMMIT,
+            value["implementation_commit"]
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except (OSError, subprocess.SubprocessError) as exc:
         raise PrivateResearchV3CorrectedError("implementation lineage objects are unavailable") from exc
 
 

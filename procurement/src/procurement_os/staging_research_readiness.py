@@ -6,6 +6,7 @@ import fcntl
 import hmac
 import json
 import os
+from pathlib import Path
 import stat
 import struct
 
@@ -438,10 +439,131 @@ class ResearchReadinessReader:
         return proof
 
 
+def current_readiness_process_identity() -> ReadinessProcessIdentity:
+    """Capture the exact session-leader identity of the calling worker."""
+
+    pid = os.getpid()
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+    except (OSError, UnicodeError):
+        raise ResearchReadinessError("readiness process identity is unavailable") from None
+    close = raw.rfind(")")
+    fields = raw[close + 2 :].split() if close >= 1 else []
+    if len(fields) < 20:
+        raise ResearchReadinessError("readiness process identity is malformed")
+    try:
+        identity = ReadinessProcessIdentity(
+            pid=pid,
+            start_ticks=int(fields[19]),
+            process_group=int(fields[2]),
+            session_id=int(fields[3]),
+        )
+        identity.validate()
+    except (ValueError, ResearchReadinessError):
+        raise ResearchReadinessError("readiness process identity is malformed") from None
+    return identity
+
+
+class ResearchReadinessWriter:
+    """Own one anonymous-pipe writer and emit exactly one terminal frame."""
+
+    def __init__(self, descriptor: int, *, key: bytes, generation: int) -> None:
+        _validate_key(key)
+        if type(descriptor) is not int or descriptor < 3:
+            raise ResearchReadinessError("readiness descriptor is invalid")
+        if type(generation) is not int or not 0 <= generation <= _MAX_GENERATION:
+            raise ResearchReadinessError("readiness generation is invalid")
+        try:
+            info = os.fstat(descriptor)
+            flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+            endpoint = os.readlink(f"/proc/self/fd/{descriptor}")
+            if (
+                not stat.S_ISFIFO(info.st_mode)
+                or flags & os.O_ACCMODE != os.O_WRONLY
+                or endpoint != f"pipe:[{info.st_ino}]"
+            ):
+                raise ResearchReadinessError("readiness descriptor differs")
+            os.set_inheritable(descriptor, False)
+        except ResearchReadinessError:
+            raise
+        except OSError:
+            raise ResearchReadinessError(
+                "readiness descriptor is unavailable"
+            ) from None
+        self._descriptor: int | None = descriptor
+        self._key = bytes(key)
+        self._generation = generation
+        self._identity = current_readiness_process_identity()
+        self._emitted = False
+
+    @property
+    def closed(self) -> bool:
+        return self._descriptor is None
+
+    def close(self) -> None:
+        descriptor = self._descriptor
+        self._descriptor = None
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise ResearchReadinessError(
+                    "readiness descriptor close failed"
+                ) from exc
+
+    def emit_ready(self, validation_identity: str) -> None:
+        self._emit(
+            state="READY",
+            failure=None,
+            validation_identity=validation_identity,
+        )
+
+    def emit_failure(self, failure: str) -> None:
+        self._emit(state="FAILED", failure=failure, validation_identity=None)
+
+    def _emit(
+        self,
+        *,
+        state: str,
+        failure: str | None,
+        validation_identity: str | None,
+    ) -> None:
+        descriptor = self._descriptor
+        if self._emitted or descriptor is None:
+            raise ResearchReadinessError("readiness proof was already emitted")
+        frame = mint_readiness_frame(
+            key=self._key,
+            generation=self._generation,
+            identity=self._identity,
+            state=state,
+            failure=failure,
+            validation_identity=validation_identity,
+        )
+        self._emitted = True
+        try:
+            view = memoryview(frame)
+            while view:
+                try:
+                    written = os.write(descriptor, view)
+                except InterruptedError:
+                    continue
+                if written <= 0:
+                    raise OSError("readiness write made no progress")
+                view = view[written:]
+        except OSError:
+            try:
+                self.close()
+            except ResearchReadinessError:
+                pass
+            raise ResearchReadinessError("readiness channel write failed") from None
+        self.close()
+
+
 __all__ = [
     "MAX_READINESS_PAYLOAD_BYTES",
     "READINESS_VERSION",
     "ReadinessProcessIdentity",
+    "ResearchReadinessWriter",
     "ResearchReadinessAbsent",
     "ResearchReadinessError",
     "ResearchReadinessProof",
@@ -449,4 +571,5 @@ __all__ = [
     "mint_readiness_frame",
     "mint_readiness_payload",
     "parse_readiness_payload",
+    "current_readiness_process_identity",
 ]

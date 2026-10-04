@@ -12,12 +12,18 @@ import sys
 from uvicorn import Config, Server
 
 from .staging_config import load_staging_config
+from .staging_composition import load_staging_worker_boundary_config
 from .staging_gateway import RegisteredRoutePolicy, StagingGateway
 from .staging_management_keys import (
     derive_gateway_activation_key,
     derive_supervisor_control_key,
 )
 from .staging_process_contract import validated_process_environment
+from .staging_research_readiness import (
+    ResearchReadinessError,
+    ResearchReadinessWriter,
+)
+from .staging_research_validation import StagingResearchValidationError
 from .staging_supervisor import SupervisorControlClient
 from .staging_uds import PeerCredentials, SocketContract
 from .staging_worker_activation import (
@@ -210,17 +216,136 @@ def _run_worker(role: str, environment: dict[str, str]) -> None:
     listen_fd = _canonical_integer(environment, "BUFFALO_STAGING_LISTEN_FD", 3)
     socket_gid = _canonical_integer(environment, "BUFFALO_STAGING_SOCKET_GID", 1)
     path = Path(environment["BUFFALO_STAGING_SOCKET_PATH"])
-    run_worker(
-        worker_role=role,
-        listen_fd=listen_fd,
-        socket_contract=SocketContract(
-            path=path,
-            parent_uid=0,
-            parent_gid=socket_gid,
-            socket_uid=os.getuid(),
-            socket_gid=socket_gid,
-        ),
+    socket_contract = SocketContract(
+        path=path,
+        parent_uid=0,
+        parent_gid=socket_gid,
+        socket_uid=os.getuid(),
+        socket_gid=socket_gid,
     )
+    if role != "research":
+        run_worker(
+            worker_role=role,
+            listen_fd=listen_fd,
+            socket_contract=socket_contract,
+        )
+        return
+    boundary = load_staging_worker_boundary_config("research")
+    readiness_fd = _canonical_integer(
+        environment, "BUFFALO_STAGING_RESEARCH_READINESS_FD", 3
+    )
+    generation = _canonical_integer(
+        environment, "BUFFALO_STAGING_KEY_GENERATION", 0
+    )
+    try:
+        writer = ResearchReadinessWriter(
+            readiness_fd,
+            key=boundary.assertion_key,
+            generation=generation,
+        )
+    except ResearchReadinessError as exc:
+        raise StagingProcessError("research readiness writer is unavailable") from exc
+
+    def server_factory(config: Config) -> Server:
+        return _ResearchReadinessServer(config, readiness=writer)
+
+    try:
+        run_worker(
+            worker_role=role,
+            listen_fd=listen_fd,
+            socket_contract=socket_contract,
+            server_factory=server_factory,
+        )
+    except BaseException:
+        if not writer.closed:
+            try:
+                writer.emit_failure("ACTIVATION")
+            except ResearchReadinessError:
+                pass
+        raise
+    finally:
+        if not writer.closed:
+            try:
+                writer.close()
+            except ResearchReadinessError:
+                pass
+
+
+class _ResearchReadinessServer(Server):
+    """Emit the proof only after lifespan and the Uvicorn accept loop start."""
+
+    def __init__(self, config: Config, *, readiness: ResearchReadinessWriter) -> None:
+        super().__init__(config)
+        self._readiness = readiness
+
+    async def startup(self, sockets=None) -> None:
+        try:
+            await super().startup(sockets=sockets)
+        except SystemExit:
+            failure = "ACTIVATION"
+            try:
+                from .private_research_app import staging_research_startup_failure
+
+                failure = staging_research_startup_failure() or (
+                    "SEMANTIC"
+                    if getattr(self.lifespan, "should_exit", False)
+                    else "ACTIVATION"
+                )
+            except BaseException:
+                failure = "ACTIVATION"
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure(failure)
+                except ResearchReadinessError:
+                    pass
+            raise
+        except MemoryError:
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("OOM")
+                except ResearchReadinessError:
+                    pass
+            raise
+        except BaseException:
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("ACTIVATION")
+                except ResearchReadinessError:
+                    pass
+            raise
+        if self.should_exit or not self.started:
+            if not self._readiness.closed:
+                self._readiness.emit_failure("SEMANTIC")
+            return
+        try:
+            from .private_research_app import staging_research_validation_identity
+
+            validation_identity = staging_research_validation_identity()
+            self._readiness.emit_ready(validation_identity)
+        except MemoryError:
+            self.should_exit = True
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("OOM")
+                except ResearchReadinessError:
+                    pass
+            return
+        except StagingResearchValidationError:
+            self.should_exit = True
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("INTEGRITY")
+                except ResearchReadinessError:
+                    pass
+            return
+        except ResearchReadinessError:
+            self.should_exit = True
+            if not self._readiness.closed:
+                try:
+                    self._readiness.emit_failure("ACTIVATION")
+                except ResearchReadinessError:
+                    pass
+            return
 
 
 def _gateway_socket_contract(

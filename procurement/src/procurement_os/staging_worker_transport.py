@@ -404,7 +404,11 @@ def _require_listener_endpoint_binding(listen_fd: int, path: Path) -> None:
 
 
 def build_worker_server(
-    *, worker_role: str, listen_fd: int, socket_contract: SocketContract
+    *,
+    worker_role: str,
+    listen_fd: int,
+    socket_contract: SocketContract,
+    server_factory: Callable[[Config], Server] | None = None,
 ) -> Server:
     if type(listen_fd) is not int or listen_fd < 3:
         raise StagingWorkerBoundaryError("worker listen descriptor is invalid")
@@ -445,16 +449,21 @@ def build_worker_server(
         date_header=False,
         workers=1,
     )
-    return Server(config)
+    return Server(config) if server_factory is None else server_factory(config)
 
 
 def run_worker(
-    *, worker_role: str, listen_fd: int, socket_contract: SocketContract
+    *,
+    worker_role: str,
+    listen_fd: int,
+    socket_contract: SocketContract,
+    server_factory: Callable[[Config], Server] | None = None,
 ) -> None:
     build_worker_server(
         worker_role=worker_role,
         listen_fd=listen_fd,
         socket_contract=socket_contract,
+        server_factory=server_factory,
     ).run()
 
 

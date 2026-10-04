@@ -1040,7 +1040,6 @@ class SupervisorChildTests(unittest.TestCase):
         contract, specs = _isolation_fixture()
         launched: list[subprocess.Popen[bytes]] = []
         committer = mock.Mock()
-        disable_calls = 0
 
         def launcher(_spec: FixedChildSpec) -> subprocess.Popen[bytes]:
             process = subprocess.Popen(
@@ -1052,12 +1051,6 @@ class SupervisorChildTests(unittest.TestCase):
             launched.append(process)
             return process
 
-        def disable_once(_staged: StagedWorkerKey) -> None:
-            nonlocal disable_calls
-            disable_calls += 1
-            if disable_calls == 1:
-                raise StagingSupervisorError("injected disable failure")
-
         with mock.patch.object(
             StagingIsolationContract, "validate_runtime_roots"
         ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
@@ -1068,7 +1061,7 @@ class SupervisorChildTests(unittest.TestCase):
                 worker_specs=(specs[1], specs[2]),
                 worker_key_preparer=lambda _staged, _gateway: None,
                 worker_key_committer=committer,
-                worker_key_disabler=disable_once,
+                worker_key_disabler=lambda _staged: None,
                 launcher=launcher,
             )
             try:
@@ -1082,10 +1075,29 @@ class SupervisorChildTests(unittest.TestCase):
                     StagingSupervisorError, "cannot be committed"
                 ):
                     supervisor.commit_worker("synthetic")
-                with self.assertRaisesRegex(
-                    StagingSupervisorError, "did not stop"
+                real_terminate = terminate_owned_process_group
+                failed_once = False
+
+                def fail_synthetic_once(process, identity, *, timeout_seconds):
+                    nonlocal failed_once
+                    if (
+                        process is supervisor.children["synthetic"].process
+                        and not failed_once
+                    ):
+                        failed_once = True
+                        raise StagingSupervisorError("injected cleanup failure")
+                    return real_terminate(
+                        process, identity, timeout_seconds=timeout_seconds
+                    )
+
+                with mock.patch(
+                    "procurement_os.staging_supervisor.terminate_owned_process_group",
+                    side_effect=fail_synthetic_once,
                 ):
-                    supervisor.process_pending_signal()
+                    with self.assertRaisesRegex(
+                        StagingSupervisorError, "did not stop"
+                    ):
+                        supervisor.process_pending_signal()
                 self.assertTrue(supervisor._signal_requested)
                 self.assertIn("synthetic", supervisor.children)
                 with self.assertRaisesRegex(
@@ -1149,6 +1161,72 @@ class SupervisorChildTests(unittest.TestCase):
                 supervisor.shutdown(timeout_seconds=2)
                 self.assertEqual(disabled, [("synthetic", 0)])
                 self.assertEqual(supervisor.children, {})
+            finally:
+                for process in launched:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+
+    def test_poisoned_disable_kills_gateway_before_terminal_worker_cleanup(self):
+        contract, specs = _isolation_fixture()
+        launched: list[subprocess.Popen[bytes]] = []
+        events: list[str] = []
+
+        def launcher(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", "import time;time.sleep(60)"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            launched.append(process)
+            events.append(f"launch:{spec.name}")
+            return process
+
+        def poisoned_disable(_staged) -> None:
+            events.append("disable:unknown")
+            raise StagingSupervisorError("injected poisoned activation channel")
+
+        real_terminate = terminate_owned_process_group
+
+        def tracked_terminate(process, identity, *, timeout_seconds):
+            role = next(
+                name
+                for name, child in supervisor.children.items()
+                if child.process is process
+            )
+            events.append(f"terminate:{role}")
+            return real_terminate(
+                process, identity, timeout_seconds=timeout_seconds
+            )
+
+        with mock.patch.object(
+            StagingIsolationContract, "validate_runtime_roots"
+        ), mock.patch.object(StagingIsolationContract, "validate_private_sockets"):
+            supervisor = _new_supervisor(
+                isolation=contract,
+                gateway_spec=specs[0],
+                key_lifecycle=_FakeKeyLifecycle(specs),
+                worker_specs=(specs[1], specs[2]),
+                worker_key_preparer=lambda _staged, _gateway: None,
+                worker_key_committer=lambda _staged, _gateway, _worker: None,
+                worker_key_disabler=poisoned_disable,
+                launcher=launcher,
+            )
+            try:
+                supervisor.start_initial()
+                with mock.patch(
+                    "procurement_os.staging_supervisor.terminate_owned_process_group",
+                    side_effect=tracked_terminate,
+                ):
+                    supervisor.shutdown(timeout_seconds=2)
+                self.assertEqual(supervisor.children, {})
+                self.assertTrue(supervisor._shutdown_complete)
+                self.assertTrue(supervisor._gateway_proven_gone)
+                self.assertLess(
+                    events.index("terminate:gateway"),
+                    events.index("terminate:synthetic"),
+                )
             finally:
                 for process in launched:
                     if process.poll() is None:

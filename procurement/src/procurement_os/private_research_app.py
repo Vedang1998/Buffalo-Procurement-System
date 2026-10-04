@@ -9,16 +9,24 @@ import base64
 import binascii
 from copy import deepcopy
 from dataclasses import dataclass
+import hashlib
 import html
 import hmac
 import json
 import math
 import os
 from pathlib import Path
+import stat
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 
 from .local_access import (
     _read_secret,
@@ -44,6 +52,12 @@ from .private_research_projection import (
     PrivateResearchProjectionError,
     _compile_private_research_row_filter,
 )
+from .staging_research_validation import (
+    ResearchSemanticProof,
+    StagingResearchValidationError,
+    validate_replayed_workspace,
+    validate_staging_research_paths,
+)
 
 
 app = FastAPI(
@@ -56,15 +70,28 @@ app = FastAPI(
 
 
 @dataclass(frozen=True)
+class _ArtifactHandle:
+    descriptor: int
+    identity: tuple[int, ...]
+    bytes: int
+    sha256: str
+    media_type: str
+
+
+@dataclass(frozen=True)
 class _ValidatedWorkspaceSnapshot:
     """One atomically published, fully replayed private workspace."""
 
     path: str
     workspace: dict[str, object]
     projection: dict[str, object]
+    artifact_handles: dict[str, _ArtifactHandle] | None = None
+    semantic_proof: ResearchSemanticProof | None = None
 
 
 _CACHED_WORKSPACE: _ValidatedWorkspaceSnapshot | None = None
+_STAGING_STARTUP_FAILURE: str | None = None
+_ARTIFACT_CHUNK_BYTES = 1024 * 1024
 _BASIC_USERNAME = "private"
 _BASIC_CHALLENGE = 'Basic realm="Buffalo private research", charset="UTF-8"'
 
@@ -222,9 +249,25 @@ def _workspace() -> dict[str, object]:
     cached = _CACHED_WORKSPACE
     if cached is not None and cached.path == raw:
         return cached.workspace
+    staging_paths = None
     try:
-        loaded = read_private_research_workspace(Path(raw))
-    except PrivateResearchError as exc:
+        if os.getenv("BUFFALO_STAGING_WORKER_ROLE", "") == "research":
+            staging_paths = validate_staging_research_paths(
+                os.environ, worker_runtime=True
+            )
+            if Path(raw) != staging_paths.workspace:
+                raise StagingResearchValidationError(
+                    "research workspace binding differs"
+                )
+        if staging_paths is None:
+            loaded = read_private_research_workspace(Path(raw))
+        else:
+            loaded = read_private_research_workspace(
+                Path(raw),
+                _retain_corrected_artifacts=False,
+                lineage_repository=staging_paths.git_dir,
+            )
+    except (PrivateResearchError, StagingResearchValidationError) as exc:
         raise HTTPException(status_code=503, detail="Private research workspace is invalid") from exc
     projection = loaded.get("projection")
     manifest = loaded.get("manifest")
@@ -264,8 +307,256 @@ def _workspace() -> dict[str, object]:
         or projection.get("data_mode") != expected[2]
     ):
         raise HTTPException(status_code=503, detail="Private research workspace is invalid")
-    _CACHED_WORKSPACE = _ValidatedWorkspaceSnapshot(raw, loaded, projection)
+    handles: dict[str, _ArtifactHandle] | None = None
+    semantic_proof: ResearchSemanticProof | None = None
+    try:
+        if staging_paths is not None:
+            manifest_path = staging_paths.workspace / "manifest.json"
+            manifest_sha256 = _hash_exact_file(manifest_path)
+            semantic_proof = validate_replayed_workspace(
+                loaded,
+                manifest_sha256=manifest_sha256,
+            )
+            handles = _open_artifact_handles(staging_paths.workspace, manifest)
+    except (OSError, StagingResearchValidationError) as exc:
+        _close_artifact_handles(handles)
+        raise HTTPException(
+            status_code=503, detail="Private research workspace is invalid"
+        ) from exc
+    _CACHED_WORKSPACE = _ValidatedWorkspaceSnapshot(
+        raw,
+        loaded,
+        projection,
+        handles,
+        semantic_proof,
+    )
     return loaded
+
+
+def _stable_file_identity(info: os.stat_result) -> tuple[int, ...]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_mode,
+        info.st_nlink,
+        info.st_uid,
+        info.st_gid,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def _open_regular_file(path: Path) -> tuple[int, os.stat_result]:
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NONBLOCK", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        info = os.fstat(descriptor)
+        linked = path.stat(follow_symlinks=False)
+        if (
+            path.is_symlink()
+            or not stat.S_ISREG(info.st_mode)
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or info.st_uid != os.getuid()
+            or info.st_gid != os.getgid()
+            or info.st_nlink != 1
+            or _stable_file_identity(info) != _stable_file_identity(linked)
+        ):
+            raise OSError("private artifact metadata differs")
+        os.set_inheritable(descriptor, False)
+        return descriptor, info
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _descriptor_sha256(descriptor: int, expected_bytes: int) -> str:
+    digest = hashlib.sha256()
+    offset = 0
+    while offset < expected_bytes:
+        chunk = os.pread(
+            descriptor,
+            min(_ARTIFACT_CHUNK_BYTES, expected_bytes - offset),
+            offset,
+        )
+        if not chunk:
+            raise OSError("private artifact ended early")
+        digest.update(chunk)
+        offset += len(chunk)
+    if os.pread(descriptor, 1, offset):
+        raise OSError("private artifact exceeds its declared size")
+    return digest.hexdigest()
+
+
+def _hash_exact_file(path: Path) -> str:
+    descriptor, info = _open_regular_file(path)
+    try:
+        digest = _descriptor_sha256(descriptor, info.st_size)
+        if _stable_file_identity(os.fstat(descriptor)) != _stable_file_identity(info):
+            raise OSError("private artifact changed while hashing")
+        return digest
+    finally:
+        os.close(descriptor)
+
+
+def _open_artifact_handles(
+    workspace_path: Path, manifest: dict[str, object]
+) -> dict[str, _ArtifactHandle]:
+    raw_records = manifest.get("artifacts")
+    if not isinstance(raw_records, list):
+        raise OSError("private artifact inventory differs")
+    result: dict[str, _ArtifactHandle] = {}
+    try:
+        for raw in raw_records:
+            if not isinstance(raw, dict):
+                raise OSError("private artifact record differs")
+            name = raw.get("name")
+            size = raw.get("bytes")
+            digest = raw.get("sha256")
+            media_type = raw.get("media_type")
+            if (
+                not isinstance(name, str)
+                or name in result
+                or raw.get("path") != name
+                or Path(name).name != name
+                or type(size) is not int
+                or size < 0
+                or not isinstance(digest, str)
+                or len(digest) != 64
+                or not isinstance(media_type, str)
+            ):
+                raise OSError("private artifact record differs")
+            descriptor, info = _open_regular_file(workspace_path / name)
+            try:
+                if (
+                    info.st_size != size
+                    or _descriptor_sha256(descriptor, size) != digest
+                    or _stable_file_identity(os.fstat(descriptor))
+                    != _stable_file_identity(info)
+                ):
+                    raise OSError("private artifact content differs")
+                result[name] = _ArtifactHandle(
+                    descriptor=descriptor,
+                    identity=_stable_file_identity(info),
+                    bytes=size,
+                    sha256=digest,
+                    media_type=media_type,
+                )
+            except BaseException:
+                os.close(descriptor)
+                raise
+        if set(result) != {
+            "coverage.json",
+            "owner-preview.html",
+            "owner-worksheet.csv",
+            "projection.json",
+        }:
+            raise OSError("private artifact inventory differs")
+        return result
+    except BaseException:
+        _close_artifact_handles(result)
+        raise
+
+
+def _close_artifact_handles(
+    handles: dict[str, _ArtifactHandle] | None,
+) -> None:
+    if not handles:
+        return
+    for handle in handles.values():
+        try:
+            os.close(handle.descriptor)
+        except OSError:
+            pass
+    handles.clear()
+
+
+def staging_research_validation_identity() -> str:
+    """Return only the current process's fully replayed staging attestation."""
+
+    cached = _CACHED_WORKSPACE
+    if (
+        os.getenv("BUFFALO_STAGING_WORKER_ROLE", "") != "research"
+        or cached is None
+        or cached.semantic_proof is None
+        or cached.artifact_handles is None
+    ):
+        raise StagingResearchValidationError("research semantic proof is unavailable")
+    try:
+        for handle in cached.artifact_handles.values():
+            if (
+                _stable_file_identity(os.fstat(handle.descriptor)) != handle.identity
+                or _descriptor_sha256(handle.descriptor, handle.bytes)
+                != handle.sha256
+                or _stable_file_identity(os.fstat(handle.descriptor))
+                != handle.identity
+            ):
+                raise StagingResearchValidationError(
+                    "research artifact readiness differs"
+                )
+    except OSError:
+        raise StagingResearchValidationError(
+            "research artifact readiness differs"
+        ) from None
+    return cached.semantic_proof.validation_identity
+
+
+def staging_research_startup_failure() -> str | None:
+    """Expose only a bounded readiness failure class to the child launcher."""
+
+    if os.getenv("BUFFALO_STAGING_WORKER_ROLE", "") != "research":
+        return None
+    return _STAGING_STARTUP_FAILURE
+
+
+def _stream_artifact(handle: _ArtifactHandle):
+    descriptor = os.dup(handle.descriptor)
+    os.set_inheritable(descriptor, False)
+    digest = hashlib.sha256()
+    offset = 0
+    try:
+        if _stable_file_identity(os.fstat(descriptor)) != handle.identity:
+            raise OSError("private artifact metadata changed")
+        while offset < handle.bytes:
+            chunk = os.pread(
+                descriptor,
+                min(_ARTIFACT_CHUNK_BYTES, handle.bytes - offset),
+                offset,
+            )
+            if not chunk:
+                raise OSError("private artifact ended early")
+            digest.update(chunk)
+            offset += len(chunk)
+            yield chunk
+        if (
+            os.pread(descriptor, 1, offset)
+            or digest.hexdigest() != handle.sha256
+            or _stable_file_identity(os.fstat(descriptor)) != handle.identity
+        ):
+            raise OSError("private artifact changed during delivery")
+    finally:
+        os.close(descriptor)
+
+
+def _staging_artifact_response(
+    name: str, *, attachment: bool
+) -> StreamingResponse | None:
+    cached = _CACHED_WORKSPACE
+    if cached is None or cached.artifact_handles is None:
+        return None
+    handle = cached.artifact_handles.get(name)
+    if handle is None:
+        raise HTTPException(status_code=404, detail="Private artifact is absent")
+    headers = {"Content-Length": str(handle.bytes)}
+    if attachment:
+        headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    return StreamingResponse(
+        _stream_artifact(handle),
+        media_type=handle.media_type,
+        headers=headers,
+    )
 
 
 def _page_app_owned_workspace_rows(
@@ -340,7 +631,32 @@ def _page_app_owned_workspace_rows(
 def validate_workspace_at_startup() -> None:
     """Perform the expensive immutable replay once before readiness is served."""
 
-    _workspace()
+    global _STAGING_STARTUP_FAILURE
+    _STAGING_STARTUP_FAILURE = None
+    try:
+        _workspace()
+    except MemoryError:
+        _STAGING_STARTUP_FAILURE = "OOM"
+        raise
+    except HTTPException as exc:
+        _STAGING_STARTUP_FAILURE = (
+            "INTEGRITY"
+            if isinstance(exc.__cause__, StagingResearchValidationError)
+            else "SEMANTIC"
+        )
+        raise
+    except BaseException:
+        _STAGING_STARTUP_FAILURE = "SEMANTIC"
+        raise
+
+
+@app.on_event("shutdown")
+def release_workspace_at_shutdown() -> None:
+    global _CACHED_WORKSPACE
+    cached = _CACHED_WORKSPACE
+    _CACHED_WORKSPACE = None
+    if cached is not None:
+        _close_artifact_handles(cached.artifact_handles)
 
 
 def _private_review_config():
@@ -871,6 +1187,9 @@ def private_research_projection() -> Response:
         V3_CONTRACT,
         V3_CORRECTED_CONTRACT,
     }:
+        streamed = _staging_artifact_response("projection.json", attachment=False)
+        if streamed is not None:
+            return streamed
         artifacts = workspace.get("artifacts")
         projection_bytes = (
             artifacts.get("projection.json")
@@ -900,6 +1219,9 @@ def private_research_artifact(artifact_name: str) -> Response:
     }
     if artifact_name not in media_types:
         raise HTTPException(status_code=404, detail="Private artifact is not published")
+    streamed = _staging_artifact_response(artifact_name, attachment=True)
+    if streamed is not None:
+        return streamed
     artifacts = _workspace().get("artifacts")
     if not isinstance(artifacts, dict) or not isinstance(artifacts.get(artifact_name), bytes):
         raise HTTPException(status_code=404, detail="Private artifact is absent")

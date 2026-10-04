@@ -1696,6 +1696,7 @@ def read_private_research_workspace(
     workspace_root: str | Path,
     *,
     _retain_corrected_artifacts: bool = True,
+    lineage_repository: str | Path | None = None,
 ) -> dict[str, Any]:
     """Rehash and semantically rebuild one immutable research workspace."""
 
@@ -1752,7 +1753,11 @@ def read_private_research_workspace(
             storage=storage,
             manifest=manifest,
             manifest_bytes=manifest_bytes,
-            repo_root=Path(__file__).resolve().parents[3],
+            repo_root=(
+                Path(__file__).resolve().parents[3]
+                if lineage_repository is None
+                else lineage_repository
+            ),
             retain_artifacts=_retain_corrected_artifacts,
         )
     if isinstance(manifest, dict) and manifest.get("contract") == V2_CONTRACT:

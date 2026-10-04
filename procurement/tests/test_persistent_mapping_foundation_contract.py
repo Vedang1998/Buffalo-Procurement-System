@@ -38,7 +38,7 @@ IMPLEMENTATION_SPEC = (
     / "2026-09-10-persistent-mapping-foundation-implementation-spec.md"
 )
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 1003
+EXPECTED_GLOBAL_TEST_POPULATION = 1295
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):

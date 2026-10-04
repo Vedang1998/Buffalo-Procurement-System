@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -581,6 +582,38 @@ class PrivateResearchV3CorrectedTests(unittest.TestCase):
         forged["implementation_tree"] = corrected.ACCEPTED_TREE
         with self.assertRaises(corrected.PrivateResearchV3CorrectedError):
             corrected._verify_lineage_objects(repo_root, forged)
+
+    def test_real_git_object_lineage_uses_an_explicit_bare_store(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        lineage = {
+            "accepted_commit": corrected.ACCEPTED_COMMIT,
+            "accepted_tree": corrected.ACCEPTED_TREE,
+            "runtime_commit": corrected.RUNTIME_COMMIT,
+            "runtime_tree": corrected.RUNTIME_TREE,
+            "test_commit": corrected.TEST_COMMIT,
+            "test_tree": corrected.TEST_TREE,
+            "implementation_commit": corrected.DESIGN_COMMIT,
+            "implementation_tree": corrected.DESIGN_TREE,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            bare = Path(temporary) / "source.git"
+            completed = subprocess.run(
+                [
+                    "/usr/bin/git",
+                    "clone",
+                    "--bare",
+                    "--no-hardlinks",
+                    str(repo_root),
+                    str(bare),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            corrected._verify_lineage_objects(bare, lineage)
 
     def test_bundle_reader_binds_storage_key_identity_and_private_modes(self) -> None:
         with self._built() as built, tempfile.TemporaryDirectory() as temporary:

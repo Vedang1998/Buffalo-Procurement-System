@@ -204,7 +204,13 @@ class ResearchLifecycleManager:
         self._operation_serial = 0
         self._operation_in_progress: int | None = None
         self._operation_started_wall: float | None = None
+        self._operation_kind: str | None = None
         self._termination_retry_allowed = False
+        self._ready_restart_consumed = False
+        self._restart_after_cleanup = False
+        self._terminal_cleanup_fault = False
+        self._terminal_resource_fault = False
+        self._cleanup_completed_at: float | None = None
         self._stop_requested = False
         self._last_authenticated_activity_at: float | None = None
 
@@ -241,7 +247,9 @@ class ResearchLifecycleManager:
             self._retry_due_at = None
             self._transition_locked("STOPPING")
             if self._operation_in_progress is None:
-                if not self._cleanup_required:
+                if self._phase == "POST_FAILURE_SAMPLE":
+                    pass
+                elif not self._cleanup_required:
                     self._complete_stop_locked()
                 else:
                     self._phase = "TERMINATE"
@@ -268,9 +276,14 @@ class ResearchLifecycleManager:
             elif kind == "LAUNCH":
                 assert generation is not None
                 outcome = self.driver.launch(generation)
-            elif kind in {"SAMPLE", "FINAL_SAMPLE", "READY_SAMPLE"}:
+            elif kind in {
+                "SAMPLE",
+                "FINAL_SAMPLE",
+                "READY_SAMPLE",
+                "POST_FAILURE_SAMPLE",
+            }:
                 outcome = self.resource_sampler()
-            elif kind == "PROBE":
+            elif kind in {"PROBE", "READY_PROBE"}:
                 assert generation is not None
                 outcome = self.driver.probe(generation)
             elif kind == "COMMIT":
@@ -297,10 +310,13 @@ class ResearchLifecycleManager:
         if self._operation_in_progress is not None:
             return None
         if self._state == "STOPPING":
-            if not self._cleanup_required:
+            if self._phase == "POST_FAILURE_SAMPLE":
+                pass
+            elif not self._cleanup_required:
                 self._complete_stop_locked()
                 return None
-            self._phase = "TERMINATE"
+            else:
+                self._phase = "TERMINATE"
         elif self._state == "VALIDATING":
             if self._deadline_reached_locked(now):
                 if not self._cleanup_required:
@@ -322,8 +338,8 @@ class ResearchLifecycleManager:
                 self._stop_requested = True
                 self._transition_locked("STOPPING")
                 self._phase = "TERMINATE"
-            else:
-                self._phase = "READY_SAMPLE"
+            elif self._phase not in {"READY_PROBE", "READY_SAMPLE"}:
+                self._phase = "READY_PROBE"
         else:
             return None
         generation = (
@@ -333,7 +349,14 @@ class ResearchLifecycleManager:
         )
         if (
             self._phase
-            in {"SAMPLE", "PROBE", "FINAL_SAMPLE", "COMMIT", "READY_SAMPLE"}
+            in {
+                "SAMPLE",
+                "PROBE",
+                "FINAL_SAMPLE",
+                "COMMIT",
+                "READY_PROBE",
+                "READY_SAMPLE",
+            }
             and generation is None
         ):
             self._latch_failed_locked()
@@ -345,6 +368,7 @@ class ResearchLifecycleManager:
         serial = self._operation_serial
         self._operation_in_progress = serial
         self._operation_started_wall = time.monotonic()
+        self._operation_kind = self._phase
         if self._phase == "LAUNCH":
             # Once launch begins it may create a child/key before returning its
             # actual generation.  From this point cleanup is role-scoped and
@@ -365,18 +389,47 @@ class ResearchLifecycleManager:
             raise ResearchLifecycleError("research lifecycle operation binding differs")
         self._operation_in_progress = None
         self._operation_started_wall = None
+        self._operation_kind = None
         now = self._now()
         if self._state == "STOPPING":
             if kind == "TERMINATE":
                 if error is not None:
+                    self._terminal_cleanup_fault = True
                     self._latch_failed_locked()
                 else:
                     self._active_generation = None
                     self._cleanup_required = False
+                    self._cleanup_completed_at = now
                     if self._stop_requested:
                         self._complete_stop_locked()
+                    elif self._restart_after_cleanup:
+                        self._phase = "POST_FAILURE_SAMPLE"
                     else:
                         self._latch_failed_locked()
+            elif kind == "POST_FAILURE_SAMPLE":
+                accepted = self._accepted_sample(outcome=outcome, error=error)
+                if self._stop_requested:
+                    self._restart_after_cleanup = False
+                    self._complete_stop_locked()
+                    if not accepted:
+                        self._terminal_resource_fault = True
+                elif not accepted:
+                    self._restart_after_cleanup = False
+                    self._latch_failed_locked()
+                elif self._restart_after_cleanup:
+                    self._restart_after_cleanup = False
+                    self._graph_started_at = now
+                    # A post-READY controlled restart is itself the sole
+                    # restart for that crash. Its initialization failure must
+                    # latch instead of starting another worker.
+                    self._automatic_retries = 1
+                    self._retry_due_at = (
+                        self._cleanup_completed_at + self.retry_backoff_seconds
+                    )
+                    self._transition_locked("VALIDATING")
+                    self._phase = "WAIT_RETRY"
+                else:
+                    self._latch_failed_locked()
             elif not self._cleanup_required:
                 if self._stop_requested:
                     self._complete_stop_locked()
@@ -395,10 +448,12 @@ class ResearchLifecycleManager:
             return
         if kind == "TERMINATE":
             if error is not None:
+                self._terminal_cleanup_fault = True
                 self._latch_failed_locked()
                 return
             self._active_generation = None
             self._cleanup_required = False
+            self._cleanup_completed_at = now
             can_retry = (
                 self._termination_retry_allowed
                 and self._automatic_retries == 0
@@ -406,12 +461,10 @@ class ResearchLifecycleManager:
                 and now + self.retry_backoff_seconds
                 < self._graph_started_at + self.initialization_timeout_seconds
             )
-            self._termination_retry_allowed = False
             if can_retry:
-                self._automatic_retries = 1
-                self._retry_due_at = now + self.retry_backoff_seconds
-                self._phase = "WAIT_RETRY"
+                self._phase = "POST_FAILURE_SAMPLE"
             else:
+                self._termination_retry_allowed = False
                 self._latch_failed_locked()
             return
         if self._state == "VALIDATING" and self._deadline_reached_locked(now):
@@ -439,18 +492,41 @@ class ResearchLifecycleManager:
             self._termination_retry_allowed = retry_allowed
             self._phase = "TERMINATE"
             return
-        if kind in {"SAMPLE", "FINAL_SAMPLE", "READY_SAMPLE"}:
-            accepted = False
-            if error is None and type(outcome) is AggregateResourceSample:
-                try:
-                    accepted = outcome.accepted()
-                except BaseException:
-                    accepted = False
+        if kind in {
+            "SAMPLE",
+            "FINAL_SAMPLE",
+            "READY_SAMPLE",
+            "POST_FAILURE_SAMPLE",
+        }:
+            accepted = self._accepted_sample(outcome=outcome, error=error)
             if not accepted:
                 self._termination_retry_allowed = False
+                if kind == "POST_FAILURE_SAMPLE":
+                    self._latch_failed_locked()
+                    return
                 if kind == "READY_SAMPLE":
                     self._transition_locked("STOPPING")
                 self._phase = "TERMINATE"
+                return
+            if kind == "POST_FAILURE_SAMPLE":
+                can_retry = (
+                    self._termination_retry_allowed
+                    and self._automatic_retries == 0
+                    and self._graph_started_at is not None
+                    and now + self.retry_backoff_seconds
+                    < self._graph_started_at + self.initialization_timeout_seconds
+                )
+                self._termination_retry_allowed = False
+                if can_retry:
+                    self._automatic_retries = 1
+                    completed_at = self._cleanup_completed_at
+                    if completed_at is None:
+                        self._latch_failed_locked()
+                        return
+                    self._retry_due_at = completed_at + self.retry_backoff_seconds
+                    self._phase = "WAIT_RETRY"
+                else:
+                    self._latch_failed_locked()
                 return
             self._phase = {
                 "SAMPLE": "PROBE",
@@ -458,15 +534,43 @@ class ResearchLifecycleManager:
                 "READY_SAMPLE": "IDLE",
             }[kind]
             return
-        if kind == "PROBE":
+        if kind in {"PROBE", "READY_PROBE"}:
             if error is not None or not isinstance(outcome, AttemptObservation):
                 self._termination_retry_allowed = False
+                if kind == "READY_PROBE":
+                    self._transition_locked("STOPPING")
                 self._phase = "TERMINATE"
                 return
             try:
                 outcome.validate()
             except ResearchLifecycleError:
                 self._termination_retry_allowed = False
+                if kind == "READY_PROBE":
+                    self._transition_locked("STOPPING")
+                self._phase = "TERMINATE"
+                return
+            if kind == "READY_PROBE":
+                valid_ready = bool(
+                    outcome.generation == generation
+                    and outcome.ready
+                    and outcome.validation_identity
+                    == self.expected_validation_identity
+                )
+                if valid_ready:
+                    self._phase = "READY_SAMPLE"
+                    return
+                retryable = bool(
+                    outcome.generation == generation
+                    and outcome.failure in _RETRYABLE_FAILURES
+                    and not self._ready_restart_consumed
+                )
+                self._ready_restart_consumed = (
+                    self._ready_restart_consumed or retryable
+                )
+                self._restart_after_cleanup = retryable
+                self._termination_retry_allowed = False
+                self._stop_requested = False
+                self._transition_locked("STOPPING")
                 self._phase = "TERMINATE"
                 return
             if outcome.generation != generation:
@@ -485,7 +589,9 @@ class ResearchLifecycleManager:
             return
         if kind == "COMMIT":
             if error is not None:
-                self._termination_retry_allowed = False
+                self._termination_retry_allowed = isinstance(
+                    error, RecoverableAttemptError
+                )
                 self._phase = "TERMINATE"
             else:
                 self._phase = "IDLE"
@@ -494,10 +600,20 @@ class ResearchLifecycleManager:
             return
         raise ResearchLifecycleError("research lifecycle action is invalid")
 
+    @staticmethod
+    def _accepted_sample(*, outcome: object, error: BaseException | None) -> bool:
+        if error is not None or type(outcome) is not AggregateResourceSample:
+            return False
+        try:
+            return outcome.accepted()
+        except BaseException:
+            return False
+
     def _allocate_attempt_locked(self) -> None:
         if self._active_generation is not None or self._cleanup_required:
             self._latch_failed_locked()
             return
+        self._cleanup_completed_at = None
         self._generation = max(
             0,
             self._last_worker_generation + 1,
@@ -537,6 +653,11 @@ class ResearchLifecycleManager:
         self._retry_due_at = None
         self._automatic_retries = 0
         self._termination_retry_allowed = False
+        self._ready_restart_consumed = False
+        self._restart_after_cleanup = False
+        self._terminal_cleanup_fault = False
+        self._terminal_resource_fault = False
+        self._cleanup_completed_at = None
         self._stop_requested = False
         self._last_authenticated_activity_at = None
         self._phase = "IDLE"
@@ -595,29 +716,40 @@ class ResearchLifecycleManager:
                 self._transition_locked("STOPPING")
                 self._phase = "TERMINATE"
 
-    def _watchdog_expire_if_due(self, *, action_timeout_seconds: float) -> bool:
+    def _terminal_faulted(self) -> bool:
+        with self._lock:
+            return self._terminal_cleanup_fault or self._terminal_resource_fault
+
+    def _watchdog_expire_if_due(
+        self, *, action_timeout_seconds: dict[str, float]
+    ) -> bool:
         """Make an over-deadline graph unroutable without waiting on its action."""
 
         with self._lock:
             action_overdue = (
                 self._operation_in_progress is not None
                 and self._operation_started_wall is not None
+                and self._operation_kind in action_timeout_seconds
                 and time.monotonic() - self._operation_started_wall
-                >= action_timeout_seconds
+                >= action_timeout_seconds[self._operation_kind]
             )
             graph_overdue = (
                 self._state == "VALIDATING"
                 and self._operation_in_progress is not None
                 and self._deadline_reached_locked(self._now())
             )
-            if (
-                self._state not in {"VALIDATING", "READY"}
-                or not (action_overdue or graph_overdue)
+            if not (
+                (
+                    self._state in {"VALIDATING", "READY"}
+                    and (action_overdue or graph_overdue)
+                )
+                or (self._state == "STOPPING" and action_overdue)
             ):
                 return False
             self._stop_requested = False
             self._retry_due_at = None
             self._termination_retry_allowed = False
+            self._restart_after_cleanup = False
             self._transition_locked("STOPPING")
             if self._operation_in_progress is None:
                 if not self._cleanup_required:
@@ -635,8 +767,10 @@ class ResearchLifecycleRunner:
         manager: ResearchLifecycleManager,
         *,
         interval_seconds: float = 0.25,
-        join_timeout_seconds: float = 5.0,
+        join_timeout_seconds: float = 30.0,
         action_timeout_seconds: float = 5.0,
+        recover_timeout_seconds: float = 300.0,
+        terminate_timeout_seconds: float = 15.0,
         fatal_handler: Callable[[], None],
     ) -> None:
         if (
@@ -644,9 +778,15 @@ class ResearchLifecycleRunner:
             or not isinstance(interval_seconds, (int, float))
             or not 0.01 <= float(interval_seconds) <= 5.0
             or not isinstance(join_timeout_seconds, (int, float))
-            or not 0.1 <= float(join_timeout_seconds) <= 30.0
+            or not 0.1 <= float(join_timeout_seconds) <= 60.0
             or not isinstance(action_timeout_seconds, (int, float))
             or not 0.05 <= float(action_timeout_seconds) <= 30.0
+            or not isinstance(recover_timeout_seconds, (int, float))
+            or not 1.0
+            <= float(recover_timeout_seconds)
+            <= INITIALIZATION_TIMEOUT_SECONDS
+            or not isinstance(terminate_timeout_seconds, (int, float))
+            or not 10.0 <= float(terminate_timeout_seconds) <= 60.0
             or not callable(fatal_handler)
         ):
             raise ResearchLifecycleError("research lifecycle runner is invalid")
@@ -654,6 +794,18 @@ class ResearchLifecycleRunner:
         self.interval_seconds = float(interval_seconds)
         self.join_timeout_seconds = float(join_timeout_seconds)
         self.action_timeout_seconds = float(action_timeout_seconds)
+        self.action_timeouts = {
+            "RECOVER": float(recover_timeout_seconds),
+            "LAUNCH": float(action_timeout_seconds),
+            "SAMPLE": float(action_timeout_seconds),
+            "PROBE": float(action_timeout_seconds),
+            "FINAL_SAMPLE": float(action_timeout_seconds),
+            "COMMIT": float(action_timeout_seconds),
+            "READY_PROBE": float(action_timeout_seconds),
+            "READY_SAMPLE": float(action_timeout_seconds),
+            "POST_FAILURE_SAMPLE": float(action_timeout_seconds),
+            "TERMINATE": float(terminate_timeout_seconds),
+        }
         self.fatal_handler = fatal_handler
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -661,6 +813,7 @@ class ResearchLifecycleRunner:
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
         self._failure: BaseException | None = None
+        self._fatal_invoked = False
 
     def start(self) -> None:
         with self._lock:
@@ -704,6 +857,8 @@ class ResearchLifecycleRunner:
                     self.manager.tick()
                 except BaseException:
                     break
+                if self.manager.status().state != "STOPPED":
+                    break
             else:
                 time.sleep(min(self.interval_seconds, 0.05))
         self._stop.set()
@@ -720,6 +875,10 @@ class ResearchLifecycleRunner:
         try:
             while not self._stop.is_set():
                 self.manager.tick()
+                if self.manager._terminal_faulted():
+                    raise ResearchLifecycleError(
+                        "mandatory research lifecycle gate failed"
+                    )
                 self._wake.wait(self.interval_seconds)
                 self._wake.clear()
         except BaseException as exc:
@@ -728,8 +887,9 @@ class ResearchLifecycleRunner:
                 self.manager.tick()
             except BaseException:
                 pass
+            failure = self._invoke_fatal(exc)
             with self._lock:
-                self._failure = exc
+                self._failure = failure
             self._stop.set()
             self._wake.set()
 
@@ -737,19 +897,13 @@ class ResearchLifecycleRunner:
         try:
             while not self._stop.wait(min(self.interval_seconds, 0.05)):
                 if not self.manager._watchdog_expire_if_due(
-                    action_timeout_seconds=self.action_timeout_seconds
+                    action_timeout_seconds=self.action_timeouts
                 ):
                     continue
                 error = ResearchLifecycleError(
                     "research lifecycle initialization deadline expired"
                 )
-                try:
-                    self.fatal_handler()
-                except BaseException as exc:
-                    error = ResearchLifecycleError(
-                        "research lifecycle fatal handler failed"
-                    )
-                    error.__cause__ = exc
+                error = self._invoke_fatal(error)
                 with self._lock:
                     if self._failure is None:
                         self._failure = error
@@ -762,3 +916,18 @@ class ResearchLifecycleRunner:
                     self._failure = exc
             self._stop.set()
             self._wake.set()
+
+    def _invoke_fatal(self, error: BaseException) -> BaseException:
+        with self._lock:
+            if self._fatal_invoked:
+                return error
+            self._fatal_invoked = True
+        try:
+            self.fatal_handler()
+        except BaseException as exc:
+            replacement = ResearchLifecycleError(
+                "research lifecycle fatal handler failed"
+            )
+            replacement.__cause__ = exc
+            return replacement
+        return error

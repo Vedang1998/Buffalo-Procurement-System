@@ -1122,6 +1122,7 @@ class StagingChildSupervisor:
         self._shutdown_complete = False
         self._final_cleanup_done = False
         self._gateway_proven_gone = False
+        self._activation_channel_ambiguous = False
         self._signal_requested = False
 
     @_serialized
@@ -1236,6 +1237,8 @@ class StagingChildSupervisor:
                 )
                 self.worker_key_preparer(staged_key, gateway)
             except BaseException as preparation_error:
+                if activation_attempted:
+                    self._activation_channel_ambiguous = True
                 try:
                     self._abort_worker_key(
                         name, activation_attempted=activation_attempted
@@ -1535,6 +1538,7 @@ class StagingChildSupervisor:
                 try:
                     self.worker_key_disabler(staged_key)
                 except BaseException as exc:
+                    self._activation_channel_ambiguous = True
                     # Retain both manager ownership and key copies so DISABLE
                     # can be retried; deleting a possibly prepared key is unsafe.
                     raise StagingSupervisorError(
@@ -1646,6 +1650,7 @@ class StagingChildSupervisor:
         try:
             self.worker_key_committer(staged_key, gateway, worker)
         except BaseException as exc:
+            self._activation_channel_ambiguous = True
             # A lost/failed acknowledgement cannot prove whether the gateway
             # made the generation routable.  Enter terminal cleanup rather
             # than retrying COMMIT or serving with ambiguous state.
@@ -1659,13 +1664,31 @@ class StagingChildSupervisor:
     def _research_process_is_live(self, attempt: _ResearchAttempt) -> bool:
         child = self.children.get("research")
         staged_key = self._active_worker_keys.get("research")
+        state: str | None = None
+        identity_values: tuple[int, int, int] | None = None
+        if child is not None:
+            try:
+                state, start_ticks, process_group, session_id = _proc_record(
+                    child.identity.pid
+                )
+                identity_values = (start_ticks, process_group, session_id)
+            except (ProcessLookupError, StagingSupervisorError):
+                pass
         return bool(
             child is not None
             and staged_key is not None
             and child.identity == attempt.snapshot.identity
             and staged_key.generation == attempt.snapshot.generation
-            and child.process.poll() is None
-            and child.identity.is_live()
+            # Do not call Popen.poll here: it reaps a dead leader before the
+            # resource sampler can retain its final VmHWM.  A zombie is not
+            # live, but remains owned until generation-bound termination.
+            and state not in {None, "Z", "X", "x"}
+            and identity_values
+            == (
+                child.identity.start_ticks,
+                child.identity.process_group,
+                child.identity.session_id,
+            )
         )
 
     def _probe_research_locked(
@@ -1736,6 +1759,16 @@ class StagingChildSupervisor:
         return None if attempt is None else attempt.snapshot
 
     @_serialized
+    def owned_process_identities(self) -> tuple[ProcessIdentity, ...]:
+        """Return immutable identities without polling or reaping any child."""
+
+        if self._uncaptured_children:
+            raise StagingSupervisorError("uncaptured child identity is unavailable")
+        return tuple(
+            self.children[name].identity for name in sorted(self.children)
+        )
+
+    @_serialized
     def stop(self, name: str, *, timeout_seconds: float = 10.0) -> int:
         if name == "research":
             raise StagingSupervisorError(
@@ -1757,7 +1790,11 @@ class StagingChildSupervisor:
             generation = (staged_key.role, staged_key.generation)
             if generation not in self._deactivated_worker_keys:
                 if not self._gateway_proven_gone:
-                    self.worker_key_disabler(staged_key)
+                    try:
+                        self.worker_key_disabler(staged_key)
+                    except BaseException:
+                        self._activation_channel_ambiguous = True
+                        raise
                 self._deactivated_worker_keys.add(generation)
         result = terminate_owned_process_group(
             child.process,
@@ -1817,6 +1854,7 @@ class StagingChildSupervisor:
                         try:
                             self.worker_key_disabler(staged_key)
                         except BaseException as exc:
+                            self._activation_channel_ambiguous = True
                             raise StagingSupervisorError(
                                 "worker key disable was not acknowledged"
                             ) from exc
@@ -1954,8 +1992,70 @@ class StagingChildSupervisor:
             except BaseException as exc:
                 failures.append(exc)
         self._finish_shutdown_if_empty()
+        if (
+            failures
+            and self._activation_channel_ambiguous
+            and not self._gateway_proven_gone
+        ):
+            fallback_failures: list[BaseException] = []
+            self._force_gateway_gone_for_terminal_shutdown(
+                timeout_seconds=timeout_seconds,
+                failures=fallback_failures,
+            )
+            self._cleanup_uncaptured_children(failures=fallback_failures)
+            for name in ("research", "synthetic"):
+                try:
+                    if name in self.children:
+                        self._stop_owned(name, timeout_seconds=timeout_seconds)
+                    elif name in self._active_worker_keys:
+                        self._abort_worker_key(name, activation_attempted=False)
+                except BaseException as exc:
+                    fallback_failures.append(exc)
+            if (
+                self._research_attempt is not None
+                and "research" not in self.children
+                and "research" not in self._active_worker_keys
+                and "research" not in self._uncaptured_children
+            ):
+                try:
+                    self._close_research_attempt()
+                except BaseException as exc:
+                    fallback_failures.append(exc)
+            self._finish_shutdown_if_empty()
+            if not fallback_failures and self._shutdown_complete:
+                return
+            failures = fallback_failures or failures
         if failures:
             raise StagingSupervisorError("one or more child groups did not stop") from failures[0]
+
+    def _force_gateway_gone_for_terminal_shutdown(
+        self,
+        *,
+        timeout_seconds: float,
+        failures: list[BaseException],
+    ) -> None:
+        """Resolve poisoned activation state only during whole-service shutdown."""
+
+        gateway = self.children.get("gateway")
+        if gateway is not None:
+            try:
+                self._stop_owned("gateway", timeout_seconds=timeout_seconds)
+            except BaseException as exc:
+                failures.append(exc)
+                return
+        uncaptured = self._uncaptured_children.get("gateway")
+        if uncaptured is not None:
+            try:
+                _kill_uncaptured_process_group(uncaptured[1])
+            except BaseException as exc:
+                failures.append(exc)
+                return
+            self._uncaptured_children.pop("gateway")
+            self._gateway_proven_gone = True
+        if self._gateway_started and not self._gateway_proven_gone:
+            failures.append(
+                StagingSupervisorError("gateway absence is not proven")
+            )
 
     def _finish_shutdown_if_empty(self) -> None:
         if (
@@ -1997,6 +2097,7 @@ class StagingChildSupervisor:
                             try:
                                 self.worker_key_disabler(staged_key)
                             except BaseException as exc:
+                                self._activation_channel_ambiguous = True
                                 failures.append(exc)
                                 continue
                         self._deactivated_worker_keys.add(generation)

@@ -246,6 +246,164 @@ class ResearchLifecycleTests(unittest.TestCase):
         self.clock.advance(9)
         self.assertEqual(manager.tick().state, "READY")
 
+    def test_ready_crash_becomes_unroutable_and_revalidates_once(self) -> None:
+        self._launch()
+        self._make_ready()
+        self.driver.observation = AttemptObservation(
+            generation=0, failure=AttemptFailure.CRASH
+        )
+
+        self.assertEqual(self.manager.tick().state, "STOPPING")
+        self.assertEqual(self.manager.tick().state, "STOPPING")
+        self.assertEqual(self.manager.tick().state, "VALIDATING")
+        self.assertEqual(self.driver.terminations, [0])
+        self.clock.advance(7)
+        self._drive_until(lambda: self.driver.launches == [0, 1])
+        self.assertEqual(self.driver.recoveries, 2)
+
+        self.driver.observation = AttemptObservation(
+            generation=1,
+            ready=True,
+            validation_identity=VALIDATION_IDENTITY,
+        )
+        self._drive_until(lambda: self.manager.status().state == "READY")
+        self.assertEqual(self.driver.commits, [0, 1])
+
+        self.driver.observation = AttemptObservation(
+            generation=1, failure=AttemptFailure.CRASH
+        )
+        self.assertEqual(self.manager.tick().state, "STOPPING")
+        self.assertEqual(self.manager.tick().state, "FAILED")
+        self.assertEqual(self.driver.terminations, [0, 1])
+
+    def test_stop_during_post_failure_gate_never_restarts(self) -> None:
+        for rejected in (False, True):
+            with self.subTest(rejected=rejected):
+                clock = _Clock()
+                driver = _Driver()
+                sampler = _Sampler()
+                manager = self._new_manager(
+                    driver=driver, clock=clock, sampler=sampler
+                )
+                manager.start()
+                for _ in range(8):
+                    manager.tick()
+                    if driver.launches:
+                        break
+                driver.observation = AttemptObservation(
+                    generation=0,
+                    ready=True,
+                    validation_identity=VALIDATION_IDENTITY,
+                )
+                for _ in range(8):
+                    manager.tick()
+                    if manager.status().state == "READY":
+                        break
+                driver.observation = AttemptObservation(
+                    generation=0, failure=AttemptFailure.CRASH
+                )
+                self.assertEqual(manager.tick().state, "STOPPING")
+                self.assertEqual(manager.tick().state, "STOPPING")
+                entered = threading.Event()
+                release = threading.Event()
+
+                def blocking_sample() -> AggregateResourceSample:
+                    entered.set()
+                    release.wait(timeout=1)
+                    return AggregateResourceSample(
+                        1, 1, int(rejected), 0, 0
+                    )
+
+                manager.resource_sampler = blocking_sample
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    result = pool.submit(manager.tick)
+                    self.assertTrue(entered.wait(timeout=1))
+                    self.assertEqual(manager.stop().state, "STOPPING")
+                    release.set()
+                    self.assertEqual(result.result(timeout=1).state, "STOPPED")
+                self.assertEqual(manager._terminal_faulted(), rejected)
+                clock.advance(100)
+                for _ in range(4):
+                    manager.tick()
+                self.assertEqual(driver.launches, [0])
+
+    def test_rejected_stop_race_resource_gate_is_reported_to_runner(self) -> None:
+        self._launch()
+        self._make_ready()
+        self.driver.observation = AttemptObservation(
+            generation=0, failure=AttemptFailure.CRASH
+        )
+        self.assertEqual(self.manager.tick().state, "STOPPING")
+        self.assertEqual(self.manager.tick().state, "STOPPING")
+        self.manager.stop()
+        self.sampler.sample = AggregateResourceSample(1, 1, 0, 1, 0)
+        self.assertEqual(self.manager.tick().state, "STOPPED")
+        fatal = threading.Event()
+        runner = ResearchLifecycleRunner(
+            self.manager,
+            interval_seconds=0.01,
+            join_timeout_seconds=0.2,
+            fatal_handler=fatal.set,
+        )
+        runner.start()
+        self.assertTrue(fatal.wait(timeout=1))
+        with self.assertRaisesRegex(ResearchLifecycleError, "runner failed"):
+            runner.shutdown()
+
+    def test_watchdog_covers_stopping_and_cancels_restart_intent(self) -> None:
+        self._launch()
+        self._make_ready()
+        self.driver.observation = AttemptObservation(
+            generation=0, failure=AttemptFailure.CRASH
+        )
+        self.assertEqual(self.manager.tick().state, "STOPPING")
+        with self.manager._lock:
+            self.manager._operation_serial += 1
+            self.manager._operation_in_progress = self.manager._operation_serial
+            self.manager._operation_kind = "TERMINATE"
+            self.manager._operation_started_wall = time.monotonic() - 20
+            self.manager._restart_after_cleanup = True
+        self.assertTrue(
+            self.manager._watchdog_expire_if_due(
+                action_timeout_seconds={"TERMINATE": 15.0}
+            )
+        )
+        self.assertFalse(self.manager._restart_after_cleanup)
+
+    def test_ready_probe_refuses_stale_or_nonretryable_result(self) -> None:
+        for observation in (
+            AttemptObservation(generation=0, validating=True),
+            AttemptObservation(generation=0, failure=AttemptFailure.INTEGRITY),
+            AttemptObservation(
+                generation=0,
+                ready=True,
+                validation_identity="cd" * 32,
+            ),
+        ):
+            with self.subTest(observation=observation):
+                clock = _Clock()
+                driver = _Driver()
+                manager = self._new_manager(
+                    driver=driver, clock=clock, sampler=_Sampler()
+                )
+                manager.start()
+                for _ in range(3):
+                    manager.tick()
+                driver.observation = AttemptObservation(
+                    generation=0,
+                    ready=True,
+                    validation_identity=VALIDATION_IDENTITY,
+                )
+                for _ in range(5):
+                    if manager.status().state == "READY":
+                        break
+                    manager.tick()
+                self.assertEqual(manager.status().state, "READY")
+                driver.observation = observation
+                self.assertEqual(manager.tick().state, "STOPPING")
+                self.assertEqual(manager.tick().state, "FAILED")
+                self.assertEqual(driver.launches, [0])
+
     def test_typed_launch_crash_is_cleaned_before_retry(self) -> None:
         self.driver.launch_failure = RecoverableAttemptError(AttemptFailure.CRASH)
         self.manager.start()
@@ -266,6 +424,32 @@ class ResearchLifecycleTests(unittest.TestCase):
         self.clock.advance(100)
         self.manager.tick()
         self.assertEqual(self.driver.launches, [0])
+
+    def test_post_cleanup_resource_gate_blocks_every_retryable_failure(self) -> None:
+        for failure in (AttemptFailure.CRASH, AttemptFailure.TIMEOUT):
+            with self.subTest(failure=failure):
+                clock = _Clock()
+                driver = _Driver()
+                sampler = _Sampler()
+                manager = self._new_manager(
+                    driver=driver, clock=clock, sampler=sampler
+                )
+                manager.start()
+                for _ in range(3):
+                    manager.tick()
+                driver.observation = AttemptObservation(
+                    generation=0, failure=failure
+                )
+                for _ in range(3):
+                    manager.tick()
+                    if driver.terminations:
+                        break
+                self.assertEqual(driver.terminations, [0])
+                sampler.sample = AggregateResourceSample(1, 1, 0, 1, 0)
+                self.assertEqual(manager.tick().state, "FAILED")
+                clock.advance(100)
+                manager.tick()
+                self.assertEqual(driver.launches, [0])
 
     def test_untyped_launch_error_and_older_generation_never_retry(self) -> None:
         for configure in (
@@ -719,6 +903,26 @@ class ResearchLifecycleTests(unittest.TestCase):
             runner.shutdown()
         self.assertEqual(manager.status().state, "STOPPED")
         self.assertEqual(driver.terminations, [0])
+
+    def test_mandatory_cleanup_failure_invokes_the_service_fatal_handler(self) -> None:
+        fatal = threading.Event()
+        self.driver.fail_termination = True
+        self.driver.observation = AttemptObservation(
+            generation=0, failure=AttemptFailure.INTEGRITY
+        )
+        runner = ResearchLifecycleRunner(
+            self.manager,
+            interval_seconds=0.01,
+            join_timeout_seconds=0.2,
+            fatal_handler=fatal.set,
+        )
+        runner.start()
+        self.manager.start()
+        self.assertTrue(fatal.wait(timeout=1))
+        self.assertEqual(self.manager.status().state, "FAILED")
+        self.driver.fail_termination = False
+        with self.assertRaisesRegex(ResearchLifecycleError, "runner failed"):
+            runner.shutdown()
 
 
 if __name__ == "__main__":
