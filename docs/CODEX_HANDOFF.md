@@ -10,29 +10,64 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Synthetic staging database contract — LOCAL IMPLEMENTATION CHECKPOINT / DATABASE GATES PENDING
+### Synthetic staging database contract — TASK 6/7 LOCAL TRANSITION AND RESTRICTED-RUNTIME PROOF PASS / LIFECYCLE GATES PENDING
 
-- A fresh complete-history checkout began clean at exact recovered source
-  `c0a04c1b18e41cd249aa3739ab582d03a61267bb`, tree
-  `7e1a6b285d12fa0b5c05fa9dfeab736cbf48e8e8`. The paused `5d5c9a22...`
-  checkout was not used or changed.
-- Fresh hook safety passed `10/10`; filesystem mode was `0755`, Git mode was
-  `100755`, and the unchanged inert hook invoked no sentinel. No-database test
-  discovery observed 1,235 tests and three unavailable database-dependent
-  modules against the declared 1,295 floor. This is discovery evidence only,
-  not a suite pass; all earlier unbound claims remain UNVERIFIED.
-- The additive V1 implementation defines three separated roles, an explicit
-  per-object operation matrix and hash, dedicated destination identity,
-  recursive role-topology and effective-ACL attestation, immutable fixture and
-  contract markers, a SQL-side assertion, and an operator-only provisioning
-  command. Gateway and research worker environment allowlists remain free of
-  database credentials. Legacy loopback test validation is unchanged.
-- Pure contract plus unchanged hook tests passed `14/14`; compilation and
-  `git diff --check` passed. Disposable PostgreSQL role/ACL execution,
-  dump/restore, real runtime-role workflow, lifecycle integration, full suite,
-  startup, browser/resource acceptance, and independent review remain pending.
-  This checkpoint is not final, accepted, deployable, or evidence that the
-  interrupted 1,295-test run passed.
+- Work resumed from the owner-pinned clean checkpoint
+  `bfcd2bc8f0da5c33b1f63bae59737ad19057a3dc`, tree
+  `51c631338d78197f04189db233be66bab7c56503`, on the sole-writer branch
+  `codex/railway-staging-delivery`. The first recoverable implementation
+  checkpoint is `c78ab530982ba7fe5797fe9d884efe3df51d78da`, tree
+  `78d5a957d53383afff362121e0cb6584739f22b9`. It is local-only at this
+  handoff update and is not a release candidate.
+- The staging-only V2 transition leaves migrations 001–016 and legacy
+  behavior unchanged. It separates administrative bootstrap, constrained
+  provisioning, no-login ownership, and a non-owner runtime login; replaces
+  broad ownership reassignment with enumerated objects; installs exact
+  staging successors for the integrity consumers derived from 014, 015, and
+  016; and refuses partial/conflicting state rather than repairing it.
+- The exact matrix is 60 readable application relations, 28 writable
+  relations / 36 operations, 14 `USAGE`-only sequences, 45 routine
+  signatures, and 155 canonical records. Matrix SHA-256 is
+  `d58ed105c7eb6446c4b6d4694b2a3d8a12fc304454e8622f1de2d4a06dfeabb6`.
+  The immutable development-v2 fixture manifest is
+  `08fd401f70ad55f7957b09bd47e99797a648d1f7ba2c0c86e24f5d0034683ec1`.
+  Exact post-bootstrap predecessor and successor catalogs are
+  `59ebe68a203511cb54d2d02d7c73ef44cb1ee3887f2c85effbaa08f7276cceda`
+  and
+  `af02588dee120940bd34a44c6d1fbc4b66062082eaeda36e268344ae992eaea3`.
+- Two independently initialized PostgreSQL 16 databases with distinct
+  administrator identities reproduced the same fixture, predecessor,
+  successor, and 014/015/016 staging identities. Python and SQL global
+  projections were equal. A late injected transition failure rolled back to
+  the byte-for-byte predecessor identity; exact reapplication returned a
+  verified no-op. Missing, wrong, and malformed markers failed through the
+  installed SQL assertion, including the prior NULL-handling case. An
+  unrelated role/database/schema/table sentinel remained unchanged.
+- A real `buffalo_synthetic_runtime` connection completed the early canonical
+  causal chain on a fresh fixture: stale-V1 retirement, exact SUP-001 mapping
+  and selected offer, V2 demand, ACCEPT review, one internal DRAFT, packet
+  build, and idempotent replay. Exact controls were
+  `(1,1,1,1,1,1,2,1,1,1,2,1,1,1,2,1,0)`; the verified fixture CURRENT break
+  was six cases at `$9.50` = `$57`; the packet had 13 members; terminal state
+  was `RUNNING / PACKET_BUILT / INTERNAL_DRAFT_ONLY`; non-DRAFT POs, release,
+  and Shopify calls were zero. Runtime attestation remained
+  `be472ebbad9b26e3fa7feb0c22ed5c82ad9001c21f53694bf6c53f122b817168`
+  and the immutable fixture hash did not change.
+- The focused database/contract module passed `11/11`; the combined staging,
+  population-contract, conformance, and runner selection passed all cases
+  except an expected stale full-source SHA pin, which was updated to the exact
+  reviewed staging-dispatch source and then passed on rerun. Compilation,
+  `git diff --check`, and the bounded credential scan passed. The registered
+  floor is now 1,306 tests. This is not a full-suite result.
+- Remaining gates are staging-compatible Backup V2 plus private dump/restore;
+  generation-bound synthetic database readiness and supervisor cleanup;
+  root composition and portable container startup; authenticated browser,
+  restart, research-closure, and resource acceptance; authoritative full suite
+  and 10 startup tests; attributable independent review; clean freeze and
+  non-force WIP publication. External Claude review is unavailable because
+  the installed client is unauthenticated, and Cursor is absent; until that
+  changes final status must remain `REVIEW BLOCKED`. The accepted staging
+  design continues to exclude bulk price upload from public routes.
 
 ### Railway staging source recovery — EXACT SOURCE PRESERVED / WIP TRANSFER ONLY / NOT ACCEPTED OR DEPLOYABLE
 
