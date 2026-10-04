@@ -28,6 +28,7 @@ RUNTIME_LOGIN = "buffalo_synthetic_runtime"
 # restore to another database name would invalidate that protected evidence.
 EXPECTED_DATABASE = "buffalo_synthetic_staging_demo"
 EXPECTED_POSTGRES_MAJOR = 16
+EXPECTED_PRIVATE_HOST = "postgres.railway.internal"
 FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 MULTIVENDOR_FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2"
 DEVELOPMENT_FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_DEVELOPMENT_FORECAST_V2"
@@ -454,12 +455,7 @@ class SyntheticStagingTarget:
         host_ok = (
             parsed.hostname == self.expected_private_host
             and (
-                bool(
-                    re.fullmatch(
-                        r"[a-z0-9.-]+\.railway\.internal",
-                        self.expected_private_host,
-                    )
-                )
+                self.expected_private_host == EXPECTED_PRIVATE_HOST
                 if remote
                 else self.expected_private_host in {"127.0.0.1", "::1"}
             )

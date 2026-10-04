@@ -26,7 +26,7 @@ from procurement_os.staging_config import (
 )
 from procurement_os import synthetic_staging_database as staging_database
 from procurement_os.synthetic_staging_database import (
-    EXPECTED_DATABASE, IMMUTABLE_FIXTURE_MANIFEST_SHA256,
+    EXPECTED_DATABASE, EXPECTED_PRIVATE_HOST, IMMUTABLE_FIXTURE_MANIFEST_SHA256,
     PERMISSION_MATRIX_SHA256, PREDECESSOR_CATALOG_SHA256, PROVISIONER,
     RUNTIME_LOGIN, SUCCESSOR_CATALOG_SHA256,
     SyntheticStagingDatabaseError, SyntheticStagingTarget,
@@ -38,8 +38,8 @@ from procurement_os.synthetic_staging_database import (
 class SyntheticStagingDatabaseContractTests(unittest.TestCase):
     def target(self):
         return SyntheticStagingTarget(
-            database_url=f"postgresql://{RUNTIME_LOGIN}@postgres.railway.internal/{EXPECTED_DATABASE}",
-            expected_private_host="postgres.railway.internal",
+            database_url=f"postgresql://{RUNTIME_LOGIN}@{EXPECTED_PRIVATE_HOST}/{EXPECTED_DATABASE}",
+            expected_private_host=EXPECTED_PRIVATE_HOST,
             project_id=EXPECTED_PROJECT_ID,
             environment_id=EXPECTED_ENVIRONMENT_ID,
             app_service_id=EXPECTED_APP_SERVICE_ID,
@@ -78,6 +78,13 @@ class SyntheticStagingDatabaseContractTests(unittest.TestCase):
         changes = (
             {"project_id": "wrong"},
             {"expected_private_host": "evil.example"},
+            {
+                "database_url": (
+                    f"postgresql://{RUNTIME_LOGIN}@unrelated-clone.railway.internal/"
+                    f"{EXPECTED_DATABASE}"
+                ),
+                "expected_private_host": "unrelated-clone.railway.internal",
+            },
             {"database_url": "postgresql://buffalo_synthetic_runtime:x@postgres.railway.internal/production"},
             {"database_url": f"postgresql://admin:x@postgres.railway.internal/{EXPECTED_DATABASE}"},
         )
