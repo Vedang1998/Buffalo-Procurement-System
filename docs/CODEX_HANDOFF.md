@@ -10,6 +10,102 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-05 Option-B / registered-clock continuation checkpoint
+
+- The owner approved Option B for Task-9 LOCAL acceptance and the
+  registered-observation clock correction. This supersedes only the earlier
+  requirement that the Task-9 browser upload the registered synthetic price
+  fixture. The fixed stopped-service operator may create only the exact
+  unapproved `VALIDATED` candidate; browser CONFIRM, Backup V2, APPLY,
+  selection, review, DRAFT generation, packet creation, and downloads remain
+  untransferred browser/operator authorities. No generic staging upload route,
+  direct CURRENT seed, post-APPLY seed, Railway deployment, external database,
+  Shopify action, or production authority was added.
+- The exact latest clean source checkpoint is
+  `1457f2dd66036fa967713a04458703995f8f8629`, tree
+  `4a855ce6d607c74162dc5efaf67fd889f5f1bcea`, on the sole-writer branch
+  `codex/railway-staging-delivery`. Its relevant ancestry is: Option-B operator
+  `5379753`, registered clock `453bb9d`, focused checkpoint `68fd497`, staging
+  browser gate `8669018`, accepted-release materializer `f9cd28f`, local Docker
+  materializer lifecycle `f31e425`, and isolated browser-worker protocol
+  `1457f2d`. The tracked staging remote is still 25 commits behind this local
+  branch. Nothing in this continuation has been pushed or attached to a new
+  PR; publication remains blocked on the applicable independent-review gate.
+- The stopped-service price operator is fixed-input and fixed-target. It
+  verifies the registered 1,590-byte CSV and source/declaration identities,
+  performs full staging-target attestation inside the deciding transaction,
+  holds the database lifecycle exclusion, runs the real normalization and
+  validation path, publishes immutable raw evidence once, and proves all
+  non-staging database/storage projections unchanged. Exact replay is
+  read-only/idempotent; missing/tampered raw state, policy/declaration/catalog/
+  role/storage drift, live-service exclusion, wrong lock identity, ambiguous
+  uncommitted outcome, and advanced commercial state fail closed. Browser
+  confirmation and APPLY re-read operator raw evidence through the strict
+  fixed key/hash/size/UID/GID/mode/nlink/inode contract. The focused operator
+  module passed 16/16 against real PostgreSQL where behavior depends on it;
+  its runner/floor/storage slice passed 14/14.
+- Declared synthetic list/detail/confirmation now derive temporal status from
+  the exact registered observation instant and policy timezone/boundary while
+  leaving generic price-book host-clock behavior unchanged. Durable and
+  operational states are separately machine-addressable; declaration or
+  policy drift and confirmation/APPLY replay drift fail closed. Focused proof
+  covers two host-date outcomes, mixed declared/generic lists, pre-confirm
+  `VALIDATED`, post-confirm `VERIFIED_FUTURE`, API conflict behavior, and the
+  preserved no-upload staging surface. Focused validation passed the real
+  PostgreSQL replacement module 14/14, legacy price-book module 42/42,
+  local-access/composition/gateway slice 74/74, and operator module 16/16.
+- The tracked staging browser confirmation phase consumes the exact validated
+  operator proof, authenticates through the real staging gateway, proves
+  registered-observation `VALIDATED -> VERIFIED_FUTURE`, compares exact CURRENT
+  and candidate tiers, binds the submitted confirmation body to the reviewed
+  preview, downloads and hashes the registered raw source, and destroys the
+  authenticated page before writing aggregate proof. Its CDP contract pins
+  source/driver/Node/Chromium/TLS identities, guards the exact Chromium target
+  inventory and request ledger, blocks external network paths, and retains no
+  cookie, CSRF value, passphrase, raw download, or DOM. Focused browser tests
+  passed 6/6; independent live Chromium-152 target/teardown probes passed.
+  This is source/probe evidence only: no real gateway browser confirmation is
+  claimed yet.
+- The one-shot accepted-research materializer is now in the frozen image
+  `sha256:64b2f821aaa12b2c4297f4d28e4f112d98698f204716f36ac81500974ebc0a6f`
+  built from clean `f9cd28f` / tree `2c7efd855001bbbe4a70defe07b6684e8c2d60a2`.
+  It publishes the exact accepted 77-record release atomically to the durable
+  volume, validates crash/replay states, restores `/data` metadata, removes
+  transfer state, and performs the final parent-directory durability barrier
+  on every successful path. The local lifecycle pins the direct Docker 27.5.1
+  CLI bytes, daemon/runtime projection, full image/layer/config identity,
+  explicitly created labeled volume, exact read-only/no-network/capability/
+  resource/mount envelope, clean exit timestamps, replay without ingress, and
+  owned cleanup. Materializer tests passed 9/9; the lifecycle module passed
+  14/14, including public-only real-Docker create/inspect/remove and expected
+  empty-release failure/cleanup probes. No private release payload was mounted
+  or materialized in these probes.
+- The next launcher layer is deliberately still non-executable. Its pure
+  browser-worker protocol uses bounded canonical request/READY/RESULT frames,
+  exact credential-free operator/browser proof schemas, parent-observed source,
+  Python/module/driver/Node/Chromium PID+start-time/preflight attestation before
+  any credential release, exact READY digest binding in RESULT, and four
+  distinct blocking directional anonymous pipes with CLOEXEC. Named FIFOs,
+  descriptor aliases, wrong directions, nonblocking pipes, oversized/noncanonical
+  descriptors, nested credential fields, mutable frame races, and forged
+  identities refuse. `main()` still rejects the hidden mode silently; no worker
+  is spawned and no passphrase is read or written. Independent read-only review
+  found no remaining P0/P1/P2. The module and exact discovery-floor checks pass
+  20/20, with module floor 18 and global discovery floor 1,482; compilation and
+  `git diff --check` pass.
+- Integrated Task-9 acceptance is **not complete**. There is still no executed
+  isolated worker, private clean source/dependency snapshot, local TLS/NSS
+  composition, real root/Tini gateway run, Backup V2/APPLY, derived
+  2-DRAFT/3-line/14-member `$282 + $7 = $289` result, corrected private research
+  replay/concurrency/idle/crash/restart proof, or final RSS/cgroup/OOM/cleanup
+  evidence. The exact next authorized implementation boundary is the isolated
+  launcher that performs all source/runtime/process preflight before releasing
+  the 43-byte owner passphrase through the dedicated pipe. The subsequent real
+  replay must recheck memory immediately, use the frozen image/owned volume,
+  preserve private inputs read-only, and stop on any failed gate. Qualified,
+  attributable independent review remains unavailable, so operational status
+  stays **REVIEW BLOCKED** and Railway deployment remains prohibited.
+
 ### Railway staging delivery — TASKS 6–8 SOURCE/IMAGE CHECKPOINT PASS / TASK 9 OPTION-B+CLOCK FOCUSED PASS / INTEGRATED ACCEPTANCE AND QUALIFIED REVIEW BLOCKED
 
 - Work is on the sole-writer branch `codex/railway-staging-delivery`. The exact
