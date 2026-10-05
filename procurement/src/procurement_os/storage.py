@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import stat
 import tempfile
+import hashlib
 
 
 class StorageAdapter(ABC):
@@ -118,6 +119,115 @@ class LocalFilesystemStorage(StorageAdapter):
                 os.close(directory_descriptor)
         finally:
             temporary_path.unlink(missing_ok=True)
+            try:
+                staging.rmdir()
+            except OSError:
+                # Another in-flight writer or crash debris must remain visible
+                # to the composition root instead of being removed here.
+                pass
+
+    def require_clean_immutable_staging(self) -> None:
+        """Require the internal create-once staging directory to be empty/safe."""
+
+        staging = self._root.resolve() / ".immutable-staging"
+        try:
+            info = staging.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        if (
+            staging.is_symlink()
+            or not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o700
+            or any(staging.iterdir())
+        ):
+            raise PermissionError("immutable staging directory is not clean")
+        staging.rmdir()
+
+    def read_bytes_once(
+        self,
+        key: str,
+        expected_sha256: str,
+        expected_size: int,
+    ) -> bytes:
+        """Read one immutable object through a stable, private inode."""
+
+        path = self._path(key)
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(
+                path,
+                os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
+            )
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or stat.S_IMODE(before.st_mode) != 0o600
+                or before.st_uid != os.getuid()
+                or before.st_gid != os.getgid()
+                or before.st_nlink != 1
+                or before.st_size != expected_size
+            ):
+                raise PermissionError("immutable storage object is unsafe")
+            digest = hashlib.sha256()
+            chunks: list[bytes] = []
+            observed = 0
+            while observed <= expected_size:
+                block = os.read(
+                    descriptor,
+                    min(1024 * 1024, expected_size + 1 - observed),
+                )
+                if not block:
+                    break
+                chunks.append(block)
+                digest.update(block)
+                observed += len(block)
+            after = os.fstat(descriptor)
+            named = path.stat(follow_symlinks=False)
+            before_identity = (
+                before.st_dev,
+                before.st_ino,
+                before.st_mode,
+                before.st_uid,
+                before.st_gid,
+                before.st_nlink,
+                before.st_size,
+                before.st_mtime_ns,
+                before.st_ctime_ns,
+            )
+            if (
+                observed != expected_size
+                or before_identity
+                != (
+                    after.st_dev,
+                    after.st_ino,
+                    after.st_mode,
+                    after.st_uid,
+                    after.st_gid,
+                    after.st_nlink,
+                    after.st_size,
+                    after.st_mtime_ns,
+                    after.st_ctime_ns,
+                )
+                or before_identity
+                != (
+                    named.st_dev,
+                    named.st_ino,
+                    named.st_mode,
+                    named.st_uid,
+                    named.st_gid,
+                    named.st_nlink,
+                    named.st_size,
+                    named.st_mtime_ns,
+                    named.st_ctime_ns,
+                )
+                or digest.hexdigest() != expected_sha256
+            ):
+                raise PermissionError("immutable storage object differs")
+            return b"".join(chunks)
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
 
     def get_bytes(self, key: str) -> bytes:
         return self._path(key).read_bytes()

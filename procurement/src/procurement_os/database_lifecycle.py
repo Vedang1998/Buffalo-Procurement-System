@@ -75,6 +75,14 @@ def assert_database_lifecycle_lock(conn: Any, *, lock_name: str) -> None:
     """Prove that this backend still owns the exact session advisory lock."""
 
     _validate_lock_name(lock_name)
+    row = conn.execute(
+        "SELECT pg_catalog.current_database()::text"
+    ).fetchone()
+    if (
+        row is None
+        or lock_name != database_lifecycle_lock_name(str(row[0]))
+    ):
+        raise DatabaseLifecycleError("database lifecycle identity differs")
     if not _session_holds_lock(conn, lock_name):
         raise DatabaseLifecycleError("database lifecycle lock is no longer held")
 

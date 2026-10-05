@@ -65,6 +65,13 @@ from .synthetic_price_replacement_contract import (
     CATALOG_SHA256,
     FIXTURE_REGISTRATION_CANONICAL_SHA256,
     MIGRATION_SHA256,
+    REGISTERED_OPERATOR_BOOK_BYTES,
+    REGISTERED_OPERATOR_BOOK_REF,
+    REGISTERED_OPERATOR_BOOK_SHA256,
+    STOPPED_SERVICE_PRICE_STAGE_AUTHN_SHA256,
+    STOPPED_SERVICE_PRICE_STAGE_CONTRACT,
+    STOPPED_SERVICE_PRICE_STAGE_PRINCIPAL,
+    STOPPED_SERVICE_PRICE_STAGE_ROLE,
     verify_synthetic_price_replacement_contract,
 )
 
@@ -492,26 +499,434 @@ def _declared_validation(
     return validation
 
 
-def stage_and_validate_declared_price_book(
+def _verified_storage_write_once(
+    storage: StorageAdapter, key: str, data: bytes
+) -> None:
+    publish = getattr(storage, "put_bytes_once", None)
+    if not callable(publish):
+        raise SyntheticPriceReplacementError(
+            "DECLARED_PRICE_IMMUTABLE_STORAGE_REQUIRED"
+        )
+    try:
+        publish(key, data)
+    except FileExistsError:
+        pass
+    read_once = getattr(storage, "read_bytes_once", None)
+    if not callable(read_once):
+        raise SyntheticPriceReplacementError(
+            "DECLARED_PRICE_IMMUTABLE_STORAGE_REQUIRED"
+        )
+    try:
+        observed = read_once(
+            key,
+            hashlib.sha256(data).hexdigest(),
+            len(data),
+        )
+    except (OSError, ValueError) as exc:
+        raise SyntheticPriceReplacementError(
+            "DECLARED_PRICE_IMMUTABLE_STORAGE_DIFFERS"
+        ) from exc
+    if observed != data:
+        raise SyntheticPriceReplacementError(
+            "DECLARED_PRICE_IMMUTABLE_STORAGE_DIFFERS"
+        )
+
+
+def _verified_operator_storage_read(
+    storage: StorageAdapter,
+    key: str,
+    expected_sha256: str,
+) -> bytes:
+    read_once = getattr(storage, "read_bytes_once", None)
+    if not callable(read_once):
+        raise SyntheticPriceReplacementError(
+            "DECLARED_PRICE_IMMUTABLE_STORAGE_REQUIRED"
+        )
+    try:
+        return read_once(
+            key,
+            expected_sha256,
+            REGISTERED_OPERATOR_BOOK_BYTES,
+        )
+    except (OSError, ValueError) as exc:
+        raise SyntheticPriceReplacementError(
+            "DECLARED_PRICE_IMMUTABLE_STORAGE_DIFFERS"
+        ) from exc
+
+
+def _verified_declared_raw_read(
+    storage: StorageAdapter,
+    key: str,
+    expected_sha256: str,
+    *,
+    staged_by: str,
+    validation_evidence: Any,
+) -> bytes:
+    observed = (
+        validation_evidence.get("stopped_service_operator_stage")
+        if isinstance(validation_evidence, dict)
+        else None
+    )
+    operator_staged = staged_by == STOPPED_SERVICE_PRICE_STAGE_PRINCIPAL
+    if operator_staged != isinstance(observed, dict):
+        raise SyntheticPriceReplacementError(
+            "stopped-service price-stage evidence differs"
+        )
+    if operator_staged:
+        if (
+            key
+            != f"price-books/raw/{REGISTERED_OPERATOR_BOOK_SHA256}.csv"
+            or expected_sha256 != REGISTERED_OPERATOR_BOOK_SHA256
+            or observed.get("contract")
+            != STOPPED_SERVICE_PRICE_STAGE_CONTRACT
+            or observed.get("source_ref") != REGISTERED_OPERATOR_BOOK_REF
+            or observed.get("source_bytes") != REGISTERED_OPERATOR_BOOK_BYTES
+            or observed.get("raw_sha256")
+            != REGISTERED_OPERATOR_BOOK_SHA256
+        ):
+            raise SyntheticPriceReplacementError(
+                "stopped-service price-stage evidence differs"
+            )
+        return _verified_operator_storage_read(
+            storage,
+            key,
+            expected_sha256,
+        )
+    return _verified_storage_read(storage, key, expected_sha256)
+
+
+def _operator_stage_evidence(
+    *,
+    principal: Principal,
+    declaration_sha256: str,
+    validation_fingerprint: str,
+    proposed_scope_membership_sha256: str,
+    staging_rows_sha256: str,
+    validation_issues_sha256: str,
+) -> dict[str, Any]:
+    from .synthetic_staging_database import EXPECTED_RUNTIME_ATTESTATION_IDENTITY
+
+    evidence = {
+        "contract": STOPPED_SERVICE_PRICE_STAGE_CONTRACT,
+        "source_ref": REGISTERED_OPERATOR_BOOK_REF,
+        "source_bytes": REGISTERED_OPERATOR_BOOK_BYTES,
+        "raw_sha256": REGISTERED_OPERATOR_BOOK_SHA256,
+        "principal_ref": principal.principal_ref,
+        "role_ref": principal.role_ref,
+        "authn_context_sha256": principal.authn_context_sha256,
+        "declaration_sha256": declaration_sha256,
+        "validation_fingerprint": validation_fingerprint,
+        "proposed_scope_membership_sha256": (
+            proposed_scope_membership_sha256
+        ),
+        "staging_rows_sha256": staging_rows_sha256,
+        "validation_issues_sha256": validation_issues_sha256,
+        "target_attestation_sha256": EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+        "commercial_authority": False,
+        "real_price_approval": False,
+    }
+    return {**evidence, "evidence_sha256": _sha256(evidence)}
+
+
+def _operator_validation_evidence(
+    validation: Mapping[str, Any],
+    *,
+    principal: Principal,
+    declaration_sha256: str,
+    proposed_scope_membership_sha256: str,
+    staging_rows_sha256: str,
+    validation_issues_sha256: str,
+) -> dict[str, Any]:
+    operator = _operator_stage_evidence(
+        principal=principal,
+        declaration_sha256=declaration_sha256,
+        validation_fingerprint=str(validation["validation_fingerprint"]),
+        proposed_scope_membership_sha256=proposed_scope_membership_sha256,
+        staging_rows_sha256=staging_rows_sha256,
+        validation_issues_sha256=validation_issues_sha256,
+    )
+    return {
+        **dict(validation["validation_evidence"]),
+        "proposed_scope_membership_sha256": (
+            proposed_scope_membership_sha256
+        ),
+        "stopped_service_operator_stage": operator,
+    }
+
+
+def _operator_projection_hashes(conn: Any, batch_id: str) -> tuple[str, str]:
+    row = conn.execute(
+        """SELECT
+             persistent_mapping_json_sha256(COALESCE((
+               SELECT jsonb_agg(to_jsonb(s)-'price_book_staging_row_id'
+                                ORDER BY s.source_row_number)
+                 FROM price_book_staging_rows s
+                WHERE s.price_book_batch_id=%s),'[]'::jsonb)),
+             persistent_mapping_json_sha256(COALESCE((
+               SELECT jsonb_agg(to_jsonb(i)-'price_book_validation_issue_id'
+                                ORDER BY i.severity,i.source_row_number NULLS FIRST,
+                                         i.offer_id NULLS FIRST,i.issue_code,
+                                         i.vendor_id NULLS FIRST,
+                                         i.variant_id NULLS FIRST,i.message)
+                 FROM price_book_validation_issues i
+                WHERE i.price_book_batch_id=%s),'[]'::jsonb))""",
+        (batch_id, batch_id),
+    ).fetchone()
+    if (
+        row is None
+        or _SHA256.fullmatch(str(row[0])) is None
+        or _SHA256.fullmatch(str(row[1])) is None
+    ):
+        raise SyntheticPriceReplacementError(
+            "STOPPED_SERVICE_PRICE_STAGE_PROJECTION_DIFFERS"
+        )
+    return str(row[0]), str(row[1])
+
+
+def _validation_issue_records(
+    validation: Mapping[str, Any],
+) -> tuple[tuple[Any, ...], ...]:
+    return tuple(
+        (
+            issue["source_row_number"],
+            issue["code"],
+            issue["severity"],
+            None if issue["vendor_id"] is None else str(issue["vendor_id"]),
+            None if issue["variant_id"] is None else str(issue["variant_id"]),
+            issue["offer_id"],
+            issue["message"],
+            None,
+        )
+        for issue in validation["issues"]
+    )
+
+
+def _assert_operator_replay(
+    conn: Any,
+    storage: StorageAdapter,
+    *,
+    existing: Mapping[str, Any],
+    parsed: Mapping[str, Any],
+    declaration: Mapping[str, Any],
+    validation: Mapping[str, Any],
+    principal: Principal,
+    raw_key: str,
+    csv_bytes: bytes,
+) -> str:
+    batch_id = str(existing["batch_id"])
+    if (
+        str(existing["vendor_id"]) != str(validation["vendor_id"])
+        or existing["vendor_name"] != parsed["vendor_name"]
+        or existing["batch_ref"] != parsed["batch_ref"]
+        or existing["content_sha256"] != parsed["content_sha256"]
+        or existing["raw_storage_key"] != raw_key
+        or existing["status"] != "VALIDATED"
+        or existing["validation_fingerprint"]
+        != validation["validation_fingerprint"]
+        or existing["target_price_state"] != parsed["target_price_state"]
+        or existing["effective_from"] != parsed["effective_from"]
+        or existing["effective_through"] != parsed["effective_through"]
+        or existing["replacement_contract"] != CONTRACT
+        or existing["schedule_policy_ref"]
+        != declaration["schedule_policy_ref"]
+        or existing["price_scope_key"] != declaration["price_scope_key"]
+        or existing["declaration_sha256"]
+        != declaration["declaration_sha256"]
+        or existing["future_predecessor_sha256"]
+        != validation["future_predecessor_sha256"]
+        or (
+            None
+            if existing["future_predecessor_batch_id"] is None
+            else str(existing["future_predecessor_batch_id"])
+        )
+        != validation["future_predecessor_batch_id"]
+        or existing["source_period_label"]
+        != declaration["source_period_label"]
+        or existing["source_valid_from"]
+        != date.fromisoformat(str(declaration["source_valid_from"]))
+        or existing["source_valid_through"]
+        != date.fromisoformat(str(declaration["source_valid_through"]))
+        or existing["source_validity_basis"]
+        != declaration["source_validity_basis"]
+        or existing["supplier_verified_at"].isoformat()
+        != declaration["supplier_verified_at"]
+        or existing["operational_effective_from"]
+        != parsed["effective_from"]
+        or existing["operational_effective_through"]
+        != parsed["effective_through"]
+        or existing["staged_by"] != principal.principal_ref
+        or int(existing["row_count"]) != len(parsed["rows"])
+        or int(existing["valid_row_count"])
+        != int(validation["valid_row_count"])
+        or int(existing["error_count"]) != 0
+        or int(existing["warning_count"])
+        != int(validation["warning_count"])
+        or int(existing["expected_offer_count"])
+        != int(validation["expected_offer_count"])
+        or int(existing["covered_offer_count"])
+        != int(validation["covered_offer_count"])
+        or int(existing["missing_offer_count"]) != 0
+        or existing["scope_membership_sha256"] is not None
+        or any(
+            existing[name] is not None
+            for name in (
+                "promoted_by",
+                "promoted_at",
+                "disposition_by",
+                "disposition_reason",
+                "disposition_at",
+            )
+        )
+    ):
+        raise SyntheticPriceReplacementError(
+            "STOPPED_SERVICE_PRICE_STAGE_REPLAY_DIFFERS"
+        )
+    if _verified_operator_storage_read(
+        storage,
+        raw_key,
+        str(parsed["content_sha256"]),
+    ) != csv_bytes:
+        raise SyntheticPriceReplacementError(
+            "STOPPED_SERVICE_PRICE_STAGE_REPLAY_DIFFERS"
+        )
+    typed = _parsed_from_staging(
+        conn,
+        (
+            existing["batch_id"],
+            None,
+            parsed["vendor_name"],
+            parsed["batch_ref"],
+            parsed["target_price_state"],
+            parsed["effective_from"],
+            parsed["content_sha256"],
+            parsed["effective_through"],
+            None,
+            len(parsed["rows"]),
+        ),
+    )
+    typed_validation = _declared_validation(conn, typed, declaration)
+    proposed = _proposed_membership_sha256(conn, batch_id)
+    staging_rows_sha256, validation_issues_sha256 = _operator_projection_hashes(
+        conn, batch_id
+    )
+    expected_evidence = _operator_validation_evidence(
+        validation,
+        principal=principal,
+        declaration_sha256=str(declaration["declaration_sha256"]),
+        proposed_scope_membership_sha256=proposed,
+        staging_rows_sha256=staging_rows_sha256,
+        validation_issues_sha256=validation_issues_sha256,
+    )
+    actual_issues = tuple(
+        (
+            row[0],
+            row[1],
+            row[2],
+            None if row[3] is None else str(row[3]),
+            None if row[4] is None else str(row[4]),
+            row[5],
+            row[6],
+            row[7],
+        )
+        for row in conn.execute(
+            """SELECT source_row_number,issue_code,severity,vendor_id,variant_id,
+                      offer_id,message,resolved_at
+                 FROM price_book_validation_issues
+                WHERE price_book_batch_id=%s
+                ORDER BY severity,source_row_number NULLS FIRST,
+                         offer_id NULLS FIRST,issue_code,
+                         vendor_id NULLS FIRST,variant_id NULLS FIRST,message""",
+            (batch_id,),
+        ).fetchall()
+    )
+    downstream = conn.execute(
+        """SELECT
+             (SELECT count(*) FROM price_book_scope_memberships
+               WHERE price_book_batch_id=%s),
+             (SELECT count(*) FROM price_book_promotion_events
+               WHERE price_book_batch_id=%s),
+             (SELECT count(*) FROM prices
+               WHERE source_price_book_batch_id=%s)""",
+        (batch_id, batch_id, batch_id),
+    ).fetchone()
+    if (
+        typed_validation["validation_fingerprint"]
+        != validation["validation_fingerprint"]
+        or existing["validation_evidence"] != expected_evidence
+        or actual_issues != _validation_issue_records(validation)
+        or downstream != (0, 0, 0)
+    ):
+        raise SyntheticPriceReplacementError(
+            "STOPPED_SERVICE_PRICE_STAGE_REPLAY_DIFFERS"
+        )
+    return batch_id
+
+
+def _stage_and_validate_declared_price_book(
     conn: Any,
     storage: StorageAdapter,
     *,
     csv_bytes: bytes,
     principal: Principal,
     expected_declaration_sha256: str,
+    operator_stage: bool,
+    operator_lock_name: str | None,
 ) -> dict[str, Any]:
-    """Persist one declared candidate; operational CURRENT remains unchanged."""
-
     require_process_policy()
     principal.validate()
-    if principal.role_ref != "procurement.price.approve":
+    if operator_stage:
+        if (
+            principal.principal_ref != STOPPED_SERVICE_PRICE_STAGE_PRINCIPAL
+            or principal.role_ref != STOPPED_SERVICE_PRICE_STAGE_ROLE
+            or principal.authn_context_sha256
+            != STOPPED_SERVICE_PRICE_STAGE_AUTHN_SHA256
+        ):
+            raise SyntheticPriceReplacementError("DECLARED_PRICE_PRINCIPAL_DIFFERS")
+    elif principal.role_ref != "procurement.price.approve":
         raise SyntheticPriceReplacementError("DECLARED_PRICE_PRINCIPAL_DIFFERS")
     parsed = parse_price_book_csv(csv_bytes)
+    if operator_stage and (
+        len(csv_bytes) != REGISTERED_OPERATOR_BOOK_BYTES
+        or parsed["content_sha256"] != REGISTERED_OPERATOR_BOOK_SHA256
+    ):
+        raise SyntheticPriceReplacementError("STOPPED_SERVICE_PRICE_SOURCE_DIFFERS")
     raw_key = f"price-books/raw/{parsed['content_sha256']}.csv"
     replay = False
     with conn.transaction():
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         require_attested_database(conn)
+        if operator_stage:
+            if not operator_lock_name:
+                raise SyntheticPriceReplacementError(
+                    "STOPPED_SERVICE_PRICE_STAGE_LOCK_ABSENT"
+                )
+            from .database_lifecycle import assert_database_lifecycle_lock
+            from .synthetic_staging_database import (
+                EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+                attest_runtime_connection,
+                target_from_environment,
+            )
+
+            operator_target = target_from_environment(os.environ)
+            if (
+                attest_runtime_connection(conn, operator_target)
+                != EXPECTED_RUNTIME_ATTESTATION_IDENTITY
+            ):
+                raise SyntheticPriceReplacementError(
+                    "STOPPED_SERVICE_PRICE_STAGE_TARGET_DIFFERS"
+                )
+            conn.execute(
+                f'SET LOCAL search_path = "{SCHEMA}",pg_catalog'
+            )
+
+            assert_database_lifecycle_lock(
+                conn,
+                lock_name=operator_lock_name,
+            )
+        elif operator_lock_name is not None:
+            raise SyntheticPriceReplacementError(
+                "STOPPED_SERVICE_PRICE_STAGE_LOCK_UNEXPECTED"
+            )
         _transaction_lock(conn)
         declaration = _registered_declaration(
             conn,
@@ -523,35 +938,119 @@ def stage_and_validate_declared_price_book(
             raise SyntheticPriceReplacementError(
                 "SYNTHETIC_PRICE_DECLARATION_HASH_DIFFERS"
             )
-        existing = conn.execute(
-            """SELECT price_book_batch_id,content_sha256,raw_storage_key,status,
-                      validation_fingerprint,target_price_state,effective_from,
-                      effective_through,replacement_contract,schedule_policy_ref,
-                      price_scope_key,declaration_sha256
+        validation = _declared_validation(conn, parsed, declaration)
+        if operator_stage and validation["error_count"] != 0:
+            raise SyntheticPriceReplacementError(
+                "STOPPED_SERVICE_PRICE_STAGE_NOT_VALIDATED"
+            )
+        existing_row = conn.execute(
+            """SELECT price_book_batch_id,vendor_id,vendor_name,batch_ref,
+                      content_sha256,raw_storage_key,status,validation_fingerprint,
+                      target_price_state,effective_from,effective_through,
+                      replacement_contract,schedule_policy_ref,price_scope_key,
+                      declaration_sha256,staged_by,validation_evidence,row_count,
+                      valid_row_count,error_count,warning_count,
+                      expected_offer_count,covered_offer_count,missing_offer_count,
+                      scope_membership_sha256,future_predecessor_sha256,
+                      future_predecessor_batch_id,source_period_label,
+                      source_valid_from,source_valid_through,source_validity_basis,
+                      supplier_verified_at,operational_effective_from,
+                      operational_effective_through,promoted_by,promoted_at,
+                      disposition_by,disposition_reason,disposition_at
                  FROM price_book_batches
                 WHERE vendor_name=%s AND batch_ref=%s""",
             (parsed["vendor_name"], parsed["batch_ref"]),
         ).fetchone()
-        if existing is not None:
+        existing_keys = (
+            "batch_id", "vendor_id", "vendor_name", "batch_ref",
+            "content_sha256", "raw_storage_key", "status",
+            "validation_fingerprint", "target_price_state", "effective_from",
+            "effective_through", "replacement_contract", "schedule_policy_ref",
+            "price_scope_key", "declaration_sha256", "staged_by",
+            "validation_evidence", "row_count", "valid_row_count", "error_count",
+            "warning_count", "expected_offer_count", "covered_offer_count",
+            "missing_offer_count", "scope_membership_sha256",
+            "future_predecessor_sha256", "future_predecessor_batch_id",
+            "source_period_label", "source_valid_from", "source_valid_through",
+            "source_validity_basis", "supplier_verified_at",
+            "operational_effective_from", "operational_effective_through",
+            "promoted_by", "promoted_at", "disposition_by",
+            "disposition_reason", "disposition_at",
+        )
+        existing = (
+            None
+            if existing_row is None
+            else dict(zip(existing_keys, existing_row, strict=True))
+        )
+        if operator_stage:
+            inventory = conn.execute(
+                """SELECT price_book_batch_id::text
+                     FROM price_book_batches
+                    WHERE replacement_contract=%s
+                      AND schedule_policy_ref=%s
+                      AND price_scope_key=%s
+                    ORDER BY price_book_batch_id""",
+                (
+                    CONTRACT,
+                    declaration["schedule_policy_ref"],
+                    declaration["price_scope_key"],
+                ),
+            ).fetchall()
             if (
-                existing[1] != parsed["content_sha256"]
-                or existing[5] != parsed["target_price_state"]
-                or existing[6] != parsed["effective_from"]
-                or existing[7] != parsed["effective_through"]
-                or existing[8] != CONTRACT
-                or existing[9] != declaration["schedule_policy_ref"]
-                or existing[10] != declaration["price_scope_key"]
-                or existing[11] != declaration["declaration_sha256"]
+                (existing is None and inventory)
+                or (
+                    existing is not None
+                    and inventory != [(str(existing["batch_id"]),)]
+                )
             ):
                 raise SyntheticPriceReplacementError(
-                    "batch_ref already exists with different immutable declared input"
+                    "STOPPED_SERVICE_PRICE_STAGE_INVENTORY_DIFFERS"
                 )
-            _verified_storage_read(storage, existing[2], existing[1])
-            batch_id = str(existing[0])
-            replay = True
+        if existing is not None:
+            if operator_stage:
+                batch_id = _assert_operator_replay(
+                    conn,
+                    storage,
+                    existing=existing,
+                    parsed=parsed,
+                    declaration=declaration,
+                    validation=validation,
+                    principal=principal,
+                    raw_key=raw_key,
+                    csv_bytes=csv_bytes,
+                )
+                replay = True
+            else:
+                if (
+                    existing["content_sha256"] != parsed["content_sha256"]
+                    or existing["target_price_state"]
+                    != parsed["target_price_state"]
+                    or existing["effective_from"] != parsed["effective_from"]
+                    or existing["effective_through"]
+                    != parsed["effective_through"]
+                    or existing["replacement_contract"] != CONTRACT
+                    or existing["schedule_policy_ref"]
+                    != declaration["schedule_policy_ref"]
+                    or existing["price_scope_key"]
+                    != declaration["price_scope_key"]
+                    or existing["declaration_sha256"]
+                    != declaration["declaration_sha256"]
+                ):
+                    raise SyntheticPriceReplacementError(
+                        "batch_ref already exists with different immutable declared input"
+                    )
+                _verified_storage_read(
+                    storage,
+                    existing["raw_storage_key"],
+                    existing["content_sha256"],
+                )
+                batch_id = str(existing["batch_id"])
+                replay = True
         else:
-            _verified_storage_write(storage, raw_key, csv_bytes)
-            validation = _declared_validation(conn, parsed, declaration)
+            if operator_stage:
+                _verified_storage_write_once(storage, raw_key, csv_bytes)
+            else:
+                _verified_storage_write(storage, raw_key, csv_bytes)
             batch_id = str(
                 conn.execute(
                     """INSERT INTO price_book_batches(
@@ -661,6 +1160,21 @@ def stage_and_validate_declared_price_book(
                     ),
                 )
             status = "INVALID" if validation["error_count"] else "VALIDATED"
+            validation_evidence = dict(validation["validation_evidence"])
+            if operator_stage:
+                proposed = _proposed_membership_sha256(conn, batch_id)
+                (
+                    staging_rows_sha256,
+                    validation_issues_sha256,
+                ) = _operator_projection_hashes(conn, batch_id)
+                validation_evidence = _operator_validation_evidence(
+                    validation,
+                    principal=principal,
+                    declaration_sha256=str(declaration["declaration_sha256"]),
+                    proposed_scope_membership_sha256=proposed,
+                    staging_rows_sha256=staging_rows_sha256,
+                    validation_issues_sha256=validation_issues_sha256,
+                )
             conn.execute(
                 """UPDATE price_book_batches SET
                        status=%s,valid_row_count=%s,error_count=%s,warning_count=%s,
@@ -677,7 +1191,7 @@ def stage_and_validate_declared_price_book(
                     validation["covered_offer_count"],
                     validation["missing_offer_count"],
                     validation["validation_fingerprint"],
-                    json.dumps(validation["validation_evidence"], sort_keys=True),
+                    json.dumps(validation_evidence, sort_keys=True),
                     batch_id,
                 ),
             )
@@ -685,6 +1199,30 @@ def stage_and_validate_declared_price_book(
         result = get_declared_price_book_batch(conn, batch_id)
     result["idempotent_replay"] = replay
     return result
+
+
+def stage_and_validate_declared_price_book(
+    conn: Any,
+    storage: StorageAdapter,
+    *,
+    csv_bytes: bytes,
+    principal: Principal,
+    expected_declaration_sha256: str,
+) -> dict[str, Any]:
+    """Persist one browser-originated candidate; CURRENT remains unchanged."""
+
+    principal.validate()
+    if principal.role_ref != "procurement.price.approve":
+        raise SyntheticPriceReplacementError("DECLARED_PRICE_PRINCIPAL_DIFFERS")
+    return _stage_and_validate_declared_price_book(
+        conn,
+        storage,
+        csv_bytes=csv_bytes,
+        principal=principal,
+        expected_declaration_sha256=expected_declaration_sha256,
+        operator_stage=False,
+        operator_lock_name=None,
+    )
 
 
 def get_declared_price_book_batch(conn: Any, batch_id: str) -> dict[str, Any]:
@@ -803,6 +1341,53 @@ def _proposed_membership_sha256(conn: Any, batch_id: str) -> str:
     )
 
 
+def _require_operator_stage_evidence_for_confirmation(
+    conn: Any,
+    batch_id: str,
+    validation_evidence: Any,
+    *,
+    declaration_sha256: str,
+    validation_fingerprint: str,
+    proposed_scope_membership_sha256: str,
+    staged_by: str,
+) -> None:
+    if not isinstance(validation_evidence, dict):
+        raise SyntheticPriceReplacementError(
+            "stopped-service price-stage evidence differs"
+        )
+    observed = validation_evidence.get("stopped_service_operator_stage")
+    operator_staged = staged_by == STOPPED_SERVICE_PRICE_STAGE_PRINCIPAL
+    if operator_staged != isinstance(observed, dict):
+        raise SyntheticPriceReplacementError(
+            "stopped-service price-stage evidence differs"
+        )
+    if not operator_staged:
+        return
+    staging_rows_sha256, validation_issues_sha256 = _operator_projection_hashes(
+        conn, batch_id
+    )
+    expected = _operator_stage_evidence(
+        principal=Principal(
+            principal_ref=STOPPED_SERVICE_PRICE_STAGE_PRINCIPAL,
+            role_ref=STOPPED_SERVICE_PRICE_STAGE_ROLE,
+            authn_context_sha256=STOPPED_SERVICE_PRICE_STAGE_AUTHN_SHA256,
+        ),
+        declaration_sha256=declaration_sha256,
+        validation_fingerprint=validation_fingerprint,
+        proposed_scope_membership_sha256=proposed_scope_membership_sha256,
+        staging_rows_sha256=staging_rows_sha256,
+        validation_issues_sha256=validation_issues_sha256,
+    )
+    if (
+        observed != expected
+        or validation_evidence.get("proposed_scope_membership_sha256")
+        != proposed_scope_membership_sha256
+    ):
+        raise SyntheticPriceReplacementError(
+            "stopped-service price-stage evidence differs"
+        )
+
+
 def _confirmation_preview_in_transaction(
     conn: Any,
     storage: StorageAdapter,
@@ -822,7 +1407,7 @@ def _confirmation_preview_in_transaction(
                   price_scope_key,source_period_label,source_valid_from,
                   source_valid_through,source_validity_basis,supplier_verified_at,
                   operational_effective_from,operational_effective_through,
-                  scope_membership_sha256,declaration_sha256
+                  scope_membership_sha256,declaration_sha256,staged_by
              FROM price_book_batches
             WHERE price_book_batch_id=%s FOR UPDATE""",
         (batch_id,),
@@ -846,7 +1431,13 @@ def _confirmation_preview_in_transaction(
         raise SyntheticPriceReplacementError(
             "warning acknowledgement does not match declared batch"
         )
-    raw = _verified_storage_read(storage, batch[14], batch[6])
+    raw = _verified_declared_raw_read(
+        storage,
+        batch[14],
+        batch[6],
+        staged_by=batch[32],
+        validation_evidence=batch[16],
+    )
     parsed = parse_price_book_csv(raw)
     declaration = _registered_declaration(
         conn,
@@ -875,6 +1466,15 @@ def _confirmation_preview_in_transaction(
             "locked declared price-book revalidation differs"
         )
     membership_sha256 = _proposed_membership_sha256(conn, batch_id)
+    _require_operator_stage_evidence_for_confirmation(
+        conn,
+        batch_id,
+        batch[16],
+        declaration_sha256=str(batch[31]),
+        validation_fingerprint=str(batch[8]),
+        proposed_scope_membership_sha256=membership_sha256,
+        staged_by=str(batch[32]),
+    )
     policy = conn.execute(
         """SELECT policy_sha256,observation_at,application_at,monday_evaluation_at,
                   fixture_database_name
@@ -1072,13 +1672,19 @@ def confirm_declared_price_book(
                       warning_count,validation_evidence,batch_generation,
                       future_predecessor_sha256,future_predecessor_batch_id,
                       replacement_contract,schedule_policy_ref,price_scope_key,
-                      declaration_sha256
+                      declaration_sha256,staged_by
                  FROM price_book_batches WHERE price_book_batch_id=%s FOR UPDATE""",
             (batch_id,),
         ).fetchone()
         if batch is None or batch[7] != "VALIDATED" or batch[13] != CONTRACT:
             raise SyntheticPriceReplacementError("declared batch is not confirmable")
-        raw = _verified_storage_read(storage, f"price-books/raw/{batch[4]}.csv", batch[4])
+        raw = _verified_declared_raw_read(
+            storage,
+            f"price-books/raw/{batch[4]}.csv",
+            batch[4],
+            staged_by=batch[17],
+            validation_evidence=batch[9],
+        )
         parsed = parse_price_book_csv(raw)
         declaration = _registered_declaration(
             conn,
@@ -1323,7 +1929,8 @@ def _apply_snapshot(
                   e.price_book_promotion_event_id,e.promoted_future_sha256,
                   e.scope_membership_sha256,e.confirmation_payload_sha256,
                   h.supplier_price_authority_event_id::text,h.head_version,
-                  h.current_scope_sha256,h.active_price_book_batch_id::text
+                  h.current_scope_sha256,h.active_price_book_batch_id::text,
+                  b.staged_by,b.validation_evidence
              FROM price_book_batches b
              JOIN supplier_price_schedule_policies p
                ON p.policy_ref=b.schedule_policy_ref
@@ -1346,6 +1953,7 @@ def _apply_snapshot(
         "boundary_day","fixture_database","promotion_event_id","future_sha256",
         "promotion_membership_sha256","confirmation_payload_sha256",
         "prior_event_id","head_version","current_scope_sha256","active_batch_id",
+        "staged_by","validation_evidence",
     )
     state = dict(zip(keys, rows[0], strict=True))
     application_local = state["application_at"].astimezone(
@@ -1387,7 +1995,13 @@ def _apply_snapshot(
         ) != int(state["row_count"])
     ):
         raise SyntheticPriceReplacementError("replacement scope no longer matches confirmation")
-    _verified_storage_read(storage, state["raw_storage_key"], state["content_sha256"])
+    _verified_declared_raw_read(
+        storage,
+        state["raw_storage_key"],
+        state["content_sha256"],
+        staged_by=state["staged_by"],
+        validation_evidence=state["validation_evidence"],
+    )
     if (
         backup.database != conn.info.dbname
         or backup.batch_id != state["batch_id"]

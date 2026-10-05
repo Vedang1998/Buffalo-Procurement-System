@@ -101,6 +101,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_supplier_review_real_v5.py": 29,
     "test_supplier_review_v5.py": 16,
     "test_synthetic_price_replacement_postgres.py": 14,
+    "test_synthetic_staging_price_stage.py": 16,
     "test_synthetic_staging_backup_v2.py": 15,
     "test_synthetic_staging_database.py": 24,
     "test_synthetic_staging_transfer.py": 18,

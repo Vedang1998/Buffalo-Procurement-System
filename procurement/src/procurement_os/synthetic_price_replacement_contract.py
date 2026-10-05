@@ -19,6 +19,22 @@ FIXTURE_REGISTRATION_REF = "config/synthetic_price_replacement_fixture.json"
 FIXTURE_REGISTRATION_CANONICAL_SHA256 = (
     "4ac0137a42e79f560fbab6a4f6073324e553f2ca924d0e3a8c5956f51dd79659"
 )
+REGISTERED_OPERATOR_BOOK_REF = (
+    "procurement/config/synthetic_price_replacement_book.csv"
+)
+REGISTERED_OPERATOR_BOOK_PATH = "config/synthetic_price_replacement_book.csv"
+REGISTERED_OPERATOR_BOOK_BYTES = 1590
+REGISTERED_OPERATOR_BOOK_SHA256 = (
+    "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c"
+)
+STOPPED_SERVICE_PRICE_STAGE_CONTRACT = "BUFFALO_STOPPED_SERVICE_PRICE_STAGE_V1"
+STOPPED_SERVICE_PRICE_STAGE_PRINCIPAL = (
+    "synthetic:stopped-service-price-fixture:v1"
+)
+STOPPED_SERVICE_PRICE_STAGE_ROLE = "procurement.price.stage"
+STOPPED_SERVICE_PRICE_STAGE_AUTHN_SHA256 = (
+    "00da26f58b51399c6776c0953ef22a8c4fab9807e2d19f58d454c3c0686efcc6"
+)
 
 _RELATIONS = (
     "price_book_scope_memberships",
