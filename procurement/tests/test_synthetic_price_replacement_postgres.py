@@ -42,12 +42,19 @@ from procurement_os.procurement_review import (
     preview_recommendation_review,
     record_recommendation_review,
 )
+from procurement_os.price_book import (
+    get_price_book_batch,
+    stage_and_validate_price_book,
+)
 from procurement_os.storage import LocalFilesystemStorage
 from procurement_os.synthetic_price_replacement import (
     SyntheticPriceReplacementError,
+    _registered_observation_operational_status,
     _run_price_apply_with_retry,
     apply_price_replacement,
     confirm_declared_price_book,
+    get_declared_price_book_batch,
+    list_declared_price_book_batches,
     preview_declared_price_confirmation,
     preview_price_replacement,
     registered_target_declaration,
@@ -516,7 +523,99 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                     warning_review_reason=None,
                     principal=self.price_principal,
                 )
-        batch_id, _preview, confirmed = self._stage_and_confirm()
+        with self._connection() as conn:
+            declaration = registered_target_declaration(conn)
+            conn.commit()
+            staged = stage_and_validate_declared_price_book(
+                conn,
+                self.storage,
+                csv_bytes=self.book,
+                principal=self.price_principal,
+                expected_declaration_sha256=declaration["declaration_sha256"],
+            )
+            batch_id = str(staged["price_book_batch_id"])
+            generic = get_price_book_batch(conn, batch_id)
+            declared_detail = get_declared_price_book_batch(conn, batch_id)
+            declared_listing = {
+                str(item["price_book_batch_id"]): item
+                for item in list_declared_price_book_batches(conn)
+            }
+            declared_list = declared_listing[batch_id]
+            expected_generic_status = conn.execute(
+                """SELECT CASE
+                         WHEN date_trunc('month',%s::date)::date <>
+                              (date_trunc('month',(clock_timestamp() AT TIME ZONE
+                                 'America/New_York')) + interval '1 month')::date
+                         THEN 'TEMPORAL_BLOCKED' ELSE 'VALIDATED' END""",
+                (generic["effective_from"],),
+            ).fetchone()[0]
+            self.assertEqual(generic["status"], "VALIDATED")
+            self.assertEqual(generic["operational_status"], expected_generic_status)
+            for observed in (declared_detail, declared_list):
+                self.assertEqual(
+                    (observed["status"], observed["operational_status"]),
+                    ("VALIDATED", "VALIDATED"),
+                )
+                self.assertEqual(
+                    observed["temporal_basis"], "REGISTERED_OBSERVATION"
+                )
+                self.assertEqual(
+                    observed["registered_observation_at"],
+                    "2026-09-16T14:00:00+00:00",
+                )
+                self.assertEqual(observed["policy_timezone"], "America/New_York")
+            for host_now in (
+                datetime(2026, 9, 15, 12, tzinfo=timezone.utc),
+                datetime(2026, 10, 5, 12, tzinfo=timezone.utc),
+            ):
+                with self.subTest(host_now=host_now), mock.patch(
+                    "procurement_os.synthetic_price_replacement.datetime",
+                    wraps=datetime,
+                ) as host_datetime:
+                    host_datetime.now.return_value = host_now
+                    self.assertEqual(
+                        _registered_observation_operational_status(
+                            durable_status="VALIDATED",
+                            effective_from=date(2026, 10, 1),
+                            observation_at=datetime(
+                                2026, 9, 16, 14, tzinfo=timezone.utc
+                            ),
+                            policy_timezone="America/New_York",
+                        ),
+                        "VALIDATED",
+                    )
+                    host_datetime.now.assert_not_called()
+            conn.commit()
+            preview = preview_declared_price_confirmation(
+                conn,
+                self.storage,
+                batch_id=batch_id,
+                confirmation_idempotency_key="focused-price-confirm-v1",
+                warning_review_reason=WARNING_REASON,
+                principal=self.price_principal,
+            )
+            self.assertEqual(
+                (
+                    preview["temporal_basis"],
+                    preview["observation_at"],
+                    preview["policy_timezone"],
+                ),
+                (
+                    "REGISTERED_OBSERVATION",
+                    "2026-09-16T14:00:00+00:00",
+                    "America/New_York",
+                ),
+            )
+            confirmed = confirm_declared_price_book(
+                conn,
+                self.storage,
+                batch_id=batch_id,
+                confirmation_idempotency_key="focused-price-confirm-v1",
+                expected_preview_sha256=preview["preview_sha256"],
+                confirm="CONFIRM",
+                warning_review_reason=WARNING_REASON,
+                principal=self.price_principal,
+            )
         self.assertEqual(confirmed["status"], "VERIFIED_FUTURE")
         with self._connection() as conn:
             row = conn.execute(
@@ -532,6 +631,86 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(row[0].isoformat(), "2026-09-16T14:00:00+00:00")
         self.assertEqual(row[1:], (4, 4))
+        with self._connection() as conn:
+            generic_book = self.book.replace(
+                b"synthetic-october-replacement-v1",
+                b"generic-host-clock-control-v1",
+            )
+            generic_staged = stage_and_validate_price_book(
+                conn,
+                self.storage,
+                csv_bytes=generic_book,
+                actor="synthetic:clock-control:01",
+            )
+            generic_batch_id = str(generic_staged["price_book_batch_id"])
+            confirmed_detail = get_declared_price_book_batch(conn, batch_id)
+            confirmed_listing = {
+                str(item["price_book_batch_id"]): item
+                for item in list_declared_price_book_batches(conn)
+            }
+            confirmed_list = confirmed_listing[batch_id]
+            generic_detail = get_price_book_batch(conn, generic_batch_id)
+            self.assertEqual(
+                confirmed_listing[generic_batch_id]["operational_status"],
+                generic_detail["operational_status"],
+            )
+            self.assertNotIn(
+                "temporal_basis", confirmed_listing[generic_batch_id]
+            )
+        for observed in (confirmed_detail, confirmed_list):
+            self.assertEqual(
+                (observed["status"], observed["operational_status"]),
+                ("VERIFIED_FUTURE", "VERIFIED_FUTURE"),
+            )
+        with psycopg.connect(self.admin_url, autocommit=True) as admin:
+            admin.execute("SET session_replication_role=replica")
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                admin.execute(
+                    f'''UPDATE {mapping_matrix.SCHEMA}.supplier_price_schedule_policies
+                           SET policy_timezone='UTC'
+                         WHERE policy_ref='synthetic-southern-monthly-complete-v1' '''
+                )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                admin.execute(
+                    f'''UPDATE {mapping_matrix.SCHEMA}.supplier_price_schedule_policies
+                           SET effective_boundary_day=2
+                         WHERE policy_ref='synthetic-southern-monthly-complete-v1' '''
+                )
+            admin.execute(
+                f'''UPDATE {mapping_matrix.SCHEMA}.supplier_price_schedule_policies
+                       SET observation_at=observation_at + interval '1 day'
+                     WHERE policy_ref='synthetic-southern-monthly-complete-v1' '''
+            )
+        refused = (
+            lambda conn: list_declared_price_book_batches(conn),
+            lambda conn: get_declared_price_book_batch(conn, batch_id),
+            lambda conn: preview_declared_price_confirmation(
+                conn,
+                self.storage,
+                batch_id=batch_id,
+                confirmation_idempotency_key="policy-drift-refusal",
+                warning_review_reason=WARNING_REASON,
+                principal=self.price_principal,
+            ),
+            lambda conn: confirm_declared_price_book(
+                conn,
+                self.storage,
+                batch_id=batch_id,
+                confirmation_idempotency_key="focused-price-confirm-v1",
+                expected_preview_sha256=preview["preview_sha256"],
+                confirm="CONFIRM",
+                warning_review_reason=WARNING_REASON,
+                principal=self.price_principal,
+            ),
+        )
+        for operation in refused:
+            with self.subTest(operation=operation):
+                with self._connection() as conn:
+                    with self.assertRaisesRegex(
+                        SyntheticPriceReplacementError,
+                        "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED",
+                    ):
+                        operation(conn)
 
     def test_apply_late_failure_rolls_back_then_replays_without_control_vendor_change(self):
         batch_id, _confirmation_preview, _confirmed = self._stage_and_confirm()
@@ -597,6 +776,27 @@ class SyntheticPriceReplacementPostgresTests(unittest.TestCase):
                     confirm="CONFIRM",
                     principal=self.price_principal,
                 )
+            with psycopg.connect(self.admin_url, autocommit=True) as admin:
+                admin.execute("SET session_replication_role=replica")
+                admin.execute(
+                    f'''UPDATE {mapping_matrix.SCHEMA}.supplier_price_schedule_policies
+                           SET application_at=application_at + interval '1 day'
+                         WHERE policy_ref='synthetic-southern-monthly-complete-v1' '''
+                )
+            with self._connection() as conn:
+                with self.assertRaisesRegex(
+                    SyntheticPriceReplacementError,
+                    "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED",
+                ):
+                    apply_price_replacement(
+                        conn,
+                        self.storage,
+                        batch_id=batch_id,
+                        apply_idempotency_key=key,
+                        expected_preview_sha256=preview["preview_sha256"],
+                        confirm="CONFIRM",
+                        principal=self.price_principal,
+                    )
         self.assertFalse(applied["idempotent_replay"])
         self.assertTrue(replay["idempotent_replay"])
         self.assertEqual(

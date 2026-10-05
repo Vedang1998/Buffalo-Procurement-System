@@ -19,6 +19,7 @@ import time
 from typing import Any, Mapping
 from urllib.parse import urlparse
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import psycopg
 
@@ -46,7 +47,6 @@ from .price_book import (
     _transaction_lock,
     _verified_storage_read,
     _verified_storage_write,
-    get_price_book_batch,
     parse_price_book_csv,
 )
 from .storage import StorageAdapter
@@ -89,6 +89,14 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _APPLY_OPERATION_SECONDS = 20.0
 _APPLY_SCOPE_LOCK_PREFIX = "synthetic-price-replacement:scope:"
 _APPLY_KEY_LOCK_PREFIX = "synthetic-price-replacement:idempotency:"
+_POLICY_VERSION = 1
+_POLICY_CADENCE = "MONTHLY"
+_POLICY_TIMEZONE = "America/New_York"
+_OBSERVATION_WINDOW_START_DAY = 15
+_OBSERVATION_WINDOW_END_DAY = 20
+_EFFECTIVE_BOUNDARY_DAY = 1
+_POLICY_PRINCIPAL_REF = "synthetic:price-fixture-registration:01"
+_REGISTERED_OBSERVATION_BASIS = "REGISTERED_OBSERVATION"
 
 
 class SyntheticPriceReplacementError(PriceBookError):
@@ -270,13 +278,13 @@ def require_attested_database(conn: Any) -> None:
         ) from exc
 
 
-def _registered_declaration(
+def _registered_policy_evidence(
     conn: Any,
     *,
     vendor_name: str,
-    effective_from: date,
-    effective_through: date | None,
 ) -> dict[str, Any]:
+    """Return one exact DB-owned policy after verifying its full registration."""
+
     fixture = _fixture()
     matches = [
         item
@@ -289,38 +297,127 @@ def _registered_declaration(
             "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
         )
     registered = matches[0]
-    policy = conn.execute(
-        f'''SELECT policy_ref,vendor_id::text,price_scope_key,currency,
-                   policy_timezone,observation_at,application_at,
-                   monday_evaluation_at,policy_sha256,fixture_database_name
+    row = conn.execute(
+        f'''SELECT policy_ref,policy_version,vendor_id::text,price_scope_key,
+                   cadence,currency,policy_timezone,observation_window_start_day,
+                   observation_window_end_day,effective_boundary_day,
+                   source_validity_required,fixture_policy_config_sha256,
+                   fixture_database_name,policy_principal_ref,observation_at,
+                   application_at,monday_evaluation_at,policy_sha256
               FROM "{SCHEMA}".supplier_price_schedule_policies
              WHERE policy_ref=%s''',
         (registered["policy_ref"],),
     ).fetchone()
-    if policy is None or (
-        str(policy[0]),
-        str(policy[1]),
-        str(policy[2]),
-        str(policy[3]),
-        str(policy[4]),
-        policy[5].isoformat(),
-        policy[6].isoformat(),
-        policy[7].isoformat(),
-        str(policy[9]),
-    ) != (
-        registered["policy_ref"],
-        registered["vendor_id"],
-        registered["price_scope_key"],
-        registered["currency"],
-        fixture["policy_timezone"],
-        fixture["observation_at"],
-        fixture["application_at"],
-        fixture["monday_evaluation_at"],
-        conn.info.dbname,
-    ):
+    try:
+        expected_policy_sha256 = conn.execute(
+            f'SELECT "{SCHEMA}".persistent_mapping_json_sha256(%s::jsonb)',
+            (json.dumps(registered, sort_keys=True, separators=(",", ":")),),
+        ).fetchone()[0]
+        expected_observation = datetime.fromisoformat(fixture["observation_at"])
+        expected_application = datetime.fromisoformat(fixture["application_at"])
+        expected_monday = datetime.fromisoformat(fixture["monday_evaluation_at"])
+        database_name = str(conn.info.dbname)
+        if row is None or (
+            str(row[0]),
+            int(row[1]),
+            str(row[2]),
+            str(row[3]),
+            str(row[4]),
+            str(row[5]),
+            str(row[6]),
+            int(row[7]),
+            int(row[8]),
+            int(row[9]),
+            bool(row[10]),
+            str(row[11]),
+            str(row[12]),
+            str(row[13]),
+            row[14],
+            row[15],
+            row[16],
+            str(row[17]),
+        ) != (
+            registered["policy_ref"],
+            _POLICY_VERSION,
+            registered["vendor_id"],
+            registered["price_scope_key"],
+            _POLICY_CADENCE,
+            registered["currency"],
+            _POLICY_TIMEZONE,
+            _OBSERVATION_WINDOW_START_DAY,
+            _OBSERVATION_WINDOW_END_DAY,
+            _EFFECTIVE_BOUNDARY_DAY,
+            True,
+            FIXTURE_REGISTRATION_CANONICAL_SHA256,
+            database_name,
+            _POLICY_PRINCIPAL_REF,
+            expected_observation,
+            expected_application,
+            expected_monday,
+            str(expected_policy_sha256),
+        ):
+            raise SyntheticPriceReplacementError(
+                "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
+            )
+        timezone = ZoneInfo(str(row[6]))
+        observation_local = row[14].astimezone(timezone)
+        application_local = row[15].astimezone(timezone)
+        monday_local = row[16].astimezone(timezone)
+        next_month = (
+            date(observation_local.year + 1, 1, 1)
+            if observation_local.month == 12
+            else date(observation_local.year, observation_local.month + 1, 1)
+        )
+        if (
+            not int(row[7]) <= observation_local.day <= int(row[8])
+            or application_local.date() != next_month
+            or application_local.day != int(row[9])
+            or date.fromisoformat(fixture["source_valid_from"])
+            != application_local.date()
+            or monday_local.weekday() != 0
+            or row[16] <= row[15]
+            or row[15] <= row[14]
+        ):
+            raise SyntheticPriceReplacementError(
+                "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
+            )
+    except (
+        AttributeError,
+        IndexError,
+        TypeError,
+        ValueError,
+        ZoneInfoNotFoundError,
+    ) as exc:
         raise SyntheticPriceReplacementError(
             "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
-        )
+        ) from exc
+    return {
+        "registered": registered,
+        "fixture": fixture,
+        "policy_ref": str(row[0]),
+        "vendor_id": str(row[2]),
+        "price_scope_key": str(row[3]),
+        "currency": str(row[5]),
+        "policy_timezone": str(row[6]),
+        "observation_window_start_day": int(row[7]),
+        "observation_window_end_day": int(row[8]),
+        "effective_boundary_day": int(row[9]),
+        "observation_at": row[14],
+        "application_at": row[15],
+        "monday_evaluation_at": row[16],
+        "policy_sha256": str(row[17]),
+    }
+
+
+def _registered_declaration(
+    conn: Any,
+    *,
+    vendor_name: str,
+    effective_from: date,
+    effective_through: date | None,
+) -> dict[str, Any]:
+    policy = _registered_policy_evidence(conn, vendor_name=vendor_name)
+    fixture = policy["fixture"]
     source_from = date.fromisoformat(fixture["source_valid_from"])
     source_through = date.fromisoformat(fixture["source_valid_through"])
     if effective_from != source_from or effective_through != source_through:
@@ -330,12 +427,12 @@ def _registered_declaration(
     declaration = {
         "contract": DECLARATION_CONTRACT,
         "fixture_registration_sha256": FIXTURE_REGISTRATION_CANONICAL_SHA256,
-        "schedule_policy_ref": policy[0],
-        "policy_sha256": policy[8],
-        "vendor_id": policy[1],
+        "schedule_policy_ref": policy["policy_ref"],
+        "policy_sha256": policy["policy_sha256"],
+        "vendor_id": policy["vendor_id"],
         "vendor_name": vendor_name,
-        "price_scope_key": policy[2],
-        "currency": policy[3],
+        "price_scope_key": policy["price_scope_key"],
+        "currency": policy["currency"],
         "source_period_label": fixture["source_period_label"],
         "source_valid_from": source_from.isoformat(),
         "source_valid_through": source_through.isoformat(),
@@ -392,18 +489,173 @@ def registered_monday_evaluation_at(conn: Any) -> datetime:
         raise SyntheticPriceReplacementError(
             "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
         )
-    row = conn.execute(
-        f'''SELECT monday_evaluation_at
-              FROM "{SCHEMA}".supplier_price_schedule_policies
-             WHERE policy_ref=%s AND fixture_database_name=current_database()''',
-        (targets[0]["policy_ref"],),
-    ).fetchone()
-    expected = datetime.fromisoformat(fixture["monday_evaluation_at"])
-    if row is None or row[0] != expected:
+    policy = _registered_policy_evidence(
+        conn, vendor_name=str(targets[0]["vendor_name"])
+    )
+    return policy["monday_evaluation_at"]
+
+
+def _registered_observation_operational_status(
+    *,
+    durable_status: str,
+    effective_from: date,
+    observation_at: datetime,
+    policy_timezone: str,
+) -> str:
+    """Evaluate declared FUTURE timing without consulting the host clock."""
+
+    try:
+        observation_local = observation_at.astimezone(ZoneInfo(policy_timezone))
+    except (AttributeError, TypeError, ValueError, ZoneInfoNotFoundError) as exc:
         raise SyntheticPriceReplacementError(
-            "SYNTHETIC_PRICE_REPLACEMENT_NOT_AUTHORIZED"
+            "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
+        ) from exc
+    registered_effective_month = (
+        date(observation_local.year + 1, 1, 1)
+        if observation_local.month == 12
+        else date(observation_local.year, observation_local.month + 1, 1)
+    )
+    if (
+        durable_status in {"VALIDATED", "VERIFIED_FUTURE"}
+        and effective_from.replace(day=1) != registered_effective_month
+    ):
+        return "TEMPORAL_BLOCKED"
+    return durable_status
+
+
+def _apply_registered_observation_projection(
+    conn: Any,
+    batch: dict[str, Any],
+    declared: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Cross-bind one declared row and derive its temporal status from policy."""
+
+    policy = _registered_policy_evidence(
+        conn, vendor_name=str(batch["vendor_name"])
+    )
+    declaration = _registered_declaration(
+        conn,
+        vendor_name=str(batch["vendor_name"]),
+        effective_from=batch["effective_from"],
+        effective_through=batch["effective_through"],
+    )
+    fixture = policy["fixture"]
+    expected = {
+        "replacement_contract": CONTRACT,
+        "schedule_policy_ref": policy["policy_ref"],
+        "price_scope_key": policy["price_scope_key"],
+        "source_period_label": fixture["source_period_label"],
+        "source_valid_from": date.fromisoformat(fixture["source_valid_from"]),
+        "source_valid_through": date.fromisoformat(fixture["source_valid_through"]),
+        "source_validity_basis": fixture["source_validity_basis"],
+        "supplier_verified_at": policy["observation_at"],
+        "operational_effective_from": date.fromisoformat(
+            fixture["source_valid_from"]
+        ),
+        "operational_effective_through": date.fromisoformat(
+            fixture["source_valid_through"]
+        ),
+        "declaration_sha256": declaration["declaration_sha256"],
+        "vendor_id": policy["vendor_id"],
+    }
+    if any(declared.get(key) != value for key, value in expected.items()):
+        raise SyntheticPriceReplacementError(
+            "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
         )
-    return row[0]
+    application_local = policy["application_at"].astimezone(
+        ZoneInfo(policy["policy_timezone"])
+    )
+    if (
+        batch["effective_from"] != application_local.date()
+        or batch["effective_from"].day != policy["effective_boundary_day"]
+        or batch["effective_through"]
+        != date.fromisoformat(fixture["source_valid_through"])
+    ):
+        raise SyntheticPriceReplacementError(
+            "SYNTHETIC_PRICE_DECLARATION_NOT_REGISTERED"
+    )
+    batch.update(declared)
+    batch["operational_status"] = _registered_observation_operational_status(
+        durable_status=str(batch["status"]),
+        effective_from=batch["effective_from"],
+        observation_at=policy["observation_at"],
+        policy_timezone=policy["policy_timezone"],
+    )
+    batch["temporal_basis"] = _REGISTERED_OBSERVATION_BASIS
+    batch["registered_observation_at"] = policy["observation_at"].isoformat()
+    batch["registered_application_at"] = policy["application_at"].isoformat()
+    batch["registered_monday_evaluation_at"] = policy[
+        "monday_evaluation_at"
+    ].isoformat()
+    batch["policy_timezone"] = policy["policy_timezone"]
+    batch["policy_sha256"] = policy["policy_sha256"]
+    return batch
+
+
+def list_declared_price_book_batches(conn: Any) -> list[dict[str, Any]]:
+    """List batches while evaluating declared rows only at registered time."""
+
+    require_attested_database(conn)
+    rows = conn.execute(
+        f'''SELECT price_book_batch_id,batch_generation,vendor_name,batch_ref,
+                   target_price_state,effective_from,effective_through,status,
+                   CASE WHEN replacement_contract IS NULL
+                              AND status IN ('VALIDATED','VERIFIED_FUTURE')
+                              AND date_trunc('month',effective_from)::date <>
+                                  (date_trunc('month',(clock_timestamp() AT TIME ZONE
+                                     'America/New_York')) + interval '1 month')::date
+                        THEN 'TEMPORAL_BLOCKED' ELSE status END,
+                   row_count,valid_row_count,error_count,warning_count,
+                   expected_offer_count,covered_offer_count,missing_offer_count,
+                   validation_fingerprint,future_predecessor_sha256,
+                   future_predecessor_batch_id,staged_at,promoted_at,disposition_at
+              FROM "{SCHEMA}".price_book_batches
+             ORDER BY staged_at DESC,price_book_batch_id DESC'''
+    ).fetchall()
+    base_keys = (
+        "price_book_batch_id", "batch_generation", "vendor_name", "batch_ref",
+        "target_price_state", "effective_from", "effective_through", "status",
+        "operational_status", "row_count", "valid_row_count", "error_count",
+        "warning_count", "expected_offer_count", "covered_offer_count",
+        "missing_offer_count", "validation_fingerprint",
+        "future_predecessor_sha256", "future_predecessor_batch_id", "staged_at",
+        "promoted_at", "disposition_at",
+    )
+    batches = [dict(zip(base_keys, row, strict=True)) for row in rows]
+    declared_rows = conn.execute(
+        f'''SELECT price_book_batch_id::text,replacement_contract,
+                   schedule_policy_ref,price_scope_key,source_period_label,
+                   source_valid_from,source_valid_through,source_validity_basis,
+                   supplier_verified_at,operational_effective_from,
+                   operational_effective_through,scope_membership_sha256,
+                   declaration_sha256,vendor_id::text
+              FROM "{SCHEMA}".price_book_batches
+             WHERE replacement_contract IS NOT NULL'''
+    ).fetchall()
+    keys = (
+        "replacement_contract",
+        "schedule_policy_ref",
+        "price_scope_key",
+        "source_period_label",
+        "source_valid_from",
+        "source_valid_through",
+        "source_validity_basis",
+        "supplier_verified_at",
+        "operational_effective_from",
+        "operational_effective_through",
+        "scope_membership_sha256",
+        "declaration_sha256",
+        "vendor_id",
+    )
+    declared = {
+        str(row[0]): dict(zip(keys, row[1:], strict=True))
+        for row in declared_rows
+    }
+    for batch in batches:
+        details = declared.get(str(batch["price_book_batch_id"]))
+        if details is not None:
+            _apply_registered_observation_projection(conn, batch, details)
+    return batches
 
 
 def _declared_validation(
@@ -1226,14 +1478,60 @@ def stage_and_validate_declared_price_book(
 
 
 def get_declared_price_book_batch(conn: Any, batch_id: str) -> dict[str, Any]:
-    base = get_price_book_batch(conn, batch_id)
+    require_attested_database(conn)
+    row = conn.execute(
+        f'''SELECT price_book_batch_id,batch_generation,vendor_id,vendor_name,
+                   batch_ref,target_price_state,effective_from,effective_through,
+                   content_sha256,raw_storage_key,future_predecessor_sha256,
+                   future_predecessor_batch_id,status,status,row_count,
+                   valid_row_count,error_count,warning_count,expected_offer_count,
+                   covered_offer_count,missing_offer_count,validation_fingerprint,
+                   validation_evidence,staged_by,staged_at,promoted_by,promoted_at,
+                   disposition_by,disposition_reason,disposition_at
+              FROM "{SCHEMA}".price_book_batches
+             WHERE price_book_batch_id=%s''',
+        (batch_id,),
+    ).fetchone()
+    if row is None:
+        raise SyntheticPriceReplacementError("declared price-book batch is absent")
+    base_keys = (
+        "price_book_batch_id", "batch_generation", "vendor_id", "vendor_name",
+        "batch_ref", "target_price_state", "effective_from", "effective_through",
+        "content_sha256", "raw_storage_key", "future_predecessor_sha256",
+        "future_predecessor_batch_id", "status", "operational_status", "row_count",
+        "valid_row_count", "error_count", "warning_count", "expected_offer_count",
+        "covered_offer_count", "missing_offer_count", "validation_fingerprint",
+        "validation_evidence", "staged_by", "staged_at", "promoted_by",
+        "promoted_at", "disposition_by", "disposition_reason", "disposition_at",
+    )
+    base = dict(zip(base_keys, row, strict=True))
+    base["issues"] = [
+        {
+            "source_row_number": issue[0],
+            "issue_code": issue[1],
+            "severity": issue[2],
+            "variant_id": issue[3],
+            "offer_id": issue[4],
+            "message": issue[5],
+            "resolved_at": issue[6],
+        }
+        for issue in conn.execute(
+            f'''SELECT source_row_number,issue_code,severity,variant_id,offer_id,
+                       message,resolved_at
+                  FROM "{SCHEMA}".price_book_validation_issues
+                 WHERE price_book_batch_id=%s
+                 ORDER BY severity DESC,source_row_number NULLS FIRST,
+                          issue_code,offer_id NULLS FIRST''',
+            (batch_id,),
+        ).fetchall()
+    ]
     declared = conn.execute(
-        """SELECT replacement_contract,schedule_policy_ref,price_scope_key,
+        f'''SELECT replacement_contract,schedule_policy_ref,price_scope_key,
                   source_period_label,source_valid_from,source_valid_through,
                   source_validity_basis,supplier_verified_at,
                   operational_effective_from,operational_effective_through,
                   scope_membership_sha256,declaration_sha256
-             FROM price_book_batches WHERE price_book_batch_id=%s""",
+             FROM "{SCHEMA}".price_book_batches WHERE price_book_batch_id=%s''',
         (batch_id,),
     ).fetchone()
     if declared is None or declared[0] != CONTRACT:
@@ -1252,7 +1550,9 @@ def get_declared_price_book_batch(conn: Any, batch_id: str) -> dict[str, Any]:
         "scope_membership_sha256",
         "declaration_sha256",
     )
-    base.update(dict(zip(keys, declared, strict=True)))
+    details = dict(zip(keys, declared, strict=True))
+    details["vendor_id"] = str(base["vendor_id"])
+    _apply_registered_observation_projection(conn, base, details)
     staged_tiers = [
         {
             "source_row_number": row[0],
@@ -1304,6 +1604,28 @@ def get_declared_price_book_batch(conn: Any, batch_id: str) -> dict[str, Any]:
             ).fetchall()
         ]
     return base
+
+
+def _verify_declared_replay_boundary(
+    conn: Any,
+    storage: StorageAdapter,
+    *,
+    batch_id: str,
+    accepted_statuses: frozenset[str],
+) -> dict[str, Any]:
+    """Re-attest policy, declaration, and immutable raw before replay success."""
+
+    observed = get_declared_price_book_batch(conn, batch_id)
+    if observed["status"] not in accepted_statuses:
+        raise SyntheticPriceReplacementError("declared replay state differs")
+    _verified_declared_raw_read(
+        storage,
+        observed["raw_storage_key"],
+        observed["content_sha256"],
+        staged_by=observed["staged_by"],
+        validation_evidence=observed["validation_evidence"],
+    )
+    return observed
 
 
 def _set_price_context(conn: Any, principal: Principal, capability: str) -> None:
@@ -1447,6 +1769,34 @@ def _confirmation_preview_in_transaction(
     )
     if declaration["declaration_sha256"] != batch[31]:
         raise SyntheticPriceReplacementError("declared price-book declaration changed")
+    temporal = _apply_registered_observation_projection(
+        conn,
+        {
+            "vendor_name": str(batch[2]),
+            "effective_from": batch[5],
+            "effective_through": batch[7],
+            "status": str(batch[10]),
+        },
+        {
+            "replacement_contract": batch[20],
+            "schedule_policy_ref": batch[21],
+            "price_scope_key": batch[22],
+            "source_period_label": batch[23],
+            "source_valid_from": batch[24],
+            "source_valid_through": batch[25],
+            "source_validity_basis": batch[26],
+            "supplier_verified_at": batch[27],
+            "operational_effective_from": batch[28],
+            "operational_effective_through": batch[29],
+            "scope_membership_sha256": batch[30],
+            "declaration_sha256": batch[31],
+            "vendor_id": str(batch[1]),
+        },
+    )
+    if temporal["operational_status"] not in {"VALIDATED", "VERIFIED_FUTURE"}:
+        raise SyntheticPriceReplacementError(
+            "only a complete declared VALIDATED batch can be confirmed"
+        )
     validation = _declared_validation(conn, parsed, declaration)
     typed = _parsed_from_staging(conn, batch)
     typed_validation = _declared_validation(conn, typed, declaration)
@@ -1475,14 +1825,6 @@ def _confirmation_preview_in_transaction(
         proposed_scope_membership_sha256=membership_sha256,
         staged_by=str(batch[32]),
     )
-    policy = conn.execute(
-        """SELECT policy_sha256,observation_at,application_at,monday_evaluation_at,
-                  fixture_database_name
-             FROM supplier_price_schedule_policies WHERE policy_ref=%s""",
-        (batch[21],),
-    ).fetchone()
-    if policy is None or policy[4] != conn.info.dbname:
-        raise SyntheticPriceReplacementError("declared price policy differs")
     current_rows = conn.execute(
         """SELECT o.supplier_sku,p.level_type,p.break_qty,p.break_unit,
                   p.case_price,p.unit_price,p.price_id
@@ -1541,7 +1883,7 @@ def _confirmation_preview_in_transaction(
         "validation_fingerprint": batch[8],
         "declaration_sha256": batch[31],
         "policy_ref": batch[21],
-        "policy_sha256": policy[0],
+        "policy_sha256": temporal["policy_sha256"],
         "scope_membership_sha256": membership_sha256,
         "predecessor_future_sha256": batch[18],
         "predecessor_batch_id": (
@@ -1562,9 +1904,11 @@ def _confirmation_preview_in_transaction(
             ]
             for row in current_rows
         ],
-        "observation_at": policy[1].isoformat(),
-        "application_at": policy[2].isoformat(),
-        "monday_evaluation_at": policy[3].isoformat(),
+        "observation_at": temporal["registered_observation_at"],
+        "application_at": temporal["registered_application_at"],
+        "monday_evaluation_at": temporal["registered_monday_evaluation_at"],
+        "policy_timezone": temporal["policy_timezone"],
+        "temporal_basis": temporal["temporal_basis"],
         "commercial_authority": False,
         "real_price_approval": False,
     }
@@ -1649,6 +1993,14 @@ def confirm_declared_price_book(
                 raise SyntheticPriceReplacementError(
                     "price confirmation idempotency conflict"
                 )
+            _verify_declared_replay_boundary(
+                conn,
+                storage,
+                batch_id=str(batch_id),
+                accepted_statuses=frozenset(
+                    {"VERIFIED_FUTURE", "APPLIED_CURRENT"}
+                ),
+            )
             return {
                 "price_book_batch_id": str(batch_id),
                 "status": existing[5],
@@ -1930,7 +2282,7 @@ def _apply_snapshot(
                   e.scope_membership_sha256,e.confirmation_payload_sha256,
                   h.supplier_price_authority_event_id::text,h.head_version,
                   h.current_scope_sha256,h.active_price_book_batch_id::text,
-                  b.staged_by,b.validation_evidence
+                  b.staged_by,b.validation_evidence,b.vendor_name
              FROM price_book_batches b
              JOIN supplier_price_schedule_policies p
                ON p.policy_ref=b.schedule_policy_ref
@@ -1953,17 +2305,27 @@ def _apply_snapshot(
         "boundary_day","fixture_database","promotion_event_id","future_sha256",
         "promotion_membership_sha256","confirmation_payload_sha256",
         "prior_event_id","head_version","current_scope_sha256","active_batch_id",
-        "staged_by","validation_evidence",
+        "staged_by","validation_evidence","vendor_name",
     )
     state = dict(zip(keys, rows[0], strict=True))
-    application_local = state["application_at"].astimezone(
-        __import__("zoneinfo").ZoneInfo(state["policy_timezone"])
+    policy = _registered_policy_evidence(
+        conn, vendor_name=str(state["vendor_name"])
+    )
+    application_local = policy["application_at"].astimezone(
+        ZoneInfo(policy["policy_timezone"])
     )
     if (
         state["status"] != "VERIFIED_FUTURE"
         or state["replacement_contract"] != CONTRACT
         or state["scope_key"] != "COMPLETE_VENDOR"
         or state["fixture_database"] != conn.info.dbname
+        or state["policy_ref"] != policy["policy_ref"]
+        or state["vendor_id"] != policy["vendor_id"]
+        or state["scope_key"] != policy["price_scope_key"]
+        or state["policy_sha256"] != policy["policy_sha256"]
+        or state["policy_timezone"] != policy["policy_timezone"]
+        or state["application_at"] != policy["application_at"]
+        or state["boundary_day"] != policy["effective_boundary_day"]
         or state["effective_from"] != application_local.date()
         or state["effective_from"].day != state["boundary_day"]
         or state["effective_through"] is None
@@ -2474,6 +2836,12 @@ def apply_price_replacement(
                 principal=principal,
             )
             if replay is not None:
+                _verify_declared_replay_boundary(
+                    conn,
+                    storage,
+                    batch_id=str(batch_id),
+                    accepted_statuses=frozenset({"APPLIED_CURRENT"}),
+                )
                 return replay
             state = _apply_snapshot(
                 conn,

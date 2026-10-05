@@ -217,17 +217,56 @@ class LocalAccessTests(unittest.TestCase):
                 return_value={"run": None, "missing": [], "new": []},
             ),
         ):
+            price_detail_page = api._price_book_detail_html(price_detail)
             operational_pages = (
                 api._vendor_rules_html(
                     {"status": "WARN", "message": "synthetic", "vendors": []}
                 ),
                 api._price_book_list_html([]),
-                api._price_book_detail_html(price_detail),
+                price_detail_page,
                 api.investigation_page(),
             )
         for page in operational_pages:
             with self.subTest(page=page[:80]):
                 self.assertIn("TEST DATA — NOT FOR ORDERING", page)
+        self.assertIn("id='price-book-durable-status'", price_detail_page)
+        self.assertIn("id='price-book-operational-status'", price_detail_page)
+
+        declared_target = {
+            "vendor_name": "Synthetic Southern",
+            "source_valid_from": "2026-10-01",
+            "source_valid_through": "2026-10-31",
+            "declaration_sha256": "b" * 64,
+        }
+        staging_prices = api._price_book_list_html(
+            [], declared_target, allow_upload=False
+        )
+        self.assertIn(
+            "operator-staged input, browser-approved workflow", staging_prices
+        )
+        self.assertNotIn("price-books/import", staging_prices)
+        self.assertNotIn("type='file'", staging_prices)
+
+        declared_detail = {
+            **price_detail,
+            "status": "VALIDATED",
+            "operational_status": "TEMPORAL_BLOCKED",
+            "replacement_contract": api.SYNTHETIC_PRICE_REPLACEMENT_CONTRACT,
+            "schedule_policy_ref": "synthetic-southern-monthly-complete-v1",
+            "declaration_sha256": "c" * 64,
+            "scope_membership_sha256": None,
+            "temporal_basis": "REGISTERED_OBSERVATION",
+            "tiers": [],
+        }
+        blocked_declared_page = api._price_book_detail_html(declared_detail)
+        self.assertNotIn("confirmation-preview", blocked_declared_page)
+        declared_detail["operational_status"] = "VALIDATED"
+        authorized_declared_page = api._price_book_detail_html(declared_detail)
+        self.assertIn("confirmation-preview", authorized_declared_page)
+        self.assertIn(
+            "data-temporal-basis='REGISTERED_OBSERVATION'",
+            authorized_declared_page,
+        )
 
         canonical_readiness = {
             "po_generation_enabled": True,

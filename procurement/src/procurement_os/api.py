@@ -98,11 +98,13 @@ from .staging_composition import (
     install_access_boundary as _install_access_boundary,
 )
 from .synthetic_price_replacement import (
+    CAPABILITY_ENV as SYNTHETIC_PRICE_REPLACEMENT_CAPABILITY_ENV,
     CONTRACT as SYNTHETIC_PRICE_REPLACEMENT_CONTRACT,
     SyntheticPriceReplacementError,
     apply_price_replacement,
     confirm_declared_price_book,
     get_declared_price_book_batch,
+    list_declared_price_book_batches,
     preview_declared_price_confirmation,
     preview_price_replacement,
     registered_target_declaration,
@@ -2906,7 +2908,10 @@ def monday_run_artifact(run_id: UUID, artifact_id: int):
 
 
 def _price_book_list_html(
-    batches: list[dict], declared_target: dict | None = None
+    batches: list[dict],
+    declared_target: dict | None = None,
+    *,
+    allow_upload: bool = True,
 ) -> str:
     rows = "".join(
         "<tr>"
@@ -2915,42 +2920,62 @@ def _price_book_list_html(
         f"<td>{_html_escape(batch['vendor_name'])}</td>"
         f"<td>{_html_escape(batch['target_price_state'])}</td>"
         f"<td>{_html_escape(batch['effective_from'])}</td>"
-        f"<td>{_html_escape(batch['operational_status'])}</td>"
+        f"<td class='price-book-durable-status'>{_html_escape(batch['status'])}</td>"
+        f"<td class='price-book-operational-status' data-temporal-basis='"
+        f"{_html_escape(batch.get('temporal_basis', 'HOST_CLOCK'))}'>"
+        f"{_html_escape(batch['operational_status'])}</td>"
         f"<td>{_html_escape(batch['valid_row_count'])}/{_html_escape(batch['row_count'])}</td>"
         f"<td>{_html_escape(batch['error_count'])}</td>"
         "</tr>"
         for batch in batches
-    ) or "<tr><td colspan='7'>No price-book batches have been staged.</td></tr>"
+    ) or "<tr><td colspan='8'>No price-book batches have been staged.</td></tr>"
     declared_form = ""
     if declared_target is not None:
-        declared_form = f"""<section id='synthetic-price-replacement'>
-<h2>SYNTHETIC REPLACEMENT PRICE BOOK — TEST DATA / NO REAL AUTHORITY</h2>
-<p>Registered target: {_html_escape(declared_target['vendor_name'])}; source validity
-{_html_escape(declared_target['source_valid_from'])} through
-{_html_escape(declared_target['source_valid_through'])}. Upload remains staging-only.</p>
-<form method='post' action='price-books/import' enctype='multipart/form-data'>
+        if allow_upload:
+            declared_action = f"""<form method='post' action='price-books/import' enctype='multipart/form-data'>
 <input type='hidden' name='replacement_contract' value='{SYNTHETIC_PRICE_REPLACEMENT_CONTRACT}'>
 <input type='hidden' name='expected_declaration_sha256' value='{_form_value(declared_target['declaration_sha256'])}'>
 <label>Fabricated replacement CSV <input type='file' name='price_book_file' accept='.csv,text/csv' required></label><br>
 <label>Operator <input name='actor' required></label><br>
 <label>Price-book review token <input type='password' name='review_token' required></label><br>
 <button type='submit'>Stage and validate declared synthetic replacement</button>
-</form></section>"""
-    return f"""<!doctype html><html><head><title>Price Books</title></head><body>
-{_operational_nav('/', current='Price Books')}
-<h1>Price Book Import / Validation</h1>
-<p>Uploads may prepare FUTURE pricing only. CURRENT remains untouched until a separately guarded rollover.</p>
+</form>"""
+        else:
+            declared_action = (
+                "<p id='synthetic-price-input-authority'><b>operator-staged input, "
+                "browser-approved workflow</b></p>"
+                "<p>Input staging is available only through the stopped-service, "
+                "exact-fixture operator. Browser confirmation and APPLY remain "
+                "separate authenticated actions.</p>"
+            )
+        declared_form = f"""<section id='synthetic-price-replacement'>
+<h2>SYNTHETIC REPLACEMENT PRICE BOOK — TEST DATA / NO REAL AUTHORITY</h2>
+<p>Registered target: {_html_escape(declared_target['vendor_name'])}; source validity
+{_html_escape(declared_target['source_valid_from'])} through
+{_html_escape(declared_target['source_valid_through'])}.</p>
+{declared_action}</section>"""
+    if allow_upload:
+        generic_action = """<p>Uploads may prepare FUTURE pricing only. CURRENT remains untouched until a separately guarded rollover.</p>
 <p><a href='price-books/template.csv'>Download strict normalized CSV template</a></p>
 <form method='post' action='price-books/import' enctype='multipart/form-data'>
 <label>Normalized CSV <input type='file' name='price_book_file' accept='.csv,text/csv' required></label><br>
 <label>Operator <input name='actor' required></label><br>
 <label>Price-book review token <input type='password' name='review_token' required></label><br>
 <button type='submit'>Stage and validate FUTURE</button>
-</form>
+</form>"""
+    else:
+        generic_action = (
+            "<p>Bulk upload is not part of this staging surface. CURRENT remains "
+            "unchanged until the separately guarded workflow completes.</p>"
+        )
+    return f"""<!doctype html><html><head><title>Price Books</title></head><body>
+{_operational_nav('/', current='Price Books')}
+<h1>Price Book Import / Validation</h1>
+{generic_action}
 {declared_form}
 <h2>Durable batches</h2>
 <table border='1' cellpadding='5'><thead><tr><th>Batch</th><th>Vendor</th><th>State</th>
-<th>Effective</th><th>Status</th><th>Valid rows</th><th>Errors</th></tr></thead>
+<th>Effective</th><th>Durable status</th><th>Evaluated temporal status</th><th>Valid rows</th><th>Errors</th></tr></thead>
 <tbody>{rows}</tbody></table>
 </body></html>"""
 
@@ -2966,21 +2991,38 @@ def _price_book_detail_html(batch: dict) -> str:
         for issue in batch["issues"]
     ) or "<tr><td colspan='4'>No validation issues.</td></tr>"
     batch_id = _html_escape(batch["price_book_batch_id"])
+    declared_batch = (
+        batch.get("replacement_contract")
+        == SYNTHETIC_PRICE_REPLACEMENT_CONTRACT
+    )
     promotable = (
         batch["status"] == "VALIDATED"
         and batch["operational_status"] == "VALIDATED"
     )
     disabled = "" if promotable else " disabled aria-disabled='true'"
-    blocker = "" if promotable else (
-        f"<p><b>Promotion unavailable:</b> operational status is "
-        f"{_html_escape(batch['operational_status'])}.</p>"
-    )
+    if declared_batch:
+        declared_actionable = (
+            batch["status"], batch["operational_status"]
+        ) in {
+            ("VALIDATED", "VALIDATED"),
+            ("VERIFIED_FUTURE", "VERIFIED_FUTURE"),
+        }
+        blocker = "" if declared_actionable else (
+            f"<p><b>Declared action unavailable:</b> durable status is "
+            f"{_html_escape(batch['status'])}; evaluated temporal status is "
+            f"{_html_escape(batch['operational_status'])}.</p>"
+        )
+    else:
+        blocker = "" if promotable else (
+            f"<p><b>Promotion unavailable:</b> operational status is "
+            f"{_html_escape(batch['operational_status'])}.</p>"
+        )
     warning_reason = (
         "<label>Warning review reason <input name='warning_review_reason' required></label><br>"
         if batch["warning_count"] else ""
     )
     declared_controls = ""
-    if batch.get("replacement_contract") == SYNTHETIC_PRICE_REPLACEMENT_CONTRACT:
+    if declared_batch:
         tier_rows = "".join(
             "<tr>"
             f"<td>{_html_escape(tier['source_row_number'])}</td>"
@@ -2995,7 +3037,10 @@ def _price_book_detail_html(batch: dict) -> str:
             for tier in batch.get("tiers", [])
         ) or "<tr><td colspan='8'>No reusable candidate tiers remain.</td></tr>"
         action_form = ""
-        if batch["status"] == "VALIDATED":
+        if (
+            batch["status"] == "VALIDATED"
+            and batch["operational_status"] == "VALIDATED"
+        ):
             action_form = f"""<h2>Separate synthetic price confirmation</h2>
 <form method='post' action='../price-books/{batch_id}/confirmation-preview'>
 <label>Confirmation idempotency key <input name='confirmation_idempotency_key' required></label><br>
@@ -3003,7 +3048,10 @@ def _price_book_detail_html(batch: dict) -> str:
 {warning_reason}
 <label>Price-book review token <input type='password' name='review_token' required></label><br>
 <button type='submit'>Preview exact confirmation</button></form>"""
-        elif batch["status"] == "VERIFIED_FUTURE":
+        elif (
+            batch["status"] == "VERIFIED_FUTURE"
+            and batch["operational_status"] == "VERIFIED_FUTURE"
+        ):
             action_form = f"""<h2>Guarded effective-boundary APPLY</h2>
 <p>A launcher-bound BACKUP V2 is required; no browser path or label grants recovery authority.</p>
 <form method='post' action='../price-books/{batch_id}/apply-preview'>
@@ -3041,7 +3089,9 @@ def _price_book_detail_html(batch: dict) -> str:
 <h1>{_html_escape(batch['batch_ref'])}</h1>
 <dl><dt>Vendor</dt><dd>{_html_escape(batch['vendor_name'])}</dd>
 <dt>Target</dt><dd>{_html_escape(batch['target_price_state'])}</dd>
-  <dt>Status</dt><dd>{_html_escape(batch['operational_status'])}</dd>
+<dt>Durable status</dt><dd id='price-book-durable-status'>{_html_escape(batch['status'])}</dd>
+<dt>Evaluated temporal status</dt><dd id='price-book-operational-status'
+ data-temporal-basis='{_html_escape(batch.get('temporal_basis', 'HOST_CLOCK'))}'>{_html_escape(batch['operational_status'])}</dd>
 <dt>Rows</dt><dd>{_html_escape(batch['valid_row_count'])}/{_html_escape(batch['row_count'])}</dd>
 <dt>Coverage</dt><dd>{_html_escape(batch['covered_offer_count'])}/{_html_escape(batch['expected_offer_count'])}</dd>
 <dt>Validation fingerprint</dt><dd><code>{_html_escape(batch['validation_fingerprint'])}</code></dd></dl>
@@ -3102,20 +3152,30 @@ def price_book_template():
 
 @app.get("/price-books", response_class=HTMLResponse)
 def price_books_page():
-    with _db_conn() as conn:
-        batches = list_price_book_batches(conn)
-        try:
-            declared_target = registered_target_declaration(conn)
-        except SyntheticPriceReplacementError:
-            declared_target = None
-    return _price_book_list_html(batches, declared_target)
+    try:
+        with _db_conn() as conn:
+            declared_enabled = (
+                os.getenv(SYNTHETIC_PRICE_REPLACEMENT_CAPABILITY_ENV) == "1"
+            )
+            if declared_enabled:
+                batches = list_declared_price_book_batches(conn)
+                declared_target = registered_target_declaration(conn)
+            else:
+                batches = list_price_book_batches(conn)
+                declared_target = None
+    except SyntheticPriceReplacementError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _price_book_list_html(
+        batches,
+        declared_target,
+        allow_upload=staging_request_worker_role() != "synthetic",
+    )
 
 
 @app.get("/price-books/{batch_id}", response_class=HTMLResponse)
 def price_book_detail(batch_id: UUID):
     try:
         with _db_conn() as conn:
-            batch = get_price_book_batch(conn, str(batch_id))
             has_contract_column = bool(
                 conn.execute(
                     """SELECT EXISTS (
@@ -3125,15 +3185,20 @@ def price_book_detail(batch_id: UUID):
                             AND NOT attisdropped)"""
                 ).fetchone()[0]
             )
+            contract = None
             if has_contract_column:
                 contract = conn.execute(
                     "SELECT replacement_contract FROM price_book_batches "
                     "WHERE price_book_batch_id=%s",
                     (str(batch_id),),
                 ).fetchone()
-                if contract is not None and contract[0] is not None:
-                    batch = get_declared_price_book_batch(conn, str(batch_id))
-    except (PriceBookError, SyntheticPriceReplacementError) as exc:
+            if contract is not None and contract[0] is not None:
+                batch = get_declared_price_book_batch(conn, str(batch_id))
+            else:
+                batch = get_price_book_batch(conn, str(batch_id))
+    except SyntheticPriceReplacementError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PriceBookError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return _price_book_detail_html(batch)
 
