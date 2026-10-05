@@ -83,6 +83,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_staging_process_readiness.py": 14,
     "test_staging_research_gateway.py": 15,
     "test_staging_research_lifecycle.py": 33,
+    "test_staging_research_materializer.py": 9,
     "test_staging_research_readiness.py": 13,
     "test_staging_research_release.py": 21,
     "test_staging_research_runtime.py": 5,
