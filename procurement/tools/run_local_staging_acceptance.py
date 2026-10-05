@@ -81,6 +81,31 @@ _BROWSER_READY_LIMIT = 4 * 1024
 _BROWSER_RESULT_LIMIT = 16 * 1024
 _BROWSER_WORKER_MAX_FD = 1_048_575
 _BROWSER_SECRET_BYTES = 43
+_BROWSER_PROC_STAT_LIMIT = 16 * 1024
+_BROWSER_PROC_VALUE_LIMIT = 64 * 1024
+_BROWSER_WORKER_ARGUMENT_LIMIT = 32
+_BROWSER_WORKER_DESCRIPTOR_LIMIT = 16
+_BROWSER_PYTHON_EXECUTABLE = Path(
+    "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/"
+    "bin/python3.13"
+)
+_BROWSER_PYTHON_BYTES = 15_776
+_BROWSER_PYTHON_SHA256 = (
+    "bd5afcc703e9293ebea22ec05ad3a95f5b14ca6b65293a5f2969efe83148f565"
+)
+_BROWSER_PYTHON_UID = 1000
+_BROWSER_PYTHON_GID = 1000
+_BROWSER_PYTHON_MODE = 0o555
+_BROWSER_LIVE_PROCESS_STATES = frozenset({"R", "S"})
+_BROWSER_PROCESS_STATES = frozenset(
+    {"R", "S", "D", "T", "t", "W", "X", "x", "Z", "P", "I"}
+)
+_BROWSER_WORKER_ENVIRONMENT = (
+    ("LANG", "C.UTF-8"),
+    ("LC_ALL", "C.UTF-8"),
+    ("TZ", "UTC"),
+)
+_BROWSER_HANDLE_TOKEN = object()
 _SHA256_TEXT = re.compile(r"\A[0-9a-f]{64}\Z")
 _GIT_OID_TEXT = re.compile(r"\A[0-9a-f]{40}\Z")
 _CANONICAL_FD = re.compile(r"\A(?:[3-9]|[1-9][0-9]+)\Z")
@@ -351,6 +376,179 @@ class BrowserWorkerResult:
     proof_json: bytes = field(repr=False)
 
 
+@dataclass(frozen=True)
+class BrowserWorkerProcessStat:
+    pid: int
+    state: str
+    parent_pid: int
+    process_group: int
+    session_id: int
+    start_ticks: int
+
+
+@dataclass
+class PinnedBrowserPythonExecutable:
+    """Owned descriptor for the pinned CPython ELF, not its runtime closure."""
+
+    descriptor: int
+    path: Path
+    device: int
+    inode: int
+    size: int
+    mtime_ns: int
+    _owner_token: object = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def close(self) -> None:
+        descriptor = self.descriptor
+        if descriptor == -1 and self._owner_token is None:
+            return
+        if (
+            self._owner_token is not _BROWSER_HANDLE_TOKEN
+            or type(descriptor) is not int
+            or descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python cleanup differs"
+            )
+        try:
+            info = os.fstat(descriptor)
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python cleanup differs"
+            ) from None
+        if (info.st_dev, info.st_ino) != (self.device, self.inode):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python cleanup differs"
+            )
+        self.descriptor = -1
+        self._owner_token = None
+        os.close(descriptor)
+
+    def __enter__(self) -> PinnedBrowserPythonExecutable:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def __copy__(self) -> PinnedBrowserPythonExecutable:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python ownership differs"
+        )
+
+    def __deepcopy__(
+        self,
+        _: dict[int, object],
+    ) -> PinnedBrowserPythonExecutable:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python ownership differs"
+        )
+
+
+@dataclass
+class ObservedBrowserWorker:
+    """Owned pidfd for one exact preflight snapshot, not execution authority."""
+
+    pidfd: int
+    pidfd_device: int
+    pidfd_inode: int
+    process: BrowserWorkerProcessStat
+    _owner_token: object = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def close(self) -> None:
+        descriptor = self.pidfd
+        if descriptor == -1 and self._owner_token is None:
+            return
+        if (
+            self._owner_token is not _BROWSER_HANDLE_TOKEN
+            or type(descriptor) is not int
+            or descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process cleanup differs"
+            )
+        try:
+            info, process_id, _, _ = _read_browser_pidfd_metadata(descriptor)
+            if (
+                (info.st_dev, info.st_ino)
+                != (self.pidfd_device, self.pidfd_inode)
+                or process_id not in {None, self.process.pid}
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser process differs"
+                )
+        except (
+            LocalStagingAcceptanceError,
+            OSError,
+            OverflowError,
+            ValueError,
+            TypeError,
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process cleanup differs"
+            ) from None
+        self.pidfd = -1
+        self._owner_token = None
+        os.close(descriptor)
+
+    def __enter__(self) -> ObservedBrowserWorker:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def __copy__(self) -> ObservedBrowserWorker:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process ownership differs"
+        )
+
+    def __deepcopy__(
+        self,
+        _: dict[int, object],
+    ) -> ObservedBrowserWorker:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process ownership differs"
+        )
+
+
+@dataclass(frozen=True)
+class BrowserWorkerDescriptorExpectation:
+    number: int
+    target: str
+    device: int
+    inode: int
+    mount_id: int
+    position: int
+    status_flags: int
+    close_on_exec: bool
+
+
+@dataclass(frozen=True)
+class BrowserWorkerProcessExpectation:
+    command_line: tuple[str, ...]
+    environment: tuple[tuple[str, str], ...]
+    cwd: Path
+    cwd_device: int
+    cwd_inode: int
+    descriptors: tuple[BrowserWorkerDescriptorExpectation, ...]
+    user_id: int
+    group_id: int
+    supplementary_groups: tuple[int, ...]
+    no_new_privileges: int
+    seccomp_mode: int
+
+
 @dataclass
 class TrustedDockerClient:
     descriptor: int
@@ -479,6 +677,898 @@ def open_trusted_docker() -> TrustedDockerClient:
         if descriptor >= 0:
             os.close(descriptor)
         raise
+
+
+def _browser_python_sha256(descriptor: int) -> str:
+    digest = hashlib.sha256()
+    observed = 0
+    try:
+        while observed <= _BROWSER_PYTHON_BYTES:
+            block = os.pread(
+                descriptor,
+                min(
+                    _CHUNK_BYTES,
+                    _BROWSER_PYTHON_BYTES + 1 - observed,
+                ),
+                observed,
+            )
+            if not block:
+                break
+            observed += len(block)
+            digest.update(block)
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python differs"
+        ) from None
+    if observed != _BROWSER_PYTHON_BYTES:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python differs"
+        )
+    return digest.hexdigest()
+
+
+def _validate_pinned_browser_python_executable(runtime: PinnedBrowserPythonExecutable) -> None:
+    if (
+        type(runtime) is not PinnedBrowserPythonExecutable
+        or runtime._owner_token is not _BROWSER_HANDLE_TOKEN
+        or type(runtime.descriptor) is not int
+        or runtime.descriptor <= 2
+        or runtime.descriptor > _BROWSER_WORKER_MAX_FD
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python differs"
+        )
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        descriptor_info = os.fstat(runtime.descriptor)
+        named_info = runtime.path.stat(follow_symlinks=False)
+        descriptor_target = os.readlink(
+            f"/proc/self/fd/{runtime.descriptor}"
+        )
+        descriptor_flags = fcntl.fcntl(runtime.descriptor, fcntl.F_GETFD)
+        status_flags = fcntl.fcntl(runtime.descriptor, fcntl.F_GETFL)
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python differs"
+        ) from None
+    descriptor_identity = (
+        descriptor_info.st_dev,
+        descriptor_info.st_ino,
+        descriptor_info.st_size,
+        descriptor_info.st_mtime_ns,
+    )
+    named_identity = (
+        named_info.st_dev,
+        named_info.st_ino,
+        named_info.st_size,
+        named_info.st_mtime_ns,
+    )
+    if (
+        runtime.path != _BROWSER_PYTHON_EXECUTABLE
+        or (
+            soft_limit != resource.RLIM_INFINITY
+            and runtime.descriptor >= soft_limit
+        )
+        or runtime.path.is_symlink()
+        or descriptor_target != str(_BROWSER_PYTHON_EXECUTABLE)
+        or descriptor_flags & fcntl.FD_CLOEXEC == 0
+        or os.get_inheritable(runtime.descriptor)
+        or status_flags & os.O_ACCMODE != os.O_RDONLY
+        or status_flags & os.O_NONBLOCK == 0
+        or not stat.S_ISREG(descriptor_info.st_mode)
+        or descriptor_info.st_nlink != 1
+        or (descriptor_info.st_uid, descriptor_info.st_gid)
+        != (_BROWSER_PYTHON_UID, _BROWSER_PYTHON_GID)
+        or stat.S_IMODE(descriptor_info.st_mode) != _BROWSER_PYTHON_MODE
+        or descriptor_info.st_size != _BROWSER_PYTHON_BYTES
+        or descriptor_identity
+        != (
+            runtime.device,
+            runtime.inode,
+            runtime.size,
+            runtime.mtime_ns,
+        )
+        or named_identity != descriptor_identity
+        or _browser_python_sha256(runtime.descriptor)
+        != _BROWSER_PYTHON_SHA256
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python differs"
+        )
+
+
+def open_pinned_browser_python_executable() -> PinnedBrowserPythonExecutable:
+    """Pin the direct CPython ELF; runtime-closure attestation remains later."""
+
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            _BROWSER_PYTHON_EXECUTABLE,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+        )
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if (
+            descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and descriptor >= soft_limit
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python differs"
+            )
+        info = os.fstat(descriptor)
+        runtime = PinnedBrowserPythonExecutable(
+            descriptor=descriptor,
+            path=_BROWSER_PYTHON_EXECUTABLE,
+            device=info.st_dev,
+            inode=info.st_ino,
+            size=info.st_size,
+            mtime_ns=info.st_mtime_ns,
+        )
+        runtime._owner_token = _BROWSER_HANDLE_TOKEN
+        _validate_pinned_browser_python_executable(runtime)
+        return runtime
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise
+
+
+def _canonical_proc_integer(value: bytes, *, positive: bool) -> int:
+    if (
+        not value
+        or len(value) > 20
+        or not value.isascii()
+        or not value.isdigit()
+        or (len(value) > 1 and value.startswith(b"0"))
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    selected = int(value)
+    if (
+        selected > 18_446_744_073_709_551_615
+        or (positive and selected <= 0)
+        or (not positive and selected < 0)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    return selected
+
+
+def _parse_browser_worker_proc_stat(
+    raw: bytes,
+    *,
+    expected_pid: int,
+) -> BrowserWorkerProcessStat:
+    if (
+        type(raw) is not bytes
+        or not raw
+        or len(raw) > _BROWSER_PROC_STAT_LIMIT
+        or type(expected_pid) is not int
+        or expected_pid <= 1
+        or expected_pid > 2_147_483_647
+        or raw.count(b"\n") != 1
+        or not raw.endswith(b"\n")
+        or b"\0" in raw
+        or b"\r" in raw
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    selected = raw[:-1]
+    prefix = str(expected_pid).encode("ascii") + b" ("
+    closing = selected.rfind(b") ")
+    if not selected.startswith(prefix) or closing < len(prefix):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    command_name = selected[len(prefix) : closing]
+    fields = selected[closing + 2 :].split(b" ")
+    if (
+        not command_name
+        or len(command_name) > 255
+        or any(byte < 0x20 or byte > 0x7E for byte in command_name)
+        or len(fields) < 20
+        or any(not field for field in fields)
+        or len(fields[0]) != 1
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    try:
+        state = fields[0].decode("ascii", errors="strict")
+    except UnicodeDecodeError:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    if state not in _BROWSER_PROCESS_STATES:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    return BrowserWorkerProcessStat(
+        pid=expected_pid,
+        state=state,
+        parent_pid=_canonical_proc_integer(fields[1], positive=True),
+        process_group=_canonical_proc_integer(fields[2], positive=True),
+        session_id=_canonical_proc_integer(fields[3], positive=True),
+        start_ticks=_canonical_proc_integer(fields[19], positive=True),
+    )
+
+
+def _read_browser_proc_value(
+    path: str,
+    *,
+    maximum_bytes: int,
+) -> bytes:
+    if (
+        not isinstance(path, str)
+        or not path.startswith("/proc/")
+        or type(maximum_bytes) is not int
+        or maximum_bytes <= 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+        )
+        observed = bytearray()
+        while len(observed) <= maximum_bytes:
+            try:
+                block = os.read(
+                    descriptor,
+                    min(4096, maximum_bytes + 1 - len(observed)),
+                )
+            except InterruptedError:
+                continue
+            if not block:
+                break
+            observed.extend(block)
+        if len(observed) > maximum_bytes:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            )
+        return bytes(observed)
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _read_browser_worker_proc_stat(pid: int) -> BrowserWorkerProcessStat:
+    if type(pid) is not int or pid <= 1 or pid > 2_147_483_647:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    return _parse_browser_worker_proc_stat(
+        _read_browser_proc_value(
+            f"/proc/{pid}/stat",
+            maximum_bytes=_BROWSER_PROC_STAT_LIMIT,
+        ),
+        expected_pid=pid,
+    )
+
+
+def _canonical_status_integers(
+    value: str,
+    *,
+    count: int | None,
+) -> tuple[int, ...]:
+    parts = value.split()
+    if count is not None and len(parts) != count:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    try:
+        selected = tuple(
+            _canonical_proc_integer(part.encode("ascii"), positive=False)
+            for part in parts
+        )
+    except UnicodeEncodeError:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    return selected
+
+
+def _parse_browser_worker_status(
+    raw: bytes,
+    *,
+    process: BrowserWorkerProcessStat,
+    expectation: BrowserWorkerProcessExpectation,
+) -> None:
+    if (
+        type(raw) is not bytes
+        or not raw
+        or len(raw) > _BROWSER_PROC_VALUE_LIMIT
+        or raw.count(b"\0")
+        or raw.count(b"\r")
+        or not raw.endswith(b"\n")
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    try:
+        text = raw.decode("ascii", errors="strict")
+        values: dict[str, str] = {}
+        for line in text.splitlines():
+            key, separator, value = line.partition(":")
+            if not separator or not key or key in values:
+                raise ValueError
+            values[key] = value.strip()
+        pid = _canonical_status_integers(values["Pid"], count=1)
+        parent = _canonical_status_integers(values["PPid"], count=1)
+        tracer = _canonical_status_integers(values["TracerPid"], count=1)
+        threads = _canonical_status_integers(values["Threads"], count=1)
+        user_ids = _canonical_status_integers(values["Uid"], count=4)
+        group_ids = _canonical_status_integers(values["Gid"], count=4)
+        groups = _canonical_status_integers(values["Groups"], count=None)
+        namespace_pids = _canonical_status_integers(
+            values["NSpid"],
+            count=None,
+        )
+        no_new_privileges = _canonical_status_integers(
+            values["NoNewPrivs"],
+            count=1,
+        )
+        seccomp = _canonical_status_integers(values["Seccomp"], count=1)
+    except (KeyError, UnicodeDecodeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    if (
+        pid != (process.pid,)
+        or parent != (process.parent_pid,)
+        or tracer != (0,)
+        or threads != (1,)
+        or user_ids != (expectation.user_id,) * 4
+        or group_ids != (expectation.group_id,) * 4
+        or groups != expectation.supplementary_groups
+        or not namespace_pids
+        or namespace_pids[0] != process.pid
+        or no_new_privileges != (expectation.no_new_privileges,)
+        or seccomp != (expectation.seccomp_mode,)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+
+
+def _validate_browser_worker_expectation(
+    expectation: BrowserWorkerProcessExpectation,
+) -> None:
+    if type(expectation) is not BrowserWorkerProcessExpectation:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    command_line = expectation.command_line
+    environment = expectation.environment
+    descriptors = expectation.descriptors
+    try:
+        canonical_cwd = expectation.cwd.resolve(strict=True)
+        cwd_info = expectation.cwd.stat(follow_symlinks=False)
+    except (OSError, AttributeError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    if (
+        type(command_line) is not tuple
+        or not command_line
+        or len(command_line) > _BROWSER_WORKER_ARGUMENT_LIMIT
+        or any(
+            type(value) is not str
+            or not value
+            or "\0" in value
+            or len(value) > 4096
+            or not value.isascii()
+            for value in command_line
+        )
+        or sum(len(value) + 1 for value in command_line)
+        > _BROWSER_PROC_VALUE_LIMIT
+        or environment != _BROWSER_WORKER_ENVIRONMENT
+        or type(descriptors) is not tuple
+        or not descriptors
+        or len(descriptors) > _BROWSER_WORKER_DESCRIPTOR_LIMIT
+        or any(
+            type(item) is not BrowserWorkerDescriptorExpectation
+            for item in descriptors
+        )
+        or any(
+            type(item.number) is not int
+            or item.number < 0
+            or item.number > _BROWSER_WORKER_MAX_FD
+            or type(item.target) is not str
+            or not item.target
+            or "\0" in item.target
+            or len(item.target) > 4096
+            or not item.target.isascii()
+            or type(item.device) is not int
+            or type(item.inode) is not int
+            or type(item.mount_id) is not int
+            or type(item.position) is not int
+            or item.device < 0
+            or item.inode <= 0
+            or item.mount_id <= 0
+            or item.position < 0
+            or type(item.status_flags) is not int
+            or item.status_flags < 0
+            or item.status_flags & os.O_CLOEXEC
+            or item.status_flags & os.O_ACCMODE
+            not in {os.O_RDONLY, os.O_WRONLY, os.O_RDWR}
+            or type(item.close_on_exec) is not bool
+            for item in descriptors
+        )
+        or tuple(sorted(descriptors, key=lambda item: item.number))
+        != descriptors
+        or len({item.number for item in descriptors}) != len(descriptors)
+        or not {0, 1, 2}.issubset({item.number for item in descriptors})
+        or expectation.cwd != canonical_cwd
+        or expectation.cwd.is_symlink()
+        or not stat.S_ISDIR(cwd_info.st_mode)
+        or type(expectation.cwd_device) is not int
+        or type(expectation.cwd_inode) is not int
+        or expectation.cwd_device <= 0
+        or expectation.cwd_inode <= 0
+        or (cwd_info.st_dev, cwd_info.st_ino)
+        != (expectation.cwd_device, expectation.cwd_inode)
+        or type(expectation.user_id) is not int
+        or type(expectation.group_id) is not int
+        or expectation.user_id != os.geteuid()
+        or expectation.user_id != os.getuid()
+        or expectation.group_id != os.getegid()
+        or expectation.group_id != os.getgid()
+        or type(expectation.supplementary_groups) is not tuple
+        or any(
+            type(group) is not int or group < 0
+            for group in expectation.supplementary_groups
+        )
+        or expectation.supplementary_groups != tuple(sorted(os.getgroups()))
+        or type(expectation.no_new_privileges) is not int
+        or type(expectation.seccomp_mode) is not int
+        or expectation.no_new_privileges != 1
+        or expectation.seccomp_mode != 2
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+
+
+def _read_browser_worker_fd_metadata(
+    pid: int,
+    descriptor: int,
+) -> tuple[int, int, int, int]:
+    raw = _read_browser_proc_value(
+        f"/proc/{pid}/fdinfo/{descriptor}",
+        maximum_bytes=4096,
+    )
+    try:
+        text = raw.decode("ascii", errors="strict")
+        values: dict[str, str] = {}
+        for line in text.splitlines():
+            key, separator, value = line.partition(":")
+            if not separator or not key or key in values:
+                raise ValueError
+            values[key] = value.strip()
+        if set(values) != {"pos", "flags", "mnt_id", "ino"}:
+            raise ValueError
+        flags_text = values["flags"]
+        if (
+            re.fullmatch(r"[0-7]+", flags_text) is None
+            or len(flags_text) > 20
+        ):
+            raise ValueError
+        position = _canonical_proc_integer(
+            values["pos"].encode("ascii"),
+            positive=False,
+        )
+        mount_id = _canonical_proc_integer(
+            values["mnt_id"].encode("ascii"),
+            positive=True,
+        )
+        inode = _canonical_proc_integer(
+            values["ino"].encode("ascii"),
+            positive=True,
+        )
+        return position, int(flags_text, 8), mount_id, inode
+    except (KeyError, UnicodeDecodeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+
+
+def _validate_browser_worker_proc_snapshot(
+    pid: int,
+    runtime: PinnedBrowserPythonExecutable,
+    expectation: BrowserWorkerProcessExpectation,
+) -> BrowserWorkerProcessStat:
+    _validate_browser_worker_expectation(expectation)
+    process = _read_browser_worker_proc_stat(pid)
+    if (
+        process.state not in _BROWSER_LIVE_PROCESS_STATES
+        or process.parent_pid != os.getpid()
+        or process.process_group != pid
+        or process.session_id != pid
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    _validate_browser_worker_executable(pid, runtime)
+    _parse_browser_worker_status(
+        _read_browser_proc_value(
+            f"/proc/{pid}/status",
+            maximum_bytes=_BROWSER_PROC_VALUE_LIMIT,
+        ),
+        process=process,
+        expectation=expectation,
+    )
+    expected_command_line = b"\0".join(
+        value.encode("ascii") for value in expectation.command_line
+    ) + b"\0"
+    expected_environment = b"".join(
+        f"{key}={value}".encode("ascii") + b"\0"
+        for key, value in expectation.environment
+    )
+    command_line = _read_browser_proc_value(
+        f"/proc/{pid}/cmdline",
+        maximum_bytes=_BROWSER_PROC_VALUE_LIMIT,
+    )
+    environment = _read_browser_proc_value(
+        f"/proc/{pid}/environ",
+        maximum_bytes=_BROWSER_PROC_VALUE_LIMIT,
+    )
+    try:
+        cwd = os.readlink(f"/proc/{pid}/cwd")
+        cwd_info = os.stat(f"/proc/{pid}/cwd")
+        expected_cwd_info = expectation.cwd.stat(follow_symlinks=False)
+        descriptor_root = f"/proc/{pid}/fd"
+        descriptor_names: list[str] = []
+        with os.scandir(descriptor_root) as entries:
+            for entry in entries:
+                descriptor_names.append(entry.name)
+                if len(descriptor_names) > len(expectation.descriptors):
+                    raise ValueError
+        observed_numbers = tuple(
+            sorted(
+                int(value)
+                for value in descriptor_names
+                if value.isascii() and value.isdigit()
+            )
+        )
+        if len(observed_numbers) != len(descriptor_names):
+            raise ValueError
+        descriptor_values: list[BrowserWorkerDescriptorExpectation] = []
+        for number in observed_numbers:
+            descriptor_path = f"{descriptor_root}/{number}"
+            descriptor_info = os.stat(descriptor_path)
+            position, flags, mount_id, fdinfo_inode = (
+                _read_browser_worker_fd_metadata(pid, number)
+            )
+            if fdinfo_inode != descriptor_info.st_ino:
+                raise ValueError
+            descriptor_values.append(
+                BrowserWorkerDescriptorExpectation(
+                    number=number,
+                    target=os.readlink(descriptor_path),
+                    device=descriptor_info.st_dev,
+                    inode=descriptor_info.st_ino,
+                    mount_id=mount_id,
+                    position=position,
+                    status_flags=flags & ~os.O_CLOEXEC,
+                    close_on_exec=bool(flags & os.O_CLOEXEC),
+                )
+            )
+        observed_descriptors = tuple(descriptor_values)
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    if (
+        command_line != expected_command_line
+        or environment != expected_environment
+        or cwd != str(expectation.cwd)
+        or (cwd_info.st_dev, cwd_info.st_ino)
+        != (expectation.cwd_device, expectation.cwd_inode)
+        or (expected_cwd_info.st_dev, expected_cwd_info.st_ino)
+        != (expectation.cwd_device, expectation.cwd_inode)
+        or observed_descriptors != expectation.descriptors
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    return process
+
+
+def _stable_browser_process_identity(
+    value: BrowserWorkerProcessStat,
+) -> tuple[int, int, int, int, int]:
+    return (
+        value.pid,
+        value.parent_pid,
+        value.process_group,
+        value.session_id,
+        value.start_ticks,
+    )
+
+
+def _browser_pidfd_is_terminal(descriptor: int) -> bool:
+    selector = selectors.DefaultSelector()
+    try:
+        selector.register(descriptor, selectors.EVENT_READ)
+        return bool(selector.select(0))
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    finally:
+        selector.close()
+
+
+def _validate_browser_worker_executable(
+    pid: int,
+    runtime: PinnedBrowserPythonExecutable,
+) -> None:
+    _validate_pinned_browser_python_executable(runtime)
+    try:
+        executable = Path(f"/proc/{pid}/exe")
+        info = executable.stat()
+        target = os.readlink(executable)
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    if (
+        target != str(_BROWSER_PYTHON_EXECUTABLE)
+        or (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        != (
+            runtime.device,
+            runtime.inode,
+            runtime.size,
+            runtime.mtime_ns,
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+
+
+def _read_browser_pidfd_metadata(
+    descriptor: int,
+) -> tuple[os.stat_result, int | None, int, int]:
+    if (
+        type(descriptor) is not int
+        or descriptor <= 2
+        or descriptor > _BROWSER_WORKER_MAX_FD
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        info = os.fstat(descriptor)
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
+        descriptor_flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+        status_flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        info_descriptor = os.open(
+            f"/proc/self/fdinfo/{descriptor}",
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+        )
+        try:
+            raw_info = bytearray()
+            while len(raw_info) <= 4096:
+                block = os.read(info_descriptor, 4097 - len(raw_info))
+                if not block:
+                    break
+                raw_info.extend(block)
+        finally:
+            os.close(info_descriptor)
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    try:
+        text = bytes(raw_info).decode("ascii", errors="strict")
+        pairs: dict[str, str] = {}
+        for line in text.splitlines():
+            key, separator, value = line.partition(":")
+            if not separator or not key or key in pairs:
+                raise ValueError
+            pairs[key] = value.strip()
+        if set(pairs) != {"pos", "flags", "mnt_id", "ino", "Pid", "NSpid"}:
+            raise ValueError
+        if (
+            pairs["pos"] != "0"
+            or re.fullmatch(r"[0-7]+", pairs["flags"]) is None
+            or re.fullmatch(r"[1-9][0-9]*", pairs["mnt_id"]) is None
+            or re.fullmatch(r"[1-9][0-9]*", pairs["ino"]) is None
+            or int(pairs["flags"], 8)
+            != status_flags | (
+                os.O_CLOEXEC if descriptor_flags & fcntl.FD_CLOEXEC else 0
+            )
+            or int(pairs["ino"]) != info.st_ino
+            or pairs["NSpid"] != pairs["Pid"]
+        ):
+            raise ValueError
+        pid_value = pairs["Pid"]
+        if pid_value == "-1":
+            process_id = None
+        elif re.fullmatch(r"[1-9][0-9]*", pid_value) is not None:
+            process_id = int(pid_value)
+        else:
+            raise ValueError
+    except (UnicodeDecodeError, KeyError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        ) from None
+    if (
+        (
+            soft_limit != resource.RLIM_INFINITY
+            and descriptor >= soft_limit
+        )
+        or target != "anon_inode:[pidfd]"
+        or descriptor_flags & fcntl.FD_CLOEXEC == 0
+        or os.get_inheritable(descriptor)
+        or status_flags != os.O_RDWR
+        or len(raw_info) > 4096
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    return info, process_id, descriptor_flags, status_flags
+
+
+def _validate_browser_pidfd(
+    observed: ObservedBrowserWorker,
+) -> None:
+    if (
+        type(observed) is not ObservedBrowserWorker
+        or observed._owner_token is not _BROWSER_HANDLE_TOKEN
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    info, process_id, _, _ = _read_browser_pidfd_metadata(observed.pidfd)
+    if (
+        process_id != observed.process.pid
+        or (info.st_dev, info.st_ino)
+        != (observed.pidfd_device, observed.pidfd_inode)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+
+
+def observe_browser_worker_process(
+    pid: int,
+    runtime: PinnedBrowserPythonExecutable,
+    *,
+    expectation: BrowserWorkerProcessExpectation,
+) -> ObservedBrowserWorker:
+    if type(pid) is not int or pid <= 1 or pid > 2_147_483_647:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    pidfd = -1
+    try:
+        open_standard_descriptors: set[int] = set()
+        for standard_descriptor in (0, 1, 2):
+            try:
+                os.fstat(standard_descriptor)
+            except OSError:
+                continue
+            open_standard_descriptors.add(standard_descriptor)
+        opener = getattr(os, "pidfd_open", None)
+        if not callable(opener):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            )
+        try:
+            candidate_pidfd = opener(pid, 0)
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            ) from None
+        if (
+            type(candidate_pidfd) is not int
+            or candidate_pidfd <= 2
+            or candidate_pidfd > _BROWSER_WORKER_MAX_FD
+        ):
+            if (
+                type(candidate_pidfd) is int
+                and candidate_pidfd >= 0
+                and candidate_pidfd not in open_standard_descriptors
+            ):
+                try:
+                    os.close(candidate_pidfd)
+                except OSError:
+                    pass
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            )
+        pidfd = candidate_pidfd
+        initial = _read_browser_worker_proc_stat(pid)
+        if (
+            initial.state not in _BROWSER_LIVE_PROCESS_STATES
+            or initial.parent_pid != os.getpid()
+            or initial.process_group != pid
+            or initial.session_id != pid
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            )
+        info = os.fstat(pidfd)
+        observed = ObservedBrowserWorker(
+            pidfd=pidfd,
+            pidfd_device=info.st_dev,
+            pidfd_inode=info.st_ino,
+            process=initial,
+        )
+        observed._owner_token = _BROWSER_HANDLE_TOKEN
+        _validate_browser_pidfd(observed)
+        if _browser_pidfd_is_terminal(pidfd):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            )
+        repeated = _validate_browser_worker_proc_snapshot(
+            pid,
+            runtime,
+            expectation,
+        )
+        if (
+            repeated.state not in _BROWSER_LIVE_PROCESS_STATES
+            or _stable_browser_process_identity(repeated)
+            != _stable_browser_process_identity(initial)
+            or _browser_pidfd_is_terminal(pidfd)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser process differs"
+            )
+        return observed
+    except BaseException:
+        if pidfd >= 0:
+            os.close(pidfd)
+        raise
+
+
+def require_browser_worker_process_live(
+    observed: ObservedBrowserWorker,
+    runtime: PinnedBrowserPythonExecutable,
+    *,
+    expectation: BrowserWorkerProcessExpectation,
+) -> BrowserWorkerProcessStat:
+    if type(observed) is not ObservedBrowserWorker:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    _validate_browser_pidfd(observed)
+    if _browser_pidfd_is_terminal(observed.pidfd):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    repeated = _validate_browser_worker_proc_snapshot(
+        observed.process.pid,
+        runtime,
+        expectation,
+    )
+    if (
+        repeated.state not in _BROWSER_LIVE_PROCESS_STATES
+        or _stable_browser_process_identity(repeated)
+        != _stable_browser_process_identity(observed.process)
+        or _browser_pidfd_is_terminal(observed.pidfd)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser process differs"
+        )
+    return repeated
 
 
 def _validate_docker_config_root(path: Path) -> Path:
@@ -3203,7 +4293,10 @@ __all__ = [
     "BROWSER_WORKER_HIDDEN_MODE",
     "BROWSER_WORKER_PROTOCOL",
     "BrowserWorkerArguments",
+    "BrowserWorkerDescriptorExpectation",
     "BrowserWorkerExpectedAttestation",
+    "BrowserWorkerProcessExpectation",
+    "BrowserWorkerProcessStat",
     "BrowserWorkerReady",
     "BrowserWorkerRequest",
     "BrowserWorkerResult",
@@ -3216,6 +4309,8 @@ __all__ = [
     "MaterializerInvocation",
     "MaterializerPhaseProof",
     "MaterializerVolumeFingerprint",
+    "ObservedBrowserWorker",
+    "PinnedBrowserPythonExecutable",
     "attest_docker_materializer_runtime",
     "build_materializer_create_argv",
     "build_materializer_volume_create_argv",
@@ -3227,12 +4322,15 @@ __all__ = [
     "encode_browser_worker_frame",
     "materializer_invocation",
     "new_browser_worker_identifiers",
+    "observe_browser_worker_process",
     "open_trusted_docker",
+    "open_pinned_browser_python_executable",
     "parse_browser_worker_arguments",
     "read_browser_worker_frame",
     "read_browser_worker_secret",
     "remove_owned_materializer_container",
     "remove_owned_materializer_volume",
+    "require_browser_worker_process_live",
     "run_materializer_phase",
     "validate_browser_worker_ready",
     "validate_browser_worker_ready_attestation",

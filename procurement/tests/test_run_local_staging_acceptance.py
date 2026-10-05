@@ -5,11 +5,13 @@ from __future__ import annotations
 import ast
 import copy
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from dataclasses import replace
 import hashlib
 from io import StringIO
 import json
 import os
 from pathlib import Path
+import selectors
 import sys
 from tempfile import TemporaryDirectory
 import threading
@@ -450,6 +452,38 @@ def _exited_container(
     value["HostsPath"] = f"/var/lib/docker/containers/{CONTAINER_ID}/hosts"
     value["HostConfig"]["OomKillDisable"] = None
     return value
+
+
+def _browser_descriptor_expectation(
+    source_descriptor: int,
+    *,
+    number: int | None = None,
+    target: str | None = None,
+    close_on_exec: bool,
+) -> acceptance.BrowserWorkerDescriptorExpectation:
+    info = os.fstat(source_descriptor)
+    position, flags, mount_id, fdinfo_inode = (
+        acceptance._read_browser_worker_fd_metadata(
+            os.getpid(),
+            source_descriptor,
+        )
+    )
+    if fdinfo_inode != info.st_ino:
+        raise AssertionError("descriptor fixture identity differs")
+    return acceptance.BrowserWorkerDescriptorExpectation(
+        number=source_descriptor if number is None else number,
+        target=(
+            os.readlink(f"/proc/self/fd/{source_descriptor}")
+            if target is None
+            else target
+        ),
+        device=info.st_dev,
+        inode=info.st_ino,
+        mount_id=mount_id,
+        position=position,
+        status_flags=flags & ~os.O_CLOEXEC,
+        close_on_exec=close_on_exec,
+    )
 
 
 class RunLocalStagingAcceptanceTests(unittest.TestCase):
@@ -1563,6 +1597,892 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         os.close(write_descriptor)
         for index in range(len(stalled_secret)):
             stalled_secret[index] = 0
+
+    def test_browser_worker_proc_stat_is_bounded_and_unambiguous(self):
+        pid = 23456
+        fields = (
+            ["S", "123", "23456", "23456"]
+            + ["0"] * 15
+            + ["987654"]
+            + ["0"] * 30
+        )
+        raw = (
+            f"{pid} (worker ) with spaces) {' '.join(fields)}\n".encode(
+                "ascii"
+            )
+        )
+        self.assertEqual(
+            acceptance._parse_browser_worker_proc_stat(
+                raw,
+                expected_pid=pid,
+            ),
+            acceptance.BrowserWorkerProcessStat(
+                pid=pid,
+                state="S",
+                parent_pid=123,
+                process_group=pid,
+                session_id=pid,
+                start_ticks=987654,
+            ),
+        )
+
+        def changed_field(index: int, value: str) -> bytes:
+            selected = list(fields)
+            selected[index] = value
+            return f"{pid} (worker) {' '.join(selected)}\n".encode("ascii")
+
+        malformed = (
+            b"",
+            raw[:-1],
+            raw + b"\n",
+            raw.replace(b"worker", b"work\0er"),
+            raw.replace(str(pid).encode("ascii"), b"99999", 1),
+            f"{pid} worker {' '.join(fields)}\n".encode("ascii"),
+            f"{pid} (worker) S 1 2\n".encode("ascii"),
+            changed_field(0, "?"),
+            changed_field(1, "0"),
+            changed_field(1, "9" * 5_000),
+            changed_field(2, "023456"),
+            changed_field(3, "-1"),
+            changed_field(19, "0"),
+            (
+                f"{pid} (worker) ".encode("ascii")
+                + b"S "
+                + b"1 " * acceptance._BROWSER_PROC_STAT_LIMIT
+                + b"\n"
+            ),
+        )
+        for selected in malformed:
+            with self.subTest(raw=selected[:64]), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._parse_browser_worker_proc_stat(
+                    selected,
+                    expected_pid=pid,
+                )
+
+    def test_browser_worker_process_is_bound_to_direct_python_and_pidfd(self):
+        self.assertEqual(
+            str(acceptance._BROWSER_PYTHON_EXECUTABLE),
+            "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-"
+            "python3-3.13.11/bin/python3.13",
+        )
+        self.assertEqual(acceptance._BROWSER_PYTHON_BYTES, 15_776)
+        self.assertEqual(
+            acceptance._BROWSER_PYTHON_SHA256,
+            "bd5afcc703e9293ebea22ec05ad3a95f5b14ca6b65293a5f2969efe83148f565",
+        )
+        with (
+            patch.object(acceptance.os, "open", return_value=0),
+            patch.object(acceptance.os, "close") as close_low_descriptor,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance.open_pinned_browser_python_executable()
+        close_low_descriptor.assert_called_once_with(0)
+        for invalid_pid in (True, 1, 2_147_483_648, 10**100):
+            with self.subTest(invalid_pid=invalid_pid), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.observe_browser_worker_process(
+                    invalid_pid,
+                    None,
+                    expectation=None,
+                )
+        process = None
+        observed = None
+        ready_read = ready_write = gate_read = gate_write = -1
+        held_descriptor = -1
+        with (
+            acceptance.open_pinned_browser_python_executable() as runtime,
+            TemporaryDirectory() as descriptor_temporary,
+        ):
+            held_path = Path(descriptor_temporary) / "held-input"
+            held_path.write_bytes(b"fixed held descriptor fixture")
+            held_descriptor = os.open(
+                held_path,
+                os.O_RDONLY | os.O_CLOEXEC,
+            )
+            try:
+                ready_read, ready_write = os.pipe2(os.O_CLOEXEC)
+                gate_read, gate_write = os.pipe2(os.O_CLOEXEC)
+                code = (
+                    "import os,sys;"
+                    "tuple(os.set_inheritable(int(value),False) "
+                    "for value in sys.argv[1:5]);"
+                    "os.write(int(sys.argv[1]),b'R');"
+                    "assert os.read(int(sys.argv[2]),1)==b'P';"
+                    "held=int(sys.argv[4]);"
+                    "os.lseek(held,1,os.SEEK_SET);"
+                    "os.write(int(sys.argv[1]),b'P');"
+                    "assert os.read(int(sys.argv[2]),1)==b'D';"
+                    "os.close(held);"
+                    "replacement=os.open(sys.argv[5],os.O_RDONLY|os.O_CLOEXEC);"
+                    "(os.dup2(replacement,held,inheritable=False),"
+                    "os.close(replacement)) if replacement!=held else None;"
+                    "os.set_inheritable(held,False);"
+                    "os.write(int(sys.argv[1]),b'D');"
+                    "os.read(int(sys.argv[2]),1)"
+                )
+                worker_argv = (
+                    f"/proc/self/fd/{runtime.descriptor}",
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-P",
+                    "-c",
+                    code,
+                    str(ready_write),
+                    str(gate_read),
+                    str(runtime.descriptor),
+                    str(held_descriptor),
+                    str(held_path),
+                )
+                standard_probe = os.open(
+                    "/dev/null",
+                    os.O_RDWR | os.O_CLOEXEC,
+                )
+                try:
+                    standard_descriptors = tuple(
+                        _browser_descriptor_expectation(
+                            standard_probe,
+                            number=number,
+                            target="/dev/null",
+                            close_on_exec=False,
+                        )
+                        for number in (0, 1, 2)
+                    )
+                finally:
+                    os.close(standard_probe)
+                expected_descriptors = tuple(
+                    sorted(
+                        (
+                            *standard_descriptors,
+                            _browser_descriptor_expectation(
+                                runtime.descriptor,
+                                close_on_exec=True,
+                            ),
+                            _browser_descriptor_expectation(
+                                ready_write,
+                                close_on_exec=True,
+                            ),
+                            _browser_descriptor_expectation(
+                                gate_read,
+                                close_on_exec=True,
+                            ),
+                            _browser_descriptor_expectation(
+                                held_descriptor,
+                                close_on_exec=True,
+                            ),
+                        ),
+                        key=lambda item: item.number,
+                    )
+                )
+                expectation = acceptance.BrowserWorkerProcessExpectation(
+                    command_line=worker_argv,
+                    environment=acceptance._BROWSER_WORKER_ENVIRONMENT,
+                    cwd=Path.cwd(),
+                    cwd_device=Path.cwd().stat().st_dev,
+                    cwd_inode=Path.cwd().stat().st_ino,
+                    descriptors=expected_descriptors,
+                    user_id=os.geteuid(),
+                    group_id=os.getegid(),
+                    supplementary_groups=tuple(sorted(os.getgroups())),
+                    no_new_privileges=1,
+                    seccomp_mode=2,
+                )
+                process = acceptance.subprocess.Popen(
+                    worker_argv,
+                    stdin=acceptance.subprocess.DEVNULL,
+                    stdout=acceptance.subprocess.DEVNULL,
+                    stderr=acceptance.subprocess.DEVNULL,
+                    close_fds=True,
+                    pass_fds=(
+                        runtime.descriptor,
+                        ready_write,
+                        gate_read,
+                        held_descriptor,
+                    ),
+                    start_new_session=True,
+                    shell=False,
+                    env=dict(acceptance._BROWSER_WORKER_ENVIRONMENT),
+                )
+                child_gate_descriptor = gate_read
+                os.close(ready_write)
+                ready_write = -1
+                os.close(gate_read)
+                gate_read = -1
+                selector = selectors.DefaultSelector()
+                try:
+                    selector.register(ready_read, selectors.EVENT_READ)
+                    self.assertTrue(selector.select(5.0))
+                finally:
+                    selector.close()
+                self.assertEqual(os.read(ready_read, 1), b"R")
+
+                with patch.object(acceptance.os, "pidfd_open", None):
+                    with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                        acceptance.observe_browser_worker_process(
+                            process.pid,
+                            runtime,
+                            expectation=expectation,
+                        )
+                standard_input = os.fstat(0)
+                with patch.object(
+                    acceptance.os,
+                    "pidfd_open",
+                    return_value=False,
+                ):
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.observe_browser_worker_process(
+                            process.pid,
+                            runtime,
+                            expectation=expectation,
+                        )
+                with patch.object(
+                    acceptance.os,
+                    "pidfd_open",
+                    return_value=0,
+                ):
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.observe_browser_worker_process(
+                            process.pid,
+                            runtime,
+                            expectation=expectation,
+                        )
+                self.assertEqual(os.fstat(0), standard_input)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.observe_browser_worker_process(
+                        process.pid,
+                        runtime,
+                        expectation=replace(
+                            expectation,
+                            command_line=expectation.command_line
+                            + ("unexpected",),
+                        ),
+                    )
+                observed = acceptance.observe_browser_worker_process(
+                    process.pid,
+                    runtime,
+                    expectation=expectation,
+                )
+                current = acceptance.require_browser_worker_process_live(
+                    observed,
+                    runtime,
+                    expectation=expectation,
+                )
+                self.assertEqual(current.pid, process.pid)
+                self.assertEqual(current.start_ticks, observed.process.start_ticks)
+                expectation_mutations = (
+                    replace(
+                        expectation,
+                        environment=expectation.environment
+                        + (("FORBIDDEN_MARKER", "present"),),
+                    ),
+                    replace(
+                        expectation,
+                        descriptors=expectation.descriptors[:-1],
+                    ),
+                    replace(
+                        expectation,
+                        descriptors=tuple(
+                            replace(
+                                item,
+                                status_flags=(
+                                    item.status_flags & ~os.O_ACCMODE
+                                )
+                                | os.O_WRONLY,
+                            )
+                            if item.number == child_gate_descriptor
+                            else item
+                            for item in expectation.descriptors
+                        ),
+                    ),
+                    replace(
+                        expectation,
+                        descriptors=tuple(
+                            replace(
+                                item,
+                                status_flags=item.status_flags | os.O_NONBLOCK,
+                            )
+                            if item.number == child_gate_descriptor
+                            else item
+                            for item in expectation.descriptors
+                        ),
+                    ),
+                    replace(
+                        expectation,
+                        descriptors=tuple(
+                            replace(item, inode=item.inode + 1)
+                            if item.number == child_gate_descriptor
+                            else item
+                            for item in expectation.descriptors
+                        ),
+                    ),
+                    replace(
+                        expectation,
+                        descriptors=tuple(
+                            replace(item, position=item.position + 1)
+                            if item.number == child_gate_descriptor
+                            else item
+                            for item in expectation.descriptors
+                        ),
+                    ),
+                    replace(expectation, cwd=Path("/")),
+                    replace(expectation, cwd_inode=expectation.cwd_inode + 1),
+                    replace(expectation, user_id=expectation.user_id + 1),
+                )
+                for changed in expectation_mutations:
+                    with self.subTest(changed=changed), self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.require_browser_worker_process_live(
+                            observed,
+                            runtime,
+                            expectation=changed,
+                        )
+
+                original_process = observed.process
+                observed.process = replace(
+                    observed.process,
+                    start_ticks=observed.process.start_ticks + 1,
+                )
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.require_browser_worker_process_live(
+                            observed,
+                            runtime,
+                            expectation=expectation,
+                        )
+                finally:
+                    observed.process = original_process
+
+                os.kill(process.pid, acceptance.signal.SIGSTOP)
+                deadline = time.monotonic() + 2.0
+                while time.monotonic() < deadline:
+                    if acceptance._read_browser_worker_proc_stat(
+                        process.pid
+                    ).state in {"T", "t"}:
+                        break
+                    time.sleep(0.01)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.require_browser_worker_process_live(
+                        observed,
+                        runtime,
+                        expectation=expectation,
+                    )
+                os.kill(process.pid, acceptance.signal.SIGCONT)
+                deadline = time.monotonic() + 2.0
+                while time.monotonic() < deadline:
+                    if acceptance._read_browser_worker_proc_stat(
+                        process.pid
+                    ).state in {"R", "S"}:
+                        break
+                    time.sleep(0.01)
+                acceptance.require_browser_worker_process_live(
+                    observed,
+                    runtime,
+                    expectation=expectation,
+                )
+
+                original_pidfd_inode = observed.pidfd_inode
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    copy.copy(observed)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    copy.deepcopy(observed)
+                original_pidfd = observed.pidfd
+                observed.pidfd = 10**100
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observed.close()
+                finally:
+                    observed.pidfd = original_pidfd
+                observed.pidfd_inode += 1
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observed.close()
+                finally:
+                    observed.pidfd_inode = original_pidfd_inode
+
+                os.write(gate_write, b"P")
+                selector = selectors.DefaultSelector()
+                try:
+                    selector.register(ready_read, selectors.EVENT_READ)
+                    self.assertTrue(selector.select(5.0))
+                finally:
+                    selector.close()
+                self.assertEqual(os.read(ready_read, 1), b"P")
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.require_browser_worker_process_live(
+                        observed,
+                        runtime,
+                        expectation=expectation,
+                    )
+                os.lseek(held_descriptor, 0, os.SEEK_SET)
+                acceptance.require_browser_worker_process_live(
+                    observed,
+                    runtime,
+                    expectation=expectation,
+                )
+
+                displaced_held_path = Path(descriptor_temporary) / "displaced"
+                held_path.rename(displaced_held_path)
+                held_path.write_bytes(b"fixed held descriptor fixture")
+                self.assertNotEqual(
+                    held_path.stat().st_ino,
+                    os.fstat(held_descriptor).st_ino,
+                )
+                os.write(gate_write, b"D")
+                selector = selectors.DefaultSelector()
+                try:
+                    selector.register(ready_read, selectors.EVENT_READ)
+                    self.assertTrue(selector.select(5.0))
+                finally:
+                    selector.close()
+                self.assertEqual(os.read(ready_read, 1), b"D")
+                os.close(ready_read)
+                ready_read = -1
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.require_browser_worker_process_live(
+                        observed,
+                        runtime,
+                        expectation=expectation,
+                    )
+                os.write(gate_write, b"X")
+                os.close(gate_write)
+                gate_write = -1
+                self.assertEqual(process.wait(timeout=5.0), 0)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.require_browser_worker_process_live(
+                        observed,
+                        runtime,
+                        expectation=expectation,
+                    )
+                replacement_process = acceptance.subprocess.Popen(
+                    (
+                        str(acceptance._BROWSER_PYTHON_EXECUTABLE),
+                        "-I",
+                        "-S",
+                        "-B",
+                        "-c",
+                        "import time;time.sleep(5)",
+                    ),
+                    stdin=acceptance.subprocess.DEVNULL,
+                    stdout=acceptance.subprocess.DEVNULL,
+                    stderr=acceptance.subprocess.DEVNULL,
+                    close_fds=True,
+                    start_new_session=True,
+                    shell=False,
+                    env=dict(acceptance._BROWSER_WORKER_ENVIRONMENT),
+                )
+                stale_descriptor = observed.pidfd
+                os.close(stale_descriptor)
+                replacement_pidfd = os.pidfd_open(replacement_process.pid)
+                try:
+                    if replacement_pidfd != stale_descriptor:
+                        os.dup2(replacement_pidfd, stale_descriptor)
+                        os.close(replacement_pidfd)
+                        replacement_pidfd = stale_descriptor
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observed.close()
+                finally:
+                    os.close(replacement_pidfd)
+                    observed.pidfd = -1
+                    observed._owner_token = None
+                    replacement_process.kill()
+                    replacement_process.wait(timeout=5.0)
+            finally:
+                if process is not None and process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5.0)
+                if observed is not None:
+                    observed.close()
+                for descriptor in (
+                    ready_read,
+                    ready_write,
+                    gate_read,
+                    gate_write,
+                ):
+                    if descriptor >= 0:
+                        os.close(descriptor)
+                if held_descriptor >= 0:
+                    os.close(held_descriptor)
+                    held_descriptor = -1
+
+            def assert_actual_drift_rejected(
+                *,
+                extra_environment: bool = False,
+                nonblocking_ready: bool = False,
+                extra_descriptor: bool = False,
+            ) -> None:
+                dirty_process = None
+                dirty_ready_read = dirty_ready_write = -1
+                dirty_gate_read = dirty_gate_write = -1
+                dirty_extra_read = dirty_extra_write = -1
+                try:
+                    dirty_ready_read, dirty_ready_write = os.pipe2(
+                        os.O_CLOEXEC
+                    )
+                    dirty_gate_read, dirty_gate_write = os.pipe2(
+                        os.O_CLOEXEC
+                    )
+                    if extra_descriptor:
+                        dirty_extra_read, dirty_extra_write = os.pipe2(
+                            os.O_CLOEXEC
+                        )
+                    toggle = (
+                        "fcntl.fcntl(int(sys.argv[1]),fcntl.F_SETFL,"
+                        "fcntl.fcntl(int(sys.argv[1]),fcntl.F_GETFL)"
+                        "|os.O_NONBLOCK);"
+                        if nonblocking_ready
+                        else ""
+                    )
+                    dirty_code = (
+                        "import fcntl,os,sys;"
+                        "tuple(os.set_inheritable(int(value),False) "
+                        "for value in sys.argv[1:]);"
+                        + toggle
+                        + "os.write(int(sys.argv[1]),b'R');"
+                        "os.read(int(sys.argv[2]),1)"
+                    )
+                    dirty_argv = (
+                        f"/proc/self/fd/{runtime.descriptor}",
+                        "-I",
+                        "-S",
+                        "-B",
+                        "-P",
+                        "-c",
+                        dirty_code,
+                        str(dirty_ready_write),
+                        str(dirty_gate_read),
+                        str(runtime.descriptor),
+                    ) + (
+                        (str(dirty_extra_read),)
+                        if extra_descriptor
+                        else ()
+                    )
+                    dirty_descriptors = tuple(
+                        sorted(
+                            (
+                                *standard_descriptors,
+                                _browser_descriptor_expectation(
+                                    runtime.descriptor,
+                                    close_on_exec=True,
+                                ),
+                                _browser_descriptor_expectation(
+                                    dirty_ready_write,
+                                    close_on_exec=True,
+                                ),
+                                _browser_descriptor_expectation(
+                                    dirty_gate_read,
+                                    close_on_exec=True,
+                                ),
+                            ),
+                            key=lambda item: item.number,
+                        )
+                    )
+                    dirty_expectation = replace(
+                        expectation,
+                        command_line=dirty_argv,
+                        descriptors=dirty_descriptors,
+                    )
+                    dirty_environment = dict(
+                        acceptance._BROWSER_WORKER_ENVIRONMENT
+                    )
+                    if extra_environment:
+                        dirty_environment["FORBIDDEN_MARKER"] = "present"
+                    pass_fds = (
+                        runtime.descriptor,
+                        dirty_ready_write,
+                        dirty_gate_read,
+                    ) + (
+                        (dirty_extra_read,) if extra_descriptor else ()
+                    )
+                    dirty_process = acceptance.subprocess.Popen(
+                        dirty_argv,
+                        stdin=acceptance.subprocess.DEVNULL,
+                        stdout=acceptance.subprocess.DEVNULL,
+                        stderr=acceptance.subprocess.DEVNULL,
+                        close_fds=True,
+                        pass_fds=pass_fds,
+                        start_new_session=True,
+                        shell=False,
+                        env=dirty_environment,
+                    )
+                    os.close(dirty_ready_write)
+                    dirty_ready_write = -1
+                    os.close(dirty_gate_read)
+                    dirty_gate_read = -1
+                    if dirty_extra_read >= 0:
+                        os.close(dirty_extra_read)
+                        dirty_extra_read = -1
+                    selector = selectors.DefaultSelector()
+                    try:
+                        selector.register(
+                            dirty_ready_read,
+                            selectors.EVENT_READ,
+                        )
+                        self.assertTrue(selector.select(5.0))
+                    finally:
+                        selector.close()
+                    self.assertEqual(os.read(dirty_ready_read, 1), b"R")
+                    os.close(dirty_ready_read)
+                    dirty_ready_read = -1
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.observe_browser_worker_process(
+                            dirty_process.pid,
+                            runtime,
+                            expectation=dirty_expectation,
+                        )
+                    os.write(dirty_gate_write, b"X")
+                    os.close(dirty_gate_write)
+                    dirty_gate_write = -1
+                    self.assertEqual(dirty_process.wait(timeout=5.0), 0)
+                finally:
+                    if dirty_process is not None and dirty_process.poll() is None:
+                        dirty_process.kill()
+                        dirty_process.wait(timeout=5.0)
+                    for descriptor in (
+                        dirty_ready_read,
+                        dirty_ready_write,
+                        dirty_gate_read,
+                        dirty_gate_write,
+                        dirty_extra_read,
+                        dirty_extra_write,
+                    ):
+                        if descriptor >= 0:
+                            os.close(descriptor)
+
+            for drift in (
+                {"extra_environment": True},
+                {"nonblocking_ready": True},
+                {"extra_descriptor": True},
+            ):
+                with self.subTest(actual_drift=drift):
+                    assert_actual_drift_rejected(**drift)
+
+            cwd_process = None
+            cwd_observed = None
+            cwd_ready_read = cwd_ready_write = -1
+            cwd_gate_read = cwd_gate_write = -1
+            with TemporaryDirectory() as temporary:
+                cwd_root = Path(temporary)
+                cwd_path = cwd_root / "worker"
+                cwd_path.mkdir(mode=0o700)
+                original_cwd = cwd_path.stat()
+                try:
+                    cwd_ready_read, cwd_ready_write = os.pipe2(os.O_CLOEXEC)
+                    cwd_gate_read, cwd_gate_write = os.pipe2(os.O_CLOEXEC)
+                    cwd_code = (
+                        "import os,sys;"
+                        "tuple(os.set_inheritable(int(value),False) "
+                        "for value in sys.argv[1:4]);"
+                        "os.write(int(sys.argv[1]),b'R');"
+                        "assert os.read(int(sys.argv[2]),1)==b'C';"
+                        "os.chdir(sys.argv[4]);"
+                        "os.write(int(sys.argv[1]),b'C');"
+                        "os.read(int(sys.argv[2]),1)"
+                    )
+                    cwd_argv = (
+                        f"/proc/self/fd/{runtime.descriptor}",
+                        "-I",
+                        "-S",
+                        "-B",
+                        "-P",
+                        "-c",
+                        cwd_code,
+                        str(cwd_ready_write),
+                        str(cwd_gate_read),
+                        str(runtime.descriptor),
+                        str(cwd_path),
+                    )
+                    cwd_descriptors = tuple(
+                        sorted(
+                            (
+                                *standard_descriptors,
+                                _browser_descriptor_expectation(
+                                    runtime.descriptor,
+                                    close_on_exec=True,
+                                ),
+                                _browser_descriptor_expectation(
+                                    cwd_ready_write,
+                                    close_on_exec=True,
+                                ),
+                                _browser_descriptor_expectation(
+                                    cwd_gate_read,
+                                    close_on_exec=True,
+                                ),
+                            ),
+                            key=lambda item: item.number,
+                        )
+                    )
+                    cwd_expectation = replace(
+                        expectation,
+                        command_line=cwd_argv,
+                        cwd=cwd_path,
+                        cwd_device=original_cwd.st_dev,
+                        cwd_inode=original_cwd.st_ino,
+                        descriptors=cwd_descriptors,
+                    )
+                    cwd_process = acceptance.subprocess.Popen(
+                        cwd_argv,
+                        stdin=acceptance.subprocess.DEVNULL,
+                        stdout=acceptance.subprocess.DEVNULL,
+                        stderr=acceptance.subprocess.DEVNULL,
+                        close_fds=True,
+                        pass_fds=(
+                            runtime.descriptor,
+                            cwd_ready_write,
+                            cwd_gate_read,
+                        ),
+                        start_new_session=True,
+                        shell=False,
+                        cwd=cwd_path,
+                        env=dict(acceptance._BROWSER_WORKER_ENVIRONMENT),
+                    )
+                    os.close(cwd_ready_write)
+                    cwd_ready_write = -1
+                    os.close(cwd_gate_read)
+                    cwd_gate_read = -1
+                    selector = selectors.DefaultSelector()
+                    try:
+                        selector.register(cwd_ready_read, selectors.EVENT_READ)
+                        self.assertTrue(selector.select(5.0))
+                    finally:
+                        selector.close()
+                    self.assertEqual(os.read(cwd_ready_read, 1), b"R")
+                    cwd_observed = acceptance.observe_browser_worker_process(
+                        cwd_process.pid,
+                        runtime,
+                        expectation=cwd_expectation,
+                    )
+
+                    displaced_cwd = cwd_root / "displaced"
+                    cwd_path.rename(displaced_cwd)
+                    cwd_path.mkdir(mode=0o700)
+                    self.assertNotEqual(
+                        cwd_path.stat().st_ino,
+                        original_cwd.st_ino,
+                    )
+                    os.write(cwd_gate_write, b"C")
+                    selector = selectors.DefaultSelector()
+                    try:
+                        selector.register(cwd_ready_read, selectors.EVENT_READ)
+                        self.assertTrue(selector.select(5.0))
+                    finally:
+                        selector.close()
+                    self.assertEqual(os.read(cwd_ready_read, 1), b"C")
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.require_browser_worker_process_live(
+                            cwd_observed,
+                            runtime,
+                            expectation=cwd_expectation,
+                        )
+                    os.write(cwd_gate_write, b"X")
+                    os.close(cwd_gate_write)
+                    cwd_gate_write = -1
+                    self.assertEqual(cwd_process.wait(timeout=5.0), 0)
+                finally:
+                    if cwd_process is not None and cwd_process.poll() is None:
+                        cwd_process.kill()
+                        cwd_process.wait(timeout=5.0)
+                    if cwd_observed is not None:
+                        cwd_observed.close()
+                    for descriptor in (
+                        cwd_ready_read,
+                        cwd_ready_write,
+                        cwd_gate_read,
+                        cwd_gate_write,
+                    ):
+                        if descriptor >= 0:
+                            os.close(descriptor)
+
+        standard_input = os.fstat(0)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.ObservedBrowserWorker(
+                pidfd=0,
+                pidfd_device=0,
+                pidfd_inode=0,
+                process=acceptance.BrowserWorkerProcessStat(
+                    pid=123,
+                    state="S",
+                    parent_pid=1,
+                    process_group=123,
+                    session_id=123,
+                    start_ticks=1,
+                ),
+            ).close()
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.PinnedBrowserPythonExecutable(
+                descriptor=0,
+                path=acceptance._BROWSER_PYTHON_EXECUTABLE,
+                device=0,
+                inode=0,
+                size=0,
+                mtime_ns=0,
+            ).close()
+        self.assertEqual(os.fstat(0), standard_input)
+
+        with TemporaryDirectory() as temporary:
+            original = acceptance._BROWSER_PYTHON_EXECUTABLE.read_bytes()
+            root = Path(temporary)
+            candidate = root / "python"
+            candidate.write_bytes(original)
+            candidate.chmod(0o555)
+            with patch.multiple(
+                acceptance,
+                _BROWSER_PYTHON_EXECUTABLE=candidate,
+                _BROWSER_PYTHON_BYTES=len(original),
+                _BROWSER_PYTHON_SHA256=hashlib.sha256(original).hexdigest(),
+                _BROWSER_PYTHON_UID=os.geteuid(),
+                _BROWSER_PYTHON_GID=os.getegid(),
+            ):
+                held = acceptance.open_pinned_browser_python_executable()
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    copy.copy(held)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    copy.deepcopy(held)
+                original_descriptor = held.descriptor
+                held.descriptor = 10**100
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance._validate_pinned_browser_python_executable(
+                            held
+                        )
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        held.close()
+                finally:
+                    held.descriptor = original_descriptor
+                displaced = root / "displaced"
+                candidate.rename(displaced)
+                candidate.write_bytes(original)
+                candidate.chmod(0o555)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance._validate_pinned_browser_python_executable(held)
+                finally:
+                    held.close()
 
     def test_browser_request_schema_contains_no_credential_and_fails_closed(self):
         from procurement_os.synthetic_staging_price_stage import (
