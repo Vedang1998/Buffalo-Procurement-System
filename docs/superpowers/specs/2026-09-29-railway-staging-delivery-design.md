@@ -289,6 +289,13 @@ Hard resource gates cover the combined service, not isolated processes:
 
 ## 9. Synthetic database and workflow contract
 
+> **2026-10-05 LOCAL acceptance amendment:** for Task 9 only, the browser-upload
+> step is replaced by a stopped-service operator that may create only the exact
+> registered `VALIDATED` candidate. Confirmation, Backup V2, APPLY, and every
+> downstream purchasing action remain browser-controlled. The historical
+> requirement below remains authoritative outside that one scenario. See
+> [Local Staging Price Bridge Amendment](2026-10-05-local-staging-price-bridge-amendment.md).
+
 The authoritative loopback test initializer and its database guards remain
 unchanged. No Railway credential is supplied to that test runner.
 

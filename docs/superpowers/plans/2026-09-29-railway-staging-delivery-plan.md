@@ -216,6 +216,12 @@ dependency.
 
 ## Task 9 — Integrated local acceptance
 
+> **2026-10-05 additive amendment:** the LOCAL run uses the stopped-service,
+> exact-fixture `VALIDATED` staging boundary in the
+> [Local Staging Price Bridge Amendment](../specs/2026-10-05-local-staging-price-bridge-amendment.md).
+> This replaces only the browser-upload step; confirmation, Backup V2, APPLY,
+> and the rest of the canonical browser workflow remain unchanged.
+
 Against a disposable local PostgreSQL 16 target and a synthetic mounted-volume
 fixture:
 

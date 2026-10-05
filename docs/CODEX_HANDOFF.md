@@ -163,7 +163,8 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   replay cgroup peak of 3,865,370,624 bytes, before any safety margin. It must
   be measured again immediately before any authorized replay; this failed
   snapshot is not permission to retry blindly or weaken the limit.
-- Task 9 is not yet authorized or proven. The earlier accepted V2 contract says
+- At checkpoint `e9f82cd`, Task 9 was not yet authorized or proven. The earlier
+  accepted V2 contract says
   the authenticated browser must create the price upload, confirmation, and
   backup-bound APPLY; the later Railway contract excludes bulk upload while
   still requiring the canonical `$289` browser result, but never authorizes a
@@ -175,16 +176,24 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   which the browser still confirms, backup-binds/APPLYs, maps, selects,
   reviews, and builds DRAFTs/packet; or (C) an explicitly accepted split proof
   frozen at `VALIDATED`. Direct CURRENT seeding or a post-APPLY fixture remains
-  forbidden. Until that decision, the real root container/browser `$289`,
+  forbidden. While that decision remained open, the real root container/browser `$289`,
   corrected research replay/concurrency/idle/crash/restart, RSS/cgroup/OOM,
   and exhaustive cleanup acceptance cannot honestly be claimed.
-- Exact next authorization boundary: retain `REVIEW BLOCKED` and obtain the
-  owner's A/B/C pricing-evidence decision before adding any Task 9 prestate
-  operator or route. After that explicit decision, the remaining local-only
-  gate is the real root/Tini multi-UID container, TLS/browser `$289` workflow,
+- On 2026-10-05 the owner approved Option B and the registered-observation clock
+  correction for Task 9 LOCAL acceptance. The exact amendment is recorded in
+  `docs/superpowers/specs/2026-10-05-local-staging-price-bridge-amendment.md`.
+  The proof is named **operator-staged input, browser-approved workflow**. This
+  approval does not yet constitute implementation or acceptance evidence; the
+  failed browser run above remains the current observed result until the new
+  focused and integrated gates pass.
+- Exact next authorization boundary: implement and validate only the approved
+  stopped-service operator and registered-observation correction, then complete
+  the real root/Tini multi-UID container, TLS/browser `$289` workflow,
   corrected research replay/concurrency/idle/crash/restart, RSS/cgroup/OOM,
-  persistence, and exhaustive cleanup acceptance. Deployment, domain, Railway
-  data transfer, and operational purchasing remain out of scope.
+  persistence, exhaustive cleanup, authoritative suite, and attributable
+  independent review. `REVIEW BLOCKED` remains in force until that evidence and
+  review exist. Deployment, domain, Railway data transfer, and operational
+  purchasing remain out of scope.
 
 ### Staging database Backup V2 and exact startup binding — LOCAL CHECKPOINT PASS / INITIAL TRANSFER-RESTORE PENDING
 
