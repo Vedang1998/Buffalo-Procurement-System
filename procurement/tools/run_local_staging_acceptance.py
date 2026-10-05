@@ -96,6 +96,24 @@ _BROWSER_PYTHON_SHA256 = (
 _BROWSER_PYTHON_UID = 1000
 _BROWSER_PYTHON_GID = 1000
 _BROWSER_PYTHON_MODE = 0o555
+_BROWSER_WORKER_RUNNER_SOURCE = Path(__file__).resolve(strict=True).with_name(
+    "run_local_staging_browser_worker.py"
+)
+_BROWSER_WORKER_RUNNER_BYTES = 664
+_BROWSER_WORKER_RUNNER_SHA256 = (
+    "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2"
+)
+_BROWSER_WORKER_RUNNER_MEMFD_NAME = "buffalo-local-staging-browser-worker"
+_BROWSER_WORKER_RUNNER_MEMFD_TARGET = (
+    f"/memfd:{_BROWSER_WORKER_RUNNER_MEMFD_NAME} (deleted)"
+)
+_BROWSER_WORKER_RUNNER_MODE = 0o400
+_BROWSER_WORKER_RUNNER_SEALS = (
+    fcntl.F_SEAL_SEAL
+    | fcntl.F_SEAL_SHRINK
+    | fcntl.F_SEAL_GROW
+    | fcntl.F_SEAL_WRITE
+)
 _BROWSER_LIVE_PROCESS_STATES = frozenset({"R", "S"})
 _BROWSER_PROCESS_STATES = frozenset(
     {"R", "S", "D", "T", "t", "W", "X", "x", "Z", "P", "I"}
@@ -448,6 +466,86 @@ class PinnedBrowserPythonExecutable:
         raise LocalStagingAcceptanceError(
             "local acceptance browser Python ownership differs"
         )
+
+
+@dataclass
+class PinnedBrowserWorkerRunner:
+    """Owned sealed worker bytes; not a complete executable runtime."""
+
+    descriptor: int
+    device: int
+    inode: int
+    size: int
+    sha256: str
+    _owner_token: object = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def close(self) -> None:
+        descriptor = self.descriptor
+        if descriptor == -1 and self._owner_token is None:
+            return
+        if (
+            self._owner_token is not _BROWSER_HANDLE_TOKEN
+            or type(descriptor) is not int
+            or descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser worker runner cleanup differs"
+            )
+        try:
+            info = os.fstat(descriptor)
+            seals = fcntl.fcntl(descriptor, fcntl.F_GET_SEALS)
+            target = os.readlink(f"/proc/self/fd/{descriptor}")
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser worker runner cleanup differs"
+            ) from None
+        if (
+            (info.st_dev, info.st_ino) != (self.device, self.inode)
+            or seals != _BROWSER_WORKER_RUNNER_SEALS
+            or target != _BROWSER_WORKER_RUNNER_MEMFD_TARGET
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser worker runner cleanup differs"
+            )
+        self.descriptor = -1
+        self._owner_token = None
+        os.close(descriptor)
+
+    def __enter__(self) -> PinnedBrowserWorkerRunner:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def __copy__(self) -> PinnedBrowserWorkerRunner:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner ownership differs"
+        )
+
+    def __deepcopy__(
+        self,
+        _: dict[int, object],
+    ) -> PinnedBrowserWorkerRunner:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner ownership differs"
+        )
+
+
+@dataclass(frozen=True)
+class BrowserWorkerLaunch:
+    """Exact inert launch specification; it confers no execution authority."""
+
+    command_line: tuple[str, ...]
+    environment: tuple[tuple[str, str], ...]
+    cwd: Path
+    pass_fds: tuple[int, ...]
+    arguments: BrowserWorkerArguments
 
 
 @dataclass
@@ -814,6 +912,302 @@ def open_pinned_browser_python_executable() -> PinnedBrowserPythonExecutable:
         if descriptor >= 0:
             os.close(descriptor)
         raise
+
+
+def _read_browser_worker_runner_source() -> bytes:
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            _BROWSER_WORKER_RUNNER_SOURCE,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+        )
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if (
+            descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and descriptor >= soft_limit
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser worker runner differs"
+            )
+        before = os.fstat(descriptor)
+        named_before = _BROWSER_WORKER_RUNNER_SOURCE.stat(
+            follow_symlinks=False
+        )
+        descriptor_target = os.readlink(f"/proc/self/fd/{descriptor}")
+        descriptor_flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+        status_flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        selected = bytearray()
+        while len(selected) <= _BROWSER_WORKER_RUNNER_BYTES:
+            block = os.read(
+                descriptor,
+                _BROWSER_WORKER_RUNNER_BYTES + 1 - len(selected),
+            )
+            if not block:
+                break
+            selected.extend(block)
+        after = os.fstat(descriptor)
+        named_after = _BROWSER_WORKER_RUNNER_SOURCE.stat(
+            follow_symlinks=False
+        )
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        ) from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    identity = (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+    )
+    if (
+        _BROWSER_WORKER_RUNNER_SOURCE.is_symlink()
+        or descriptor_target != str(_BROWSER_WORKER_RUNNER_SOURCE)
+        or descriptor_flags & fcntl.FD_CLOEXEC == 0
+        or status_flags & os.O_ACCMODE != os.O_RDONLY
+        or status_flags & os.O_NONBLOCK == 0
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or (before.st_uid, before.st_gid) != (os.geteuid(), os.getegid())
+        or stat.S_IMODE(before.st_mode) != 0o644
+        or identity
+        != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        )
+        or identity
+        != (
+            named_before.st_dev,
+            named_before.st_ino,
+            named_before.st_size,
+            named_before.st_mtime_ns,
+        )
+        or identity
+        != (
+            named_after.st_dev,
+            named_after.st_ino,
+            named_after.st_size,
+            named_after.st_mtime_ns,
+        )
+        or len(selected) != _BROWSER_WORKER_RUNNER_BYTES
+        or hashlib.sha256(selected).hexdigest()
+        != _BROWSER_WORKER_RUNNER_SHA256
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        )
+    return bytes(selected)
+
+
+def _browser_worker_runner_sha256(descriptor: int) -> str:
+    digest = hashlib.sha256()
+    selected = 0
+    try:
+        if os.lseek(descriptor, 0, os.SEEK_CUR) != 0:
+            raise OSError
+        while selected <= _BROWSER_WORKER_RUNNER_BYTES:
+            block = os.read(
+                descriptor,
+                _BROWSER_WORKER_RUNNER_BYTES + 1 - selected,
+            )
+            if not block:
+                break
+            selected += len(block)
+            digest.update(block)
+        if os.lseek(descriptor, 0, os.SEEK_SET) != 0:
+            raise OSError
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        ) from None
+    if selected != _BROWSER_WORKER_RUNNER_BYTES:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        )
+    return digest.hexdigest()
+
+
+def _validate_pinned_browser_worker_runner(
+    runner: PinnedBrowserWorkerRunner,
+) -> None:
+    if (
+        type(runner) is not PinnedBrowserWorkerRunner
+        or runner._owner_token is not _BROWSER_HANDLE_TOKEN
+        or type(runner.descriptor) is not int
+        or runner.descriptor <= 2
+        or runner.descriptor > _BROWSER_WORKER_MAX_FD
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        )
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        info = os.fstat(runner.descriptor)
+        target = os.readlink(f"/proc/self/fd/{runner.descriptor}")
+        descriptor_flags = fcntl.fcntl(runner.descriptor, fcntl.F_GETFD)
+        status_flags = fcntl.fcntl(runner.descriptor, fcntl.F_GETFL)
+        seals = fcntl.fcntl(runner.descriptor, fcntl.F_GET_SEALS)
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        ) from None
+    if (
+        (
+            soft_limit != resource.RLIM_INFINITY
+            and runner.descriptor >= soft_limit
+        )
+        or target != _BROWSER_WORKER_RUNNER_MEMFD_TARGET
+        or descriptor_flags & fcntl.FD_CLOEXEC == 0
+        or os.get_inheritable(runner.descriptor)
+        or status_flags & os.O_ACCMODE != os.O_RDONLY
+        or status_flags & os.O_NONBLOCK != 0
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 0
+        or (info.st_uid, info.st_gid) != (os.geteuid(), os.getegid())
+        or stat.S_IMODE(info.st_mode) != _BROWSER_WORKER_RUNNER_MODE
+        or seals != _BROWSER_WORKER_RUNNER_SEALS
+        or info.st_size != _BROWSER_WORKER_RUNNER_BYTES
+        or (info.st_dev, info.st_ino, info.st_size)
+        != (runner.device, runner.inode, runner.size)
+        or runner.sha256 != _BROWSER_WORKER_RUNNER_SHA256
+        or _browser_worker_runner_sha256(runner.descriptor)
+        != _BROWSER_WORKER_RUNNER_SHA256
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker runner differs"
+        )
+
+
+def open_pinned_browser_worker_runner() -> PinnedBrowserWorkerRunner:
+    """Copy exact public worker bytes into a sealed read-only descriptor."""
+
+    content = _read_browser_worker_runner_source()
+    staging_descriptor = -1
+    sealed_descriptor = -1
+    try:
+        staging_descriptor = os.memfd_create(
+            _BROWSER_WORKER_RUNNER_MEMFD_NAME,
+            os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING,
+        )
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if (
+            staging_descriptor <= 2
+            or staging_descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and staging_descriptor >= soft_limit
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser worker runner differs"
+            )
+        offset = 0
+        while offset < len(content):
+            written = os.write(staging_descriptor, content[offset:])
+            if written <= 0:
+                raise OSError
+            offset += written
+        os.fchmod(staging_descriptor, _BROWSER_WORKER_RUNNER_MODE)
+        if os.lseek(staging_descriptor, 0, os.SEEK_SET) != 0:
+            raise OSError
+        fcntl.fcntl(
+            staging_descriptor,
+            fcntl.F_ADD_SEALS,
+            _BROWSER_WORKER_RUNNER_SEALS,
+        )
+        sealed_descriptor = os.open(
+            f"/proc/self/fd/{staging_descriptor}",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        if (
+            sealed_descriptor <= 2
+            or sealed_descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and sealed_descriptor >= soft_limit
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser worker runner differs"
+            )
+        os.close(staging_descriptor)
+        staging_descriptor = -1
+        info = os.fstat(sealed_descriptor)
+        runner = PinnedBrowserWorkerRunner(
+            descriptor=sealed_descriptor,
+            device=info.st_dev,
+            inode=info.st_ino,
+            size=info.st_size,
+            sha256=_BROWSER_WORKER_RUNNER_SHA256,
+        )
+        runner._owner_token = _BROWSER_HANDLE_TOKEN
+        _validate_pinned_browser_worker_runner(runner)
+        return runner
+    except BaseException:
+        if sealed_descriptor >= 0:
+            os.close(sealed_descriptor)
+        if staging_descriptor >= 0:
+            os.close(staging_descriptor)
+        raise
+
+
+def build_browser_worker_launch(
+    runtime: PinnedBrowserPythonExecutable,
+    runner: PinnedBrowserWorkerRunner,
+    arguments: BrowserWorkerArguments,
+) -> BrowserWorkerLaunch:
+    """Build an exact inert spec; spawning remains intentionally unavailable."""
+
+    _validate_pinned_browser_python_executable(runtime)
+    _validate_pinned_browser_worker_runner(runner)
+    validated_arguments = validate_browser_worker_descriptors(arguments)
+    channel_descriptors = (
+        validated_arguments.request_descriptor,
+        validated_arguments.ready_descriptor,
+        validated_arguments.secret_descriptor,
+        validated_arguments.result_descriptor,
+    )
+    inherited = (runtime.descriptor, runner.descriptor, *channel_descriptors)
+    if len(set(inherited)) != 6:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker launch differs"
+        )
+    cwd = _BROWSER_WORKER_RUNNER_SOURCE.parents[2]
+    try:
+        cwd_info = cwd.stat(follow_symlinks=False)
+    except OSError:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker launch differs"
+        ) from None
+    if cwd.is_symlink() or not stat.S_ISDIR(cwd_info.st_mode):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker launch differs"
+        )
+    command_line = (
+        f"/proc/self/fd/{runtime.descriptor}",
+        "-I",
+        "-S",
+        "-B",
+        "-P",
+        f"/proc/self/fd/{runner.descriptor}",
+        BROWSER_WORKER_HIDDEN_MODE,
+        *(str(value) for value in channel_descriptors),
+    )
+    return BrowserWorkerLaunch(
+        command_line=command_line,
+        environment=_BROWSER_WORKER_ENVIRONMENT,
+        cwd=cwd,
+        pass_fds=inherited,
+        arguments=validated_arguments,
+    )
 
 
 def _canonical_proc_integer(value: bytes, *, positive: bool) -> int:
@@ -4295,6 +4689,7 @@ __all__ = [
     "BrowserWorkerArguments",
     "BrowserWorkerDescriptorExpectation",
     "BrowserWorkerExpectedAttestation",
+    "BrowserWorkerLaunch",
     "BrowserWorkerProcessExpectation",
     "BrowserWorkerProcessStat",
     "BrowserWorkerReady",
@@ -4311,11 +4706,13 @@ __all__ = [
     "MaterializerVolumeFingerprint",
     "ObservedBrowserWorker",
     "PinnedBrowserPythonExecutable",
+    "PinnedBrowserWorkerRunner",
     "attest_docker_materializer_runtime",
     "build_materializer_create_argv",
     "build_materializer_volume_create_argv",
     "browser_worker_ready_sha256",
     "browser_worker_request_sha256",
+    "build_browser_worker_launch",
     "create_materializer_container",
     "create_materializer_volume",
     "decode_browser_worker_frame",
@@ -4325,6 +4722,7 @@ __all__ = [
     "observe_browser_worker_process",
     "open_trusted_docker",
     "open_pinned_browser_python_executable",
+    "open_pinned_browser_worker_runner",
     "parse_browser_worker_arguments",
     "read_browser_worker_frame",
     "read_browser_worker_secret",

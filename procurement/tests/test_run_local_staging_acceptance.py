@@ -20,6 +20,7 @@ import unittest
 from unittest.mock import patch
 
 import run_local_staging_acceptance as acceptance
+import run_local_staging_browser_worker as browser_worker
 
 
 IMAGE_ID = acceptance.FROZEN_IMAGE_ID
@@ -535,6 +536,217 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         )
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             self.assertEqual(acceptance.main(["unexpected"]), 2)
+
+    def test_browser_worker_runner_is_separate_pinned_sealed_and_inert(self):
+        source_path = Path(browser_worker.__file__).resolve(strict=True)
+        self.assertEqual(source_path, acceptance._BROWSER_WORKER_RUNNER_SOURCE)
+        self.assertNotEqual(source_path, Path(acceptance.__file__).resolve())
+        source = source_path.read_bytes()
+        self.assertEqual(len(source), 664)
+        self.assertEqual(
+            hashlib.sha256(source).hexdigest(),
+            "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+        )
+        imported: set[str] = set()
+        for node in ast.walk(ast.parse(source.decode("utf-8"))):
+            if isinstance(node, ast.Import):
+                imported.update(
+                    item.name.partition(".")[0] for item in node.names
+                )
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                imported.add(node.module.partition(".")[0])
+        self.assertTrue(imported.issubset(sys.stdlib_module_names), imported)
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(browser_worker.main([]), 2)
+            self.assertEqual(
+                browser_worker.main(
+                    [acceptance.BROWSER_WORKER_HIDDEN_MODE, "3", "4", "5", "6"]
+                ),
+                2,
+            )
+        self.assertEqual((stdout.getvalue(), stderr.getvalue()), ("", ""))
+
+        with acceptance.open_pinned_browser_worker_runner() as runner:
+            info = os.fstat(runner.descriptor)
+            self.assertEqual(
+                os.readlink(f"/proc/self/fd/{runner.descriptor}"),
+                "/memfd:buffalo-local-staging-browser-worker (deleted)",
+            )
+            self.assertEqual(info.st_nlink, 0)
+            self.assertEqual(info.st_size, 664)
+            self.assertEqual(info.st_mode & 0o777, 0o400)
+            self.assertEqual(
+                acceptance.fcntl.fcntl(
+                    runner.descriptor,
+                    acceptance.fcntl.F_GET_SEALS,
+                ),
+                acceptance._BROWSER_WORKER_RUNNER_SEALS,
+            )
+            self.assertEqual(
+                acceptance._browser_worker_runner_sha256(runner.descriptor),
+                acceptance._BROWSER_WORKER_RUNNER_SHA256,
+            )
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                copy.copy(runner)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                copy.deepcopy(runner)
+            os.set_inheritable(runner.descriptor, True)
+            try:
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance._validate_pinned_browser_worker_runner(runner)
+            finally:
+                os.set_inheritable(runner.descriptor, False)
+            acceptance._validate_pinned_browser_worker_runner(runner)
+
+        for case in ("mode", "hardlink", "symlink", "bytes"):
+            with self.subTest(case=case), TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                candidate = root / "runner.py"
+                candidate.write_bytes(source)
+                candidate.chmod(0o644)
+                selected = candidate
+                if case == "mode":
+                    candidate.chmod(0o600)
+                elif case == "hardlink":
+                    selected = root / "runner-alias.py"
+                    os.link(candidate, selected)
+                elif case == "symlink":
+                    selected = root / "runner-alias.py"
+                    selected.symlink_to(candidate)
+                elif case == "bytes":
+                    candidate.write_bytes(b"X" + source[1:])
+                with (
+                    patch.object(
+                        acceptance,
+                        "_BROWSER_WORKER_RUNNER_SOURCE",
+                        selected,
+                    ),
+                    self.assertRaises(acceptance.LocalStagingAcceptanceError),
+                ):
+                    acceptance.open_pinned_browser_worker_runner()
+
+        stale = acceptance.open_pinned_browser_worker_runner()
+        stale_descriptor = stale.descriptor
+        os.close(stale_descriptor)
+        replacement = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
+        try:
+            if replacement != stale_descriptor:
+                os.dup2(replacement, stale_descriptor, inheritable=False)
+                os.close(replacement)
+                replacement = stale_descriptor
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                stale.close()
+            os.fstat(replacement)
+        finally:
+            os.close(replacement)
+            stale.descriptor = -1
+            stale._owner_token = None
+
+    def test_browser_worker_launch_is_exact_code_owned_and_inert(self):
+        descriptors: list[int] = []
+        try:
+            request_read, request_write = os.pipe2(os.O_CLOEXEC)
+            ready_read, ready_write = os.pipe2(os.O_CLOEXEC)
+            secret_read, secret_write = os.pipe2(os.O_CLOEXEC)
+            result_read, result_write = os.pipe2(os.O_CLOEXEC)
+            descriptors.extend(
+                (
+                    request_read,
+                    request_write,
+                    ready_read,
+                    ready_write,
+                    secret_read,
+                    secret_write,
+                    result_read,
+                    result_write,
+                )
+            )
+            arguments = acceptance.BrowserWorkerArguments(
+                request_read,
+                ready_write,
+                secret_read,
+                result_write,
+            )
+            with (
+                acceptance.open_pinned_browser_python_executable() as runtime,
+                acceptance.open_pinned_browser_worker_runner() as runner,
+                patch.object(acceptance.subprocess, "Popen") as spawn,
+                patch.object(acceptance, "write_browser_worker_frame") as frame,
+                patch.object(acceptance, "write_browser_worker_secret") as secret,
+            ):
+                launch = acceptance.build_browser_worker_launch(
+                    runtime,
+                    runner,
+                    arguments,
+                )
+                expected_command = (
+                    f"/proc/self/fd/{runtime.descriptor}",
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-P",
+                    f"/proc/self/fd/{runner.descriptor}",
+                    "--internal-browser-worker",
+                    str(request_read),
+                    str(ready_write),
+                    str(secret_read),
+                    str(result_write),
+                )
+                self.assertEqual(launch.command_line, expected_command)
+                self.assertEqual(
+                    launch.environment,
+                    (("LANG", "C.UTF-8"), ("LC_ALL", "C.UTF-8"), ("TZ", "UTC")),
+                )
+                self.assertEqual(
+                    launch.cwd,
+                    Path(acceptance.__file__).resolve().parents[2],
+                )
+                self.assertEqual(
+                    launch.pass_fds,
+                    (
+                        runtime.descriptor,
+                        runner.descriptor,
+                        request_read,
+                        ready_write,
+                        secret_read,
+                        result_write,
+                    ),
+                )
+                self.assertEqual(launch.arguments, arguments)
+                rendered = repr(launch)
+                self.assertNotIn(
+                    str(acceptance._BROWSER_WORKER_RUNNER_SOURCE),
+                    rendered,
+                )
+                self.assertNotIn("owner-passphrase", rendered)
+                spawn.assert_not_called()
+                frame.assert_not_called()
+                secret.assert_not_called()
+
+                os.lseek(runner.descriptor, 1, os.SEEK_SET)
+                try:
+                    with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                        acceptance.build_browser_worker_launch(
+                            runtime,
+                            runner,
+                            arguments,
+                        )
+                finally:
+                    os.lseek(runner.descriptor, 0, os.SEEK_SET)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.build_browser_worker_launch(
+                        runtime,
+                        runner,
+                        replace(arguments, request_descriptor=runtime.descriptor),
+                    )
+        finally:
+            for descriptor in descriptors:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
 
     def test_stable_ingress_file_refuses_alias_metadata_and_content_drift(self):
         raw = b"exact public test ingress"
