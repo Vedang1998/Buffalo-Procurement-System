@@ -83,6 +83,15 @@ _BROWSER_WORKER_MAX_FD = 1_048_575
 _BROWSER_SECRET_BYTES = 43
 _BROWSER_PROC_STAT_LIMIT = 16 * 1024
 _BROWSER_PROC_VALUE_LIMIT = 64 * 1024
+_BROWSER_CGROUP_FILE_LIMIT = 4_096
+_BROWSER_CGROUP_PATH_LIMIT = 4_092
+_BROWSER_CGROUP_COMPONENT_LIMIT = 255
+_BROWSER_CGROUP_EVENTS_LIMIT = 64
+_BROWSER_CGROUP_MEMBER_LIMIT = 4_096
+_BROWSER_CGROUP_MEMBERS_BYTES_LIMIT = 45_056
+_BROWSER_NSPID_LIMIT = 384
+_BROWSER_PID_NAMESPACE_DEPTH_LIMIT = 32
+_BROWSER_LINUX_PID_MAX = 2_147_483_647
 _BROWSER_WORKER_ARGUMENT_LIMIT = 32
 _BROWSER_WORKER_DESCRIPTOR_LIMIT = 16
 _BROWSER_PYTHON_EXECUTABLE = Path(
@@ -402,6 +411,26 @@ class BrowserWorkerProcessStat:
     process_group: int
     session_id: int
     start_ticks: int
+
+
+@dataclass(frozen=True)
+class BrowserCgroupEvents:
+    populated: bool
+    frozen: bool
+
+
+@dataclass(frozen=True)
+class BrowserContainmentTextEvidence:
+    """Normalized text only; never launch or credential-release authority."""
+
+    cgroup_path: str
+    events: BrowserCgroupEvents
+    process_ids: tuple[int, ...]
+    thread_ids: tuple[int, ...]
+    init_outer_pid: int
+    worker_outer_pid: int
+    init_namespace_pids: tuple[int, ...]
+    worker_namespace_pids: tuple[int, ...]
 
 
 @dataclass
@@ -1207,6 +1236,266 @@ def build_browser_worker_launch(
         cwd=cwd,
         pass_fds=inherited,
         arguments=validated_arguments,
+    )
+
+
+def _parse_browser_containment_pid(value: bytes) -> int:
+    if (
+        type(value) is not bytes
+        or not value
+        or len(value) > 10
+        or not value.isascii()
+        or not value.isdigit()
+        or value.startswith(b"0")
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    selected = int(value)
+    if selected <= 0 or selected > _BROWSER_LINUX_PID_MAX:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    return selected
+
+
+def parse_browser_cgroup_path(raw: bytes) -> str:
+    """Parse one exact unified-cgroup membership record without filesystem I/O."""
+
+    if (
+        type(raw) is not bytes
+        or len(raw) < 5
+        or len(raw) > _BROWSER_CGROUP_FILE_LIMIT
+        or not raw.endswith(b"\n")
+        or raw.count(b"\n") != 1
+        or b"\r" in raw
+        or b"\0" in raw
+        or not raw.startswith(b"0::")
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    path = raw[3:-1]
+    if not path or len(path) > _BROWSER_CGROUP_PATH_LIMIT:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    if path == b"/":
+        return "/"
+    if not path.startswith(b"/") or path.endswith(b"/") or b"//" in path:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    components = path[1:].split(b"/")
+    if any(
+        not component
+        or len(component) > _BROWSER_CGROUP_COMPONENT_LIMIT
+        or component in {b".", b".."}
+        or any(value < 0x21 or value > 0x7E for value in component)
+        for component in components
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    try:
+        return path.decode("ascii", errors="strict")
+    except UnicodeDecodeError:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        ) from None
+
+
+def parse_browser_namespace_pids(raw: bytes) -> tuple[int, ...]:
+    """Parse exactly one selected NSpid status record in kernel order."""
+
+    prefix = b"NSpid:\t"
+    if (
+        type(raw) is not bytes
+        or len(raw) <= len(prefix) + 1
+        or len(raw) > _BROWSER_NSPID_LIMIT
+        or not raw.startswith(prefix)
+        or not raw.endswith(b"\n")
+        or raw.count(b"\n") != 1
+        or b"\r" in raw
+        or b"\0" in raw
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    parts = raw[len(prefix) : -1].split(b"\t")
+    if (
+        not parts
+        or len(parts) > _BROWSER_PID_NAMESPACE_DEPTH_LIMIT
+        or any(not part for part in parts)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    return tuple(_parse_browser_containment_pid(part) for part in parts)
+
+
+def parse_browser_cgroup_events(raw: bytes) -> BrowserCgroupEvents:
+    """Parse the complete bounded cgroup.events projection."""
+
+    if (
+        type(raw) is not bytes
+        or not raw
+        or len(raw) > _BROWSER_CGROUP_EVENTS_LIMIT
+        or not raw.endswith(b"\n")
+        or b"\r" in raw
+        or b"\0" in raw
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    selected: dict[bytes, bool] = {}
+    for line in raw[:-1].split(b"\n"):
+        if line.count(b" ") != 1:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser containment evidence differs"
+            )
+        key, value = line.split(b" ", 1)
+        if key in selected or value not in {b"0", b"1"}:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser containment evidence differs"
+            )
+        selected[key] = value == b"1"
+    if set(selected) != {b"populated", b"frozen"}:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    return BrowserCgroupEvents(
+        populated=selected[b"populated"],
+        frozen=selected[b"frozen"],
+    )
+
+
+def _parse_browser_cgroup_members(raw: bytes) -> tuple[int, ...]:
+    if type(raw) is not bytes or len(raw) > _BROWSER_CGROUP_MEMBERS_BYTES_LIMIT:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    if not raw:
+        return ()
+    if not raw.endswith(b"\n") or b"\r" in raw or b"\0" in raw:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    parts = raw[:-1].split(b"\n")
+    if (
+        not parts
+        or len(parts) > _BROWSER_CGROUP_MEMBER_LIMIT
+        or any(not part for part in parts)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    members = tuple(_parse_browser_containment_pid(part) for part in parts)
+    if len(set(members)) != len(members):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    return tuple(sorted(members))
+
+
+def parse_browser_cgroup_processes(raw: bytes) -> tuple[int, ...]:
+    """Normalize one bounded cgroup.procs snapshot."""
+
+    return _parse_browser_cgroup_members(raw)
+
+
+def parse_browser_cgroup_threads(raw: bytes) -> tuple[int, ...]:
+    """Normalize one bounded cgroup.threads snapshot."""
+
+    return _parse_browser_cgroup_members(raw)
+
+
+def parse_browser_containment_text_evidence(
+    *,
+    expected_cgroup_path: str,
+    expected_init_outer_pid: int,
+    expected_worker_outer_pid: int,
+    expected_frozen: bool,
+    init_cgroup: bytes,
+    worker_cgroup: bytes,
+    init_nspid: bytes,
+    worker_nspid: bytes,
+    events: bytes,
+    processes: bytes,
+    threads: bytes,
+) -> BrowserContainmentTextEvidence:
+    """Normalize a two-process text snapshot without granting authority.
+
+    This does not prove pidfd/start binding, PPID, namespace inodes, historical
+    childlessness, mount isolation, launch ordering, or credential release.
+    """
+
+    if (
+        type(expected_cgroup_path) is not str
+        or not expected_cgroup_path
+        or len(expected_cgroup_path) > _BROWSER_CGROUP_PATH_LIMIT
+        or type(expected_init_outer_pid) is not int
+        or type(expected_worker_outer_pid) is not int
+        or type(expected_frozen) is not bool
+        or expected_init_outer_pid <= 1
+        or expected_worker_outer_pid <= 1
+        or expected_init_outer_pid > _BROWSER_LINUX_PID_MAX
+        or expected_worker_outer_pid > _BROWSER_LINUX_PID_MAX
+        or expected_init_outer_pid == expected_worker_outer_pid
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    try:
+        expected_raw = expected_cgroup_path.encode("ascii", errors="strict")
+    except UnicodeEncodeError:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        ) from None
+    if (
+        parse_browser_cgroup_path(b"0::" + expected_raw + b"\n")
+        != expected_cgroup_path
+        or expected_cgroup_path == "/"
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    init_path = parse_browser_cgroup_path(init_cgroup)
+    worker_path = parse_browser_cgroup_path(worker_cgroup)
+    parsed_events = parse_browser_cgroup_events(events)
+    process_ids = parse_browser_cgroup_processes(processes)
+    thread_ids = parse_browser_cgroup_threads(threads)
+    init_namespace_pids = parse_browser_namespace_pids(init_nspid)
+    worker_namespace_pids = parse_browser_namespace_pids(worker_nspid)
+    expected_members = tuple(
+        sorted((expected_init_outer_pid, expected_worker_outer_pid))
+    )
+    if (
+        init_path != expected_cgroup_path
+        or worker_path != expected_cgroup_path
+        or parsed_events
+        != BrowserCgroupEvents(populated=True, frozen=expected_frozen)
+        or process_ids != expected_members
+        or thread_ids != expected_members
+        or len(init_namespace_pids) < 2
+        or len(init_namespace_pids) != len(worker_namespace_pids)
+        or init_namespace_pids[0] != expected_init_outer_pid
+        or worker_namespace_pids[0] != expected_worker_outer_pid
+        or init_namespace_pids[-1] != 1
+        or worker_namespace_pids[-1] != 2
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment evidence differs"
+        )
+    return BrowserContainmentTextEvidence(
+        cgroup_path=expected_cgroup_path,
+        events=parsed_events,
+        process_ids=process_ids,
+        thread_ids=thread_ids,
+        init_outer_pid=expected_init_outer_pid,
+        worker_outer_pid=expected_worker_outer_pid,
+        init_namespace_pids=init_namespace_pids,
+        worker_namespace_pids=worker_namespace_pids,
     )
 
 
@@ -4686,6 +4975,8 @@ __all__ = [
     "ACCEPTANCE_CONTRACT",
     "BROWSER_WORKER_HIDDEN_MODE",
     "BROWSER_WORKER_PROTOCOL",
+    "BrowserCgroupEvents",
+    "BrowserContainmentTextEvidence",
     "BrowserWorkerArguments",
     "BrowserWorkerDescriptorExpectation",
     "BrowserWorkerExpectedAttestation",
@@ -4724,6 +5015,12 @@ __all__ = [
     "open_pinned_browser_python_executable",
     "open_pinned_browser_worker_runner",
     "parse_browser_worker_arguments",
+    "parse_browser_cgroup_events",
+    "parse_browser_cgroup_path",
+    "parse_browser_cgroup_processes",
+    "parse_browser_cgroup_threads",
+    "parse_browser_containment_text_evidence",
+    "parse_browser_namespace_pids",
     "read_browser_worker_frame",
     "read_browser_worker_secret",
     "remove_owned_materializer_container",

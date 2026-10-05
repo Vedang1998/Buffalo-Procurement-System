@@ -748,6 +748,195 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 except OSError:
                     pass
 
+    def test_browser_containment_cgroup_and_nspid_text_is_canonical(self):
+        self.assertEqual(
+            acceptance.parse_browser_cgroup_path(
+                b"0::/system.slice/default.scope/buffalo-run_01\n"
+            ),
+            "/system.slice/default.scope/buffalo-run_01",
+        )
+        self.assertEqual(acceptance.parse_browser_cgroup_path(b"0::/\n"), "/")
+        self.assertEqual(
+            acceptance.parse_browser_namespace_pids(
+                b"NSpid:\t120001\t41\t1\n"
+            ),
+            (120001, 41, 1),
+        )
+        invalid_cgroups = (
+            b"",
+            b"0::/x",
+            b"0::/x\r\n",
+            b"0::/x\0\n",
+            b"1:name=/x\n",
+            b"0::relative\n",
+            b"0::/x//y\n",
+            b"0::/x/\n",
+            b"0::/./x\n",
+            b"0::/../x\n",
+            b"0::/white space\n",
+            b"0::/x\n0::/y\n",
+            b"0::/" + b"a" * 256 + b"\n",
+            b"0::/" + b"a/" * 2046 + b"a\n",
+            b"0::/\xff\n",
+        )
+        for raw in invalid_cgroups:
+            with self.subTest(cgroup=raw[:40]), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.parse_browser_cgroup_path(raw)
+        invalid_nspids = (
+            b"",
+            b"NSpid:\t1",
+            b"NSpid: 1\n",
+            b"NSpid:\t0\n",
+            b"NSpid:\t01\n",
+            b"NSpid:\t+1\n",
+            b"NSpid:\t-1\n",
+            b"NSpid:\t2147483648\n",
+            b"NSpid:\t1 2\n",
+            b"NSpid:\t1\t\n",
+            b"NSpid:\t1\r\n",
+            b"NSpid:\t1\0\n",
+            b"NSpid:\t1\nNSpid:\t2\n",
+            b"NSpid:\t" + b"\t".join([b"1"] * 33) + b"\n",
+        )
+        for raw in invalid_nspids:
+            with self.subTest(nspid=raw[:40]), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.parse_browser_namespace_pids(raw)
+
+    def test_browser_containment_events_and_members_are_exact(self):
+        expected_events = acceptance.BrowserCgroupEvents(
+            populated=True,
+            frozen=False,
+        )
+        self.assertEqual(
+            acceptance.parse_browser_cgroup_events(
+                b"populated 1\nfrozen 0\n"
+            ),
+            expected_events,
+        )
+        self.assertEqual(
+            acceptance.parse_browser_cgroup_events(
+                b"frozen 0\npopulated 1\n"
+            ),
+            expected_events,
+        )
+        self.assertEqual(acceptance.parse_browser_cgroup_processes(b""), ())
+        self.assertEqual(
+            acceptance.parse_browser_cgroup_processes(b"12\n3\n9\n"),
+            (3, 9, 12),
+        )
+        self.assertEqual(
+            acceptance.parse_browser_cgroup_threads(b"12\n3\n9\n"),
+            (3, 9, 12),
+        )
+        invalid_events = (
+            b"",
+            b"populated 1\n",
+            b"populated 1\nfrozen 0",
+            b"populated 1\nfrozen 0\nextra 0\n",
+            b"populated 1\npopulated 1\nfrozen 0\n",
+            b"populated 2\nfrozen 0\n",
+            b"populated 1 \nfrozen 0\n",
+            b"populated\t1\nfrozen 0\n",
+            b"populated 1\nfrozen 0\r\n",
+            b"populated 1\nfrozen 0\0\n",
+        )
+        for raw in invalid_events:
+            with self.subTest(events=raw), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.parse_browser_cgroup_events(raw)
+        invalid_members = (
+            b"1",
+            b"1\r\n",
+            b"1\0\n",
+            b"0\n",
+            b"01\n",
+            b"+1\n",
+            b"-1\n",
+            b"2147483648\n",
+            b"1 2\n",
+            b"1\n1\n",
+            b"1\n\n",
+            b"1\n" * 4_097,
+            b"2147483647\n" * 4_097,
+        )
+        for raw in invalid_members:
+            with self.subTest(members=raw[:40]), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.parse_browser_cgroup_processes(raw)
+
+    def test_browser_containment_text_evidence_requires_pid1_pid2_topology(self):
+        values: dict[str, object] = {
+            "expected_cgroup_path": "/buffalo.acceptance/run-01/worker",
+            "expected_init_outer_pid": 120001,
+            "expected_worker_outer_pid": 120002,
+            "expected_frozen": False,
+            "init_cgroup": b"0::/buffalo.acceptance/run-01/worker\n",
+            "worker_cgroup": b"0::/buffalo.acceptance/run-01/worker\n",
+            "init_nspid": b"NSpid:\t120001\t1\n",
+            "worker_nspid": b"NSpid:\t120002\t2\n",
+            "events": b"populated 1\nfrozen 0\n",
+            "processes": b"120002\n120001\n",
+            "threads": b"120001\n120002\n",
+        }
+        expected = acceptance.BrowserContainmentTextEvidence(
+            cgroup_path="/buffalo.acceptance/run-01/worker",
+            events=acceptance.BrowserCgroupEvents(
+                populated=True,
+                frozen=False,
+            ),
+            process_ids=(120001, 120002),
+            thread_ids=(120001, 120002),
+            init_outer_pid=120001,
+            worker_outer_pid=120002,
+            init_namespace_pids=(120001, 1),
+            worker_namespace_pids=(120002, 2),
+        )
+        with (
+            patch.object(acceptance.os, "open") as opened,
+            patch.object(acceptance.os, "write") as wrote,
+            patch.object(acceptance.subprocess, "Popen") as spawned,
+            patch.object(acceptance, "write_browser_worker_secret") as secret,
+        ):
+            self.assertEqual(
+                acceptance.parse_browser_containment_text_evidence(**values),
+                expected,
+            )
+        opened.assert_not_called()
+        wrote.assert_not_called()
+        spawned.assert_not_called()
+        secret.assert_not_called()
+
+        mutations: tuple[tuple[str, object], ...] = (
+            ("expected_cgroup_path", "/"),
+            ("expected_cgroup_path", "/" + "a" * 4_093),
+            ("expected_init_outer_pid", True),
+            ("expected_worker_outer_pid", 120001),
+            ("expected_frozen", 0),
+            ("init_cgroup", b"0::/buffalo.acceptance/other\n"),
+            ("worker_cgroup", b"0::/buffalo.acceptance/other\n"),
+            ("events", b"populated 0\nfrozen 0\n"),
+            ("events", b"populated 1\nfrozen 1\n"),
+            ("processes", b"120001\n"),
+            ("processes", b"120001\n120002\n120003\n"),
+            ("threads", b"120001\n"),
+            ("init_nspid", b"NSpid:\t120001\t2\n"),
+            ("worker_nspid", b"NSpid:\t120002\t1\n"),
+            ("worker_nspid", b"NSpid:\t120002\t55\t2\n"),
+        )
+        for key, changed in mutations:
+            case = dict(values)
+            case[key] = changed
+            with self.subTest(key=key, changed=changed), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.parse_browser_containment_text_evidence(**case)
+
     def test_stable_ingress_file_refuses_alias_metadata_and_content_drift(self):
         raw = b"exact public test ingress"
         digest = hashlib.sha256(raw).hexdigest()

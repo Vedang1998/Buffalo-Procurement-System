@@ -68,7 +68,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_private_research_workspace.py": 9,
     "test_readiness.py": 21,
     "test_replenishment.py": 9,
-    "test_run_local_staging_acceptance.py": 24,
+    "test_run_local_staging_acceptance.py": 27,
     "test_review.py": 3,
     "test_sales.py": 18,
     "test_serve_private_research.py": 7,
