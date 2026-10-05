@@ -110,6 +110,152 @@ def _docker_info() -> dict[str, object]:
     }
 
 
+def _operator_proof() -> dict[str, object]:
+    return {
+        "contract": "BUFFALO_STOPPED_SERVICE_PRICE_STAGE_V1",
+        "source_ref": "procurement/config/synthetic_price_replacement_book.csv",
+        "source_bytes": 1_590,
+        "raw_sha256": (
+            "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c"
+        ),
+        "target_attestation_sha256": (
+            "517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a"
+        ),
+        "batch_id": "11111111-1111-4111-8111-111111111111",
+        "status": "VALIDATED",
+        "declaration_sha256": "a" * 64,
+        "validation_fingerprint": "b" * 64,
+        "proposed_scope_membership_sha256": "c" * 64,
+        "staging_rows_sha256": "d" * 64,
+        "validation_issues_sha256": "e" * 64,
+        "unchanged_database_sha256": "f" * 64,
+        "unchanged_storage_sha256": "0" * 64,
+        "idempotent_replay": False,
+        "ambiguous_commit_recovered": False,
+    }
+
+
+def _browser_request() -> dict[str, object]:
+    return {
+        "protocol": acceptance.BROWSER_WORKER_PROTOCOL,
+        "frame": "REQUEST",
+        "challenge": "1" * 64,
+        "run_id": "2" * 32,
+        "source_commit": "3" * 40,
+        "source_tree": "4" * 40,
+        "cdp_endpoint": "http://127.0.0.1:9222",
+        "evidence_root": "/private/runtime/evidence/price-confirm",
+        "operator_proof": _operator_proof(),
+        "tls_certificate_sha256": "5" * 64,
+        "chromium_pid": 12345,
+    }
+
+
+def _browser_ready(request: dict[str, object]) -> dict[str, object]:
+    return {
+        "protocol": acceptance.BROWSER_WORKER_PROTOCOL,
+        "frame": "READY",
+        "challenge": request["challenge"],
+        "config_sha256": acceptance.browser_worker_request_sha256(request),
+        "worker_pid": 23456,
+        "worker_start_ticks": 34567,
+        "source_commit": request["source_commit"],
+        "source_tree": request["source_tree"],
+        "chromium_pid": request["chromium_pid"],
+        "browser_start_time": "45678",
+        "python_executable_sha256": "6" * 64,
+        "module_manifest_sha256": "7" * 64,
+        "driver_sha256": "8" * 64,
+        "node_sha256": "9" * 64,
+        "preflight_sha256": "a" * 64,
+    }
+
+
+def _browser_result(
+    request: dict[str, object],
+    ready: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "protocol": acceptance.BROWSER_WORKER_PROTOCOL,
+        "frame": "RESULT",
+        "challenge": request["challenge"],
+        "config_sha256": ready["config_sha256"],
+        "ready_sha256": acceptance.browser_worker_ready_sha256(ready),
+        "worker_pid": ready["worker_pid"],
+        "worker_start_ticks": ready["worker_start_ticks"],
+        "proof": {
+            "assertion_count": 62,
+            "assertion_manifest_sha256": (
+                "64a5063520cbe378502b7930f8b51ba784b05c0e9c2ea986de9adeda991efb50"
+            ),
+            "batch_id": request["operator_proof"]["batch_id"],
+            "browser_js_version": "15.0.0.0",
+            "browser_pid": request["chromium_pid"],
+            "browser_product": "HeadlessChrome/152.0.7977.64",
+            "browser_protocol_version": "1.3",
+            "browser_start_time": "45678",
+            "confirmation_preview_sha256": "1" * 64,
+            "contract": "BUFFALO_STAGING_PURCHASING_BROWSER_PHASE_V1",
+            "driver_sha256": ready["driver_sha256"],
+            "node_sha256": ready["node_sha256"],
+            "node_version": "v24.13.0",
+            "operational_status_after": "VERIFIED_FUTURE",
+            "operational_status_before": "VALIDATED",
+            "operator_proof_sha256": acceptance.validate_browser_worker_request(
+                request
+            ).operator_proof_sha256,
+            "phase": "price-confirm",
+            "raw_bytes": 1_590,
+            "raw_sha256": (
+                "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c"
+            ),
+            "screenshot_bytes": 128,
+            "screenshot_sha256": "2" * 64,
+            "source_commit": request["source_commit"],
+            "source_tree": request["source_tree"],
+            "status_after": "VERIFIED_FUTURE",
+            "status_before": "VALIDATED",
+            "target_summary": {
+                "active_guarded": 5,
+                "guarded": 5,
+                "inert": 0,
+                "live_detached": 0,
+                "tracked": 5,
+                "unattached": 0,
+                "unguarded": 0,
+                "unresumed": 0,
+                "unsupported": 0,
+            },
+            "temporal_basis": "REGISTERED_OBSERVATION",
+            "tls_certificate_sha256": request["tls_certificate_sha256"],
+        },
+    }
+
+
+def _browser_expected(
+    request: dict[str, object],
+    ready: dict[str, object],
+) -> acceptance.BrowserWorkerExpectedAttestation:
+    return acceptance.BrowserWorkerExpectedAttestation(
+        challenge=request["challenge"],
+        run_id=request["run_id"],
+        source_commit=request["source_commit"],
+        source_tree=request["source_tree"],
+        cdp_endpoint=request["cdp_endpoint"],
+        evidence_root=request["evidence_root"],
+        tls_certificate_sha256=request["tls_certificate_sha256"],
+        chromium_pid=request["chromium_pid"],
+        browser_start_time="45678",
+        worker_pid=ready["worker_pid"],
+        worker_start_ticks=ready["worker_start_ticks"],
+        python_executable_sha256=ready["python_executable_sha256"],
+        module_manifest_sha256=ready["module_manifest_sha256"],
+        driver_sha256=ready["driver_sha256"],
+        node_sha256=ready["node_sha256"],
+        preflight_sha256=ready["preflight_sha256"],
+    )
+
+
 def _container_inspect(
     invocation: acceptance.MaterializerInvocation,
 ) -> dict[str, object]:
@@ -1053,6 +1199,432 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             container_id=CONTAINER_ID,
             envelope_sha256=envelope,
         )
+
+    def test_browser_worker_frame_is_bounded_canonical_and_exact(self):
+        value = {"a": 1, "nested": [True, None, "text"]}
+        framed = acceptance.encode_browser_worker_frame(
+            value,
+            maximum_bytes=128,
+        )
+        self.assertEqual(
+            int.from_bytes(framed[:4], "big"),
+            len(framed) - 4,
+        )
+        self.assertEqual(
+            acceptance.decode_browser_worker_frame(
+                framed,
+                maximum_bytes=128,
+            ),
+            value,
+        )
+        noncanonical = b'{"nested": [true,null,"text"], "a":1}'
+        duplicate = b'{"a":1,"a":1}'
+        cases = (
+            b"",
+            b"\x00\x00\x00\x00",
+            framed[:-1],
+            framed + b"x",
+            len(noncanonical).to_bytes(4, "big") + noncanonical,
+            len(duplicate).to_bytes(4, "big") + duplicate,
+            b"\x00\x00\x00\x09{\"x\":NaN}",
+            b"\x00\x00\x00\x0a{\"x\":1.25}",
+        )
+        for raw in cases:
+            with self.subTest(raw=raw), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.decode_browser_worker_frame(
+                    raw,
+                    maximum_bytes=128,
+                )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.encode_browser_worker_frame(
+                {"float": 1.25},
+                maximum_bytes=128,
+            )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.decode_browser_worker_frame(
+                framed,
+                maximum_bytes=len(framed) - 5,
+            )
+        for non_object in ([], 1, "object"):
+            with self.subTest(non_object=non_object), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.encode_browser_worker_frame(
+                    non_object,
+                    maximum_bytes=128,
+                )
+
+    def test_browser_request_schema_contains_no_credential_and_fails_closed(self):
+        from procurement_os.synthetic_staging_price_stage import (
+            _validate_operator_proof,
+        )
+
+        request = _browser_request()
+        observed = acceptance.validate_browser_worker_request(request)
+        self.assertEqual(
+            _validate_operator_proof(copy.deepcopy(request["operator_proof"])),
+            request["operator_proof"],
+        )
+        self.assertEqual(observed.run_id, "2" * 32)
+        frozen_proof = observed.operator_proof_json
+        request["operator_proof"]["status"] = "MUTATED"
+        self.assertEqual(observed.operator_proof_json, frozen_proof)
+        request = _browser_request()
+        self.assertEqual(
+            len(acceptance.browser_worker_request_sha256(request)),
+            64,
+        )
+        with patch.object(
+            acceptance.os,
+            "urandom",
+            side_effect=(b"\x12" * 32, b"\x34" * 16),
+        ):
+            self.assertEqual(
+                acceptance.new_browser_worker_identifiers(),
+                ("12" * 32, "34" * 16),
+            )
+        sentinel = "S" * 43
+        encoded = acceptance.encode_browser_worker_frame(
+            request,
+            maximum_bytes=acceptance._BROWSER_REQUEST_LIMIT,
+        )
+        self.assertNotIn(sentinel.encode("ascii"), encoded)
+        mutations = (
+            lambda value: value.update(secret=sentinel),
+            lambda value: value.pop("source_tree"),
+            lambda value: value.update(protocol="foreign"),
+            lambda value: value.update(cdp_endpoint="https://evil.example"),
+            lambda value: value.update(evidence_root="relative"),
+            lambda value: value.update(evidence_root="/"),
+            lambda value: value.update(chromium_pid=True),
+            lambda value: value.update(operator_proof={}),
+            lambda value: value["operator_proof"].update(password=sentinel),
+            lambda value: value["operator_proof"].update(status="MUTATED"),
+        )
+        for mutate in mutations:
+            changed = copy.deepcopy(request)
+            mutate(changed)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.validate_browser_worker_request(changed)
+
+    def test_browser_ready_and_result_are_bound_to_the_exact_request(self):
+        from audit_staging_purchasing_browser import _validate_phase_proof
+
+        request = _browser_request()
+        ready = _browser_ready(request)
+        result = _browser_result(request, ready)
+        expected = _browser_expected(request, ready)
+        proof = result["proof"]
+        self.assertEqual(
+            _validate_phase_proof(
+                copy.deepcopy(proof),
+                batch_id=proof["batch_id"],
+                expected_source_commit=proof["source_commit"],
+                expected_source_tree=proof["source_tree"],
+                driver_sha256=proof["driver_sha256"],
+                node_sha256=proof["node_sha256"],
+                node_version=proof["node_version"],
+                operator_proof_sha256=proof["operator_proof_sha256"],
+                browser_pid=proof["browser_pid"],
+                browser_start_time=proof["browser_start_time"],
+                tls_certificate_sha256=proof["tls_certificate_sha256"],
+                screenshot_bytes=proof["screenshot_bytes"],
+                screenshot_sha256=proof["screenshot_sha256"],
+            ),
+            proof,
+        )
+        validated = acceptance.validate_browser_worker_transition(
+            request,
+            ready,
+            result,
+            expected=expected,
+        )
+        self.assertIsNone(
+            acceptance.validate_browser_worker_transition(
+                request,
+                ready,
+                expected=expected,
+            )[2]
+        )
+        self.assertEqual(validated[0].challenge, validated[1].challenge)
+        self.assertEqual(validated[1].worker_pid, validated[2].worker_pid)
+        sentinel = b"S" * 43
+        for value, maximum in (
+            (ready, acceptance._BROWSER_READY_LIMIT),
+            (result, acceptance._BROWSER_RESULT_LIMIT),
+        ):
+            self.assertNotIn(
+                sentinel,
+                acceptance.encode_browser_worker_frame(
+                    value,
+                    maximum_bytes=maximum,
+                ),
+            )
+        for label, target, field, replacement in (
+            ("challenge", ready, "challenge", "f" * 64),
+            ("config", ready, "config_sha256", "e" * 64),
+            ("source", ready, "source_tree", "d" * 40),
+            ("browser pid", ready, "chromium_pid", 99999),
+            ("browser start", ready, "browser_start_time", "45679"),
+            ("python", ready, "python_executable_sha256", "f" * 64),
+            ("modules", ready, "module_manifest_sha256", "f" * 64),
+            ("driver", ready, "driver_sha256", "f" * 64),
+            ("node", ready, "node_sha256", "f" * 64),
+            ("preflight", ready, "preflight_sha256", "f" * 64),
+            ("result pid", result, "worker_pid", 99999),
+            ("result start", result, "worker_start_ticks", 99999),
+        ):
+            with self.subTest(label=label):
+                changed_ready = copy.deepcopy(ready)
+                changed_result = copy.deepcopy(result)
+                if target is ready:
+                    changed_ready[field] = replacement
+                else:
+                    changed_result[field] = replacement
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.validate_browser_worker_transition(
+                        request,
+                        changed_ready,
+                        changed_result,
+                        expected=expected,
+                    )
+        for label, mutate in (
+            (
+                "nested result credential",
+                lambda value: value["proof"].update(cookie="private"),
+            ),
+            (
+                "ready digest",
+                lambda value: value.update(ready_sha256="0" * 64),
+            ),
+            (
+                "operator binding",
+                lambda value: value["proof"].update(operator_proof_sha256="0" * 64),
+            ),
+            (
+                "browser start",
+                lambda value: value["proof"].update(browser_start_time="45679"),
+            ),
+        ):
+            with self.subTest(label=label):
+                changed_result = copy.deepcopy(result)
+                mutate(changed_result)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.validate_browser_worker_transition(
+                        request,
+                        ready,
+                        changed_result,
+                        expected=expected,
+                    )
+        for field in (
+            "challenge",
+            "run_id",
+            "source_commit",
+            "source_tree",
+            "cdp_endpoint",
+            "evidence_root",
+            "tls_certificate_sha256",
+            "chromium_pid",
+            "browser_start_time",
+            "worker_pid",
+            "worker_start_ticks",
+            "python_executable_sha256",
+            "module_manifest_sha256",
+            "driver_sha256",
+            "node_sha256",
+            "preflight_sha256",
+        ):
+            with self.subTest(expected_attestation=field):
+                changed = copy.copy(expected)
+                replacements = {
+                    "challenge": "e" * 64,
+                    "run_id": "e" * 32,
+                    "source_commit": "e" * 40,
+                    "source_tree": "e" * 40,
+                    "cdp_endpoint": "http://127.0.0.1:9223",
+                    "evidence_root": "/private/runtime/evidence/foreign",
+                    "tls_certificate_sha256": "e" * 64,
+                    "chromium_pid": 99999,
+                    "browser_start_time": "45679",
+                    "worker_pid": 99999,
+                    "worker_start_ticks": 99999,
+                }
+                replacement = replacements.get(field, "f" * 64)
+                object.__setattr__(changed, field, replacement)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.validate_browser_worker_transition(
+                        request,
+                        ready,
+                        result,
+                        expected=changed,
+                    )
+                if field == "browser_start_time":
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance.validate_browser_worker_transition(
+                            request,
+                            ready,
+                            expected=changed,
+                        )
+
+    def test_hidden_browser_worker_fd_arguments_are_exact_but_not_dispatched(self):
+        self.assertEqual(
+            acceptance.BROWSER_WORKER_PROTOCOL,
+            "BUFFALO_LOCAL_STAGING_BROWSER_WORKER_V1",
+        )
+        self.assertEqual(
+            acceptance.BROWSER_WORKER_HIDDEN_MODE,
+            "--internal-browser-worker",
+        )
+        self.assertEqual(
+            (
+                acceptance._BROWSER_REQUEST_LIMIT,
+                acceptance._BROWSER_READY_LIMIT,
+                acceptance._BROWSER_RESULT_LIMIT,
+            ),
+            (16_384, 4_096, 16_384),
+        )
+        arguments = [acceptance.BROWSER_WORKER_HIDDEN_MODE, "3", "4", "10", "11"]
+        self.assertEqual(
+            acceptance.parse_browser_worker_arguments(arguments),
+            acceptance.BrowserWorkerArguments(3, 4, 10, 11),
+        )
+        for changed in (
+            arguments[:-1],
+            ["--foreign", *arguments[1:]],
+            [acceptance.BROWSER_WORKER_HIDDEN_MODE, "0", "4", "10", "11"],
+            [acceptance.BROWSER_WORKER_HIDDEN_MODE, "03", "4", "10", "11"],
+            [acceptance.BROWSER_WORKER_HIDDEN_MODE, "+3", "4", "10", "11"],
+            [
+                acceptance.BROWSER_WORKER_HIDDEN_MODE,
+                "1048576",
+                "4",
+                "10",
+                "11",
+            ],
+            [acceptance.BROWSER_WORKER_HIDDEN_MODE, "3", "3", "10", "11"],
+            [
+                acceptance.BROWSER_WORKER_HIDDEN_MODE,
+                "9" * 5_000,
+                "4",
+                "10",
+                "11",
+            ],
+        ):
+            with self.subTest(changed=changed), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance.parse_browser_worker_arguments(changed)
+        descriptors: list[int] = []
+        try:
+            request_read, request_write = os.pipe2(os.O_CLOEXEC)
+            ready_read, ready_write = os.pipe2(os.O_CLOEXEC)
+            secret_read, secret_write = os.pipe2(os.O_CLOEXEC)
+            result_read, result_write = os.pipe2(os.O_CLOEXEC)
+            descriptors.extend(
+                (
+                    request_read,
+                    request_write,
+                    ready_read,
+                    ready_write,
+                    secret_read,
+                    secret_write,
+                    result_read,
+                    result_write,
+                )
+            )
+            exact = acceptance.BrowserWorkerArguments(
+                request_read,
+                ready_write,
+                secret_read,
+                result_write,
+            )
+            self.assertEqual(
+                acceptance.validate_browser_worker_descriptors(exact),
+                exact,
+            )
+            self.assertTrue(
+                all(
+                    not os.get_inheritable(descriptor)
+                    for descriptor in (
+                        request_read,
+                        ready_write,
+                        secret_read,
+                        result_write,
+                    )
+                )
+            )
+            duplicate = os.dup(request_read)
+            descriptors.append(duplicate)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.validate_browser_worker_descriptors(
+                    acceptance.BrowserWorkerArguments(
+                        request_read,
+                        ready_write,
+                        duplicate,
+                        result_write,
+                    )
+                )
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.validate_browser_worker_descriptors(
+                    acceptance.BrowserWorkerArguments(
+                        request_write,
+                        ready_write,
+                        secret_read,
+                        result_write,
+                    )
+                )
+            nonblocking_read, nonblocking_write = os.pipe2(
+                os.O_CLOEXEC | os.O_NONBLOCK
+            )
+            descriptors.extend((nonblocking_read, nonblocking_write))
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.validate_browser_worker_descriptors(
+                    acceptance.BrowserWorkerArguments(
+                        nonblocking_read,
+                        ready_write,
+                        secret_read,
+                        result_write,
+                    )
+                )
+            with TemporaryDirectory() as temporary:
+                fifo_descriptors: list[int] = []
+                for index in range(4):
+                    fifo = Path(temporary) / f"channel-{index}"
+                    os.mkfifo(fifo, 0o600)
+                    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+                    writer = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+                    acceptance.fcntl.fcntl(reader, acceptance.fcntl.F_SETFL, 0)
+                    acceptance.fcntl.fcntl(
+                        writer,
+                        acceptance.fcntl.F_SETFL,
+                        os.O_WRONLY,
+                    )
+                    fifo_descriptors.extend((reader, writer))
+                descriptors.extend(fifo_descriptors)
+                named = acceptance.BrowserWorkerArguments(
+                    fifo_descriptors[0],
+                    fifo_descriptors[3],
+                    fifo_descriptors[4],
+                    fifo_descriptors[7],
+                )
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.validate_browser_worker_descriptors(named)
+        finally:
+            for descriptor in descriptors:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(acceptance.main(arguments), 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "")
 
 
 if __name__ == "__main__":

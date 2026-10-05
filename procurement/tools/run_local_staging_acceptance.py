@@ -9,14 +9,16 @@ before any repository module or credential is loaded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+import fcntl
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import re
+import resource
 import selectors
 import signal
 import stat
@@ -24,9 +26,12 @@ import subprocess
 import sys
 import time
 from typing import Any, Mapping
+from uuid import UUID
 
 
 ACCEPTANCE_CONTRACT = "BUFFALO_LOCAL_STAGING_ACCEPTANCE_V1"
+BROWSER_WORKER_PROTOCOL = "BUFFALO_LOCAL_STAGING_BROWSER_WORKER_V1"
+BROWSER_WORKER_HIDDEN_MODE = "--internal-browser-worker"
 MATERIALIZER_ROLE = "research-materializer"
 MATERIALIZER_VOLUME_ROLE = "research-volume"
 MATERIALIZER_MODULE = "procurement_os.staging_research_materializer"
@@ -71,6 +76,110 @@ _DOCKER_ZERO_TIME = "0001-01-01T00:00:00Z"
 _DOCKER_METADATA_LIMIT = 256 * 1024
 _DOCKER_ATTACH_LIMIT = 16 * 1024
 _DOCKER_METADATA_TIMEOUT = 30.0
+_BROWSER_REQUEST_LIMIT = 16 * 1024
+_BROWSER_READY_LIMIT = 4 * 1024
+_BROWSER_RESULT_LIMIT = 16 * 1024
+_BROWSER_WORKER_MAX_FD = 1_048_575
+_SHA256_TEXT = re.compile(r"\A[0-9a-f]{64}\Z")
+_GIT_OID_TEXT = re.compile(r"\A[0-9a-f]{40}\Z")
+_CANONICAL_FD = re.compile(r"\A(?:[3-9]|[1-9][0-9]+)\Z")
+_START_TICKS_TEXT = re.compile(r"\A[1-9][0-9]*\Z")
+_BROWSER_PRODUCT_TEXT = re.compile(
+    r"\A(?:Chrome|HeadlessChrome)/[0-9]+(?:\.[0-9]+)+\Z"
+)
+_VERSION_TEXT = re.compile(r"\A[0-9]+(?:\.[0-9]+)+\Z")
+_OPERATOR_PROOF_CONTRACT = "BUFFALO_STOPPED_SERVICE_PRICE_STAGE_V1"
+_OPERATOR_SOURCE_REF = "procurement/config/synthetic_price_replacement_book.csv"
+_OPERATOR_SOURCE_BYTES = 1_590
+_OPERATOR_RAW_SHA256 = (
+    "00071443ea8c54b57fc6014c3b1daf204081714a2ff09b98bed6c56a0dd3862c"
+)
+_OPERATOR_TARGET_ATTESTATION_SHA256 = (
+    "517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a"
+)
+_OPERATOR_PROOF_KEYS = frozenset(
+    {
+        "contract",
+        "source_ref",
+        "source_bytes",
+        "raw_sha256",
+        "target_attestation_sha256",
+        "batch_id",
+        "status",
+        "declaration_sha256",
+        "validation_fingerprint",
+        "proposed_scope_membership_sha256",
+        "staging_rows_sha256",
+        "validation_issues_sha256",
+        "unchanged_database_sha256",
+        "unchanged_storage_sha256",
+        "idempotent_replay",
+        "ambiguous_commit_recovered",
+    }
+)
+_OPERATOR_PROOF_NON_HASH_KEYS = frozenset(
+    {
+        "contract",
+        "source_ref",
+        "source_bytes",
+        "batch_id",
+        "status",
+        "idempotent_replay",
+        "ambiguous_commit_recovered",
+    }
+)
+_BROWSER_PHASE_CONTRACT = "BUFFALO_STAGING_PURCHASING_BROWSER_PHASE_V1"
+_BROWSER_PHASE = "price-confirm"
+_BROWSER_NODE_VERSION = "v24.13.0"
+_BROWSER_ASSERTION_COUNT = 62
+_BROWSER_ASSERTION_MANIFEST_SHA256 = (
+    "64a5063520cbe378502b7930f8b51ba784b05c0e9c2ea986de9adeda991efb50"
+)
+_BROWSER_TARGET_SUMMARY_KEYS = frozenset(
+    {
+        "active_guarded",
+        "guarded",
+        "inert",
+        "live_detached",
+        "tracked",
+        "unattached",
+        "unguarded",
+        "unresumed",
+        "unsupported",
+    }
+)
+_BROWSER_PROOF_KEYS = frozenset(
+    {
+        "assertion_count",
+        "assertion_manifest_sha256",
+        "batch_id",
+        "browser_js_version",
+        "browser_pid",
+        "browser_product",
+        "browser_protocol_version",
+        "browser_start_time",
+        "confirmation_preview_sha256",
+        "contract",
+        "driver_sha256",
+        "node_sha256",
+        "node_version",
+        "operational_status_after",
+        "operational_status_before",
+        "operator_proof_sha256",
+        "phase",
+        "raw_bytes",
+        "raw_sha256",
+        "screenshot_bytes",
+        "screenshot_sha256",
+        "source_commit",
+        "source_tree",
+        "status_after",
+        "status_before",
+        "target_summary",
+        "temporal_basis",
+        "tls_certificate_sha256",
+    }
+)
 
 ACCEPTED_INVENTORY_BYTES = 49_648
 ACCEPTED_INVENTORY_SHA256 = (
@@ -162,6 +271,82 @@ class MaterializerPhaseProof:
     immutable_envelope_sha256: str
     started_at: str
     finished_at: str
+
+
+@dataclass(frozen=True)
+class BrowserWorkerArguments:
+    request_descriptor: int
+    ready_descriptor: int
+    secret_descriptor: int
+    result_descriptor: int
+
+
+@dataclass(frozen=True)
+class BrowserWorkerRequest:
+    protocol: str
+    frame: str
+    challenge: str
+    run_id: str
+    source_commit: str
+    source_tree: str
+    cdp_endpoint: str
+    evidence_root: str
+    operator_proof_json: bytes = field(repr=False)
+    operator_batch_id: str
+    operator_proof_sha256: str
+    tls_certificate_sha256: str
+    chromium_pid: int
+
+
+@dataclass(frozen=True)
+class BrowserWorkerReady:
+    protocol: str
+    frame: str
+    challenge: str
+    config_sha256: str
+    worker_pid: int
+    worker_start_ticks: int
+    source_commit: str
+    source_tree: str
+    chromium_pid: int
+    browser_start_time: str
+    python_executable_sha256: str
+    module_manifest_sha256: str
+    driver_sha256: str
+    node_sha256: str
+    preflight_sha256: str
+
+
+@dataclass(frozen=True)
+class BrowserWorkerExpectedAttestation:
+    challenge: str
+    run_id: str
+    source_commit: str
+    source_tree: str
+    cdp_endpoint: str
+    evidence_root: str
+    tls_certificate_sha256: str
+    chromium_pid: int
+    browser_start_time: str
+    worker_pid: int
+    worker_start_ticks: int
+    python_executable_sha256: str
+    module_manifest_sha256: str
+    driver_sha256: str
+    node_sha256: str
+    preflight_sha256: str
+
+
+@dataclass(frozen=True)
+class BrowserWorkerResult:
+    protocol: str
+    frame: str
+    challenge: str
+    config_sha256: str
+    ready_sha256: str
+    worker_pid: int
+    worker_start_ticks: int
+    proof_json: bytes = field(repr=False)
 
 
 @dataclass
@@ -865,6 +1050,733 @@ def _finite_json_float(value: str) -> float:
             "local acceptance Docker response differs"
         )
     return parsed
+
+
+def _reject_protocol_float(_: str) -> None:
+    raise LocalStagingAcceptanceError(
+        "local acceptance browser frame differs"
+    )
+
+
+def _assert_protocol_json_value(value: object) -> None:
+    if value is None or isinstance(value, (str, bool)) or type(value) is int:
+        return
+    if isinstance(value, list):
+        for selected in value:
+            _assert_protocol_json_value(selected)
+        return
+    if isinstance(value, dict):
+        if any(not isinstance(key, str) for key in value):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser frame differs"
+            )
+        for selected in value.values():
+            _assert_protocol_json_value(selected)
+        return
+    raise LocalStagingAcceptanceError(
+        "local acceptance browser frame differs"
+    )
+
+
+def _canonical_protocol_json(value: Mapping[str, Any]) -> bytes:
+    try:
+        _assert_protocol_json_value(value)
+        return json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    except (TypeError, ValueError, UnicodeError, RecursionError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        ) from None
+
+
+def encode_browser_worker_frame(
+    value: Mapping[str, Any],
+    *,
+    maximum_bytes: int,
+) -> bytes:
+    if type(value) is not dict or maximum_bytes <= 0:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        )
+    body = _canonical_protocol_json(value)
+    if not body or len(body) > maximum_bytes:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        )
+    return len(body).to_bytes(4, "big") + body
+
+
+def decode_browser_worker_frame(
+    raw: bytes,
+    *,
+    maximum_bytes: int,
+) -> Mapping[str, Any]:
+    if maximum_bytes <= 0 or len(raw) < 5:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        )
+    declared = int.from_bytes(raw[:4], "big")
+    body = raw[4:]
+    if declared <= 0 or declared > maximum_bytes or len(body) != declared:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        )
+    try:
+        text = body.decode("ascii", errors="strict")
+        value = json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_json_pairs,
+            parse_constant=_reject_json_constant,
+            parse_float=_reject_protocol_float,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        ) from None
+    if not isinstance(value, dict) or _canonical_protocol_json(value) != body:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser frame differs"
+        )
+    return value
+
+
+def _require_exact_keys(value: Mapping[str, Any], expected: set[str]) -> None:
+    if not isinstance(value, dict) or set(value) != expected:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+
+
+def _require_exact_text(
+    value: object,
+    *,
+    pattern: re.Pattern[str] | None = None,
+    maximum: int = 1024,
+) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > maximum
+        or any(ord(character) < 0x20 or ord(character) > 0x7E for character in value)
+        or (pattern is not None and pattern.fullmatch(value) is None)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    return value
+
+
+def _require_positive_integer(value: object) -> int:
+    if type(value) is not int or value <= 0:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    return value
+
+
+def _snapshot_browser_worker_value(
+    value: Mapping[str, Any],
+    *,
+    maximum_bytes: int,
+) -> tuple[dict[str, Any], bytes]:
+    framed = encode_browser_worker_frame(value, maximum_bytes=maximum_bytes)
+    decoded = decode_browser_worker_frame(framed, maximum_bytes=maximum_bytes)
+    return dict(decoded), framed
+
+
+def _validate_operator_proof_snapshot(
+    value: object,
+) -> tuple[bytes, str, str]:
+    if type(value) is not dict or set(value) != _OPERATOR_PROOF_KEYS:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser operator proof differs"
+        )
+    batch_value = value.get("batch_id")
+    try:
+        batch_id = str(UUID(batch_value)) if isinstance(batch_value, str) else ""
+    except (ValueError, TypeError, AttributeError):
+        batch_id = ""
+    hash_names = _OPERATOR_PROOF_KEYS - _OPERATOR_PROOF_NON_HASH_KEYS
+    if (
+        value.get("contract") != _OPERATOR_PROOF_CONTRACT
+        or value.get("source_ref") != _OPERATOR_SOURCE_REF
+        or value.get("source_bytes") != _OPERATOR_SOURCE_BYTES
+        or value.get("raw_sha256") != _OPERATOR_RAW_SHA256
+        or value.get("target_attestation_sha256")
+        != _OPERATOR_TARGET_ATTESTATION_SHA256
+        or value.get("status") != "VALIDATED"
+        or batch_value != batch_id
+        or any(
+            not isinstance(value.get(name), str)
+            or _SHA256_TEXT.fullmatch(value[name]) is None
+            for name in hash_names
+        )
+        or type(value.get("idempotent_replay")) is not bool
+        or type(value.get("ambiguous_commit_recovered")) is not bool
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser operator proof differs"
+        )
+    canonical = _canonical_protocol_json(value)
+    return canonical, batch_id, hashlib.sha256(canonical).hexdigest()
+
+
+def _validate_target_summary(value: object) -> None:
+    if (
+        type(value) is not dict
+        or set(value) != _BROWSER_TARGET_SUMMARY_KEYS
+        or any(type(item) is not int or item < 0 for item in value.values())
+        or value["tracked"] != 5
+        or value["guarded"] != 5
+        or value["active_guarded"] != 5
+        or value["inert"] != 0
+        or value["tracked"] != value["guarded"] + value["inert"]
+        or any(
+            value[key] != 0
+            for key in (
+                "live_detached",
+                "unsupported",
+                "unattached",
+                "unguarded",
+                "unresumed",
+            )
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser result proof differs"
+        )
+
+
+def _validate_browser_proof_snapshot(value: object) -> bytes:
+    if type(value) is not dict or set(value) != _BROWSER_PROOF_KEYS:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser result proof differs"
+        )
+    batch_value = value.get("batch_id")
+    try:
+        batch_id = str(UUID(batch_value)) if isinstance(batch_value, str) else ""
+    except (ValueError, TypeError, AttributeError):
+        batch_id = ""
+    hash_names = (
+        "assertion_manifest_sha256",
+        "confirmation_preview_sha256",
+        "driver_sha256",
+        "node_sha256",
+        "operator_proof_sha256",
+        "raw_sha256",
+        "screenshot_sha256",
+        "tls_certificate_sha256",
+    )
+    browser_start_time = value.get("browser_start_time")
+    if (
+        value.get("contract") != _BROWSER_PHASE_CONTRACT
+        or value.get("phase") != _BROWSER_PHASE
+        or batch_value != batch_id
+        or value.get("status_before") != "VALIDATED"
+        or value.get("operational_status_before") != "VALIDATED"
+        or value.get("status_after") != "VERIFIED_FUTURE"
+        or value.get("operational_status_after") != "VERIFIED_FUTURE"
+        or value.get("temporal_basis") != "REGISTERED_OBSERVATION"
+        or value.get("raw_bytes") != _OPERATOR_SOURCE_BYTES
+        or value.get("raw_sha256") != _OPERATOR_RAW_SHA256
+        or value.get("assertion_count") != _BROWSER_ASSERTION_COUNT
+        or value.get("assertion_manifest_sha256")
+        != _BROWSER_ASSERTION_MANIFEST_SHA256
+        or value.get("node_version") != _BROWSER_NODE_VERSION
+        or not isinstance(value.get("browser_product"), str)
+        or _BROWSER_PRODUCT_TEXT.fullmatch(value["browser_product"]) is None
+        or not isinstance(value.get("browser_protocol_version"), str)
+        or _VERSION_TEXT.fullmatch(value["browser_protocol_version"]) is None
+        or not isinstance(value.get("browser_js_version"), str)
+        or _VERSION_TEXT.fullmatch(value["browser_js_version"]) is None
+        or any(
+            not isinstance(value.get(name), str)
+            or _SHA256_TEXT.fullmatch(value[name]) is None
+            for name in hash_names
+        )
+        or not isinstance(value.get("source_commit"), str)
+        or _GIT_OID_TEXT.fullmatch(value["source_commit"]) is None
+        or not isinstance(value.get("source_tree"), str)
+        or _GIT_OID_TEXT.fullmatch(value["source_tree"]) is None
+        or type(value.get("browser_pid")) is not int
+        or value["browser_pid"] <= 1
+        or not isinstance(browser_start_time, str)
+        or not browser_start_time.isascii()
+        or not browser_start_time.isdigit()
+        or browser_start_time.startswith("0")
+        or type(value.get("screenshot_bytes")) is not int
+        or not 8 <= value["screenshot_bytes"] <= 10 * 1024 * 1024
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser result proof differs"
+        )
+    _validate_target_summary(value.get("target_summary"))
+    return _canonical_protocol_json(value)
+
+
+def _validate_evidence_root_text(value: object) -> str:
+    selected = _require_exact_text(value, maximum=4096)
+    path = Path(selected)
+    if (
+        selected == "/"
+        or selected.startswith("//")
+        or not path.is_absolute()
+        or any(part in {".", ".."} for part in path.parts)
+        or os.path.normpath(selected) != selected
+        or str(path) != selected
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    return selected
+
+
+def _validate_browser_worker_request_snapshot(
+    value: dict[str, Any],
+) -> BrowserWorkerRequest:
+    expected = {
+        "protocol",
+        "frame",
+        "challenge",
+        "run_id",
+        "source_commit",
+        "source_tree",
+        "cdp_endpoint",
+        "evidence_root",
+        "operator_proof",
+        "tls_certificate_sha256",
+        "chromium_pid",
+    }
+    _require_exact_keys(value, expected)
+    if value["protocol"] != BROWSER_WORKER_PROTOCOL or value["frame"] != "REQUEST":
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    challenge = _require_exact_text(value["challenge"], pattern=_SHA256_TEXT)
+    run_id = _require_exact_text(value["run_id"], pattern=_RUN_ID)
+    source_commit = _require_exact_text(value["source_commit"], pattern=_GIT_OID_TEXT)
+    source_tree = _require_exact_text(value["source_tree"], pattern=_GIT_OID_TEXT)
+    certificate = _require_exact_text(
+        value["tls_certificate_sha256"],
+        pattern=_SHA256_TEXT,
+    )
+    cdp_endpoint = _require_exact_text(value["cdp_endpoint"], maximum=64)
+    endpoint = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})", cdp_endpoint)
+    if endpoint is None or int(endpoint.group(1)) > 65_535:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    evidence_root = _validate_evidence_root_text(value["evidence_root"])
+    operator_proof_json, batch_id, operator_proof_sha256 = (
+        _validate_operator_proof_snapshot(value["operator_proof"])
+    )
+    chromium_pid = _require_positive_integer(value["chromium_pid"])
+    if chromium_pid <= 1:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    return BrowserWorkerRequest(
+        protocol=BROWSER_WORKER_PROTOCOL,
+        frame="REQUEST",
+        challenge=challenge,
+        run_id=run_id,
+        source_commit=source_commit,
+        source_tree=source_tree,
+        cdp_endpoint=cdp_endpoint,
+        evidence_root=evidence_root,
+        operator_proof_json=operator_proof_json,
+        operator_batch_id=batch_id,
+        operator_proof_sha256=operator_proof_sha256,
+        tls_certificate_sha256=certificate,
+        chromium_pid=chromium_pid,
+    )
+
+
+def validate_browser_worker_request(
+    value: Mapping[str, Any],
+) -> BrowserWorkerRequest:
+    snapshot, _ = _snapshot_browser_worker_value(
+        value,
+        maximum_bytes=_BROWSER_REQUEST_LIMIT,
+    )
+    return _validate_browser_worker_request_snapshot(snapshot)
+
+
+def _validate_browser_worker_ready_snapshot(
+    value: dict[str, Any],
+) -> BrowserWorkerReady:
+    expected = {
+        "protocol",
+        "frame",
+        "challenge",
+        "config_sha256",
+        "worker_pid",
+        "worker_start_ticks",
+        "source_commit",
+        "source_tree",
+        "chromium_pid",
+        "browser_start_time",
+        "python_executable_sha256",
+        "module_manifest_sha256",
+        "driver_sha256",
+        "node_sha256",
+        "preflight_sha256",
+    }
+    _require_exact_keys(value, expected)
+    if value["protocol"] != BROWSER_WORKER_PROTOCOL or value["frame"] != "READY":
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    worker_pid = _require_positive_integer(value["worker_pid"])
+    chromium_pid = _require_positive_integer(value["chromium_pid"])
+    browser_start_time = _require_exact_text(
+        value["browser_start_time"],
+        pattern=_START_TICKS_TEXT,
+    )
+    if worker_pid <= 1 or chromium_pid <= 1:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    return BrowserWorkerReady(
+        protocol=BROWSER_WORKER_PROTOCOL,
+        frame="READY",
+        challenge=_require_exact_text(value["challenge"], pattern=_SHA256_TEXT),
+        config_sha256=_require_exact_text(
+            value["config_sha256"], pattern=_SHA256_TEXT
+        ),
+        worker_pid=worker_pid,
+        worker_start_ticks=_require_positive_integer(value["worker_start_ticks"]),
+        source_commit=_require_exact_text(
+            value["source_commit"], pattern=_GIT_OID_TEXT
+        ),
+        source_tree=_require_exact_text(value["source_tree"], pattern=_GIT_OID_TEXT),
+        chromium_pid=chromium_pid,
+        browser_start_time=browser_start_time,
+        python_executable_sha256=_require_exact_text(
+            value["python_executable_sha256"], pattern=_SHA256_TEXT
+        ),
+        module_manifest_sha256=_require_exact_text(
+            value["module_manifest_sha256"], pattern=_SHA256_TEXT
+        ),
+        driver_sha256=_require_exact_text(
+            value["driver_sha256"], pattern=_SHA256_TEXT
+        ),
+        node_sha256=_require_exact_text(value["node_sha256"], pattern=_SHA256_TEXT),
+        preflight_sha256=_require_exact_text(
+            value["preflight_sha256"], pattern=_SHA256_TEXT
+        ),
+    )
+
+
+def validate_browser_worker_ready(
+    value: Mapping[str, Any],
+) -> BrowserWorkerReady:
+    snapshot, _ = _snapshot_browser_worker_value(
+        value,
+        maximum_bytes=_BROWSER_READY_LIMIT,
+    )
+    return _validate_browser_worker_ready_snapshot(snapshot)
+
+
+def _validate_browser_worker_result_snapshot(
+    value: dict[str, Any],
+) -> BrowserWorkerResult:
+    expected = {
+        "protocol",
+        "frame",
+        "challenge",
+        "config_sha256",
+        "ready_sha256",
+        "worker_pid",
+        "worker_start_ticks",
+        "proof",
+    }
+    _require_exact_keys(value, expected)
+    if value["protocol"] != BROWSER_WORKER_PROTOCOL or value["frame"] != "RESULT":
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    proof_json = _validate_browser_proof_snapshot(value["proof"])
+    worker_pid = _require_positive_integer(value["worker_pid"])
+    if worker_pid <= 1:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
+    return BrowserWorkerResult(
+        protocol=BROWSER_WORKER_PROTOCOL,
+        frame="RESULT",
+        challenge=_require_exact_text(value["challenge"], pattern=_SHA256_TEXT),
+        config_sha256=_require_exact_text(
+            value["config_sha256"], pattern=_SHA256_TEXT
+        ),
+        ready_sha256=_require_exact_text(
+            value["ready_sha256"], pattern=_SHA256_TEXT
+        ),
+        worker_pid=worker_pid,
+        worker_start_ticks=_require_positive_integer(value["worker_start_ticks"]),
+        proof_json=proof_json,
+    )
+
+
+def validate_browser_worker_result(
+    value: Mapping[str, Any],
+) -> BrowserWorkerResult:
+    snapshot, _ = _snapshot_browser_worker_value(
+        value,
+        maximum_bytes=_BROWSER_RESULT_LIMIT,
+    )
+    return _validate_browser_worker_result_snapshot(snapshot)
+
+
+def browser_worker_request_sha256(value: Mapping[str, Any]) -> str:
+    snapshot, framed = _snapshot_browser_worker_value(
+        value,
+        maximum_bytes=_BROWSER_REQUEST_LIMIT,
+    )
+    _validate_browser_worker_request_snapshot(snapshot)
+    return hashlib.sha256(framed).hexdigest()
+
+
+def browser_worker_ready_sha256(value: Mapping[str, Any]) -> str:
+    snapshot, framed = _snapshot_browser_worker_value(
+        value,
+        maximum_bytes=_BROWSER_READY_LIMIT,
+    )
+    _validate_browser_worker_ready_snapshot(snapshot)
+    return hashlib.sha256(framed).hexdigest()
+
+
+def new_browser_worker_identifiers() -> tuple[str, str]:
+    return os.urandom(32).hex(), os.urandom(16).hex()
+
+
+def validate_browser_worker_ready_attestation(
+    request: BrowserWorkerRequest,
+    ready: BrowserWorkerReady,
+    expected: BrowserWorkerExpectedAttestation,
+) -> None:
+    if type(expected) is not BrowserWorkerExpectedAttestation:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser attestation differs"
+        )
+    try:
+        expected_challenge = _require_exact_text(
+            expected.challenge,
+            pattern=_SHA256_TEXT,
+        )
+        expected_run_id = _require_exact_text(expected.run_id, pattern=_RUN_ID)
+        expected_source_commit = _require_exact_text(
+            expected.source_commit,
+            pattern=_GIT_OID_TEXT,
+        )
+        expected_source_tree = _require_exact_text(
+            expected.source_tree,
+            pattern=_GIT_OID_TEXT,
+        )
+        expected_cdp = _require_exact_text(expected.cdp_endpoint, maximum=64)
+        expected_evidence = _validate_evidence_root_text(expected.evidence_root)
+        expected_tls = _require_exact_text(
+            expected.tls_certificate_sha256,
+            pattern=_SHA256_TEXT,
+        )
+        expected_browser_pid = _require_positive_integer(expected.chromium_pid)
+        expected_worker_pid = _require_positive_integer(expected.worker_pid)
+        expected_worker_start = _require_positive_integer(
+            expected.worker_start_ticks
+        )
+        hashes = (
+            _require_exact_text(
+                expected.python_executable_sha256,
+                pattern=_SHA256_TEXT,
+            ),
+            _require_exact_text(expected.module_manifest_sha256, pattern=_SHA256_TEXT),
+            _require_exact_text(expected.driver_sha256, pattern=_SHA256_TEXT),
+            _require_exact_text(expected.node_sha256, pattern=_SHA256_TEXT),
+            _require_exact_text(expected.preflight_sha256, pattern=_SHA256_TEXT),
+        )
+    except LocalStagingAcceptanceError:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser attestation differs"
+        ) from None
+    if (
+        expected_browser_pid <= 1
+        or expected_worker_pid <= 1
+        or not isinstance(expected.browser_start_time, str)
+        or not expected.browser_start_time.isascii()
+        or not expected.browser_start_time.isdigit()
+        or expected.browser_start_time.startswith("0")
+        or request.challenge != expected_challenge
+        or request.run_id != expected_run_id
+        or request.source_commit != expected_source_commit
+        or request.source_tree != expected_source_tree
+        or request.cdp_endpoint != expected_cdp
+        or request.evidence_root != expected_evidence
+        or request.tls_certificate_sha256 != expected_tls
+        or request.chromium_pid != expected_browser_pid
+        or ready.worker_pid != expected_worker_pid
+        or ready.worker_start_ticks != expected_worker_start
+        or ready.source_commit != expected_source_commit
+        or ready.source_tree != expected_source_tree
+        or ready.chromium_pid != expected_browser_pid
+        or ready.browser_start_time != expected.browser_start_time
+        or (
+            ready.python_executable_sha256,
+            ready.module_manifest_sha256,
+            ready.driver_sha256,
+            ready.node_sha256,
+            ready.preflight_sha256,
+        )
+        != hashes
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser attestation differs"
+        )
+
+
+def validate_browser_worker_transition(
+    request_value: Mapping[str, Any],
+    ready_value: Mapping[str, Any],
+    result_value: Mapping[str, Any] | None = None,
+    *,
+    expected: BrowserWorkerExpectedAttestation,
+) -> tuple[BrowserWorkerRequest, BrowserWorkerReady, BrowserWorkerResult | None]:
+    request_snapshot, request_frame = _snapshot_browser_worker_value(
+        request_value,
+        maximum_bytes=_BROWSER_REQUEST_LIMIT,
+    )
+    ready_snapshot, ready_frame = _snapshot_browser_worker_value(
+        ready_value,
+        maximum_bytes=_BROWSER_READY_LIMIT,
+    )
+    request = _validate_browser_worker_request_snapshot(request_snapshot)
+    ready = _validate_browser_worker_ready_snapshot(ready_snapshot)
+    request_sha256 = hashlib.sha256(request_frame).hexdigest()
+    ready_sha256 = hashlib.sha256(ready_frame).hexdigest()
+    if (
+        ready.challenge != request.challenge
+        or ready.config_sha256 != request_sha256
+        or ready.source_commit != request.source_commit
+        or ready.source_tree != request.source_tree
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser transition differs"
+        )
+    validate_browser_worker_ready_attestation(request, ready, expected)
+    result: BrowserWorkerResult | None = None
+    if result_value is not None:
+        result_snapshot, _ = _snapshot_browser_worker_value(
+            result_value,
+            maximum_bytes=_BROWSER_RESULT_LIMIT,
+        )
+        result = _validate_browser_worker_result_snapshot(result_snapshot)
+        proof = json.loads(result.proof_json)
+        if (
+            result.challenge != request.challenge
+            or result.config_sha256 != request_sha256
+            or result.ready_sha256 != ready_sha256
+            or result.worker_pid != ready.worker_pid
+            or result.worker_start_ticks != ready.worker_start_ticks
+            or proof["batch_id"] != request.operator_batch_id
+            or proof["source_commit"] != request.source_commit
+            or proof["source_tree"] != request.source_tree
+            or proof["driver_sha256"] != ready.driver_sha256
+            or proof["node_sha256"] != ready.node_sha256
+            or proof["operator_proof_sha256"] != request.operator_proof_sha256
+            or proof["browser_pid"] != request.chromium_pid
+            or proof["browser_start_time"] != expected.browser_start_time
+            or proof["tls_certificate_sha256"]
+            != request.tls_certificate_sha256
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser transition differs"
+            )
+    return request, ready, result
+
+
+def parse_browser_worker_arguments(
+    arguments: list[str] | tuple[str, ...],
+) -> BrowserWorkerArguments:
+    if len(arguments) != 5 or arguments[0] != BROWSER_WORKER_HIDDEN_MODE:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker arguments differ"
+        )
+    raw_descriptors = arguments[1:]
+    if any(
+        not isinstance(value, str)
+        or len(value) > 7
+        or _CANONICAL_FD.fullmatch(value) is None
+        for value in raw_descriptors
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker arguments differ"
+        )
+    descriptors = tuple(int(value) for value in raw_descriptors)
+    if (
+        len(set(descriptors)) != 4
+        or any(value > _BROWSER_WORKER_MAX_FD for value in descriptors)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker arguments differ"
+        )
+    return BrowserWorkerArguments(*descriptors)
+
+
+def validate_browser_worker_descriptors(
+    arguments: BrowserWorkerArguments,
+) -> BrowserWorkerArguments:
+    if type(arguments) is not BrowserWorkerArguments:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker descriptors differ"
+        )
+    descriptors = (
+        arguments.request_descriptor,
+        arguments.ready_descriptor,
+        arguments.secret_descriptor,
+        arguments.result_descriptor,
+    )
+    expected_access = (
+        os.O_RDONLY,
+        os.O_WRONLY,
+        os.O_RDONLY,
+        os.O_WRONLY,
+    )
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        identities: list[tuple[int, int]] = []
+        for descriptor, access in zip(descriptors, expected_access, strict=True):
+            if (
+                type(descriptor) is not int
+                or descriptor <= 2
+                or descriptor > _BROWSER_WORKER_MAX_FD
+                or (soft_limit != resource.RLIM_INFINITY and descriptor >= soft_limit)
+            ):
+                raise OSError
+            info = os.fstat(descriptor)
+            flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+            descriptor_target = os.readlink(f"/proc/self/fd/{descriptor}")
+            if (
+                not stat.S_ISFIFO(info.st_mode)
+                or flags != access
+                or descriptor_target != f"pipe:[{info.st_ino}]"
+            ):
+                raise OSError
+            identities.append((info.st_dev, info.st_ino))
+        if len(set(identities)) != 4:
+            raise OSError
+        for descriptor in descriptors:
+            descriptor_flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+            fcntl.fcntl(descriptor, fcntl.F_SETFD, descriptor_flags | fcntl.FD_CLOEXEC)
+            os.set_inheritable(descriptor, False)
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker descriptors differ"
+        ) from None
+    return arguments
 
 
 def parse_single_json_object(raw: bytes) -> Mapping[str, Any]:
@@ -1932,6 +2844,13 @@ if __name__ == "__main__":
 
 __all__ = [
     "ACCEPTANCE_CONTRACT",
+    "BROWSER_WORKER_HIDDEN_MODE",
+    "BROWSER_WORKER_PROTOCOL",
+    "BrowserWorkerArguments",
+    "BrowserWorkerExpectedAttestation",
+    "BrowserWorkerReady",
+    "BrowserWorkerRequest",
+    "BrowserWorkerResult",
     "FROZEN_IMAGE_ID",
     "FROZEN_IMAGE_ROOTFS_LAYERS",
     "FROZEN_SOURCE_COMMIT",
@@ -1944,12 +2863,24 @@ __all__ = [
     "attest_docker_materializer_runtime",
     "build_materializer_create_argv",
     "build_materializer_volume_create_argv",
+    "browser_worker_ready_sha256",
+    "browser_worker_request_sha256",
     "create_materializer_container",
     "create_materializer_volume",
+    "decode_browser_worker_frame",
+    "encode_browser_worker_frame",
     "materializer_invocation",
+    "new_browser_worker_identifiers",
     "open_trusted_docker",
+    "parse_browser_worker_arguments",
     "remove_owned_materializer_container",
     "remove_owned_materializer_volume",
     "run_materializer_phase",
+    "validate_browser_worker_ready",
+    "validate_browser_worker_ready_attestation",
+    "validate_browser_worker_request",
+    "validate_browser_worker_result",
+    "validate_browser_worker_transition",
+    "validate_browser_worker_descriptors",
     "validate_materializer_ingress",
 ]
