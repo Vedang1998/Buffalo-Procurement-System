@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### Railway staging delivery — TASKS 6–8 SOURCE/IMAGE CHECKPOINT PASS / TASK 9 AUTHORITY DECISION AND QUALIFIED REVIEW BLOCKED
+### Railway staging delivery — TASKS 6–8 SOURCE/IMAGE CHECKPOINT PASS / TASK 9 OPTION-B+CLOCK FOCUSED PASS / INTEGRATED ACCEPTANCE AND QUALIFIED REVIEW BLOCKED
 
 - Work is on the sole-writer branch `codex/railway-staging-delivery`. The exact
   clean source candidate is
@@ -181,19 +181,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   and exhaustive cleanup acceptance cannot honestly be claimed.
 - On 2026-10-05 the owner approved Option B and the registered-observation clock
   correction for Task 9 LOCAL acceptance. The exact amendment is recorded in
-  `docs/superpowers/specs/2026-10-05-local-staging-price-bridge-amendment.md`.
-  The proof is named **operator-staged input, browser-approved workflow**. This
-  approval does not yet constitute implementation or acceptance evidence; the
-  failed browser run above remains the current observed result until the new
-  focused and integrated gates pass.
-- Exact next authorization boundary: implement and validate only the approved
-  stopped-service operator and registered-observation correction, then complete
-  the real root/Tini multi-UID container, TLS/browser `$289` workflow,
-  corrected research replay/concurrency/idle/crash/restart, RSS/cgroup/OOM,
-  persistence, exhaustive cleanup, authoritative suite, and attributable
-  independent review. `REVIEW BLOCKED` remains in force until that evidence and
-  review exist. Deployment, domain, Railway data transfer, and operational
-  purchasing remain out of scope.
+  `docs/superpowers/specs/2026-10-05-local-staging-price-bridge-amendment.md`;
+  the proof is named **operator-staged input, browser-approved workflow**.
+  The stopped-service operator is implemented at checkpoint
+  `53797530732c564b3e1a86daf67c5a96030f33ca`. It accepts no caller-selected
+  price bytes or path, requires the exact stopped-service lifecycle exclusion,
+  full staging target attestation, restricted synthetic identity, immutable
+  source/storage evidence, and can create only the registered hash-pinned
+  `VALIDATED` candidate. Focused validation passed **16/16**, including real
+  PostgreSQL wrong-target/role/catalog/declaration/storage refusals, zero-effect
+  failures, post-commit ambiguity recovery through a fresh observer, immutable
+  raw-file checks, exact replay, browser confirmation, and advanced-state
+  refusal. Independent same-model security and test reviews found no remaining
+  concrete P0/P1 in this operator boundary.
+- The registered-observation correction is implemented at checkpoint
+  `453bb9d1aeb6014745b4a76d82b6191abe15d660`, tree
+  `12e608a69cc66e8a55c6f127e6ed1909982c6dfd`. Declared list, detail, and
+  confirmation derive temporal state from the exact registered observation;
+  APPLY remains bound to the registered application instant; generic/legacy
+  price-book projections retain their host-clock behavior. Registration or
+  policy drift fails closed, including idempotent confirmation/APPLY replay,
+  and the UI exposes durable and evaluated status separately while suppressing
+  bulk-upload controls in staging. Focused validation passed the real
+  PostgreSQL replacement module **14/14**, legacy price-book module **42/42**,
+  local-access/composition/gateway slice **74/74**, and the operator module
+  **16/16**. Compilation and Git diff checks passed; independent same-model
+  clock/security reviews found no remaining concrete P0/P1.
+- These checkpoints are local only. A non-force push to
+  `origin/codex/railway-staging-delivery` was attempted and failed before any
+  remote mutation because this environment has neither a verified SSH host
+  path/forwarded SSH agent nor authenticated GitHub CLI state. No publication,
+  PR, deployment, domain, Railway data transfer, or operational purchasing is
+  claimed.
+- Exact next boundary: execute the integrated stopped-service stage -> real
+  browser confirmation -> Backup V2 -> restart -> browser APPLY and downstream
+  mapping/selection/review/DRAFT/packet proof for `$282 + $7 = $289`; then the
+  corrected private research replay/concurrency/idle/crash/restart,
+  RSS/cgroup/OOM, persistence and exhaustive-cleanup gates. Afterward run the
+  authoritative suite, obtain attributable qualified independent review, and
+  publish when authenticated authority is available. `REVIEW BLOCKED` remains
+  in force until that evidence and review exist. Deployment remains out of
+  scope.
 
 ### Staging database Backup V2 and exact startup binding — LOCAL CHECKPOINT PASS / INITIAL TRANSFER-RESTORE PENDING
 
