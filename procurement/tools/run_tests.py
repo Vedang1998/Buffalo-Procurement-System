@@ -23,6 +23,7 @@ SYNTHETIC_SERVER_LOOPBACKS = frozenset({"127.0.0.1", "::1"})
 REQUIRED_MODULE_MINIMUMS = {
     "test_assortment.py": 4,
     "test_audit_private_research_browser.py": 17,
+    "test_audit_staging_purchasing_browser.py": 6,
     "test_automatic_merge_safety.py": 10,
     "test_catalog.py": 7,
     "test_catalog_readiness.py": 14,
