@@ -748,6 +748,317 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 except OSError:
                     pass
 
+    def test_browser_python_runtime_source_is_exact_but_non_authorizing(self):
+        with (
+            patch.object(acceptance.subprocess, "Popen") as spawned,
+            patch.object(acceptance, "write_browser_worker_frame") as frame,
+            patch.object(acceptance, "write_browser_worker_secret") as secret,
+        ):
+            observed = acceptance._observe_browser_python_runtime_source()
+        self.assertEqual(
+            observed,
+            acceptance._BrowserPythonRuntimeObservation(
+                startup_sha256=(
+                    "5f0b49198f006b36808508d976d2b9e35410839e0f34700a208877d815b10934"
+                ),
+                stdlib_sha256=(
+                    "91e877d25cd89b60c1125fbaca143c88ef9d7a06c019ab86de658d9f9f4e4600"
+                ),
+                stdlib_entries=3_251,
+                stdlib_regular_files=3_137,
+                stdlib_directories=113,
+                stdlib_symlinks=1,
+                stdlib_regular_bytes=102_170_195,
+                stdlib_zip_absent=True,
+                all_source_mounts_read_only=False,
+                execution_authority=False,
+            ),
+        )
+        spawned.assert_not_called()
+        frame.assert_not_called()
+        secret.assert_not_called()
+
+    def test_browser_python_runtime_source_observation_rejects_drift(self):
+        def manifest_sha256(
+            domain: bytes,
+            records: tuple[tuple[bytes, bytes, int, int, bytes], ...],
+        ) -> str:
+            digest = hashlib.sha256(domain)
+            for kind, path, mode, size, payload in sorted(
+                records,
+                key=lambda item: item[1],
+            ):
+                digest.update(kind)
+                digest.update(len(path).to_bytes(4, "big"))
+                digest.update(path)
+                digest.update(mode.to_bytes(4, "big"))
+                digest.update(size.to_bytes(8, "big"))
+                digest.update(len(payload).to_bytes(4, "big"))
+                digest.update(payload)
+            return digest.hexdigest()
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            runtime_one = root / "runtime-one"
+            runtime_two = root / "runtime-two"
+            runtime_link = root / "runtime-link"
+            one_bytes = b"runtime-one"
+            two_bytes = b"runtime-two"
+            runtime_one.write_bytes(one_bytes)
+            runtime_two.write_bytes(two_bytes)
+            runtime_one.chmod(0o600)
+            runtime_two.chmod(0o600)
+            runtime_link.symlink_to(runtime_one)
+            link_target = os.fsencode(str(runtime_one))
+            user_id = os.geteuid()
+            group_id = os.getegid()
+            startup_expectations = (
+                acceptance._BrowserRuntimeFileExpectation(
+                    runtime_one,
+                    "F",
+                    len(one_bytes),
+                    0o600,
+                    hashlib.sha256(one_bytes).hexdigest(),
+                    user_id,
+                    group_id,
+                ),
+                acceptance._BrowserRuntimeFileExpectation(
+                    runtime_two,
+                    "F",
+                    len(two_bytes),
+                    0o600,
+                    hashlib.sha256(two_bytes).hexdigest(),
+                    user_id,
+                    group_id,
+                ),
+                acceptance._BrowserRuntimeFileExpectation(
+                    runtime_link,
+                    "L",
+                    len(link_target),
+                    0o777,
+                    os.fsdecode(link_target),
+                    user_id,
+                    group_id,
+                ),
+            )
+            startup_records = (
+                (
+                    b"F",
+                    os.fsencode(runtime_one),
+                    0o600,
+                    len(one_bytes),
+                    hashlib.sha256(one_bytes).digest(),
+                ),
+                (
+                    b"F",
+                    os.fsencode(runtime_two),
+                    0o600,
+                    len(two_bytes),
+                    hashlib.sha256(two_bytes).digest(),
+                ),
+                (
+                    b"L",
+                    os.fsencode(runtime_link),
+                    0o777,
+                    len(link_target),
+                    link_target,
+                ),
+            )
+            startup_sha256 = manifest_sha256(
+                b"BUFFALO_LOCAL_BROWSER_PYTHON_STARTUP_FILES_V1\0",
+                startup_records,
+            )
+
+            def observe_startup() -> acceptance._BrowserRuntimeStartupObservation:
+                return acceptance._observe_browser_runtime_startup_files(
+                    startup_expectations,
+                    expected_sha256=startup_sha256,
+                )
+
+            startup = observe_startup()
+            self.assertEqual(startup.sha256, startup_sha256)
+            self.assertFalse(startup.all_source_mounts_read_only)
+
+            with self.subTest(startup="same-size content"):
+                runtime_one.write_bytes(b"Runtime-one")
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    observe_startup()
+                runtime_one.write_bytes(one_bytes)
+            with self.subTest(startup="mode"):
+                runtime_one.chmod(0o640)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    observe_startup()
+                runtime_one.chmod(0o600)
+            with self.subTest(startup="hardlink"):
+                alias = root / "runtime-hardlink"
+                os.link(runtime_one, alias)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_startup()
+                finally:
+                    alias.unlink()
+            with self.subTest(startup="symlink target"):
+                runtime_link.unlink()
+                runtime_link.symlink_to(runtime_two)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_startup()
+                finally:
+                    runtime_link.unlink()
+                    runtime_link.symlink_to(runtime_one)
+
+            stdlib = root / "stdlib"
+            child = stdlib / "sub"
+            stdlib.mkdir(mode=0o700)
+            child.mkdir(mode=0o700)
+            file_a = stdlib / "a.txt"
+            file_b = child / "b.bin"
+            tree_link = stdlib / "link"
+            file_a.write_bytes(b"alpha")
+            file_b.write_bytes(b"beta")
+            file_a.chmod(0o600)
+            file_b.chmod(0o600)
+            tree_link.symlink_to("sub/b.bin")
+            absent_zip = root / "python.zip"
+            tree_records = (
+                (
+                    b"F",
+                    b"a.txt",
+                    0o600,
+                    5,
+                    hashlib.sha256(b"alpha").digest(),
+                ),
+                (b"L", b"link", 0o777, 9, b"sub/b.bin"),
+                (b"D", b"sub", 0o700, 0, b""),
+                (
+                    b"F",
+                    b"sub/b.bin",
+                    0o600,
+                    4,
+                    hashlib.sha256(b"beta").digest(),
+                ),
+            )
+            tree_sha256 = manifest_sha256(
+                b"BUFFALO_LOCAL_BROWSER_PYTHON_STDLIB_TREE_V1\0",
+                tree_records,
+            )
+
+            def observe_tree() -> acceptance._BrowserStdlibObservation:
+                return acceptance._observe_browser_stdlib_tree(
+                    stdlib,
+                    absent_zip,
+                    expected_sha256=tree_sha256,
+                    expected_entries=4,
+                    expected_regular_files=2,
+                    expected_directories=1,
+                    expected_symlinks=1,
+                    expected_regular_bytes=9,
+                    expected_user_id=user_id,
+                    expected_group_id=group_id,
+                    expected_root_mode=0o700,
+                )
+
+            tree = observe_tree()
+            self.assertEqual(
+                tree,
+                acceptance._BrowserStdlibObservation(
+                    sha256=tree_sha256,
+                    entries=4,
+                    regular_files=2,
+                    directories=1,
+                    symlinks=1,
+                    regular_bytes=9,
+                    all_source_mounts_read_only=False,
+                ),
+            )
+
+            with self.subTest(stdlib="same-size content"):
+                file_a.write_bytes(b"ALPHA")
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    observe_tree()
+                file_a.write_bytes(b"alpha")
+            with self.subTest(stdlib="mode"):
+                file_a.chmod(0o640)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    observe_tree()
+                file_a.chmod(0o600)
+            with self.subTest(stdlib="hardlink"):
+                alias = stdlib / "alias"
+                os.link(file_a, alias)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    alias.unlink()
+            with self.subTest(stdlib="symlink target"):
+                tree_link.unlink()
+                tree_link.symlink_to("a.txt")
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    tree_link.unlink()
+                    tree_link.symlink_to("sub/b.bin")
+            with self.subTest(stdlib="missing entry"):
+                saved_a = root / "saved-a.txt"
+                file_a.rename(saved_a)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    saved_a.rename(file_a)
+            with self.subTest(stdlib="extra entry"):
+                extra = stdlib / "extra"
+                extra.write_bytes(b"extra")
+                extra.chmod(0o600)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    extra.unlink()
+            with self.subTest(stdlib="type change"):
+                file_a.unlink()
+                file_a.mkdir(mode=0o700)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    file_a.rmdir()
+                    file_a.write_bytes(b"alpha")
+                    file_a.chmod(0o600)
+            with self.subTest(stdlib="zip appearance"):
+                absent_zip.write_bytes(b"zip")
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    absent_zip.unlink()
+            with self.subTest(stdlib="root mode"):
+                stdlib.chmod(0o750)
+                try:
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        observe_tree()
+                finally:
+                    stdlib.chmod(0o700)
+
     def test_browser_containment_cgroup_and_nspid_text_is_canonical(self):
         self.assertEqual(
             acceptance.parse_browser_cgroup_path(

@@ -105,6 +105,34 @@ _BROWSER_PYTHON_SHA256 = (
 _BROWSER_PYTHON_UID = 1000
 _BROWSER_PYTHON_GID = 1000
 _BROWSER_PYTHON_MODE = 0o555
+_BROWSER_RUNTIME_STARTUP_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_PYTHON_STARTUP_FILES_V1\0"
+)
+_BROWSER_RUNTIME_STARTUP_SHA256 = (
+    "5f0b49198f006b36808508d976d2b9e35410839e0f34700a208877d815b10934"
+)
+_BROWSER_RUNTIME_STDLIB_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_PYTHON_STDLIB_TREE_V1\0"
+)
+_BROWSER_RUNTIME_STDLIB_SHA256 = (
+    "91e877d25cd89b60c1125fbaca143c88ef9d7a06c019ab86de658d9f9f4e4600"
+)
+_BROWSER_RUNTIME_STDLIB_ROOT = Path(
+    "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/"
+    "lib/python3.13"
+)
+_BROWSER_RUNTIME_STDLIB_ZIP = Path(
+    "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/"
+    "lib/python313.zip"
+)
+_BROWSER_RUNTIME_STDLIB_ENTRIES = 3_251
+_BROWSER_RUNTIME_STDLIB_FILES = 3_137
+_BROWSER_RUNTIME_STDLIB_DIRECTORIES = 113
+_BROWSER_RUNTIME_STDLIB_SYMLINKS = 1
+_BROWSER_RUNTIME_STDLIB_BYTES = 102_170_195
+_BROWSER_RUNTIME_STARTUP_FILE_BYTES_LIMIT = 8 * 1024 * 1024
+_BROWSER_RUNTIME_TREE_DEPTH_LIMIT = 64
+_BROWSER_RUNTIME_PATH_BYTES_LIMIT = 4_096
 _BROWSER_WORKER_RUNNER_SOURCE = Path(__file__).resolve(strict=True).with_name(
     "run_local_staging_browser_worker.py"
 )
@@ -431,6 +459,146 @@ class BrowserContainmentTextEvidence:
     worker_outer_pid: int
     init_namespace_pids: tuple[int, ...]
     worker_namespace_pids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class _BrowserRuntimeFileExpectation:
+    path: Path
+    kind: str
+    size: int
+    mode: int
+    payload: str
+    user_id: int = 1000
+    group_id: int = 1000
+
+
+@dataclass(frozen=True)
+class _BrowserRuntimeStartupObservation:
+    sha256: str
+    all_source_mounts_read_only: bool
+
+
+@dataclass(frozen=True)
+class _BrowserStdlibObservation:
+    sha256: str
+    entries: int
+    regular_files: int
+    directories: int
+    symlinks: int
+    regular_bytes: int
+    all_source_mounts_read_only: bool
+
+
+@dataclass(frozen=True)
+class _BrowserPythonRuntimeObservation:
+    startup_sha256: str
+    stdlib_sha256: str
+    stdlib_entries: int
+    stdlib_regular_files: int
+    stdlib_directories: int
+    stdlib_symlinks: int
+    stdlib_regular_bytes: int
+    stdlib_zip_absent: bool
+    all_source_mounts_read_only: bool
+    execution_authority: bool
+
+
+_BROWSER_RUNTIME_STARTUP_FILES = (
+    _BrowserRuntimeFileExpectation(
+        path=_BROWSER_PYTHON_EXECUTABLE,
+        kind="F",
+        size=15_776,
+        mode=0o555,
+        payload=(
+            "bd5afcc703e9293ebea22ec05ad3a95f5b14ca6b65293a5f2969efe83148f565"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/ld-linux-x86-64.so.2"
+        ),
+        kind="F",
+        size=253_696,
+        mode=0o555,
+        payload=(
+            "1e08370bba3ee9e4f97bb0500d1f32afb0417babca6ae455c6458b9a3edb86a8"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/qzc04a3npl70cyyy6flnnrb2ig3kayxm-python3-3.13.11/"
+            "lib/libpython3.13.so.1.0"
+        ),
+        kind="F",
+        size=6_918_296,
+        mode=0o555,
+        payload=(
+            "c18948facb3a9ad3f737bd49838dfce75b9a7a0125b11f778b742bd3a2baa78e"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/libdl.so.2"
+        ),
+        kind="F",
+        size=15_688,
+        mode=0o555,
+        payload=(
+            "0b410a4dc1e19583f1bbd192ff5d09de4208715a04d6d11c28fdbda01e1c6bb0"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/libm.so.6"
+        ),
+        kind="F",
+        size=1_029_504,
+        mode=0o555,
+        payload=(
+            "2e1c8e9e8d5fbefde85eb1d0750375da636ea65aa918b7fdcc328f07f3e6c01e"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/libc.so.6"
+        ),
+        kind="F",
+        size=2_413_048,
+        mode=0o555,
+        payload=(
+            "29ed835214dc8bc811e10f384ac5428148418bdc7d93f43e5f3a6880bd6dc903"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/xc0ga87wdclrx54qjaryahkkmkmqi9qz-gcc-15.2.0-lib/"
+            "lib/libgcc_s.so.1"
+        ),
+        kind="L",
+        size=79,
+        mode=0o777,
+        payload=(
+            "/nix/store/b7kx9bkjsma9wslr1cg0316m5jy450l8-gcc-15.2.0-libgcc/"
+            "lib/libgcc_s.so.1"
+        ),
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/b7kx9bkjsma9wslr1cg0316m5jy450l8-gcc-15.2.0-libgcc/"
+            "lib/libgcc_s.so.1"
+        ),
+        kind="F",
+        size=196_968,
+        mode=0o444,
+        payload=(
+            "528a3ea63aa4c25bf9ba5cd8d14c8bdeab3c5aaea16dc9cee00d50fdd8565a53"
+        ),
+    ),
+)
 
 
 @dataclass
@@ -941,6 +1109,761 @@ def open_pinned_browser_python_executable() -> PinnedBrowserPythonExecutable:
         if descriptor >= 0:
             os.close(descriptor)
         raise
+
+
+def _browser_runtime_identity(info: os.stat_result) -> tuple[int, ...]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_mode,
+        info.st_nlink,
+        info.st_uid,
+        info.st_gid,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def _update_browser_runtime_manifest(
+    digest: Any,
+    *,
+    kind: bytes,
+    path: bytes,
+    mode: int,
+    size: int,
+    payload: bytes,
+) -> None:
+    if (
+        type(kind) is not bytes
+        or kind not in {b"F", b"D", b"L"}
+        or type(path) is not bytes
+        or not path
+        or len(path) > _BROWSER_RUNTIME_PATH_BYTES_LIMIT
+        or b"\0" in path
+        or type(mode) is not int
+        or mode < 0
+        or mode > 0o7777
+        or type(size) is not int
+        or size < 0
+        or size > 18_446_744_073_709_551_615
+        or type(payload) is not bytes
+        or len(payload) > _BROWSER_RUNTIME_PATH_BYTES_LIMIT
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    digest.update(kind)
+    digest.update(len(path).to_bytes(4, "big"))
+    digest.update(path)
+    digest.update(mode.to_bytes(4, "big"))
+    digest.update(size.to_bytes(8, "big"))
+    digest.update(len(payload).to_bytes(4, "big"))
+    digest.update(payload)
+
+
+def _observe_exact_browser_runtime_file(
+    expectation: _BrowserRuntimeFileExpectation,
+) -> tuple[bytes, bytes, int, int, bytes, bool]:
+    if (
+        type(expectation) is not _BrowserRuntimeFileExpectation
+        or not isinstance(expectation.path, Path)
+        or not expectation.path.is_absolute()
+        or type(expectation.kind) is not str
+        or expectation.kind not in {"F", "L"}
+        or type(expectation.size) is not int
+        or expectation.size < 0
+        or expectation.size > _BROWSER_RUNTIME_STARTUP_FILE_BYTES_LIMIT
+        or type(expectation.mode) is not int
+        or expectation.mode < 0
+        or expectation.mode > 0o7777
+        or type(expectation.payload) is not str
+        or type(expectation.user_id) is not int
+        or expectation.user_id < 0
+        or expectation.user_id > 4_294_967_295
+        or type(expectation.group_id) is not int
+        or expectation.group_id < 0
+        or expectation.group_id > 4_294_967_295
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    path_bytes = os.fsencode(expectation.path)
+    if (
+        not path_bytes.startswith(b"/")
+        or len(path_bytes) > _BROWSER_RUNTIME_PATH_BYTES_LIMIT
+        or b"\0" in path_bytes
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    if expectation.kind == "L":
+        parent_descriptor = -1
+        try:
+            if expectation.path.name in {"", ".", ".."}:
+                raise OSError
+            named_parent_before = expectation.path.parent.lstat()
+            named_link_before = expectation.path.lstat()
+            named_target_before = os.fsencode(os.readlink(expectation.path))
+            parent_descriptor = os.open(
+                expectation.path.parent,
+                os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY,
+            )
+            if (
+                parent_descriptor <= 2
+                or parent_descriptor > _BROWSER_WORKER_MAX_FD
+            ):
+                raise OSError
+            parent_before = os.fstat(parent_descriptor)
+            before = os.stat(
+                expectation.path.name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            target_before = os.fsencode(
+                os.readlink(expectation.path.name, dir_fd=parent_descriptor)
+            )
+            after = os.stat(
+                expectation.path.name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            target_after = os.fsencode(
+                os.readlink(expectation.path.name, dir_fd=parent_descriptor)
+            )
+            parent_after = os.fstat(parent_descriptor)
+            read_only = bool(
+                os.fstatvfs(parent_descriptor).f_flag & os.ST_RDONLY
+            )
+            named_link_after = expectation.path.lstat()
+            named_target_after = os.fsencode(os.readlink(expectation.path))
+            named_parent_after = expectation.path.parent.lstat()
+            expected_target = expectation.payload.encode("ascii", errors="strict")
+        except (OSError, OverflowError, ValueError, TypeError, UnicodeEncodeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            ) from None
+        finally:
+            if parent_descriptor >= 0:
+                os.close(parent_descriptor)
+        if (
+            not stat.S_ISDIR(parent_before.st_mode)
+            or _browser_runtime_identity(parent_before)
+            != _browser_runtime_identity(named_parent_before)
+            or _browser_runtime_identity(parent_before)
+            != _browser_runtime_identity(parent_after)
+            or _browser_runtime_identity(parent_before)
+            != _browser_runtime_identity(named_parent_after)
+            or not stat.S_ISLNK(before.st_mode)
+            or before.st_nlink != 1
+            or (before.st_uid, before.st_gid)
+            != (expectation.user_id, expectation.group_id)
+            or stat.S_IMODE(before.st_mode) != expectation.mode
+            or before.st_size != expectation.size
+            or _browser_runtime_identity(before)
+            != _browser_runtime_identity(after)
+            or _browser_runtime_identity(before)
+            != _browser_runtime_identity(named_link_before)
+            or _browser_runtime_identity(before)
+            != _browser_runtime_identity(named_link_after)
+            or target_before != target_after
+            or target_before != named_target_before
+            or target_before != named_target_after
+            or target_before != expected_target
+            or len(target_before) != expectation.size
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        return (
+            b"L",
+            path_bytes,
+            expectation.mode,
+            expectation.size,
+            target_before,
+            read_only,
+        )
+
+    if _SHA256_TEXT.fullmatch(expectation.payload) is None:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    descriptor = -1
+    try:
+        named_before = expectation.path.lstat()
+        descriptor = os.open(
+            expectation.path,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+        )
+        if descriptor <= 2 or descriptor > _BROWSER_WORKER_MAX_FD:
+            raise OSError
+        before = os.fstat(descriptor)
+        descriptor_target = os.readlink(f"/proc/self/fd/{descriptor}")
+        digest = hashlib.sha256()
+        observed = 0
+        while observed <= expectation.size:
+            block = os.read(
+                descriptor,
+                min(1024 * 1024, expectation.size + 1 - observed),
+            )
+            if not block:
+                break
+            observed += len(block)
+            digest.update(block)
+        after = os.fstat(descriptor)
+        named_after = expectation.path.lstat()
+        read_only = bool(os.fstatvfs(descriptor).f_flag & os.ST_RDONLY)
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        ) from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if (
+        descriptor_target != str(expectation.path)
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or (before.st_uid, before.st_gid)
+        != (expectation.user_id, expectation.group_id)
+        or stat.S_IMODE(before.st_mode) != expectation.mode
+        or before.st_size != expectation.size
+        or observed != expectation.size
+        or _browser_runtime_identity(before) != _browser_runtime_identity(after)
+        or _browser_runtime_identity(before)
+        != _browser_runtime_identity(named_before)
+        or _browser_runtime_identity(before)
+        != _browser_runtime_identity(named_after)
+        or digest.hexdigest() != expectation.payload
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    return (
+        b"F",
+        path_bytes,
+        expectation.mode,
+        expectation.size,
+        digest.digest(),
+        read_only,
+    )
+
+
+def _observe_browser_runtime_startup_files(
+    expectations: tuple[_BrowserRuntimeFileExpectation, ...],
+    *,
+    expected_sha256: str,
+) -> _BrowserRuntimeStartupObservation:
+    if (
+        type(expectations) is not tuple
+        or not expectations
+        or len(expectations) > len(_BROWSER_RUNTIME_STARTUP_FILES)
+        or type(expected_sha256) is not str
+        or _SHA256_TEXT.fullmatch(expected_sha256) is None
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    records = tuple(
+        _observe_exact_browser_runtime_file(expectation)
+        for expectation in expectations
+    )
+    paths = tuple(record[1] for record in records)
+    if len(set(paths)) != len(paths):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    digest = hashlib.sha256(_BROWSER_RUNTIME_STARTUP_DOMAIN)
+    for kind, path, mode, size, payload, _ in sorted(
+        records,
+        key=lambda item: item[1],
+    ):
+        _update_browser_runtime_manifest(
+            digest,
+            kind=kind,
+            path=path,
+            mode=mode,
+            size=size,
+            payload=payload,
+        )
+    observed = digest.hexdigest()
+    if observed != expected_sha256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    return _BrowserRuntimeStartupObservation(
+        sha256=observed,
+        all_source_mounts_read_only=all(record[5] for record in records),
+    )
+
+
+def _require_browser_runtime_path_absent(path: Path) -> bool:
+    if (
+        not isinstance(path, Path)
+        or not path.is_absolute()
+        or path.name in {"", ".", ".."}
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    parent_descriptor = -1
+    try:
+        named_parent_before = path.parent.lstat()
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        parent_descriptor = os.open(
+            path.parent,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY,
+        )
+        if parent_descriptor <= 2 or parent_descriptor > _BROWSER_WORKER_MAX_FD:
+            raise OSError
+        before = os.fstat(parent_descriptor)
+        try:
+            os.stat(
+                path.name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        read_only = bool(os.fstatvfs(parent_descriptor).f_flag & os.ST_RDONLY)
+        after = os.fstat(parent_descriptor)
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        named_parent_after = path.parent.lstat()
+    except LocalStagingAcceptanceError:
+        raise
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        ) from None
+    finally:
+        if parent_descriptor >= 0:
+            os.close(parent_descriptor)
+    if (
+        not stat.S_ISDIR(before.st_mode)
+        or _browser_runtime_identity(before)
+        != _browser_runtime_identity(named_parent_before)
+        or _browser_runtime_identity(before) != _browser_runtime_identity(after)
+        or _browser_runtime_identity(before)
+        != _browser_runtime_identity(named_parent_after)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    return read_only
+
+
+def _observe_browser_stdlib_tree(
+    root: Path,
+    absent_zip: Path,
+    *,
+    expected_sha256: str,
+    expected_entries: int,
+    expected_regular_files: int,
+    expected_directories: int,
+    expected_symlinks: int,
+    expected_regular_bytes: int,
+    expected_user_id: int,
+    expected_group_id: int,
+    expected_root_mode: int,
+) -> _BrowserStdlibObservation:
+    integer_values = (
+        expected_entries,
+        expected_regular_files,
+        expected_directories,
+        expected_symlinks,
+        expected_regular_bytes,
+        expected_user_id,
+        expected_group_id,
+        expected_root_mode,
+    )
+    if (
+        not isinstance(root, Path)
+        or not root.is_absolute()
+        or not isinstance(absent_zip, Path)
+        or not absent_zip.is_absolute()
+        or absent_zip.parent != root.parent
+        or type(expected_sha256) is not str
+        or _SHA256_TEXT.fullmatch(expected_sha256) is None
+        or any(type(value) is not int or value < 0 for value in integer_values)
+        or expected_entries <= 0
+        or expected_entries > _BROWSER_RUNTIME_STDLIB_ENTRIES
+        or expected_regular_files > expected_entries
+        or expected_directories > expected_entries
+        or expected_symlinks > expected_entries
+        or (
+            expected_regular_files
+            + expected_directories
+            + expected_symlinks
+            != expected_entries
+        )
+        or expected_regular_bytes > _BROWSER_RUNTIME_STDLIB_BYTES
+        or expected_user_id > 4_294_967_295
+        or expected_group_id > 4_294_967_295
+        or expected_root_mode > 0o7777
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    all_source_mounts_read_only = _require_browser_runtime_path_absent(
+        absent_zip
+    )
+    root_descriptor = -1
+    records: list[tuple[bytes, bytes, int, int, bytes]] = []
+    regular_files = 0
+    directories = 0
+    symlinks = 0
+    regular_bytes = 0
+
+    def observe_mount(descriptor: int) -> None:
+        nonlocal all_source_mounts_read_only
+        try:
+            read_only = bool(os.fstatvfs(descriptor).f_flag & os.ST_RDONLY)
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            ) from None
+        all_source_mounts_read_only = (
+            all_source_mounts_read_only and read_only
+        )
+
+    def require_identity(
+        observed: os.stat_result,
+        expected: os.stat_result,
+    ) -> None:
+        if _browser_runtime_identity(observed) != _browser_runtime_identity(expected):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+
+    def observe_regular(
+        parent_descriptor: int,
+        name: str,
+        named_before: os.stat_result,
+    ) -> tuple[int, bytes]:
+        nonlocal regular_bytes
+        descriptor = -1
+        try:
+            descriptor = os.open(
+                name,
+                os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+                dir_fd=parent_descriptor,
+            )
+            if descriptor <= 2 or descriptor > _BROWSER_WORKER_MAX_FD:
+                raise OSError
+            before = os.fstat(descriptor)
+            observe_mount(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or (before.st_uid, before.st_gid)
+                != (expected_user_id, expected_group_id)
+                or before.st_size > expected_regular_bytes - regular_bytes
+            ):
+                raise OSError
+            digest = hashlib.sha256()
+            observed = 0
+            while observed <= before.st_size:
+                block = os.read(
+                    descriptor,
+                    min(1024 * 1024, before.st_size + 1 - observed),
+                )
+                if not block:
+                    break
+                observed += len(block)
+                digest.update(block)
+            after = os.fstat(descriptor)
+            named_after = os.stat(
+                name,
+                dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            ) from None
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        if observed != before.st_size:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        require_identity(before, named_before)
+        require_identity(before, after)
+        require_identity(before, named_after)
+        regular_bytes += observed
+        return observed, digest.digest()
+
+    def walk(
+        directory_descriptor: int,
+        prefix: bytes,
+        expected_directory: os.stat_result,
+        depth: int,
+    ) -> None:
+        nonlocal regular_files, directories, symlinks
+        if depth > _BROWSER_RUNTIME_TREE_DEPTH_LIMIT:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        before = os.fstat(directory_descriptor)
+        observe_mount(directory_descriptor)
+        require_identity(before, expected_directory)
+        if (
+            not stat.S_ISDIR(before.st_mode)
+            or (before.st_uid, before.st_gid)
+            != (expected_user_id, expected_group_id)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            )
+        entries: list[tuple[bytes, str]] = []
+        try:
+            with os.scandir(directory_descriptor) as iterator:
+                for entry in iterator:
+                    raw_name = os.fsencode(entry.name)
+                    if (
+                        not raw_name
+                        or raw_name in {b".", b".."}
+                        or b"/" in raw_name
+                        or b"\0" in raw_name
+                        or len(entries) >= expected_entries
+                    ):
+                        raise LocalStagingAcceptanceError(
+                            "local acceptance browser Python runtime source differs"
+                        )
+                    entries.append((raw_name, entry.name))
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser Python runtime source differs"
+            ) from None
+        for raw_name, name in sorted(entries):
+            relative = raw_name if not prefix else prefix + b"/" + raw_name
+            if (
+                len(relative) > _BROWSER_RUNTIME_PATH_BYTES_LIMIT
+                or len(records) >= expected_entries
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser Python runtime source differs"
+                )
+            try:
+                named_before = os.stat(
+                    name,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+            except OSError:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser Python runtime source differs"
+                ) from None
+            mode = stat.S_IMODE(named_before.st_mode)
+            if stat.S_ISREG(named_before.st_mode):
+                size, payload = observe_regular(
+                    directory_descriptor,
+                    name,
+                    named_before,
+                )
+                regular_files += 1
+                records.append((relative, b"F", mode, size, payload))
+            elif stat.S_ISDIR(named_before.st_mode):
+                child_descriptor = -1
+                try:
+                    child_descriptor = os.open(
+                        name,
+                        os.O_RDONLY
+                        | os.O_CLOEXEC
+                        | os.O_NOFOLLOW
+                        | os.O_DIRECTORY,
+                        dir_fd=directory_descriptor,
+                    )
+                    if (
+                        child_descriptor <= 2
+                        or child_descriptor > _BROWSER_WORKER_MAX_FD
+                    ):
+                        raise OSError
+                    directories += 1
+                    records.append((relative, b"D", mode, 0, b""))
+                    walk(
+                        child_descriptor,
+                        relative,
+                        named_before,
+                        depth + 1,
+                    )
+                    named_after = os.stat(
+                        name,
+                        dir_fd=directory_descriptor,
+                        follow_symlinks=False,
+                    )
+                    require_identity(named_after, named_before)
+                except OSError:
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser Python runtime source differs"
+                    ) from None
+                finally:
+                    if child_descriptor >= 0:
+                        os.close(child_descriptor)
+            elif stat.S_ISLNK(named_before.st_mode):
+                try:
+                    target_before = os.fsencode(
+                        os.readlink(name, dir_fd=directory_descriptor)
+                    )
+                    named_after = os.stat(
+                        name,
+                        dir_fd=directory_descriptor,
+                        follow_symlinks=False,
+                    )
+                    target_after = os.fsencode(
+                        os.readlink(name, dir_fd=directory_descriptor)
+                    )
+                except OSError:
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser Python runtime source differs"
+                    ) from None
+                if (
+                    named_before.st_nlink != 1
+                    or (named_before.st_uid, named_before.st_gid)
+                    != (expected_user_id, expected_group_id)
+                    or named_before.st_size != len(target_before)
+                    or target_before != target_after
+                ):
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser Python runtime source differs"
+                    )
+                require_identity(named_after, named_before)
+                symlinks += 1
+                records.append(
+                    (relative, b"L", mode, len(target_before), target_before)
+                )
+            else:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser Python runtime source differs"
+                )
+        after = os.fstat(directory_descriptor)
+        require_identity(after, before)
+
+    try:
+        named_root_before = root.lstat()
+        root_descriptor = os.open(
+            root,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY,
+        )
+        if root_descriptor <= 2 or root_descriptor > _BROWSER_WORKER_MAX_FD:
+            raise OSError
+        descriptor_root = os.fstat(root_descriptor)
+        if (
+            not stat.S_ISDIR(descriptor_root.st_mode)
+            or (descriptor_root.st_uid, descriptor_root.st_gid)
+            != (expected_user_id, expected_group_id)
+            or stat.S_IMODE(descriptor_root.st_mode) != expected_root_mode
+        ):
+            raise OSError
+        walk(root_descriptor, b"", descriptor_root, 0)
+        descriptor_root_after = os.fstat(root_descriptor)
+        named_root_after = root.lstat()
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        ) from None
+    finally:
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
+    require_identity(descriptor_root, named_root_before)
+    require_identity(descriptor_root, descriptor_root_after)
+    require_identity(descriptor_root, named_root_after)
+    zip_parent_read_only_after = _require_browser_runtime_path_absent(
+        absent_zip
+    )
+    all_source_mounts_read_only = (
+        all_source_mounts_read_only and zip_parent_read_only_after
+    )
+    if (
+        len(records) != expected_entries
+        or regular_files != expected_regular_files
+        or directories != expected_directories
+        or symlinks != expected_symlinks
+        or regular_bytes != expected_regular_bytes
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    digest = hashlib.sha256(_BROWSER_RUNTIME_STDLIB_DOMAIN)
+    for path, kind, mode, size, payload in sorted(records):
+        _update_browser_runtime_manifest(
+            digest,
+            kind=kind,
+            path=path,
+            mode=mode,
+            size=size,
+            payload=payload,
+        )
+    observed_sha256 = digest.hexdigest()
+    if observed_sha256 != expected_sha256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    return _BrowserStdlibObservation(
+        sha256=observed_sha256,
+        entries=len(records),
+        regular_files=regular_files,
+        directories=directories,
+        symlinks=symlinks,
+        regular_bytes=regular_bytes,
+        all_source_mounts_read_only=all_source_mounts_read_only,
+    )
+
+
+def _observe_browser_python_runtime_source() -> _BrowserPythonRuntimeObservation:
+    """Observe exact named source bytes without granting execution authority."""
+
+    startup = _observe_browser_runtime_startup_files(
+        _BROWSER_RUNTIME_STARTUP_FILES,
+        expected_sha256=_BROWSER_RUNTIME_STARTUP_SHA256,
+    )
+    stdlib = _observe_browser_stdlib_tree(
+        _BROWSER_RUNTIME_STDLIB_ROOT,
+        _BROWSER_RUNTIME_STDLIB_ZIP,
+        expected_sha256=_BROWSER_RUNTIME_STDLIB_SHA256,
+        expected_entries=_BROWSER_RUNTIME_STDLIB_ENTRIES,
+        expected_regular_files=_BROWSER_RUNTIME_STDLIB_FILES,
+        expected_directories=_BROWSER_RUNTIME_STDLIB_DIRECTORIES,
+        expected_symlinks=_BROWSER_RUNTIME_STDLIB_SYMLINKS,
+        expected_regular_bytes=_BROWSER_RUNTIME_STDLIB_BYTES,
+        expected_user_id=_BROWSER_PYTHON_UID,
+        expected_group_id=_BROWSER_PYTHON_GID,
+        expected_root_mode=0o555,
+    )
+    return _BrowserPythonRuntimeObservation(
+        startup_sha256=startup.sha256,
+        stdlib_sha256=stdlib.sha256,
+        stdlib_entries=stdlib.entries,
+        stdlib_regular_files=stdlib.regular_files,
+        stdlib_directories=stdlib.directories,
+        stdlib_symlinks=stdlib.symlinks,
+        stdlib_regular_bytes=stdlib.regular_bytes,
+        stdlib_zip_absent=True,
+        all_source_mounts_read_only=(
+            startup.all_source_mounts_read_only
+            and stdlib.all_source_mounts_read_only
+        ),
+        execution_authority=False,
+    )
 
 
 def _read_browser_worker_runner_source() -> bytes:
