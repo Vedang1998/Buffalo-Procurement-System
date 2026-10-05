@@ -296,8 +296,16 @@ def _db_conn():
                 target_from_environment,
             )
 
+            conn.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            conn.execute("SET LOCAL statement_timeout = '10000ms'")
+            conn.execute("SET LOCAL lock_timeout = '2000ms'")
+            conn.execute(
+                "SET LOCAL idle_in_transaction_session_timeout = '15000ms'"
+            )
             attest_runtime_connection(conn, target_from_environment(os.environ))
-            conn.commit()
+            conn.rollback()
         except Exception:
             conn.close()
             raise

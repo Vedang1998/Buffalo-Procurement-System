@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import threading
 from pathlib import Path
@@ -30,6 +31,7 @@ from procurement_os.staging_gateway import (
     StagingGateway,
     StagingGatewayError,
     WorkerResponse,
+    write_sanitized_request_log,
 )
 from procurement_os.staging_internal import NonceReplayCache, verify_assertion
 from procurement_os.staging_routes import response_metadata_is_allowed
@@ -154,6 +156,7 @@ class StagingGatewayTests(unittest.TestCase):
         self.transport = _RecordingTransport()
         self.research_control = _ResearchControl()
         self.policy = RegisteredRoutePolicy()
+        self.request_logs: list[dict[str, object]] = []
         self.gateway = StagingGateway(
             config=self.config,
             route_policy=self.policy,
@@ -163,6 +166,7 @@ class StagingGatewayTests(unittest.TestCase):
                 "research": self.research_key,
             },
             research_control=self.research_control,
+            request_logger=self.request_logs.append,
         )
         for role, key in (
             ("synthetic", self.synthetic_key),
@@ -229,6 +233,136 @@ class StagingGatewayTests(unittest.TestCase):
         self.assertNotIn("type='password'", response.text)
         self.assertIn("_buffalo_staging_csrf", response.text)
 
+    def test_authenticated_readiness_is_coarse_and_source_bound(self):
+        unauthenticated = self.client.get("/ready")
+        self.assertEqual(unauthenticated.status_code, 401)
+        self.assertNotIn("source_commit", unauthenticated.text)
+
+        self.assertEqual(self._login().status_code, 303)
+        self.research_control.calls.clear()
+        ready = self.client.get("/ready")
+        self.assertEqual(ready.status_code, 200)
+        self.assertEqual(
+            ready.json(),
+            {
+                "components": {
+                    "gateway": "ready",
+                    "research": "ready",
+                    "synthetic": "ready",
+                },
+                "ok": True,
+                "source_commit": "a" * 40,
+            },
+        )
+        self.assertEqual(self.research_control.calls, ["research-status"])
+        for private_value in (
+            self.config.project_id,
+            self.config.environment_id,
+            self.config.app_service_id,
+            self.config.postgres_service_id,
+            self.config.replica_id,
+            self.config.owner_verifier,
+        ):
+            self.assertNotIn(private_value, ready.text)
+
+        self.research_control.state = "STOPPED"
+        self.research_control.calls.clear()
+        idle = self.client.get("/ready")
+        self.assertEqual(idle.status_code, 200)
+        self.assertEqual(idle.json()["components"]["research"], "idle")
+        self.assertEqual(self.research_control.calls, ["research-status"])
+        self.assertEqual(self.research_control.state, "STOPPED")
+
+        self.gateway.disable_worker_key(worker_role="synthetic", generation=0)
+        unavailable = self.client.get("/ready")
+        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(unavailable.headers["retry-after"], "1")
+        self.assertFalse(unavailable.json()["ok"])
+        self.assertEqual(
+            unavailable.json()["components"]["synthetic"], "unavailable"
+        )
+
+    def test_request_logs_are_fixed_schema_and_payload_free(self):
+        self.assertEqual(
+            self._login(passphrase=self.credential.passphrase).status_code, 303
+        )
+        sensitive_values = {
+            self.credential.passphrase,
+            MAPPING_CANDIDATE,
+            HOST,
+            *(cookie for cookie in self.client.cookies.values()),
+        }
+        self.request_logs.clear()
+        response = self.client.get(f"/supplier-mapping/{MAPPING_CANDIDATE}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(self.request_logs), 1)
+        record = self.request_logs[0]
+        self.assertEqual(
+            set(record),
+            {
+                "authenticated",
+                "duration_ms",
+                "event",
+                "method",
+                "request_id",
+                "route",
+                "status",
+                "version",
+            },
+        )
+        self.assertEqual(record["route"], "synthetic.mapping_detail")
+        self.assertEqual(record["method"], "GET")
+        self.assertEqual(record["status"], 200)
+        self.assertIs(record["authenticated"], True)
+        self.assertGreaterEqual(record["duration_ms"], 0)
+        self.assertRegex(record["request_id"], r"\A[a-f0-9]{32}\Z")
+        first_request_id = record["request_id"]
+        proxied = self.transport.requests[-1]
+        verified = verify_assertion(
+            token=proxied["assertion"],
+            key=self.synthetic_key,
+            expected_worker_role="synthetic",
+            method=proxied["method"],
+            path=proxied["path"],
+            query=proxied["query"],
+            body=proxied["body"],
+            expected_origin=ORIGIN,
+            now=proxied["issued_at"] + 1,
+            nonce_cache=NonceReplayCache(),
+        )
+        self.assertEqual(verified.request_id, first_request_id)
+        rendered = json.dumps(record, sort_keys=True)
+        for value in sensitive_values:
+            self.assertNotIn(value, rendered)
+
+        self.request_logs.clear()
+        rejected = self.client.get("/health?secret=do-not-log")
+        self.assertEqual(rejected.status_code, 403)
+        self.assertEqual(self.request_logs[0]["route"], "gateway.health")
+        self.assertNotEqual(self.request_logs[0]["request_id"], first_request_id)
+        self.assertNotIn("do-not-log", json.dumps(self.request_logs[0]))
+
+    def test_stdout_request_log_is_one_canonical_bounded_record(self):
+        record = {
+            "authenticated": True,
+            "duration_ms": 7,
+            "event": "staging_request",
+            "method": "GET",
+            "request_id": "a" * 32,
+            "route": "gateway.readiness",
+            "status": 200,
+            "version": 1,
+        }
+        with patch("procurement_os.staging_gateway.os.write") as write:
+            write_sanitized_request_log(record)
+        self.assertEqual(write.call_args.args[0], 1)
+        encoded = write.call_args.args[1]
+        self.assertLessEqual(len(encoded), 512)
+        self.assertTrue(encoded.endswith(b"\n"))
+        self.assertEqual(json.loads(encoded), record)
+        with self.assertRaisesRegex(StagingGatewayError, "log contract"):
+            write_sanitized_request_log({"event": "staging_request"})
+
     def test_health_is_minimal_and_security_headers_are_unconditional(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
@@ -240,6 +374,35 @@ class StagingGatewayTests(unittest.TestCase):
         self.assertEqual(response.headers["strict-transport-security"], "max-age=31536000")
         self.assertNotIn("process", response.text)
         self.assertNotIn("commit", response.text)
+
+    def test_railway_healthcheck_host_is_accepted_only_for_exact_liveness(self):
+        health = self.client.get(
+            "/health", headers={"Host": "healthcheck.railway.app"}
+        )
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(
+            health.json(),
+            {"ok": True, "service": "buffalo-procurement-staging-gateway"},
+        )
+        self.assertEqual(
+            self.client.get(
+                "/health?unexpected=1",
+                headers={"Host": "healthcheck.railway.app"},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/health", headers={"Host": "healthcheck.railway.app"}
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/auth/login", headers={"Host": "healthcheck.railway.app"}
+            ).status_code,
+            403,
+        )
 
     def test_login_uses_one_time_csrf_and_secure_host_only_cookies(self):
         response = self._login()

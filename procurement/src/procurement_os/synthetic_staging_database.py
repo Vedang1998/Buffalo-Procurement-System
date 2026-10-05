@@ -6,12 +6,15 @@ Ordinary application startup only calls the read-only attestation path.
 """
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 import hashlib
+import hmac
 import json
 from pathlib import Path
 import re
-from typing import Any, Mapping
+import secrets
+from typing import Any, Literal, Mapping
 from urllib.parse import urlparse
 
 from psycopg import sql
@@ -33,6 +36,21 @@ RUNTIME_LOGIN = "buffalo_synthetic_runtime"
 EXPECTED_DATABASE = "buffalo_synthetic_staging_demo"
 EXPECTED_POSTGRES_MAJOR = 16
 EXPECTED_PRIVATE_HOST = "postgres.railway.internal"
+EXPECTED_DATABASE_CREATION: Mapping[str, object] = {
+    "allow_connections": True,
+    "collation": "C",
+    "collation_version": None,
+    "connection_limit": -1,
+    "ctype": "C",
+    "encoding": "UTF8",
+    "icu_locale": None,
+    "icu_rules": None,
+    "is_template": False,
+    "locale_provider": "c",
+    "server_encoding": "UTF8",
+    "tablespace": "pg_default",
+    "time_zone": "UTC",
+}
 FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_OWNER_DEMO_V1"
 MULTIVENDOR_FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_MULTIVENDOR_ACCEPTANCE_V2"
 DEVELOPMENT_FIXTURE_CONTRACT = "BUFFALO_SYNTHETIC_DEVELOPMENT_FORECAST_V2"
@@ -132,6 +150,46 @@ PGCRYPTO_ROUTINES = (
 )
 PGCRYPTO_DEFINITION_SHA256 = (
     "de59d5a5df4ff6bcca818c44b428e8adc07ca6851d6353030f5d742e9b29c0b3"
+)
+TRANSFER_SOURCE_CATALOG_SHA256 = (
+    "f23bc0543bbb8562957ae10a4da29ac9efc8e35a58ef6b376aeb3610fba923ba"
+)
+TRANSFER_SEQUENCE_OWNERSHIP_SHA256 = (
+    "2c7bfae88dfabb23b27087a1b1fcd9e386575f9a0d16fb9f115f3bc169527e9e"
+)
+CORE_SYSTEM_VIEW_SHA256 = (
+    "b4cfaffba9b5c37dbef9ab5fd96c453716e5dffc42e08a73eb85a67059ae2569"
+)
+CORE_SYSTEM_ROUTINE_SHA256 = (
+    "78d732c718df86f8709d3d69b3dc74b9ae96e5ce0a69a1223e2b0265acd22387"
+)
+_PGCRYPTO_BOOTSTRAP_OWNER = "<PGCRYPTO_BOOTSTRAP_OWNER>"
+_TRANSFER_DATABASE_ACL = "<TRANSFER_DATABASE_ACL>"
+_TRANSFER_SOURCE_DATABASE_ACL: tuple[object, object] = (True, [])
+_DATABASE_SECURITY_DEFAULTS = ("session_replication_role=origin",)
+_TRANSFER_FENCED_DATABASE_ACL: tuple[object, object] = (
+    False,
+    [
+        {
+            "grantee": LEGACY_OWNER,
+            "grantor": LEGACY_OWNER,
+            "grantable": False,
+            "privilege": privilege,
+        }
+        for privilege in ("CONNECT", "CREATE", "TEMPORARY")
+    ],
+)
+_PREDECESSOR_FENCED_DATABASE_ACL: tuple[object, object] = (
+    False,
+    [
+        {
+            "grantee": OBJECT_OWNER,
+            "grantor": OBJECT_OWNER,
+            "grantable": False,
+            "privilege": privilege,
+        }
+        for privilege in ("CONNECT", "CREATE", "TEMPORARY")
+    ],
 )
 
 # The gateway exposes reviewed reads across the synthetic operational UI.  The
@@ -426,6 +484,61 @@ EXPECTED_RUNTIME_ATTESTATION_IDENTITY = (
     "517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a"
 )
 STAGING_BACKUP_RELEASE_CONTRACT = "BUFFALO_SYNTHETIC_STAGING_BACKUP_RELEASE_V1"
+STAGING_TRANSFER_CONTRACT = "BUFFALO_SYNTHETIC_STAGING_TRANSFER_V1"
+TRANSFER_CONTRACT_META_KEY = "staging_transfer_contract"
+TRANSFER_MANIFEST_META_KEY = "staging_transfer_manifest_sha256"
+_SCRAM_ITERATIONS = 4096
+_SCRAM_VERIFIER = re.compile(
+    r"^SCRAM-SHA-256\$([1-9][0-9]*):([A-Za-z0-9+/]+={0,2})\$"
+    r"([A-Za-z0-9+/]+={0,2}):([A-Za-z0-9+/]+={0,2})$"
+)
+
+
+def _validated_role_secret(value: str, *, label: str) -> bytes:
+    if (
+        type(value) is not str
+        or not 32 <= len(value) <= 256
+        or any(ord(character) < 0x21 or ord(character) > 0x7E for character in value)
+    ):
+        raise SyntheticStagingDatabaseError(
+            f"synthetic staging {label} credential differs"
+        )
+    return value.encode("ascii")
+
+
+def _scram_sha256_verifier(secret: str, *, salt: bytes | None = None) -> str:
+    password = _validated_role_secret(secret, label="role")
+    selected_salt = secrets.token_bytes(16) if salt is None else salt
+    if type(selected_salt) is not bytes or len(selected_salt) != 16:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging role credential salt differs"
+        )
+    salted = hashlib.pbkdf2_hmac(
+        "sha256", password, selected_salt, _SCRAM_ITERATIONS
+    )
+    client_key = hmac.new(salted, b"Client Key", hashlib.sha256).digest()
+    stored_key = hashlib.sha256(client_key).digest()
+    server_key = hmac.new(salted, b"Server Key", hashlib.sha256).digest()
+    encoded = lambda value: base64.b64encode(value).decode("ascii")
+    return (
+        f"SCRAM-SHA-256${_SCRAM_ITERATIONS}:{encoded(selected_salt)}$"
+        f"{encoded(stored_key)}:{encoded(server_key)}"
+    )
+
+
+def _scram_secret_matches(secret: str, verifier: str | None) -> bool:
+    password = _validated_role_secret(secret, label="role")
+    if not isinstance(verifier, str):
+        return False
+    matched = _SCRAM_VERIFIER.fullmatch(verifier)
+    if matched is None or int(matched.group(1)) != _SCRAM_ITERATIONS:
+        return False
+    try:
+        salt = base64.b64decode(matched.group(2), validate=True)
+        expected = _scram_sha256_verifier(password.decode("ascii"), salt=salt)
+    except (ValueError, SyntheticStagingDatabaseError):
+        return False
+    return hmac.compare_digest(verifier, expected)
 
 
 def staging_backup_release(target: Any | None = None) -> dict[str, object]:
@@ -490,6 +603,7 @@ class SyntheticStagingTarget:
     environment_id: str
     app_service_id: str
     postgres_service_id: str
+    transfer_manifest_sha256: str
     owned_local_port: int | None = None
 
     def validate_static(self) -> None:
@@ -531,6 +645,8 @@ class SyntheticStagingTarget:
             or parsed.params
             or parsed.query
             or parsed.fragment
+            or re.fullmatch(r"[0-9a-f]{64}", self.transfer_manifest_sha256)
+            is None
         ):
             raise SyntheticStagingDatabaseError(
                 "synthetic staging database destination differs"
@@ -556,6 +672,7 @@ def target_from_environment(environment: Mapping[str, str]) -> SyntheticStagingT
         "RAILWAY_ENVIRONMENT_ID",
         "RAILWAY_SERVICE_ID",
         "BUFFALO_STAGING_POSTGRES_SERVICE_ID",
+        "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256",
     }
     if not required.issubset(environment):
         raise SyntheticStagingDatabaseError(
@@ -589,38 +706,89 @@ def target_from_environment(environment: Mapping[str, str]) -> SyntheticStagingT
         postgres_service_id=str(
             environment["BUFFALO_STAGING_POSTGRES_SERVICE_ID"]
         ),
+        transfer_manifest_sha256=str(
+            environment["BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256"]
+        ),
         owned_local_port=owned_local_port,
     )
     target.validate_static()
     return target
 
 
-def _role_flags(conn: Any, role: str) -> tuple[bool, ...]:
+def _role_flags(conn: Any, role: str) -> tuple[Any, ...]:
     row = conn.execute(
         "SELECT rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,"
-        "rolreplication,rolbypassrls FROM pg_catalog.pg_roles WHERE rolname=%s",
+        "rolreplication,rolbypassrls,rolconnlimit,rolvaliduntil::text "
+        "FROM pg_catalog.pg_roles WHERE rolname=%s",
         (role,),
     ).fetchone()
     if row is None:
         raise SyntheticStagingDatabaseError("synthetic staging role is absent")
-    return tuple(bool(value) for value in row)
+    return (
+        *(bool(value) for value in row[:7]),
+        int(row[7]),
+        None if row[8] is None else str(row[8]),
+    )
+
+
+def database_creation_envelope(conn: Any) -> dict[str, object]:
+    """Return DB creation facts that a schema-only dump cannot transfer."""
+
+    row = conn.execute(
+        "SELECT d.datallowconn,d.datcollate,d.datcollversion,d.datconnlimit,"
+        "d.datctype,"
+        "pg_catalog.pg_encoding_to_char(d.encoding),d.daticulocale,d.daticurules,"
+        "d.datistemplate,d.datlocprovider,"
+        "pg_catalog.current_setting('server_encoding'),"
+        "t.spcname,pg_catalog.current_setting('TimeZone') "
+        "FROM pg_catalog.pg_database d JOIN pg_catalog.pg_tablespace t "
+        "ON t.oid=d.dattablespace WHERE d.datname=pg_catalog.current_database()"
+    ).fetchone()
+    if row is None:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging database creation envelope is absent"
+        )
+    return {
+        "allow_connections": bool(row[0]),
+        "collation": str(row[1]),
+        "collation_version": None if row[2] is None else str(row[2]),
+        "connection_limit": int(row[3]),
+        "ctype": str(row[4]),
+        "encoding": str(row[5]),
+        "icu_locale": None if row[6] is None else str(row[6]),
+        "icu_rules": None if row[7] is None else str(row[7]),
+        "is_template": bool(row[8]),
+        "locale_provider": str(row[9]),
+        "server_encoding": str(row[10]),
+        "tablespace": str(row[11]),
+        "time_zone": str(row[12]),
+    }
+
+
+def verify_database_creation_envelope(conn: Any) -> None:
+    if database_creation_envelope(conn) != dict(EXPECTED_DATABASE_CREATION):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging database creation envelope differs"
+        )
 
 
 def _require_source_hashes() -> None:
+    values = (
+        PREDECESSOR_CATALOG_SHA256,
+        SUCCESSOR_CATALOG_SHA256,
+        MIGRATION_SHA256,
+        STAGING_PERSISTENT_MAPPING_CATALOG_SHA256,
+        STAGING_RETIREMENT_CATALOG_SHA256,
+        STAGING_PRICE_CATALOG_SHA256,
+        IMMUTABLE_FIXTURE_MANIFEST_SHA256,
+        EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+        TRANSFER_SOURCE_CATALOG_SHA256,
+        STAGING_BACKUP_RELEASE_SHA256,
+    )
     if not all(
         re.fullmatch(r"[0-9a-f]{64}", value)
-        for value in (
-            PREDECESSOR_CATALOG_SHA256,
-            SUCCESSOR_CATALOG_SHA256,
-            MIGRATION_SHA256,
-            STAGING_PERSISTENT_MAPPING_CATALOG_SHA256,
-            STAGING_RETIREMENT_CATALOG_SHA256,
-            STAGING_PRICE_CATALOG_SHA256,
-            IMMUTABLE_FIXTURE_MANIFEST_SHA256,
-            EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
-            STAGING_BACKUP_RELEASE_SHA256,
-        )
-    ):
+        for value in values
+    ) or "0" * 64 in values:
         raise SyntheticStagingDatabaseError(
             "synthetic staging source catalog identities are not pinned"
         )
@@ -697,15 +865,18 @@ def _catalog_payload(conn: Any) -> dict[str, Any]:
     # fixed path makes provisioner and runtime projections byte-identical; the
     # caller's transaction-local setting is restored before returning.
     previous_search_path = conn.execute(
-        "SELECT current_setting('search_path')"
+        "SELECT pg_catalog.current_setting('search_path')"
     ).fetchone()[0]
-    conn.execute("SELECT set_config('search_path','pg_catalog',true)")
+    conn.execute(
+        "SELECT pg_catalog.set_config('search_path','pg_catalog',true)"
+    )
 
     try:
         return _catalog_payload_with_fixed_path(conn)
     finally:
         conn.execute(
-            "SELECT set_config('search_path',%s,true)", (previous_search_path,)
+            "SELECT pg_catalog.set_config('search_path',%s,true)",
+            (previous_search_path,),
         )
 
 
@@ -856,13 +1027,19 @@ def _catalog_payload_with_fixed_path(conn: Any) -> dict[str, Any]:
         ),
     ).fetchall()
     settings = conn.execute(
-        "SELECT r.rolname,d.datname,"
+        "SELECT COALESCE(r.rolname,'<ALL_ROLES>'),d.datname,"
         + _normalized_text_array_sql("s.setconfig")
         + " "
-        "FROM pg_catalog.pg_db_role_setting s JOIN pg_catalog.pg_roles r "
+        "FROM pg_catalog.pg_db_role_setting s LEFT JOIN pg_catalog.pg_roles r "
         "ON r.oid=s.setrole LEFT JOIN pg_catalog.pg_database d ON d.oid=s.setdatabase "
-        "WHERE r.rolname=ANY(%s) ORDER BY r.rolname,d.datname",
-        ([LEGACY_OWNER, LEGACY_LOGIN, OBJECT_OWNER, PROVISIONER, RUNTIME_LOGIN],),
+        "WHERE r.rolname=ANY(%s) OR (s.setrole=0 AND d.datname=%s) "
+        "AND s.setconfig<>%s "
+        "ORDER BY 1,2,3",
+        (
+            [LEGACY_OWNER, LEGACY_LOGIN, OBJECT_OWNER, PROVISIONER, RUNTIME_LOGIN],
+            EXPECTED_DATABASE,
+            list(_DATABASE_SECURITY_DEFAULTS),
+        ),
     ).fetchall()
     return {
         "classes": [list(row) for row in classes],
@@ -881,15 +1058,169 @@ def _catalog_payload_with_fixed_path(conn: Any) -> dict[str, Any]:
     }
 
 
-def compute_catalog_sha256(conn: Any) -> str:
+def _catalog_payload_sha256(conn: Any, payload: Mapping[str, Any]) -> str:
     from psycopg.types.json import Jsonb
 
     # PostgreSQL jsonb text is the shared canonicalization used by the SQL
     # calculator.  This deliberately avoids a Python/SQL serializer mismatch.
     canonical = conn.execute(
-        "SELECT %s::pg_catalog.jsonb::text", (Jsonb(_catalog_payload(conn)),)
+        "SELECT %s::pg_catalog.jsonb::text", (Jsonb(payload),)
     ).fetchone()[0]
     return hashlib.sha256(str(canonical).encode()).hexdigest()
+
+
+def compute_catalog_sha256(conn: Any) -> str:
+    return _catalog_payload_sha256(conn, _catalog_payload(conn))
+
+
+def compute_predecessor_catalog_sha256(
+    conn: Any, *, database_acl: Literal["source", "fenced"] = "source"
+) -> str:
+    """Hash the accepted predecessor under one caller-authorized ACL state.
+
+    The one-time transfer fence replaces the database's implicit owner/PUBLIC
+    ACL with an explicit owner-only ACL before bootstrap.  That transport
+    control is verified exactly here and only then normalized to the original
+    source ACL representation.  No other catalog field is normalized, and the
+    accepted predecessor identity remains unchanged.
+    """
+
+    payload = _catalog_payload(conn)
+    database = payload.get("database")
+    expected_acl = {
+        "source": _TRANSFER_SOURCE_DATABASE_ACL,
+        "fenced": _PREDECESSOR_FENCED_DATABASE_ACL,
+    }.get(database_acl)
+    if (
+        expected_acl is None
+        or not isinstance(database, list)
+        or len(database) != 6
+        or tuple(database[2:4]) != expected_acl
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging predecessor database ACL differs"
+        )
+    if database_acl == "fenced":
+        database[2:4] = list(_TRANSFER_SOURCE_DATABASE_ACL)
+    return _catalog_payload_sha256(conn, payload)
+
+
+def _transfer_source_catalog_payload(
+    conn: Any, *, database_acl: str
+) -> dict[str, Any]:
+    """Return the exact pre-bootstrap catalog with one portable owner token.
+
+    PostgreSQL creates trusted-extension members as the cluster bootstrap
+    administrator even when the extension itself is created under the legacy
+    owner.  The administrator name is cluster-local, so only those 36 reviewed
+    pgcrypto member owners are replaced with one explicit token.  Every other
+    catalog field, including function bodies, trigger definitions and ACLs,
+    remains byte-significant.
+    """
+
+    payload = _catalog_payload(conn)
+    expected_database_acl = {
+        "source": _TRANSFER_SOURCE_DATABASE_ACL,
+        "fenced": _TRANSFER_FENCED_DATABASE_ACL,
+    }.get(database_acl)
+    database = payload.get("database")
+    if (
+        expected_database_acl is None
+        or not isinstance(database, list)
+        or len(database) != 6
+        or tuple(database[2:4]) != expected_database_acl
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer database ACL differs"
+        )
+    database[2:4] = [_TRANSFER_DATABASE_ACL, _TRANSFER_DATABASE_ACL]
+    extensions = payload.get("extensions")
+    if extensions != [["pgcrypto", "1.3", SCHEMA, LEGACY_OWNER]]:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer source extension differs"
+        )
+    member_rows = conn.execute(
+        "SELECT p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid),"
+        "pg_catalog.pg_get_userbyid(p.proowner) FROM pg_catalog.pg_proc p "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+        "JOIN pg_catalog.pg_depend d ON d.classid='pg_catalog.pg_proc'::regclass "
+        "AND d.objid=p.oid AND d.deptype='e' "
+        "JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid "
+        "WHERE n.nspname=%s AND e.extname='pgcrypto' "
+        "ORDER BY p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid)",
+        (SCHEMA,),
+    ).fetchall()
+    member_identities = {(str(row[0]), str(row[1])) for row in member_rows}
+    if len(member_rows) != len(PGCRYPTO_ROUTINES) or len(member_identities) != len(
+        PGCRYPTO_ROUTINES
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer source pgcrypto inventory differs"
+        )
+    observed: set[tuple[str, str]] = set()
+    bootstrap_owners: set[str] = set()
+    for routine in payload.get("routines", []):
+        if not isinstance(routine, list) or len(routine) != 17:
+            raise SyntheticStagingDatabaseError(
+                "synthetic staging transfer source routine inventory differs"
+            )
+        identity = (str(routine[0]), str(routine[1]))
+        if identity not in member_identities:
+            continue
+        if identity in observed or routine[12:14] != [True, []]:
+            raise SyntheticStagingDatabaseError(
+                "synthetic staging transfer source pgcrypto ACL differs"
+            )
+        observed.add(identity)
+        bootstrap_owners.add(str(routine[11]))
+        routine[11] = _PGCRYPTO_BOOTSTRAP_OWNER
+    if observed != member_identities or len(bootstrap_owners) != 1:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer source pgcrypto owner differs"
+        )
+    bootstrap_owner = next(iter(bootstrap_owners))
+    if conn.execute(
+        "SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=%s",
+        (bootstrap_owner,),
+    ).fetchone() != (True,):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer source pgcrypto owner differs"
+        )
+    return payload
+
+
+def compute_transfer_source_catalog_sha256(
+    conn: Any, *, database_acl: str = "source"
+) -> str:
+    """Hash the accepted 001-016 source without executing restored code."""
+
+    return hashlib.sha256(
+        _canonical(
+            _transfer_source_catalog_payload(conn, database_acl=database_acl)
+        )
+    ).hexdigest()
+
+
+def verify_transfer_source_catalog(
+    conn: Any, *, database_acl: str = "source"
+) -> str:
+    """Prove the immutable legacy catalog before any restored code is called."""
+
+    # This verifier is an operator-only transaction boundary.  Keep the fixed
+    # path in force for every subsequent legacy fixture check in the same
+    # transaction rather than restoring a possibly attacker-controlled path.
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
+    verify_database_creation_envelope(conn)
+    _verify_semantic_catalog_envelope(conn)
+    observed = compute_transfer_source_catalog_sha256(
+        conn, database_acl=database_acl
+    )
+    if observed != TRANSFER_SOURCE_CATALOG_SHA256:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer source catalog differs"
+        )
+    return observed
 
 
 def _metadata(conn: Any, keys: list[str]) -> dict[str, str]:
@@ -1047,7 +1378,9 @@ def _verify_fixture_provenance(conn: Any) -> None:
 
 def _verify_role_topology(conn: Any, *, bootstrapped: bool) -> None:
     expected = {
-        LEGACY_OWNER: (False, False, False, False, False, False, False),
+        LEGACY_OWNER: (
+            False, False, False, False, False, False, False, -1, None
+        ),
         LEGACY_LOGIN: (
             False,
             False,
@@ -1056,14 +1389,22 @@ def _verify_role_topology(conn: Any, *, bootstrapped: bool) -> None:
             not bootstrapped,
             False,
             False,
+            -1,
+            None,
         ),
     }
     if bootstrapped:
         expected.update(
             {
-                OBJECT_OWNER: (False, False, False, False, False, False, False),
-                PROVISIONER: (False, True, False, False, True, False, False),
-                RUNTIME_LOGIN: (False, False, False, False, True, False, False),
+                OBJECT_OWNER: (
+                    False, False, False, False, False, False, False, -1, None
+                ),
+                PROVISIONER: (
+                    False, True, False, False, True, False, False, -1, None
+                ),
+                RUNTIME_LOGIN: (
+                    False, False, False, False, True, False, False, -1, None
+                ),
             }
         )
     for role, flags in expected.items():
@@ -1096,6 +1437,62 @@ def _verify_role_topology(conn: Any, *, bootstrapped: bool) -> None:
         raise SyntheticStagingDatabaseError(
             "synthetic staging role membership differs"
         )
+    if bootstrapped:
+        security_defaults = conn.execute(
+            "SELECT s.setconfig FROM pg_catalog.pg_db_role_setting s "
+            "JOIN pg_catalog.pg_database d ON d.oid=s.setdatabase "
+            "WHERE s.setrole=0 AND d.datname=%s",
+            (EXPECTED_DATABASE,),
+        ).fetchall()
+        if security_defaults != [(list(_DATABASE_SECURITY_DEFAULTS),)]:
+            raise SyntheticStagingDatabaseError(
+                "synthetic staging database security defaults differ"
+            )
+
+
+def _verify_role_credentials(
+    conn: Any,
+    *,
+    bootstrapped: bool,
+    provisioner_secret: str,
+    runtime_secret: str,
+) -> None:
+    """Verify credential state as admin without exposing verifier bytes."""
+
+    provisioner_bytes = _validated_role_secret(
+        provisioner_secret, label="provisioner"
+    )
+    runtime_bytes = _validated_role_secret(runtime_secret, label="runtime")
+    if hmac.compare_digest(provisioner_bytes, runtime_bytes):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging role credentials must be distinct"
+        )
+    wanted = [LEGACY_OWNER, LEGACY_LOGIN]
+    if bootstrapped:
+        wanted.extend([OBJECT_OWNER, PROVISIONER, RUNTIME_LOGIN])
+    rows = dict(
+        conn.execute(
+            "SELECT rolname,rolpassword FROM pg_catalog.pg_authid "
+            "WHERE rolname=ANY(%s) ORDER BY rolname",
+            (wanted,),
+        ).fetchall()
+    )
+    if set(rows) != set(wanted) or any(
+        rows[role] is not None for role in (LEGACY_OWNER, LEGACY_LOGIN)
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging role credential state differs"
+        )
+    if not bootstrapped:
+        return
+    if (
+        rows[OBJECT_OWNER] is not None
+        or not _scram_secret_matches(provisioner_secret, rows[PROVISIONER])
+        or not _scram_secret_matches(runtime_secret, rows[RUNTIME_LOGIN])
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging role credential state differs"
+        )
 
 
 def _require_transaction(conn: Any) -> None:
@@ -1103,6 +1500,534 @@ def _require_transaction(conn: Any) -> None:
         raise SyntheticStagingDatabaseError(
             "synthetic staging transition requires one explicit transaction"
         )
+
+
+def _transfer_markers(manifest_sha256: str) -> dict[str, str]:
+    if re.fullmatch(r"[0-9a-f]{64}", manifest_sha256) is None:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer manifest identity is malformed"
+        )
+    return {
+        TRANSFER_CONTRACT_META_KEY: STAGING_TRANSFER_CONTRACT,
+        TRANSFER_MANIFEST_META_KEY: manifest_sha256,
+    }
+
+
+def _observed_transfer_markers(conn: Any) -> dict[str, str]:
+    return dict(
+        conn.execute(
+            sql.SQL(
+                "SELECT key,value FROM {}.meta WHERE key=ANY(%s) ORDER BY key"
+            ).format(sql.Identifier(SCHEMA)),
+            ([TRANSFER_CONTRACT_META_KEY, TRANSFER_MANIFEST_META_KEY],),
+        ).fetchall()
+    )
+
+
+def _verify_transfer_markers(conn: Any, manifest_sha256: str) -> None:
+    if _observed_transfer_markers(conn) != _transfer_markers(manifest_sha256):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer provenance differs"
+        )
+
+
+def _verify_semantic_catalog_envelope(conn: Any) -> None:
+    """Reject schema semantics omitted from the pinned catalog projections."""
+
+    row = conn.execute(
+        "SELECT "
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_rewrite r "
+        "JOIN pg_catalog.pg_class c ON c.oid=r.ev_class "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s AND r.rulename<>'_RETURN'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_policy p "
+        "JOIN pg_catalog.pg_class c ON c.oid=p.polrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s AND c.relkind='c'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_type t "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace "
+        "WHERE n.nspname=%s AND t.typrelid=0 AND t.typelem=0),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_operator o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.oprnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_opclass o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.opcnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_opfamily o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.opfnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_collation c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.collnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_conversion c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.connamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_config x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.cfgnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_dict x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.dictnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_parser x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.prsnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_template x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.tmplnamespace "
+        "WHERE n.nspname=%s),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_attribute a "
+        "JOIN pg_catalog.pg_class c ON c.oid=a.attrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "JOIN pg_catalog.pg_type t ON t.oid=a.atttypid "
+        "WHERE n.nspname=%s AND a.attnum>0 AND NOT a.attisdropped "
+        "AND a.attcollation<>0 AND a.attcollation<>t.typcollation),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_attribute a "
+        "JOIN pg_catalog.pg_class c ON c.oid=a.attrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "JOIN pg_catalog.pg_type t ON t.oid=a.atttypid "
+        "WHERE n.nspname=%s AND a.attnum>0 AND NOT a.attisdropped "
+        "AND (a.attstorage<>t.typstorage OR a.attcompression::text<>'' "
+        "OR a.attstattarget<>-1 OR a.attoptions IS NOT NULL "
+        "OR a.attfdwoptions IS NOT NULL OR a.attinhcount<>0 "
+        "OR NOT a.attislocal)),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_trigger g "
+        "JOIN pg_catalog.pg_class c ON c.oid=g.tgrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s AND g.tgisinternal AND g.tgenabled<>'O'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_proc p "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+        "WHERE n.nspname=%s AND p.pronargdefaults<>0),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_proc p "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+        "JOIN pg_catalog.pg_language l ON l.oid=p.prolang "
+        "WHERE n.nspname=%s AND (p.procost<>(CASE WHEN l.lanname IN "
+        "('c','internal') THEN 1 ELSE 100 END) OR "
+        "p.prorows<>(CASE WHEN p.proretset THEN 1000 ELSE 0 END) "
+        "OR p.prosupport<>0)),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s AND ((c.relkind='r' AND c.relreplident<>'d') "
+        "OR (c.relkind<>'r' AND c.relreplident<>'n'))),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s AND c.reltablespace<>0),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_index i "
+        "JOIN pg_catalog.pg_class c ON c.oid=i.indexrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname=%s AND (i.indisclustered OR i.indisreplident)),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "JOIN pg_catalog.pg_class t ON t.oid=c.reltoastrelid "
+        "WHERE n.nspname=%s AND t.reloptions IS NOT NULL),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_depend d "
+        "LEFT JOIN pg_catalog.pg_proc p "
+        "ON d.classid='pg_catalog.pg_proc'::pg_catalog.regclass "
+        "AND d.objid=p.oid "
+        "LEFT JOIN pg_catalog.pg_class c "
+        "ON d.classid='pg_catalog.pg_class'::pg_catalog.regclass "
+        "AND d.objid=c.oid "
+        "LEFT JOIN pg_catalog.pg_type t "
+        "ON d.classid='pg_catalog.pg_type'::pg_catalog.regclass "
+        "AND d.objid=t.oid "
+        "LEFT JOIN pg_catalog.pg_trigger g "
+        "ON d.classid='pg_catalog.pg_trigger'::pg_catalog.regclass "
+        "AND d.objid=g.oid "
+        "LEFT JOIN pg_catalog.pg_class gc ON gc.oid=g.tgrelid "
+        "LEFT JOIN pg_catalog.pg_namespace pn ON pn.oid=p.pronamespace "
+        "LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid=c.relnamespace "
+        "LEFT JOIN pg_catalog.pg_namespace tn ON tn.oid=t.typnamespace "
+        "LEFT JOIN pg_catalog.pg_namespace gn ON gn.oid=gc.relnamespace "
+        "WHERE d.deptype='x' AND (pn.nspname=%s OR cn.nspname=%s "
+        "OR tn.nspname=%s OR gn.nspname=%s)),"
+        "(SELECT d.description FROM pg_catalog.pg_description d "
+        "JOIN pg_catalog.pg_extension e ON "
+        "d.classoid='pg_catalog.pg_extension'::pg_catalog.regclass "
+        "AND d.objoid=e.oid AND d.objsubid=0 "
+        "WHERE e.extname='pgcrypto') IS DISTINCT FROM 'cryptographic functions',"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_event_trigger),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_foreign_data_wrapper),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_foreign_server),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_user_mappings),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_publication),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_subscription),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_description d "
+        "LEFT JOIN pg_catalog.pg_class c "
+        "ON d.classoid='pg_catalog.pg_class'::pg_catalog.regclass "
+        "AND d.objoid=c.oid "
+        "LEFT JOIN pg_catalog.pg_proc p "
+        "ON d.classoid='pg_catalog.pg_proc'::pg_catalog.regclass "
+        "AND d.objoid=p.oid "
+        "LEFT JOIN pg_catalog.pg_type t "
+        "ON d.classoid='pg_catalog.pg_type'::pg_catalog.regclass "
+        "AND d.objoid=t.oid "
+        "LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid=c.relnamespace "
+        "LEFT JOIN pg_catalog.pg_namespace pn ON pn.oid=p.pronamespace "
+        "LEFT JOIN pg_catalog.pg_namespace tn ON tn.oid=t.typnamespace "
+        "WHERE cn.nspname=%s OR pn.nspname=%s OR tn.nspname=%s "
+        "OR (d.classoid='pg_catalog.pg_namespace'::pg_catalog.regclass "
+        "AND d.objoid=(SELECT oid FROM pg_catalog.pg_namespace WHERE nspname=%s))),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_largeobject_metadata),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_seclabel),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_shseclabel l "
+        "LEFT JOIN pg_catalog.pg_database d "
+        "ON l.classoid='pg_catalog.pg_database'::pg_catalog.regclass "
+        "AND l.objoid=d.oid LEFT JOIN pg_catalog.pg_roles r "
+        "ON l.classoid='pg_catalog.pg_authid'::pg_catalog.regclass "
+        "AND l.objoid=r.oid WHERE d.datname=pg_catalog.current_database() "
+        "OR r.rolname=ANY(%s)),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_db_role_setting s "
+        "LEFT JOIN pg_catalog.pg_roles r ON r.oid=s.setrole "
+        "WHERE s.setdatabase=(SELECT oid FROM pg_catalog.pg_database "
+        "WHERE datname=current_database()) "
+        "AND ((s.setrole=0 AND s.setconfig<>%s) "
+        "OR (s.setrole<>0 AND r.rolname<>ALL(%s))) "
+        "OR (s.setdatabase=0 AND r.rolname=ANY(%s)))",
+        (
+            *(SCHEMA for _ in range(30)),
+            [LEGACY_OWNER, LEGACY_LOGIN, OBJECT_OWNER, PROVISIONER, RUNTIME_LOGIN],
+            list(_DATABASE_SECURITY_DEFAULTS),
+            [LEGACY_OWNER, LEGACY_LOGIN, OBJECT_OWNER, PROVISIONER, RUNTIME_LOGIN],
+            [LEGACY_OWNER, LEGACY_LOGIN, OBJECT_OWNER, PROVISIONER, RUNTIME_LOGIN],
+        ),
+    ).fetchone()
+    if row is None or any(bool(value) for value in row):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging semantic catalog envelope differs"
+        )
+    namespaces = {
+        str(record[0])
+        for record in conn.execute(
+            "SELECT nspname FROM pg_catalog.pg_namespace "
+            "WHERE nspname NOT LIKE 'pg_%' AND nspname<>'information_schema'"
+        ).fetchall()
+    }
+    extensions = {
+        str(record[0])
+        for record in conn.execute(
+            "SELECT extname FROM pg_catalog.pg_extension ORDER BY extname"
+        ).fetchall()
+    }
+    if namespaces != {"public", SCHEMA} or extensions != {"plpgsql", "pgcrypto"}:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging semantic catalog envelope differs"
+        )
+    sequence_ownership = [
+        [str(value) for value in record]
+        for record in conn.execute(
+            "SELECT s.relname,t.relname,a.attname "
+            "FROM pg_catalog.pg_class s "
+            "JOIN pg_catalog.pg_namespace sn ON sn.oid=s.relnamespace "
+            "JOIN pg_catalog.pg_depend d "
+            "ON d.classid='pg_catalog.pg_class'::pg_catalog.regclass "
+            "AND d.objid=s.oid AND d.objsubid=0 "
+            "AND d.refclassid='pg_catalog.pg_class'::pg_catalog.regclass "
+            "AND d.deptype='a' "
+            "JOIN pg_catalog.pg_class t ON t.oid=d.refobjid "
+            "JOIN pg_catalog.pg_namespace tn ON tn.oid=t.relnamespace "
+            "JOIN pg_catalog.pg_attribute a "
+            "ON a.attrelid=t.oid AND a.attnum=d.refobjsubid "
+            "WHERE sn.nspname=%s AND tn.nspname=%s AND s.relkind='S' "
+            "ORDER BY s.relname,t.relname,a.attname",
+            (SCHEMA, SCHEMA),
+        ).fetchall()
+    ]
+    if (
+        len(sequence_ownership) != 33
+        or hashlib.sha256(_canonical(sequence_ownership)).hexdigest()
+        != TRANSFER_SEQUENCE_OWNERSHIP_SHA256
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging semantic catalog envelope differs"
+        )
+
+
+def _verify_effective_postgres_safety_settings(conn: Any) -> None:
+    effective_security = conn.execute(
+        "SELECT pg_catalog.current_setting('session_replication_role'),"
+        "pg_catalog.current_setting('fsync'),"
+        "pg_catalog.current_setting('full_page_writes'),"
+        "pg_catalog.current_setting('synchronous_commit'),"
+        "pg_catalog.current_setting('data_sync_retry'),"
+        "pg_catalog.current_setting('zero_damaged_pages'),"
+        "pg_catalog.current_setting('ignore_invalid_pages'),"
+        "pg_catalog.current_setting('ignore_checksum_failure'),"
+        "pg_catalog.current_setting('max_prepared_transactions')"
+    ).fetchone()
+    if effective_security != (
+        "origin",
+        "on",
+        "on",
+        "on",
+        "off",
+        "off",
+        "off",
+        "off",
+        "0",
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging core global privilege envelope differs"
+        )
+    prepared = conn.execute(
+        "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_prepared_xacts "
+        "WHERE database=pg_catalog.current_database())"
+    ).fetchone()
+    if prepared != (False,):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging core global privilege envelope differs"
+        )
+
+
+def _verify_core_global_privilege_envelope(conn: Any) -> None:
+    """Reject inherited/global authority outside the application catalog."""
+
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    flags = conn.execute(
+        "SELECT "
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_namespace n "
+        "CROSS JOIN LATERAL pg_catalog.aclexplode(COALESCE("
+        "n.nspacl,pg_catalog.acldefault('n',n.nspowner))) a "
+        "WHERE n.nspname IN ('pg_catalog','information_schema','pg_toast') "
+        "AND NOT ((a.grantee=n.nspowner AND a.privilege_type IN ('USAGE','CREATE')) "
+        "OR (n.nspname IN ('pg_catalog','information_schema') AND a.grantee=0 "
+        "AND a.privilege_type='USAGE' AND NOT a.is_grantable))),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "LEFT JOIN pg_catalog.pg_init_privs i "
+        "ON i.classoid='pg_catalog.pg_class'::pg_catalog.regclass "
+        "AND i.objoid=c.oid AND i.objsubid=0 AND i.privtype='i' "
+        "WHERE n.nspname='pg_catalog' "
+        "AND c.relacl IS DISTINCT FROM i.initprivs) OR EXISTS("
+        "SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "CROSS JOIN LATERAL pg_catalog.aclexplode(c.relacl) a "
+        "WHERE n.nspname='information_schema' "
+        "AND NOT ((a.grantee=c.relowner) OR (a.grantee=0 "
+        "AND a.privilege_type='SELECT' AND NOT a.is_grantable))) OR EXISTS("
+        "SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname='pg_toast' AND c.relacl IS NOT NULL) OR EXISTS("
+        "SELECT 1 FROM pg_catalog.pg_attribute a "
+        "JOIN pg_catalog.pg_class c ON c.oid=a.attrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "LEFT JOIN pg_catalog.pg_init_privs i "
+        "ON i.classoid='pg_catalog.pg_class'::pg_catalog.regclass "
+        "AND i.objoid=c.oid AND i.objsubid=a.attnum AND i.privtype='i' "
+        "WHERE n.nspname='pg_catalog' "
+        "AND a.attnum>0 AND NOT a.attisdropped "
+        "AND a.attacl IS DISTINCT FROM i.initprivs) OR EXISTS("
+        "SELECT 1 FROM pg_catalog.pg_attribute a "
+        "JOIN pg_catalog.pg_class c ON c.oid=a.attrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname IN ('information_schema','pg_toast') "
+        "AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_proc p "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+        "LEFT JOIN pg_catalog.pg_init_privs i "
+        "ON i.classoid='pg_catalog.pg_proc'::pg_catalog.regclass "
+        "AND i.objoid=p.oid AND i.objsubid=0 AND i.privtype='i' "
+        "WHERE n.nspname='pg_catalog' "
+        "AND p.proacl IS DISTINCT FROM i.initprivs),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_tablespace t "
+        "LEFT JOIN pg_catalog.pg_init_privs i "
+        "ON i.classoid='pg_catalog.pg_tablespace'::pg_catalog.regclass "
+        "AND i.objoid=t.oid AND i.objsubid=0 AND i.privtype='i' "
+        "WHERE t.spcacl IS DISTINCT FROM i.initprivs),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_parameter_acl),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_cast WHERE oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_transform),"
+        "(SELECT pg_catalog.array_agg(lanname ORDER BY lanname) "
+        "FROM pg_catalog.pg_language)<>ARRAY['c','internal','plpgsql','sql']::name[],"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_language l "
+        "LEFT JOIN pg_catalog.pg_init_privs i "
+        "ON i.classoid='pg_catalog.pg_language'::pg_catalog.regclass "
+        "AND i.objoid=l.oid AND i.objsubid=0 AND i.privtype='i' "
+        "WHERE l.lanacl IS DISTINCT FROM i.initprivs),"
+        "(SELECT pg_catalog.array_agg(amname||':'||amtype::pg_catalog.text "
+        "ORDER BY amname) "
+        "FROM pg_catalog.pg_am)<>ARRAY["
+        "'brin:i','btree:i','gin:i','gist:i','hash:i','heap:t','spgist:i']::text[],"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND c.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_proc p "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND p.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_type t "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND t.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_operator o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.oprnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND o.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_conversion c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.connamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND c.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_opclass o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.opcnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND o.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_opfamily o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.opfnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND o.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_config x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.cfgnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND x.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_dict x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.dictnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND x.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_parser x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.prsnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND x.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_template x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.tmplnamespace "
+        "WHERE n.nspname IN ('pg_catalog','information_schema') "
+        "AND x.oid>=16384),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_class c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_proc p "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_type t "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_operator o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.oprnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_collation c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.collnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_conversion c "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.connamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_opclass o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.opcnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_opfamily o "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=o.opfnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_config x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.cfgnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_dict x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.dictnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_parser x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.prsnamespace "
+        "WHERE n.nspname='public'),"
+        "EXISTS(SELECT 1 FROM pg_catalog.pg_ts_template x "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=x.tmplnamespace "
+        "WHERE n.nspname='public')",
+    ).fetchone()
+    if flags is None or any(bool(value) for value in flags):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging core global privilege envelope differs"
+        )
+    views = [
+        list(record)
+        for record in conn.execute(
+            "SELECT n.nspname,c.relname,c.relkind,"
+            "CASE WHEN c.relowner=b.owner_oid THEN '<BOOTSTRAP_ADMIN>' "
+            "ELSE pg_catalog.pg_get_userbyid(c.relowner) END,"
+            "c.reloptions,c.relrowsecurity,c.relforcerowsecurity,c.relispopulated,"
+            "pg_catalog.pg_get_viewdef(c.oid,false) "
+            "FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+            "CROSS JOIN (SELECT nspowner AS owner_oid "
+            "FROM pg_catalog.pg_namespace WHERE nspname='pg_catalog') b "
+            "WHERE n.nspname IN ('pg_catalog','information_schema') "
+            "AND c.relkind IN ('v','m') ORDER BY n.nspname,c.relname"
+        ).fetchall()
+    ]
+    routines = [
+        list(record)
+        for record in conn.execute(
+            "SELECT n.nspname,p.proname,"
+            "pg_catalog.pg_get_function_identity_arguments(p.oid),"
+            "pg_catalog.pg_get_function_result(p.oid),l.lanname,p.prokind,"
+            "p.provolatile,p.proparallel,p.prosecdef,p.proleakproof,p.proisstrict,"
+            "p.proretset,p.pronargs,p.pronargdefaults,p.proargmodes::text,"
+            "p.proargnames,p.proallargtypes::text,p.proargdefaults::text,"
+            "p.prosrc,COALESCE(p.probin,''),p.prosqlbody::text,p.proconfig,"
+            "p.procost::text,p.prorows::text,p.prosupport::regproc::text,"
+            "CASE WHEN p.proowner=b.owner_oid THEN '<BOOTSTRAP_ADMIN>' "
+            "ELSE pg_catalog.pg_get_userbyid(p.proowner) END "
+            "FROM pg_catalog.pg_proc p "
+            "JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace "
+            "JOIN pg_catalog.pg_language l ON l.oid=p.prolang "
+            "CROSS JOIN (SELECT nspowner AS owner_oid "
+            "FROM pg_catalog.pg_namespace WHERE nspname='pg_catalog') b "
+            "WHERE n.nspname IN ('pg_catalog','information_schema') "
+            "ORDER BY n.nspname,p.proname,"
+            "pg_catalog.pg_get_function_identity_arguments(p.oid)"
+        ).fetchall()
+    ]
+    if (
+        len(views) != 141
+        or hashlib.sha256(_canonical(views)).hexdigest()
+        != CORE_SYSTEM_VIEW_SHA256
+        or len(routines) != 3297
+        or hashlib.sha256(_canonical(routines)).hexdigest()
+        != CORE_SYSTEM_ROUTINE_SHA256
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging core global privilege envelope differs"
+        )
+    _verify_effective_postgres_safety_settings(conn)
+
+
+def install_transfer_provenance(conn: Any, manifest_sha256: str) -> bool:
+    """Atomically bind one caller-pinned private transfer before bootstrap."""
+
+    _require_transaction(conn)
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
+    row = conn.execute(
+        "SELECT pg_catalog.current_database(),"
+        "pg_catalog.current_setting('server_version_num')::int/10000,"
+        "current_user=session_user AND rolsuper FROM pg_catalog.pg_authid "
+        "WHERE rolname=current_user"
+    ).fetchone()
+    if row != (EXPECTED_DATABASE, EXPECTED_POSTGRES_MAJOR, True):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging transfer marker requires an administrative session"
+        )
+    conn.execute(
+        "SELECT pg_catalog.pg_advisory_xact_lock("
+        "pg_catalog.hashtextextended(%s,0))",
+        (f"{STAGING_TRANSFER_CONTRACT}:{EXPECTED_DATABASE}",),
+    )
+    verify_transfer_source_catalog(conn, database_acl="fenced")
+    _verify_role_topology(conn, bootstrapped=False)
+    _verify_fixture_provenance(conn)
+    wanted = _transfer_markers(manifest_sha256)
+    observed = _observed_transfer_markers(conn)
+    if observed:
+        if observed != wanted:
+            raise SyntheticStagingDatabaseError(
+                "synthetic staging transfer provenance is partial or conflicting"
+            )
+        return False
+    for key, value in wanted.items():
+        conn.execute(
+            sql.SQL("INSERT INTO {}.meta(key,value) VALUES (%s,%s)").format(
+                sql.Identifier(SCHEMA)
+            ),
+            (key, value),
+        )
+    _verify_transfer_markers(conn, manifest_sha256)
+    return True
 
 
 def _pgcrypto_definition_records(conn: Any) -> tuple[list[list[Any]], list[Any]]:
@@ -1174,20 +2099,35 @@ def _normalize_pgcrypto_owners(conn: Any, rows: list[Any]) -> None:
         )
 
 
-def bootstrap_roles(conn: Any) -> bool:
+def bootstrap_roles(
+    conn: Any,
+    *,
+    transfer_manifest_sha256: str,
+    provisioner_secret: str,
+    runtime_secret: str,
+) -> bool:
     """Administrative, transactional role bootstrap; never an app operation."""
 
     _require_transaction(conn)
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
     row = conn.execute(
-        "SELECT current_user=session_user AND rolsuper FROM pg_catalog.pg_roles "
+        "SELECT current_user=session_user AND rolsuper FROM pg_catalog.pg_authid "
         "WHERE rolname=current_user"
     ).fetchone()
     if row != (True,):
         raise SyntheticStagingDatabaseError(
             "synthetic staging bootstrap requires an administrative session"
         )
+    _validated_role_secret(provisioner_secret, label="provisioner")
+    _validated_role_secret(runtime_secret, label="runtime")
+    if hmac.compare_digest(provisioner_secret, runtime_secret):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging role credentials must be distinct"
+        )
     if conn.execute(
-        "SELECT current_database(),current_setting('server_version_num')::int/10000"
+        "SELECT pg_catalog.current_database(),"
+        "pg_catalog.current_setting('server_version_num')::int/10000"
     ).fetchone() != (EXPECTED_DATABASE, EXPECTED_POSTGRES_MAJOR):
         raise SyntheticStagingDatabaseError(
             "synthetic staging bootstrap destination differs"
@@ -1197,7 +2137,6 @@ def bootstrap_roles(conn: Any) -> bool:
         "pg_catalog.hashtextextended(%s,0))",
         (f"{CONTRACT_VERSION}:{EXPECTED_DATABASE}:bootstrap",),
     )
-    _verify_fixture_provenance(conn)
     existing = {
         row[0]
         for row in conn.execute(
@@ -1222,64 +2161,120 @@ def bootstrap_roles(conn: Any) -> bool:
         and pgcrypto_owners == {OBJECT_OWNER}
     )
     if post_bootstrap:
+        verify_database_creation_envelope(conn)
+        _verify_semantic_catalog_envelope(conn)
         _verify_role_topology(conn, bootstrapped=True)
+        observed_predecessor = compute_predecessor_catalog_sha256(
+            conn, database_acl="fenced"
+        )
+        if observed_predecessor != PREDECESSOR_CATALOG_SHA256:
+            raise SyntheticStagingDatabaseError(
+                "synthetic staging predecessor catalog differs "
+                f"({observed_predecessor})"
+            )
+        _verify_transfer_markers(conn, transfer_manifest_sha256)
+        _verify_role_credentials(
+            conn,
+            bootstrapped=True,
+            provisioner_secret=provisioner_secret,
+            runtime_secret=runtime_secret,
+        )
+        # The exact catalog is proven before any restored fixture routine is
+        # invoked on the idempotent post-bootstrap path.
+        _verify_fixture_provenance(conn)
         return False
     if not pre_bootstrap:
         raise SyntheticStagingDatabaseError(
             "synthetic staging bootstrap state is partial or conflicting"
         )
+    _verify_role_credentials(
+        conn,
+        bootstrapped=False,
+        provisioner_secret=provisioner_secret,
+        runtime_secret=runtime_secret,
+    )
+    verify_transfer_source_catalog(
+        conn, database_acl="fenced"
+    )
+    _verify_transfer_markers(conn, transfer_manifest_sha256)
     _verify_role_topology(conn, bootstrapped=False)
-    changed = True
-    if pre_bootstrap:
+    # The exact source catalog is proven before these restored fixture calls.
+    _verify_fixture_provenance(conn)
+    conn.execute(
+        sql.SQL(
+            "CREATE ROLE {} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB "
+            "NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+        ).format(sql.Identifier(OBJECT_OWNER))
+    )
+    conn.execute(
+        sql.SQL(
+            "CREATE ROLE {} LOGIN INHERIT NOSUPERUSER NOCREATEDB "
+            "NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD {}"
+        ).format(
+            sql.Identifier(PROVISIONER),
+            sql.Literal(_scram_sha256_verifier(provisioner_secret)),
+        )
+    )
+    conn.execute(
+        sql.SQL(
+            "CREATE ROLE {} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB "
+            "NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD {}"
+        ).format(
+            sql.Identifier(RUNTIME_LOGIN),
+            sql.Literal(_scram_sha256_verifier(runtime_secret)),
+        )
+    )
+    conn.execute(
+        sql.SQL("REVOKE {} FROM {}").format(
+            sql.Identifier(LEGACY_OWNER), sql.Identifier(LEGACY_LOGIN)
+        )
+    )
+    conn.execute(
+        sql.SQL("ALTER ROLE {} NOLOGIN").format(sql.Identifier(LEGACY_LOGIN))
+    )
+    for parent in (LEGACY_OWNER, OBJECT_OWNER):
         conn.execute(
             sql.SQL(
-                "CREATE ROLE {} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB "
-                "NOCREATEROLE NOREPLICATION NOBYPASSRLS"
-            ).format(sql.Identifier(OBJECT_OWNER))
+                "GRANT {} TO {} WITH ADMIN FALSE, INHERIT TRUE, SET TRUE"
+            ).format(sql.Identifier(parent), sql.Identifier(PROVISIONER))
         )
-        conn.execute(
-            sql.SQL(
-                "CREATE ROLE {} LOGIN INHERIT NOSUPERUSER NOCREATEDB "
-                "NOCREATEROLE NOREPLICATION NOBYPASSRLS"
-            ).format(sql.Identifier(PROVISIONER))
+    conn.execute(
+        sql.SQL(
+            "ALTER ROLE {} IN DATABASE {} SET search_path TO {},pg_catalog"
+        ).format(
+            sql.Identifier(RUNTIME_LOGIN),
+            sql.Identifier(EXPECTED_DATABASE),
+            sql.Identifier(SCHEMA),
         )
-        conn.execute(
-            sql.SQL(
-                "CREATE ROLE {} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB "
-                "NOCREATEROLE NOREPLICATION NOBYPASSRLS"
-            ).format(sql.Identifier(RUNTIME_LOGIN))
+    )
+    conn.execute(
+        sql.SQL(
+            "ALTER DATABASE {} SET session_replication_role TO origin"
+        ).format(sql.Identifier(EXPECTED_DATABASE))
+    )
+    conn.execute(
+        sql.SQL("ALTER DATABASE {} OWNER TO {}").format(
+            sql.Identifier(EXPECTED_DATABASE), sql.Identifier(OBJECT_OWNER)
         )
-        conn.execute(
-            sql.SQL("REVOKE {} FROM {}").format(
-                sql.Identifier(LEGACY_OWNER), sql.Identifier(LEGACY_LOGIN)
-            )
-        )
-        conn.execute(
-            sql.SQL("ALTER ROLE {} NOLOGIN").format(sql.Identifier(LEGACY_LOGIN))
-        )
-        for parent in (LEGACY_OWNER, OBJECT_OWNER):
-            conn.execute(
-                sql.SQL(
-                    "GRANT {} TO {} WITH ADMIN FALSE, INHERIT TRUE, SET TRUE"
-                ).format(sql.Identifier(parent), sql.Identifier(PROVISIONER))
-            )
-        conn.execute(
-            sql.SQL(
-                "ALTER ROLE {} IN DATABASE {} SET search_path TO {},pg_catalog"
-            ).format(
-                sql.Identifier(RUNTIME_LOGIN),
-                sql.Identifier(EXPECTED_DATABASE),
-                sql.Identifier(SCHEMA),
-            )
-        )
-        conn.execute(
-            sql.SQL("ALTER DATABASE {} OWNER TO {}").format(
-                sql.Identifier(EXPECTED_DATABASE), sql.Identifier(OBJECT_OWNER)
-            )
-        )
+    )
     _normalize_pgcrypto_owners(conn, pgcrypto_rows)
     _verify_role_topology(conn, bootstrapped=True)
-    return changed
+    _verify_role_credentials(
+        conn,
+        bootstrapped=True,
+        provisioner_secret=provisioner_secret,
+        runtime_secret=runtime_secret,
+    )
+    observed_predecessor = compute_predecessor_catalog_sha256(
+        conn, database_acl="fenced"
+    )
+    if observed_predecessor != PREDECESSOR_CATALOG_SHA256:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging predecessor catalog differs "
+            f"({observed_predecessor})"
+        )
+    _verify_fixture_provenance(conn)
+    return True
 
 
 def _alter_application_owners(conn: Any) -> None:
@@ -1540,14 +2535,42 @@ def _observed_staging_markers(conn: Any) -> dict[str, str]:
     )
 
 
-def provision_contract(conn: Any, *, sql_path: Path | None = None) -> bool:
+def _verify_successor_catalog_and_fixture(
+    conn: Any,
+    *,
+    transfer_manifest_sha256: str,
+    error_message: str,
+) -> None:
+    """Verify catalog-only successor facts before invoking restored routines."""
+
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
+    verify_database_creation_envelope(conn)
+    _verify_semantic_catalog_envelope(conn)
+    if compute_catalog_sha256(conn) != SUCCESSOR_CATALOG_SHA256:
+        raise SyntheticStagingDatabaseError(error_message)
+    _verify_transfer_markers(conn, transfer_manifest_sha256)
+    if _observed_staging_markers(conn) != _staging_markers():
+        raise SyntheticStagingDatabaseError(error_message)
+    _verify_fixture_provenance(conn)
+
+
+def provision_contract(
+    conn: Any,
+    *,
+    transfer_manifest_sha256: str,
+    sql_path: Path | None = None,
+) -> bool:
     """Apply predecessor -> successor as the constrained provisioner."""
 
     _require_transaction(conn)
     _require_source_hashes()
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
     if conn.execute(
-        "SELECT current_database(),current_setting('server_version_num')::int/10000,"
-        "session_user::text,current_user::text"
+        "SELECT pg_catalog.current_database(),"
+        "pg_catalog.current_setting('server_version_num')::int/10000,"
+        "session_user::pg_catalog.text,current_user::pg_catalog.text"
     ).fetchone() != (
         EXPECTED_DATABASE,
         EXPECTED_POSTGRES_MAJOR,
@@ -1590,19 +2613,33 @@ def provision_contract(conn: Any, *, sql_path: Path | None = None) -> bool:
         (f"{CONTRACT_VERSION}:{EXPECTED_DATABASE}",),
     )
     _verify_role_topology(conn, bootstrapped=True)
-    _verify_fixture_provenance(conn)
+    verify_database_creation_envelope(conn)
+    _verify_semantic_catalog_envelope(conn)
     wanted = _staging_markers()
-    observed = _observed_staging_markers(conn)
-    if observed:
-        if observed != wanted or compute_catalog_sha256(conn) != SUCCESSOR_CATALOG_SHA256:
-            raise SyntheticStagingDatabaseError(
-                "synthetic staging state is partial or conflicting"
-            )
-        return False
-    if compute_catalog_sha256(conn) != PREDECESSOR_CATALOG_SHA256:
-        raise SyntheticStagingDatabaseError(
-            "synthetic staging predecessor catalog differs"
+    observed_catalog = compute_catalog_sha256(conn)
+    if observed_catalog == SUCCESSOR_CATALOG_SHA256:
+        _verify_successor_catalog_and_fixture(
+            conn,
+            transfer_manifest_sha256=transfer_manifest_sha256,
+            error_message="synthetic staging state is partial or conflicting",
         )
+        return False
+    observed_predecessor = compute_predecessor_catalog_sha256(
+        conn, database_acl="fenced"
+    )
+    if observed_predecessor != PREDECESSOR_CATALOG_SHA256:
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging predecessor catalog differs "
+            f"({observed_predecessor})"
+        )
+    _verify_transfer_markers(conn, transfer_manifest_sha256)
+    if _observed_staging_markers(conn):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging state is partial or conflicting"
+        )
+    # No restored routine runs until the exact caller-authorized predecessor
+    # catalog has passed above.
+    _verify_fixture_provenance(conn)
     _alter_application_owners(conn)
     conn.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(OBJECT_OWNER)))
     conn.execute(contract_sql)
@@ -1799,11 +2836,15 @@ def attest_provisioner_connection(
 
     _require_source_hashes()
     target.validate_static()
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
     row = conn.execute(
-        "SELECT current_database(),current_setting('server_version_num')::int/10000,"
-        "session_user::text,current_user::text,"
+        "SELECT pg_catalog.current_database(),"
+        "pg_catalog.current_setting('server_version_num')::int/10000,"
+        "session_user::pg_catalog.text,current_user::pg_catalog.text,"
         "pg_catalog.pg_get_userbyid(d.datdba) "
-        "FROM pg_catalog.pg_database d WHERE d.datname=current_database()"
+        "FROM pg_catalog.pg_database d "
+        "WHERE d.datname=pg_catalog.current_database()"
     ).fetchone()
     if row != (
         EXPECTED_DATABASE,
@@ -1816,14 +2857,11 @@ def attest_provisioner_connection(
             "synthetic staging provisioner connection differs"
         )
     _verify_role_topology(conn, bootstrapped=True)
-    _verify_fixture_provenance(conn)
-    if (
-        _observed_staging_markers(conn) != _staging_markers()
-        or compute_catalog_sha256(conn) != SUCCESSOR_CATALOG_SHA256
-    ):
-        raise SyntheticStagingDatabaseError(
-            "synthetic staging provisioner catalog differs"
-        )
+    _verify_successor_catalog_and_fixture(
+        conn,
+        transfer_manifest_sha256=target.transfer_manifest_sha256,
+        error_message="synthetic staging provisioner catalog differs",
+    )
     persistent = conn.execute(
         sql.SQL(
             "SELECT {}.compute_synthetic_staging_persistent_mapping_sha256()"
@@ -1854,11 +2892,33 @@ def attest_runtime_connection(
 
     _require_source_hashes()
     target.validate_static()
+    original_search_path = conn.execute("SHOW search_path").fetchone()
+    conn.execute("SET LOCAL search_path = pg_catalog")
+    _verify_core_global_privilege_envelope(conn)
+    if original_search_path is None or not isinstance(
+        original_search_path[0], str
+    ):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging connected search path differs"
+        )
+    conn.execute(
+        "SELECT pg_catalog.set_config('search_path',%s,true)",
+        (original_search_path[0],),
+    )
+    search_path = conn.execute(
+        "SELECT pg_catalog.current_schemas(false)"
+    ).fetchone()
+    if search_path is None or tuple(search_path[0]) != (SCHEMA, "pg_catalog"):
+        raise SyntheticStagingDatabaseError(
+            "synthetic staging connected search path differs"
+        )
+    conn.execute("SET LOCAL search_path = pg_catalog")
     row = conn.execute(
-        "SELECT current_database(),current_setting('server_version_num')::int,"
-        "session_user::text,current_user::text,current_schema(),"
+        "SELECT pg_catalog.current_database(),"
+        "pg_catalog.current_setting('server_version_num')::int,"
+        "session_user::pg_catalog.text,current_user::pg_catalog.text,"
         "pg_catalog.pg_get_userbyid(d.datdba) FROM pg_catalog.pg_database d "
-        "WHERE d.datname=current_database()"
+        "WHERE d.datname=pg_catalog.current_database()"
     ).fetchone()
     if not row or (
         row[0],
@@ -1866,28 +2926,22 @@ def attest_runtime_connection(
         row[2],
         row[3],
         row[4],
-        row[5],
     ) != (
         EXPECTED_DATABASE,
         EXPECTED_POSTGRES_MAJOR,
         RUNTIME_LOGIN,
         RUNTIME_LOGIN,
-        SCHEMA,
         OBJECT_OWNER,
     ):
         raise SyntheticStagingDatabaseError(
             "synthetic staging connected identity differs"
         )
     _verify_role_topology(conn, bootstrapped=True)
-    _verify_fixture_provenance(conn)
-    if _observed_staging_markers(conn) != _staging_markers():
-        raise SyntheticStagingDatabaseError(
-            "synthetic staging contract marker differs"
-        )
-    if compute_catalog_sha256(conn) != SUCCESSOR_CATALOG_SHA256:
-        raise SyntheticStagingDatabaseError(
-            "synthetic staging successor catalog differs"
-        )
+    _verify_successor_catalog_and_fixture(
+        conn,
+        transfer_manifest_sha256=target.transfer_manifest_sha256,
+        error_message="synthetic staging successor catalog differs",
+    )
     db_privileges = tuple(
         bool(value)
         for value in conn.execute(

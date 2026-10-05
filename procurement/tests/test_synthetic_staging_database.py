@@ -30,12 +30,16 @@ from procurement_os.synthetic_staging_database import (
     PERMISSION_MATRIX_SHA256, PREDECESSOR_CATALOG_SHA256, PROVISIONER,
     RUNTIME_LOGIN, SUCCESSOR_CATALOG_SHA256,
     SyntheticStagingDatabaseError, SyntheticStagingTarget,
-    attest_runtime_connection, bootstrap_roles, compute_catalog_sha256,
-    compute_immutable_fixture_sha256, permission_records, provision_contract,
+    attest_provisioner_connection, attest_runtime_connection, bootstrap_roles,
+    compute_catalog_sha256, compute_predecessor_catalog_sha256,
+    compute_immutable_fixture_sha256, install_transfer_provenance,
+    permission_records, provision_contract,
 )
 
 
 class SyntheticStagingDatabaseContractTests(unittest.TestCase):
+    TRANSFER_MANIFEST = "a" * 64
+
     def target(self):
         return SyntheticStagingTarget(
             database_url=f"postgresql://{RUNTIME_LOGIN}@{EXPECTED_PRIVATE_HOST}/{EXPECTED_DATABASE}",
@@ -44,6 +48,7 @@ class SyntheticStagingDatabaseContractTests(unittest.TestCase):
             environment_id=EXPECTED_ENVIRONMENT_ID,
             app_service_id=EXPECTED_APP_SERVICE_ID,
             postgres_service_id=EXPECTED_POSTGRES_SERVICE_ID,
+            transfer_manifest_sha256=self.TRANSFER_MANIFEST,
         )
 
     def test_exact_target_is_accepted_without_connecting(self):
@@ -78,6 +83,8 @@ class SyntheticStagingDatabaseContractTests(unittest.TestCase):
         changes = (
             {"project_id": "wrong"},
             {"expected_private_host": "evil.example"},
+            {"transfer_manifest_sha256": "A" * 64},
+            {"transfer_manifest_sha256": "a" * 63},
             {
                 "database_url": (
                     f"postgresql://{RUNTIME_LOGIN}@unrelated-clone.railway.internal/"
@@ -139,6 +146,9 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
     SENTINEL_ROLE = "staging_unrelated_owner"
     SENTINEL_DATABASE = "staging_unrelated_sentinel"
     BUSINESS_DATE = date(2026, 10, 5)
+    TRANSFER_MANIFEST = "a" * 64
+    PROVISIONER_SECRET = "P" * 48
+    RUNTIME_SECRET = "R" * 48
 
     @classmethod
     def _command(cls, argv: list[str]) -> None:
@@ -165,6 +175,25 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 [cls._pg_ctl, "-D", str(cls._data), "-m", "fast", "-w", "stop"]
             )
             cls._started = False
+
+    @classmethod
+    def _restart_cluster(cls) -> None:
+        root = Path(cls._temporary.name)
+        cls._command(
+            [
+                cls._pg_ctl,
+                "-D",
+                str(cls._data),
+                "-l",
+                str(root / "postgres.log"),
+                "-o",
+                f"-h 127.0.0.1 -p {cls._port} -k {root}",
+                "-m",
+                "fast",
+                "-w",
+                "restart",
+            ]
+        )
 
     @classmethod
     def _sentinel_snapshot(cls) -> tuple[object, ...]:
@@ -242,7 +271,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 "-l",
                 str(log),
                 "-o",
-                f"-h 127.0.0.1 -p {cls._port} -k {root} -F",
+                f"-h 127.0.0.1 -p {cls._port} -k {root}",
                 "-w",
                 "start",
             ]
@@ -333,20 +362,83 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
         if initialized.get("initialized") is not True:
             raise AssertionError("fresh staging fixture was not initialized")
         with psycopg.connect(cls._target_admin_url) as conn:
-            cls._bootstrap_changed = bootstrap_roles(conn)
+            conn.execute(
+                sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(
+                    sql.Identifier(EXPECTED_DATABASE)
+                )
+            )
             conn.commit()
         with psycopg.connect(cls._target_admin_url) as conn:
-            cls._bootstrap_noop = bootstrap_roles(conn)
+            cls._transfer_changed = install_transfer_provenance(
+                conn, cls.TRANSFER_MANIFEST
+            )
+            conn.commit()
+        with psycopg.connect(cls._target_admin_url) as conn:
+            cls._transfer_noop = install_transfer_provenance(
+                conn, cls.TRANSFER_MANIFEST
+            )
+            conn.execute("SAVEPOINT transfer_partial")
+            conn.execute(
+                "DELETE FROM qa_mapping_test.meta "
+                "WHERE key=%s",
+                (staging_database.TRANSFER_CONTRACT_META_KEY,),
+            )
+            try:
+                install_transfer_provenance(conn, cls.TRANSFER_MANIFEST)
+            except SyntheticStagingDatabaseError as exc:
+                cls._transfer_partial_failure = str(exc)
+            else:
+                raise AssertionError("partial transfer provenance was accepted")
+            conn.execute("ROLLBACK TO SAVEPOINT transfer_partial")
+            conn.execute("SAVEPOINT transfer_conflict")
+            conn.execute(
+                "UPDATE qa_mapping_test.meta SET value=%s WHERE key=%s",
+                ("b" * 64, staging_database.TRANSFER_MANIFEST_META_KEY),
+            )
+            try:
+                install_transfer_provenance(conn, cls.TRANSFER_MANIFEST)
+            except SyntheticStagingDatabaseError as exc:
+                cls._transfer_conflict_failure = str(exc)
+            else:
+                raise AssertionError("conflicting transfer provenance was accepted")
+            conn.execute("ROLLBACK TO SAVEPOINT transfer_conflict")
+            try:
+                install_transfer_provenance(conn, "malformed")
+            except SyntheticStagingDatabaseError as exc:
+                cls._transfer_malformed_failure = str(exc)
+            else:
+                raise AssertionError("malformed transfer provenance was accepted")
+            conn.rollback()
+        with psycopg.connect(cls._target_admin_url) as conn:
+            cls._bootstrap_changed = bootstrap_roles(
+                conn,
+                transfer_manifest_sha256=cls.TRANSFER_MANIFEST,
+                provisioner_secret=cls.PROVISIONER_SECRET,
+                runtime_secret=cls.RUNTIME_SECRET,
+            )
+            conn.commit()
+        with psycopg.connect(cls._target_admin_url) as conn:
+            cls._bootstrap_noop = bootstrap_roles(
+                conn,
+                transfer_manifest_sha256=cls.TRANSFER_MANIFEST,
+                provisioner_secret=cls.PROVISIONER_SECRET,
+                runtime_secret=cls.RUNTIME_SECRET,
+            )
             conn.commit()
         with psycopg.connect(cls._provisioner_url, autocommit=True) as conn:
             try:
-                provision_contract(conn)
+                provision_contract(
+                    conn,
+                    transfer_manifest_sha256=cls.TRANSFER_MANIFEST,
+                )
             except SyntheticStagingDatabaseError:
                 cls._autocommit_refused = True
             else:
                 cls._autocommit_refused = False
         with psycopg.connect(cls._provisioner_url) as conn:
-            cls._predecessor = compute_catalog_sha256(conn)
+            cls._predecessor = compute_predecessor_catalog_sha256(
+                conn, database_acl="fenced"
+            )
             conn.rollback()
 
         real_apply_permissions = staging_database._apply_permissions
@@ -362,20 +454,28 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                     "_apply_permissions",
                     side_effect=fail_after_permissions,
                 ):
-                    provision_contract(conn)
+                    provision_contract(
+                        conn,
+                        transfer_manifest_sha256=cls.TRANSFER_MANIFEST,
+                    )
             except SyntheticStagingDatabaseError as exc:
                 cls._rollback_failure = str(exc)
                 conn.rollback()
             else:
                 raise AssertionError("injected transition failure did not fire")
         with psycopg.connect(cls._provisioner_url) as conn:
-            cls._post_rollback_catalog = compute_catalog_sha256(conn)
+            cls._post_rollback_catalog = compute_predecessor_catalog_sha256(
+                conn, database_acl="fenced"
+            )
             cls._post_rollback_markers = staging_database._observed_staging_markers(
                 conn
             )
             conn.rollback()
         with psycopg.connect(cls._provisioner_url) as conn:
-            cls._provision_changed = provision_contract(conn)
+            cls._provision_changed = provision_contract(
+                conn,
+                transfer_manifest_sha256=cls.TRANSFER_MANIFEST,
+            )
             conn.commit()
         with psycopg.connect(cls._provisioner_url) as conn:
             cls._successor = compute_catalog_sha256(conn)
@@ -391,6 +491,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             environment_id=EXPECTED_ENVIRONMENT_ID,
             app_service_id=EXPECTED_APP_SERVICE_ID,
             postgres_service_id=EXPECTED_POSTGRES_SERVICE_ID,
+            transfer_manifest_sha256=cls.TRANSFER_MANIFEST,
             owned_local_port=cls._port,
         )
         with psycopg.connect(cls._runtime_url) as conn:
@@ -398,6 +499,20 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             conn.rollback()
 
     def test_01_exact_transition_and_transactional_rollback(self):
+        self.assertTrue(self._transfer_changed)
+        self.assertFalse(self._transfer_noop)
+        self.assertEqual(
+            self._transfer_partial_failure,
+            "synthetic staging transfer provenance is partial or conflicting",
+        )
+        self.assertEqual(
+            self._transfer_conflict_failure,
+            "synthetic staging transfer provenance is partial or conflicting",
+        )
+        self.assertEqual(
+            self._transfer_malformed_failure,
+            "synthetic staging transfer manifest identity is malformed",
+        )
         self.assertTrue(self._bootstrap_changed)
         self.assertFalse(self._bootstrap_noop)
         self.assertTrue(self._autocommit_refused)
@@ -412,7 +527,12 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
 
     def test_02_successor_reapplication_is_verified_noop(self):
         with psycopg.connect(self._provisioner_url) as conn:
-            self.assertFalse(provision_contract(conn))
+            self.assertFalse(
+                provision_contract(
+                    conn,
+                    transfer_manifest_sha256=self.TRANSFER_MANIFEST,
+                )
+            )
             self.assertEqual(compute_catalog_sha256(conn), SUCCESSOR_CATALOG_SHA256)
             conn.commit()
         source = (
@@ -429,7 +549,11 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     SyntheticStagingDatabaseError, "source hash differs"
                 ):
-                    provision_contract(conn, sql_path=altered)
+                    provision_contract(
+                        conn,
+                        transfer_manifest_sha256=self.TRANSFER_MANIFEST,
+                        sql_path=altered,
+                    )
                 conn.rollback()
 
     def test_03_sql_assertion_rejects_missing_wrong_and_malformed_markers(self):
@@ -463,7 +587,166 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 self._runtime_generation,
             )
 
-    def test_04_runtime_has_only_the_exact_nonowner_authority(self):
+    def test_04_transfer_provenance_is_required_by_both_attestations(self):
+        mutations = (
+            "DELETE FROM qa_mapping_test.meta "
+            f"WHERE key='{staging_database.TRANSFER_CONTRACT_META_KEY}'",
+            "UPDATE qa_mapping_test.meta SET value='b' || substring(value from 2) "
+            f"WHERE key='{staging_database.TRANSFER_MANIFEST_META_KEY}'",
+            "UPDATE qa_mapping_test.meta SET value='malformed' "
+            f"WHERE key='{staging_database.TRANSFER_MANIFEST_META_KEY}'",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), psycopg.connect(
+                self._target_admin_url
+            ) as conn:
+                conn.execute(mutation)
+                conn.execute(
+                    sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                        sql.Identifier(RUNTIME_LOGIN)
+                    )
+                )
+                conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
+                with self.assertRaisesRegex(
+                    SyntheticStagingDatabaseError,
+                    "transfer provenance differs",
+                ):
+                    attest_runtime_connection(conn, self._target)
+                conn.execute("RESET SESSION AUTHORIZATION")
+                conn.rollback()
+
+        wrong_target = replace(
+            self._target, transfer_manifest_sha256="b" * 64
+        )
+        with psycopg.connect(self._runtime_url) as conn:
+            with self.assertRaisesRegex(
+                SyntheticStagingDatabaseError, "transfer provenance differs"
+            ):
+                attest_runtime_connection(conn, wrong_target)
+            conn.rollback()
+        with psycopg.connect(self._provisioner_url) as conn:
+            with self.assertRaisesRegex(
+                SyntheticStagingDatabaseError, "transfer provenance differs"
+            ):
+                attest_provisioner_connection(conn, wrong_target)
+            conn.rollback()
+
+        with psycopg.connect(self._target_admin_url) as conn:
+            conn.execute(
+                "CREATE OPERATOR qa_mapping_test.=== ("
+                "LEFTARG=text,RIGHTARG=text,PROCEDURE=pg_catalog.texteq)"
+            )
+            conn.execute(
+                sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                    sql.Identifier(RUNTIME_LOGIN)
+                )
+            )
+            conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
+            with self.assertRaisesRegex(
+                SyntheticStagingDatabaseError,
+                "semantic catalog envelope differs",
+            ):
+                attest_runtime_connection(conn, self._target)
+            conn.execute("RESET SESSION AUTHORIZATION")
+            conn.rollback()
+
+        with psycopg.connect(self._target_admin_url) as conn:
+            conn.execute(
+                sql.SQL("ALTER DATABASE {} SET application_name={}").format(
+                    sql.Identifier(EXPECTED_DATABASE),
+                    sql.Literal("tampered-database-default"),
+                )
+            )
+            conn.execute(
+                sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                    sql.Identifier(RUNTIME_LOGIN)
+                )
+            )
+            conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
+            with self.assertRaisesRegex(
+                SyntheticStagingDatabaseError,
+                "database security defaults differ",
+            ):
+                attest_runtime_connection(conn, self._target)
+            conn.execute("RESET SESSION AUTHORIZATION")
+            conn.rollback()
+
+        dump_semantic_mutations = (
+            "CREATE SCHEMA audit_hidden",
+            "CREATE STATISTICS public.audit_stats "
+            "ON variant_id,vendor_id FROM qa_mapping_test.supplier_offers",
+            "ALTER FUNCTION qa_mapping_test."
+            "is_operational_current_variant(text) COST 999",
+            "ALTER FUNCTION qa_mapping_test."
+            "is_operational_current_variant(text) DEPENDS ON EXTENSION pgcrypto",
+            "ALTER TRIGGER trg_assert_monday_stale_forecast_retirement_audit_commit "
+            "ON qa_mapping_test.change_log DEPENDS ON EXTENSION pgcrypto",
+            "ALTER TABLE qa_mapping_test.catalog_reconciliation_items "
+            "REPLICA IDENTITY FULL",
+            "ALTER TABLE qa_mapping_test.catalog_reconciliation_items "
+            "CLUSTER ON catalog_reconciliation_items_pkey",
+            "ALTER TABLE qa_mapping_test.catalog_reconciliation_items "
+            "SET (toast.autovacuum_enabled=false)",
+            "ALTER SEQUENCE qa_mapping_test."
+            "catalog_reconciliation_items_reconciliation_item_id_seq "
+            "OWNED BY qa_mapping_test.catalog_reconciliation_items.catalog_sync_id",
+            "COMMENT ON EXTENSION pgcrypto IS 'altered transfer comment'",
+        )
+        for mutation in dump_semantic_mutations:
+            with self.subTest(mutation=mutation), psycopg.connect(
+                self._target_admin_url
+            ) as conn:
+                conn.execute(mutation)
+                conn.execute(
+                    sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                        sql.Identifier(RUNTIME_LOGIN)
+                    )
+                )
+                conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
+                with self.assertRaisesRegex(
+                    SyntheticStagingDatabaseError,
+                    "semantic catalog envelope differs",
+                ):
+                    attest_runtime_connection(conn, self._target)
+                conn.execute("RESET SESSION AUTHORIZATION")
+                conn.rollback()
+
+        tablespace_path = Path(self._temporary.name) / "audit-tablespace"
+        tablespace_path.mkdir(mode=0o700)
+        try:
+            with psycopg.connect(
+                self._target_admin_url, autocommit=True
+            ) as admin:
+                admin.execute(
+                    sql.SQL("CREATE TABLESPACE buffalo_audit_space LOCATION {}").format(
+                        sql.Literal(str(tablespace_path))
+                    )
+                )
+            with psycopg.connect(self._target_admin_url) as conn:
+                conn.execute(
+                    "ALTER TABLE qa_mapping_test.catalog_reconciliation_items "
+                    "SET TABLESPACE buffalo_audit_space"
+                )
+                conn.execute(
+                    sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                        sql.Identifier(RUNTIME_LOGIN)
+                    )
+                )
+                conn.execute("SET search_path TO qa_mapping_test,pg_catalog")
+                with self.assertRaisesRegex(
+                    SyntheticStagingDatabaseError,
+                    "semantic catalog envelope differs",
+                ):
+                    attest_runtime_connection(conn, self._target)
+                conn.execute("RESET SESSION AUTHORIZATION")
+                conn.rollback()
+        finally:
+            with psycopg.connect(
+                self._target_admin_url, autocommit=True
+            ) as admin:
+                admin.execute("DROP TABLESPACE IF EXISTS buffalo_audit_space")
+
+    def test_05_runtime_has_only_the_exact_nonowner_authority(self):
         denied = (
             "CREATE TEMP TABLE staging_denied(value integer)",
             "CREATE SCHEMA staging_denied",
@@ -502,10 +785,10 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
         with self.assertRaises(psycopg.OperationalError):
             psycopg.connect(self._sentinel_runtime_url, connect_timeout=2)
 
-    def test_05_unrelated_database_role_and_objects_are_unchanged(self):
+    def test_06_unrelated_database_role_and_objects_are_unchanged(self):
         self.assertEqual(self._sentinel_snapshot(), self._sentinel_before)
 
-    def test_06_runtime_backup_state_facade_matches_owner_projection(self):
+    def test_07_runtime_backup_state_facade_matches_owner_projection(self):
         from procurement_os.local_backup_v2 import database_state_evidence
 
         with psycopg.connect(self._provisioner_url) as conn:
@@ -558,7 +841,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             hashlib.sha256(b"").hexdigest(),
         )
 
-    def test_07_price_preflight_rechecks_full_target_attestation(self):
+    def test_08_price_preflight_rechecks_full_target_attestation(self):
         from procurement_os.local_backup_v2 import VerifiedPriceApplyBackup
         from procurement_os.synthetic_price_replacement import (
             SyntheticPriceReplacementError,
@@ -573,6 +856,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
         environment = {
             "DATABASE_URL": self._runtime_url,
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
             "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
             "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
             "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
@@ -657,7 +941,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             ).fetchone()
         self.assertEqual(after, before)
 
-    def test_08_runtime_backup_v2_price_apply_and_retry_attestation(self):
+    def test_09_runtime_backup_v2_price_apply_and_retry_attestation(self):
         from procurement_os import synthetic_price_replacement as price_service
         from procurement_os.staging_identity import (
             OWNER_PRINCIPAL_REF,
@@ -681,6 +965,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
         environment = {
             "DATABASE_URL": self._runtime_url,
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
             "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
             "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
             "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
@@ -989,7 +1274,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                     "price_book_batch_id"
                 ]
 
-    def test_09_restricted_runtime_completes_selected_price_draft_packet(self):
+    def test_10_restricted_runtime_completes_selected_price_draft_packet(self):
         from procurement_os.draft_po import build_vendor_drafts, preview_vendor_drafts
         from procurement_os.emergency_packet import build_emergency_review_packet
         from procurement_os.persistent_mapping import (
@@ -1021,6 +1306,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
         environment = {
             "DATABASE_URL": self._runtime_url,
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
             "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
             "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
             "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
@@ -1290,6 +1576,848 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             (1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1, 0),
         )
         self.assertEqual(state, ("RUNNING", "PACKET_BUILT", "INTERNAL_DRAFT_ONLY"))
+
+    def test_11_fresh_mapping_write_connection_rechecks_full_attestation(self):
+        from procurement_os.persistent_mapping import (
+            PersistentMappingError,
+            Principal,
+            _execute_write,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        }
+        with psycopg.connect(self._runtime_url) as conn:
+            before = conn.execute(
+                "SELECT count(*) FROM supplier_mapping_review_batches"
+            ).fetchone()[0]
+        domain_locks = mock.Mock(
+            side_effect=AssertionError("domain locks ran before attestation")
+        )
+        operation = mock.Mock(
+            side_effect=AssertionError("write ran before attestation")
+        )
+        with psycopg.connect(self._target_admin_url) as conn:
+            conn.execute(
+                "UPDATE qa_mapping_test.meta SET value=%s WHERE key=%s",
+                (
+                    "c" * 64,
+                    staging_database.TRANSFER_MANIFEST_META_KEY,
+                ),
+            )
+            conn.commit()
+        try:
+            with mock.patch.dict(os.environ, environment, clear=False):
+                from procurement_os import api, health
+
+                report = health.full_health()
+                self.assertFalse(report["database"]["ok"])
+                self.assertFalse(report["po_generation_enabled"])
+                with self.assertRaises(SyntheticStagingDatabaseError):
+                    api._db_conn()
+                with self.assertRaisesRegex(
+                    PersistentMappingError,
+                    "connected synthetic mapping database identity differs",
+                ):
+                    _execute_write(
+                        self._runtime_url,
+                        operation_name="staging-attestation-negative",
+                        capability="review_intake_writes_enabled",
+                        principal=Principal(
+                            principal_ref="owner:railway-staging:01",
+                            role_ref="role:owner",
+                            authn_context_sha256="1" * 64,
+                        ),
+                        idempotency_key=uuid5(
+                            NAMESPACE_URL,
+                            "buffalo:staging:attestation-negative:v1",
+                        ),
+                        domain_locks=domain_locks,
+                        operation=operation,
+                    )
+        finally:
+            with psycopg.connect(self._target_admin_url) as conn:
+                conn.execute(
+                    "UPDATE qa_mapping_test.meta SET value=%s WHERE key=%s",
+                    (
+                        self.TRANSFER_MANIFEST,
+                        staging_database.TRANSFER_MANIFEST_META_KEY,
+                    ),
+                )
+                conn.commit()
+        domain_locks.assert_not_called()
+        operation.assert_not_called()
+        with psycopg.connect(self._runtime_url) as conn:
+            after = conn.execute(
+                "SELECT count(*) FROM supplier_mapping_review_batches"
+            ).fetchone()[0]
+            self.assertEqual(
+                attest_runtime_connection(conn, self._target),
+                self._runtime_generation,
+            )
+        self.assertEqual(after, before)
+
+    def test_12_unknown_commit_recovery_reattests_before_lookup(self):
+        from procurement_os import persistent_mapping as mapping_service
+        from procurement_os.persistent_mapping import (
+            PersistentMappingError,
+            Principal,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        }
+        real_connect = psycopg.connect
+        operation = mock.Mock(return_value={"created": True})
+        recovery_lookup = mock.Mock(
+            side_effect=AssertionError("recovery lookup ran before attestation")
+        )
+        outer = self
+
+        class CommitResponseLost:
+            def __init__(self, raw):
+                self.raw = raw
+                self.injected = False
+
+            @property
+            def closed(self):
+                return self.raw.closed
+
+            @property
+            def info(self):
+                return self.raw.info
+
+            def execute(self, statement, parameters=None):
+                if parameters is None:
+                    return self.raw.execute(statement)
+                return self.raw.execute(statement, parameters)
+
+            def rollback(self):
+                return self.raw.rollback()
+
+            def close(self):
+                return self.raw.close()
+
+            def commit(self):
+                self.raw.commit()
+                if not self.injected:
+                    self.injected = True
+                    with real_connect(outer._target_admin_url) as admin:
+                        admin.execute(
+                            "UPDATE qa_mapping_test.meta SET value=%s "
+                            "WHERE key=%s",
+                            (
+                                "d" * 64,
+                                staging_database.TRANSFER_MANIFEST_META_KEY,
+                            ),
+                        )
+                        admin.commit()
+                    raise psycopg.OperationalError(
+                        "lost response after server commit"
+                    )
+
+        connections = 0
+
+        def connect(*args, **kwargs):
+            nonlocal connections
+            connections += 1
+            raw = real_connect(*args, **kwargs)
+            return CommitResponseLost(raw) if connections == 1 else raw
+
+        try:
+            with mock.patch.dict(os.environ, environment, clear=False), mock.patch.object(
+                mapping_service.psycopg, "connect", side_effect=connect
+            ):
+                with self.assertRaises(PersistentMappingError) as raised:
+                    mapping_service._execute_write(
+                        self._runtime_url,
+                        operation_name="staging-unknown-commit-attestation",
+                        capability="review_intake_writes_enabled",
+                        principal=Principal(
+                            principal_ref="owner:railway-staging:01",
+                            role_ref="role:owner",
+                            authn_context_sha256="2" * 64,
+                        ),
+                        idempotency_key=uuid5(
+                            NAMESPACE_URL,
+                            "buffalo:staging:unknown-commit-attestation:v1",
+                        ),
+                        domain_locks=lambda _conn: (),
+                        operation=operation,
+                        recovery_lookup=recovery_lookup,
+                    )
+            self.assertEqual(
+                raised.exception.code,
+                "COMMIT_OUTCOME_UNKNOWN",
+                repr(raised.exception.__cause__),
+            )
+            self.assertEqual(connections, 2)
+            operation.assert_called_once()
+            recovery_lookup.assert_not_called()
+        finally:
+            with real_connect(self._target_admin_url) as conn:
+                conn.execute(
+                    "UPDATE qa_mapping_test.meta SET value=%s WHERE key=%s",
+                    (
+                        self.TRANSFER_MANIFEST,
+                        staging_database.TRANSFER_MANIFEST_META_KEY,
+                    ),
+                )
+                conn.commit()
+        with real_connect(self._runtime_url) as conn:
+            self.assertEqual(
+                attest_runtime_connection(conn, self._target),
+                self._runtime_generation,
+            )
+
+    def test_13_core_global_privilege_drift_fails_every_runtime_attestation(self):
+        mutations = (
+            (
+                "GRANT SELECT ON pg_catalog.pg_authid TO PUBLIC",
+                "REVOKE SELECT ON pg_catalog.pg_authid FROM PUBLIC",
+            ),
+            (
+                "GRANT SELECT (rolpassword) ON pg_catalog.pg_authid TO PUBLIC",
+                "REVOKE SELECT (rolpassword) ON pg_catalog.pg_authid FROM PUBLIC",
+            ),
+            (
+                "GRANT CREATE ON SCHEMA pg_catalog TO PUBLIC",
+                "REVOKE CREATE ON SCHEMA pg_catalog FROM PUBLIC",
+            ),
+            (
+                "GRANT SET ON PARAMETER session_replication_role TO PUBLIC",
+                "REVOKE SET ON PARAMETER session_replication_role FROM PUBLIC",
+            ),
+        )
+        for grant, revoke in mutations:
+            with self.subTest(grant=grant):
+                try:
+                    with psycopg.connect(
+                        self._target_admin_url, autocommit=True
+                    ) as admin:
+                        admin.execute(grant)
+                    with psycopg.connect(self._runtime_url) as runtime:
+                        with self.assertRaisesRegex(
+                            SyntheticStagingDatabaseError,
+                            "core global privilege envelope differs",
+                        ):
+                            attest_runtime_connection(runtime, self._target)
+                        runtime.rollback()
+                finally:
+                    with psycopg.connect(
+                        self._target_admin_url, autocommit=True
+                    ) as admin:
+                        admin.execute(revoke)
+                with psycopg.connect(self._runtime_url) as runtime:
+                    self.assertEqual(
+                        attest_runtime_connection(runtime, self._target),
+                        self._runtime_generation,
+                    )
+                    runtime.rollback()
+
+        try:
+            with psycopg.connect(
+                self._target_admin_url, autocommit=True
+            ) as admin:
+                admin.execute(
+                    "CREATE FUNCTION information_schema.buffalo_forbidden() "
+                    "RETURNS text LANGUAGE sql SECURITY DEFINER "
+                    "SET search_path=pg_catalog AS 'SELECT current_user::text'"
+                )
+            with psycopg.connect(self._runtime_url) as runtime:
+                self.assertEqual(
+                    runtime.execute(
+                        "SELECT information_schema.buffalo_forbidden()"
+                    ).fetchone(),
+                    (self.ADMIN,),
+                )
+                with self.assertRaisesRegex(
+                    SyntheticStagingDatabaseError,
+                    "core global privilege envelope differs",
+                ):
+                    attest_runtime_connection(runtime, self._target)
+                runtime.rollback()
+        finally:
+            with psycopg.connect(
+                self._target_admin_url, autocommit=True
+            ) as admin:
+                admin.execute(
+                    "DROP FUNCTION IF EXISTS information_schema.buffalo_forbidden()"
+                )
+        with psycopg.connect(self._runtime_url) as runtime:
+            self.assertEqual(
+                attest_runtime_connection(runtime, self._target),
+                self._runtime_generation,
+            )
+            runtime.rollback()
+
+    def test_15_deciding_write_rechecks_effective_postgres_safety(self):
+        from procurement_os.persistent_mapping import (
+            PersistentMappingError,
+            Principal,
+            _execute_write,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        }
+        observed_roles: list[str] = []
+
+        def drift_after_attestation(conn):
+            with psycopg.connect(
+                self._postgres_admin_url, autocommit=True
+            ) as admin:
+                admin.execute(
+                    sql.SQL("GRANT SET ON PARAMETER session_replication_role TO {}")
+                    .format(sql.Identifier(RUNTIME_LOGIN))
+                )
+            conn.execute("SET session_replication_role=replica")
+            observed_roles.append(
+                conn.execute(
+                    "SELECT pg_catalog.current_setting('session_replication_role')"
+                ).fetchone()[0]
+            )
+            return ()
+
+        operation = mock.Mock(
+            side_effect=AssertionError("write ran with unsafe PostgreSQL settings")
+        )
+        try:
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(
+                    PersistentMappingError,
+                    "database security state differs",
+                ):
+                    _execute_write(
+                        self._runtime_url,
+                        operation_name="staging-effective-safety-recheck",
+                        capability="review_intake_writes_enabled",
+                        principal=Principal(
+                            principal_ref="owner:railway-staging:01",
+                            role_ref="role:owner",
+                            authn_context_sha256="4" * 64,
+                        ),
+                        idempotency_key=uuid5(
+                            NAMESPACE_URL,
+                            "buffalo:staging:effective-safety-recheck:v1",
+                        ),
+                        domain_locks=drift_after_attestation,
+                        operation=operation,
+                    )
+        finally:
+            with psycopg.connect(
+                self._postgres_admin_url, autocommit=True
+            ) as admin:
+                admin.execute(
+                    sql.SQL(
+                        "REVOKE SET ON PARAMETER session_replication_role FROM {}"
+                    ).format(sql.Identifier(RUNTIME_LOGIN))
+                )
+        self.assertEqual(observed_roles, ["replica"])
+        operation.assert_not_called()
+        with psycopg.connect(self._runtime_url) as runtime:
+            self.assertEqual(
+                attest_runtime_connection(runtime, self._target),
+                self._runtime_generation,
+            )
+            runtime.rollback()
+
+    def test_16_durability_settings_refuse_attestation_and_write(self):
+        from procurement_os.persistent_mapping import (
+            PersistentMappingError,
+            Principal,
+            _execute_write,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        }
+        cases = (
+            ("fsync", "off", "on"),
+            ("full_page_writes", "off", "on"),
+            ("synchronous_commit", "off", "on"),
+            ("zero_damaged_pages", "on", "off"),
+            ("ignore_checksum_failure", "on", "off"),
+        )
+        for setting, unsafe, safe in cases:
+            with self.subTest(setting=setting, unsafe=unsafe):
+                domain_locks = mock.Mock(
+                    side_effect=AssertionError(
+                        "domain locks ran before durability attestation"
+                    )
+                )
+                operation = mock.Mock(
+                    side_effect=AssertionError(
+                        "write ran before durability attestation"
+                    )
+                )
+                with psycopg.connect(
+                    self._postgres_admin_url, autocommit=True
+                ) as admin:
+                    try:
+                        admin.execute(
+                            sql.SQL("ALTER SYSTEM SET {}={}").format(
+                                sql.Identifier(setting), sql.Literal(unsafe)
+                            )
+                        )
+                        admin.execute("SELECT pg_catalog.pg_reload_conf()")
+                        with psycopg.connect(self._runtime_url) as runtime:
+                            self.assertEqual(
+                                runtime.execute(
+                                    sql.SQL(
+                                        "SELECT pg_catalog.current_setting({})"
+                                    ).format(sql.Literal(setting))
+                                ).fetchone(),
+                                (unsafe,),
+                            )
+                            with self.assertRaisesRegex(
+                                SyntheticStagingDatabaseError,
+                                "core global privilege envelope differs",
+                            ):
+                                attest_runtime_connection(runtime, self._target)
+                            runtime.rollback()
+                        with mock.patch.dict(
+                            os.environ, environment, clear=False
+                        ):
+                            with self.assertRaisesRegex(
+                                PersistentMappingError,
+                                "connected synthetic mapping database identity differs",
+                            ):
+                                _execute_write(
+                                    self._runtime_url,
+                                    operation_name=(
+                                        f"staging-durability-negative-{setting}"
+                                    ),
+                                    capability="review_intake_writes_enabled",
+                                    principal=Principal(
+                                        principal_ref="owner:railway-staging:01",
+                                        role_ref="role:owner",
+                                        authn_context_sha256="5" * 64,
+                                    ),
+                                    idempotency_key=uuid5(
+                                        NAMESPACE_URL,
+                                        "buffalo:staging:durability-negative:"
+                                        f"{setting}:v1",
+                                    ),
+                                    domain_locks=domain_locks,
+                                    operation=operation,
+                                )
+                    finally:
+                        admin.execute(
+                            sql.SQL("ALTER SYSTEM RESET {}").format(
+                                sql.Identifier(setting)
+                            )
+                        )
+                        admin.execute("SELECT pg_catalog.pg_reload_conf()")
+                domain_locks.assert_not_called()
+                operation.assert_not_called()
+                with psycopg.connect(self._runtime_url) as runtime:
+                    self.assertEqual(
+                        runtime.execute(
+                            sql.SQL("SELECT pg_catalog.current_setting({})").format(
+                                sql.Literal(setting)
+                            )
+                        ).fetchone(),
+                        (safe,),
+                    )
+                    self.assertEqual(
+                        attest_runtime_connection(runtime, self._target),
+                        self._runtime_generation,
+                    )
+                    runtime.rollback()
+
+    def test_14_database_default_resists_cluster_replication_reload(self):
+        from procurement_os.persistent_mapping import (
+            PersistentMappingError,
+            Principal,
+            _execute_write,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        }
+        with psycopg.connect(self._runtime_url) as existing_runtime:
+            self.assertEqual(
+                existing_runtime.execute(
+                    "SELECT pg_catalog.current_setting('session_replication_role'),"
+                    "source FROM pg_catalog.pg_settings "
+                    "WHERE name='session_replication_role'"
+                ).fetchone(),
+                ("origin", "database"),
+            )
+            with psycopg.connect(
+                self._postgres_admin_url, autocommit=True
+            ) as admin:
+                try:
+                    admin.execute(
+                        "ALTER SYSTEM SET session_replication_role='replica'"
+                    )
+                    admin.execute("SELECT pg_catalog.pg_reload_conf()")
+                    self.assertEqual(
+                        existing_runtime.execute(
+                            "SELECT pg_catalog.current_setting("
+                            "'session_replication_role'),source "
+                            "FROM pg_catalog.pg_settings "
+                            "WHERE name='session_replication_role'"
+                        ).fetchone(),
+                        ("origin", "database"),
+                    )
+                    self.assertEqual(
+                        attest_runtime_connection(existing_runtime, self._target),
+                        self._runtime_generation,
+                    )
+                    existing_runtime.rollback()
+                    with psycopg.connect(self._runtime_url) as fresh_runtime:
+                        self.assertEqual(
+                            fresh_runtime.execute(
+                                "SELECT pg_catalog.current_setting("
+                                "'session_replication_role'),source "
+                                "FROM pg_catalog.pg_settings "
+                                "WHERE name='session_replication_role'"
+                            ).fetchone(),
+                            ("origin", "database"),
+                        )
+                        self.assertEqual(
+                            attest_runtime_connection(fresh_runtime, self._target),
+                            self._runtime_generation,
+                        )
+                        fresh_runtime.rollback()
+                finally:
+                    admin.execute("ALTER SYSTEM RESET session_replication_role")
+                    admin.execute("SELECT pg_catalog.pg_reload_conf()")
+
+        domain_locks = mock.Mock(return_value=())
+        operation = mock.Mock(return_value="safe")
+        with mock.patch.dict(os.environ, environment, clear=False):
+            self.assertEqual(
+                _execute_write(
+                    self._runtime_url,
+                    operation_name="staging-replication-default-positive",
+                    capability="review_intake_writes_enabled",
+                    principal=Principal(
+                        principal_ref="owner:railway-staging:01",
+                        role_ref="role:owner",
+                        authn_context_sha256="3" * 64,
+                    ),
+                    idempotency_key=uuid5(
+                        NAMESPACE_URL,
+                        "buffalo:staging:replication-default-positive:v1",
+                    ),
+                    domain_locks=domain_locks,
+                    operation=operation,
+                ),
+                "safe",
+            )
+        domain_locks.assert_called_once()
+        operation.assert_called_once()
+
+        domain_locks.reset_mock()
+        operation.reset_mock()
+        with psycopg.connect(self._target_admin_url, autocommit=True) as admin:
+            try:
+                admin.execute(
+                    sql.SQL(
+                        "ALTER DATABASE {} SET session_replication_role TO replica"
+                    ).format(sql.Identifier(EXPECTED_DATABASE))
+                )
+                with psycopg.connect(self._runtime_url) as runtime:
+                    self.assertEqual(
+                        runtime.execute(
+                            "SELECT pg_catalog.current_setting("
+                            "'session_replication_role'),source "
+                            "FROM pg_catalog.pg_settings "
+                            "WHERE name='session_replication_role'"
+                        ).fetchone(),
+                        ("replica", "database"),
+                    )
+                    with self.assertRaisesRegex(
+                        SyntheticStagingDatabaseError,
+                        "core global privilege envelope differs",
+                    ):
+                        attest_runtime_connection(runtime, self._target)
+                    runtime.rollback()
+                with mock.patch.dict(os.environ, environment, clear=False):
+                    with self.assertRaisesRegex(
+                        PersistentMappingError,
+                        "connected synthetic mapping database identity differs",
+                    ):
+                        _execute_write(
+                            self._runtime_url,
+                            operation_name="staging-replication-setting-negative",
+                            capability="review_intake_writes_enabled",
+                            principal=Principal(
+                                principal_ref="owner:railway-staging:01",
+                                role_ref="role:owner",
+                                authn_context_sha256="3" * 64,
+                            ),
+                            idempotency_key=uuid5(
+                                NAMESPACE_URL,
+                                "buffalo:staging:replication-setting-negative:v1",
+                            ),
+                            domain_locks=domain_locks,
+                            operation=operation,
+                        )
+            finally:
+                admin.execute(
+                    sql.SQL(
+                        "ALTER DATABASE {} SET session_replication_role TO origin"
+                    ).format(sql.Identifier(EXPECTED_DATABASE))
+                )
+        domain_locks.assert_not_called()
+        operation.assert_not_called()
+        with psycopg.connect(self._runtime_url) as runtime:
+            self.assertEqual(
+                runtime.execute(
+                    "SELECT pg_catalog.current_setting('session_replication_role')"
+                ).fetchone(),
+                ("origin",),
+            )
+            self.assertEqual(
+                attest_runtime_connection(runtime, self._target),
+                self._runtime_generation,
+            )
+            runtime.rollback()
+
+        with psycopg.connect(self._target_admin_url) as admin:
+            definition = admin.execute(
+                "SELECT pg_catalog.pg_get_viewdef('pg_catalog.pg_roles'::regclass,false)"
+            ).fetchone()[0]
+            original = "'********'::text AS rolpassword"
+            self.assertIn(original, definition)
+            admin.execute(
+                "CREATE OR REPLACE VIEW pg_catalog.pg_roles AS "
+                + definition.replace(
+                    original,
+                    "pg_authid.rolpassword COLLATE \"default\" AS rolpassword",
+                    1,
+                )
+            )
+            admin.execute(
+                sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                    sql.Identifier(RUNTIME_LOGIN)
+                )
+            )
+            admin.execute("SET search_path TO qa_mapping_test,pg_catalog")
+            with self.assertRaisesRegex(
+                SyntheticStagingDatabaseError,
+                "core global privilege envelope differs",
+            ):
+                attest_runtime_connection(admin, self._target)
+            admin.execute("RESET SESSION AUTHORIZATION")
+            admin.rollback()
+
+        with psycopg.connect(self._target_admin_url) as admin:
+            admin.execute(
+                "CREATE OR REPLACE FUNCTION pg_catalog.quote_literal(anyelement) "
+                "RETURNS text LANGUAGE sql SECURITY DEFINER "
+                "SET search_path=pg_catalog AS "
+                "'SELECT current_user::text'"
+            )
+            admin.execute(
+                sql.SQL("SET SESSION AUTHORIZATION {}").format(
+                    sql.Identifier(RUNTIME_LOGIN)
+                )
+            )
+            admin.execute("SET search_path TO qa_mapping_test,pg_catalog")
+            with self.assertRaisesRegex(
+                SyntheticStagingDatabaseError,
+                "core global privilege envelope differs",
+            ):
+                attest_runtime_connection(admin, self._target)
+            admin.execute("RESET SESSION AUTHORIZATION")
+            admin.rollback()
+
+        with psycopg.connect(self._runtime_url) as runtime:
+            self.assertEqual(
+                attest_runtime_connection(runtime, self._target),
+                self._runtime_generation,
+            )
+            runtime.rollback()
+
+    def test_17_restart_only_corruption_and_prepared_xact_modes_refuse(self):
+        from procurement_os.persistent_mapping import (
+            PersistentMappingError,
+            Principal,
+            _execute_write,
+        )
+
+        environment = {
+            "DATABASE_URL": self._runtime_url,
+            "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": self.TRANSFER_MANIFEST,
+            "BUFFALO_STAGING_OWNED_LOCAL_PORT": str(self._port),
+            "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
+            "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
+            "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
+            "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
+            "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_RUNTIME_MODE": "SYNTHETIC_DEMO",
+            "BUFFALO_ENABLE_SYNTHETIC_MAPPING_DEMO": "1",
+        }
+        unsafe = {
+            "data_sync_retry": "on",
+            "ignore_invalid_pages": "on",
+            "max_prepared_transactions": "1",
+        }
+        gid = "buffalo-staging-detached-transaction-proof"
+        prepared = False
+        try:
+            with psycopg.connect(
+                self._postgres_admin_url, autocommit=True
+            ) as admin:
+                for setting, value in unsafe.items():
+                    admin.execute(
+                        sql.SQL("ALTER SYSTEM SET {}={}").format(
+                            sql.Identifier(setting), sql.Literal(value)
+                        )
+                    )
+            self._restart_cluster()
+            with psycopg.connect(self._runtime_url) as runtime:
+                observed = runtime.execute(
+                    "SELECT pg_catalog.current_setting('data_sync_retry'),"
+                    "pg_catalog.current_setting('ignore_invalid_pages'),"
+                    "pg_catalog.current_setting('max_prepared_transactions')"
+                ).fetchone()
+                self.assertEqual(observed, ("on", "on", "1"))
+                with self.assertRaisesRegex(
+                    SyntheticStagingDatabaseError,
+                    "core global privilege envelope differs",
+                ):
+                    attest_runtime_connection(runtime, self._target)
+                runtime.rollback()
+
+            with psycopg.connect(self._runtime_url) as runtime:
+                runtime.execute("SELECT 1")
+                runtime.execute(
+                    sql.SQL("PREPARE TRANSACTION {}").format(sql.Literal(gid))
+                )
+                prepared = True
+            with psycopg.connect(self._target_admin_url, autocommit=True) as admin:
+                self.assertEqual(
+                    admin.execute(
+                        "SELECT owner,database FROM pg_catalog.pg_prepared_xacts "
+                        "WHERE gid=%s",
+                        (gid,),
+                    ).fetchone(),
+                    (RUNTIME_LOGIN, EXPECTED_DATABASE),
+                )
+                admin.execute(
+                    sql.SQL("ROLLBACK PREPARED {}").format(sql.Literal(gid))
+                )
+                prepared = False
+
+            domain_locks = mock.Mock(
+                side_effect=AssertionError("locks ran with unsafe PostgreSQL settings")
+            )
+            operation = mock.Mock(
+                side_effect=AssertionError("write ran with unsafe PostgreSQL settings")
+            )
+            with mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(
+                    PersistentMappingError,
+                    "connected synthetic mapping database identity differs",
+                ):
+                    _execute_write(
+                        self._runtime_url,
+                        operation_name="staging-restart-only-safety-negative",
+                        capability="review_intake_writes_enabled",
+                        principal=Principal(
+                            principal_ref="owner:railway-staging:01",
+                            role_ref="role:owner",
+                            authn_context_sha256="6" * 64,
+                        ),
+                        idempotency_key=uuid5(
+                            NAMESPACE_URL,
+                            "buffalo:staging:restart-only-safety-negative:v1",
+                        ),
+                        domain_locks=domain_locks,
+                        operation=operation,
+                    )
+            domain_locks.assert_not_called()
+            operation.assert_not_called()
+        finally:
+            if prepared:
+                with psycopg.connect(
+                    self._target_admin_url, autocommit=True
+                ) as admin:
+                    admin.execute(
+                        sql.SQL("ROLLBACK PREPARED {}").format(sql.Literal(gid))
+                    )
+            with psycopg.connect(
+                self._postgres_admin_url, autocommit=True
+            ) as admin:
+                for setting in unsafe:
+                    admin.execute(
+                        sql.SQL("ALTER SYSTEM RESET {}").format(
+                            sql.Identifier(setting)
+                        )
+                    )
+            self._restart_cluster()
+
+        with psycopg.connect(self._runtime_url) as runtime:
+            self.assertEqual(
+                runtime.execute(
+                    "SELECT pg_catalog.current_setting('data_sync_retry'),"
+                    "pg_catalog.current_setting('ignore_invalid_pages'),"
+                    "pg_catalog.current_setting('max_prepared_transactions')"
+                ).fetchone(),
+                ("off", "off", "0"),
+            )
+            self.assertEqual(
+                attest_runtime_connection(runtime, self._target),
+                self._runtime_generation,
+            )
+            runtime.rollback()
 
 
 if __name__ == "__main__":

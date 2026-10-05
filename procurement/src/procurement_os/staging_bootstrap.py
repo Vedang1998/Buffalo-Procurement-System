@@ -145,6 +145,7 @@ _REQUIRED_INPUT_NAMES = frozenset(
         "BUFFALO_STAGING_OWNER_VERIFIER",
         "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST",
         "BUFFALO_STAGING_POSTGRES_SERVICE_ID",
+        "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256",
         "BUFFALO_STAGING_VOLUME_ROOT",
         DATABASE_URL_ENV,
         DATABASE_PASSWORD_ENV,
@@ -189,6 +190,7 @@ class StagingBootstrapInputs:
     volume_root: Path
     database_url: str
     postgres_private_host: str
+    transfer_manifest_sha256: str
     local_port: str | None = None
     backup_label: str | None = None
     expected_manifest_sha256: str | None = None
@@ -442,6 +444,9 @@ def _database_target_environment(
         "DATABASE_URL": inputs.database_url,
         "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": inputs.postgres_private_host,
         "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+        "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": (
+            inputs.transfer_manifest_sha256
+        ),
         "RAILWAY_ENVIRONMENT_ID": EXPECTED_ENVIRONMENT_ID,
         "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,
         "RAILWAY_SERVICE_ID": EXPECTED_APP_SERVICE_ID,
@@ -514,6 +519,10 @@ def load_bootstrap_inputs(
         or selected["RAILWAY_SERVICE_ID"] != EXPECTED_APP_SERVICE_ID
         or selected["BUFFALO_STAGING_POSTGRES_SERVICE_ID"]
         != EXPECTED_POSTGRES_SERVICE_ID
+        or _SHA256.fullmatch(
+            selected["BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256"]
+        )
+        is None
     ):
         raise StagingBootstrapError("staging bootstrap scope differs")
     if backup and (
@@ -548,6 +557,9 @@ def load_bootstrap_inputs(
         database_url=selected[DATABASE_URL_ENV],
         postgres_private_host=selected[
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST"
+        ],
+        transfer_manifest_sha256=selected[
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256"
         ],
         local_port=selected.get("BUFFALO_STAGING_OWNED_LOCAL_PORT"),
         backup_label=selected.get(BACKUP_LABEL_ENV),
@@ -858,6 +870,9 @@ def build_child_contracts(
         "BUFFALO_STAGING_LISTEN_FD": str(synthetic_listener_fd),
         "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": inputs.postgres_private_host,
         "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+        "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": (
+            inputs.transfer_manifest_sha256
+        ),
         "BUFFALO_STAGING_RUNTIME_ROOT": str(layout.synthetic_root),
         "BUFFALO_STAGING_SOCKET_GID": str(SYNTHETIC_SOCKET_GROUP),
         "BUFFALO_STAGING_SOCKET_PATH": str(layout.synthetic_socket),

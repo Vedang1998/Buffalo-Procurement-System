@@ -74,6 +74,7 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
             environment_id=EXPECTED_ENVIRONMENT_ID,
             app_service_id=EXPECTED_APP_SERVICE_ID,
             postgres_service_id=EXPECTED_POSTGRES_SERVICE_ID,
+            transfer_manifest_sha256="a" * 64,
             owned_local_port=55432,
         )
         self.raw = b"synthetic,price\n"
@@ -331,6 +332,7 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
         target_environment = {
             "DATABASE_URL": self.target.database_url,
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": "a" * 64,
             "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
             "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
             "BUFFALO_STAGING_OWNED_LOCAL_PORT": "55432",
@@ -800,6 +802,7 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
             "BUFFALO_STAGING_PRICE_BACKUP_ROOT": str(recovery),
             "PROCUREMENT_STORAGE_ROOT": str(storage),
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "127.0.0.1",
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": "a" * 64,
             "BUFFALO_STAGING_OWNED_LOCAL_PORT": "55432",
             "BUFFALO_STAGING_LOCAL_ACCEPTANCE": "1",
             "RAILWAY_PROJECT_ID": EXPECTED_PROJECT_ID,

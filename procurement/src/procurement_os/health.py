@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 from .readiness import po_readiness
 
@@ -330,7 +331,30 @@ def full_health() -> dict[str, Any]:
     import psycopg
 
     try:
-        with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        database_url = os.environ["DATABASE_URL"]
+        with psycopg.connect(database_url) as conn:
+            parsed = urlparse(database_url)
+            if (
+                parsed.username == "buffalo_synthetic_runtime"
+                or parsed.path == "/buffalo_synthetic_staging_demo"
+            ):
+                from .synthetic_staging_database import (
+                    attest_runtime_connection,
+                    target_from_environment,
+                )
+
+                conn.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                conn.execute("SET LOCAL statement_timeout = '10000ms'")
+                conn.execute("SET LOCAL lock_timeout = '2000ms'")
+                conn.execute(
+                    "SET LOCAL idle_in_transaction_session_timeout = '15000ms'"
+                )
+                attest_runtime_connection(
+                    conn, target_from_environment(os.environ)
+                )
+                conn.rollback()
             report["database"] = check_database(conn)
             report["schema"] = check_schema(conn)
             if report["schema"]["ok"]:

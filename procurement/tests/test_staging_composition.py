@@ -76,6 +76,7 @@ def _worker_environment(*, role: str, key_file: Path) -> dict[str, str]:
                 "BUFFALO_ENABLE_SYNTHETIC_SELECTED_OFFER_INPUTS": "1",
                 "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "postgres.railway.internal",
                 "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+                "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": "b" * 64,
                 "DATABASE_URL": "postgresql://buffalo_synthetic_runtime@postgres.railway.internal/buffalo_synthetic_staging_demo",
                 "PGPASSFILE": "/run/buffalo/synthetic/private/pgpass",
                 "PROCUREMENT_STORAGE_ROOT": "/data/synthetic",

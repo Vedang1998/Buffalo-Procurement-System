@@ -1737,7 +1737,9 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
             changed_module.POST_MAPPING_APPLICATION_RELEASE_MANIFEST = (
                 changed_retirement_release,
             )
-            retirement_module_name = f"mapping_retirement_changed_{uuid4().hex}"
+            retirement_module_name = (
+                f"procurement_os.mapping_retirement_changed_{uuid4().hex}"
+            )
             retirement_spec = importlib.util.spec_from_file_location(
                 retirement_module_name,
                 Path(changed_module.__file__).resolve().parents[1]
@@ -8858,6 +8860,14 @@ class PersistentMappingFoundationPostgresTests(unittest.TestCase):
         )
         self.assertEqual(
             sum("pg_try_advisory_lock" in item for item in retry_connection.statements), 2
+        )
+        self.assertFalse(
+            any(
+                "session_replication_role" in item
+                or "pg_prepared_xacts" in item
+                for item in retry_connection.statements
+            ),
+            retry_connection.statements,
         )
 
         uncertain = FakeConnection(commit_error=psycopg.OperationalError("lost response"))

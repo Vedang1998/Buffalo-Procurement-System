@@ -16,7 +16,11 @@ from uvicorn import Config, Server
 
 from .staging_config import load_staging_config
 from .staging_composition import load_staging_worker_boundary_config
-from .staging_gateway import RegisteredRoutePolicy, StagingGateway
+from .staging_gateway import (
+    RegisteredRoutePolicy,
+    StagingGateway,
+    write_sanitized_request_log,
+)
 from .staging_management_keys import (
     derive_gateway_activation_key,
     derive_supervisor_control_key,
@@ -202,6 +206,7 @@ def _run_gateway(environment: dict[str, str]) -> None:
             worker_keys=worker_keys,
             research_control=control_client,
             activation_service_factory=activation_factory,
+            request_logger=write_sanitized_request_log,
         )
         server = Server(
             Config(

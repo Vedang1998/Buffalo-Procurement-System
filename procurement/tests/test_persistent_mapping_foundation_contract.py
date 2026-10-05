@@ -38,7 +38,7 @@ IMPLEMENTATION_SPEC = (
     / "2026-09-10-persistent-mapping-foundation-implementation-spec.md"
 )
 RUNNER_PATH = PROCUREMENT / "tools" / "run_tests.py"
-EXPECTED_GLOBAL_TEST_POPULATION = 1388
+EXPECTED_GLOBAL_TEST_POPULATION = 1430
 
 
 class PersistentMappingFoundationContractTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
         source = SERVICE.read_text(encoding="utf-8")
         self.assertEqual(
             hashlib.sha256(source.encode("utf-8")).hexdigest(),
-            "9325cc1f22cf383f08843fae7a6800ef0cb23186b34f29e3e9b31c144f354c4a",
+            "e51f37d0cd8a4a9e16e103798917e3a32fa21cb2a3e6a9e297154cdbc707a293",
         )
         tree = ast.parse(source)
         import_contract = set()
@@ -127,6 +127,20 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                     "from",
                     1,
                     "synthetic_staging_database",
+                    "_verify_effective_postgres_safety_settings",
+                    None,
+                ),
+                (
+                    "from",
+                    1,
+                    "synthetic_staging_database",
+                    "attest_runtime_connection",
+                    None,
+                ),
+                (
+                    "from",
+                    1,
+                    "synthetic_staging_database",
                     "EXPECTED_DATABASE",
                     None,
                 ),
@@ -161,7 +175,12 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
                 and isinstance(node.value, ast.Name)
                 and node.value.id == "os"
             ),
-            [("environ", 156), ("getenv", 73), ("getenv", 74)],
+            [
+                ("environ", 156),
+                ("environ", 263),
+                ("getenv", 73),
+                ("getenv", 74),
+            ],
         )
         for forbidden_builtin in (
             "open",
@@ -429,6 +448,22 @@ class PersistentMappingFoundationContractTests(unittest.TestCase):
             def execute(self, statement, _parameters=()):
                 rendered = str(statement)
                 self.statements.append(rendered)
+                if "current_setting('session_replication_role')" in rendered:
+                    return Result(
+                        (
+                            "origin",
+                            "on",
+                            "on",
+                            "on",
+                            "off",
+                            "off",
+                            "off",
+                            "off",
+                            "0",
+                        )
+                    )
+                if "pg_prepared_xacts" in rendered:
+                    return Result(False)
                 if "current_database" in rendered:
                     return Result(
                         (

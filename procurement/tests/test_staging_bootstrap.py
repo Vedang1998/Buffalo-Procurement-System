@@ -44,6 +44,7 @@ class StagingBootstrapContractTests(unittest.TestCase):
             "BUFFALO_STAGING_OWNER_VERIFIER": self.owner_verifier,
             "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "postgres.railway.internal",
             "BUFFALO_STAGING_POSTGRES_SERVICE_ID": EXPECTED_POSTGRES_SERVICE_ID,
+            "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": "b" * 64,
             "BUFFALO_STAGING_REPLICA_COUNT": "1",
             "BUFFALO_STAGING_SYNTHETIC_DATABASE_URL": (
                 "postgresql://buffalo_synthetic_runtime@"
@@ -326,7 +327,18 @@ class StagingBootstrapContractTests(unittest.TestCase):
             - OPTIONAL_CERTIFICATE_ENVIRONMENT_NAMES,
         )
         self.assertIn("DATABASE_URL", environments["synthetic"])
+        self.assertEqual(
+            environments["synthetic"][
+                "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256"
+            ],
+            "b" * 64,
+        )
         self.assertNotIn("DATABASE_URL", environments["gateway"])
+        for role in ("gateway", "research"):
+            self.assertNotIn(
+                "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256",
+                environments[role],
+            )
         self.assertNotIn("DATABASE_URL", environments["research"])
         self.assertIn("BUFFALO_RESEARCH_ROOT", environments["research"])
         self.assertNotIn("BUFFALO_RESEARCH_ROOT", environments["synthetic"])

@@ -224,6 +224,53 @@ def _verify_connected_synthetic_database(conn: Any, expected_database: str) -> N
         )
 
 
+def _attest_fresh_write_connection(
+    conn: Any, expected_database: str, deadline: float
+) -> None:
+    """Fully attest every fresh staging DML backend before locks or reads."""
+
+    if expected_database != "buffalo_synthetic_staging_demo":
+        _verify_connected_synthetic_database(conn, expected_database)
+        return
+    remaining_ms = int((deadline - time.monotonic()) * 1000)
+    if remaining_ms <= 0:
+        raise PersistentMappingError(
+            "persistent mapping operation deadline expired"
+        )
+    try:
+        from .synthetic_staging_database import (
+            attest_runtime_connection,
+            target_from_environment,
+        )
+
+        conn.execute(
+            "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        try:
+            conn.execute(
+                "SELECT pg_catalog.set_config('statement_timeout',%s,true)",
+                (str(max(1, remaining_ms)),),
+            )
+            conn.execute(
+                "SELECT pg_catalog.set_config('lock_timeout',%s,true)",
+                (str(max(1, min(2000, remaining_ms))),),
+            )
+            conn.execute(
+                "SELECT pg_catalog.set_config("
+                "'idle_in_transaction_session_timeout',%s,true)",
+                (str(max(1, remaining_ms)),),
+            )
+            attest_runtime_connection(conn, target_from_environment(os.environ))
+        finally:
+            conn.rollback()
+    except PersistentMappingError:
+        raise
+    except Exception as exc:
+        raise PersistentMappingError(
+            "connected synthetic mapping database identity differs"
+        ) from exc
+
+
 def _try_session_lock(conn: Any, lock_name: str, deadline: float) -> None:
     while time.monotonic() < deadline:
         locked = conn.execute(
@@ -322,7 +369,9 @@ def _execute_write(
                     conn = psycopg.connect(
                         database_url, autocommit=True, connect_timeout=connect_timeout
                     )
-                    _verify_connected_synthetic_database(conn, expected_database)
+                    _attest_fresh_write_connection(
+                        conn, expected_database, deadline
+                    )
                     if frozen_domain_locks is None:
                         resolved = sorted(
                             domain_locks(conn),
@@ -385,6 +434,18 @@ def _execute_write(
                     "SELECT pg_catalog.set_config('lock_timeout',%s,true)",
                     (str(min(5000, remaining_ms)),),
                 )
+                if expected_database == "buffalo_synthetic_staging_demo":
+                    try:
+                        from .synthetic_staging_database import (
+                            _verify_effective_postgres_safety_settings,
+                        )
+
+                        _verify_effective_postgres_safety_settings(conn)
+                    except Exception as exc:
+                        raise PersistentMappingError(
+                            "persistent mapping database security state differs",
+                            code="DATABASE_IDENTITY_MISMATCH",
+                        ) from exc
                 if recovery_mode is not None:
                     active_recovery = recovery_mode
                     if recovery_lookup is None:

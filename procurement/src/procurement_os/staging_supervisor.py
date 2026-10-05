@@ -999,7 +999,10 @@ def launch_fixed_child(spec: FixedChildSpec) -> subprocess.Popen[bytes]:
     return subprocess.Popen(
         list(spec.argv),
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
+        # Uvicorn access logs are disabled.  The gateway alone inherits the
+        # supervisor's stdout for its fixed-schema sanitized request records;
+        # workers have no output channel at all.
+        stdout=None if spec.name == "gateway" else subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         env=dict(spec.environment),
         close_fds=True,

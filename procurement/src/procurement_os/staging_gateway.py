@@ -15,6 +15,8 @@ from http.cookies import CookieError, SimpleCookie
 import html
 import ipaddress
 import inspect
+import json
+import os
 import re
 import secrets
 import time
@@ -53,7 +55,12 @@ from .staging_research_gateway import (
     ResearchDecision,
     ResearchGatewayCoordinator,
 )
-from .staging_worker_types import WorkerKeyring, WorkerResponse, WorkerTransport
+from .staging_worker_types import (
+    WorkerKeyState,
+    WorkerKeyring,
+    WorkerResponse,
+    WorkerTransport,
+)
 
 
 _MAX_LOGIN_BODY = 16 * 1024
@@ -114,10 +121,37 @@ _WORKER_RESPONSE_HEADERS = frozenset(
 )
 _CSRF_FORM_FIELD = "_buffalo_staging_csrf"
 _RESEARCH_RETRY_PATH = "/private-research/retry"
+_RAILWAY_HEALTHCHECK_HOST = "healthcheck.railway.app"
 _MAX_HTML_FORMS = 512
 _RAILWAY_EDGE_RE = re.compile(r"\A[a-z]{3}[1-9][0-9]{0,2}\Z")
 _RAILWAY_REQUEST_ID_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _RAILWAY_REQUEST_START_RE = re.compile(r"\A[0-9]{13}\Z")
+_REQUEST_LOG_KEYS = frozenset(
+    {
+        "authenticated",
+        "duration_ms",
+        "event",
+        "method",
+        "request_id",
+        "route",
+        "status",
+        "version",
+    }
+)
+_REQUEST_LOG_ID_RE = re.compile(r"\A[a-f0-9]{32}\Z")
+_REQUEST_LOG_METHODS = frozenset({"GET", "POST", "HEAD", "OPTIONS", "OTHER", "INVALID"})
+_REQUEST_LOG_ROUTES = frozenset(
+    {
+        "invalid",
+        "unmatched",
+        "gateway.health",
+        "gateway.login",
+        "gateway.logout",
+        "gateway.readiness",
+        "gateway.research_retry",
+        *(route.route_id for route in ROUTES),
+    }
+)
 _POST_FORM = re.compile(
     rb"(<form\b[^>]*\bmethod\s*=\s*(['\"])post\2[^>]*>)",
     re.IGNORECASE,
@@ -146,6 +180,36 @@ class GatewayActivationService(Protocol):
     async def close(self) -> None: ...
 
 
+def write_sanitized_request_log(record: Mapping[str, object]) -> None:
+    """Write one bounded record containing no request-derived payload values."""
+
+    if (
+        set(record) != _REQUEST_LOG_KEYS
+        or record.get("event") != "staging_request"
+        or record.get("version") != 1
+        or record.get("method") not in _REQUEST_LOG_METHODS
+        or record.get("route") not in _REQUEST_LOG_ROUTES
+        or type(record.get("authenticated")) is not bool
+        or type(record.get("duration_ms")) is not int
+        or not 0 <= record["duration_ms"] <= 86_400_000
+        or not isinstance(record.get("request_id"), str)
+        or _REQUEST_LOG_ID_RE.fullmatch(record["request_id"]) is None
+        or type(record.get("status")) is not int
+        or not 100 <= record["status"] <= 599
+    ):
+        raise StagingGatewayError("request log contract differs")
+    encoded = json.dumps(
+        dict(record),
+        ensure_ascii=True,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii") + b"\n"
+    if len(encoded) > 512:
+        raise StagingGatewayError("request log record is too large")
+    os.write(1, encoded)
+
+
 class RegisteredRoutePolicy:
     """The reviewed static registry; each worker validates its own live routes."""
 
@@ -170,6 +234,7 @@ class StagingGateway:
         activation_service_factory: (
             Callable[[WorkerKeyring], GatewayActivationService] | None
         ) = None,
+        request_logger: Callable[[Mapping[str, object]], None] | None = None,
         wall_clock: Any = time.time,
     ) -> None:
         try:
@@ -198,6 +263,9 @@ class StagingGateway:
                 raise StagingGatewayError("activation service contract differs")
         self._activation_service = activation_service
         self._activation_task: asyncio.Task[None] | None = None
+        if request_logger is not None and not callable(request_logger):
+            raise StagingGatewayError("request logger contract differs")
+        self._request_logger = request_logger
         self.authenticator = OwnerPasswordAuthenticator(config.owner_verifier)
         self.sessions = StagingSessionStore()
         self.login_challenges = LoginChallengeStore()
@@ -214,8 +282,24 @@ class StagingGateway:
             return
         if scope_type != "http":
             return
+        started_at = time.monotonic()
+        log_method = "INVALID"
+        log_route = "invalid"
+        log_status = 500
+        log_authenticated = False
+        log_request_id = secrets.token_hex(16)
+        downstream_send = send
+
+        async def logged_send(message):
+            nonlocal log_status
+            if message.get("type") == "http.response.start":
+                status = message.get("status")
+                if type(status) is int and 100 <= status <= 599:
+                    log_status = status
+            await downstream_send(message)
+
+        send = logged_send
         try:
-            headers = self._validated_headers(scope)
             raw_method = scope.get("method")
             if (
                 not isinstance(raw_method, str)
@@ -223,12 +307,18 @@ class StagingGateway:
             ):
                 raise StagingGatewayError("public request method is not canonical")
             method = raw_method
+            log_method = method if method in {"GET", "POST", "HEAD", "OPTIONS"} else "OTHER"
             path = str(scope.get("path", ""))
             raw_path = bytes(scope.get("raw_path") or path.encode("utf-8"))
             query = bytes(scope.get("query_string") or b"")
             if not canonical_path_is_valid(path=path, raw_path=raw_path):
                 raise StagingGatewayError("public request path is not canonical")
+            headers = self._validated_headers(
+                scope,
+                allow_healthcheck_host=(method == "GET" and path == "/health"),
+            )
             if method == "GET" and path == "/health":
+                log_route = "gateway.health"
                 self._validate_query(query, frozenset())
                 self._require_zero_body_headers(headers)
                 await self._respond(
@@ -242,11 +332,13 @@ class StagingGateway:
                 )
                 return
             if method == "GET" and path == "/auth/login":
+                log_route = "gateway.login"
                 self._validate_query(query, frozenset())
                 self._require_zero_body_headers(headers)
                 await self._login_page(send)
                 return
             if method == "POST" and path == "/auth/login":
+                log_route = "gateway.login"
                 self._validate_query(query, frozenset())
                 self._require_body_within_limit(headers, limit=_MAX_LOGIN_BODY)
                 body = await self._read_body(receive, limit=_MAX_LOGIN_BODY)
@@ -254,7 +346,9 @@ class StagingGateway:
                 await self._login(headers=headers, body=body, send=send)
                 return
             session_token, session = self._session(headers)
+            log_authenticated = session is not None
             if method == "POST" and path == "/auth/logout":
+                log_route = "gateway.logout"
                 self._validate_query(query, frozenset())
                 self._require_body_within_limit(headers, limit=1_024)
                 body = await self._read_body(receive, limit=1_024)
@@ -272,7 +366,14 @@ class StagingGateway:
             if session is None:
                 await self._respond(send, PlainTextResponse("Unauthorized", status_code=401))
                 return
+            if method == "GET" and path == "/ready":
+                log_route = "gateway.readiness"
+                self._validate_query(query, frozenset())
+                self._require_zero_body_headers(headers)
+                await self._readiness(send)
+                return
             if method == "POST" and path == _RESEARCH_RETRY_PATH:
+                log_route = "gateway.research_retry"
                 await self._retry_research(
                     headers=headers,
                     query=query,
@@ -284,6 +385,8 @@ class StagingGateway:
             selection = self.route_policy.match(
                 method=method, path=path, raw_path=raw_path
             )
+            if selection is not None:
+                log_route = selection.route_id
             if selection is None or selection.capability not in session.capabilities:
                 await self._respond(send, PlainTextResponse("Forbidden", status_code=403))
                 return
@@ -336,6 +439,7 @@ class StagingGateway:
                         path=path,
                         query=query,
                         body=body,
+                        request_id=log_request_id,
                         session=session,
                         selection=selection,
                         expected_generation=decision.generation,
@@ -349,6 +453,7 @@ class StagingGateway:
                 path=path,
                 query=query,
                 body=body,
+                request_id=log_request_id,
                 session=session,
                 selection=selection,
                 expected_generation=None,
@@ -372,8 +477,70 @@ class StagingGateway:
             await self._respond(
                 send, PlainTextResponse("Staging worker unavailable", status_code=502)
             )
+        finally:
+            self._emit_request_log(
+                {
+                    "authenticated": log_authenticated,
+                    "duration_ms": max(
+                        0, min(86_400_000, int((time.monotonic() - started_at) * 1_000))
+                    ),
+                    "event": "staging_request",
+                    "method": log_method,
+                    "request_id": log_request_id,
+                    "route": log_route,
+                    "status": log_status,
+                    "version": 1,
+                }
+            )
 
-    def _validated_headers(self, scope: Mapping[str, object]) -> dict[bytes, bytes]:
+    def _emit_request_log(self, record: Mapping[str, object]) -> None:
+        logger = self._request_logger
+        if logger is None:
+            return
+        try:
+            logger(record)
+        except Exception:
+            # A telemetry sink cannot replace the already-decided response.
+            pass
+
+    async def _readiness(self, send) -> None:
+        synthetic = self.worker_keyring.status("synthetic")
+        synthetic_state = {
+            WorkerKeyState.ACTIVE: "ready",
+            WorkerKeyState.PENDING: "validating",
+            WorkerKeyState.DISABLED: "unavailable",
+        }[synthetic.state]
+        coordinator = self.research_coordinator
+        research_state = (
+            await coordinator.readiness_state()
+            if coordinator is not None
+            else "unavailable"
+        )
+        ready = synthetic_state == "ready" and research_state in {"idle", "ready"}
+        headers = {} if ready else {"retry-after": "1"}
+        await self._respond(
+            send,
+            JSONResponse(
+                {
+                    "components": {
+                        "gateway": "ready",
+                        "research": research_state,
+                        "synthetic": synthetic_state,
+                    },
+                    "ok": ready,
+                    "source_commit": self.config.expected_source_commit,
+                },
+                status_code=200 if ready else 503,
+                headers=headers,
+            ),
+        )
+
+    def _validated_headers(
+        self,
+        scope: Mapping[str, object],
+        *,
+        allow_healthcheck_host: bool = False,
+    ) -> dict[bytes, bytes]:
         pairs = [(bytes(key).lower(), bytes(value)) for key, value in scope.get("headers", ())]
         grouped: dict[bytes, list[bytes]] = {}
         for key, value in pairs:
@@ -404,7 +571,9 @@ class StagingGateway:
             if not text_length or not text_length.isdecimal():
                 raise StagingGatewayError("request content length is invalid")
         host = decoded_singletons.get(b"host", "")
-        if host != self.config.external_host:
+        if host != self.config.external_host and not (
+            allow_healthcheck_host and host == _RAILWAY_HEALTHCHECK_HOST
+        ):
             raise StagingGatewayError("external host differs")
         if decoded_singletons.get(b"x-forwarded-proto", "https") != "https":
             raise StagingGatewayError("external protocol differs")
@@ -748,6 +917,7 @@ class StagingGateway:
         path: str,
         query: bytes,
         body: bytes,
+        request_id: str,
         session: StagingSession,
         selection: RouteSpec,
         expected_generation: int | None,
@@ -775,7 +945,7 @@ class StagingGateway:
         assertion = mint_assertion(
             key=worker_key,
             worker_role=selection.worker_role,
-            request_id=secrets.token_hex(16),
+            request_id=request_id,
             session_digest=session.token_digest_hex,
             principal_ref=session.principal_ref,
             role_ref=session.role_ref,

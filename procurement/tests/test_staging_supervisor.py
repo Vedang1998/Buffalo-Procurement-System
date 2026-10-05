@@ -151,6 +151,7 @@ def _isolation_fixture() -> tuple[
                 "BUFFALO_STAGING_LISTEN_FD": "11",
                 "BUFFALO_STAGING_POSTGRES_PRIVATE_HOST": "postgres.railway.internal",
                 "BUFFALO_STAGING_POSTGRES_SERVICE_ID": "postgres-service",
+                "BUFFALO_STAGING_TRANSFER_MANIFEST_SHA256": "b" * 64,
                 "BUFFALO_STAGING_RUNTIME_ROOT": str(base / "synthetic"),
                 "BUFFALO_STAGING_SOCKET_GID": "2301",
                 "BUFFALO_STAGING_SOCKET_PATH": str(base / "sockets" / "synthetic" / "worker.sock"),
@@ -725,6 +726,13 @@ class SupervisorChildTests(unittest.TestCase):
         self.assertEqual(kwargs["extra_groups"], (1003,))
         self.assertEqual(kwargs["pass_fds"], (7,))
         self.assertEqual(kwargs["env"], {"LANG": "C.UTF-8", "PATH": "/usr/bin"})
+        self.assertIsNone(kwargs["stdout"])
+        self.assertIs(kwargs["stderr"], subprocess.DEVNULL)
+
+        worker = replace(spec, name="synthetic")
+        with mock.patch("subprocess.Popen") as popen:
+            launch_fixed_child(worker)
+        self.assertIs(popen.call_args.kwargs["stdout"], subprocess.DEVNULL)
 
     def test_child_spec_repr_never_contains_environment_values(self):
         _, specs = _isolation_fixture()

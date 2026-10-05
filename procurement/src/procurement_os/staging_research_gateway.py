@@ -197,6 +197,26 @@ class ResearchGatewayCoordinator:
                 self._retry_task = task
         return await asyncio.shield(task)
 
+    async def readiness_state(self) -> str:
+        """Report coarse lifecycle state without starting or touching research."""
+
+        if self._closed:
+            return "unavailable"
+        try:
+            status = await self._control("research-status")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return "unavailable"
+        if status.state == "READY":
+            return "ready" if self._active_key_matches(status.generation) else "unavailable"
+        return {
+            "STOPPED": "idle",
+            "VALIDATING": "validating",
+            "STOPPING": "stopping",
+            "FAILED": "failed",
+        }.get(status.state, "unavailable")
+
     async def _shared_decision(self, *, force: bool) -> ResearchDecision:
         async with self._lock:
             if self._closed:
