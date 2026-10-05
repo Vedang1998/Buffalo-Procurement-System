@@ -9,11 +9,17 @@ import socket
 import stat
 import struct
 import sys
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 from urllib.parse import urlparse
 
 from uvicorn import Config, Server
 
+from .database_lifecycle import (
+    DatabaseLifecycleError,
+    acquire_database_lifecycle_lock,
+    assert_database_lifecycle_lock,
+    release_database_lifecycle_lock,
+)
 from .staging_config import load_staging_config
 from .staging_composition import load_staging_worker_boundary_config
 from .staging_gateway import (
@@ -385,23 +391,27 @@ class _SyntheticReadinessServer(Server):
         super().__init__(config)
         self._readiness = readiness
         self._environment = dict(environment)
+        self._lifecycle_connection: Any | None = None
+        self._lifecycle_lock_name: str | None = None
 
-    def _attest_database(self) -> str:
+    def _open_attested_database_lifecycle(self) -> tuple[str, Any, str]:
         import psycopg
 
         from .synthetic_staging_database import (
+            EXPECTED_DATABASE,
             attest_runtime_connection,
             target_from_environment,
         )
 
         target = target_from_environment(self._environment)
         passfile = _validated_synthetic_pgpass(self._environment, target)
-        with psycopg.connect(
+        conn = psycopg.connect(
             self._environment["DATABASE_URL"],
             connect_timeout=5,
             autocommit=False,
             passfile=passfile,
-        ) as conn:
+        )
+        try:
             conn.execute(
                 "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
             )
@@ -410,7 +420,55 @@ class _SyntheticReadinessServer(Server):
             conn.execute("SET LOCAL idle_in_transaction_session_timeout = '15000ms'")
             identity = attest_runtime_connection(conn, target)
             conn.rollback()
+            conn.autocommit = True
+            lock_name = acquire_database_lifecycle_lock(
+                conn, database=EXPECTED_DATABASE
+            )
+            assert_database_lifecycle_lock(conn, lock_name=lock_name)
+            return identity, conn, lock_name
+        except BaseException:
+            try:
+                conn.close()
+            except BaseException:
+                pass
+            raise
+
+    def _adopt_database_lifecycle(self, lifecycle: tuple[str, Any, str]) -> str:
+        identity, conn, lock_name = lifecycle
+        if self._lifecycle_connection is not None:
+            try:
+                conn.close()
+            finally:
+                raise DatabaseLifecycleError(
+                    "database lifecycle connection was already established"
+                )
+        self._lifecycle_connection = conn
+        self._lifecycle_lock_name = lock_name
         return identity
+
+    def _assert_database_lifecycle(self) -> None:
+        if (
+            self._lifecycle_connection is None
+            or self._lifecycle_lock_name is None
+        ):
+            raise DatabaseLifecycleError("database lifecycle connection is absent")
+        assert_database_lifecycle_lock(
+            self._lifecycle_connection,
+            lock_name=self._lifecycle_lock_name,
+        )
+
+    def _close_database_lifecycle(self) -> None:
+        conn = self._lifecycle_connection
+        lock_name = self._lifecycle_lock_name
+        self._lifecycle_connection = None
+        self._lifecycle_lock_name = None
+        if conn is None:
+            return
+        try:
+            if lock_name is not None and not bool(getattr(conn, "closed", False)):
+                release_database_lifecycle_lock(conn, lock_name=lock_name)
+        finally:
+            conn.close()
 
     async def startup(self, sockets=None) -> None:
         try:
@@ -434,14 +492,30 @@ class _SyntheticReadinessServer(Server):
                 self._readiness.emit_failure("ACTIVATION")
             return
         try:
-            validation_identity = await asyncio.to_thread(self._attest_database)
+            lifecycle_task = asyncio.create_task(
+                asyncio.to_thread(self._open_attested_database_lifecycle)
+            )
+            try:
+                lifecycle = await asyncio.shield(lifecycle_task)
+            except asyncio.CancelledError:
+                try:
+                    lifecycle = await lifecycle_task
+                except BaseException:
+                    pass
+                else:
+                    self._adopt_database_lifecycle(lifecycle)
+                    await asyncio.to_thread(self._close_database_lifecycle)
+                raise
+            validation_identity = self._adopt_database_lifecycle(lifecycle)
             if self.should_exit or not self.started:
+                await asyncio.to_thread(self._close_database_lifecycle)
                 if not self._readiness.closed:
                     self._readiness.emit_failure("ACTIVATION")
                 return
             self._readiness.emit_ready(validation_identity)
         except asyncio.CancelledError:
             self.should_exit = True
+            await asyncio.to_thread(self._close_database_lifecycle)
             if not self._readiness.closed:
                 try:
                     self._readiness.emit_failure("ACTIVATION")
@@ -450,6 +524,7 @@ class _SyntheticReadinessServer(Server):
             raise
         except MemoryError:
             self.should_exit = True
+            await asyncio.to_thread(self._close_database_lifecycle)
             if not self._readiness.closed:
                 try:
                     self._readiness.emit_failure("OOM")
@@ -457,6 +532,10 @@ class _SyntheticReadinessServer(Server):
                     pass
         except BaseException as exc:
             self.should_exit = True
+            try:
+                await asyncio.to_thread(self._close_database_lifecycle)
+            except BaseException:
+                pass
             failure = "ACTIVATION"
             try:
                 import psycopg
@@ -465,7 +544,9 @@ class _SyntheticReadinessServer(Server):
                     SyntheticStagingDatabaseError,
                 )
 
-                if isinstance(exc, psycopg.OperationalError):
+                if isinstance(
+                    exc, (psycopg.OperationalError, DatabaseLifecycleError)
+                ):
                     failure = "DATABASE"
                 elif isinstance(
                     exc,
@@ -483,6 +564,24 @@ class _SyntheticReadinessServer(Server):
                     self._readiness.emit_failure(failure)
                 except ResearchReadinessError:
                     pass
+
+    async def on_tick(self, counter: int) -> bool:
+        if await super().on_tick(counter):
+            return True
+        if counter % 10 != 0:
+            return False
+        try:
+            await asyncio.to_thread(self._assert_database_lifecycle)
+        except Exception:
+            self.should_exit = True
+            return True
+        return False
+
+    async def shutdown(self, sockets=None) -> None:
+        try:
+            await super().shutdown(sockets=sockets)
+        finally:
+            await asyncio.to_thread(self._close_database_lifecycle)
 
 
 def _split_pgpass_record(record: str) -> tuple[str, str, str, str, str]:

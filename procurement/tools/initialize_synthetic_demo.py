@@ -27,7 +27,7 @@ from apply_schema import (
     apply_verified_legacy_file,
     verify_or_apply_synthetic_price_replacement,
 )
-from local_purchasing_candidate import acquire_database_lifecycle_lock
+from procurement_os.database_lifecycle import acquire_database_lifecycle_lock
 from procurement_os.synthetic_price_replacement_contract import (
     FIXTURE_REGISTRATION_CANONICAL_SHA256,
     FIXTURE_REGISTRATION_REF,
@@ -138,7 +138,7 @@ def _require_owned_target(conn: psycopg.Connection, database_url: str) -> None:
         != ("qa_release_login", "qa_mapping_owner", "qa_mapping_owner")
     ):
         raise RuntimeError("synthetic demo maintenance role pair differs")
-    acquire_database_lifecycle_lock(conn, str(row[0]))
+    acquire_database_lifecycle_lock(conn, database=str(row[0]))
     user_schemas = tuple(
         value[0]
         for value in conn.execute(

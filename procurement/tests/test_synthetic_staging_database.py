@@ -25,6 +25,13 @@ from procurement_os.staging_config import (
     EXPECTED_POSTGRES_SERVICE_ID, EXPECTED_PROJECT_ID,
 )
 from procurement_os import synthetic_staging_database as staging_database
+from procurement_os.database_lifecycle import (
+    DatabaseLifecycleError,
+    acquire_database_lifecycle_lock,
+    assert_database_lifecycle_lock,
+    database_lifecycle_lock_name,
+    release_database_lifecycle_lock,
+)
 from procurement_os.synthetic_staging_database import (
     EXPECTED_DATABASE, EXPECTED_PRIVATE_HOST, IMMUTABLE_FIXTURE_MANIFEST_SHA256,
     PERMISSION_MATRIX_SHA256, PREDECESSOR_CATALOG_SHA256, PROVISIONER,
@@ -2418,6 +2425,45 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 self._runtime_generation,
             )
             runtime.rollback()
+
+    def test_18_shared_lifecycle_lock_excludes_two_real_sessions(self):
+        expected_lock = database_lifecycle_lock_name(EXPECTED_DATABASE)
+        first = psycopg.connect(self._runtime_url, autocommit=True)
+        second = psycopg.connect(self._runtime_url, autocommit=True)
+        self.addCleanup(first.close)
+        self.addCleanup(second.close)
+
+        observed = acquire_database_lifecycle_lock(
+            first, database=EXPECTED_DATABASE
+        )
+        self.assertEqual(observed, expected_lock)
+        assert_database_lifecycle_lock(first, lock_name=expected_lock)
+        with self.assertRaisesRegex(
+            DatabaseLifecycleError, "database lifecycle lock is already held"
+        ):
+            acquire_database_lifecycle_lock(first, database=EXPECTED_DATABASE)
+        with self.assertRaisesRegex(
+            DatabaseLifecycleError,
+            "another local purchasing lifecycle operation is active",
+        ):
+            acquire_database_lifecycle_lock(second, database=EXPECTED_DATABASE)
+
+        release_database_lifecycle_lock(first, lock_name=expected_lock)
+        observed = acquire_database_lifecycle_lock(
+            second, database=EXPECTED_DATABASE
+        )
+        self.assertEqual(observed, expected_lock)
+        second.close()
+
+        replacement = psycopg.connect(self._runtime_url, autocommit=True)
+        self.addCleanup(replacement.close)
+        self.assertEqual(
+            acquire_database_lifecycle_lock(
+                replacement, database=EXPECTED_DATABASE
+            ),
+            expected_lock,
+        )
+        release_database_lifecycle_lock(replacement, lock_name=expected_lock)
 
 
 if __name__ == "__main__":

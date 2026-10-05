@@ -134,7 +134,6 @@ _MAPPING_RELATIONS = (
     "v_supplier_offer_selection_shadow",
     "monday_stale_forecast_retirements",
 )
-_DATABASE_LIFECYCLE_LOCK_PREFIX = "buffalo:local-purchasing-candidate:lifecycle:v1"
 _PRICE_BACKUP_LABEL = re.compile(r"^candidate-v2-\d{8}T\d{6}Z-[0-9a-f]{12}$")
 
 
@@ -144,18 +143,15 @@ class CandidateBoundaryError(RuntimeError):
 
 def acquire_database_lifecycle_lock(conn: Any, database: str) -> str:
     """Acquire the cooperative lifecycle lock for one exact owned database."""
+    from procurement_os.database_lifecycle import (
+        DatabaseLifecycleError,
+        acquire_database_lifecycle_lock as acquire_shared_database_lifecycle_lock,
+    )
 
-    lock_name = f"{_DATABASE_LIFECYCLE_LOCK_PREFIX}:{database}"
-    locked = conn.execute(
-        "SELECT pg_catalog.pg_try_advisory_lock("
-        "pg_catalog.hashtextextended(%s,0))",
-        (lock_name,),
-    ).fetchone()[0]
-    if not locked:
-        raise CandidateBoundaryError(
-            "another local purchasing lifecycle operation is active for this database"
-        )
-    return lock_name
+    try:
+        return acquire_shared_database_lifecycle_lock(conn, database=database)
+    except DatabaseLifecycleError as exc:
+        raise CandidateBoundaryError(str(exc)) from exc
 
 
 @contextmanager

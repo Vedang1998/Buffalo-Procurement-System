@@ -294,6 +294,11 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
 
             def execute(self, statement, parameters=()):
                 rendered = str(statement)
+                if "pg_try_advisory_lock" in rendered:
+                    self.lock_name = parameters[0]
+                    return _Result(one=(self.locked,))
+                if "pg_locks" in rendered:
+                    return _Result(one=(False,))
                 if "current_database" in rendered:
                     return _Result(
                         one=(
@@ -305,9 +310,6 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
                             "qa_mapping_owner",
                         )
                     )
-                if "pg_try_advisory_lock" in rendered:
-                    self.lock_name = parameters[0]
-                    return _Result(one=(self.locked,))
                 raise AssertionError(rendered)
 
         connection = LifecycleConnection()
@@ -366,7 +368,15 @@ class LocalPurchasingCandidateTests(unittest.TestCase):
             / "tools"
             / "initialize_synthetic_demo.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("acquire_database_lifecycle_lock(conn, str(row[0]))", initializer_source)
+        self.assertIn(
+            "acquire_database_lifecycle_lock(conn, database=str(row[0]))",
+            initializer_source,
+        )
+        self.assertIn(
+            "from procurement_os.database_lifecycle import "
+            "acquire_database_lifecycle_lock",
+            initializer_source,
+        )
         self.assertNotIn("buffalo:synthetic-demo-initialize", initializer_source)
 
     def test_database_preflight_requires_disabled_policy_source_hash_identity_and_catalog(self):

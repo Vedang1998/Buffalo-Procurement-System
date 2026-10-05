@@ -12,6 +12,7 @@ import psycopg
 from uvicorn import Config, Server
 
 from procurement_os import private_research_app, staging_process
+from procurement_os.database_lifecycle import DatabaseLifecycleError
 from procurement_os.synthetic_staging_database import (
     EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
     SyntheticStagingDatabaseError,
@@ -129,14 +130,21 @@ class StagingProcessReadinessTests(unittest.TestCase):
             ordering.append("uvicorn")
             instance.started = True
 
-        def attest() -> str:
+        connection = mock.Mock(closed=False)
+        lifecycle = (
+            EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+            connection,
+            "buffalo:local-purchasing-candidate:lifecycle:v1:staging",
+        )
+
+        def attest():
             self.assertTrue(server.started)
             self.assertEqual(writer.events, [])
             ordering.append("database")
-            return EXPECTED_RUNTIME_ATTESTATION_IDENTITY
+            return lifecycle
 
         with mock.patch.object(Server, "startup", new=startup), mock.patch.object(
-            server, "_attest_database", side_effect=attest
+            server, "_open_attested_database_lifecycle", side_effect=attest
         ) as database:
             asyncio.run(server.startup())
         database.assert_called_once_with()
@@ -145,15 +153,15 @@ class StagingProcessReadinessTests(unittest.TestCase):
             writer.events,
             [("READY", EXPECTED_RUNTIME_ATTESTATION_IDENTITY)],
         )
+        self.assertIs(server._lifecycle_connection, connection)
 
     def test_synthetic_database_attestation_uses_one_bounded_repeatable_snapshot(self) -> None:
         writer = _Writer()
         server = self._synthetic_server(writer)
         connection = mock.MagicMock()
-        context = mock.MagicMock()
-        context.__enter__.return_value = connection
+        connection.closed = False
         target = object()
-        with mock.patch("psycopg.connect", return_value=context) as connect, mock.patch(
+        with mock.patch("psycopg.connect", return_value=connection) as connect, mock.patch(
             "procurement_os.staging_process._validated_synthetic_pgpass",
             return_value="/run/buffalo/synthetic/private/pgpass",
         ) as credential, mock.patch(
@@ -162,9 +170,17 @@ class StagingProcessReadinessTests(unittest.TestCase):
         ), mock.patch(
             "procurement_os.synthetic_staging_database.attest_runtime_connection",
             return_value=EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
-        ) as attest:
-            observed = server._attest_database()
-        self.assertEqual(observed, EXPECTED_RUNTIME_ATTESTATION_IDENTITY)
+        ) as attest, mock.patch(
+            "procurement_os.staging_process.acquire_database_lifecycle_lock",
+            return_value="exact-lock",
+        ) as acquire, mock.patch(
+            "procurement_os.staging_process.assert_database_lifecycle_lock"
+        ) as assert_lock:
+            observed = server._open_attested_database_lifecycle()
+        self.assertEqual(
+            observed,
+            (EXPECTED_RUNTIME_ATTESTATION_IDENTITY, connection, "exact-lock"),
+        )
         connect.assert_called_once_with(
             "postgresql://runtime@private/staging",
             connect_timeout=5,
@@ -183,6 +199,11 @@ class StagingProcessReadinessTests(unittest.TestCase):
         )
         attest.assert_called_once_with(connection, target)
         connection.rollback.assert_called_once_with()
+        self.assertIs(connection.autocommit, True)
+        acquire.assert_called_once_with(
+            connection, database="buffalo_synthetic_staging_demo"
+        )
+        assert_lock.assert_called_once_with(connection, lock_name="exact-lock")
 
     def test_synthetic_pgpass_is_inode_stable_private_and_role_local(self) -> None:
         with tempfile.TemporaryDirectory(prefix="buffalo-pgpass-") as raw:
@@ -261,6 +282,7 @@ class StagingProcessReadinessTests(unittest.TestCase):
     def test_synthetic_database_failures_are_sanitized_by_class(self) -> None:
         cases = (
             (psycopg.OperationalError("private DSN and password"), "DATABASE"),
+            (DatabaseLifecycleError("private lock detail"), "DATABASE"),
             (psycopg.DatabaseError("private SQL assertion detail"), "INTEGRITY"),
             (SyntheticStagingDatabaseError("private catalog detail"), "INTEGRITY"),
             (RuntimeError("private implementation detail"), "ACTIVATION"),
@@ -275,7 +297,9 @@ class StagingProcessReadinessTests(unittest.TestCase):
                 writer = _Writer()
                 server = self._synthetic_server(writer)
                 with mock.patch.object(Server, "startup", new=startup), mock.patch.object(
-                    server, "_attest_database", side_effect=exception
+                    server,
+                    "_open_attested_database_lifecycle",
+                    side_effect=exception,
                 ):
                     asyncio.run(server.startup())
                 self.assertTrue(server.should_exit)
@@ -291,7 +315,7 @@ class StagingProcessReadinessTests(unittest.TestCase):
             instance.started = True
 
         with mock.patch.object(Server, "startup", new=startup), mock.patch.object(
-            server, "_attest_database", side_effect=MemoryError
+            server, "_open_attested_database_lifecycle", side_effect=MemoryError
         ):
             asyncio.run(server.startup())
         self.assertTrue(server.should_exit)
@@ -305,15 +329,25 @@ class StagingProcessReadinessTests(unittest.TestCase):
             del sockets
             instance.started = True
 
-        def attest() -> str:
+        connection = mock.Mock(closed=False)
+
+        def attest():
             server.should_exit = True
-            return EXPECTED_RUNTIME_ATTESTATION_IDENTITY
+            return (
+                EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+                connection,
+                "exact-lock",
+            )
 
         with mock.patch.object(Server, "startup", new=startup), mock.patch.object(
-            server, "_attest_database", side_effect=attest
-        ):
+            server, "_open_attested_database_lifecycle", side_effect=attest
+        ), mock.patch(
+            "procurement_os.staging_process.release_database_lifecycle_lock"
+        ) as release:
             asyncio.run(server.startup())
         self.assertEqual(writer.events, [("FAILED", "ACTIVATION")])
+        release.assert_called_once_with(connection, lock_name="exact-lock")
+        connection.close.assert_called_once_with()
 
     def test_synthetic_attestation_cancellation_is_not_swallowed(self) -> None:
         writer = _Writer()
@@ -323,15 +357,75 @@ class StagingProcessReadinessTests(unittest.TestCase):
             del sockets
             instance.started = True
 
-        async def cancelled(_function):
+        connection = mock.Mock(closed=False)
+
+        async def cancelled(_awaitable):
             raise asyncio.CancelledError
 
         with mock.patch.object(Server, "startup", new=startup), mock.patch.object(
-            asyncio, "to_thread", side_effect=cancelled
-        ), self.assertRaises(asyncio.CancelledError):
+            server,
+            "_open_attested_database_lifecycle",
+            return_value=(
+                EXPECTED_RUNTIME_ATTESTATION_IDENTITY,
+                connection,
+                "exact-lock",
+            ),
+        ), mock.patch.object(
+            asyncio, "shield", side_effect=cancelled
+        ), mock.patch(
+            "procurement_os.staging_process.release_database_lifecycle_lock"
+        ) as release, self.assertRaises(asyncio.CancelledError):
             asyncio.run(server.startup())
         self.assertTrue(server.should_exit)
         self.assertEqual(writer.events, [("FAILED", "ACTIVATION")])
+        release.assert_called_once_with(connection, lock_name="exact-lock")
+        connection.close.assert_called_once_with()
+
+    def test_synthetic_lock_loss_stops_before_another_tick(self) -> None:
+        writer = _Writer()
+        server = self._synthetic_server(writer)
+        connection = mock.Mock(closed=False)
+        server._lifecycle_connection = connection
+        server._lifecycle_lock_name = "exact-lock"
+
+        async def on_tick(_instance, _counter):
+            return False
+
+        with mock.patch.object(Server, "on_tick", new=on_tick), mock.patch(
+            "procurement_os.staging_process.assert_database_lifecycle_lock",
+            side_effect=DatabaseLifecycleError("private lost session"),
+        ) as asserted:
+            self.assertTrue(asyncio.run(server.on_tick(10)))
+        asserted.assert_called_once_with(connection, lock_name="exact-lock")
+        self.assertTrue(server.should_exit)
+
+    def test_synthetic_shutdown_releases_lock_only_after_request_drain(self) -> None:
+        writer = _Writer()
+        server = self._synthetic_server(writer)
+        connection = mock.Mock(closed=False)
+        server._lifecycle_connection = connection
+        server._lifecycle_lock_name = "exact-lock"
+        ordering: list[str] = []
+
+        async def shutdown(_instance, sockets=None):
+            del sockets
+            ordering.append("drain")
+            self.assertIs(server._lifecycle_connection, connection)
+
+        def release(_connection, *, lock_name):
+            self.assertIs(_connection, connection)
+            self.assertEqual(lock_name, "exact-lock")
+            ordering.append("release")
+
+        connection.close.side_effect = lambda: ordering.append("close")
+        with mock.patch.object(Server, "shutdown", new=shutdown), mock.patch(
+            "procurement_os.staging_process.release_database_lifecycle_lock",
+            side_effect=release,
+        ):
+            asyncio.run(server.shutdown())
+        self.assertEqual(ordering, ["drain", "release", "close"])
+        self.assertIsNone(server._lifecycle_connection)
+        self.assertIsNone(server._lifecycle_lock_name)
 
     def test_synthetic_uvicorn_failure_never_attempts_database_attestation(self) -> None:
         writer = _Writer()
@@ -342,7 +436,7 @@ class StagingProcessReadinessTests(unittest.TestCase):
             raise RuntimeError("private listener detail")
 
         with mock.patch.object(Server, "startup", new=startup), mock.patch.object(
-            server, "_attest_database"
+            server, "_open_attested_database_lifecycle"
         ) as database, self.assertRaises(RuntimeError):
             asyncio.run(server.startup())
         database.assert_not_called()
