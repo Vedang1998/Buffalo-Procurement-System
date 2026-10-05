@@ -22,14 +22,15 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   direct CURRENT seed, post-APPLY seed, Railway deployment, external database,
   Shopify action, or production authority was added.
 - The exact latest clean source checkpoint is
-  `74237f269a34cb9721817c475fe7748897679849`, tree
-  `0abcaad1fef6fdf168aeb2254790c49013a909f9`, on the sole-writer branch
+  `63484e752c717ade523d73b047264f3f4c422451`, tree
+  `180b5317db677cc6988d1ad2c467190e6a219669`, on the sole-writer branch
   `codex/railway-staging-delivery`. Its relevant ancestry is: Option-B operator
   `5379753`, registered clock `453bb9d`, focused checkpoint `68fd497`, staging
   browser gate `8669018`, accepted-release materializer `f9cd28f`, local Docker
   materializer lifecycle `f31e425`, and isolated browser-worker protocol
-  `1457f2d`, bounded browser-worker transport `13bedcc`, and exact process
-  preflight `74237f2`. The tracked staging remote is still 28 commits behind
+  `1457f2d`, bounded browser-worker transport `13bedcc`, exact process
+  preflight `74237f2`, and inert pinned worker launch specification `63484e7`.
+  The tracked staging remote is still 30 commits behind
   this local branch. Nothing in this continuation has been pushed or attached
   to a new PR; publication remains blocked on the applicable independent-review
   gate.
@@ -103,22 +104,31 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   stopped state, PID reuse, and stale pidfd ownership refuse. `/proc/PID/environ`
   proves only the initial inherited environment image, not later libc/Python
   mutations; a future worker must self-attest its live environment before
-  READY. `main()` still rejects the hidden mode silently; no worker is spawned
-  and no passphrase is read or written. Three independent same-model read-only
-  reviews found no remaining scoped P0/P1/P2. The focused module plus exact
-  discovery-floor checks pass 24/24, with module floor 22 and global discovery
-  floor 1,486; compilation and `git diff --check` pass.
+  READY. The supervisor now separately pins the exact 664-byte stdlib-only
+  worker source, copies it into a linkless mode-0400 memfd sealed against
+  writes/growth/shrinkage/further seal changes, and constructs the only
+  permitted held-FD argv/environment/cwd/pass-FD projection. Both entry points
+  remain inert: production adds no subprocess, frame, READY, or credential
+  path, and `main()` still rejects the hidden mode silently. Two independent
+  read-only reviews found no remaining scoped P0/P1/P2. The focused module
+  plus exact discovery-floor checks pass 26/26, with module floor 24 and global
+  discovery floor 1,488; the real held-FD inert probe exits 2 with empty output,
+  and compilation and `git diff --check` pass.
 - Integrated Task-9 acceptance is **not complete**. There is still no executed
   isolated worker, private clean source/dependency snapshot, local TLS/NSS
   composition, real root/Tini gateway run, Backup V2/APPLY, derived
   2-DRAFT/3-line/14-member `$282 + $7 = $289` result, corrected private research
   replay/concurrency/idle/crash/restart proof, or final RSS/cgroup/OOM/cleanup
   evidence. The exact next authorized implementation boundary is the
-  code-owned worker launch/runtime layer: it must bind the private clean source
-  and dependency closure, construct rather than accept the exact argv/FD
-  policy, establish an atomic startup barrier plus cgroup/PID-namespace
-  containment and childlessness, and have the worker self-attest all live state
-  before READY. Only that completed gate may release the 43-byte owner
+  remaining code-owned worker runtime/containment layer. The direct CPython
+  ELF pin is not runtime authority: its exact loader/shared-library/stdlib
+  closure must be privately frozen, the absent high-priority stdlib zip must
+  remain absent, and the exact 23-distribution dependency tree must be
+  extracted from the frozen image rather than ambient `.pythonlibs`. The
+  launcher must then establish an atomic startup barrier plus cgroup/PID/
+  mount-namespace containment and childlessness, and have the worker
+  self-attest all live state before READY. Ordinary spawn-then-cgroup-attach is
+  prohibited. Only that completed gate may release the 43-byte owner
   passphrase through the dedicated pipe. The subsequent real
   replay must recheck memory immediately, use the frozen image/owned volume,
   preserve private inputs read-only, and stop on any failed gate. Qualified,
