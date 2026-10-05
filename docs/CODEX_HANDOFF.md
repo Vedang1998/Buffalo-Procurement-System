@@ -22,15 +22,16 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   direct CURRENT seed, post-APPLY seed, Railway deployment, external database,
   Shopify action, or production authority was added.
 - The exact latest clean source checkpoint is
-  `63484e752c717ade523d73b047264f3f4c422451`, tree
-  `180b5317db677cc6988d1ad2c467190e6a219669`, on the sole-writer branch
+  `8217413c49f4ad42abfaf03b20905080af0aa485`, tree
+  `c9ce66a2dc8aba96c96e14cc1de6154bf47ca304`, on the sole-writer branch
   `codex/railway-staging-delivery`. Its relevant ancestry is: Option-B operator
   `5379753`, registered clock `453bb9d`, focused checkpoint `68fd497`, staging
   browser gate `8669018`, accepted-release materializer `f9cd28f`, local Docker
   materializer lifecycle `f31e425`, and isolated browser-worker protocol
   `1457f2d`, bounded browser-worker transport `13bedcc`, exact process
-  preflight `74237f2`, and inert pinned worker launch specification `63484e7`.
-  The tracked staging remote is still 30 commits behind
+  preflight `74237f2`, inert pinned worker launch specification `63484e7`, and
+  bounded containment text evidence `8217413`. The tracked staging remote is
+  still 32 commits behind
   this local branch. Nothing in this continuation has been pushed or attached
   to a new PR; publication remains blocked on the applicable independent-review
   gate.
@@ -109,10 +110,17 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   writes/growth/shrinkage/further seal changes, and constructs the only
   permitted held-FD argv/environment/cwd/pass-FD projection. Both entry points
   remain inert: production adds no subprocess, frame, READY, or credential
-  path, and `main()` still rejects the hidden mode silently. Two independent
+  path, and `main()` still rejects the hidden mode silently. The next pure
+  evidence layer now parses only bounded canonical unified-cgroup membership,
+  `NSpid`, `cgroup.events`, `cgroup.procs`, and `cgroup.threads` bytes and
+  normalizes the intended outer-PID / inner-PID-1 init plus outer-PID /
+  inner-PID-2 worker snapshot. It has no filesystem, cgroup, process, frame, or
+  credential side effect and explicitly does not prove pidfd/start binding,
+  namespace inodes, descendant absence, self-freeze, launch history, or release
+  authority. Two independent
   read-only reviews found no remaining scoped P0/P1/P2. The focused module
-  plus exact discovery-floor checks pass 26/26, with module floor 24 and global
-  discovery floor 1,488; the real held-FD inert probe exits 2 with empty output,
+  plus exact discovery-floor checks pass 29/29, with module floor 27 and global
+  discovery floor 1,491; the real held-FD inert probe exits 2 with empty output,
   and compilation and `git diff --check` pass.
 - Integrated Task-9 acceptance is **not complete**. There is still no executed
   isolated worker, private clean source/dependency snapshot, local TLS/NSS
