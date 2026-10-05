@@ -81,9 +81,10 @@ fingerprints, and audit columns execute normally.
 
 A new fixed non-human principal identifies only this setup action. Its role is
 `procurement.price.stage`, distinct from `procurement.price.approve`. The
-staging function may accept that role only for candidate staging; confirmation
-and APPLY continue to require their existing owner/session-bound approval
-principal.
+existing browser-facing staging function remains approval-only. A private
+shared staging core may accept the stage-only role only through the fixed
+operator wrapper; confirmation and APPLY continue to require their existing
+owner/session-bound approval principal.
 
 The exact `VALIDATED` result is idempotent. A replay must revalidate the raw
 member and immutable evidence and return the same batch without inserting
@@ -97,6 +98,13 @@ and prior completed artifacts are unchanged. The operator emits only a
 credential-free canonical proof containing the contract, source identity,
 batch ID, `VALIDATED` disposition, raw/declaration/validation/membership hashes,
 and unchanged-state fingerprints.
+
+Membership evidence at this boundary is the proposed membership hash computed
+from normalized rows and retained in immutable validation evidence. The
+operator does not insert confirmation-owned membership rows or populate the
+confirmation-owned durable batch membership field. Raw publication is
+create-once: an existing object must match the exact registered bytes or the
+operation refuses without overwrite.
 
 ## 5. Browser and Backup V2 sequence
 
