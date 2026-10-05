@@ -22,15 +22,17 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   direct CURRENT seed, post-APPLY seed, Railway deployment, external database,
   Shopify action, or production authority was added.
 - The exact latest clean source checkpoint is
-  `1457f2dd66036fa967713a04458703995f8f8629`, tree
-  `4a855ce6d607c74162dc5efaf67fd889f5f1bcea`, on the sole-writer branch
+  `74237f269a34cb9721817c475fe7748897679849`, tree
+  `0abcaad1fef6fdf168aeb2254790c49013a909f9`, on the sole-writer branch
   `codex/railway-staging-delivery`. Its relevant ancestry is: Option-B operator
   `5379753`, registered clock `453bb9d`, focused checkpoint `68fd497`, staging
   browser gate `8669018`, accepted-release materializer `f9cd28f`, local Docker
   materializer lifecycle `f31e425`, and isolated browser-worker protocol
-  `1457f2d`. The tracked staging remote is still 25 commits behind this local
-  branch. Nothing in this continuation has been pushed or attached to a new
-  PR; publication remains blocked on the applicable independent-review gate.
+  `1457f2d`, bounded browser-worker transport `13bedcc`, and exact process
+  preflight `74237f2`. The tracked staging remote is still 28 commits behind
+  this local branch. Nothing in this continuation has been pushed or attached
+  to a new PR; publication remains blocked on the applicable independent-review
+  gate.
 - The stopped-service price operator is fixed-input and fixed-target. It
   verifies the registered 1,590-byte CSV and source/declaration identities,
   performs full staging-target attestation inside the deciding transaction,
@@ -80,7 +82,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   14/14, including public-only real-Docker create/inspect/remove and expected
   empty-release failure/cleanup probes. No private release payload was mounted
   or materialized in these probes.
-- The next launcher layer is deliberately still non-executable. Its pure
+- The next launcher layer is deliberately still non-executable. Its
   browser-worker protocol uses bounded canonical request/READY/RESULT frames,
   exact credential-free operator/browser proof schemas, parent-observed source,
   Python/module/driver/Node/Chromium PID+start-time/preflight attestation before
@@ -88,19 +90,36 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   distinct blocking directional anonymous pipes with CLOEXEC. Named FIFOs,
   descriptor aliases, wrong directions, nonblocking pipes, oversized/noncanonical
   descriptors, nested credential fields, mutable frame races, and forged
-  identities refuse. `main()` still rejects the hidden mode silently; no worker
-  is spawned and no passphrase is read or written. Independent read-only review
-  found no remaining P0/P1/P2. The module and exact discovery-floor checks pass
-  20/20, with module floor 18 and global discovery floor 1,482; compilation and
-  `git diff --check` pass.
+  identities refuse. Its transport now performs deadline-bound fragmented
+  frame I/O, exact EOF handling, one-shot descriptor closure, and 43-byte
+  secret transfer with cleanup on ordinary errors and cancellation. The new
+  point-in-time process preflight pins the direct CPython ELF and pidfd/start
+  identity, then binds the exact initial command line, inherited exec-time
+  environment bytes, UID/GID/groups, seccomp/no-new-privileges state, session,
+  cwd device/inode, executable inode, and complete descriptor inventory. Each
+  descriptor is bound by number, target, device/inode, mount, position, full
+  status flags, and CLOEXEC; live regressions prove same-path cwd/file
+  replacement, offset drift, nonblocking mode, extra environment/FD state,
+  stopped state, PID reuse, and stale pidfd ownership refuse. `/proc/PID/environ`
+  proves only the initial inherited environment image, not later libc/Python
+  mutations; a future worker must self-attest its live environment before
+  READY. `main()` still rejects the hidden mode silently; no worker is spawned
+  and no passphrase is read or written. Three independent same-model read-only
+  reviews found no remaining scoped P0/P1/P2. The focused module plus exact
+  discovery-floor checks pass 24/24, with module floor 22 and global discovery
+  floor 1,486; compilation and `git diff --check` pass.
 - Integrated Task-9 acceptance is **not complete**. There is still no executed
   isolated worker, private clean source/dependency snapshot, local TLS/NSS
   composition, real root/Tini gateway run, Backup V2/APPLY, derived
   2-DRAFT/3-line/14-member `$282 + $7 = $289` result, corrected private research
   replay/concurrency/idle/crash/restart proof, or final RSS/cgroup/OOM/cleanup
-  evidence. The exact next authorized implementation boundary is the isolated
-  launcher that performs all source/runtime/process preflight before releasing
-  the 43-byte owner passphrase through the dedicated pipe. The subsequent real
+  evidence. The exact next authorized implementation boundary is the
+  code-owned worker launch/runtime layer: it must bind the private clean source
+  and dependency closure, construct rather than accept the exact argv/FD
+  policy, establish an atomic startup barrier plus cgroup/PID-namespace
+  containment and childlessness, and have the worker self-attest all live state
+  before READY. Only that completed gate may release the 43-byte owner
+  passphrase through the dedicated pipe. The subsequent real
   replay must recheck memory immediately, use the frozen image/owned volume,
   preserve private inputs read-only, and stop on any failed gate. Qualified,
   attributable independent review remains unavailable, so operational status
