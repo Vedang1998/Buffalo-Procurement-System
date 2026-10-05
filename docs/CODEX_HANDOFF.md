@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-04 (UTC)
+**Updated:** 2026-10-05 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,141 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### Railway staging delivery — TASKS 6–8 SOURCE/IMAGE CHECKPOINT PASS / TASK 9 AUTHORITY DECISION AND QUALIFIED REVIEW BLOCKED
+
+- Work is on the sole-writer branch `codex/railway-staging-delivery`. The exact
+  clean source candidate is
+  `8b04e97b2c1f493b9ec02d9dcdf8db3156a2b9e4`, tree
+  `bc6018c38f1985f9bdfc77163bfa573631ba6f7c`, with parent
+  `dbee3fd24fa6a75c32f3135e1b113ede9c1fff3f`. It was checked out detached and
+  clean for both no-cache builds. This handoff is a documentation-only child
+  of that source candidate; code/image evidence below remains bound to the
+  source commit and tree, not the documentation commit. No Railway mutation,
+  domain creation, external database access, Shopify action, supplier contact,
+  purchase, PO release, or real operational action occurred. The tracked
+  remote remains at `bfcd2bc8f0da5c33b1f63bae59737ad19057a3dc`; this checkpoint
+  has not been pushed and no PR was created.
+- The Task 6 staging-only database transition is complete without rewriting
+  migrations 001–016 or their accepted identities. The source-defined
+  predecessor and successor remain
+  `59ebe68a203511cb54d2d02d7c73ef44cb1ee3887f2c85effbaa08f7276cceda`
+  and
+  `0690b5c784b48b1bb82fc7022bc7695d8eb5195f8da0edd90a5437a2bb1089fc`;
+  runtime attestation remains
+  `517843a848fd07e5fc62b9713279a8bcfc52a782890aee68c7d900dd3600d77a`.
+  Every fresh staging write/recovery connection now obtains full target
+  attestation, and each deciding SERIALIZABLE attempt rechecks the exact
+  effective PostgreSQL safety tuple before recovery reads or DML. The latter
+  is explicitly staging-only; an actual legacy loopback retry regression
+  proves no staging GUC/prepared-transaction query leaks into legacy behavior.
+- Task 7 now has a real one-shot operator transfer contract rather than a dump
+  listing surrogate. A clean, exact-name development-v2 source exports from a
+  held verified PostgreSQL snapshot; a canonical manifest binds source
+  commit/tree, physical source-cluster identity, source catalog
+  `f23bc0543bbb8562957ae10a4da29ac9efc8e35a58ef6b376aeb3610fba923ba`,
+  sequence ownership
+  `2c7bfae88dfabb23b27087a1b1fcd9e386575f9a0d16fb9f115f3bc169527e9e`,
+  exact source state, and the 842-record semantic TOC digest
+  `bce860227495cf55374016878274436ae1412b5ca15a14508315df7c4651472e`.
+  Restore prepares a new dedicated target, authenticates distinct initializer,
+  provisioner, and runtime SCRAM credentials supplied through inherited file
+  descriptors, fences concurrent access, restores the already-staged exact
+  dump inode through a generated use-list, verifies the restored predecessor
+  before invoking restored routines, installs dynamic transfer provenance,
+  transitions to the unchanged successor, and reattests both restricted
+  roles. Partial or ambiguous mutation is discard-only; no reset/repair
+  fallback exists.
+- The transfer/source/runtime envelope is fail closed over database creation
+  properties, role topology, core system view/routine definitions and ACLs,
+  parameter privileges, app/global semantic objects, hidden schemas,
+  sequences, function/class/column physical semantics, dangerous effective
+  GUCs, prepared transactions, and transfer-manifest provenance. Real tests use
+  two distinct PostgreSQL 16 cluster system identifiers and SCRAM HBA rules;
+  missing, wrong, and cross-role passwords fail. A restricted runtime completes
+  the reviewed Backup V2 price APPLY/retry and downstream selected-price
+  DRAFT/packet path while unauthorized target drift fails before mutation.
+- Gateway/worker integration now reattests the exact target on API, health, and
+  every internal write/reconnect boundary; readiness is coarse and
+  source-bound; request logs are fixed-schema, bounded, payload-free, and use
+  the same request ID as the signed worker assertion. Railway's exact
+  `healthcheck.railway.app` host is accepted only for `GET /health`. The root
+  process remains the only public listener and drops the fixed gateway,
+  synthetic, and research identities with exact group, FD, environment,
+  runtime-root, socket, pgpass, signal, and cleanup contracts.
+- Task 8 source artifacts are present and statically exact: pinned Dockerfile
+  frontend/Python/uv digests, literal Debian snapshot and exact `git`/`tini`
+  versions with build-time verification, frozen lock install, repo-shaped
+  `/app`, isolated `python -I` import path, root+tini exec entrypoint, and no
+  `CMD`, `VOLUME`, `EXPOSE`, Node, uv, shell wrapper, migration, restore, seed,
+  or research replay at ordinary startup. `railway.json` explicitly clears
+  start/predeploy/cron/multiregion overrides, requires one replica and `/data`,
+  uses `/health`, 120-second draining, no overlap, and the reviewed
+  5-GiB-minus-page memory limit. The three tracked CSV authority files copied
+  into `/app` are hash-pinned public application dependencies—not private
+  transfer members—so the accepted private closure remains exactly 77 records
+  / 1,031,003,702 bytes.
+- The exact clean source candidate built successfully for `linux/amd64` with
+  `--pull --no-cache`. The inspected image is
+  `sha256:8e48208190fea4fd1487cba535735ac03a8339312774a91cb262162a285ab19c`.
+  Its OCI config is root `0:0`, workdir `/app`, `SIGTERM`, null `Cmd`, no
+  volumes or exposed ports, and the exact exec-form Tini/root-bootstrap
+  entrypoint. Runtime inspection proved the fixed UID/GID/group memberships,
+  nologin accounts, root-owned non-worker-writable application/venv files,
+  `python -I` resolution from `/app/procurement/src`, exact `git 2.39.5` and
+  `tini 0.19.0`, absence of uv/Node/npm/pnpm/curl/psql, and the three exact
+  public-authority CSV hashes. Both missing-authority root startup and non-root
+  startup failed with exit 1 and only `Buffalo staging bootstrap failed`.
+  Across all 16 image layers, the `/app` payload contains no tests, tools,
+  docs, Git metadata, archives/dumps/bundles, or known private-source path
+  markers; history contains no credential/private-source assignment.
+- A second clean `--pull --no-cache` build produced OCI image
+  `sha256:1c7d60885e399f67174fc490fd86577f761a9cf9b8df0e8e88bdb06874375720`.
+  The raw image IDs differ because build/runtime-generated apt/dpkg logs,
+  `ldconfig` cache, hostname, and hosts bytes are volatile. After excluding
+  only those six documented files, both 9,988-object / 7,732-regular-file
+  filesystems have the identical normalized manifest SHA-256
+  `986029114b256fef2cbdee922db1568c0bc9217cfcd3e598e6c61b8e78b90250`;
+  both OCI `Config` objects hash to
+  `0b11bfbde4dc1d244be2d93de8eda7166940168ff623f52e59fd1af155844bf7`.
+  This proves normalized content/config reproducibility, not byte-identical
+  OCI-image reproducibility.
+- Final current-tree validation is green: authoritative discovery and execution
+  **1,430/1,430** in 1,178.910 seconds with zero failures, errors, skips,
+  expected failures, or unexpected successes; startup **10/10**; staging
+  database **23/23**; two-cluster transfer **18/18**; directly affected unit
+  contracts **176/176**; container source contract **12/12**; and the corrected
+  concurrent first-apply race **10/10**. A separate read-only same-model review
+  reproduced that race **6/6**, confirmed the fix is fixture-only, and found no
+  production behavior change. Python compilation, `docker build --check`, JSON
+  parsing, source hashes, runner registration/floors, and `git diff --check`
+  pass. Multiple independent same-model security/implementation reviews found
+  no remaining concrete P0/P1 in the database, transfer, reconnect, core
+  privilege, or container-source scopes. This still does not substitute for
+  the governance-required attributable qualified independent reviewer, so the
+  operational status remains **REVIEW BLOCKED**.
+- Task 9 is not yet authorized or proven. The earlier accepted V2 contract says
+  the authenticated browser must create the price upload, confirmation, and
+  backup-bound APPLY; the later Railway contract excludes bulk upload while
+  still requiring the canonical `$289` browser result, but never authorizes a
+  replacement pre-stage action. Governance forbids silently changing that
+  pricing-lifecycle evidence. Owner choice is required among: (A) an
+  authenticated no-file browser action for the exact registered fixture; (B)
+  the recommended stopped-service operator that accepts no arbitrary path or
+  bytes and may create only the exact hash-pinned `VALIDATED` candidate, after
+  which the browser still confirms, backup-binds/APPLYs, maps, selects,
+  reviews, and builds DRAFTs/packet; or (C) an explicitly accepted split proof
+  frozen at `VALIDATED`. Direct CURRENT seeding or a post-APPLY fixture remains
+  forbidden. Until that decision, the real root container/browser `$289`,
+  corrected research replay/concurrency/idle/crash/restart, RSS/cgroup/OOM,
+  and exhaustive cleanup acceptance cannot honestly be claimed.
+- Exact next authorization boundary: retain `REVIEW BLOCKED` and obtain the
+  owner's A/B/C pricing-evidence decision before adding any Task 9 prestate
+  operator or route. After that explicit decision, the remaining local-only
+  gate is the real root/Tini multi-UID container, TLS/browser `$289` workflow,
+  corrected research replay/concurrency/idle/crash/restart, RSS/cgroup/OOM,
+  persistence, and exhaustive cleanup acceptance. Deployment, domain, Railway
+  data transfer, and operational purchasing remain out of scope.
 
 ### Staging database Backup V2 and exact startup binding — LOCAL CHECKPOINT PASS / INITIAL TRANSFER-RESTORE PENDING
 
