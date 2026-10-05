@@ -122,6 +122,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   privilege, or container-source scopes. This still does not substitute for
   the governance-required attributable qualified independent reviewer, so the
   operational status remains **REVIEW BLOCKED**.
+- A post-freeze completion audit found additional gates that the source/image
+  checkpoint does not satisfy. Task 2 still lacks the accepted operator
+  command that generates the one-time owner passphrase and Argon2id verifier,
+  writes the raw passphrase only to a fresh private 0700 handoff directory in a
+  0600 file, and supports the explicit receipt/removal lifecycle. Task 8 still
+  lacks a successful run of the exact image across root/Tini, gateway, both
+  worker identities, PostgreSQL, UDS/FD/
+  environment boundaries, signal handling, and cleanup; the 12 container tests
+  are static source-contract checks. Task 9 remains missing, and Task 10 still
+  lacks integrated acceptance and attributable qualified review. These are
+  completion blockers, not evidence that the current source/image checkpoint
+  is a deployment-ready service.
+- Fresh public/local checks after the freeze passed: prerequisites found Python
+  3.13.11, PostgreSQL 16.9 tools, Chromium 152, Node 24.13, and uv 0.12.3;
+  container-source/auth/config/gateway/internal-assertion/worker-transport
+  contracts passed **109/109**; synthetic/research lifecycle, process,
+  transfer, readiness, and resource contracts passed **259/259**; `uv lock
+  --check`, shell syntax, `railway.json` parsing, `docker build --check`, clean
+  generated tree, and Git diff checks passed. These remain modeled/static
+  evidence, not a substitute for the live container/research gates.
+- One fresh disposable legacy-loopback Chromium run was attempted once and
+  stopped on a deterministic declared-price temporal/presentation defect
+  before Backup V2, APPLY, or downstream purchasing. The database was correctly
+  and durably `VERIFIED_FUTURE`, retained four future price rows, and the HTML
+  renderer emitted the guarded APPLY form. The accepted declared-price
+  contract binds list/detail temporal status to the registered observation
+  instant, but the generic price-book projection still used host
+  `clock_timestamp()`. On
+  2026-10-05 it therefore exposed only `TEMPORAL_BLOCKED` for the fixed
+  2026-10-01 fixture, while selecting the APPLY form from the durable state and
+  omitting the browser-required `VERIFIED_FUTURE` label. No retry, host-time
+  override, or assertion weakening occurred; no `$289` browser success is
+  claimed. The owned disposable tree, including its synthetic secret files,
+  was removed after diagnosis.
+- At the captured resource-preflight snapshot, a private research replay was
+  not permitted: the root cgroup reported 6,218,330,112 of 8,589,934,592 bytes
+  in use (only 2,371,604,480 bytes of cgroup headroom), with zero OOM/OOM-kill
+  counters. The available headroom was below even the smallest accepted full
+  replay cgroup peak of 3,865,370,624 bytes, before any safety margin. It must
+  be measured again immediately before any authorized replay; this failed
+  snapshot is not permission to retry blindly or weaken the limit.
 - Task 9 is not yet authorized or proven. The earlier accepted V2 contract says
   the authenticated browser must create the price upload, confirmation, and
   backup-bound APPLY; the later Railway contract excludes bulk upload while
