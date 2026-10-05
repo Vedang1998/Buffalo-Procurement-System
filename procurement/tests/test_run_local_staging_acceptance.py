@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -1255,6 +1257,312 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     non_object,
                     maximum_bytes=128,
                 )
+        for invalid_maximum in (True, 1.5, float("inf")):
+            with self.subTest(
+                invalid_maximum=invalid_maximum
+            ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.encode_browser_worker_frame(
+                    value,
+                    maximum_bytes=invalid_maximum,
+                )
+            with self.subTest(
+                invalid_decode_maximum=invalid_maximum
+            ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.decode_browser_worker_frame(
+                    framed,
+                    maximum_bytes=invalid_maximum,
+                )
+
+    def test_browser_worker_frame_pipe_io_is_bounded_one_shot_and_deadlined(self):
+        value = _browser_request()
+        maximum = acceptance._BROWSER_REQUEST_LIMIT
+        framed = acceptance.encode_browser_worker_frame(
+            value,
+            maximum_bytes=maximum,
+        )
+
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+
+        def fragmented_writer() -> None:
+            try:
+                for start, stop in ((0, 1), (1, 4), (4, 19), (19, len(framed))):
+                    os.write(write_descriptor, framed[start:stop])
+                    time.sleep(0.005)
+            finally:
+                os.close(write_descriptor)
+
+        writer = threading.Thread(target=fragmented_writer)
+        writer.start()
+        observed, observed_frame = acceptance.read_browser_worker_frame(
+            read_descriptor,
+            maximum_bytes=maximum,
+            deadline=time.monotonic() + 1.0,
+        )
+        writer.join(timeout=1.0)
+        self.assertFalse(writer.is_alive())
+        self.assertEqual(observed, value)
+        self.assertEqual(observed_frame, framed)
+        with self.assertRaises(OSError):
+            os.fstat(read_descriptor)
+
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        reader_result: list[tuple[dict[str, object], bytes]] = []
+
+        def bounded_reader() -> None:
+            selected, raw = acceptance.read_browser_worker_frame(
+                read_descriptor,
+                maximum_bytes=maximum,
+                deadline=time.monotonic() + 1.0,
+            )
+            reader_result.append((dict(selected), raw))
+
+        reader = threading.Thread(target=bounded_reader)
+        reader.start()
+        written = acceptance.write_browser_worker_frame(
+            write_descriptor,
+            value,
+            maximum_bytes=maximum,
+            deadline=time.monotonic() + 1.0,
+        )
+        reader.join(timeout=1.0)
+        self.assertFalse(reader.is_alive())
+        self.assertEqual(written, framed)
+        self.assertEqual(reader_result, [(value, framed)])
+
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        reader_result.clear()
+        reader = threading.Thread(target=bounded_reader)
+        reader.start()
+        real_write = os.write
+        write_calls = 0
+
+        def partial_write(descriptor: int, payload: object) -> int:
+            nonlocal write_calls
+            write_calls += 1
+            if write_calls == 1:
+                raise InterruptedError
+            selected = memoryview(payload)
+            return real_write(descriptor, selected[: min(17, len(selected))])
+
+        with patch.object(acceptance.os, "write", side_effect=partial_write):
+            self.assertEqual(
+                acceptance.write_browser_worker_frame(
+                    write_descriptor,
+                    value,
+                    maximum_bytes=maximum,
+                    deadline=time.monotonic() + 1.0,
+                ),
+                framed,
+            )
+        reader.join(timeout=1.0)
+        self.assertFalse(reader.is_alive())
+        self.assertGreater(write_calls, 2)
+        self.assertEqual(reader_result, [(value, framed)])
+
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        with patch.object(acceptance.os, "write", return_value=0):
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.write_browser_worker_frame(
+                    write_descriptor,
+                    value,
+                    maximum_bytes=maximum,
+                    deadline=time.monotonic() + 0.5,
+                )
+        os.close(read_descriptor)
+
+        malformed_cases = (
+            framed[:-1],
+            framed + b"x",
+            b"\x00\x00\x00\x09{\"x\":NaN}",
+        )
+        for raw in malformed_cases:
+            with self.subTest(raw=raw):
+                read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+                os.write(write_descriptor, raw)
+                os.close(write_descriptor)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.read_browser_worker_frame(
+                        read_descriptor,
+                        maximum_bytes=maximum,
+                        deadline=time.monotonic() + 0.5,
+                    )
+                with self.assertRaises(OSError):
+                    os.fstat(read_descriptor)
+
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        os.write(write_descriptor, (maximum + 1).to_bytes(4, "big"))
+        started = time.monotonic()
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.read_browser_worker_frame(
+                read_descriptor,
+                maximum_bytes=maximum,
+                deadline=time.monotonic() + 1.0,
+            )
+        self.assertLess(time.monotonic() - started, 0.5)
+        os.close(write_descriptor)
+
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        os.write(write_descriptor, framed)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.read_browser_worker_frame(
+                read_descriptor,
+                maximum_bytes=maximum,
+                deadline=time.monotonic() + 0.05,
+            )
+        os.close(write_descriptor)
+
+    def test_browser_worker_secret_pipe_is_exact_one_shot_and_scrubbed(self):
+        secret = bytearray(b"S" * 43)
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        acceptance.write_browser_worker_secret(
+            write_descriptor,
+            secret,
+            deadline=time.monotonic() + 1.0,
+        )
+        self.assertEqual(secret, bytearray(43))
+        observed = acceptance.read_browser_worker_secret(
+            read_descriptor,
+            deadline=time.monotonic() + 1.0,
+        )
+        self.assertEqual(observed, bytearray(b"S" * 43))
+        for index in range(len(observed)):
+            observed[index] = 0
+
+        retained: list[bytearray] = []
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        os.write(write_descriptor, b"S" * 10)
+
+        def interrupting_readv(_: int, buffers: list[object]) -> int:
+            target = memoryview(buffers[0])
+            target[:10] = b"S" * 10
+            retained.append(target.obj)
+            raise KeyboardInterrupt
+
+        with patch.object(
+            acceptance.os,
+            "readv",
+            side_effect=interrupting_readv,
+        ), self.assertRaises(KeyboardInterrupt):
+            acceptance.read_browser_worker_secret(
+                read_descriptor,
+                deadline=time.monotonic() + 0.5,
+            )
+        self.assertEqual(retained, [bytearray(43)])
+        with self.assertRaises(OSError):
+            os.fstat(read_descriptor)
+        os.close(write_descriptor)
+
+        for payload in (
+            b"",
+            b"S" * 42,
+            b"S" * 44,
+            b"S" * 42 + b"\n",
+            b"S" * 42 + b"!",
+            b"\xff" * 43,
+        ):
+            with self.subTest(payload_bytes=len(payload)):
+                read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+                if payload:
+                    os.write(write_descriptor, payload)
+                os.close(write_descriptor)
+                with self.assertRaises(
+                    acceptance.LocalStagingAcceptanceError
+                ) as captured:
+                    acceptance.read_browser_worker_secret(
+                        read_descriptor,
+                        deadline=time.monotonic() + 0.5,
+                    )
+                self.assertNotIn("S" * 8, str(captured.exception))
+                with self.assertRaises(OSError):
+                    os.fstat(read_descriptor)
+
+        invalid = bytearray(b"short")
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.write_browser_worker_secret(
+                write_descriptor,
+                invalid,
+                deadline=time.monotonic() + 0.5,
+            )
+        self.assertEqual(invalid, bytearray(len(invalid)))
+        with self.assertRaises(OSError):
+            os.fstat(write_descriptor)
+        os.close(read_descriptor)
+
+        class MutableSecret(bytearray):
+            pass
+
+        subclass_secret = MutableSecret(b"U" * 43)
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.write_browser_worker_secret(
+                write_descriptor,
+                subclass_secret,
+                deadline=time.monotonic() + 0.5,
+            )
+        self.assertEqual(subclass_secret, bytearray(43))
+        with self.assertRaises(OSError):
+            os.fstat(write_descriptor)
+        os.close(read_descriptor)
+
+        for wrong_type in (b"S" * 43, None):
+            with self.subTest(wrong_type=type(wrong_type).__name__):
+                read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance.write_browser_worker_secret(
+                        write_descriptor,
+                        wrong_type,
+                        deadline=time.monotonic() + 0.5,
+                    )
+                with self.assertRaises(OSError):
+                    os.fstat(write_descriptor)
+                os.close(read_descriptor)
+
+        interrupted = bytearray(b"I" * 43)
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        with patch.object(
+            acceptance.os,
+            "write",
+            side_effect=KeyboardInterrupt,
+        ), self.assertRaises(KeyboardInterrupt):
+            acceptance.write_browser_worker_secret(
+                write_descriptor,
+                interrupted,
+                deadline=time.monotonic() + 0.5,
+            )
+        self.assertEqual(interrupted, bytearray(43))
+        with self.assertRaises(OSError):
+            os.fstat(write_descriptor)
+        os.close(read_descriptor)
+
+        with TemporaryDirectory() as temporary:
+            retained = Path(temporary) / "must-remain-empty"
+            regular_descriptor = os.open(
+                retained,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+                0o600,
+            )
+            rejected = bytearray(b"R" * 43)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance.write_browser_worker_secret(
+                    regular_descriptor,
+                    rejected,
+                    deadline=time.monotonic() + 0.5,
+                )
+            self.assertEqual(rejected, bytearray(43))
+            self.assertEqual(retained.read_bytes(), b"")
+
+        stalled_secret = bytearray(b"T" * 43)
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        os.write(write_descriptor, stalled_secret)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance.read_browser_worker_secret(
+                read_descriptor,
+                deadline=time.monotonic() + 0.05,
+            )
+        os.close(write_descriptor)
+        for index in range(len(stalled_secret)):
+            stalled_secret[index] = 0
 
     def test_browser_request_schema_contains_no_credential_and_fails_closed(self):
         from procurement_os.synthetic_staging_price_stage import (

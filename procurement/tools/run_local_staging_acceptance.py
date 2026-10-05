@@ -80,6 +80,7 @@ _BROWSER_REQUEST_LIMIT = 16 * 1024
 _BROWSER_READY_LIMIT = 4 * 1024
 _BROWSER_RESULT_LIMIT = 16 * 1024
 _BROWSER_WORKER_MAX_FD = 1_048_575
+_BROWSER_SECRET_BYTES = 43
 _SHA256_TEXT = re.compile(r"\A[0-9a-f]{64}\Z")
 _GIT_OID_TEXT = re.compile(r"\A[0-9a-f]{40}\Z")
 _CANONICAL_FD = re.compile(r"\A(?:[3-9]|[1-9][0-9]+)\Z")
@@ -88,6 +89,7 @@ _BROWSER_PRODUCT_TEXT = re.compile(
     r"\A(?:Chrome|HeadlessChrome)/[0-9]+(?:\.[0-9]+)+\Z"
 )
 _VERSION_TEXT = re.compile(r"\A[0-9]+(?:\.[0-9]+)+\Z")
+_BROWSER_SECRET_TEXT = re.compile(rb"\A[A-Za-z0-9_-]{43}\Z")
 _OPERATOR_PROOF_CONTRACT = "BUFFALO_STOPPED_SERVICE_PRICE_STAGE_V1"
 _OPERATOR_SOURCE_REF = "procurement/config/synthetic_price_replacement_book.csv"
 _OPERATOR_SOURCE_BYTES = 1_590
@@ -1099,7 +1101,11 @@ def encode_browser_worker_frame(
     *,
     maximum_bytes: int,
 ) -> bytes:
-    if type(value) is not dict or maximum_bytes <= 0:
+    if (
+        type(value) is not dict
+        or type(maximum_bytes) is not int
+        or maximum_bytes <= 0
+    ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser frame differs"
         )
@@ -1116,7 +1122,11 @@ def decode_browser_worker_frame(
     *,
     maximum_bytes: int,
 ) -> Mapping[str, Any]:
-    if maximum_bytes <= 0 or len(raw) < 5:
+    if (
+        type(maximum_bytes) is not int
+        or maximum_bytes <= 0
+        or len(raw) < 5
+    ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser frame differs"
         )
@@ -1143,6 +1153,338 @@ def decode_browser_worker_frame(
             "local acceptance browser frame differs"
         )
     return value
+
+
+def _require_browser_channel_deadline(deadline: float) -> None:
+    if (
+        isinstance(deadline, bool)
+        or not isinstance(deadline, (int, float))
+        or not math.isfinite(float(deadline))
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser channel differs"
+        )
+
+
+def _browser_pipe_identity(descriptor: int, access: int) -> tuple[int, int]:
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if (
+            type(descriptor) is not int
+            or descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+            or (soft_limit != resource.RLIM_INFINITY and descriptor >= soft_limit)
+        ):
+            raise OSError
+        info = os.fstat(descriptor)
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        descriptor_flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+        descriptor_target = os.readlink(f"/proc/self/fd/{descriptor}")
+        if (
+            not stat.S_ISFIFO(info.st_mode)
+            or flags != access
+            or descriptor_flags & fcntl.FD_CLOEXEC == 0
+            or os.get_inheritable(descriptor)
+            or descriptor_target != f"pipe:[{info.st_ino}]"
+        ):
+            raise OSError
+        return info.st_dev, info.st_ino
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser worker descriptors differ"
+        ) from None
+
+
+def _wait_browser_channel(
+    descriptor: int,
+    event: int,
+    deadline: float,
+) -> None:
+    while True:
+        remaining = float(deadline) - time.monotonic()
+        if remaining <= 0:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            )
+        selector = selectors.DefaultSelector()
+        try:
+            selector.register(descriptor, event)
+            try:
+                ready = selector.select(remaining)
+            except InterruptedError:
+                continue
+        except (OSError, ValueError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            ) from None
+        finally:
+            selector.close()
+        if ready:
+            return
+
+
+def _read_exact_browser_pipe(
+    descriptor: int,
+    count: int,
+    deadline: float,
+) -> bytes:
+    if type(count) is not int or count < 0:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser channel differs"
+        )
+    observed = bytearray()
+    while len(observed) < count:
+        _wait_browser_channel(
+            descriptor,
+            selectors.EVENT_READ,
+            deadline,
+        )
+        try:
+            block = os.read(descriptor, count - len(observed))
+        except (BlockingIOError, InterruptedError):
+            continue
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            ) from None
+        if not block:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            )
+        observed.extend(block)
+    return bytes(observed)
+
+
+def _require_browser_pipe_eof(descriptor: int, deadline: float) -> None:
+    while True:
+        _wait_browser_channel(
+            descriptor,
+            selectors.EVENT_READ,
+            deadline,
+        )
+        try:
+            trailing = os.read(descriptor, 1)
+        except (BlockingIOError, InterruptedError):
+            continue
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            ) from None
+        if trailing:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            )
+        return
+
+
+def read_browser_worker_frame(
+    descriptor: int,
+    *,
+    maximum_bytes: int,
+    deadline: float,
+) -> tuple[Mapping[str, Any], bytes]:
+    try:
+        _require_browser_channel_deadline(deadline)
+        if type(maximum_bytes) is not int or maximum_bytes <= 0:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            )
+        _browser_pipe_identity(descriptor, os.O_RDONLY)
+        os.set_blocking(descriptor, False)
+        header = _read_exact_browser_pipe(descriptor, 4, deadline)
+        declared = int.from_bytes(header, "big")
+        if declared <= 0 or declared > maximum_bytes:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            )
+        body = _read_exact_browser_pipe(descriptor, declared, deadline)
+        _require_browser_pipe_eof(descriptor, deadline)
+        framed = header + body
+        value = decode_browser_worker_frame(
+            framed,
+            maximum_bytes=maximum_bytes,
+        )
+        _validate_browser_worker_wire_snapshot(dict(value))
+        return value, framed
+    except LocalStagingAcceptanceError:
+        raise
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser channel differs"
+        ) from None
+    finally:
+        try:
+            os.close(descriptor)
+        except (OSError, TypeError):
+            pass
+
+
+def _write_exact_browser_pipe(
+    descriptor: int,
+    value: bytes | bytearray | memoryview,
+    deadline: float,
+) -> None:
+    selected = memoryview(value)
+    written = 0
+    while written < len(selected):
+        _wait_browser_channel(
+            descriptor,
+            selectors.EVENT_WRITE,
+            deadline,
+        )
+        try:
+            count = os.write(descriptor, selected[written:])
+        except (BlockingIOError, InterruptedError):
+            continue
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            ) from None
+        if count <= 0:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser channel differs"
+            )
+        written += count
+
+
+def write_browser_worker_frame(
+    descriptor: int,
+    value: Mapping[str, Any],
+    *,
+    maximum_bytes: int,
+    deadline: float,
+) -> bytes:
+    try:
+        _require_browser_channel_deadline(deadline)
+        framed = encode_browser_worker_frame(value, maximum_bytes=maximum_bytes)
+        snapshot = decode_browser_worker_frame(
+            framed,
+            maximum_bytes=maximum_bytes,
+        )
+        _validate_browser_worker_wire_snapshot(dict(snapshot))
+        _browser_pipe_identity(descriptor, os.O_WRONLY)
+        os.set_blocking(descriptor, False)
+        _write_exact_browser_pipe(descriptor, framed, deadline)
+        return framed
+    except LocalStagingAcceptanceError:
+        raise
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser channel differs"
+        ) from None
+    finally:
+        try:
+            os.close(descriptor)
+        except (OSError, TypeError):
+            pass
+
+
+def read_browser_worker_secret(
+    descriptor: int,
+    *,
+    deadline: float,
+) -> bytearray:
+    selected = bytearray(_BROWSER_SECRET_BYTES)
+    trailing = bytearray(1)
+    observed = 0
+    succeeded = False
+    try:
+        _require_browser_channel_deadline(deadline)
+        _browser_pipe_identity(descriptor, os.O_RDONLY)
+        os.set_blocking(descriptor, False)
+        while observed < _BROWSER_SECRET_BYTES:
+            _wait_browser_channel(
+                descriptor,
+                selectors.EVENT_READ,
+                deadline,
+            )
+            try:
+                count = os.readv(descriptor, [memoryview(selected)[observed:]])
+            except (BlockingIOError, InterruptedError):
+                continue
+            if count <= 0:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser credential differs"
+                )
+            observed += count
+        while True:
+            _wait_browser_channel(
+                descriptor,
+                selectors.EVENT_READ,
+                deadline,
+            )
+            try:
+                trailing_count = os.readv(descriptor, [trailing])
+            except (BlockingIOError, InterruptedError):
+                continue
+            if trailing_count != 0:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser credential differs"
+                )
+            break
+        if _BROWSER_SECRET_TEXT.fullmatch(selected) is None:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser credential differs"
+            )
+        succeeded = True
+        return selected
+    except LocalStagingAcceptanceError:
+        raise
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser credential differs"
+        ) from None
+    finally:
+        if not succeeded:
+            for index in range(len(selected)):
+                selected[index] = 0
+        trailing[0] = 0
+        try:
+            os.close(descriptor)
+        except (OSError, TypeError):
+            pass
+
+
+def write_browser_worker_secret(
+    descriptor: int,
+    secret: bytearray,
+    *,
+    deadline: float,
+) -> None:
+    try:
+        _require_browser_channel_deadline(deadline)
+        if (
+            type(secret) is not bytearray
+            or len(secret) != _BROWSER_SECRET_BYTES
+            or _BROWSER_SECRET_TEXT.fullmatch(secret) is None
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser credential differs"
+            )
+        _browser_pipe_identity(descriptor, os.O_WRONLY)
+        os.set_blocking(descriptor, False)
+        _write_exact_browser_pipe(descriptor, secret, deadline)
+    except LocalStagingAcceptanceError:
+        raise
+    except (OSError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser credential differs"
+        ) from None
+    finally:
+        try:
+            if isinstance(secret, bytearray):
+                bytearray.__setitem__(
+                    secret,
+                    slice(None),
+                    b"\0" * bytearray.__len__(secret),
+                )
+        except BaseException:
+            pass
+        finally:
+            try:
+                os.close(descriptor)
+            except (OSError, TypeError):
+                pass
 
 
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str]) -> None:
@@ -1521,6 +1863,20 @@ def _validate_browser_worker_result_snapshot(
         worker_start_ticks=_require_positive_integer(value["worker_start_ticks"]),
         proof_json=proof_json,
     )
+
+
+def _validate_browser_worker_wire_snapshot(value: dict[str, Any]) -> None:
+    frame = value.get("frame")
+    if frame == "REQUEST":
+        _validate_browser_worker_request_snapshot(value)
+    elif frame == "READY":
+        _validate_browser_worker_ready_snapshot(value)
+    elif frame == "RESULT":
+        _validate_browser_worker_result_snapshot(value)
+    else:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser protocol differs"
+        )
 
 
 def validate_browser_worker_result(
@@ -2873,6 +3229,8 @@ __all__ = [
     "new_browser_worker_identifiers",
     "open_trusted_docker",
     "parse_browser_worker_arguments",
+    "read_browser_worker_frame",
+    "read_browser_worker_secret",
     "remove_owned_materializer_container",
     "remove_owned_materializer_volume",
     "run_materializer_phase",
@@ -2883,4 +3241,6 @@ __all__ = [
     "validate_browser_worker_transition",
     "validate_browser_worker_descriptors",
     "validate_materializer_ingress",
+    "write_browser_worker_frame",
+    "write_browser_worker_secret",
 ]
