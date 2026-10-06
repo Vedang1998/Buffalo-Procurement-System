@@ -139,32 +139,89 @@ _BROWSER_RUNTIME_STDLIB_BYTES = 102_170_195
 _BROWSER_RUNTIME_STARTUP_FILE_BYTES_LIMIT = 8 * 1024 * 1024
 _BROWSER_RUNTIME_TREE_DEPTH_LIMIT = 64
 _BROWSER_RUNTIME_PATH_BYTES_LIMIT = 4_096
-_BROWSER_DEPENDENCY_ROLE = "browser-dependency-source"
-_BROWSER_DEPENDENCY_CONTAINER_PREFIX = (
-    "buffalo-staging-browser-dependencies-"
-)
 _BROWSER_DEPENDENCY_IMAGE_PATH = (
     "/opt/buffalo-venv/lib/python3.13/site-packages"
 )
-_BROWSER_DEPENDENCY_ENTRYPOINT = "/usr/bin/false"
-_BROWSER_DEPENDENCY_COMMAND = (
-    "buffalo-browser-dependency-source-must-not-start",
+_BROWSER_DEPENDENCY_IMAGE_EXPORT_TIMEOUT = 180.0
+_BROWSER_DEPENDENCY_IMAGE_EXPORT_LIMIT = 320 * 1024 * 1024
+_BROWSER_DEPENDENCY_IMAGE_EXPORT_MEMBERS = 39
+_BROWSER_DEPENDENCY_OCI_MANIFEST_SHA256 = (
+    "cc82cb64523bae47b90388f9494ee7790faaa639937a1ba3d3edabc32e212cdd"
 )
-_BROWSER_DEPENDENCY_PIDS_LIMIT = 1
-_BROWSER_DEPENDENCY_MEMORY_BYTES = 128 * 1024 * 1024
-_BROWSER_DEPENDENCY_NANO_CPUS = 1_000_000_000
-_BROWSER_DEPENDENCY_COPY_TIMEOUT = 120.0
-_BROWSER_DEPENDENCY_EVENTS_TIMEOUT = 5.0
-_BROWSER_DEPENDENCY_EVENTS_LIMIT = 8 * 1024
-_BROWSER_DEPENDENCY_EVENT_SETTLE_NANOSECONDS = 250_000_000
-_BROWSER_DEPENDENCY_EVENT_MAX_NANOSECONDS = 9_999_999_999_999_999_999
-_BROWSER_DEPENDENCY_EVENT_ACTIONS = (
-    "create",
-    "archive-path",
-    "destroy",
+_BROWSER_DEPENDENCY_OCI_MANIFEST_BYTES = 2_684
+_BROWSER_DEPENDENCY_IMAGE_CONFIG_BYTES = 12_140
+_BROWSER_DEPENDENCY_LAYER_SIZES = (
+    77_885_440,
+    9_570_304,
+    37_720_064,
+    5_120,
+    88_640_000,
+    18_944,
+    32_407_552,
+    6_656,
+    4_045_824,
+    43_008,
+    562_176,
+    442_880,
+    73_216,
+    156_160,
+    37_718_528,
+    1_024,
 )
-_BROWSER_DEPENDENCY_CREATE_RECONCILE_ATTEMPTS = 5
-_BROWSER_DEPENDENCY_CREATE_RECONCILE_INTERVAL = 0.05
+_BROWSER_DEPENDENCY_LAYER_PHYSICAL_MEMBERS = (
+    4_225,
+    544,
+    1_851,
+    8,
+    2_520,
+    14,
+    864,
+    10,
+    99,
+    13,
+    21,
+    4,
+    4,
+    4,
+    996,
+    0,
+)
+_BROWSER_DEPENDENCY_LAYER_SEMANTIC_MEMBERS = (
+    4_225,
+    541,
+    1_851,
+    8,
+    2_520,
+    14,
+    864,
+    10,
+    99,
+    13,
+    21,
+    4,
+    4,
+    4,
+    996,
+    0,
+)
+_BROWSER_DEPENDENCY_LEGACY_BLOBS = (
+    ("c086ef2f0a2f60a300313b55570800fb1555b466df9c1e3ba7e4268ea7b1f720", 401),
+    ("bbeec3a6422b87810663983b1326f1145eaa0d42ad6ad1f637e1a8c70dbf826f", 477),
+    ("66d444cf5bf3f2431e36d6dbb5fee8970df9c18eb65c3fead4deae9c553d4cda", 477),
+    ("03c23b71e27e5ac9b9782aef78630275f7ad4ca136d2f3e05732acbad56c5ec0", 477),
+    ("84e41f5d96a177d52fc77f1c7e0c4fdd85570684b9c0237101b2db0d08f7c894", 477),
+    ("2ea2b5a8a6a8071a5ab7bbf4b99caa2604ec463e61b985f8b655ff5541ca7845", 477),
+    ("9a70daafb7eb3821f87d359d9cd3eff4e012f4a0a284b271def50f99ca3dfd32", 477),
+    ("3dfa2e9fedbfc404310880c9750381b9d02e2c70b2ae6d66f72ea6e46010ba29", 477),
+    ("329dc754b1ec90b0410fb10a939844eb237dcb1db7db558f41a6ac5d75f66282", 477),
+    ("69724b5310e2a959cddff3f802601d6cc10ac1d5e6354d1310a0415719429749", 477),
+    ("24f7527a1a16938b56d3ec297491f474a2bd3552757dcca965f9c17e906653a9", 477),
+    ("cd2b4b44c4bc82cef2ce165f90a118151fd19fe12cb3b86bdda531bcc0d0cfbc", 477),
+    ("fa2f5a2b618f27ecaa8907b1a7e1c70615567bdae40872aeb3a8768969237ab7", 477),
+    ("0680c95f0293b5acefb778862ff0d859907ce0f3902588255057f746589da087", 477),
+    ("0e2f1197578857abb1d50b4ee2191a73ab64a9178f5a7c5653e8bfcd9d9a9d5c", 477),
+    ("628ed475a6fa79189fb357db0305277a3def050086b55ffe91ce07c14e29baa6", 1_254),
+)
 _BROWSER_DEPENDENCY_TREE_DOMAIN = (
     b"BUFFALO_LOCAL_BROWSER_PYTHON_DEPENDENCY_TREE_V1\0"
 )
@@ -678,13 +735,6 @@ class _BrowserPythonRuntimeObservation:
 
 
 @dataclass(frozen=True)
-class _BrowserDependencyInvocation:
-    image_id: str
-    run_id: str
-    container_name: str
-
-
-@dataclass(frozen=True)
 class _BrowserDependencySourceObservation:
     image_id: str
     tree_sha256: str
@@ -700,6 +750,27 @@ class _BrowserDependencySourceObservation:
     record_rows: int
     distributions: tuple[tuple[str, str, str], ...]
     excluded_source_files: tuple[tuple[str, str], ...]
+    execution_authority: bool
+
+
+@dataclass(frozen=True)
+class _BrowserDependencyTreeEntry:
+    path: str
+    kind: str
+    mode: int
+    user_id: int
+    group_id: int
+    layer_sha256: str
+    content: bytes
+
+
+@dataclass(frozen=True)
+class _BrowserDependencyImageSnapshot:
+    image_id: str
+    rootfs_layers: tuple[str, ...]
+    source_entries: tuple[_BrowserDependencyTreeEntry, ...]
+    selected_entries: tuple[_BrowserDependencyTreeEntry, ...]
+    observation: _BrowserDependencySourceObservation
     execution_authority: bool
 
 
@@ -2724,6 +2795,699 @@ def _observe_browser_dependency_archive(
     )
 
 
+def _scan_browser_tar_physical_members(
+    raw: bytes,
+    *,
+    maximum_bytes: int,
+    maximum_members: int,
+) -> int:
+    """Validate one bounded tar envelope before `tarfile` interprets it."""
+
+    if (
+        type(raw) is not bytes
+        or not raw
+        or type(maximum_bytes) is not int
+        or maximum_bytes <= 0
+        or len(raw) > maximum_bytes
+        or len(raw) % tarfile.BLOCKSIZE != 0
+        or type(maximum_members) is not int
+        or maximum_members < 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        )
+    offset = 0
+    members = 0
+    try:
+        while True:
+            if offset + (2 * tarfile.BLOCKSIZE) > len(raw):
+                raise ValueError
+            header = raw[offset : offset + tarfile.BLOCKSIZE]
+            if header == b"\0" * tarfile.BLOCKSIZE:
+                if (
+                    raw[
+                        offset + tarfile.BLOCKSIZE :
+                        offset + (2 * tarfile.BLOCKSIZE)
+                    ]
+                    != b"\0" * tarfile.BLOCKSIZE
+                    or any(raw[offset + (2 * tarfile.BLOCKSIZE) :])
+                ):
+                    raise ValueError
+                return members
+            members += 1
+            if members > maximum_members:
+                raise ValueError
+            member = tarfile.TarInfo.frombuf(
+                header,
+                encoding="utf-8",
+                errors="surrogateescape",
+            )
+            if type(member.size) is not int or member.size < 0:
+                raise ValueError
+            blocks = (
+                member.size + tarfile.BLOCKSIZE - 1
+            ) // tarfile.BLOCKSIZE
+            selected = offset + tarfile.BLOCKSIZE * (1 + blocks)
+            if selected <= offset or selected > len(raw):
+                raise ValueError
+            offset = selected
+    except LocalStagingAcceptanceError:
+        raise
+    except (
+        tarfile.TarError,
+        OSError,
+        EOFError,
+        IndexError,
+        OverflowError,
+        RecursionError,
+        ValueError,
+        TypeError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        ) from None
+
+
+def _canonical_browser_image_layer_path(value: str) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or len(value.encode("utf-8", errors="strict"))
+        > _BROWSER_DEPENDENCY_PATH_BYTES_LIMIT
+        or value.startswith(("/", "./"))
+        or value.endswith("/")
+        or "//" in value
+        or "\\" in value
+        or any(
+            ord(character) < 0x20 or ord(character) == 0x7F
+            for character in value
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+    components = value.split("/")
+    if (
+        len(components) > _BROWSER_DEPENDENCY_PATH_DEPTH_LIMIT
+        or any(
+            component in {"", ".", ".."}
+            or len(component.encode("utf-8", errors="strict")) > 255
+            for component in components
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+    return value
+
+
+def _remove_browser_dependency_tree_path(
+    entries: dict[str, _BrowserDependencyTreeEntry],
+    path: str,
+    *,
+    descendants_only: bool,
+) -> None:
+    prefix = f"{path}/" if path else ""
+    for selected in tuple(entries):
+        if (
+            (not descendants_only and selected == path)
+            or (prefix and selected.startswith(prefix))
+            or (not path and descendants_only)
+        ):
+            del entries[selected]
+
+
+def _apply_browser_dependency_layer(
+    entries: dict[str, _BrowserDependencyTreeEntry],
+    root_entry: _BrowserDependencyTreeEntry | None,
+    raw: bytes,
+    *,
+    layer_sha256: str,
+    expected_bytes: int,
+    expected_physical_members: int,
+    expected_semantic_members: int,
+) -> tuple[dict[str, _BrowserDependencyTreeEntry], _BrowserDependencyTreeEntry | None]:
+    """Apply one authenticated OCI layer only to the dependency subtree."""
+
+    if (
+        type(entries) is not dict
+        or (
+            root_entry is not None
+            and type(root_entry) is not _BrowserDependencyTreeEntry
+        )
+        or type(layer_sha256) is not str
+        or _SHA256_TEXT.fullmatch(layer_sha256) is None
+        or type(expected_bytes) is not int
+        or expected_bytes < 0
+        or len(raw) != expected_bytes
+        or hashlib.sha256(raw).hexdigest() != layer_sha256
+        or type(expected_physical_members) is not int
+        or expected_physical_members < 0
+        or type(expected_semantic_members) is not int
+        or expected_semantic_members < 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+    physical_members = _scan_browser_tar_physical_members(
+        raw,
+        maximum_bytes=expected_bytes,
+        maximum_members=expected_physical_members,
+    )
+    if physical_members != expected_physical_members:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+
+    target = _BROWSER_DEPENDENCY_IMAGE_PATH.lstrip("/")
+    ancestors = tuple(
+        "/".join(target.split("/")[:index])
+        for index in range(1, len(target.split("/")))
+    )
+    prior_entries = dict(entries)
+    prior_root = root_entry
+    additions: list[tuple[str, tarfile.TarInfo, bytes]] = []
+    whiteouts: list[tuple[str, str]] = []
+    seen_paths: set[str] = set()
+    seen_folded: set[str] = set()
+    semantic_members = 0
+    archive_stream = io.BytesIO(raw)
+    try:
+        with tarfile.open(fileobj=archive_stream, mode="r:") as archive:
+            while True:
+                member = archive.next()
+                if member is None:
+                    break
+                semantic_members += 1
+                if semantic_members > expected_semantic_members:
+                    raise ValueError
+                if member.name == ".":
+                    if (
+                        not member.isdir()
+                        or member.linkname
+                        or member.pax_headers
+                        or getattr(member, "sparse", None)
+                    ):
+                        raise ValueError
+                    continue
+                path = _canonical_browser_image_layer_path(member.name)
+                if path in seen_paths:
+                    raise ValueError
+                seen_paths.add(path)
+                basename = path.rsplit("/", 1)[-1]
+                parent = path.rsplit("/", 1)[0] if "/" in path else ""
+                relevant_whiteout = (
+                    basename.startswith(".wh.")
+                    and (
+                        parent == target
+                        or parent.startswith(f"{target}/")
+                        or parent in ancestors
+                        or parent == ""
+                    )
+                )
+                relevant_normal = (
+                    path == target
+                    or path.startswith(f"{target}/")
+                    or path in ancestors
+                )
+                if relevant_whiteout or relevant_normal:
+                    folded = path.casefold()
+                    if folded in seen_folded:
+                        raise ValueError
+                    seen_folded.add(folded)
+                if relevant_whiteout:
+                    if (
+                        not member.isreg()
+                        or member.size != 0
+                        or member.linkname
+                        or member.pax_headers
+                        or getattr(member, "sparse", None)
+                    ):
+                        raise ValueError
+                    marker = basename[len(".wh.") :]
+                    if marker == ".wh..opq":
+                        whiteouts.append((parent, "opaque"))
+                    elif marker and marker not in {".", ".."}:
+                        whiteouts.append(
+                            (
+                                f"{parent}/{marker}" if parent else marker,
+                                "remove",
+                            )
+                        )
+                    else:
+                        raise ValueError
+                    continue
+                if not relevant_normal:
+                    continue
+                if member.pax_headers or getattr(member, "sparse", None):
+                    raise ValueError
+                if path in ancestors:
+                    if not member.isdir() or member.linkname:
+                        raise ValueError
+                    continue
+                if path == target:
+                    if not member.isdir() or member.linkname:
+                        raise ValueError
+                    additions.append(("", member, b""))
+                    continue
+                relative = path[len(target) + 1 :]
+                relative = _canonical_browser_dependency_relative_path(relative)
+                if member.isdir():
+                    if member.linkname:
+                        raise ValueError
+                    additions.append((relative, member, b""))
+                elif member.isreg():
+                    if member.linkname or member.size > _BROWSER_DEPENDENCY_SOURCE_BYTES:
+                        raise ValueError
+                    stream = archive.extractfile(member)
+                    if stream is None:
+                        raise ValueError
+                    content = stream.read(member.size + 1)
+                    if len(content) != member.size:
+                        raise ValueError
+                    additions.append((relative, member, content))
+                else:
+                    raise ValueError
+            if semantic_members != expected_semantic_members:
+                raise ValueError
+    except (
+        tarfile.TarError,
+        OSError,
+        EOFError,
+        IndexError,
+        OverflowError,
+        RecursionError,
+        ValueError,
+        TypeError,
+        LocalStagingAcceptanceError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        ) from None
+
+    for path, operation in whiteouts:
+        if operation == "opaque":
+            if not path or path in ancestors:
+                prior_entries.clear()
+                prior_root = None
+            elif path == target:
+                prior_entries.clear()
+            elif path.startswith(f"{target}/"):
+                relative = path[len(target) + 1 :]
+                _remove_browser_dependency_tree_path(
+                    prior_entries,
+                    relative,
+                    descendants_only=True,
+                )
+            continue
+        if path == target or path in ancestors:
+            prior_entries.clear()
+            prior_root = None
+        elif path.startswith(f"{target}/"):
+            relative = path[len(target) + 1 :]
+            _remove_browser_dependency_tree_path(
+                prior_entries,
+                relative,
+                descendants_only=False,
+            )
+    for relative, member, content in additions:
+        selected = _BrowserDependencyTreeEntry(
+            path=relative,
+            kind="D" if member.isdir() else "F",
+            mode=member.mode,
+            user_id=member.uid,
+            group_id=member.gid,
+            layer_sha256=layer_sha256,
+            content=content,
+        )
+        if not relative:
+            prior_root = selected
+            continue
+        if selected.kind == "F":
+            _remove_browser_dependency_tree_path(
+                prior_entries,
+                relative,
+                descendants_only=False,
+            )
+        elif relative in prior_entries and prior_entries[relative].kind == "F":
+            del prior_entries[relative]
+        prior_entries[relative] = selected
+    return prior_entries, prior_root
+
+
+def _serialize_browser_dependency_tree(
+    entries: Mapping[str, _BrowserDependencyTreeEntry],
+    root_entry: _BrowserDependencyTreeEntry,
+) -> bytes:
+    if (
+        type(entries) is not dict
+        or type(root_entry) is not _BrowserDependencyTreeEntry
+        or root_entry.path != ""
+        or root_entry.kind != "D"
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+    output = io.BytesIO()
+    try:
+        with tarfile.open(
+            fileobj=output,
+            mode="w",
+            format=tarfile.USTAR_FORMAT,
+        ) as archive:
+            root = tarfile.TarInfo(".")
+            root.type = tarfile.DIRTYPE
+            root.mode = root_entry.mode
+            root.uid = root_entry.user_id
+            root.gid = root_entry.group_id
+            root.mtime = 0
+            archive.addfile(root)
+            for path, entry in sorted(entries.items()):
+                if entry.path != path:
+                    raise ValueError
+                item = tarfile.TarInfo(f"./{path}")
+                item.mode = entry.mode
+                item.uid = entry.user_id
+                item.gid = entry.group_id
+                item.mtime = 0
+                if entry.kind == "D":
+                    item.type = tarfile.DIRTYPE
+                    archive.addfile(item)
+                elif entry.kind == "F":
+                    item.type = tarfile.REGTYPE
+                    item.size = len(entry.content)
+                    archive.addfile(item, io.BytesIO(entry.content))
+                else:
+                    raise ValueError
+        selected = output.getvalue()
+    except (OSError, OverflowError, tarfile.TarError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        ) from None
+    if len(selected) > _BROWSER_DEPENDENCY_ARCHIVE_LIMIT:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+    return selected
+
+
+def _parse_browser_dependency_image_export(
+    raw: bytes,
+    *,
+    source_image_id: str = FROZEN_IMAGE_ID,
+    expected_image_id: str = FROZEN_IMAGE_ID,
+    expected_layers: tuple[str, ...] = FROZEN_IMAGE_ROOTFS_LAYERS,
+    expected_layer_sizes: tuple[int, ...] = _BROWSER_DEPENDENCY_LAYER_SIZES,
+    expected_physical_members: tuple[int, ...] = (
+        _BROWSER_DEPENDENCY_LAYER_PHYSICAL_MEMBERS
+    ),
+    expected_semantic_members: tuple[int, ...] = (
+        _BROWSER_DEPENDENCY_LAYER_SEMANTIC_MEMBERS
+    ),
+    expected_legacy_blobs: tuple[tuple[str, int], ...] = (
+        _BROWSER_DEPENDENCY_LEGACY_BLOBS
+    ),
+    expected_oci_manifest_sha256: str = (
+        _BROWSER_DEPENDENCY_OCI_MANIFEST_SHA256
+    ),
+    expected_config_bytes: int = _BROWSER_DEPENDENCY_IMAGE_CONFIG_BYTES,
+    expected_oci_manifest_bytes: int = (
+        _BROWSER_DEPENDENCY_OCI_MANIFEST_BYTES
+    ),
+    expected_export_members: int = _BROWSER_DEPENDENCY_IMAGE_EXPORT_MEMBERS,
+) -> _BrowserDependencyImageSnapshot:
+    """Validate a pinned `docker image save` stream and rebuild its subtree."""
+
+    if (
+        type(raw) is not bytes
+        or not raw
+        or len(raw) > _BROWSER_DEPENDENCY_IMAGE_EXPORT_LIMIT
+        or type(source_image_id) is not str
+        or source_image_id != expected_image_id
+        or not source_image_id.startswith("sha256:")
+        or _SHA256_TEXT.fullmatch(source_image_id[7:]) is None
+        or type(expected_layers) is not tuple
+        or not expected_layers
+        or type(expected_layer_sizes) is not tuple
+        or type(expected_physical_members) is not tuple
+        or type(expected_semantic_members) is not tuple
+        or not (
+            len(expected_layers)
+            == len(expected_layer_sizes)
+            == len(expected_physical_members)
+            == len(expected_semantic_members)
+        )
+        or any(
+            type(value) is not str
+            or not value.startswith("sha256:")
+            or _SHA256_TEXT.fullmatch(value[7:]) is None
+            for value in expected_layers
+        )
+        or any(type(value) is not int or value <= 0 for value in expected_layer_sizes)
+        or any(type(value) is not int or value < 0 for value in expected_physical_members)
+        or any(type(value) is not int or value < 0 for value in expected_semantic_members)
+        or type(expected_legacy_blobs) is not tuple
+        or type(expected_oci_manifest_sha256) is not str
+        or _SHA256_TEXT.fullmatch(expected_oci_manifest_sha256) is None
+        or type(expected_config_bytes) is not int
+        or expected_config_bytes <= 0
+        or type(expected_oci_manifest_bytes) is not int
+        or expected_oci_manifest_bytes <= 0
+        or type(expected_export_members) is not int
+        or expected_export_members <= 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        )
+    physical = _scan_browser_tar_physical_members(
+        raw,
+        maximum_bytes=_BROWSER_DEPENDENCY_IMAGE_EXPORT_LIMIT,
+        maximum_members=expected_export_members,
+    )
+    if physical != expected_export_members:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        )
+
+    layer_sizes = dict(zip(expected_layers, expected_layer_sizes, strict=True))
+    legacy_sizes: dict[str, int] = {}
+    for value in expected_legacy_blobs:
+        if (
+            type(value) is not tuple
+            or len(value) != 2
+            or type(value[0]) is not str
+            or _SHA256_TEXT.fullmatch(value[0]) is None
+            or type(value[1]) is not int
+            or value[1] <= 0
+            or value[0] in legacy_sizes
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser dependency image differs"
+            )
+        legacy_sizes[value[0]] = value[1]
+    config_digest = source_image_id[7:]
+    expected_blob_sizes = {
+        value[7:]: layer_sizes[value] for value in expected_layers
+    }
+    expected_blob_sizes.update(legacy_sizes)
+    expected_blob_sizes[config_digest] = expected_config_bytes
+    expected_blob_sizes[expected_oci_manifest_sha256] = (
+        expected_oci_manifest_bytes
+    )
+    if len(expected_blob_sizes) != len(expected_layers) + len(legacy_sizes) + 2:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        )
+    expected_names = (
+        "blobs",
+        "blobs/sha256",
+        *(f"blobs/sha256/{value}" for value in sorted(expected_blob_sizes)),
+        "index.json",
+        "manifest.json",
+        "oci-layout",
+    )
+    if len(expected_names) != expected_export_members:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        )
+
+    regular: dict[str, bytes] = {}
+    archive_stream = io.BytesIO(raw)
+    try:
+        with tarfile.open(fileobj=archive_stream, mode="r:") as archive:
+            observed_names: list[str] = []
+            while True:
+                member = archive.next()
+                if member is None:
+                    break
+                observed_names.append(member.name)
+                if (
+                    member.name not in expected_names
+                    or member.uid != 0
+                    or member.gid != 0
+                    or member.linkname
+                    or member.pax_headers
+                    or getattr(member, "sparse", None)
+                ):
+                    raise ValueError
+                if member.name in {"blobs", "blobs/sha256"}:
+                    if not member.isdir() or member.mode != 0o755 or member.size != 0:
+                        raise ValueError
+                    continue
+                if not member.isreg() or member.mode != 0o644:
+                    raise ValueError
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise ValueError
+                content = stream.read(member.size + 1)
+                if len(content) != member.size:
+                    raise ValueError
+                regular[member.name] = content
+            if tuple(observed_names) != expected_names:
+                raise ValueError
+    except (
+        tarfile.TarError,
+        OSError,
+        EOFError,
+        IndexError,
+        OverflowError,
+        RecursionError,
+        ValueError,
+        TypeError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        ) from None
+
+    for digest, expected_size in expected_blob_sizes.items():
+        content = regular[f"blobs/sha256/{digest}"]
+        if len(content) != expected_size or hashlib.sha256(content).hexdigest() != digest:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser dependency image differs"
+            )
+    try:
+        layout = parse_single_json_object(regular["oci-layout"])
+        index = parse_single_json_object(regular["index.json"])
+        docker_manifest = parse_single_json_array(regular["manifest.json"])
+        oci_manifest = parse_single_json_object(
+            regular[f"blobs/sha256/{expected_oci_manifest_sha256}"]
+        )
+        image_config = parse_single_json_object(
+            regular[f"blobs/sha256/{config_digest}"]
+        )
+        layer_descriptors = tuple(
+            {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                "digest": value,
+                "size": layer_sizes[value],
+            }
+            for value in expected_layers
+        )
+        layer_paths = tuple(f"blobs/sha256/{value[7:]}" for value in expected_layers)
+        if (
+            layout != {"imageLayoutVersion": "1.0.0"}
+            or set(index) != {"schemaVersion", "mediaType", "manifests"}
+            or type(index["schemaVersion"]) is not int
+            or index["schemaVersion"] != 2
+            or index["mediaType"] != "application/vnd.oci.image.index.v1+json"
+            or index["manifests"]
+            != [
+                {
+                    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                    "digest": f"sha256:{expected_oci_manifest_sha256}",
+                    "size": expected_oci_manifest_bytes,
+                }
+            ]
+            or len(docker_manifest) != 1
+            or set(docker_manifest[0])
+            != {"Config", "RepoTags", "Layers", "LayerSources"}
+            or docker_manifest[0]["Config"]
+            != f"blobs/sha256/{config_digest}"
+            or docker_manifest[0]["RepoTags"] is not None
+            or tuple(docker_manifest[0]["Layers"]) != layer_paths
+            or set(docker_manifest[0]["LayerSources"]) != set(expected_layers)
+            or any(
+                docker_manifest[0]["LayerSources"][value]
+                != layer_descriptors[index_value]
+                for index_value, value in enumerate(expected_layers)
+            )
+            or set(oci_manifest)
+            != {"schemaVersion", "mediaType", "config", "layers"}
+            or type(oci_manifest["schemaVersion"]) is not int
+            or oci_manifest["schemaVersion"] != 2
+            or oci_manifest["mediaType"]
+            != "application/vnd.oci.image.manifest.v1+json"
+            or oci_manifest["config"]
+            != {
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "digest": source_image_id,
+                "size": expected_config_bytes,
+            }
+            or tuple(oci_manifest["layers"]) != layer_descriptors
+            or set(image_config)
+            != {"architecture", "config", "created", "history", "os", "rootfs"}
+            or image_config["architecture"] != "amd64"
+            or image_config["os"] != "linux"
+            or image_config["rootfs"]
+            != {"type": "layers", "diff_ids": list(expected_layers)}
+        ):
+            raise ValueError
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        IndexError,
+        LocalStagingAcceptanceError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        ) from None
+
+    entries: dict[str, _BrowserDependencyTreeEntry] = {}
+    root_entry: _BrowserDependencyTreeEntry | None = None
+    for index_value, layer in enumerate(expected_layers):
+        layer_digest = layer[7:]
+        entries, root_entry = _apply_browser_dependency_layer(
+            entries,
+            root_entry,
+            regular[f"blobs/sha256/{layer_digest}"],
+            layer_sha256=layer_digest,
+            expected_bytes=expected_layer_sizes[index_value],
+            expected_physical_members=expected_physical_members[index_value],
+            expected_semantic_members=expected_semantic_members[index_value],
+        )
+    if root_entry is None:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency layer differs"
+        )
+    reconstructed = _serialize_browser_dependency_tree(entries, root_entry)
+    observation = _observe_browser_dependency_archive(
+        reconstructed,
+        source_image_id=source_image_id,
+    )
+    source_entries = tuple(entries[path] for path in sorted(entries))
+    excluded = {value[0] for value in _BROWSER_DEPENDENCY_SOURCE_EXTRAS}
+    selected_entries = tuple(
+        entry for entry in source_entries if entry.path not in excluded
+    )
+    if (
+        len(source_entries) != observation.source_entries
+        or len(selected_entries) != observation.entries
+        or any(entry.path in excluded for entry in selected_entries)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency image differs"
+        )
+    return _BrowserDependencyImageSnapshot(
+        image_id=source_image_id,
+        rootfs_layers=expected_layers,
+        source_entries=source_entries,
+        selected_entries=selected_entries,
+        observation=observation,
+        execution_authority=False,
+    )
+
+
 def _browser_dependency_build_source_sha256(
     descriptor: int,
     *,
@@ -2885,6 +3649,7 @@ def _validate_browser_dependency_build_sources(
 def _open_browser_dependency_build_sources(
 ) -> tuple[_BrowserDependencyBuildSource, ...]:
     selected: list[_BrowserDependencyBuildSource] = []
+    descriptor = -1
     try:
         for path, expected_bytes, expected_sha256 in (
             _BROWSER_DEPENDENCY_BUILD_FILES
@@ -2909,10 +3674,16 @@ def _open_browser_dependency_build_sources(
                 sha256=expected_sha256,
             )
             selected.append(source)
+            descriptor = -1
         result = tuple(selected)
         _validate_browser_dependency_build_sources(result)
         return result
     except BaseException:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
         for source in selected:
             try:
                 os.close(source.descriptor)
@@ -4628,185 +5399,25 @@ def materializer_invocation(
     )
 
 
-def _browser_dependency_invocation(run_id: str) -> _BrowserDependencyInvocation:
-    container_name = f"{_BROWSER_DEPENDENCY_CONTAINER_PREFIX}{run_id}"
-    if (
-        type(run_id) is not str
-        or _RUN_ID.fullmatch(run_id) is None
-        or _SAFE_DOCKER_NAME.fullmatch(container_name) is None
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency identity differs"
-        )
-    return _BrowserDependencyInvocation(
-        image_id=FROZEN_IMAGE_ID,
-        run_id=run_id,
-        container_name=container_name,
-    )
-
-
-def _validate_browser_dependency_invocation(
-    invocation: _BrowserDependencyInvocation,
-) -> None:
-    if (
-        type(invocation) is not _BrowserDependencyInvocation
-        or invocation != _browser_dependency_invocation(invocation.run_id)
-        or invocation.image_id != FROZEN_IMAGE_ID
-    ):
+def _validate_browser_dependency_run_id(run_id: str) -> None:
+    if type(run_id) is not str or _RUN_ID.fullmatch(run_id) is None:
         raise LocalStagingAcceptanceError(
             "local acceptance browser dependency identity differs"
         )
 
 
-def _build_browser_dependency_create_argv(
+def _build_browser_dependency_image_save_argv(
     *,
     docker_client: TrustedDockerClient,
-    invocation: _BrowserDependencyInvocation,
 ) -> tuple[str, ...]:
-    """Build one exact never-started dependency-source container."""
+    """Build the sole non-mutating dependency-source Docker command."""
 
     _validate_trusted_docker(docker_client)
-    _validate_browser_dependency_invocation(invocation)
     return (
         f"/proc/self/fd/{docker_client.descriptor}",
-        "create",
-        "--platform",
-        "linux/amd64",
-        "--pull",
-        "never",
-        "--runtime",
-        "runc",
-        "--user",
-        "0:0",
-        "--workdir",
-        "/app",
-        "--read-only",
-        "--network",
-        "none",
-        "--ipc",
-        "none",
-        "--cgroupns",
-        "private",
-        "--pids-limit",
-        str(_BROWSER_DEPENDENCY_PIDS_LIMIT),
-        "--memory",
-        str(_BROWSER_DEPENDENCY_MEMORY_BYTES),
-        "--memory-swap",
-        str(_BROWSER_DEPENDENCY_MEMORY_BYTES),
-        "--cpus",
-        "1",
-        "--security-opt",
-        "no-new-privileges=true",
-        "--cap-drop",
-        "ALL",
-        "--restart",
-        "no",
-        "--no-healthcheck",
-        "--log-driver",
-        "none",
-        "--name",
-        invocation.container_name,
-        "--label",
-        f"buffalo.contract={ACCEPTANCE_CONTRACT}",
-        "--label",
-        f"buffalo.run={invocation.run_id}",
-        "--label",
-        f"buffalo.role={_BROWSER_DEPENDENCY_ROLE}",
-        "--entrypoint",
-        _BROWSER_DEPENDENCY_ENTRYPOINT,
-        invocation.image_id,
-        *_BROWSER_DEPENDENCY_COMMAND,
-    )
-
-
-def _build_browser_dependency_copy_argv(
-    *,
-    docker_client: TrustedDockerClient,
-    invocation: _BrowserDependencyInvocation,
-    container_id: str,
-) -> tuple[str, ...]:
-    _validate_trusted_docker(docker_client)
-    _validate_browser_dependency_invocation(invocation)
-    if type(container_id) is not str or re.fullmatch(
-        r"[0-9a-f]{64}", container_id
-    ) is None:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency container differs"
-        )
-    return (
-        f"/proc/self/fd/{docker_client.descriptor}",
-        "container",
-        "cp",
-        "--archive",
-        "--quiet",
-        f"{container_id}:{_BROWSER_DEPENDENCY_IMAGE_PATH}/.",
-        "-",
-    )
-
-
-def _browser_dependency_wall_time_ns() -> int:
-    """Read one bounded wall-clock instant for daemon event correlation."""
-
-    try:
-        now_nanoseconds = time.time_ns()
-    except (OSError, OverflowError, ValueError):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency event clock differs"
-        ) from None
-    if (
-        type(now_nanoseconds) is not int
-        or now_nanoseconds <= 0
-        or now_nanoseconds > _BROWSER_DEPENDENCY_EVENT_MAX_NANOSECONDS
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency event clock differs"
-        )
-    return now_nanoseconds
-
-
-def _browser_dependency_event_timestamp(nanoseconds: int) -> str:
-    if (
-        type(nanoseconds) is not int
-        or nanoseconds <= 0
-        or nanoseconds > _BROWSER_DEPENDENCY_EVENT_MAX_NANOSECONDS
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency event window differs"
-        )
-    seconds, fractional = divmod(nanoseconds, 1_000_000_000)
-    return f"{seconds}.{fractional:09d}"
-
-
-def _build_browser_dependency_events_argv(
-    *,
-    docker_client: TrustedDockerClient,
-    invocation: _BrowserDependencyInvocation,
-    since_nanoseconds: int,
-    until_nanoseconds: int,
-) -> tuple[str, ...]:
-    """Build the exact post-destroy event-history query for one observer."""
-
-    _validate_trusted_docker(docker_client)
-    _validate_browser_dependency_invocation(invocation)
-    since_value = _browser_dependency_event_timestamp(since_nanoseconds)
-    until_value = _browser_dependency_event_timestamp(until_nanoseconds)
-    if until_nanoseconds <= since_nanoseconds:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency event window differs"
-        )
-    return (
-        f"/proc/self/fd/{docker_client.descriptor}",
-        "events",
-        "--since",
-        since_value,
-        "--until",
-        until_value,
-        "--filter",
-        "type=container",
-        "--filter",
-        f"label=buffalo.run={invocation.run_id}",
-        "--format",
-        "{{json .}}",
+        "image",
+        "save",
+        FROZEN_IMAGE_ID,
     )
 
 
@@ -6363,570 +6974,6 @@ def validate_frozen_image_inspect(
         ) from None
 
 
-def _browser_dependency_labels(
-    invocation: _BrowserDependencyInvocation,
-) -> dict[str, str]:
-    _validate_browser_dependency_invocation(invocation)
-    return {
-        "buffalo.contract": ACCEPTANCE_CONTRACT,
-        "buffalo.run": invocation.run_id,
-        "buffalo.role": _BROWSER_DEPENDENCY_ROLE,
-    }
-
-
-_BROWSER_DEPENDENCY_EVENT_KEYS = (
-    "status",
-    "id",
-    "from",
-    "Type",
-    "Action",
-    "Actor",
-    "scope",
-    "time",
-    "timeNano",
-)
-_BROWSER_DEPENDENCY_EVENT_ATTRIBUTE_KEYS = (
-    "buffalo.contract",
-    "buffalo.role",
-    "buffalo.run",
-    "image",
-    "name",
-)
-
-
-def _validate_browser_dependency_events(
-    raw: bytes,
-    *,
-    invocation: _BrowserDependencyInvocation,
-    container_id: str,
-    operation_windows: tuple[tuple[int, int], ...],
-) -> None:
-    """Require an exact never-started create/copy/destroy event history."""
-
-    _validate_browser_dependency_invocation(invocation)
-    if (
-        type(raw) is not bytes
-        or not raw
-        or len(raw) > _BROWSER_DEPENDENCY_EVENTS_LIMIT
-        or not raw.endswith(b"\n")
-        or b"\r" in raw
-        or b"\0" in raw
-        or type(container_id) is not str
-        or re.fullmatch(r"[0-9a-f]{64}", container_id) is None
-        or type(operation_windows) is not tuple
-        or len(operation_windows) != len(_BROWSER_DEPENDENCY_EVENT_ACTIONS)
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency events differ"
-        )
-    normalized_windows: list[tuple[int, int]] = []
-    for window in operation_windows:
-        if (
-            type(window) is not tuple
-            or len(window) != 2
-            or any(
-                type(selected) is not int
-                or selected <= 0
-                or selected > _BROWSER_DEPENDENCY_EVENT_MAX_NANOSECONDS
-                for selected in window
-            )
-            or window[1] < window[0]
-        ):
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser dependency events differ"
-            )
-        normalized_windows.append(window)
-    if any(
-        left[1] > right[0]
-        for left, right in zip(
-            normalized_windows,
-            normalized_windows[1:],
-        )
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency events differ"
-        )
-    lines = raw[:-1].split(b"\n")
-    if len(lines) != len(_BROWSER_DEPENDENCY_EVENT_ACTIONS) or any(
-        not line for line in lines
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency events differ"
-        )
-    expected_attributes = {
-        "buffalo.contract": ACCEPTANCE_CONTRACT,
-        "buffalo.role": _BROWSER_DEPENDENCY_ROLE,
-        "buffalo.run": invocation.run_id,
-        "image": invocation.image_id,
-        "name": invocation.container_name,
-    }
-    previous_nanoseconds = 0
-    for line, expected_action, operation_window in zip(
-        lines,
-        _BROWSER_DEPENDENCY_EVENT_ACTIONS,
-        normalized_windows,
-        strict=True,
-    ):
-        try:
-            event = parse_single_json_object(line)
-        except (LocalStagingAcceptanceError, RecursionError):
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser dependency events differ"
-            ) from None
-        try:
-            actor = event["Actor"]
-            event_seconds = event["time"]
-            event_nanoseconds = event["timeNano"]
-            if (
-                type(event) is not dict
-                or tuple(event) != _BROWSER_DEPENDENCY_EVENT_KEYS
-                or json.dumps(
-                    event,
-                    allow_nan=False,
-                    ensure_ascii=True,
-                    separators=(",", ":"),
-                ).encode("ascii")
-                != line
-                or event["status"] != expected_action
-                or event["Action"] != expected_action
-                or event["id"] != container_id
-                or event["from"] != invocation.image_id
-                or event["Type"] != "container"
-                or event["scope"] != "local"
-                or type(actor) is not dict
-                or tuple(actor) != ("ID", "Attributes")
-                or actor["ID"] != container_id
-                or type(actor["Attributes"]) is not dict
-                or tuple(actor["Attributes"])
-                != _BROWSER_DEPENDENCY_EVENT_ATTRIBUTE_KEYS
-                or actor["Attributes"] != expected_attributes
-                or type(event_seconds) is not int
-                or type(event_nanoseconds) is not int
-                or event_nanoseconds <= previous_nanoseconds
-                or event_nanoseconds // 1_000_000_000 != event_seconds
-                or not (
-                    operation_window[0]
-                    <= event_nanoseconds
-                    <= operation_window[1]
-                )
-            ):
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser dependency events differ"
-                )
-            previous_nanoseconds = event_nanoseconds
-        except LocalStagingAcceptanceError:
-            raise
-        except (
-            KeyError,
-            TypeError,
-            ValueError,
-            UnicodeEncodeError,
-            RecursionError,
-        ):
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser dependency events differ"
-            ) from None
-
-
-_BROWSER_DEPENDENCY_HOST_KEYS = frozenset(
-    {
-        "AutoRemove",
-        "Binds",
-        "BlkioDeviceReadBps",
-        "BlkioDeviceReadIOps",
-        "BlkioDeviceWriteBps",
-        "BlkioDeviceWriteIOps",
-        "BlkioWeight",
-        "BlkioWeightDevice",
-        "CapAdd",
-        "CapDrop",
-        "Cgroup",
-        "CgroupParent",
-        "CgroupnsMode",
-        "ConsoleSize",
-        "ContainerIDFile",
-        "CpuCount",
-        "CpuPercent",
-        "CpuPeriod",
-        "CpuQuota",
-        "CpuRealtimePeriod",
-        "CpuRealtimeRuntime",
-        "CpuShares",
-        "CpusetCpus",
-        "CpusetMems",
-        "DeviceCgroupRules",
-        "DeviceRequests",
-        "Devices",
-        "Dns",
-        "DnsOptions",
-        "DnsSearch",
-        "ExtraHosts",
-        "GroupAdd",
-        "IOMaximumBandwidth",
-        "IOMaximumIOps",
-        "IpcMode",
-        "Isolation",
-        "Links",
-        "LogConfig",
-        "MaskedPaths",
-        "Memory",
-        "MemoryReservation",
-        "MemorySwap",
-        "MemorySwappiness",
-        "NanoCpus",
-        "NetworkMode",
-        "OomKillDisable",
-        "OomScoreAdj",
-        "PidMode",
-        "PidsLimit",
-        "PortBindings",
-        "Privileged",
-        "PublishAllPorts",
-        "ReadonlyPaths",
-        "ReadonlyRootfs",
-        "RestartPolicy",
-        "Runtime",
-        "SecurityOpt",
-        "ShmSize",
-        "UTSMode",
-        "Ulimits",
-        "UsernsMode",
-        "VolumeDriver",
-        "VolumesFrom",
-    }
-)
-_BROWSER_DEPENDENCY_CONFIG_KEYS = frozenset(
-    {
-        "AttachStderr",
-        "AttachStdin",
-        "AttachStdout",
-        "Cmd",
-        "Domainname",
-        "Entrypoint",
-        "Env",
-        "Healthcheck",
-        "Hostname",
-        "Image",
-        "Labels",
-        "OnBuild",
-        "OpenStdin",
-        "StdinOnce",
-        "StopSignal",
-        "Tty",
-        "User",
-        "Volumes",
-        "WorkingDir",
-    }
-)
-_BROWSER_DEPENDENCY_STATE_KEYS = frozenset(
-    {
-        "Dead",
-        "Error",
-        "ExitCode",
-        "FinishedAt",
-        "OOMKilled",
-        "Paused",
-        "Pid",
-        "Restarting",
-        "Running",
-        "StartedAt",
-        "Status",
-    }
-)
-
-
-def _validate_browser_dependency_container_identity(
-    value: Mapping[str, Any],
-    *,
-    invocation: _BrowserDependencyInvocation,
-) -> str:
-    """Bind the complete immutable envelope, independent of runtime state."""
-
-    labels = _browser_dependency_labels(invocation)
-    try:
-        container_id = value["Id"]
-        host = value["HostConfig"]
-        config = value["Config"]
-        graph = value["GraphDriver"]
-        graph_data = graph["Data"]
-        restart_policy = host["RestartPolicy"]
-        _parse_docker_timestamp(value["Created"], allow_zero=False)
-        if (
-            type(container_id) is not str
-            or re.fullmatch(r"[0-9a-f]{64}", container_id) is None
-            or value["Image"] != invocation.image_id
-            or value["Platform"] != "linux"
-            or value["Path"] != _BROWSER_DEPENDENCY_ENTRYPOINT
-            or tuple(value["Args"]) != _BROWSER_DEPENDENCY_COMMAND
-            or value["Name"] != f"/{invocation.container_name}"
-            or value["Driver"] != "overlay2"
-            or value["MountLabel"] != ""
-            or value["ProcessLabel"] != ""
-            or value["AppArmorProfile"] != ""
-            or value["Mounts"] != []
-            or set(host) != _BROWSER_DEPENDENCY_HOST_KEYS
-            or host["LogConfig"] != {"Type": "none", "Config": {}}
-            or host["NetworkMode"] != "none"
-            or host["PortBindings"] != {}
-            or type(restart_policy) is not dict
-            or set(restart_policy) != {"Name", "MaximumRetryCount"}
-            or restart_policy["Name"] != "no"
-            or type(restart_policy["MaximumRetryCount"]) is not int
-            or restart_policy["MaximumRetryCount"] != 0
-            or host["AutoRemove"] is not False
-            or host["VolumesFrom"] is not None
-            or host["Binds"] is not None
-            or host["Links"] is not None
-            or host["CapAdd"] is not None
-            or host["CapDrop"] != ["ALL"]
-            or host["Cgroup"] != ""
-            or host["CgroupParent"] != ""
-            or host["CgroupnsMode"] != "private"
-            or host["Dns"] != []
-            or host["DnsOptions"] != []
-            or host["DnsSearch"] != []
-            or host["ExtraHosts"] is not None
-            or host["GroupAdd"] is not None
-            or host["IpcMode"] != "none"
-            or host["PidMode"] != ""
-            or host["UTSMode"] != ""
-            or host["UsernsMode"] != ""
-            or host["Privileged"] is not False
-            or host["PublishAllPorts"] is not False
-            or host["ReadonlyRootfs"] is not True
-            or host["SecurityOpt"] != ["no-new-privileges=true"]
-            or host["Runtime"] != "runc"
-            or type(host["Memory"]) is not int
-            or host["Memory"] != _BROWSER_DEPENDENCY_MEMORY_BYTES
-            or type(host["MemoryReservation"]) is not int
-            or host["MemoryReservation"] != 0
-            or type(host["MemorySwap"]) is not int
-            or host["MemorySwap"] != _BROWSER_DEPENDENCY_MEMORY_BYTES
-            or host["MemorySwappiness"] is not None
-            or type(host["NanoCpus"]) is not int
-            or host["NanoCpus"] != _BROWSER_DEPENDENCY_NANO_CPUS
-            or (
-                host["OomKillDisable"] is not False
-                and host["OomKillDisable"] is not None
-            )
-            or type(host["OomScoreAdj"]) is not int
-            or host["OomScoreAdj"] != 0
-            or type(host["PidsLimit"]) is not int
-            or host["PidsLimit"] != _BROWSER_DEPENDENCY_PIDS_LIMIT
-            or host["Devices"] != []
-            or host["DeviceRequests"] is not None
-            or host["DeviceCgroupRules"] is not None
-            or host["Ulimits"] != []
-            or type(host["ShmSize"]) is not int
-            or host["ShmSize"] != 67_108_864
-            or any(type(item) is not int for item in host["ConsoleSize"])
-            or host["ConsoleSize"] != [0, 0]
-            or host["ContainerIDFile"] != ""
-            or host["VolumeDriver"] != ""
-            or host["Isolation"] != ""
-            or any(
-                type(host[key]) is not int or host[key] != 0
-                for key in (
-                    "BlkioWeight",
-                    "CpuCount",
-                    "CpuPercent",
-                    "CpuPeriod",
-                    "CpuQuota",
-                    "CpuRealtimePeriod",
-                    "CpuRealtimeRuntime",
-                    "CpuShares",
-                    "IOMaximumBandwidth",
-                    "IOMaximumIOps",
-                )
-            )
-            or any(
-                host[key] != []
-                for key in (
-                    "BlkioDeviceReadBps",
-                    "BlkioDeviceReadIOps",
-                    "BlkioDeviceWriteBps",
-                    "BlkioDeviceWriteIOps",
-                    "BlkioWeightDevice",
-                )
-            )
-            or host["CpusetCpus"] != ""
-            or host["CpusetMems"] != ""
-            or host["MaskedPaths"]
-            != [
-                "/proc/asound",
-                "/proc/acpi",
-                "/proc/kcore",
-                "/proc/keys",
-                "/proc/latency_stats",
-                "/proc/timer_list",
-                "/proc/timer_stats",
-                "/proc/sched_debug",
-                "/proc/scsi",
-                "/sys/firmware",
-                "/sys/devices/virtual/powercap",
-            ]
-            or host["ReadonlyPaths"]
-            != [
-                "/proc/bus",
-                "/proc/fs",
-                "/proc/irq",
-                "/proc/sys",
-                "/proc/sysrq-trigger",
-            ]
-            or set(config) != _BROWSER_DEPENDENCY_CONFIG_KEYS
-            or config["User"] != "0:0"
-            or config["AttachStdin"] is not False
-            or config["AttachStdout"] is not True
-            or config["AttachStderr"] is not True
-            or config["Tty"] is not False
-            or config["OpenStdin"] is not False
-            or config["StdinOnce"] is not False
-            or tuple(config["Env"]) != _IMAGE_ENVIRONMENT
-            or tuple(config["Cmd"]) != _BROWSER_DEPENDENCY_COMMAND
-            or config["Healthcheck"] != {"Test": ["NONE"]}
-            or config["Image"] != invocation.image_id
-            or config["Volumes"] is not None
-            or config["WorkingDir"] != "/app"
-            or config["Entrypoint"] != [_BROWSER_DEPENDENCY_ENTRYPOINT]
-            or config["Labels"] != labels
-            or config["StopSignal"] != "SIGTERM"
-            or config["Hostname"] != container_id[:12]
-            or config["Domainname"] != ""
-            or config["OnBuild"] is not None
-            or set(graph) != {"Data", "Name"}
-            or graph["Name"] != "overlay2"
-            or set(graph_data) != {"LowerDir", "MergedDir", "UpperDir", "WorkDir"}
-            or any(
-                type(graph_data[key]) is not str
-                or not graph_data[key].startswith("/var/lib/docker/overlay2/")
-                or "\0" in graph_data[key]
-                or "\n" in graph_data[key]
-                for key in graph_data
-            )
-            or not graph_data["MergedDir"].endswith("/merged")
-            or not graph_data["UpperDir"].endswith("/diff")
-            or not graph_data["WorkDir"].endswith("/work")
-            or any(
-                not path.endswith("/diff")
-                for path in graph_data["LowerDir"].split(":")
-            )
-        ):
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser dependency container differs"
-            )
-    except LocalStagingAcceptanceError:
-        raise
-    except (KeyError, TypeError, ValueError):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency container differs"
-        ) from None
-    return container_id
-
-
-def _validate_browser_dependency_container_inspect(
-    value: Mapping[str, Any],
-    *,
-    invocation: _BrowserDependencyInvocation,
-) -> str:
-    """Prove the source container was created but never started."""
-
-    container_id = _validate_browser_dependency_container_identity(
-        value,
-        invocation=invocation,
-    )
-    try:
-        state = value["State"]
-        host = value["HostConfig"]
-        if (
-            set(state) != _BROWSER_DEPENDENCY_STATE_KEYS
-            or type(state["Pid"]) is not int
-            or type(state["ExitCode"]) is not int
-            or any(
-                state[key] is not False
-                for key in (
-                    "Running",
-                    "Paused",
-                    "Restarting",
-                    "OOMKilled",
-                    "Dead",
-                )
-            )
-            or state
-            != {
-                "Status": "created",
-                "Running": False,
-                "Paused": False,
-                "Restarting": False,
-                "OOMKilled": False,
-                "Dead": False,
-                "Pid": 0,
-                "ExitCode": 0,
-                "Error": "",
-                "StartedAt": _DOCKER_ZERO_TIME,
-                "FinishedAt": _DOCKER_ZERO_TIME,
-            }
-            or type(value["RestartCount"]) is not int
-            or value["RestartCount"] != 0
-            or value["ResolvConfPath"] != ""
-            or value["HostnamePath"] != ""
-            or value["HostsPath"] != ""
-            or value["LogPath"] != ""
-            or value["ExecIDs"] is not None
-            or host["OomKillDisable"] is not False
-        ):
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser dependency container differs"
-            )
-    except LocalStagingAcceptanceError:
-        raise
-    except (KeyError, TypeError, ValueError):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency container differs"
-        ) from None
-    return container_id
-
-
-def _browser_dependency_container_envelope_sha256(
-    value: Mapping[str, Any],
-) -> str:
-    keys = (
-        "Id",
-        "Created",
-        "Path",
-        "Args",
-        "Image",
-        "Name",
-        "Driver",
-        "Platform",
-        "MountLabel",
-        "ProcessLabel",
-        "AppArmorProfile",
-        "HostConfig",
-        "GraphDriver",
-        "Mounts",
-        "Config",
-    )
-    try:
-        projection = {key: value[key] for key in keys}
-        projection["HostConfig"] = {
-            key: selected
-            for key, selected in value["HostConfig"].items()
-            if key != "OomKillDisable"
-        }
-        encoded = json.dumps(
-            projection,
-            allow_nan=False,
-            ensure_ascii=True,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("ascii")
-    except (KeyError, TypeError, ValueError, UnicodeEncodeError):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency envelope differs"
-        ) from None
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def _expected_materializer_mounts(
     invocation: MaterializerInvocation,
 ) -> list[dict[str, Any]]:
@@ -7378,409 +7425,34 @@ def attest_docker_materializer_runtime(
     validate_frozen_image_inspect(image, image_id=FROZEN_IMAGE_ID)
 
 
-def _require_browser_dependency_container_absent(
-    client: TrustedDockerClient,
-    config_root: Path,
-    *,
-    invocation: _BrowserDependencyInvocation,
-    container_id: str,
-) -> None:
-    inventory = _docker_name_inventory(
-        client,
-        config_root,
-        resource="container",
-    )
-    if any(
-        observed_id == container_id
-        or observed_name == invocation.container_name
-        for observed_id, observed_name in inventory
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency cleanup differs"
-        )
-
-
-def _browser_dependency_owned_for_cleanup(
-    value: Mapping[str, Any],
-    *,
-    invocation: _BrowserDependencyInvocation,
-    container_id: str,
-    envelope_sha256: str,
-) -> bool:
-    try:
-        return (
-            type(container_id) is str
-            and re.fullmatch(r"[0-9a-f]{64}", container_id) is not None
-            and _SHA256_TEXT.fullmatch(envelope_sha256) is not None
-            and _validate_browser_dependency_container_identity(
-                value,
-                invocation=invocation,
-            )
-            == container_id
-            and _browser_dependency_container_envelope_sha256(value)
-            == envelope_sha256
-        )
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-        LocalStagingAcceptanceError,
-    ):
-        return False
-
-
-def _remove_owned_browser_dependency_container(
-    client: TrustedDockerClient,
-    config_root: Path,
-    *,
-    invocation: _BrowserDependencyInvocation,
-    container_id: str = "",
-    envelope_sha256: str = "",
-    reconcile_ambiguous: bool = False,
-) -> bool:
-    """Remove only the exact run-owned observer, including ambiguous create."""
-
-    _validate_browser_dependency_invocation(invocation)
-    if type(reconcile_ambiguous) is not bool:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency cleanup differs"
-        )
-    attempts = (
-        _BROWSER_DEPENDENCY_CREATE_RECONCILE_ATTEMPTS
-        if reconcile_ambiguous and not container_id
-        else 1
-    )
-    matches: tuple[tuple[str, str], ...] = ()
-    for attempt in range(attempts):
-        inventory = _docker_name_inventory(
-            client,
-            config_root,
-            resource="container",
-        )
-        matches = tuple(
-            (observed_id, observed_name)
-            for observed_id, observed_name in inventory
-            if observed_name == invocation.container_name
-        )
-        if matches or attempt + 1 == attempts:
-            break
-        time.sleep(_BROWSER_DEPENDENCY_CREATE_RECONCILE_INTERVAL)
-    if not matches:
-        if container_id:
-            _require_browser_dependency_container_absent(
-                client,
-                config_root,
-                invocation=invocation,
-                container_id=container_id,
-            )
-        return False
-    if len(matches) != 1:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency cleanup differs"
-        )
-    observed_id, _ = matches[0]
-    if container_id and observed_id != container_id:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency cleanup ownership differs"
-        )
-    container_id = observed_id
-    observed = _docker_inspect_one(
-        client,
-        config_root,
-        "container",
-        container_id,
-    )
-    exact_created = False
-    try:
-        exact_created = (
-            _validate_browser_dependency_container_inspect(
-                observed,
-                invocation=invocation,
-            )
-            == container_id
-        )
-    except LocalStagingAcceptanceError:
-        pass
-    if envelope_sha256:
-        owned = _browser_dependency_owned_for_cleanup(
-            observed,
-            invocation=invocation,
-            container_id=container_id,
-            envelope_sha256=envelope_sha256,
-        )
-    else:
-        try:
-            owned = (
-                _validate_browser_dependency_container_identity(
-                    observed,
-                    invocation=invocation,
-                )
-                == container_id
-            )
-            envelope_sha256 = (
-                _browser_dependency_container_envelope_sha256(observed)
-            )
-        except LocalStagingAcceptanceError:
-            owned = False
-    if not owned:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser dependency cleanup ownership differs"
-        )
-
-    removal = run_docker_command(
-        client,
-        config_root,
-        ("container", "rm", "--force", container_id),
-    )
-    if (
-        removal.returncode != 0
-        or removal.stderr != b""
-        or removal.stdout != f"{container_id}\n".encode("ascii")
-    ):
-        retry_inventory = _docker_name_inventory(
-            client,
-            config_root,
-            resource="container",
-        )
-        retry_matches = tuple(
-            (item_id, item_name)
-            for item_id, item_name in retry_inventory
-            if item_id == container_id or item_name == invocation.container_name
-        )
-        if retry_matches:
-            if retry_matches != ((container_id, invocation.container_name),):
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser dependency cleanup differs"
-                )
-            retry_observed = _docker_inspect_one(
-                client,
-                config_root,
-                "container",
-                container_id,
-            )
-            if not _browser_dependency_owned_for_cleanup(
-                retry_observed,
-                invocation=invocation,
-                container_id=container_id,
-                envelope_sha256=envelope_sha256,
-            ):
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser dependency cleanup ownership differs"
-                )
-            try:
-                exact_created = exact_created and (
-                    _validate_browser_dependency_container_inspect(
-                        retry_observed,
-                        invocation=invocation,
-                    )
-                    == container_id
-                )
-            except LocalStagingAcceptanceError:
-                exact_created = False
-            retry = run_docker_command(
-                client,
-                config_root,
-                ("container", "rm", "--force", container_id),
-            )
-            _require_success(
-                retry,
-                stdout=f"{container_id}\n".encode("ascii"),
-            )
-    _require_browser_dependency_container_absent(
-        client,
-        config_root,
-        invocation=invocation,
-        container_id=container_id,
-    )
-    return exact_created
-
-
 def _observe_frozen_browser_dependency_source(
     client: TrustedDockerClient,
     config_root: Path,
     *,
     run_id: str,
-) -> _BrowserDependencySourceObservation:
-    """Observe exact image bytes without starting or retaining a container."""
+) -> _BrowserDependencyImageSnapshot:
+    """Read the exact frozen image without creating any daemon resource."""
 
-    invocation = _browser_dependency_invocation(run_id)
+    _validate_browser_dependency_run_id(run_id)
     build_sources = _open_browser_dependency_build_sources()
     try:
         attest_docker_materializer_runtime(client, config_root)
-        require_docker_name_absent(
-            client,
-            config_root,
-            resource="container",
-            name=invocation.container_name,
+        arguments = _build_browser_dependency_image_save_argv(
+            docker_client=client,
         )
-        container_id = ""
-        envelope_sha256 = ""
-        archive = b""
-        create_attempted = False
-        cleanup_created = False
-        try:
-            create_arguments = _build_browser_dependency_create_argv(
-                docker_client=client,
-                invocation=invocation,
-            )
-            create_attempted = True
-            create_started_nanoseconds = _browser_dependency_wall_time_ns()
-            created = run_docker_argv(
-                client,
-                config_root,
-                create_arguments,
-            )
-            _require_success(created)
-            create_finished_nanoseconds = _browser_dependency_wall_time_ns()
-            container_id = parse_container_create_output(created.stdout)
-            initial = _docker_inspect_one(
-                client,
-                config_root,
-                "container",
-                container_id,
-            )
-            if (
-                _validate_browser_dependency_container_identity(
-                    initial,
-                    invocation=invocation,
-                )
-                != container_id
-            ):
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser dependency creation differs"
-                )
-            envelope_sha256 = _browser_dependency_container_envelope_sha256(
-                initial
-            )
-            if (
-                _validate_browser_dependency_container_inspect(
-                    initial,
-                    invocation=invocation,
-                )
-                != container_id
-            ):
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser dependency creation differs"
-                )
-            before_diff = run_docker_command(
-                client,
-                config_root,
-                ("container", "diff", container_id),
-            )
-            _require_success(before_diff, stdout=b"")
-            copy_started_nanoseconds = _browser_dependency_wall_time_ns()
-            copied = run_docker_argv(
-                client,
-                config_root,
-                _build_browser_dependency_copy_argv(
-                    docker_client=client,
-                    invocation=invocation,
-                    container_id=container_id,
-                ),
-                timeout_seconds=_BROWSER_DEPENDENCY_COPY_TIMEOUT,
-                stdout_limit=_BROWSER_DEPENDENCY_ARCHIVE_LIMIT,
-                stderr_limit=_DOCKER_METADATA_LIMIT,
-            )
-            _require_success(copied)
-            copy_finished_nanoseconds = _browser_dependency_wall_time_ns()
-            archive = copied.stdout
-            final = _docker_inspect_one(
-                client,
-                config_root,
-                "container",
-                container_id,
-            )
-            if (
-                _validate_browser_dependency_container_inspect(
-                    final,
-                    invocation=invocation,
-                )
-                != container_id
-                or _browser_dependency_container_envelope_sha256(final)
-                != envelope_sha256
-            ):
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser dependency container changed"
-                )
-            after_diff = run_docker_command(
-                client,
-                config_root,
-                ("container", "diff", container_id),
-            )
-            _require_success(after_diff, stdout=b"")
-        finally:
-            cleanup_clock_error: LocalStagingAcceptanceError | None = None
-            cleanup_started_nanoseconds = 0
-            cleanup_finished_nanoseconds = 0
-            try:
-                cleanup_started_nanoseconds = (
-                    _browser_dependency_wall_time_ns()
-                )
-            except LocalStagingAcceptanceError as exc:
-                cleanup_clock_error = exc
-            cleanup_created = _remove_owned_browser_dependency_container(
-                client,
-                config_root,
-                invocation=invocation,
-                container_id=container_id,
-                envelope_sha256=envelope_sha256,
-                reconcile_ambiguous=(create_attempted and not container_id),
-            )
-            try:
-                cleanup_finished_nanoseconds = (
-                    _browser_dependency_wall_time_ns()
-                )
-            except LocalStagingAcceptanceError as exc:
-                cleanup_clock_error = exc
-            if cleanup_clock_error is not None:
-                raise cleanup_clock_error
-        if not cleanup_created:
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser dependency state changed"
-            )
-        events = run_docker_argv(
+        exported = run_docker_argv(
             client,
             config_root,
-            _build_browser_dependency_events_argv(
-                docker_client=client,
-                invocation=invocation,
-                since_nanoseconds=create_started_nanoseconds,
-                until_nanoseconds=(
-                    cleanup_finished_nanoseconds
-                    + _BROWSER_DEPENDENCY_EVENT_SETTLE_NANOSECONDS
-                ),
-            ),
-            timeout_seconds=_BROWSER_DEPENDENCY_EVENTS_TIMEOUT,
-            stdout_limit=_BROWSER_DEPENDENCY_EVENTS_LIMIT,
+            arguments,
+            timeout_seconds=_BROWSER_DEPENDENCY_IMAGE_EXPORT_TIMEOUT,
+            stdout_limit=_BROWSER_DEPENDENCY_IMAGE_EXPORT_LIMIT,
             stderr_limit=_DOCKER_METADATA_LIMIT,
         )
-        _require_success(events)
-        _validate_browser_dependency_events(
-            events.stdout,
-            invocation=invocation,
-            container_id=container_id,
-            operation_windows=(
-                (
-                    create_started_nanoseconds,
-                    create_finished_nanoseconds,
-                ),
-                (
-                    copy_started_nanoseconds,
-                    copy_finished_nanoseconds,
-                ),
-                (
-                    cleanup_started_nanoseconds,
-                    cleanup_finished_nanoseconds,
-                ),
-            ),
-        )
+        _require_success(exported)
         _validate_browser_dependency_build_sources(build_sources)
-        observation = _observe_browser_dependency_archive(
-            archive,
-            source_image_id=invocation.image_id,
-        )
+        snapshot = _parse_browser_dependency_image_export(exported.stdout)
         _validate_browser_dependency_build_sources(build_sources)
-        return observation
+        return snapshot
     finally:
         _close_browser_dependency_build_sources(build_sources)
 

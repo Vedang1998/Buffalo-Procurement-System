@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-05 (UTC)
+**Updated:** 2026-10-06 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,77 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-06 authorized continuation — CLEANUP P2 RESOLVED / MATERIALIZATION AND INTEGRATED TASK 9 PENDING
+
+- The owner authorized completion of enforced runtime materialization,
+  containment, sentinel release-boundary testing, and the already-approved
+  local Option-B Task-9 acceptance without another approval stop. The hard
+  boundaries remain unchanged: no Railway mutation or administrator
+  credential, external database, remote private-data transfer, public
+  endpoint, Shopify action, real purchasing, supplier transmission, `main`
+  merge, or PR #24 change. The implementation and handoff baselines resolve to
+  full commits `06a0339a053f278cb35193eca8a1032a6905ee37` (tree
+  `0862a9f8eee1c10dc42cd2ba5392cec2df96cbf3`) and
+  `9669bc4624097571dde0b6b4aa41489c3f8391ec`, respectively, with the latter a
+  descendant of the former. The reported 1,496-test result remains bound to
+  `06a0339`; it is not being re-described as runtime, browser, research, or
+  integrated Task-9 evidence.
+- A secret/private-payload scan of the 37 commits newly publishable from the
+  tracked remote found 185 blobs / 13,817,027 bytes, zero secret findings,
+  zero private-payload candidates, zero binaries, and zero oversized blobs. A
+  non-force publication attempt failed before authentication because this
+  environment has neither the required GitHub SSH trust/authentication nor a
+  logged-in `gh` session. Nothing was published; the local continuation is not
+  a remote candidate and PR #24/main remain untouched.
+- The documented late-visibility cleanup P2 in the frozen dependency observer
+  is structurally eliminated. Dependency input now comes from the exact
+  non-mutating command `docker image save` against frozen image
+  `sha256:64b2f821aaa12b2c4297f4d28e4f112d98698f204716f36ac81500974ebc0a6f`.
+  The observer creates no container, volume, network, name, event lease, temp
+  archive, or daemon resource, so an interrupted command cannot commit a
+  later-visible cleanup target. It authenticates the exact image config,
+  ordered 16-layer identity and every hash-addressed blob, applies bounded OCI
+  whiteout/opaque-directory and replacement semantics, and then reuses the
+  strict METADATA/RECORD/tree closure validation. The immutable result retains
+  exact bytes plus winning-layer provenance for 836 source entries and 833
+  selected entries (23 distributions, 731 RECORD rows, 31,726,568 selected
+  regular bytes), with selected-tree SHA-256
+  `3c20c381aacf01fd0de297286ce26aad1a2a13d538a0dcbc8eca8d30e81e22a3`.
+  Held `uv.lock`, `pyproject.toml`, and `Dockerfile` descriptors bracket export
+  and parsing, including cancellation and drift paths. The observer remains
+  private and returns `execution_authority=False`; materialization and launch
+  authority are intentionally still absent.
+- The exact reviewed source hashes are
+  `74b349f2db18a582b4007963283483392efa2d75102ec712a7ae8b01853f6390`
+  for `run_local_staging_acceptance.py` and
+  `55f7197ce07fc815186b89d6d14a15fe69f343b1235711a9282f380f7a269df2`
+  for its focused tests. The floor files remain
+  `c102049468ad435bc90e2fc035d1c6962fda9fc761cedb57bfa29afd103b0feb`,
+  `a1ccd71d15de9eb99a14a17be932f31a767895bc3871660d4a2b50a98c9ffa25`,
+  and `0f088327b20c97f2ebd8c73f869c3b0e4619e433e7615e978781ec507c930156`.
+  Focused acceptance passed 34/34; discovery is exactly 1,498 with local floor
+  34 and no registration/minimum errors; both exact floor guards passed. Live
+  read-only image observations matched every count/hash, used only Docker
+  version/info/image-inspect/image-save, left canonical container/volume/image/
+  network inventories and the Docker config root unchanged, leaked no file
+  descriptors, and peaked at 691,124 KiB RSS. `py_compile`, AST parsing, and
+  `git diff --check` pass. The full 1,498-test execution is not yet claimed.
+- Attributable read-only reviews were performed against those exact hashes by
+  `p2_image_export_test_review`, `p2_image_export_parser_review`, and
+  `p2_image_export_security_review`. Review found and remediation closed a
+  cancellation window between source `open` and ownership recording and a
+  root-level OCI opaque-whiteout semantic gap. Each reviewer re-anchored after
+  both fixes; all three final verdicts report no remaining P0/P1/P2 in this
+  scope. Their reviews do not cover the next materialization/containment code.
+- Integrated Task 9 remains **NOT RUN**. No credential has been released and
+  no gateway, worker, Chromium confirmation, Backup V2, APPLY, DRAFT/packet,
+  private research replay, restart/restore, or combined-cgroup acceptance has
+  been claimed. The immediate implementation boundary is to turn the retained
+  exact runtime/dependency/source bytes into a private immutable execution
+  projection, atomically create the contained process generation before any
+  capability release, and first prove the release boundary with fabricated
+  sentinels. Operational status remains **INTEGRATED ACCEPTANCE BLOCKED**.
 
 ### 2026-10-05 Option-B / registered-clock continuation checkpoint
 
