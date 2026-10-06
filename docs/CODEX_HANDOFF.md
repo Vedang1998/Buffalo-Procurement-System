@@ -10,7 +10,7 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### 2026-10-06 authorized continuation — CLEANUP P2 RESOLVED / MATERIALIZATION AND INTEGRATED TASK 9 PENDING
+### 2026-10-06 authorized continuation — CLEANUP P2 RESOLVED / SEALED SOURCE MATERIALIZATION PASS / IMMUTABLE PROJECTION AND INTEGRATED TASK 9 PENDING
 
 - The owner authorized completion of enforced runtime materialization,
   containment, sentinel release-boundary testing, and the already-approved
@@ -72,6 +72,49 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   root-level OCI opaque-whiteout semantic gap. Each reviewer re-anchored after
   both fixes; all three final verdicts report no remaining P0/P1/P2 in this
   scope. Their reviews do not cover the next materialization/containment code.
+- The next bounded checkpoint is committed as
+  `b7a3796f53c9be0ee221e09e8565feca3a1d0ec2` (tree
+  `52c57c701e1ca4ebce1dfe97fd4f375b326faecc`). It retains, revalidates, and
+  canonically maps the exact eight direct-CPython startup records, full named
+  stdlib tree, authenticated `/app` source tree, 833 selected third-party
+  entries, and both held browser-audit programs. Authenticated application and
+  dependency roots retain their exact mode, ownership, and winning-layer
+  provenance; every remaining generated parent is explicit and bound to a
+  fixed parent policy. Runtime, dependency, application, audit, root, and
+  per-path image-layer identities are independently recomputed before sealing.
+  The combined source aggregate is exactly 4,242 entries and 150,061,406
+  regular bytes. It is encoded into a uniquely named, linkless, mode-0400,
+  read-only memfd with all four seals; the encoded size is 151,612,957 bytes,
+  manifest SHA-256 is
+  `018b0e202da8c2dfd2868e1bcc4841f1ec3fb4173a1d2c93d0d6c2944707d9ce`,
+  and bundle SHA-256 is
+  `a7ea8a1d3472a897ab24c860f1ef530e1b71bf9f70763a729170c140a96d842d`.
+  Generic sealed inputs cannot acquire the separate exact-frozen token. Every
+  path preserves `execution_authority=False`; no process, frame, credential,
+  capability, or executable projection was added.
+- The reviewed file hashes for that checkpoint are
+  `8e3de0002c1c4049e1813a92b57acf347cd11df8c33fe7e2d266ca154e58305b`
+  for the runner and
+  `d665f08f3452fdc55e73c1041cb2829aef432cbf0d3e1a0aa069012ba2aa8b2a`
+  for focused tests. Focused acceptance passed 41/41; exact floor checks
+  passed 12/12; discovery is exactly 1,505 with local floor 41. The real
+  read-only frozen-image path reproduced every aggregate value above, peaked
+  at 921,040 KiB RSS, and created no Docker resource. Regression evidence
+  covers malformed/deep inputs, component and parent bounds, symlink cycles,
+  provenance drift, arbitrary-versus-frozen authority, cancellation at every
+  descriptor stage, stale/reused descriptor refusal, and cleanup of rejected
+  fd-0 and over-limit allocations. `py_compile`, AST parsing, and
+  `git diff --check` pass.
+- Attributable read-only reviews by `materialization_test_review`,
+  `materialization_security_review`, and `materialization_final_review`
+  re-anchored on those exact hashes and found no remaining P0/P1/P2 in the
+  sealed-source scope. This is not yet an executable runtime projection. The
+  native-extension DSO closure (including observed OpenSSL, zlib, bz2, lzma,
+  UUID, and pthread dependencies), loader/preload/hwcaps behavior, NSS/locale/
+  gconv lookup surfaces, and private read-only filesystem projection remain
+  mandatory next gates. No later code may promote this source aggregate to
+  execution authority without pinning or explicitly masking and reattesting
+  those surfaces.
 - Integrated Task 9 remains **NOT RUN**. No credential has been released and
   no gateway, worker, Chromium confirmation, Backup V2, APPLY, DRAFT/packet,
   private research replay, restart/restore, or combined-cgroup acceptance has
