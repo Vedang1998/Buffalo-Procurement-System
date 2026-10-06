@@ -138,6 +138,47 @@ _BROWSER_RUNTIME_STDLIB_FILES = 3_137
 _BROWSER_RUNTIME_STDLIB_DIRECTORIES = 113
 _BROWSER_RUNTIME_STDLIB_SYMLINKS = 1
 _BROWSER_RUNTIME_STDLIB_BYTES = 102_170_195
+_BROWSER_RUNTIME_NATIVE_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_NATIVE_RUNTIME_TREE_V1\0"
+)
+_BROWSER_RUNTIME_NATIVE_SHA256 = (
+    "f05a1558c91a1a8979a5f9251fc52bc3b0063d1dcfa99661457c54fadf7bab0b"
+)
+_BROWSER_RUNTIME_NATIVE_ENTRIES = 304
+_BROWSER_RUNTIME_NATIVE_REGULAR_FILES = 287
+_BROWSER_RUNTIME_NATIVE_DIRECTORIES = 4
+_BROWSER_RUNTIME_NATIVE_SYMLINKS = 13
+_BROWSER_RUNTIME_NATIVE_BYTES = 21_772_212
+_BROWSER_RUNTIME_GCONV_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_GLIBC_GCONV_TREE_V1\0"
+)
+_BROWSER_RUNTIME_GCONV_SHA256 = (
+    "8f79a850c7b218e482ca3b6d34bd1cc3d12a4bbe0db4039c2c05aa51f83473c8"
+)
+_BROWSER_RUNTIME_GCONV_ROOT = Path(
+    "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+    "lib/gconv"
+)
+_BROWSER_RUNTIME_GCONV_CACHE = _BROWSER_RUNTIME_GCONV_ROOT / "gconv-modules.cache"
+_BROWSER_RUNTIME_GCONV_ENTRIES = 256
+_BROWSER_RUNTIME_GCONV_FILES = 255
+_BROWSER_RUNTIME_GCONV_DIRECTORIES = 1
+_BROWSER_RUNTIME_GCONV_BYTES = 8_441_954
+_BROWSER_RUNTIME_LOCALE_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_GLIBC_LOCALE_TREE_V1\0"
+)
+_BROWSER_RUNTIME_LOCALE_SHA256 = (
+    "784e2ff45a2b677d7eaed6d3fd702b999776128ab1c785adfc440d63f6e60136"
+)
+_BROWSER_RUNTIME_LOCALE_ROOT = Path(
+    "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+    "lib/locale/C.utf8"
+)
+_BROWSER_RUNTIME_LOCALE_ARCHIVE = _BROWSER_RUNTIME_LOCALE_ROOT.parent / "locale-archive"
+_BROWSER_RUNTIME_LOCALE_ENTRIES = 13
+_BROWSER_RUNTIME_LOCALE_FILES = 12
+_BROWSER_RUNTIME_LOCALE_DIRECTORIES = 1
+_BROWSER_RUNTIME_LOCALE_BYTES = 366_145
 _BROWSER_RUNTIME_STARTUP_FILE_BYTES_LIMIT = 8 * 1024 * 1024
 _BROWSER_RUNTIME_TREE_DEPTH_LIMIT = 64
 _BROWSER_RUNTIME_PATH_BYTES_LIMIT = 4_096
@@ -429,14 +470,14 @@ _BROWSER_RUNTIME_BUNDLE_SEALS = _BROWSER_WORKER_RUNNER_SEALS
 _BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT = 5_000
 _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT = 4 * 1024 * 1024
 _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT = 512 * 1024 * 1024
-_BROWSER_RUNTIME_BUNDLE_EXPECTED_ENTRIES = 4_242
-_BROWSER_RUNTIME_BUNDLE_EXPECTED_REGULAR_BYTES = 150_061_406
-_BROWSER_RUNTIME_BUNDLE_EXPECTED_BYTES = 151_612_957
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_ENTRIES = 4_575
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_REGULAR_BYTES = 171_833_618
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_BYTES = 173_499_779
 _BROWSER_RUNTIME_BUNDLE_EXPECTED_MANIFEST_SHA256 = (
-    "018b0e202da8c2dfd2868e1bcc4841f1ec3fb4173a1d2c93d0d6c2944707d9ce"
+    "1a176afff9196463367f3201f6e012ac874937a788abb325d9297ef890cd5edf"
 )
 _BROWSER_RUNTIME_BUNDLE_EXPECTED_SHA256 = (
-    "a7ea8a1d3472a897ab24c860f1ef530e1b71bf9f70763a729170c140a96d842d"
+    "ff46c1cc615659888aeb9c01ad52aef00b45c595d87491646c00454cbb2a858c"
 )
 _BROWSER_RUNTIME_PARENT_POLICY_SHA256 = (
     "3a8831475b2d6b539f5de30f25dd35ea4d2869ca8c750465487ac160fe91ee17"
@@ -790,6 +831,14 @@ class _BrowserPythonRuntimeObservation:
     stdlib_symlinks: int
     stdlib_regular_bytes: int
     stdlib_zip_absent: bool
+    native_sha256: str
+    native_entries: int
+    native_regular_files: int
+    native_directories: int
+    native_symlinks: int
+    native_regular_bytes: int
+    gconv_cache_absent: bool
+    locale_archive_absent: bool
     all_source_mounts_read_only: bool
     execution_authority: bool
 
@@ -1056,6 +1105,339 @@ _BROWSER_RUNTIME_STARTUP_FILES = (
         payload=(
             "528a3ea63aa4c25bf9ba5cd8d14c8bdeab3c5aaea16dc9cee00d50fdd8565a53"
         ),
+    ),
+)
+
+_BROWSER_RUNTIME_NATIVE_FILES = (
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/0c22zivvf0yspdvr2960rvmjgiwwi5wm-bzip2-1.0.8/"
+            "lib/libbz2.so.1"
+        ),
+        kind="L",
+        size=15,
+        mode=0o777,
+        payload="libbz2.so.1.0.8",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/0c22zivvf0yspdvr2960rvmjgiwwi5wm-bzip2-1.0.8/"
+            "lib/libbz2.so.1.0.8"
+        ),
+        kind="F",
+        size=86_664,
+        mode=0o555,
+        payload="bd157c9fb07c6e6ee99a63002e3ccd25fbc0df4f353ae00b9bfe40a5f6c96b16",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/1z031fwbsc8jhmm7i39r6z6m1xn7rbza-libffi-3.5.2/"
+            "lib/libffi.so.8"
+        ),
+        kind="L",
+        size=15,
+        mode=0o777,
+        payload="libffi.so.8.2.0",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/1z031fwbsc8jhmm7i39r6z6m1xn7rbza-libffi-3.5.2/"
+            "lib/libffi.so.8.2.0"
+        ),
+        kind="F",
+        size=71_536,
+        mode=0o555,
+        payload="1a11928dabba924f5a360b8e3763831ff8a0e584e05922efe7a42c951865a1a6",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/b32rwnzms52mwv98hkbadpl1mamzpfvx-xz-5.8.1/"
+            "lib/liblzma.so.5"
+        ),
+        kind="L",
+        size=16,
+        mode=0o777,
+        payload="liblzma.so.5.8.1",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/b32rwnzms52mwv98hkbadpl1mamzpfvx-xz-5.8.1/"
+            "lib/liblzma.so.5.8.1"
+        ),
+        kind="F",
+        size=223_824,
+        mode=0o555,
+        payload="efd53f325a0e0fea9b7a22cf60d73334a9f8d97872a7c5a3fc280936cbe96eb7",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/c2qsgf2832zi4n29gfkqgkjpvmbmxam6-zlib-1.3.1/"
+            "lib/libz.so.1"
+        ),
+        kind="L",
+        size=13,
+        mode=0o777,
+        payload="libz.so.1.3.1",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/c2qsgf2832zi4n29gfkqgkjpvmbmxam6-zlib-1.3.1/"
+            "lib/libz.so.1.3.1"
+        ),
+        kind="F",
+        size=128_576,
+        mode=0o555,
+        payload="9dafd654792106dc7b496ef621b1f64e27ab9925793301355b235884756bb715",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/ddranxbikfg4jkf3n1m0a0h9qqxj1vf0-ncurses-6.5/"
+            "lib/libncursesw.so.6"
+        ),
+        kind="L",
+        size=18,
+        mode=0o777,
+        payload="libncursesw.so.6.5",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/ddranxbikfg4jkf3n1m0a0h9qqxj1vf0-ncurses-6.5/"
+            "lib/libncursesw.so.6.5"
+        ),
+        kind="F",
+        size=542_656,
+        mode=0o555,
+        payload="be8af6c64a4cfcce88a4ac09cd0afc1f601fd41364aea8c109cb7758be5679cf",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/ddranxbikfg4jkf3n1m0a0h9qqxj1vf0-ncurses-6.5/"
+            "lib/libpanelw.so.6"
+        ),
+        kind="L",
+        size=16,
+        mode=0o777,
+        payload="libpanelw.so.6.5",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/ddranxbikfg4jkf3n1m0a0h9qqxj1vf0-ncurses-6.5/"
+            "lib/libpanelw.so.6.5"
+        ),
+        kind="F",
+        size=25_904,
+        mode=0o555,
+        payload="8b8c409d7864909674777ac228eda120891f13f8f991d08765b154c164c11e86",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/f6zwd0xdld51287as0sv79kbaf2pcayh-sqlite-3.51.1/"
+            "lib/libsqlite3.so"
+        ),
+        kind="L",
+        size=20,
+        mode=0o777,
+        payload="libsqlite3.so.3.51.1",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/f6zwd0xdld51287as0sv79kbaf2pcayh-sqlite-3.51.1/"
+            "lib/libsqlite3.so.3.51.1"
+        ),
+        kind="F",
+        size=1_804_080,
+        mode=0o555,
+        payload="52ff381e54f66524dbf7921fa34cdde78efa606ba64095e436f32b21d3e4dc93",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rh4shf5y1assm86qggc8p10ffk4svfg7-gdbm-1.26-lib/"
+            "lib/libgdbm.so.6"
+        ),
+        kind="L",
+        size=16,
+        mode=0o777,
+        payload="libgdbm.so.6.0.0",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rh4shf5y1assm86qggc8p10ffk4svfg7-gdbm-1.26-lib/"
+            "lib/libgdbm.so.6.0.0"
+        ),
+        kind="F",
+        size=90_272,
+        mode=0o555,
+        payload="3e148aee701e46c9b42d901efdfa82e661a33c8baee232d9e5729003220744a5",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rh4shf5y1assm86qggc8p10ffk4svfg7-gdbm-1.26-lib/"
+            "lib/libgdbm_compat.so.4"
+        ),
+        kind="L",
+        size=23,
+        mode=0o777,
+        payload="libgdbm_compat.so.4.0.0",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rh4shf5y1assm86qggc8p10ffk4svfg7-gdbm-1.26-lib/"
+            "lib/libgdbm_compat.so.4.0.0"
+        ),
+        kind="F",
+        size=20_976,
+        mode=0o555,
+        payload="21a1242f8fd81b9d494849837c71b674b4de7460738d61ff05dc09b481ba81d6",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/sr4cnxyzx24ylxygfk7d81hy4791l8gm-expat-2.7.3/"
+            "lib/libexpat.so.1"
+        ),
+        kind="L",
+        size=18,
+        mode=0o777,
+        payload="libexpat.so.1.11.1",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/sr4cnxyzx24ylxygfk7d81hy4791l8gm-expat-2.7.3/"
+            "lib/libexpat.so.1.11.1"
+        ),
+        kind="F",
+        size=208_288,
+        mode=0o555,
+        payload="c8661e70f2bd506cc47ec446feea56151173be2a3bf9eef92f18018e8023d312",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/vksayvpb9qm9h32k0qqg67nclrq8sf79-readline-8.3p1/"
+            "lib/libreadline.so.8"
+        ),
+        kind="L",
+        size=18,
+        mode=0o777,
+        payload="libreadline.so.8.3",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/vksayvpb9qm9h32k0qqg67nclrq8sf79-readline-8.3p1/"
+            "lib/libreadline.so.8.3"
+        ),
+        kind="F",
+        size=441_776,
+        mode=0o555,
+        payload="1ef7621ebcf3c9a6a917cf9641652eac1d76faf7f7de7a55d6d728924d1d1eda",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/vl3j31vls196i0ay8xw37h4prjmdyqgc-mpdecimal-4.0.1/"
+            "lib/libmpdec.so.4"
+        ),
+        kind="L",
+        size=17,
+        mode=0o777,
+        payload="libmpdec.so.4.0.1",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/vl3j31vls196i0ay8xw37h4prjmdyqgc-mpdecimal-4.0.1/"
+            "lib/libmpdec.so.4.0.1"
+        ),
+        kind="F",
+        size=222_600,
+        mode=0o555,
+        payload="31d2b33ce092df21288cfcd9b33776e31d8cf65e02ea4562fd41eee4a9461955",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/xbydf9b2lx6jziwi6z85g0bny5331dim-util-linux-minimal-"
+            "2.41.2-lib/lib/libuuid.so.1"
+        ),
+        kind="L",
+        size=16,
+        mode=0o777,
+        payload="libuuid.so.1.3.0",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/xbydf9b2lx6jziwi6z85g0bny5331dim-util-linux-minimal-"
+            "2.41.2-lib/lib/libuuid.so.1.3.0"
+        ),
+        kind="F",
+        size=40_672,
+        mode=0o555,
+        payload="b88af218b0bf10d58995c20156fbe703bbadddc8b821facc2da3daf4d8f24926",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/libpthread.so.0"
+        ),
+        kind="F",
+        size=16_536,
+        mode=0o555,
+        payload="a4150ff6ddfe86384f38fc78d181fb1c0c77b413a172d4fff10176b4084dec43",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/libresolv.so.2"
+        ),
+        kind="F",
+        size=77_152,
+        mode=0o555,
+        payload="2a52e8de1bd98665a08f66bba19269949003a4b020338836129afd023047dc59",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "lib/librt.so.1"
+        ),
+        kind="F",
+        size=16_352,
+        mode=0o555,
+        payload="573b665c223e81106e9ff7e07335e425b0e6ca5d24e733e0721f60d878576a0c",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rfm5m2l26lqkskcvxn5bm5xqh6c8wqr5-openssl-3.6.0/"
+            "lib/libcrypto.so.3"
+        ),
+        kind="F",
+        size=7_606_376,
+        mode=0o555,
+        payload="9c298d15748740096a2cc79d9fae4edd66c368a9c054c4eeeeb823160b71c0fc",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rfm5m2l26lqkskcvxn5bm5xqh6c8wqr5-openssl-3.6.0/"
+            "lib/libssl.so.3"
+        ),
+        kind="F",
+        size=1_324_464,
+        mode=0o555,
+        payload="27b3b1454ba2d358dc4a74ab3cbbba81b045ede81e215c3dac92e45d89bfff2a",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+            "share/locale/locale.alias"
+        ),
+        kind="F",
+        size=2_998,
+        mode=0o444,
+        payload="e55e2a18d3e320e27dda8672a394e30de0dbf901a051fd369e06a0d66b234752",
+    ),
+    _BrowserRuntimeFileExpectation(
+        path=Path(
+            "/nix/store/rfm5m2l26lqkskcvxn5bm5xqh6c8wqr5-openssl-3.6.0/"
+            "etc/ssl/openssl.cnf"
+        ),
+        kind="F",
+        size=12_411,
+        mode=0o444,
+        payload="a65a2cb9f4ee8ffdc7ef4f0ac600c0bdafb95b7b1ab457188ac610a62f5ad6b3",
     ),
 )
 
@@ -1967,6 +2349,8 @@ def _observe_browser_stdlib_tree(
     expected_user_id: int,
     expected_group_id: int,
     expected_root_mode: int,
+    manifest_domain: bytes = _BROWSER_RUNTIME_STDLIB_DOMAIN,
+    provenance: str | None = None,
     retained_entries: list[_BrowserRuntimeBundleEntry] | None = None,
 ) -> _BrowserStdlibObservation:
     integer_values = (
@@ -1984,9 +2368,16 @@ def _observe_browser_stdlib_tree(
         or not root.is_absolute()
         or not isinstance(absent_zip, Path)
         or not absent_zip.is_absolute()
-        or absent_zip.parent != root.parent
+        or (
+            absent_zip.parent != root.parent
+            and absent_zip.parent != root
+        )
         or type(expected_sha256) is not str
         or _SHA256_TEXT.fullmatch(expected_sha256) is None
+        or type(manifest_domain) is not bytes
+        or not manifest_domain
+        or len(manifest_domain) > 128
+        or (provenance is not None and type(provenance) is not str)
         or any(type(value) is not int or value < 0 for value in integer_values)
         or expected_entries <= 0
         or expected_entries > _BROWSER_RUNTIME_STDLIB_ENTRIES
@@ -2303,7 +2694,7 @@ def _observe_browser_stdlib_tree(
         raise LocalStagingAcceptanceError(
             "local acceptance browser Python runtime source differs"
         )
-    digest = hashlib.sha256(_BROWSER_RUNTIME_STDLIB_DOMAIN)
+    digest = hashlib.sha256(manifest_domain)
     for path, kind, mode, size, payload, _ in sorted(records):
         _update_browser_runtime_manifest(
             digest,
@@ -2319,6 +2710,11 @@ def _observe_browser_stdlib_tree(
             "local acceptance browser Python runtime source differs"
         )
     if retained_entries is not None:
+        selected_provenance = (
+            f"python-stdlib:{observed_sha256}"
+            if provenance is None
+            else provenance
+        )
         retained_entries.append(
             _BrowserRuntimeBundleEntry(
                 path=str(root),
@@ -2326,7 +2722,7 @@ def _observe_browser_stdlib_tree(
                 mode=expected_root_mode,
                 user_id=expected_user_id,
                 group_id=expected_group_id,
-                provenance=f"python-stdlib:{observed_sha256}",
+                provenance=selected_provenance,
                 content=b"",
             )
         )
@@ -2337,7 +2733,7 @@ def _observe_browser_stdlib_tree(
                 mode=mode,
                 user_id=expected_user_id,
                 group_id=expected_group_id,
-                provenance=f"python-stdlib:{observed_sha256}",
+                provenance=selected_provenance,
                 content=content,
             )
             for path, kind, mode, _, _, content in sorted(records)
@@ -2351,6 +2747,183 @@ def _observe_browser_stdlib_tree(
         regular_bytes=regular_bytes,
         all_source_mounts_read_only=all_source_mounts_read_only,
     )
+
+
+def _browser_native_runtime_sha256(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+) -> str:
+    if (
+        type(entries) is not tuple
+        or len(entries) != _BROWSER_RUNTIME_NATIVE_ENTRIES
+        or any(type(entry) is not _BrowserRuntimeBundleEntry for entry in entries)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser native runtime source differs"
+        )
+    explicit_paths = {
+        str(expectation.path) for expectation in _BROWSER_RUNTIME_NATIVE_FILES
+    }
+    allowed_roots = (
+        str(_BROWSER_RUNTIME_GCONV_ROOT),
+        str(_BROWSER_RUNTIME_LOCALE_ROOT),
+    )
+    digest = hashlib.sha256(_BROWSER_RUNTIME_NATIVE_DOMAIN)
+    regular_files = 0
+    directories = 0
+    symlinks = 0
+    regular_bytes = 0
+    paths: set[str] = set()
+    for entry in sorted(entries, key=lambda item: item.path):
+        if (
+            type(entry.path) is not str
+            or not entry.path.startswith("/")
+            or entry.path in paths
+            or (
+                entry.path not in explicit_paths
+                and not any(
+                    entry.path == root or entry.path.startswith(f"{root}/")
+                    for root in allowed_roots
+                )
+            )
+            or entry.provenance
+            != f"native-runtime:{_BROWSER_RUNTIME_NATIVE_SHA256}"
+            or (entry.user_id, entry.group_id)
+            != (_BROWSER_PYTHON_UID, _BROWSER_PYTHON_GID)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser native runtime source differs"
+            )
+        paths.add(entry.path)
+        if entry.kind == "F":
+            regular_files += 1
+            regular_bytes += len(entry.content)
+            payload = hashlib.sha256(entry.content).digest()
+        elif entry.kind == "D":
+            directories += 1
+            if entry.content:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser native runtime source differs"
+                )
+            payload = b""
+        elif entry.kind == "L":
+            symlinks += 1
+            payload = entry.content
+        else:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser native runtime source differs"
+            )
+        _update_browser_runtime_manifest(
+            digest,
+            kind=entry.kind.encode("ascii"),
+            path=entry.path.encode("ascii"),
+            mode=entry.mode,
+            size=len(entry.content),
+            payload=payload,
+        )
+    observed = digest.hexdigest()
+    if (
+        regular_files != _BROWSER_RUNTIME_NATIVE_REGULAR_FILES
+        or directories != _BROWSER_RUNTIME_NATIVE_DIRECTORIES
+        or symlinks != _BROWSER_RUNTIME_NATIVE_SYMLINKS
+        or regular_bytes != _BROWSER_RUNTIME_NATIVE_BYTES
+        or observed != _BROWSER_RUNTIME_NATIVE_SHA256
+        or str(_BROWSER_RUNTIME_GCONV_CACHE) in paths
+        or str(_BROWSER_RUNTIME_LOCALE_ARCHIVE) in paths
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser native runtime source differs"
+        )
+    for expectation in _BROWSER_RUNTIME_NATIVE_FILES:
+        selected = next(
+            (entry for entry in entries if entry.path == str(expectation.path)),
+            None,
+        )
+        if (
+            selected is None
+            or selected.kind != expectation.kind
+            or selected.mode != expectation.mode
+            or (selected.user_id, selected.group_id)
+            != (expectation.user_id, expectation.group_id)
+            or len(selected.content) != expectation.size
+            or (
+                selected.kind == "F"
+                and hashlib.sha256(selected.content).hexdigest()
+                != expectation.payload
+            )
+            or (
+                selected.kind == "L"
+                and selected.content
+                != expectation.payload.encode("ascii", errors="strict")
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser native runtime source differs"
+            )
+    return observed
+
+
+def _observe_browser_native_runtime_source(
+    retained_entries: list[_BrowserRuntimeBundleEntry],
+) -> bool:
+    if type(retained_entries) is not list:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser native runtime source differs"
+        )
+    provenance = f"native-runtime:{_BROWSER_RUNTIME_NATIVE_SHA256}"
+    read_only: list[bool] = []
+    for expectation in _BROWSER_RUNTIME_NATIVE_FILES:
+        kind, path, mode, _, _, content, source_read_only = (
+            _observe_exact_browser_runtime_file(expectation)
+        )
+        retained_entries.append(
+            _BrowserRuntimeBundleEntry(
+                path=os.fsdecode(path),
+                kind=kind.decode("ascii"),
+                mode=mode,
+                user_id=expectation.user_id,
+                group_id=expectation.group_id,
+                provenance=provenance,
+                content=content,
+            )
+        )
+        read_only.append(source_read_only)
+    gconv = _observe_browser_stdlib_tree(
+        _BROWSER_RUNTIME_GCONV_ROOT,
+        _BROWSER_RUNTIME_GCONV_CACHE,
+        expected_sha256=_BROWSER_RUNTIME_GCONV_SHA256,
+        expected_entries=_BROWSER_RUNTIME_GCONV_ENTRIES,
+        expected_regular_files=_BROWSER_RUNTIME_GCONV_FILES,
+        expected_directories=_BROWSER_RUNTIME_GCONV_DIRECTORIES,
+        expected_symlinks=0,
+        expected_regular_bytes=_BROWSER_RUNTIME_GCONV_BYTES,
+        expected_user_id=_BROWSER_PYTHON_UID,
+        expected_group_id=_BROWSER_PYTHON_GID,
+        expected_root_mode=0o555,
+        manifest_domain=_BROWSER_RUNTIME_GCONV_DOMAIN,
+        provenance=provenance,
+        retained_entries=retained_entries,
+    )
+    locale = _observe_browser_stdlib_tree(
+        _BROWSER_RUNTIME_LOCALE_ROOT,
+        _BROWSER_RUNTIME_LOCALE_ARCHIVE,
+        expected_sha256=_BROWSER_RUNTIME_LOCALE_SHA256,
+        expected_entries=_BROWSER_RUNTIME_LOCALE_ENTRIES,
+        expected_regular_files=_BROWSER_RUNTIME_LOCALE_FILES,
+        expected_directories=_BROWSER_RUNTIME_LOCALE_DIRECTORIES,
+        expected_symlinks=0,
+        expected_regular_bytes=_BROWSER_RUNTIME_LOCALE_BYTES,
+        expected_user_id=_BROWSER_PYTHON_UID,
+        expected_group_id=_BROWSER_PYTHON_GID,
+        expected_root_mode=0o555,
+        manifest_domain=_BROWSER_RUNTIME_LOCALE_DOMAIN,
+        provenance=provenance,
+        retained_entries=retained_entries,
+    )
+    native_entries = tuple(
+        entry for entry in retained_entries if entry.provenance == provenance
+    )
+    _browser_native_runtime_sha256(native_entries)
+    return all(read_only) and gconv.all_source_mounts_read_only and locale.all_source_mounts_read_only
 
 
 def _snapshot_browser_python_runtime_source() -> _BrowserPythonRuntimeSnapshot:
@@ -2376,6 +2949,9 @@ def _snapshot_browser_python_runtime_source() -> _BrowserPythonRuntimeSnapshot:
         expected_root_mode=0o555,
         retained_entries=retained_entries,
     )
+    native_read_only = _observe_browser_native_runtime_source(
+        retained_entries
+    )
     observation = _BrowserPythonRuntimeObservation(
         startup_sha256=startup.sha256,
         stdlib_sha256=stdlib.sha256,
@@ -2385,9 +2961,18 @@ def _snapshot_browser_python_runtime_source() -> _BrowserPythonRuntimeSnapshot:
         stdlib_symlinks=stdlib.symlinks,
         stdlib_regular_bytes=stdlib.regular_bytes,
         stdlib_zip_absent=True,
+        native_sha256=_BROWSER_RUNTIME_NATIVE_SHA256,
+        native_entries=_BROWSER_RUNTIME_NATIVE_ENTRIES,
+        native_regular_files=_BROWSER_RUNTIME_NATIVE_REGULAR_FILES,
+        native_directories=_BROWSER_RUNTIME_NATIVE_DIRECTORIES,
+        native_symlinks=_BROWSER_RUNTIME_NATIVE_SYMLINKS,
+        native_regular_bytes=_BROWSER_RUNTIME_NATIVE_BYTES,
+        gconv_cache_absent=True,
+        locale_archive_absent=True,
         all_source_mounts_read_only=(
             startup.all_source_mounts_read_only
             and stdlib.all_source_mounts_read_only
+            and native_read_only
         ),
         execution_authority=False,
     )
@@ -4294,6 +4879,14 @@ def _validate_exact_browser_python_runtime_snapshot(
         stdlib_symlinks=_BROWSER_RUNTIME_STDLIB_SYMLINKS,
         stdlib_regular_bytes=_BROWSER_RUNTIME_STDLIB_BYTES,
         stdlib_zip_absent=True,
+        native_sha256=_BROWSER_RUNTIME_NATIVE_SHA256,
+        native_entries=_BROWSER_RUNTIME_NATIVE_ENTRIES,
+        native_regular_files=_BROWSER_RUNTIME_NATIVE_REGULAR_FILES,
+        native_directories=_BROWSER_RUNTIME_NATIVE_DIRECTORIES,
+        native_symlinks=_BROWSER_RUNTIME_NATIVE_SYMLINKS,
+        native_regular_bytes=_BROWSER_RUNTIME_NATIVE_BYTES,
+        gconv_cache_absent=True,
+        locale_archive_absent=True,
         all_source_mounts_read_only=False,
         execution_authority=False,
     )
@@ -4306,6 +4899,7 @@ def _validate_exact_browser_python_runtime_snapshot(
         != len(_BROWSER_RUNTIME_STARTUP_FILES)
         + _BROWSER_RUNTIME_STDLIB_ENTRIES
         + 1
+        + _BROWSER_RUNTIME_NATIVE_ENTRIES
     ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
@@ -4362,9 +4956,22 @@ def _validate_exact_browser_python_runtime_snapshot(
     stdlib = tuple(
         entry for entry in entries if entry.path.startswith(prefix)
     )
+    native = tuple(
+        entry
+        for entry in entries
+        if entry.provenance
+        == f"native-runtime:{_BROWSER_RUNTIME_NATIVE_SHA256}"
+    )
     if (
         len(stdlib) != _BROWSER_RUNTIME_STDLIB_ENTRIES
-        or set(by_path) != startup_paths | {root_path} | {entry.path for entry in stdlib}
+        or len(native) != _BROWSER_RUNTIME_NATIVE_ENTRIES
+        or set(by_path)
+        != (
+            startup_paths
+            | {root_path}
+            | {entry.path for entry in stdlib}
+            | {entry.path for entry in native}
+        )
         or str(_BROWSER_RUNTIME_STDLIB_ZIP) in by_path
     ):
         raise LocalStagingAcceptanceError(
@@ -4415,6 +5022,7 @@ def _validate_exact_browser_python_runtime_snapshot(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         )
+    _browser_native_runtime_sha256(native)
 
 
 def _validate_browser_dependency_tree_entry_shape(
@@ -4729,7 +5337,7 @@ def _validate_browser_runtime_bundle_entries(
     folded: set[str] = set()
     payload_bytes = 0
     provenance_pattern = re.compile(
-        r"(?:python-startup|python-stdlib|dependency-layer|"
+        r"(?:python-startup|python-stdlib|native-runtime|dependency-layer|"
         r"application-layer|audit-source|bundle-parent):[0-9a-f]{64}"
     )
     for entry in entries:

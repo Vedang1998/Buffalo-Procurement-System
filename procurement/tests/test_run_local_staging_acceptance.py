@@ -1185,6 +1185,16 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 stdlib_symlinks=1,
                 stdlib_regular_bytes=102_170_195,
                 stdlib_zip_absent=True,
+                native_sha256=(
+                    "f05a1558c91a1a8979a5f9251fc52bc3b0063d1dcfa99661457c54fadf7bab0b"
+                ),
+                native_entries=304,
+                native_regular_files=287,
+                native_directories=4,
+                native_symlinks=13,
+                native_regular_bytes=21_772_212,
+                gconv_cache_absent=True,
+                locale_archive_absent=True,
                 all_source_mounts_read_only=False,
                 execution_authority=False,
             ),
@@ -2503,7 +2513,8 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             )
         self.assertFalse(snapshot.execution_authority)
         self.assertEqual(snapshot.observation.stdlib_entries, 3_251)
-        self.assertEqual(len(snapshot.entries), 3_260)
+        self.assertEqual(snapshot.observation.native_entries, 304)
+        self.assertEqual(len(snapshot.entries), 3_564)
         by_path = {entry.path: entry for entry in snapshot.entries}
         python = by_path[str(acceptance._BROWSER_PYTHON_EXECUTABLE)]
         self.assertEqual(
@@ -2519,10 +2530,41 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             b"../_sysconfigdata__linux_x86_64-linux-gnu.py",
         )
         self.assertNotIn(str(acceptance._BROWSER_RUNTIME_STDLIB_ZIP), by_path)
+        self.assertNotIn(str(acceptance._BROWSER_RUNTIME_GCONV_CACHE), by_path)
+        self.assertNotIn(str(acceptance._BROWSER_RUNTIME_LOCALE_ARCHIVE), by_path)
+        self.assertEqual(
+            acceptance._browser_native_runtime_sha256(
+                tuple(
+                    entry
+                    for entry in snapshot.entries
+                    if entry.provenance.startswith("native-runtime:")
+                )
+            ),
+            acceptance._BROWSER_RUNTIME_NATIVE_SHA256,
+        )
+        native_path = str(
+            acceptance._BROWSER_RUNTIME_NATIVE_FILES[0].path
+        )
+        native_entry = by_path[native_path]
+        changed_native = tuple(
+            replace(entry, content=entry.content + b"x")
+            if entry.path == native_path
+            else entry
+            for entry in snapshot.entries
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._validate_exact_browser_python_runtime_snapshot(
+                replace(snapshot, entries=changed_native)
+            )
+        self.assertEqual(by_path[native_path], native_entry)
         self.assertTrue(
             all(
                 entry.provenance.startswith(
-                    ("python-startup:", "python-stdlib:")
+                    (
+                        "python-startup:",
+                        "python-stdlib:",
+                        "native-runtime:",
+                    )
                 )
                 for entry in snapshot.entries
             )
@@ -2551,6 +2593,18 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 stdlib_symlinks=acceptance._BROWSER_RUNTIME_STDLIB_SYMLINKS,
                 stdlib_regular_bytes=acceptance._BROWSER_RUNTIME_STDLIB_BYTES,
                 stdlib_zip_absent=True,
+                native_sha256=acceptance._BROWSER_RUNTIME_NATIVE_SHA256,
+                native_entries=acceptance._BROWSER_RUNTIME_NATIVE_ENTRIES,
+                native_regular_files=(
+                    acceptance._BROWSER_RUNTIME_NATIVE_REGULAR_FILES
+                ),
+                native_directories=(
+                    acceptance._BROWSER_RUNTIME_NATIVE_DIRECTORIES
+                ),
+                native_symlinks=acceptance._BROWSER_RUNTIME_NATIVE_SYMLINKS,
+                native_regular_bytes=acceptance._BROWSER_RUNTIME_NATIVE_BYTES,
+                gconv_cache_absent=True,
+                locale_archive_absent=True,
                 all_source_mounts_read_only=False,
                 execution_authority=False,
             ),
