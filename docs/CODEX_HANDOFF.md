@@ -22,19 +22,20 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   direct CURRENT seed, post-APPLY seed, Railway deployment, external database,
   Shopify action, or production authority was added.
 - The exact latest clean source checkpoint is
-  `b07f70b6e431404c385220ebb147bf8438b7e8e0`, tree
-  `26e956dee20f153611496f932ad401d967a976ef`, on the sole-writer branch
+  `06a0339a053f278cb35193eca8a1032a6905ee37`, tree
+  `0862a9f8eee1c10dc42cd2ba5392cec2df96cbf3`, on the sole-writer branch
   `codex/railway-staging-delivery`. Its relevant ancestry is: Option-B operator
   `5379753`, registered clock `453bb9d`, focused checkpoint `68fd497`, staging
   browser gate `8669018`, accepted-release materializer `f9cd28f`, local Docker
   materializer lifecycle `f31e425`, and isolated browser-worker protocol
   `1457f2d`, bounded browser-worker transport `13bedcc`, exact process
   preflight `74237f2`, inert pinned worker launch specification `63484e7`, and
-  bounded containment text evidence `8217413`, and exact non-authorizing
-  browser-Python runtime-source observation `b07f70b`. This handoff update is
+  bounded containment text evidence `8217413`, exact non-authorizing
+  browser-Python runtime-source observation `b07f70b`, and exact frozen-image
+  dependency-source observation `06a0339`. This handoff update is
   a documentation-only child of that source checkpoint. The tracked staging
-  remote is still 35 commits behind
-  this local branch. Nothing in this continuation has been pushed or attached
+  remote remains behind this local branch. Nothing in this continuation has
+  been pushed or attached
   to a new PR; publication remains blocked on the applicable independent-review
   gate.
 - The stopped-service price operator is fixed-input and fixed-target. It
@@ -133,13 +134,44 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   `execution_authority=False`; the observer is private, has no production
   caller, and cannot spawn, write a frame, or release a credential. Loader
   preload/hwcaps, locale/gconv, negative interpreter lookup candidates, the
-  exact third-party dependency closure, and a private immutable mount
-  projection remain deliberately outside this evidence. Three independent
-  final read-only reviews found no remaining scoped P0/P1/P2. The focused
-  module plus exact discovery-floor checks pass 31/31, with module floor 29 and
-  global discovery floor 1,493; the real held-FD inert probe exits 2 with empty
-  output, repeated runtime observations leak no descriptors, and AST parsing
-  and `git diff --check` pass.
+  native-extension DSO closure, and a private immutable mount projection
+  remain deliberately outside execution authority. A separate private source
+  observer now covers the third-party tree described below. The focused module
+  plus exact discovery-floor checks pass 34/34, with module floor 32 and global
+  discovery floor 1,496; the real held-FD inert probe exits 2 with empty output,
+  repeated runtime observations leak no descriptors, and AST parsing and
+  `git diff --check` pass.
+- The frozen-image dependency observer now binds held, no-follow observations
+  of `uv.lock`, `pyproject.toml`, and `Dockerfile` before and after extraction,
+  reattests the exact public image and Docker 27.5.1 runtime, creates a labeled
+  read-only/no-network container that must remain in Docker's `created` state,
+  and streams only `/opt/buffalo-venv/lib/python3.13/site-packages` through
+  bounded `docker container cp`. It never starts or execs the container and
+  removes it before parsing or returning. An exact post-destroy Docker event
+  witness requires only `create -> archive-path -> destroy` for the full
+  container/image/name/label identity and rejects any `start`, `die`, `exec`,
+  missing, reordered, evicted, or foreign event before archive parsing.
+  The source tree is exactly 836 entries (729 files, 107 directories,
+  31,731,853 regular bytes); the selected closure is exactly 833 entries
+  (726 files, 107 directories, 31,726,568 regular bytes), 23 Linux
+  distributions, and 731 RECORD rows, with manifest SHA-256
+  `3c20c381aacf01fd0de297286ce26aad1a2a13d538a0dcbc8eca8d30e81e22a3`.
+  The observer requires but excludes the exact `_virtualenv.pth`,
+  `_virtualenv.py`, and `buffalo-procurement-os.pth` source extras so no
+  executable/path-injecting `.pth` state enters the selected closure. Strict
+  METADATA/RECORD ownership, canonical hashes/sizes, tar physical and semantic
+  bounds, no special/link members, no ambient `.pythonlibs`, and double source
+  bracketing fail closed. Two fresh public-only real-Docker observations matched
+  every count/hash and left no container residue. The authoritative wrapper
+  then discovered, executed, and passed exactly 1,496/1,496 tests with zero
+  failures, errors, skips, expected failures, or unexpected successes. Final
+  independent review found no P0/P1. One bounded P2 cleanup/availability limit
+  remains: after a timed-out or errored Docker create, five name-reconciliation
+  polls cover only about 200 ms; a daemon commit becoming visible later could
+  leave a dormant, never-started constrained container. That path cannot return
+  an observation or reach archive parsing, process launch, READY, or credential
+  release. The observer remains private, unexported, has no production caller,
+  and always returns `execution_authority=False`.
 - Integrated Task-9 acceptance is **not complete**. There is still no executed
   isolated worker, private clean source/dependency snapshot, local TLS/NSS
   composition, real root/Tini gateway run, Backup V2/APPLY, derived
@@ -147,12 +179,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   replay/concurrency/idle/crash/restart proof, or final RSS/cgroup/OOM/cleanup
   evidence. The exact next authorized implementation boundary is the
   remaining code-owned worker runtime/containment layer. The point-in-time
-  runtime-source observer is not runtime authority: its exact loader/shared-
-  library/stdlib closure must be privately frozen, its unresolved loader and
-  locale lookup surfaces must be pinned or masked, the absent high-priority
-  stdlib zip must remain absent, and the exact 23-distribution dependency tree
-  must be
-  extracted from the frozen image rather than ambient `.pythonlibs`. The
+  runtime/dependency observers are not runtime authority: the exact loader,
+  shared-library, stdlib, and now-observed 23-distribution source trees must be
+  materialized into a private immutable projection; native extension DSOs and
+  unresolved loader/locale lookup surfaces must be pinned or masked, and the
+  absent high-priority stdlib zip must remain absent. Ambient `.pythonlibs`
+  remains prohibited. The
   launcher must then establish an atomic startup barrier plus cgroup/PID/
   mount-namespace containment and childlessness, and have the worker
   self-attest all live state before READY. Ordinary spawn-then-cgroup-attach is
