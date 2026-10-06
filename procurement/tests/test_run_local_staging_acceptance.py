@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import ast
+import base64
 import copy
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 import hashlib
+import io
 from io import StringIO
 import json
 import os
 from pathlib import Path
 import selectors
 import sys
+import tarfile
 from tempfile import TemporaryDirectory
 import threading
 import time
@@ -26,6 +29,20 @@ import run_local_staging_browser_worker as browser_worker
 IMAGE_ID = acceptance.FROZEN_IMAGE_ID
 RUN_ID = "b" * 32
 CONTAINER_ID = "c" * 64
+EVENT_BASE_NANOSECONDS = 2_000_000_000_000_000_000
+EVENT_WALL_TIMES = (
+    EVENT_BASE_NANOSECONDS,
+    EVENT_BASE_NANOSECONDS + 10_000_000,
+    EVENT_BASE_NANOSECONDS + 20_000_000,
+    EVENT_BASE_NANOSECONDS + 30_000_000,
+    EVENT_BASE_NANOSECONDS + 40_000_000,
+    EVENT_BASE_NANOSECONDS + 50_000_000,
+)
+EVENT_OPERATION_WINDOWS = (
+    EVENT_WALL_TIMES[0:2],
+    EVENT_WALL_TIMES[2:4],
+    EVENT_WALL_TIMES[4:6],
+)
 
 
 def _image_inspect() -> dict[str, object]:
@@ -407,6 +424,311 @@ def _container_inspect(
             },
             "StopSignal": "SIGTERM",
         },
+    }
+
+
+def _browser_dependency_container_inspect(
+    invocation: acceptance._BrowserDependencyInvocation,
+) -> dict[str, object]:
+    materializer = acceptance.materializer_invocation(
+        image_id=IMAGE_ID,
+        run_id=invocation.run_id,
+        ingress=None,
+    )
+    value = _container_inspect(materializer)
+    value["Path"] = acceptance._BROWSER_DEPENDENCY_ENTRYPOINT
+    value["Args"] = list(acceptance._BROWSER_DEPENDENCY_COMMAND)
+    value["Name"] = f"/{invocation.container_name}"
+    value["Mounts"] = []
+    value["GraphDriver"] = {
+        "Name": "overlay2",
+        "Data": {
+            "LowerDir": "/var/lib/docker/overlay2/lower/diff",
+            "MergedDir": "/var/lib/docker/overlay2/source/merged",
+            "UpperDir": "/var/lib/docker/overlay2/source/diff",
+            "WorkDir": "/var/lib/docker/overlay2/source/work",
+        },
+    }
+    host = value["HostConfig"]
+    host.pop("Mounts")
+    host.pop("Tmpfs")
+    host.update(
+        {
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceWriteIOps": [],
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "CapAdd": None,
+            "Cgroup": "",
+            "CgroupParent": "",
+            "ConsoleSize": [0, 0],
+            "ContainerIDFile": "",
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpuShares": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "IOMaximumBandwidth": 0,
+            "IOMaximumIOps": 0,
+            "Isolation": "",
+            "Memory": acceptance._BROWSER_DEPENDENCY_MEMORY_BYTES,
+            "MemoryReservation": 0,
+            "MemorySwap": acceptance._BROWSER_DEPENDENCY_MEMORY_BYTES,
+            "NanoCpus": acceptance._BROWSER_DEPENDENCY_NANO_CPUS,
+            "OomScoreAdj": 0,
+            "PidsLimit": acceptance._BROWSER_DEPENDENCY_PIDS_LIMIT,
+            "VolumeDriver": "",
+        }
+    )
+    config = value["Config"]
+    config.update(
+        {
+            "Cmd": list(acceptance._BROWSER_DEPENDENCY_COMMAND),
+            "Domainname": "",
+            "Entrypoint": [acceptance._BROWSER_DEPENDENCY_ENTRYPOINT],
+            "Hostname": CONTAINER_ID[:12],
+            "Labels": {
+                "buffalo.contract": acceptance.ACCEPTANCE_CONTRACT,
+                "buffalo.run": invocation.run_id,
+                "buffalo.role": acceptance._BROWSER_DEPENDENCY_ROLE,
+            },
+            "OnBuild": None,
+            "StdinOnce": False,
+        }
+    )
+    return value
+
+
+def _browser_dependency_event_rows(
+    invocation: acceptance._BrowserDependencyInvocation,
+    *,
+    start_nanoseconds: int = EVENT_BASE_NANOSECONDS,
+    actions: tuple[str, ...] = acceptance._BROWSER_DEPENDENCY_EVENT_ACTIONS,
+    container_id: str = CONTAINER_ID,
+) -> list[dict[str, object]]:
+    attributes = {
+        "buffalo.contract": acceptance.ACCEPTANCE_CONTRACT,
+        "buffalo.role": acceptance._BROWSER_DEPENDENCY_ROLE,
+        "buffalo.run": invocation.run_id,
+        "image": invocation.image_id,
+        "name": invocation.container_name,
+    }
+    rows: list[dict[str, object]] = []
+    for offset, action in enumerate(actions, start=1):
+        nanoseconds = start_nanoseconds + (offset * 20 - 15) * 1_000_000
+        seconds = nanoseconds // 1_000_000_000
+        rows.append(
+            {
+                "status": action,
+                "id": container_id,
+                "from": invocation.image_id,
+                "Type": "container",
+                "Action": action,
+                "Actor": {
+                    "ID": container_id,
+                    "Attributes": copy.deepcopy(attributes),
+                },
+                "scope": "local",
+                "time": seconds,
+                "timeNano": nanoseconds,
+            }
+        )
+    return rows
+
+
+def _browser_dependency_event_stream(
+    invocation: acceptance._BrowserDependencyInvocation,
+    *,
+    start_nanoseconds: int = EVENT_BASE_NANOSECONDS,
+    actions: tuple[str, ...] = acceptance._BROWSER_DEPENDENCY_EVENT_ACTIONS,
+    container_id: str = CONTAINER_ID,
+) -> bytes:
+    rows = _browser_dependency_event_rows(
+        invocation,
+        start_nanoseconds=start_nanoseconds,
+        actions=actions,
+        container_id=container_id,
+    )
+    return _browser_dependency_rows_stream(rows)
+
+
+def _browser_dependency_rows_stream(
+    rows: list[dict[str, object]],
+) -> bytes:
+    return b"".join(
+        json.dumps(
+            row,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        + b"\n"
+        for row in rows
+    )
+
+
+def _browser_dependency_record_hash(raw: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
+    return "sha256=" + encoded.rstrip(b"=").decode("ascii")
+
+
+def _browser_dependency_fixture_members() -> dict[str, dict[str, object]]:
+    members: dict[str, dict[str, object]] = {}
+    for name, version in (("alpha", "1.0"), ("beta", "2.0")):
+        dist_info = f"{name}-{version}.dist-info"
+        module_path = f"{name}.py"
+        metadata_path = f"{dist_info}/METADATA"
+        record_path = f"{dist_info}/RECORD"
+        module = f"VALUE = {version!r}\n".encode("ascii")
+        metadata = (
+            "Metadata-Version: 2.4\n"
+            f"Name: {name}\n"
+            f"Version: {version}\n\n"
+        ).encode("ascii")
+        record = (
+            f"{module_path},{_browser_dependency_record_hash(module)},"
+            f"{len(module)}\n"
+            f"{metadata_path},{_browser_dependency_record_hash(metadata)},"
+            f"{len(metadata)}\n"
+            f"{record_path},,\n"
+        ).encode("ascii")
+        if name == "alpha":
+            script = b"alpha-script"
+            record += (
+                "../../../bin/alpha,"
+                f"{_browser_dependency_record_hash(script)},{len(script)}\n"
+            ).encode("ascii")
+        members[dist_info] = {
+            "kind": "D",
+            "mode": 0o755,
+            "uid": 0,
+            "gid": 0,
+            "content": b"",
+        }
+        for path, content in (
+            (module_path, module),
+            (metadata_path, metadata),
+            (record_path, record),
+        ):
+            members[path] = {
+                "kind": "F",
+                "mode": 0o644,
+                "uid": 0,
+                "gid": 0,
+                "content": content,
+            }
+    members["_virtualenv.pth"] = {
+        "kind": "F",
+        "mode": 0o644,
+        "uid": 0,
+        "gid": 0,
+        "content": b"import _virtualenv",
+    }
+    return members
+
+
+def _browser_dependency_fixture_archive(
+    members: dict[str, dict[str, object]],
+) -> bytes:
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        root = tarfile.TarInfo(".")
+        root.type = tarfile.DIRTYPE
+        root.mode = 0o755
+        root.uid = 0
+        root.gid = 0
+        root.mtime = 0
+        archive.addfile(root)
+        for path, value in sorted(members.items()):
+            item = tarfile.TarInfo(f"./{path}")
+            item.mode = value["mode"]
+            item.uid = value["uid"]
+            item.gid = value["gid"]
+            item.mtime = 0
+            if value["kind"] == "D":
+                item.type = tarfile.DIRTYPE
+                archive.addfile(item)
+            else:
+                content = value["content"]
+                item.type = tarfile.REGTYPE
+                item.size = len(content)
+                archive.addfile(item, io.BytesIO(content))
+    return output.getvalue()
+
+
+def _browser_dependency_fixture_parameters(
+    members: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    digest = hashlib.sha256(acceptance._BROWSER_DEPENDENCY_TREE_DOMAIN)
+    files = 0
+    directories = 0
+    regular_bytes = 0
+    excluded = {"_virtualenv.pth"}
+    for path, value in sorted(members.items()):
+        path_bytes = path.encode("ascii")
+        content = value["content"]
+        if value["kind"] == "D":
+            kind = b"D"
+            size = 0
+            payload = b""
+            directories += 1
+        else:
+            kind = b"F"
+            size = len(content)
+            payload = hashlib.sha256(content).digest()
+            regular_bytes += size
+            files += 1
+        if path in excluded:
+            regular_bytes -= size
+            files -= 1
+            continue
+        digest.update(kind)
+        digest.update(len(path_bytes).to_bytes(4, "big"))
+        digest.update(path_bytes)
+        digest.update(value["mode"].to_bytes(4, "big"))
+        digest.update(size.to_bytes(8, "big"))
+        digest.update(len(payload).to_bytes(4, "big"))
+        digest.update(payload)
+    return {
+        "source_image_id": IMAGE_ID,
+        "expected_sha256": digest.hexdigest(),
+        "expected_distributions": (
+            ("alpha", "1.0", "alpha-1.0.dist-info"),
+            ("beta", "2.0", "beta-2.0.dist-info"),
+        ),
+        "expected_extras": (
+            (
+                "_virtualenv.pth",
+                len(members["_virtualenv.pth"]["content"]),
+                hashlib.sha256(
+                    members["_virtualenv.pth"]["content"]
+                ).hexdigest(),
+            ),
+        ),
+        "expected_external_records": (
+            (
+                "alpha-1.0.dist-info/RECORD",
+                "../../../bin/alpha",
+                _browser_dependency_record_hash(b"alpha-script"),
+                str(len(b"alpha-script")),
+            ),
+        ),
+        "expected_entries": len(members) - len(excluded),
+        "expected_regular_files": files,
+        "expected_directories": directories,
+        "expected_regular_bytes": regular_bytes,
+        "expected_source_entries": len(members),
+        "expected_source_regular_files": files + len(excluded),
+        "expected_source_directories": directories,
+        "expected_source_regular_bytes": regular_bytes
+        + sum(len(members[path]["content"]) for path in excluded),
+        "expected_record_rows": 7,
     }
 
 
@@ -1058,6 +1380,1387 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                         observe_tree()
                 finally:
                     stdlib.chmod(0o700)
+
+    def test_browser_dependency_container_is_exact_and_never_started(self):
+        invocation = acceptance._browser_dependency_invocation(RUN_ID)
+        self.assertEqual(
+            invocation.container_name,
+            f"{acceptance._BROWSER_DEPENDENCY_CONTAINER_PREFIX}{RUN_ID}",
+        )
+        self.assertEqual(
+            tuple(
+                (
+                    str(path.relative_to(
+                        acceptance._BROWSER_DEPENDENCY_REPOSITORY_ROOT
+                    )),
+                    size,
+                    digest,
+                )
+                for path, size, digest in acceptance._BROWSER_DEPENDENCY_BUILD_FILES
+            ),
+            (
+                (
+                    "uv.lock",
+                    34_616,
+                    "f8613b17cb90ca5e3070e13c47cd6d53a60a8c314257d5588986cf92d0717be9",
+                ),
+                (
+                    "pyproject.toml",
+                    299,
+                    "c83fa94b31129a28040b199c4fdb6902287646bf306129066eadcc810fe1d346",
+                ),
+                (
+                    "Dockerfile",
+                    4_295,
+                    "744c0aa01c187eb0faefa9dfd1a0d6533ab1e794e452b843b3268f4162cc5573",
+                ),
+            ),
+        )
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self._docker(root) as docker:
+                descriptor = docker.descriptor
+                create = acceptance._build_browser_dependency_create_argv(
+                    docker_client=docker,
+                    invocation=invocation,
+                )
+                copied = acceptance._build_browser_dependency_copy_argv(
+                    docker_client=docker,
+                    invocation=invocation,
+                    container_id=CONTAINER_ID,
+                )
+                event_until = (
+                    EVENT_WALL_TIMES[-1]
+                    + acceptance._BROWSER_DEPENDENCY_EVENT_SETTLE_NANOSECONDS
+                )
+                events = acceptance._build_browser_dependency_events_argv(
+                    docker_client=docker,
+                    invocation=invocation,
+                    since_nanoseconds=EVENT_BASE_NANOSECONDS,
+                    until_nanoseconds=event_until,
+                )
+        self.assertEqual(
+            create,
+            (
+                f"/proc/self/fd/{descriptor}",
+                "create",
+                "--platform",
+                "linux/amd64",
+                "--pull",
+                "never",
+                "--runtime",
+                "runc",
+                "--user",
+                "0:0",
+                "--workdir",
+                "/app",
+                "--read-only",
+                "--network",
+                "none",
+                "--ipc",
+                "none",
+                "--cgroupns",
+                "private",
+                "--pids-limit",
+                "1",
+                "--memory",
+                "134217728",
+                "--memory-swap",
+                "134217728",
+                "--cpus",
+                "1",
+                "--security-opt",
+                "no-new-privileges=true",
+                "--cap-drop",
+                "ALL",
+                "--restart",
+                "no",
+                "--no-healthcheck",
+                "--log-driver",
+                "none",
+                "--name",
+                invocation.container_name,
+                "--label",
+                f"buffalo.contract={acceptance.ACCEPTANCE_CONTRACT}",
+                "--label",
+                f"buffalo.run={RUN_ID}",
+                "--label",
+                f"buffalo.role={acceptance._BROWSER_DEPENDENCY_ROLE}",
+                "--entrypoint",
+                acceptance._BROWSER_DEPENDENCY_ENTRYPOINT,
+                IMAGE_ID,
+                acceptance._BROWSER_DEPENDENCY_COMMAND[0],
+            ),
+        )
+        self.assertEqual(
+            copied,
+            (
+                f"/proc/self/fd/{descriptor}",
+                "container",
+                "cp",
+                "--archive",
+                "--quiet",
+                (
+                    f"{CONTAINER_ID}:"
+                    f"{acceptance._BROWSER_DEPENDENCY_IMAGE_PATH}/."
+                ),
+                "-",
+            ),
+        )
+        self.assertEqual(
+            events,
+            (
+                f"/proc/self/fd/{descriptor}",
+                "events",
+                "--since",
+                "2000000000.000000000",
+                "--until",
+                "2000000000.300000000",
+                "--filter",
+                "type=container",
+                "--filter",
+                f"label=buffalo.run={RUN_ID}",
+                "--format",
+                "{{json .}}",
+            ),
+        )
+        event_stream = _browser_dependency_event_stream(invocation)
+        acceptance._validate_browser_dependency_events(
+            event_stream,
+            invocation=invocation,
+            container_id=CONTAINER_ID,
+            operation_windows=EVENT_OPERATION_WINDOWS,
+        )
+        event_mutations = (
+            (
+                "start event",
+                _browser_dependency_event_stream(
+                    invocation,
+                    actions=("create", "archive-path", "start", "destroy"),
+                ),
+            ),
+            (
+                "missing destroy",
+                _browser_dependency_event_stream(
+                    invocation,
+                    actions=("create", "archive-path"),
+                ),
+            ),
+            (
+                "wrong id",
+                _browser_dependency_event_stream(
+                    invocation,
+                    container_id="d" * 64,
+                ),
+            ),
+            ("trailing blank", event_stream + b"\n"),
+        )
+        changed_rows = _browser_dependency_event_rows(
+            invocation,
+        )
+        changed_rows[1]["time"] = False
+        wrong_label_rows = _browser_dependency_event_rows(invocation)
+        wrong_label_rows[1]["Actor"]["Attributes"]["buffalo.role"] = (
+            "foreign"
+        )
+        wrong_image_rows = _browser_dependency_event_rows(invocation)
+        wrong_image_rows[1]["from"] = "sha256:" + "e" * 64
+        wrong_image_rows[1]["Actor"]["Attributes"]["image"] = (
+            "sha256:" + "e" * 64
+        )
+        wrong_type_rows = _browser_dependency_event_rows(invocation)
+        wrong_type_rows[1]["Type"] = "network"
+        wrong_scope_rows = _browser_dependency_event_rows(invocation)
+        wrong_scope_rows[1]["scope"] = "swarm"
+        outside_window_rows = _browser_dependency_event_rows(invocation)
+        outside_window_rows[1]["timeNano"] = EVENT_OPERATION_WINDOWS[1][1] + 1
+        outside_window_rows[1]["time"] = (
+            outside_window_rows[1]["timeNano"] // 1_000_000_000
+        )
+        extra_key_rows = _browser_dependency_event_rows(invocation)
+        extra_key_rows[1]["unexpected"] = "value"
+        event_mutations += (
+            (
+                "boolean timestamp",
+                _browser_dependency_rows_stream(changed_rows),
+            ),
+            ("wrong label", _browser_dependency_rows_stream(wrong_label_rows)),
+            ("wrong image", _browser_dependency_rows_stream(wrong_image_rows)),
+            ("wrong type", _browser_dependency_rows_stream(wrong_type_rows)),
+            ("wrong scope", _browser_dependency_rows_stream(wrong_scope_rows)),
+            (
+                "outside operation window",
+                _browser_dependency_rows_stream(outside_window_rows),
+            ),
+            ("extra key", _browser_dependency_rows_stream(extra_key_rows)),
+            (
+                "noncanonical JSON",
+                event_stream.replace(b"{\"status\"", b"{ \"status\"", 1),
+            ),
+            (
+                "duplicate JSON key",
+                event_stream.replace(
+                    b"{\"status\":\"create\",",
+                    b"{\"status\":\"create\",\"status\":\"create\",",
+                    1,
+                ),
+            ),
+        )
+        for label, changed_events in event_mutations:
+            with self.subTest(event_history=label), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._validate_browser_dependency_events(
+                    changed_events,
+                    invocation=invocation,
+                    container_id=CONTAINER_ID,
+                    operation_windows=EVENT_OPERATION_WINDOWS,
+                )
+        bad_windows = (
+            list(EVENT_OPERATION_WINDOWS),
+            (
+                EVENT_OPERATION_WINDOWS[0],
+                (False, EVENT_OPERATION_WINDOWS[1][1]),
+                EVENT_OPERATION_WINDOWS[2],
+            ),
+            (
+                EVENT_OPERATION_WINDOWS[0],
+                (
+                    EVENT_OPERATION_WINDOWS[0][1] - 1,
+                    EVENT_OPERATION_WINDOWS[1][1],
+                ),
+                EVENT_OPERATION_WINDOWS[2],
+            ),
+            (
+                EVENT_OPERATION_WINDOWS[0],
+                (
+                    EVENT_OPERATION_WINDOWS[1][1],
+                    EVENT_OPERATION_WINDOWS[1][0],
+                ),
+                EVENT_OPERATION_WINDOWS[2],
+            ),
+        )
+        for windows in bad_windows:
+            with self.subTest(event_windows=windows), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._validate_browser_dependency_events(
+                    event_stream,
+                    invocation=invocation,
+                    container_id=CONTAINER_ID,
+                    operation_windows=windows,
+                )
+        for clock_value in (
+            False,
+            0,
+            acceptance._BROWSER_DEPENDENCY_EVENT_MAX_NANOSECONDS + 1,
+        ):
+            with (
+                self.subTest(event_clock=clock_value),
+                patch.object(
+                    acceptance.time,
+                    "time_ns",
+                    return_value=clock_value,
+                ),
+                self.assertRaises(acceptance.LocalStagingAcceptanceError),
+            ):
+                acceptance._browser_dependency_wall_time_ns()
+        self.assertEqual(create.count("--label"), 3)
+        for forbidden in (
+            "--mount",
+            "--volume",
+            "--tmpfs",
+            "--cap-add",
+            "--env",
+            "--env-file",
+            "--device",
+            "--publish",
+            "--pid",
+            "--privileged",
+        ):
+            self.assertNotIn(forbidden, create)
+        self.assertNotIn("start", create)
+        self.assertNotIn("run", create)
+        self.assertNotIn("exec", create)
+
+        baseline = _browser_dependency_container_inspect(invocation)
+        self.assertEqual(
+            acceptance._validate_browser_dependency_container_inspect(
+                baseline,
+                invocation=invocation,
+            ),
+            CONTAINER_ID,
+        )
+        envelope = acceptance._browser_dependency_container_envelope_sha256(
+            baseline
+        )
+        missing_envelope_key = copy.deepcopy(baseline)
+        missing_envelope_key.pop("MountLabel")
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._browser_dependency_container_envelope_sha256(
+                missing_envelope_key
+            )
+        started = copy.deepcopy(baseline)
+        started["State"].update(
+            {
+                "Status": "running",
+                "Running": True,
+                "Pid": 12345,
+                "StartedAt": "2026-10-05T12:00:01.000000000Z",
+            }
+        )
+        started["HostConfig"]["OomKillDisable"] = None
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._validate_browser_dependency_container_inspect(
+                started,
+                invocation=invocation,
+            )
+        self.assertTrue(
+            acceptance._browser_dependency_owned_for_cleanup(
+                started,
+                invocation=invocation,
+                container_id=CONTAINER_ID,
+                envelope_sha256=envelope,
+            )
+        )
+        foreign_mutations = (
+            (
+                "restart policy",
+                lambda value: value["HostConfig"].update(
+                    RestartPolicy={"Name": "always", "MaximumRetryCount": 0}
+                ),
+            ),
+            (
+                "dns",
+                lambda value: value["HostConfig"].update(Dns=["1.1.1.1"]),
+            ),
+            (
+                "sysctls",
+                lambda value: value["HostConfig"].update(
+                    Sysctls={"net.ipv4.ip_forward": "1"}
+                ),
+            ),
+            (
+                "attach stdin",
+                lambda value: value["Config"].update(AttachStdin=True),
+            ),
+            (
+                "graph driver",
+                lambda value: value["GraphDriver"]["Data"].update(
+                    UpperDir="/foreign/diff"
+                ),
+            ),
+        )
+        for label, mutate in foreign_mutations:
+            with self.subTest(foreign_immutable_envelope=label):
+                changed = copy.deepcopy(baseline)
+                mutate(changed)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance._validate_browser_dependency_container_identity(
+                        changed,
+                        invocation=invocation,
+                    )
+                self.assertFalse(
+                    acceptance._browser_dependency_owned_for_cleanup(
+                        changed,
+                        invocation=invocation,
+                        container_id=CONTAINER_ID,
+                        envelope_sha256=envelope,
+                    )
+                )
+        foreign = copy.deepcopy(baseline)
+        foreign["HostConfig"]["RestartPolicy"] = {
+            "Name": "always",
+            "MaximumRetryCount": 0,
+        }
+        with (
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                return_value=((CONTAINER_ID, invocation.container_name),),
+            ),
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                return_value=foreign,
+            ),
+            patch.object(acceptance, "run_docker_command") as foreign_remove,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._remove_owned_browser_dependency_container(
+                object(),
+                Path("/unused"),
+                invocation=invocation,
+            )
+        foreign_remove.assert_not_called()
+        mutations = (
+            ("pid", lambda value: value["State"].update(Pid=1)),
+            ("boolean pid", lambda value: value["State"].update(Pid=False)),
+            (
+                "boolean exit",
+                lambda value: value["State"].update(ExitCode=False),
+            ),
+            (
+                "boolean restart count",
+                lambda value: value.update(RestartCount=False),
+            ),
+            (
+                "started timestamp",
+                lambda value: value["State"].update(
+                    StartedAt="2026-10-05T12:00:01Z"
+                ),
+            ),
+            ("mount", lambda value: value["Mounts"].append({})),
+            ("capability", lambda value: value["HostConfig"].update(CapAdd=[])),
+            (
+                "network",
+                lambda value: value["HostConfig"].update(NetworkMode="host"),
+            ),
+            (
+                "memory",
+                lambda value: value["HostConfig"].update(Memory=0),
+            ),
+            (
+                "boolean memory",
+                lambda value: value["HostConfig"].update(Memory=False),
+            ),
+            (
+                "boolean pids",
+                lambda value: value["HostConfig"].update(PidsLimit=True),
+            ),
+            (
+                "boolean console size",
+                lambda value: value["HostConfig"].update(
+                    ConsoleSize=[False, False]
+                ),
+            ),
+            (
+                "entrypoint",
+                lambda value: value["Config"].update(Entrypoint=["/bin/sh"]),
+            ),
+            (
+                "command",
+                lambda value: value["Config"].update(Cmd=["foreign"]),
+            ),
+            (
+                "label",
+                lambda value: value["Config"]["Labels"].update(
+                    unexpected="value"
+                ),
+            ),
+        )
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                changed = copy.deepcopy(baseline)
+                mutate(changed)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance._validate_browser_dependency_container_inspect(
+                        changed,
+                        invocation=invocation,
+                    )
+        for field in ("Running", "Paused", "Restarting", "OOMKilled", "Dead"):
+            with self.subTest(boolean_state_as_integer=field):
+                changed = copy.deepcopy(baseline)
+                changed["State"][field] = 0
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance._validate_browser_dependency_container_inspect(
+                        changed,
+                        invocation=invocation,
+                    )
+        forged = replace(invocation, image_id="sha256:" + "e" * 64)
+        with TemporaryDirectory() as temporary:
+            with self._docker(Path(temporary)) as docker, self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._build_browser_dependency_create_argv(
+                    docker_client=docker,
+                    invocation=forged,
+                )
+
+    def test_browser_dependency_archive_is_bounded_owned_and_canonical(self):
+        members = _browser_dependency_fixture_members()
+        parameters = _browser_dependency_fixture_parameters(members)
+        observed = acceptance._observe_browser_dependency_archive(
+            _browser_dependency_fixture_archive(members),
+            **parameters,
+        )
+        self.assertEqual(observed.tree_sha256, parameters["expected_sha256"])
+        self.assertEqual(observed.entries, 8)
+        self.assertEqual(observed.regular_files, 6)
+        self.assertEqual(observed.directories, 2)
+        self.assertEqual(observed.source_entries, 9)
+        self.assertEqual(observed.record_rows, 7)
+        self.assertEqual(
+            observed.excluded_source_files[0][0],
+            "_virtualenv.pth",
+        )
+        self.assertFalse(observed.execution_authority)
+
+        simple_mutations = (
+            (
+                "same-size content",
+                lambda value: value["alpha.py"].update(
+                    content=b"VALUE = '9.9'\n"
+                ),
+            ),
+            ("mode", lambda value: value["alpha.py"].update(mode=0o755)),
+            ("owner", lambda value: value["alpha.py"].update(uid=1)),
+            ("missing", lambda value: value.pop("alpha.py")),
+            (
+                "extra",
+                lambda value: value.update(
+                    {
+                        "extra.py": {
+                            "kind": "F",
+                            "mode": 0o644,
+                            "uid": 0,
+                            "gid": 0,
+                            "content": b"extra\n",
+                        }
+                    }
+                ),
+            ),
+            (
+                "type",
+                lambda value: value["alpha.py"].update(
+                    kind="D", mode=0o755, content=b""
+                ),
+            ),
+        )
+        for label, mutate in simple_mutations:
+            with self.subTest(label=label):
+                changed = copy.deepcopy(members)
+                mutate(changed)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance._observe_browser_dependency_archive(
+                        _browser_dependency_fixture_archive(changed),
+                        **parameters,
+                    )
+
+        for path in ("bad\nname", "bad\tname", "bad\rname", "bad\x7fname"):
+            with self.subTest(path=path), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._canonical_browser_dependency_relative_path(path)
+
+        alias = copy.deepcopy(members)
+        alias_path = "alpha-1.0.dist-info/RECORD"
+        alias_record = bytearray(alias[alias_path]["content"])
+        marker = alias_record.index(b"sha256=") + len(b"sha256=")
+        last = marker + 42
+        self.assertIn(alias_record[last], b"AEIMQUYcgkosw048")
+        alias_record[last] += 1
+        alias[alias_path]["content"] = bytes(alias_record)
+
+        unicode_size = copy.deepcopy(members)
+        unicode_path = "alpha-1.0.dist-info/RECORD"
+        unicode_lines = unicode_size[unicode_path]["content"].decode().splitlines()
+        fields = unicode_lines[0].split(",")
+        fields[2] = fields[2].translate(str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩"))
+        unicode_lines[0] = ",".join(fields)
+        unicode_size[unicode_path]["content"] = (
+            "\n".join(unicode_lines) + "\n"
+        ).encode("utf-8")
+
+        cross_owned = copy.deepcopy(members)
+        alpha_record = "alpha-1.0.dist-info/RECORD"
+        beta_record = "beta-2.0.dist-info/RECORD"
+        alpha_lines = cross_owned[alpha_record]["content"].splitlines()
+        beta_lines = cross_owned[beta_record]["content"].splitlines()
+        alpha_lines[1], beta_lines[1] = beta_lines[1], alpha_lines[1]
+        cross_owned[alpha_record]["content"] = b"\n".join(alpha_lines) + b"\n"
+        cross_owned[beta_record]["content"] = b"\n".join(beta_lines) + b"\n"
+
+        cross_self = copy.deepcopy(members)
+        alpha_lines = cross_self[alpha_record]["content"].splitlines()
+        beta_lines = cross_self[beta_record]["content"].splitlines()
+        alpha_lines[2], beta_lines[2] = beta_lines[2], alpha_lines[2]
+        cross_self[alpha_record]["content"] = b"\n".join(alpha_lines) + b"\n"
+        cross_self[beta_record]["content"] = b"\n".join(beta_lines) + b"\n"
+
+        duplicate_metadata = copy.deepcopy(members)
+        metadata_path = "alpha-1.0.dist-info/METADATA"
+        duplicate_metadata[metadata_path]["content"] = (
+            b"Metadata-Version: 2.4\n"
+            + duplicate_metadata[metadata_path]["content"]
+        )
+
+        forbidden_pth = copy.deepcopy(members)
+        forbidden_pth["alpha.pth"] = forbidden_pth.pop("alpha.py")
+        forbidden_pth[alpha_record]["content"] = forbidden_pth[alpha_record][
+            "content"
+        ].replace(b"alpha.py,", b"alpha.pth,")
+
+        for label, changed in (
+            ("base64 pad bits", alias),
+            ("unicode size", unicode_size),
+            ("cross-owned metadata", cross_owned),
+            ("cross-owned self", cross_self),
+            ("duplicate metadata version", duplicate_metadata),
+            ("selected pth", forbidden_pth),
+        ):
+            with self.subTest(label=label), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._observe_browser_dependency_archive(
+                    _browser_dependency_fixture_archive(changed),
+                    **_browser_dependency_fixture_parameters(changed),
+                )
+
+        too_many = io.BytesIO()
+        with tarfile.open(fileobj=too_many, mode="w") as archive:
+            for index in range(acceptance._BROWSER_DEPENDENCY_ARCHIVE_MEMBERS + 1):
+                item = tarfile.TarInfo("." if index == 0 else f"./d{index}")
+                item.type = tarfile.DIRTYPE
+                item.mode = 0o755
+                archive.addfile(item)
+        huge = tarfile.TarInfo("./huge")
+        huge.type = tarfile.REGTYPE
+        huge.mode = 0o644
+        huge.size = 2**63
+        malformed_huge = huge.tobuf(format=tarfile.GNU_FORMAT) + b"\0" * 1024
+        long_name = tarfile.TarInfo("././@LongLink")
+        long_name.type = tarfile.GNUTYPE_LONGNAME
+        long_name.mode = 0o644
+        long_name.size = 2
+        long_name_block = (
+            long_name.tobuf(format=tarfile.GNU_FORMAT)
+            + b"x\0"
+            + b"\0" * (tarfile.BLOCKSIZE - 2)
+        )
+        hidden_members = (
+            long_name_block
+            * (acceptance._BROWSER_DEPENDENCY_ARCHIVE_MEMBERS + 1)
+            + b"\0" * (2 * tarfile.BLOCKSIZE)
+        )
+        for label, raw in (
+            ("member ceiling", too_many.getvalue()),
+            ("base256 overflow", malformed_huge),
+            ("hidden GNU member ceiling", hidden_members),
+        ):
+            with self.subTest(label=label), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._observe_browser_dependency_archive(
+                    raw,
+                    source_image_id=IMAGE_ID,
+                )
+
+    def test_browser_dependency_observation_removes_before_parse_and_fails_closed(self):
+        invocation = acceptance._browser_dependency_invocation(RUN_ID)
+        baseline = _browser_dependency_container_inspect(invocation)
+        client = type("SyntheticDockerClient", (), {"descriptor": 17})()
+        sentinel = object()
+        ledger: list[str] = []
+        inventories = iter(
+            (
+                (),
+                ((CONTAINER_ID, invocation.container_name),),
+                (),
+            )
+        )
+
+        def inventory(*_args, **_kwargs):
+            ledger.append("inventory")
+            return next(inventories)
+
+        inspections = iter((baseline, baseline, baseline))
+
+        def inspect(*_args, **_kwargs):
+            ledger.append("inspect")
+            return copy.deepcopy(next(inspections))
+
+        def docker_argv(_client, _root, arguments, **_kwargs):
+            if arguments[1] == "create":
+                ledger.append("create")
+                return acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                )
+            if arguments[1] == "events":
+                ledger.append("events")
+                self.assertEqual(
+                    arguments,
+                    acceptance._build_browser_dependency_events_argv(
+                        docker_client=client,
+                        invocation=invocation,
+                        since_nanoseconds=EVENT_WALL_TIMES[0],
+                        until_nanoseconds=(
+                            EVENT_WALL_TIMES[-1]
+                            + acceptance._BROWSER_DEPENDENCY_EVENT_SETTLE_NANOSECONDS
+                        ),
+                    ),
+                )
+                return acceptance.BoundedProcessResult(
+                    0,
+                    _browser_dependency_event_stream(invocation),
+                    b"",
+                )
+            self.assertEqual(arguments[1:3], ("container", "cp"))
+            ledger.append("copy")
+            return acceptance.BoundedProcessResult(0, b"archive", b"")
+
+        def docker_command(_client, _root, arguments, **_kwargs):
+            if arguments[1] == "diff":
+                ledger.append("diff")
+                return acceptance.BoundedProcessResult(0, b"", b"")
+            self.assertEqual(arguments[:3], ("container", "rm", "--force"))
+            ledger.append("remove")
+            return acceptance.BoundedProcessResult(
+                0,
+                f"{CONTAINER_ID}\n".encode("ascii"),
+                b"",
+            )
+
+        def parsed(*_args, **_kwargs):
+            ledger.append("parse")
+            return sentinel
+
+        with (
+            patch.object(acceptance, "_validate_trusted_docker"),
+            patch.object(
+                acceptance,
+                "attest_docker_materializer_runtime",
+                side_effect=lambda *_args: ledger.append("attest"),
+            ),
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                side_effect=inventory,
+            ),
+            patch.object(acceptance, "run_docker_argv", side_effect=docker_argv),
+            patch.object(
+                acceptance,
+                "run_docker_command",
+                side_effect=docker_command,
+            ),
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                side_effect=inspect,
+            ),
+            patch.object(
+                acceptance,
+                "_observe_browser_dependency_archive",
+                side_effect=parsed,
+            ),
+            patch.object(
+                acceptance,
+                "_browser_dependency_wall_time_ns",
+                side_effect=EVENT_WALL_TIMES,
+            ),
+            patch.object(acceptance.subprocess, "Popen") as spawned,
+            patch.object(acceptance, "write_browser_worker_frame") as frame,
+            patch.object(acceptance, "write_browser_worker_secret") as secret,
+        ):
+            result = acceptance._observe_frozen_browser_dependency_source(
+                client,
+                Path("/unused"),
+                run_id=RUN_ID,
+            )
+        self.assertIs(result, sentinel)
+        self.assertEqual(
+            ledger,
+            [
+                "attest",
+                "inventory",
+                "create",
+                "inspect",
+                "diff",
+                "copy",
+                "inspect",
+                "diff",
+                "inventory",
+                "inspect",
+                "remove",
+                "inventory",
+                "events",
+                "parse",
+            ],
+        )
+        spawned.assert_not_called()
+        frame.assert_not_called()
+        secret.assert_not_called()
+
+        final_race_inventories = iter(
+            (
+                (),
+                ((CONTAINER_ID, invocation.container_name),),
+                (),
+            )
+        )
+        final_race_inspections = iter((baseline, baseline, baseline))
+
+        def final_race_argv(_client, _root, arguments, **_kwargs):
+            if arguments[1] == "create":
+                return acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                )
+            if arguments[1] == "events":
+                return acceptance.BoundedProcessResult(
+                    0,
+                    _browser_dependency_event_stream(
+                        invocation,
+                        actions=(
+                            "create",
+                            "archive-path",
+                            "start",
+                            "die",
+                            "destroy",
+                        ),
+                    ),
+                    b"",
+                )
+            return acceptance.BoundedProcessResult(0, b"archive", b"")
+
+        def final_race_command(_client, _root, arguments, **_kwargs):
+            if arguments[1] == "diff":
+                return acceptance.BoundedProcessResult(0, b"", b"")
+            return acceptance.BoundedProcessResult(
+                0,
+                f"{CONTAINER_ID}\n".encode("ascii"),
+                b"",
+            )
+
+        with (
+            patch.object(acceptance, "_validate_trusted_docker"),
+            patch.object(acceptance, "attest_docker_materializer_runtime"),
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                side_effect=lambda *_args, **_kwargs: next(
+                    final_race_inventories
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_argv",
+                side_effect=final_race_argv,
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_command",
+                side_effect=final_race_command,
+            ) as final_race_commands,
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                side_effect=lambda *_args, **_kwargs: copy.deepcopy(
+                    next(final_race_inspections)
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "_observe_browser_dependency_archive",
+            ) as final_race_parser,
+            patch.object(
+                acceptance,
+                "_browser_dependency_wall_time_ns",
+                side_effect=EVENT_WALL_TIMES,
+            ),
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._observe_frozen_browser_dependency_source(
+                client,
+                Path("/unused"),
+                run_id=RUN_ID,
+            )
+        self.assertEqual(
+            sum(
+                call.args[2][:3] == ("container", "rm", "--force")
+                for call in final_race_commands.call_args_list
+            ),
+            1,
+        )
+        final_race_parser.assert_not_called()
+
+        ambiguous_inventory = iter(
+            (
+                (),
+                ((CONTAINER_ID, invocation.container_name),),
+                (),
+            )
+        )
+        with (
+            patch.object(acceptance, "_validate_trusted_docker"),
+            patch.object(acceptance, "attest_docker_materializer_runtime"),
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                side_effect=lambda *_args, **_kwargs: next(ambiguous_inventory),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_argv",
+                side_effect=acceptance.LocalStagingAcceptanceError("ambiguous"),
+            ),
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                return_value=copy.deepcopy(baseline),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_command",
+                return_value=acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                ),
+            ) as removed,
+            patch.object(
+                acceptance,
+                "_observe_browser_dependency_archive",
+            ) as parser,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._observe_frozen_browser_dependency_source(
+                client,
+                Path("/unused"),
+                run_id=RUN_ID,
+            )
+        removed.assert_called_once()
+        parser.assert_not_called()
+
+        started = copy.deepcopy(baseline)
+        started["State"].update(
+            {
+                "Status": "running",
+                "Running": True,
+                "Pid": 12345,
+                "StartedAt": "2026-10-05T12:00:01.000000000Z",
+            }
+        )
+        started["HostConfig"]["OomKillDisable"] = None
+        started_inventories = iter(
+            (
+                (),
+                ((CONTAINER_ID, invocation.container_name),),
+                (),
+            )
+        )
+        started_inspections = iter((started, started))
+        with (
+            patch.object(acceptance, "_validate_trusted_docker"),
+            patch.object(acceptance, "attest_docker_materializer_runtime"),
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                side_effect=lambda *_args, **_kwargs: next(
+                    started_inventories
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_argv",
+                return_value=acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                side_effect=lambda *_args, **_kwargs: copy.deepcopy(
+                    next(started_inspections)
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_command",
+                return_value=acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                ),
+            ) as removed_started,
+            patch.object(
+                acceptance,
+                "_observe_browser_dependency_archive",
+            ) as started_parser,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._observe_frozen_browser_dependency_source(
+                client,
+                Path("/unused"),
+                run_id=RUN_ID,
+            )
+        removed_started.assert_called_once()
+        started_parser.assert_not_called()
+
+        cleanup_inventories = iter(
+            (
+                (),
+                ((CONTAINER_ID, invocation.container_name),),
+                (),
+            )
+        )
+        cleanup_inspections = iter((baseline, baseline, started))
+
+        def cleanup_race_argv(_client, _root, arguments, **_kwargs):
+            if arguments[1] == "create":
+                return acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                )
+            return acceptance.BoundedProcessResult(0, b"archive", b"")
+
+        def cleanup_race_command(_client, _root, arguments, **_kwargs):
+            if arguments[1] == "diff":
+                return acceptance.BoundedProcessResult(0, b"", b"")
+            return acceptance.BoundedProcessResult(
+                0,
+                f"{CONTAINER_ID}\n".encode("ascii"),
+                b"",
+            )
+
+        with (
+            patch.object(acceptance, "_validate_trusted_docker"),
+            patch.object(acceptance, "attest_docker_materializer_runtime"),
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                side_effect=lambda *_args, **_kwargs: next(
+                    cleanup_inventories
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_argv",
+                side_effect=cleanup_race_argv,
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_command",
+                side_effect=cleanup_race_command,
+            ) as cleanup_race_commands,
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                side_effect=lambda *_args, **_kwargs: copy.deepcopy(
+                    next(cleanup_inspections)
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "_observe_browser_dependency_archive",
+            ) as cleanup_race_parser,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._observe_frozen_browser_dependency_source(
+                client,
+                Path("/unused"),
+                run_id=RUN_ID,
+            )
+        self.assertEqual(
+            sum(
+                call.args[2][:3] == ("container", "rm", "--force")
+                for call in cleanup_race_commands.call_args_list
+            ),
+            1,
+        )
+        cleanup_race_parser.assert_not_called()
+
+        delayed_inventories = iter(
+            (
+                (),
+                (),
+                ((CONTAINER_ID, invocation.container_name),),
+                (),
+            )
+        )
+        with (
+            patch.object(acceptance, "_validate_trusted_docker"),
+            patch.object(acceptance, "attest_docker_materializer_runtime"),
+            patch.object(
+                acceptance,
+                "_docker_name_inventory",
+                side_effect=lambda *_args, **_kwargs: next(
+                    delayed_inventories
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_argv",
+                side_effect=acceptance.LocalStagingAcceptanceError(
+                    "ambiguous"
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "_docker_inspect_one",
+                return_value=copy.deepcopy(baseline),
+            ),
+            patch.object(
+                acceptance,
+                "run_docker_command",
+                return_value=acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                ),
+            ) as delayed_remove,
+            patch.object(acceptance.time, "sleep") as delayed_sleep,
+            patch.object(
+                acceptance,
+                "_observe_browser_dependency_archive",
+            ) as delayed_parser,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._observe_frozen_browser_dependency_source(
+                client,
+                Path("/unused"),
+                run_id=RUN_ID,
+            )
+        delayed_remove.assert_called_once()
+        delayed_sleep.assert_called_once_with(
+            acceptance._BROWSER_DEPENDENCY_CREATE_RECONCILE_INTERVAL
+        )
+        delayed_parser.assert_not_called()
+
+        with TemporaryDirectory() as temporary:
+            source_root = Path(temporary)
+            source_rows = []
+            for name, content in (
+                ("uv.lock", b"lock"),
+                ("pyproject.toml", b"project"),
+                ("Dockerfile", b"docker"),
+            ):
+                path = source_root / name
+                path.write_bytes(content)
+                path.chmod(0o644)
+                source_rows.append(
+                    (path, len(content), hashlib.sha256(content).hexdigest())
+                )
+            source_rows[-1] = (
+                source_rows[-1][0],
+                source_rows[-1][1],
+                "0" * 64,
+            )
+            descriptors_before = set(os.listdir("/proc/self/fd"))
+            with (
+                patch.object(
+                    acceptance,
+                    "_BROWSER_DEPENDENCY_BUILD_FILES",
+                    tuple(source_rows),
+                ),
+                patch.object(
+                    acceptance,
+                    "attest_docker_materializer_runtime",
+                ) as docker_attest,
+                self.assertRaises(acceptance.LocalStagingAcceptanceError),
+            ):
+                acceptance._observe_frozen_browser_dependency_source(
+                    client,
+                    Path("/unused"),
+                    run_id=RUN_ID,
+                )
+            docker_attest.assert_not_called()
+            self.assertEqual(
+                set(os.listdir("/proc/self/fd")),
+                descriptors_before,
+            )
+
+            source_rows[-1] = (
+                source_rows[-1][0],
+                source_rows[-1][1],
+                hashlib.sha256(source_rows[-1][0].read_bytes()).hexdigest(),
+            )
+            drift_inventories = iter(
+                (
+                    (),
+                    ((CONTAINER_ID, invocation.container_name),),
+                    (),
+                )
+            )
+            drift_inspections = iter((baseline, baseline, baseline))
+            displaced = source_root / "Dockerfile.displaced"
+
+            def drift_docker_argv(_client, _root, arguments, **_kwargs):
+                if arguments[1] == "create":
+                    return acceptance.BoundedProcessResult(
+                        0,
+                        f"{CONTAINER_ID}\n".encode("ascii"),
+                        b"",
+                    )
+                if arguments[1] == "events":
+                    return acceptance.BoundedProcessResult(
+                        0,
+                        _browser_dependency_event_stream(invocation),
+                        b"",
+                    )
+                source_rows[-1][0].rename(displaced)
+                source_rows[-1][0].write_bytes(displaced.read_bytes())
+                source_rows[-1][0].chmod(0o644)
+                return acceptance.BoundedProcessResult(0, b"archive", b"")
+
+            def drift_docker_command(_client, _root, arguments, **_kwargs):
+                if arguments[1] == "diff":
+                    return acceptance.BoundedProcessResult(0, b"", b"")
+                return acceptance.BoundedProcessResult(
+                    0,
+                    f"{CONTAINER_ID}\n".encode("ascii"),
+                    b"",
+                )
+
+            with (
+                patch.object(
+                    acceptance,
+                    "_BROWSER_DEPENDENCY_BUILD_FILES",
+                    tuple(source_rows),
+                ),
+                patch.object(acceptance, "_validate_trusted_docker"),
+                patch.object(
+                    acceptance,
+                    "attest_docker_materializer_runtime",
+                ),
+                patch.object(
+                    acceptance,
+                    "_docker_name_inventory",
+                    side_effect=lambda *_args, **_kwargs: next(
+                        drift_inventories
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "run_docker_argv",
+                    side_effect=drift_docker_argv,
+                ),
+                patch.object(
+                    acceptance,
+                    "run_docker_command",
+                    side_effect=drift_docker_command,
+                ) as drift_commands,
+                patch.object(
+                    acceptance,
+                    "_docker_inspect_one",
+                    side_effect=lambda *_args, **_kwargs: copy.deepcopy(
+                        next(drift_inspections)
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_observe_browser_dependency_archive",
+                ) as drift_parser,
+                patch.object(
+                    acceptance,
+                    "_browser_dependency_wall_time_ns",
+                    side_effect=EVENT_WALL_TIMES,
+                ),
+                self.assertRaises(acceptance.LocalStagingAcceptanceError),
+            ):
+                acceptance._observe_frozen_browser_dependency_source(
+                    client,
+                    Path("/unused"),
+                    run_id=RUN_ID,
+                )
+            self.assertEqual(
+                sum(
+                    call.args[2][:3]
+                    == ("container", "rm", "--force")
+                    for call in drift_commands.call_args_list
+                ),
+                1,
+            )
+            drift_parser.assert_not_called()
+
+            parser_drift_inventories = iter(
+                (
+                    (),
+                    ((CONTAINER_ID, invocation.container_name),),
+                    (),
+                )
+            )
+            parser_drift_inspections = iter((baseline, baseline, baseline))
+
+            def stable_docker_argv(_client, _root, arguments, **_kwargs):
+                if arguments[1] == "create":
+                    return acceptance.BoundedProcessResult(
+                        0,
+                        f"{CONTAINER_ID}\n".encode("ascii"),
+                        b"",
+                    )
+                if arguments[1] == "events":
+                    return acceptance.BoundedProcessResult(
+                        0,
+                        _browser_dependency_event_stream(invocation),
+                        b"",
+                    )
+                return acceptance.BoundedProcessResult(0, b"archive", b"")
+
+            def parser_drift(*_args, **_kwargs):
+                path = source_rows[0][0]
+                original = path.read_bytes()
+                path.write_bytes(original.upper())
+                path.write_bytes(original)
+                return sentinel
+
+            with (
+                patch.object(
+                    acceptance,
+                    "_BROWSER_DEPENDENCY_BUILD_FILES",
+                    tuple(source_rows),
+                ),
+                patch.object(acceptance, "_validate_trusted_docker"),
+                patch.object(
+                    acceptance,
+                    "attest_docker_materializer_runtime",
+                ),
+                patch.object(
+                    acceptance,
+                    "_docker_name_inventory",
+                    side_effect=lambda *_args, **_kwargs: next(
+                        parser_drift_inventories
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "run_docker_argv",
+                    side_effect=stable_docker_argv,
+                ),
+                patch.object(
+                    acceptance,
+                    "run_docker_command",
+                    side_effect=drift_docker_command,
+                ) as parser_drift_commands,
+                patch.object(
+                    acceptance,
+                    "_docker_inspect_one",
+                    side_effect=lambda *_args, **_kwargs: copy.deepcopy(
+                        next(parser_drift_inspections)
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_observe_browser_dependency_archive",
+                    side_effect=parser_drift,
+                ) as parser_drift_observer,
+                patch.object(
+                    acceptance,
+                    "_browser_dependency_wall_time_ns",
+                    side_effect=EVENT_WALL_TIMES,
+                ),
+                self.assertRaises(acceptance.LocalStagingAcceptanceError),
+            ):
+                acceptance._observe_frozen_browser_dependency_source(
+                    client,
+                    Path("/unused"),
+                    run_id=RUN_ID,
+                )
+            self.assertEqual(
+                sum(
+                    call.args[2][:3]
+                    == ("container", "rm", "--force")
+                    for call in parser_drift_commands.call_args_list
+                ),
+                1,
+            )
+            parser_drift_observer.assert_called_once()
 
     def test_browser_containment_cgroup_and_nspid_text_is_canonical(self):
         self.assertEqual(
