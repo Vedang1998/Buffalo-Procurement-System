@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import stat
 import sys
 import tarfile
 from tempfile import TemporaryDirectory
@@ -583,6 +584,10 @@ def _browser_dependency_layer_fixture(
     whiteouts: tuple[str, ...] = (),
     root_whiteouts: tuple[str, ...] = (),
     include_target_ancestors: bool = True,
+    application_members: dict[str, dict[str, object]] | None = None,
+    application_root_mode: int = 0o755,
+    application_root_uid: int = 0,
+    application_root_gid: int = 0,
 ) -> bytes:
     output = io.BytesIO()
     target = acceptance._BROWSER_DEPENDENCY_IMAGE_PATH.lstrip("/")
@@ -646,6 +651,32 @@ def _browser_dependency_layer_fixture(
                 item.type = tarfile.REGTYPE
                 item.size = len(content)
                 archive.addfile(item, io.BytesIO(content))
+        if application_members is not None:
+            application_root = tarfile.TarInfo("app")
+            application_root.type = tarfile.DIRTYPE
+            application_root.mode = application_root_mode
+            application_root.uid = application_root_uid
+            application_root.gid = application_root_gid
+            application_root.mtime = 0
+            archive.addfile(application_root)
+            for path, value in sorted(application_members.items()):
+                item = tarfile.TarInfo(f"app/{path}")
+                item.mode = value["mode"]
+                item.uid = value.get("uid", 0)
+                item.gid = value.get("gid", 0)
+                item.mtime = 0
+                if value["kind"] == "D":
+                    item.type = tarfile.DIRTYPE
+                    archive.addfile(item)
+                elif value["kind"] == "L":
+                    item.type = tarfile.SYMTYPE
+                    item.linkname = value["target"]
+                    archive.addfile(item)
+                else:
+                    content = value["content"]
+                    item.type = tarfile.REGTYPE
+                    item.size = len(content)
+                    archive.addfile(item, io.BytesIO(content))
     return output.getvalue()
 
 
@@ -1473,6 +1504,16 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     4_295,
                     "744c0aa01c187eb0faefa9dfd1a0d6533ab1e794e452b843b3268f4162cc5573",
                 ),
+                (
+                    "procurement/tools/audit_staging_purchasing_browser.py",
+                    53_889,
+                    "ce106b21b789980886cbadff90e422a7c4b118734c996790c181d754c61c6a86",
+                ),
+                (
+                    "procurement/tools/audit_staging_purchasing_browser.mjs",
+                    58_550,
+                    "951da82b06202a77a25fa3f219197860cfb24c653a23de551d2b2e242603811c",
+                ),
             ),
         )
         with TemporaryDirectory() as temporary:
@@ -1511,6 +1552,18 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     acceptance._validate_browser_dependency_run_id(invalid)
 
     def test_browser_dependency_image_export_is_exact_and_bounded(self):
+        application = {
+            "source": {
+                "kind": "D",
+                "mode": 0o755,
+                "content": b"",
+            },
+            "source/main.py": {
+                "kind": "F",
+                "mode": 0o644,
+                "content": b"APP = 1\n",
+            },
+        }
         layer = _browser_dependency_layer_fixture(
             {
                 "package": {
@@ -1523,9 +1576,37 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     "mode": 0o644,
                     "content": b"VALUE = 1\n",
                 },
-            }
+            },
+            application_members=application,
         )
         image, parameters = _browser_dependency_image_export_fixture((layer,))
+        application_digest = hashlib.sha256(
+            acceptance._BROWSER_APPLICATION_TREE_DOMAIN
+        )
+        for path, value in sorted(application.items()):
+            content = value["content"]
+            kind = value["kind"].encode("ascii")
+            payload = (
+                hashlib.sha256(content).digest()
+                if value["kind"] == "F"
+                else b""
+            )
+            acceptance._update_browser_runtime_manifest(
+                application_digest,
+                kind=kind,
+                path=path.encode("ascii"),
+                mode=value["mode"],
+                size=len(content),
+                payload=payload,
+            )
+        parameters.update(
+            expected_application_sha256=application_digest.hexdigest(),
+            expected_application_entries=2,
+            expected_application_files=1,
+            expected_application_directories=1,
+            expected_application_bytes=len(b"APP = 1\n"),
+            expected_application_layer=hashlib.sha256(layer).hexdigest(),
+        )
         observation = acceptance._BrowserDependencySourceObservation(
             image_id=parameters["source_image_id"],
             tree_sha256="0" * 64,
@@ -1558,6 +1639,27 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             ("package", "package/value.py"),
         )
         self.assertEqual(snapshot.source_entries, snapshot.selected_entries)
+        self.assertEqual(
+            tuple(value.path for value in snapshot.application_entries),
+            ("source", "source/main.py"),
+        )
+        self.assertEqual(
+            snapshot.dependency_root,
+            acceptance._BrowserDependencyTreeEntry(
+                "",
+                "D",
+                0o755,
+                0,
+                0,
+                snapshot.rootfs_layers[-1][7:],
+                b"",
+            ),
+        )
+        self.assertEqual(snapshot.application_root, snapshot.dependency_root)
+        self.assertEqual(
+            snapshot.application_tree_sha256,
+            application_digest.hexdigest(),
+        )
         self.assertFalse(snapshot.execution_authority)
         observed_tree.assert_called_once()
 
@@ -1690,6 +1792,16 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             ("package", "package/new.py", "same.py"),
         )
         self.assertEqual(entries["same.py"].content, b"replacement\n")
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._apply_browser_dependency_layer(
+                {},
+                None,
+                None,
+                layer_sha256="0" * 64,
+                expected_bytes=0,
+                expected_physical_members=0,
+                expected_semantic_members=0,
+            )
 
         invalid_layers = (
             _browser_dependency_layer_fixture(
@@ -1981,6 +2093,13 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             ) as sources,
             patch.object(
                 acceptance,
+                "_read_browser_dependency_audit_entries",
+                side_effect=lambda _sources: (
+                    lifecycle_ledger.append("audit") or ()
+                ),
+            ) as audits,
+            patch.object(
+                acceptance,
                 "attest_docker_materializer_runtime",
                 side_effect=lambda _client, _root: lifecycle_ledger.append(
                     "attest"
@@ -2009,7 +2128,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 Path("/unused"),
                 run_id=RUN_ID,
             )
-        self.assertIs(result, sentinel)
+        self.assertEqual(result, sentinel)
         attested.assert_called_once_with(client, Path("/unused"))
         self.assertEqual(
             call_ledger,
@@ -2029,11 +2148,20 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             ],
         )
         self.assertEqual(sources.call_count, 2)
+        audits.assert_called_once_with(("held",))
         parsed.assert_called_once_with(b"image-export")
         closed.assert_called_once_with(("held",))
         self.assertEqual(
             lifecycle_ledger,
-            ["open", "attest", "validate", "parse", "validate", "close"],
+            [
+                "open",
+                "attest",
+                "validate",
+                "audit",
+                "parse",
+                "validate",
+                "close",
+            ],
         )
 
         for failure in (
@@ -2181,6 +2309,11 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                             "_parse_browser_dependency_image_export",
                             side_effect=parsed,
                         ),
+                        patch.object(
+                            acceptance,
+                            "_read_browser_dependency_audit_entries",
+                            return_value=(),
+                        ),
                         self.assertRaises(
                             acceptance.LocalStagingAcceptanceError
                         ),
@@ -2194,6 +2327,787 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                         parser.assert_not_called()
                     else:
                         parser.assert_called_once_with(b"image-export")
+
+    def test_browser_application_tree_is_exact_owned_and_provenance_bound(self):
+        layer = "a" * 64
+        entries = {
+            "package": acceptance._BrowserDependencyTreeEntry(
+                "package", "D", 0o755, 0, 0, layer, b""
+            ),
+            "package/main.py": acceptance._BrowserDependencyTreeEntry(
+                "package/main.py", "F", 0o644, 0, 0, layer, b"APP = 1\n"
+            ),
+        }
+        digest = hashlib.sha256(acceptance._BROWSER_APPLICATION_TREE_DOMAIN)
+        for entry in entries.values():
+            acceptance._update_browser_runtime_manifest(
+                digest,
+                kind=entry.kind.encode("ascii"),
+                path=entry.path.encode("ascii"),
+                mode=entry.mode,
+                size=len(entry.content),
+                payload=(
+                    hashlib.sha256(entry.content).digest()
+                    if entry.kind == "F"
+                    else b""
+                ),
+            )
+        expected = digest.hexdigest()
+
+        def observe(selected):
+            return acceptance._browser_application_tree_sha256(
+                selected,
+                expected_sha256=expected,
+                expected_entries=2,
+                expected_files=1,
+                expected_directories=1,
+                expected_bytes=len(b"APP = 1\n"),
+                expected_layer=layer,
+            )
+
+        self.assertEqual(observe(entries), expected)
+        mutations = (
+            ("owner", replace(entries["package/main.py"], user_id=1)),
+            ("group", replace(entries["package/main.py"], group_id=1)),
+            ("layer", replace(entries["package/main.py"], layer_sha256="b" * 64)),
+            ("content", replace(entries["package/main.py"], content=b"APP = 2\n")),
+            ("content type", replace(entries["package/main.py"], content="x")),
+            ("kind type", replace(entries["package/main.py"], kind=[])),
+        )
+        for label, changed in mutations:
+            with self.subTest(label=label):
+                selected = dict(entries)
+                selected["package/main.py"] = changed
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    observe(selected)
+        malformed_entries = (
+            replace(entries["package/main.py"], path=[]),
+            replace(entries["package/main.py"], kind=[]),
+            replace(entries["package/main.py"], content=None),
+            replace(entries["package"], content=None),
+        )
+        for malformed in malformed_entries:
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance._validate_browser_dependency_tree_entry_shape(
+                    malformed,
+                    allow_empty_path=malformed.path == "",
+                )
+
+        invalid_root_layer = _browser_dependency_layer_fixture(
+            {"value.py": {"kind": "F", "mode": 0o644, "content": b"x"}},
+            application_members={
+                "package": {"kind": "D", "mode": 0o755, "content": b""},
+                "package/main.py": {
+                    "kind": "F",
+                    "mode": 0o644,
+                    "content": b"APP = 1\n",
+                },
+            },
+            application_root_mode=0o700,
+        )
+        image, parameters = _browser_dependency_image_export_fixture(
+            (invalid_root_layer,)
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._parse_browser_dependency_image_export(
+                image,
+                **{
+                    **parameters,
+                    "expected_application_sha256": expected,
+                    "expected_application_entries": 2,
+                    "expected_application_files": 1,
+                    "expected_application_directories": 1,
+                    "expected_application_bytes": len(b"APP = 1\n"),
+                    "expected_application_layer": hashlib.sha256(
+                        invalid_root_layer
+                    ).hexdigest(),
+                },
+            )
+
+    def test_browser_audit_sources_are_copied_from_held_descriptors(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contents = (
+                ("uv.lock", b"lock"),
+                ("pyproject.toml", b"project"),
+                ("Dockerfile", b"docker"),
+                (
+                    "procurement/tools/audit_staging_purchasing_browser.py",
+                    b"print('audit')\n",
+                ),
+                (
+                    "procurement/tools/audit_staging_purchasing_browser.mjs",
+                    b"console.log('audit');\n",
+                ),
+            )
+            rows = []
+            for relative, content in contents:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+                path.chmod(0o644)
+                rows.append((path, len(content), hashlib.sha256(content).hexdigest()))
+            with (
+                patch.object(
+                    acceptance,
+                    "_BROWSER_DEPENDENCY_REPOSITORY_ROOT",
+                    root,
+                ),
+                patch.object(
+                    acceptance,
+                    "_BROWSER_DEPENDENCY_BUILD_FILES",
+                    tuple(rows),
+                ),
+            ):
+                sources = acceptance._open_browser_dependency_build_sources()
+                try:
+                    observed = acceptance._read_browser_dependency_audit_entries(
+                        sources
+                    )
+                    self.assertEqual(
+                        tuple(entry.path for entry in observed),
+                        tuple(value[0] for value in contents[-2:]),
+                    )
+                    self.assertEqual(
+                        tuple(entry.content for entry in observed),
+                        tuple(value[1] for value in contents[-2:]),
+                    )
+                    self.assertTrue(
+                        all(
+                            entry.mode == 0o644
+                            and entry.layer_sha256
+                            == hashlib.sha256(entry.content).hexdigest()
+                            for entry in observed
+                        )
+                    )
+                    changed = rows[-1][0]
+                    displaced = changed.with_suffix(".saved")
+                    changed.rename(displaced)
+                    changed.write_bytes(contents[-1][1])
+                    changed.chmod(0o644)
+                    with self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ):
+                        acceptance._read_browser_dependency_audit_entries(
+                            sources
+                        )
+                finally:
+                    acceptance._close_browser_dependency_build_sources(sources)
+
+    def test_browser_python_runtime_snapshot_retains_exact_bytes(self):
+        snapshot = acceptance._snapshot_browser_python_runtime_source()
+        acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._validate_exact_browser_python_runtime_snapshot(
+                replace(snapshot, entries=None)
+            )
+        self.assertFalse(snapshot.execution_authority)
+        self.assertEqual(snapshot.observation.stdlib_entries, 3_251)
+        self.assertEqual(len(snapshot.entries), 3_260)
+        by_path = {entry.path: entry for entry in snapshot.entries}
+        python = by_path[str(acceptance._BROWSER_PYTHON_EXECUTABLE)]
+        self.assertEqual(
+            hashlib.sha256(python.content).hexdigest(),
+            acceptance._BROWSER_PYTHON_SHA256,
+        )
+        stdlib_link = by_path[
+            str(acceptance._BROWSER_RUNTIME_STDLIB_ROOT / "site-packages")
+            + "/_sysconfigdata__linux_x86_64-linux-gnu.py"
+        ]
+        self.assertEqual(
+            stdlib_link.content,
+            b"../_sysconfigdata__linux_x86_64-linux-gnu.py",
+        )
+        self.assertNotIn(str(acceptance._BROWSER_RUNTIME_STDLIB_ZIP), by_path)
+        self.assertTrue(
+            all(
+                entry.provenance.startswith(
+                    ("python-startup:", "python-stdlib:")
+                )
+                for entry in snapshot.entries
+            )
+        )
+
+    def test_browser_runtime_bundle_namespace_is_exact_and_provenance_bound(self):
+        E = acceptance._BrowserRuntimeBundleEntry
+        runtime = acceptance._BrowserPythonRuntimeSnapshot(
+            entries=(
+                E(
+                    "/nix/runtime",
+                    "F",
+                    0o555,
+                    1000,
+                    1000,
+                    "python-startup:" + "1" * 64,
+                    b"runtime",
+                ),
+            ),
+            observation=acceptance._BrowserPythonRuntimeObservation(
+                startup_sha256=acceptance._BROWSER_RUNTIME_STARTUP_SHA256,
+                stdlib_sha256=acceptance._BROWSER_RUNTIME_STDLIB_SHA256,
+                stdlib_entries=acceptance._BROWSER_RUNTIME_STDLIB_ENTRIES,
+                stdlib_regular_files=acceptance._BROWSER_RUNTIME_STDLIB_FILES,
+                stdlib_directories=acceptance._BROWSER_RUNTIME_STDLIB_DIRECTORIES,
+                stdlib_symlinks=acceptance._BROWSER_RUNTIME_STDLIB_SYMLINKS,
+                stdlib_regular_bytes=acceptance._BROWSER_RUNTIME_STDLIB_BYTES,
+                stdlib_zip_absent=True,
+                all_source_mounts_read_only=False,
+                execution_authority=False,
+            ),
+            execution_authority=False,
+        )
+        tree_entry = acceptance._BrowserDependencyTreeEntry
+        application = tree_entry("pkg", "D", 0o755, 0, 0, "2" * 64, b"")
+        dependency_entry = tree_entry(
+            "dep.py", "F", 0o644, 0, 0, "3" * 64, b"dep"
+        )
+        audits = (
+            tree_entry(
+                "procurement/tools/audit.py",
+                "F",
+                0o644,
+                1000,
+                1000,
+                "4" * 64,
+                b"audit",
+            ),
+            tree_entry(
+                "procurement/tools/audit.mjs",
+                "F",
+                0o644,
+                1000,
+                1000,
+                "5" * 64,
+                b"audit-js",
+            ),
+        )
+        dependency = acceptance._BrowserDependencyImageSnapshot(
+            image_id=IMAGE_ID,
+            rootfs_layers=(),
+            source_entries=(),
+            selected_entries=(dependency_entry,),
+            observation=unittest.mock.sentinel.observation,
+            execution_authority=False,
+            application_entries=(application,),
+            application_tree_sha256="6" * 64,
+            audit_entries=audits,
+            dependency_root=tree_entry(
+                "", "D", 0o755, 0, 0, "3" * 64, b""
+            ),
+            application_root=tree_entry(
+                "", "D", 0o755, 0, 0, "2" * 64, b""
+            ),
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._validate_exact_browser_dependency_snapshot(
+                replace(
+                    dependency,
+                    image_id=acceptance.FROZEN_IMAGE_ID,
+                    rootfs_layers=acceptance.FROZEN_IMAGE_ROOTFS_LAYERS,
+                    application_tree_sha256=(
+                        acceptance._BROWSER_APPLICATION_TREE_SHA256
+                    ),
+                    source_entries=None,
+                )
+            )
+        with patch.object(
+            acceptance,
+            "_validate_exact_browser_dependency_snapshot",
+        ), patch.object(
+            acceptance,
+            "_validate_exact_browser_python_runtime_snapshot",
+        ):
+            entries = acceptance._collect_browser_runtime_bundle_entries(
+                runtime,
+                dependency,
+            )
+        self.assertEqual(
+            tuple(entry.path for entry in entries),
+            (
+                "/nix",
+                "/nix/runtime",
+                "/runtime",
+                "/runtime/pkg",
+                "/runtime/procurement",
+                "/runtime/procurement/tools",
+                "/runtime/procurement/tools/audit.mjs",
+                "/runtime/procurement/tools/audit.py",
+                "/runtime/site-packages",
+                "/runtime/site-packages/dep.py",
+            ),
+        )
+        self.assertEqual(
+            tuple(entry.provenance.split(":", 1)[0] for entry in entries),
+            (
+                "bundle-parent",
+                "python-startup",
+                "application-layer",
+                "application-layer",
+                "bundle-parent",
+                "bundle-parent",
+                "audit-source",
+                "audit-source",
+                "dependency-layer",
+                "dependency-layer",
+            ),
+        )
+        collision = replace(
+            dependency,
+            audit_entries=(
+                replace(audits[0], path="pkg"),
+                audits[1],
+            ),
+        )
+        with (
+            patch.object(
+                acceptance,
+                "_validate_exact_browser_dependency_snapshot",
+            ),
+            patch.object(
+                acceptance,
+                "_validate_exact_browser_python_runtime_snapshot",
+            ),
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._collect_browser_runtime_bundle_entries(
+                runtime,
+                collision,
+            )
+        provenance = hashlib.sha256(
+            acceptance._BROWSER_DEPENDENCY_LAYER_PROVENANCE_DOMAIN
+        )
+        path = dependency_entry.path.encode("ascii")
+        provenance.update(len(path).to_bytes(4, "big"))
+        provenance.update(path)
+        provenance.update(bytes.fromhex(dependency_entry.layer_sha256))
+        self.assertEqual(
+            acceptance._browser_dependency_layer_provenance_sha256(
+                (dependency_entry,),
+                expected_sha256=provenance.hexdigest(),
+            ),
+            provenance.hexdigest(),
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._browser_dependency_layer_provenance_sha256(
+                (replace(dependency_entry, layer_sha256="7" * 64),),
+                expected_sha256=provenance.hexdigest(),
+            )
+
+    def test_browser_runtime_bundle_encoding_is_canonical_and_bounded(self):
+        E = acceptance._BrowserRuntimeBundleEntry
+        entries = (
+            E(
+                "/runtime",
+                "D",
+                0o755,
+                0,
+                0,
+                "application-layer:" + "1" * 64,
+                b"",
+            ),
+            E(
+                "/runtime/a",
+                "F",
+                0o644,
+                0,
+                0,
+                "application-layer:" + "2" * 64,
+                b"alpha",
+            ),
+            E(
+                "/runtime/link",
+                "L",
+                0o777,
+                0,
+                0,
+                "application-layer:" + "3" * 64,
+                b"/runtime/a",
+            ),
+        )
+        encoded = acceptance._encode_browser_runtime_bundle(entries)
+        shuffled = acceptance._encode_browser_runtime_bundle(tuple(reversed(entries)))
+        self.assertEqual(encoded, shuffled)
+        parsed, manifest_sha256, bundle_sha256, regular_bytes = (
+            acceptance._parse_browser_runtime_bundle(encoded[0])
+        )
+        self.assertEqual(parsed, entries)
+        self.assertEqual(manifest_sha256, encoded[1])
+        self.assertEqual(bundle_sha256, encoded[2])
+        self.assertEqual(regular_bytes, 5)
+        for label, raw in (
+            ("truncated", encoded[0][:-1]),
+            ("trailing", encoded[0] + b"x"),
+            (
+                "manifest drift",
+                encoded[0][:8]
+                + encoded[0][8:].replace(b'"kind":"F"', b'"kind":"X"', 1),
+            ),
+        ):
+            with self.subTest(label=label), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._parse_browser_runtime_bundle(raw)
+        with (
+            patch.object(acceptance, "_BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT", 2),
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._encode_browser_runtime_bundle(entries)
+        with (
+            patch.object(acceptance, "_BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT", 4),
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._encode_browser_runtime_bundle(entries)
+        invalid_entries = (
+            ("non-text path", (entries[0], replace(entries[1], path=1))),
+            (
+                "oversized component",
+                (entries[0], replace(entries[1], path="/runtime/" + "x" * 256)),
+            ),
+            (
+                "symlink cycle",
+                (
+                    entries[0],
+                    replace(
+                        entries[2],
+                        path="/runtime/left",
+                        content=b"/runtime/right",
+                    ),
+                    replace(
+                        entries[2],
+                        path="/runtime/right",
+                        content=b"/runtime/left",
+                    ),
+                ),
+            ),
+        )
+        for label, selected in invalid_entries:
+            with self.subTest(label=label), self.assertRaises(
+                acceptance.LocalStagingAcceptanceError
+            ):
+                acceptance._encode_browser_runtime_bundle(selected)
+        deep_manifest = (
+            b'{"entries":'
+            + b"[" * 2_000
+            + b"0"
+            + b"]" * 2_000
+            + b',"protocol":"'
+            + acceptance._BROWSER_RUNTIME_BUNDLE_PROTOCOL.encode("ascii")
+            + b'"}'
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._parse_browser_runtime_bundle(
+                len(deep_manifest).to_bytes(8, "big") + deep_manifest
+            )
+
+    def test_pinned_browser_runtime_bundle_is_sealed_owned_and_inert(self):
+        E = acceptance._BrowserRuntimeBundleEntry
+        entries = (
+            E(
+                "/runtime",
+                "D",
+                0o555,
+                0,
+                0,
+                "bundle-parent:"
+                + acceptance._BROWSER_RUNTIME_PARENT_POLICY_SHA256,
+                b"",
+            ),
+            E(
+                "/runtime/a",
+                "F",
+                0o644,
+                0,
+                0,
+                "application-layer:" + "1" * 64,
+                b"alpha",
+            ),
+        )
+        with (
+            patch.object(acceptance.subprocess, "Popen") as spawned,
+            patch.object(acceptance, "write_browser_worker_frame") as frame,
+            patch.object(acceptance, "write_browser_worker_secret") as secret,
+        ):
+            with acceptance._seal_browser_runtime_bundle(entries) as bundle:
+                acceptance._validate_pinned_browser_runtime_bundle(bundle)
+                with self.assertRaises(
+                    acceptance.LocalStagingAcceptanceError
+                ):
+                    acceptance._validate_frozen_browser_runtime_bundle(bundle)
+                info = os.fstat(bundle.descriptor)
+                self.assertEqual(stat.S_IMODE(info.st_mode), 0o400)
+                self.assertEqual(info.st_nlink, 0)
+                self.assertEqual(
+                    fcntl.fcntl(bundle.descriptor, fcntl.F_GET_SEALS),
+                    acceptance._BROWSER_RUNTIME_BUNDLE_SEALS,
+                )
+                self.assertFalse(bundle.execution_authority)
+                with self.assertRaises(OSError):
+                    os.write(bundle.descriptor, b"x")
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    copy.copy(bundle)
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    copy.deepcopy(bundle)
+        spawned.assert_not_called()
+        frame.assert_not_called()
+        secret.assert_not_called()
+
+        bundle = acceptance._seal_browser_runtime_bundle(entries)
+        descriptor = bundle.descriptor
+        try:
+            with (
+                patch.object(
+                    acceptance.os,
+                    "close",
+                    side_effect=KeyboardInterrupt(),
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                bundle.close()
+            self.assertEqual(bundle.descriptor, descriptor)
+            self.assertIs(bundle._owner_token, acceptance._BROWSER_HANDLE_TOKEN)
+            self.assertGreaterEqual(fcntl.fcntl(descriptor, fcntl.F_GETFD), 0)
+        finally:
+            bundle.close()
+
+        raw, manifest_sha256, bundle_sha256, regular_bytes = (
+            acceptance._encode_browser_runtime_bundle(entries)
+        )
+        with (
+            patch.object(
+                acceptance,
+                "_BROWSER_RUNTIME_BUNDLE_EXPECTED_ENTRIES",
+                len(entries),
+            ),
+            patch.object(
+                acceptance,
+                "_BROWSER_RUNTIME_BUNDLE_EXPECTED_REGULAR_BYTES",
+                regular_bytes,
+            ),
+            patch.object(
+                acceptance,
+                "_BROWSER_RUNTIME_BUNDLE_EXPECTED_BYTES",
+                len(raw),
+            ),
+            patch.object(
+                acceptance,
+                "_BROWSER_RUNTIME_BUNDLE_EXPECTED_MANIFEST_SHA256",
+                manifest_sha256,
+            ),
+            patch.object(
+                acceptance,
+                "_BROWSER_RUNTIME_BUNDLE_EXPECTED_SHA256",
+                bundle_sha256,
+            ),
+            patch.object(
+                acceptance,
+                "_snapshot_browser_python_runtime_source",
+                return_value=unittest.mock.sentinel.runtime,
+            ),
+            patch.object(
+                acceptance,
+                "_observe_frozen_browser_dependency_source",
+                return_value=unittest.mock.sentinel.dependency,
+            ),
+            patch.object(
+                acceptance,
+                "_collect_browser_runtime_bundle_entries",
+                return_value=entries,
+            ),
+        ):
+            with acceptance._open_frozen_browser_runtime_bundle(
+                object(),
+                Path("/unused"),
+                run_id=RUN_ID,
+            ) as exact_bundle:
+                acceptance._validate_frozen_browser_runtime_bundle(exact_bundle)
+                self.assertIs(
+                    exact_bundle._source_token,
+                    acceptance._BROWSER_FROZEN_RUNTIME_BUNDLE_TOKEN,
+                )
+
+    def test_browser_runtime_materialization_failure_closes_descriptors(self):
+        E = acceptance._BrowserRuntimeBundleEntry
+        entries = (
+            E(
+                "/runtime",
+                "D",
+                0o555,
+                0,
+                0,
+                "bundle-parent:"
+                + acceptance._BROWSER_RUNTIME_PARENT_POLICY_SHA256,
+                b"",
+            ),
+            E(
+                "/runtime/a",
+                "F",
+                0o644,
+                0,
+                0,
+                "application-layer:" + "1" * 64,
+                b"alpha",
+            ),
+        )
+        injections = (
+            (acceptance.os, "write"),
+            (acceptance.os, "fchmod"),
+            (acceptance.fcntl, "fcntl"),
+            (acceptance.os, "open"),
+            (acceptance, "_validate_pinned_browser_runtime_bundle"),
+        )
+        for owner, name in injections:
+            with self.subTest(point=name):
+                before = set(os.listdir("/proc/self/fd"))
+                with (
+                    patch.object(owner, name, side_effect=KeyboardInterrupt()),
+                    patch.object(acceptance.subprocess, "Popen") as spawned,
+                    patch.object(
+                        acceptance,
+                        "write_browser_worker_secret",
+                    ) as secret,
+                    self.assertRaises(KeyboardInterrupt),
+                ):
+                    acceptance._seal_browser_runtime_bundle(entries)
+                self.assertEqual(set(os.listdir("/proc/self/fd")), before)
+                spawned.assert_not_called()
+                secret.assert_not_called()
+
+        before = set(os.listdir("/proc/self/fd"))
+        with (
+            patch.object(acceptance, "_BROWSER_WORKER_MAX_FD", 2),
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._seal_browser_runtime_bundle(entries)
+        self.assertEqual(set(os.listdir("/proc/self/fd")), before)
+
+        result_read, result_write = os.pipe()
+        child = os.fork()
+        if child == 0:
+            os.close(result_read)
+            os.close(0)
+            outcome = b"0"
+            try:
+                acceptance._seal_browser_runtime_bundle(entries)
+            except acceptance.LocalStagingAcceptanceError:
+                try:
+                    fcntl.fcntl(0, fcntl.F_GETFD)
+                except OSError:
+                    outcome = b"1"
+            except BaseException:
+                outcome = b"E"
+            try:
+                os.write(result_write, outcome)
+            finally:
+                os._exit(0)
+        os.close(result_write)
+        try:
+            outcome = os.read(result_read, 2)
+        finally:
+            os.close(result_read)
+        _, child_status = os.waitpid(child, 0)
+        self.assertEqual(child_status, 0)
+        self.assertEqual(outcome, b"1")
+
+        before = set(os.listdir("/proc/self/fd"))
+        real_close = acceptance.os.close
+        reused_descriptor = -1
+        close_calls = []
+
+        def close_then_reuse(descriptor):
+            nonlocal reused_descriptor
+            close_calls.append(descriptor)
+            if reused_descriptor == -1:
+                real_close(descriptor)
+                reused_descriptor = os.open(
+                    "/dev/null",
+                    os.O_RDONLY | os.O_CLOEXEC,
+                )
+                self.assertEqual(reused_descriptor, descriptor)
+                raise KeyboardInterrupt
+            real_close(descriptor)
+
+        try:
+            with (
+                patch.object(
+                    acceptance.os,
+                    "close",
+                    side_effect=close_then_reuse,
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._seal_browser_runtime_bundle(entries)
+            self.assertGreaterEqual(
+                fcntl.fcntl(reused_descriptor, fcntl.F_GETFD),
+                0,
+            )
+            self.assertEqual(len(close_calls), 2)
+        finally:
+            if reused_descriptor >= 0:
+                real_close(reused_descriptor)
+        self.assertEqual(set(os.listdir("/proc/self/fd")), before)
+
+        real_fstat = acceptance.os.fstat
+        for failed_fstat_call in (1, 2):
+            with self.subTest(failed_fstat_call=failed_fstat_call):
+                before = set(os.listdir("/proc/self/fd"))
+                foreign_descriptor = -1
+                fstat_calls = 0
+
+                def fstat_then_reuse(descriptor):
+                    nonlocal foreign_descriptor, fstat_calls
+                    fstat_calls += 1
+                    if fstat_calls == failed_fstat_call:
+                        real_close(descriptor)
+                        foreign_descriptor = os.memfd_create(
+                            acceptance._BROWSER_RUNTIME_BUNDLE_MEMFD_NAME_PREFIX,
+                            os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING,
+                        )
+                        self.assertEqual(foreign_descriptor, descriptor)
+                        raise KeyboardInterrupt
+                    return real_fstat(descriptor)
+
+                try:
+                    with (
+                        patch.object(
+                            acceptance.os,
+                            "fstat",
+                            side_effect=fstat_then_reuse,
+                        ),
+                        self.assertRaises(KeyboardInterrupt),
+                    ):
+                        acceptance._seal_browser_runtime_bundle(entries)
+                    self.assertGreaterEqual(
+                        fcntl.fcntl(
+                            foreign_descriptor,
+                            fcntl.F_GETFD,
+                        ),
+                        0,
+                    )
+                finally:
+                    if foreign_descriptor >= 0:
+                        real_close(foreign_descriptor)
+                self.assertEqual(set(os.listdir("/proc/self/fd")), before)
+
+        before = set(os.listdir("/proc/self/fd"))
+        fstat_calls = 0
+
+        def interrupt_first_fstat(descriptor):
+            nonlocal fstat_calls
+            fstat_calls += 1
+            if fstat_calls == 1:
+                raise KeyboardInterrupt
+            return real_fstat(descriptor)
+
+        with (
+            patch.object(
+                acceptance.os,
+                "fstat",
+                side_effect=interrupt_first_fstat,
+            ),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            acceptance._seal_browser_runtime_bundle(entries)
+        self.assertEqual(set(os.listdir("/proc/self/fd")), before)
 
 
     def test_browser_containment_cgroup_and_nspid_text_is_canonical(self):

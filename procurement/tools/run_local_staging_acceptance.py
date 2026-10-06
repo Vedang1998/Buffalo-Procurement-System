@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import base64
 import csv
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from email.parser import BytesParser
 from email.policy import compat32
+import errno
 import fcntl
 import hashlib
 import io
@@ -22,6 +23,7 @@ import json
 import math
 import os
 from pathlib import Path
+import posixpath
 import re
 import resource
 import selectors
@@ -139,6 +141,7 @@ _BROWSER_RUNTIME_STDLIB_BYTES = 102_170_195
 _BROWSER_RUNTIME_STARTUP_FILE_BYTES_LIMIT = 8 * 1024 * 1024
 _BROWSER_RUNTIME_TREE_DEPTH_LIMIT = 64
 _BROWSER_RUNTIME_PATH_BYTES_LIMIT = 4_096
+_BROWSER_RUNTIME_COMPONENT_BYTES_LIMIT = 255
 _BROWSER_DEPENDENCY_IMAGE_PATH = (
     "/opt/buffalo-venv/lib/python3.13/site-packages"
 )
@@ -228,6 +231,12 @@ _BROWSER_DEPENDENCY_TREE_DOMAIN = (
 _BROWSER_DEPENDENCY_TREE_SHA256 = (
     "3c20c381aacf01fd0de297286ce26aad1a2a13d538a0dcbc8eca8d30e81e22a3"
 )
+_BROWSER_DEPENDENCY_LAYER_PROVENANCE_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_DEPENDENCY_LAYER_PROVENANCE_V1\0"
+)
+_BROWSER_DEPENDENCY_LAYER_PROVENANCE_SHA256 = (
+    "63fe97d19516e501d82b05366631cef7c334be2b08b46a1fa339ed69d5d37190"
+)
 _BROWSER_DEPENDENCY_TREE_ENTRIES = 833
 _BROWSER_DEPENDENCY_TREE_FILES = 726
 _BROWSER_DEPENDENCY_TREE_DIRECTORIES = 107
@@ -242,6 +251,21 @@ _BROWSER_DEPENDENCY_ARCHIVE_MEMBERS = 837
 _BROWSER_DEPENDENCY_PATH_BYTES_LIMIT = 4_096
 _BROWSER_DEPENDENCY_PATH_DEPTH_LIMIT = 64
 _BROWSER_DEPENDENCY_RECORD_ROWS = 731
+_BROWSER_APPLICATION_TREE_DOMAIN = b"BUFFALO_LOCAL_BROWSER_SOURCE_TREE_V1\0"
+_BROWSER_APPLICATION_TREE_SHA256 = (
+    "b3f52e90e8b47d79f9c198b89d194d9d04a4d745e12ec9a39c7a2e513ef58aca"
+)
+_BROWSER_APPLICATION_TREE_ENTRIES = 133
+_BROWSER_APPLICATION_TREE_FILES = 124
+_BROWSER_APPLICATION_TREE_DIRECTORIES = 9
+_BROWSER_APPLICATION_TREE_SYMLINKS = 0
+_BROWSER_APPLICATION_TREE_BYTES = 5_209_228
+_BROWSER_APPLICATION_ROOT_MODE = 0o755
+_BROWSER_APPLICATION_ROOT_UID = 0
+_BROWSER_APPLICATION_ROOT_GID = 0
+_BROWSER_APPLICATION_WINNING_LAYER = (
+    "bd44ce5a1cc86e352b6483432ed34708645a6047786b8d6be1a0555bfa50838b"
+)
 _BROWSER_DEPENDENCY_DISTRIBUTIONS = (
     ("annotated-doc", "0.0.5", "annotated_doc-0.0.5.dist-info"),
     ("annotated-types", "0.8.0", "annotated_types-0.8.0.dist-info"),
@@ -363,6 +387,18 @@ _BROWSER_DEPENDENCY_BUILD_FILES = (
         _FROZEN_DOCKERFILE_BYTES,
         _FROZEN_DOCKERFILE_SHA256,
     ),
+    (
+        _BROWSER_DEPENDENCY_REPOSITORY_ROOT
+        / "procurement/tools/audit_staging_purchasing_browser.py",
+        53_889,
+        "ce106b21b789980886cbadff90e422a7c4b118734c996790c181d754c61c6a86",
+    ),
+    (
+        _BROWSER_DEPENDENCY_REPOSITORY_ROOT
+        / "procurement/tools/audit_staging_purchasing_browser.mjs",
+        58_550,
+        "951da82b06202a77a25fa3f219197860cfb24c653a23de551d2b2e242603811c",
+    ),
 )
 _BROWSER_WORKER_RUNNER_SOURCE = Path(__file__).resolve(strict=True).with_name(
     "run_local_staging_browser_worker.py"
@@ -382,6 +418,29 @@ _BROWSER_WORKER_RUNNER_SEALS = (
     | fcntl.F_SEAL_GROW
     | fcntl.F_SEAL_WRITE
 )
+_BROWSER_RUNTIME_BUNDLE_MAGIC = b"BUFFALO_LOCAL_BROWSER_RUNTIME_BUNDLE_V1\0"
+_BROWSER_RUNTIME_BUNDLE_PROTOCOL = "BUFFALO_LOCAL_BROWSER_RUNTIME_BUNDLE_V1"
+_BROWSER_RUNTIME_BUNDLE_MEMFD_NAME_PREFIX = "buffalo-local-browser-runtime"
+_BROWSER_RUNTIME_BUNDLE_MEMFD_TARGET = re.compile(
+    r"\A/memfd:buffalo-local-browser-runtime-[0-9a-f]{32} \(deleted\)\Z"
+)
+_BROWSER_RUNTIME_BUNDLE_MODE = 0o400
+_BROWSER_RUNTIME_BUNDLE_SEALS = _BROWSER_WORKER_RUNNER_SEALS
+_BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT = 5_000
+_BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT = 4 * 1024 * 1024
+_BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT = 512 * 1024 * 1024
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_ENTRIES = 4_242
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_REGULAR_BYTES = 150_061_406
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_BYTES = 151_612_957
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_MANIFEST_SHA256 = (
+    "018b0e202da8c2dfd2868e1bcc4841f1ec3fb4173a1d2c93d0d6c2944707d9ce"
+)
+_BROWSER_RUNTIME_BUNDLE_EXPECTED_SHA256 = (
+    "a7ea8a1d3472a897ab24c860f1ef530e1b71bf9f70763a729170c140a96d842d"
+)
+_BROWSER_RUNTIME_PARENT_POLICY_SHA256 = (
+    "3a8831475b2d6b539f5de30f25dd35ea4d2869ca8c750465487ac160fe91ee17"
+)
 _BROWSER_LIVE_PROCESS_STATES = frozenset({"R", "S"})
 _BROWSER_PROCESS_STATES = frozenset(
     {"R", "S", "D", "T", "t", "W", "X", "x", "Z", "P", "I"}
@@ -392,6 +451,7 @@ _BROWSER_WORKER_ENVIRONMENT = (
     ("TZ", "UTC"),
 )
 _BROWSER_HANDLE_TOKEN = object()
+_BROWSER_FROZEN_RUNTIME_BUNDLE_TOKEN = object()
 _SHA256_TEXT = re.compile(r"\A[0-9a-f]{64}\Z")
 _GIT_OID_TEXT = re.compile(r"\A[0-9a-f]{40}\Z")
 _CANONICAL_FD = re.compile(r"\A(?:[3-9]|[1-9][0-9]+)\Z")
@@ -735,6 +795,13 @@ class _BrowserPythonRuntimeObservation:
 
 
 @dataclass(frozen=True)
+class _BrowserPythonRuntimeSnapshot:
+    entries: tuple[_BrowserRuntimeBundleEntry, ...]
+    observation: _BrowserPythonRuntimeObservation
+    execution_authority: bool
+
+
+@dataclass(frozen=True)
 class _BrowserDependencySourceObservation:
     image_id: str
     tree_sha256: str
@@ -772,6 +839,111 @@ class _BrowserDependencyImageSnapshot:
     selected_entries: tuple[_BrowserDependencyTreeEntry, ...]
     observation: _BrowserDependencySourceObservation
     execution_authority: bool
+    application_entries: tuple[_BrowserDependencyTreeEntry, ...] = ()
+    application_tree_sha256: str = ""
+    audit_entries: tuple[_BrowserDependencyTreeEntry, ...] = ()
+    dependency_root: _BrowserDependencyTreeEntry | None = None
+    application_root: _BrowserDependencyTreeEntry | None = None
+
+
+@dataclass(frozen=True)
+class _BrowserRuntimeBundleEntry:
+    path: str
+    kind: str
+    mode: int
+    user_id: int
+    group_id: int
+    provenance: str
+    content: bytes
+
+
+@dataclass
+class _PinnedBrowserRuntimeBundle:
+    """Owned sealed runtime bytes; not yet an executable projection."""
+
+    descriptor: int
+    target: str
+    device: int
+    inode: int
+    size: int
+    sha256: str
+    manifest_sha256: str
+    entries: int
+    regular_bytes: int
+    execution_authority: bool
+    _owner_token: object = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _source_token: object = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def close(self) -> None:
+        descriptor = self.descriptor
+        if (
+            descriptor == -1
+            and self._owner_token is None
+            and self._source_token is None
+        ):
+            return
+        if (
+            self._owner_token is not _BROWSER_HANDLE_TOKEN
+            or type(descriptor) is not int
+            or descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+            or type(self.target) is not str
+            or _BROWSER_RUNTIME_BUNDLE_MEMFD_TARGET.fullmatch(self.target)
+            is None
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle cleanup differs"
+            )
+        try:
+            info = os.fstat(descriptor)
+            seals = fcntl.fcntl(descriptor, fcntl.F_GET_SEALS)
+            target = os.readlink(f"/proc/self/fd/{descriptor}")
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle cleanup differs"
+            ) from None
+        if (
+            (info.st_dev, info.st_ino) != (self.device, self.inode)
+            or info.st_size != self.size
+            or seals != _BROWSER_RUNTIME_BUNDLE_SEALS
+            or target != self.target
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle cleanup differs"
+            )
+        os.close(descriptor)
+        self.descriptor = -1
+        self._owner_token = None
+        self._source_token = None
+
+    def __enter__(self) -> _PinnedBrowserRuntimeBundle:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def __copy__(self) -> _PinnedBrowserRuntimeBundle:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle ownership differs"
+        )
+
+    def __deepcopy__(
+        self,
+        _: dict[int, object],
+    ) -> _PinnedBrowserRuntimeBundle:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle ownership differs"
+        )
 
 
 @dataclass(frozen=True)
@@ -1451,7 +1623,7 @@ def _update_browser_runtime_manifest(
 
 def _observe_exact_browser_runtime_file(
     expectation: _BrowserRuntimeFileExpectation,
-) -> tuple[bytes, bytes, int, int, bytes, bool]:
+) -> tuple[bytes, bytes, int, int, bytes, bytes, bool]:
     if (
         type(expectation) is not _BrowserRuntimeFileExpectation
         or not isinstance(expectation.path, Path)
@@ -1568,6 +1740,7 @@ def _observe_exact_browser_runtime_file(
             expectation.mode,
             expectation.size,
             target_before,
+            target_before,
             read_only,
         )
 
@@ -1587,6 +1760,7 @@ def _observe_exact_browser_runtime_file(
         before = os.fstat(descriptor)
         descriptor_target = os.readlink(f"/proc/self/fd/{descriptor}")
         digest = hashlib.sha256()
+        content = bytearray()
         observed = 0
         while observed <= expectation.size:
             block = os.read(
@@ -1597,6 +1771,7 @@ def _observe_exact_browser_runtime_file(
                 break
             observed += len(block)
             digest.update(block)
+            content.extend(block)
         after = os.fstat(descriptor)
         named_after = expectation.path.lstat()
         read_only = bool(os.fstatvfs(descriptor).f_flag & os.ST_RDONLY)
@@ -1632,6 +1807,7 @@ def _observe_exact_browser_runtime_file(
         expectation.mode,
         expectation.size,
         digest.digest(),
+        bytes(content),
         read_only,
     )
 
@@ -1640,6 +1816,7 @@ def _observe_browser_runtime_startup_files(
     expectations: tuple[_BrowserRuntimeFileExpectation, ...],
     *,
     expected_sha256: str,
+    retained_entries: list[_BrowserRuntimeBundleEntry] | None = None,
 ) -> _BrowserRuntimeStartupObservation:
     if (
         type(expectations) is not tuple
@@ -1647,6 +1824,10 @@ def _observe_browser_runtime_startup_files(
         or len(expectations) > len(_BROWSER_RUNTIME_STARTUP_FILES)
         or type(expected_sha256) is not str
         or _SHA256_TEXT.fullmatch(expected_sha256) is None
+        or (
+            retained_entries is not None
+            and type(retained_entries) is not list
+        )
     ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser Python runtime source differs"
@@ -1661,7 +1842,7 @@ def _observe_browser_runtime_startup_files(
             "local acceptance browser Python runtime source differs"
         )
     digest = hashlib.sha256(_BROWSER_RUNTIME_STARTUP_DOMAIN)
-    for kind, path, mode, size, payload, _ in sorted(
+    for kind, path, mode, size, payload, _, _ in sorted(
         records,
         key=lambda item: item[1],
     ):
@@ -1678,9 +1859,25 @@ def _observe_browser_runtime_startup_files(
         raise LocalStagingAcceptanceError(
             "local acceptance browser Python runtime source differs"
         )
+    if retained_entries is not None:
+        retained_entries.extend(
+            _BrowserRuntimeBundleEntry(
+                path=os.fsdecode(path),
+                kind=kind.decode("ascii"),
+                mode=mode,
+                user_id=expectation.user_id,
+                group_id=expectation.group_id,
+                provenance=f"python-startup:{observed}",
+                content=content,
+            )
+            for expectation, (kind, path, mode, _, _, content, _) in sorted(
+                zip(expectations, records, strict=True),
+                key=lambda item: item[1][1],
+            )
+        )
     return _BrowserRuntimeStartupObservation(
         sha256=observed,
-        all_source_mounts_read_only=all(record[5] for record in records),
+        all_source_mounts_read_only=all(record[6] for record in records),
     )
 
 
@@ -1770,6 +1967,7 @@ def _observe_browser_stdlib_tree(
     expected_user_id: int,
     expected_group_id: int,
     expected_root_mode: int,
+    retained_entries: list[_BrowserRuntimeBundleEntry] | None = None,
 ) -> _BrowserStdlibObservation:
     integer_values = (
         expected_entries,
@@ -1805,6 +2003,10 @@ def _observe_browser_stdlib_tree(
         or expected_user_id > 4_294_967_295
         or expected_group_id > 4_294_967_295
         or expected_root_mode > 0o7777
+        or (
+            retained_entries is not None
+            and type(retained_entries) is not list
+        )
     ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser Python runtime source differs"
@@ -1813,7 +2015,7 @@ def _observe_browser_stdlib_tree(
         absent_zip
     )
     root_descriptor = -1
-    records: list[tuple[bytes, bytes, int, int, bytes]] = []
+    records: list[tuple[bytes, bytes, int, int, bytes, bytes]] = []
     regular_files = 0
     directories = 0
     symlinks = 0
@@ -1844,7 +2046,7 @@ def _observe_browser_stdlib_tree(
         parent_descriptor: int,
         name: str,
         named_before: os.stat_result,
-    ) -> tuple[int, bytes]:
+    ) -> tuple[int, bytes, bytes]:
         nonlocal regular_bytes
         descriptor = -1
         try:
@@ -1866,6 +2068,7 @@ def _observe_browser_stdlib_tree(
             ):
                 raise OSError
             digest = hashlib.sha256()
+            content = bytearray()
             observed = 0
             while observed <= before.st_size:
                 block = os.read(
@@ -1876,6 +2079,7 @@ def _observe_browser_stdlib_tree(
                     break
                 observed += len(block)
                 digest.update(block)
+                content.extend(block)
             after = os.fstat(descriptor)
             named_after = os.stat(
                 name,
@@ -1897,7 +2101,7 @@ def _observe_browser_stdlib_tree(
         require_identity(before, after)
         require_identity(before, named_after)
         regular_bytes += observed
-        return observed, digest.digest()
+        return observed, digest.digest(), bytes(content)
 
     def walk(
         directory_descriptor: int,
@@ -1962,13 +2166,15 @@ def _observe_browser_stdlib_tree(
                 ) from None
             mode = stat.S_IMODE(named_before.st_mode)
             if stat.S_ISREG(named_before.st_mode):
-                size, payload = observe_regular(
+                size, payload, content = observe_regular(
                     directory_descriptor,
                     name,
                     named_before,
                 )
                 regular_files += 1
-                records.append((relative, b"F", mode, size, payload))
+                records.append(
+                    (relative, b"F", mode, size, payload, content)
+                )
             elif stat.S_ISDIR(named_before.st_mode):
                 child_descriptor = -1
                 try:
@@ -1986,7 +2192,7 @@ def _observe_browser_stdlib_tree(
                     ):
                         raise OSError
                     directories += 1
-                    records.append((relative, b"D", mode, 0, b""))
+                    records.append((relative, b"D", mode, 0, b"", b""))
                     walk(
                         child_descriptor,
                         relative,
@@ -2036,7 +2242,14 @@ def _observe_browser_stdlib_tree(
                 require_identity(named_after, named_before)
                 symlinks += 1
                 records.append(
-                    (relative, b"L", mode, len(target_before), target_before)
+                    (
+                        relative,
+                        b"L",
+                        mode,
+                        len(target_before),
+                        target_before,
+                        target_before,
+                    )
                 )
             else:
                 raise LocalStagingAcceptanceError(
@@ -2091,7 +2304,7 @@ def _observe_browser_stdlib_tree(
             "local acceptance browser Python runtime source differs"
         )
     digest = hashlib.sha256(_BROWSER_RUNTIME_STDLIB_DOMAIN)
-    for path, kind, mode, size, payload in sorted(records):
+    for path, kind, mode, size, payload, _ in sorted(records):
         _update_browser_runtime_manifest(
             digest,
             kind=kind,
@@ -2105,6 +2318,30 @@ def _observe_browser_stdlib_tree(
         raise LocalStagingAcceptanceError(
             "local acceptance browser Python runtime source differs"
         )
+    if retained_entries is not None:
+        retained_entries.append(
+            _BrowserRuntimeBundleEntry(
+                path=str(root),
+                kind="D",
+                mode=expected_root_mode,
+                user_id=expected_user_id,
+                group_id=expected_group_id,
+                provenance=f"python-stdlib:{observed_sha256}",
+                content=b"",
+            )
+        )
+        retained_entries.extend(
+            _BrowserRuntimeBundleEntry(
+                path=str(root / os.fsdecode(path)),
+                kind=kind.decode("ascii"),
+                mode=mode,
+                user_id=expected_user_id,
+                group_id=expected_group_id,
+                provenance=f"python-stdlib:{observed_sha256}",
+                content=content,
+            )
+            for path, kind, mode, _, _, content in sorted(records)
+        )
     return _BrowserStdlibObservation(
         sha256=observed_sha256,
         entries=len(records),
@@ -2116,12 +2353,14 @@ def _observe_browser_stdlib_tree(
     )
 
 
-def _observe_browser_python_runtime_source() -> _BrowserPythonRuntimeObservation:
-    """Observe exact named source bytes without granting execution authority."""
+def _snapshot_browser_python_runtime_source() -> _BrowserPythonRuntimeSnapshot:
+    """Retain exact validated runtime bytes without granting execution authority."""
 
+    retained_entries: list[_BrowserRuntimeBundleEntry] = []
     startup = _observe_browser_runtime_startup_files(
         _BROWSER_RUNTIME_STARTUP_FILES,
         expected_sha256=_BROWSER_RUNTIME_STARTUP_SHA256,
+        retained_entries=retained_entries,
     )
     stdlib = _observe_browser_stdlib_tree(
         _BROWSER_RUNTIME_STDLIB_ROOT,
@@ -2135,8 +2374,9 @@ def _observe_browser_python_runtime_source() -> _BrowserPythonRuntimeObservation
         expected_user_id=_BROWSER_PYTHON_UID,
         expected_group_id=_BROWSER_PYTHON_GID,
         expected_root_mode=0o555,
+        retained_entries=retained_entries,
     )
-    return _BrowserPythonRuntimeObservation(
+    observation = _BrowserPythonRuntimeObservation(
         startup_sha256=startup.sha256,
         stdlib_sha256=stdlib.sha256,
         stdlib_entries=stdlib.entries,
@@ -2151,6 +2391,25 @@ def _observe_browser_python_runtime_source() -> _BrowserPythonRuntimeObservation
         ),
         execution_authority=False,
     )
+    paths = tuple(entry.path for entry in retained_entries)
+    if (
+        len(paths) != len(set(paths))
+        or any(not path.startswith("/") for path in paths)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser Python runtime source differs"
+        )
+    return _BrowserPythonRuntimeSnapshot(
+        entries=tuple(sorted(retained_entries, key=lambda entry: entry.path)),
+        observation=observation,
+        execution_authority=False,
+    )
+
+
+def _observe_browser_python_runtime_source() -> _BrowserPythonRuntimeObservation:
+    """Observe exact named source bytes without granting execution authority."""
+
+    return _snapshot_browser_python_runtime_source().observation
 
 
 def _canonical_browser_distribution_name(value: str) -> str:
@@ -2926,8 +3185,10 @@ def _apply_browser_dependency_layer(
     expected_bytes: int,
     expected_physical_members: int,
     expected_semantic_members: int,
+    target_path: str = _BROWSER_DEPENDENCY_IMAGE_PATH,
+    maximum_regular_bytes: int = _BROWSER_DEPENDENCY_SOURCE_BYTES,
 ) -> tuple[dict[str, _BrowserDependencyTreeEntry], _BrowserDependencyTreeEntry | None]:
-    """Apply one authenticated OCI layer only to the dependency subtree."""
+    """Apply one authenticated OCI layer only to one selected subtree."""
 
     if (
         type(entries) is not dict
@@ -2939,12 +3200,19 @@ def _apply_browser_dependency_layer(
         or _SHA256_TEXT.fullmatch(layer_sha256) is None
         or type(expected_bytes) is not int
         or expected_bytes < 0
+        or type(raw) is not bytes
         or len(raw) != expected_bytes
         or hashlib.sha256(raw).hexdigest() != layer_sha256
         or type(expected_physical_members) is not int
         or expected_physical_members < 0
         or type(expected_semantic_members) is not int
         or expected_semantic_members < 0
+        or type(target_path) is not str
+        or not target_path.startswith("/")
+        or target_path.endswith("/")
+        or "//" in target_path
+        or type(maximum_regular_bytes) is not int
+        or maximum_regular_bytes < 0
     ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser dependency layer differs"
@@ -2959,7 +3227,7 @@ def _apply_browser_dependency_layer(
             "local acceptance browser dependency layer differs"
         )
 
-    target = _BROWSER_DEPENDENCY_IMAGE_PATH.lstrip("/")
+    target = _canonical_browser_image_layer_path(target_path.lstrip("/"))
     ancestors = tuple(
         "/".join(target.split("/")[:index])
         for index in range(1, len(target.split("/")))
@@ -3057,7 +3325,7 @@ def _apply_browser_dependency_layer(
                         raise ValueError
                     additions.append((relative, member, b""))
                 elif member.isreg():
-                    if member.linkname or member.size > _BROWSER_DEPENDENCY_SOURCE_BYTES:
+                    if member.linkname or member.size > maximum_regular_bytes:
                         raise ValueError
                     stream = archive.extractfile(member)
                     if stream is None:
@@ -3191,6 +3459,152 @@ def _serialize_browser_dependency_tree(
     return selected
 
 
+def _browser_application_tree_sha256(
+    entries: Mapping[str, _BrowserDependencyTreeEntry],
+    *,
+    expected_sha256: str = _BROWSER_APPLICATION_TREE_SHA256,
+    expected_entries: int = _BROWSER_APPLICATION_TREE_ENTRIES,
+    expected_files: int = _BROWSER_APPLICATION_TREE_FILES,
+    expected_directories: int = _BROWSER_APPLICATION_TREE_DIRECTORIES,
+    expected_bytes: int = _BROWSER_APPLICATION_TREE_BYTES,
+    expected_layer: str = _BROWSER_APPLICATION_WINNING_LAYER,
+) -> str:
+    if (
+        type(entries) is not dict
+        or type(expected_sha256) is not str
+        or _SHA256_TEXT.fullmatch(expected_sha256) is None
+        or type(expected_entries) is not int
+        or expected_entries < 0
+        or type(expected_files) is not int
+        or expected_files < 0
+        or type(expected_directories) is not int
+        or expected_directories < 0
+        or expected_files + expected_directories != expected_entries
+        or type(expected_bytes) is not int
+        or expected_bytes < 0
+        or type(expected_layer) is not str
+        or _SHA256_TEXT.fullmatch(expected_layer) is None
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser application source differs"
+        )
+    records: list[tuple[bytes, bytes, int, int, bytes]] = []
+    regular_files = 0
+    directories = 0
+    regular_bytes = 0
+    for path, entry in entries.items():
+        if (
+            type(path) is not str
+            or type(entry) is not _BrowserDependencyTreeEntry
+            or entry.path != path
+            or type(entry.kind) is not str
+            or entry.kind not in {"F", "D"}
+            or type(entry.content) is not bytes
+            or (entry.user_id, entry.group_id)
+            != (_BROWSER_APPLICATION_ROOT_UID, _BROWSER_APPLICATION_ROOT_GID)
+            or entry.layer_sha256 != expected_layer
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser application source differs"
+            )
+        canonical = _canonical_browser_dependency_relative_path(path)
+        if canonical != path:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser application source differs"
+            )
+        if entry.kind == "D":
+            if entry.content:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser application source differs"
+                )
+            directories += 1
+            records.append((b"D", path.encode("ascii"), entry.mode, 0, b""))
+        else:
+            regular_files += 1
+            regular_bytes += len(entry.content)
+            records.append(
+                (
+                    b"F",
+                    path.encode("ascii"),
+                    entry.mode,
+                    len(entry.content),
+                    hashlib.sha256(entry.content).digest(),
+                )
+            )
+    if (
+        len(records) != expected_entries
+        or regular_files != expected_files
+        or directories != expected_directories
+        or regular_bytes != expected_bytes
+        or _BROWSER_APPLICATION_TREE_SYMLINKS != 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser application source differs"
+        )
+    digest = hashlib.sha256(_BROWSER_APPLICATION_TREE_DOMAIN)
+    for kind, path, mode, size, payload in sorted(
+        records,
+        key=lambda item: item[1],
+    ):
+        _update_browser_runtime_manifest(
+            digest,
+            kind=kind,
+            path=path,
+            mode=mode,
+            size=size,
+            payload=payload,
+        )
+    observed = digest.hexdigest()
+    if observed != expected_sha256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser application source differs"
+        )
+    return observed
+
+
+def _browser_dependency_layer_provenance_sha256(
+    entries: tuple[_BrowserDependencyTreeEntry, ...],
+    *,
+    expected_sha256: str = _BROWSER_DEPENDENCY_LAYER_PROVENANCE_SHA256,
+) -> str:
+    """Bind every selected dependency path to its exact winning image layer."""
+
+    if (
+        type(entries) is not tuple
+        or not entries
+        or type(expected_sha256) is not str
+        or _SHA256_TEXT.fullmatch(expected_sha256) is None
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency provenance differs"
+        )
+    digest = hashlib.sha256(_BROWSER_DEPENDENCY_LAYER_PROVENANCE_DOMAIN)
+    previous = ""
+    for entry in entries:
+        if (
+            type(entry) is not _BrowserDependencyTreeEntry
+            or _canonical_browser_dependency_relative_path(entry.path)
+            != entry.path
+            or entry.path <= previous
+            or type(entry.layer_sha256) is not str
+            or _SHA256_TEXT.fullmatch(entry.layer_sha256) is None
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser dependency provenance differs"
+            )
+        path = entry.path.encode("ascii", errors="strict")
+        digest.update(len(path).to_bytes(4, "big"))
+        digest.update(path)
+        digest.update(bytes.fromhex(entry.layer_sha256))
+        previous = entry.path
+    observed = digest.hexdigest()
+    if observed != expected_sha256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency provenance differs"
+        )
+    return observed
+
+
 def _parse_browser_dependency_image_export(
     raw: bytes,
     *,
@@ -3215,6 +3629,14 @@ def _parse_browser_dependency_image_export(
         _BROWSER_DEPENDENCY_OCI_MANIFEST_BYTES
     ),
     expected_export_members: int = _BROWSER_DEPENDENCY_IMAGE_EXPORT_MEMBERS,
+    expected_application_sha256: str = _BROWSER_APPLICATION_TREE_SHA256,
+    expected_application_entries: int = _BROWSER_APPLICATION_TREE_ENTRIES,
+    expected_application_files: int = _BROWSER_APPLICATION_TREE_FILES,
+    expected_application_directories: int = (
+        _BROWSER_APPLICATION_TREE_DIRECTORIES
+    ),
+    expected_application_bytes: int = _BROWSER_APPLICATION_TREE_BYTES,
+    expected_application_layer: str = _BROWSER_APPLICATION_WINNING_LAYER,
 ) -> _BrowserDependencyImageSnapshot:
     """Validate a pinned `docker image save` stream and rebuild its subtree."""
 
@@ -3255,6 +3677,20 @@ def _parse_browser_dependency_image_export(
         or expected_oci_manifest_bytes <= 0
         or type(expected_export_members) is not int
         or expected_export_members <= 0
+        or type(expected_application_sha256) is not str
+        or _SHA256_TEXT.fullmatch(expected_application_sha256) is None
+        or type(expected_application_entries) is not int
+        or expected_application_entries < 0
+        or type(expected_application_files) is not int
+        or expected_application_files < 0
+        or type(expected_application_directories) is not int
+        or expected_application_directories < 0
+        or expected_application_files + expected_application_directories
+        != expected_application_entries
+        or type(expected_application_bytes) is not int
+        or expected_application_bytes < 0
+        or type(expected_application_layer) is not str
+        or _SHA256_TEXT.fullmatch(expected_application_layer) is None
     ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser dependency image differs"
@@ -3445,20 +3881,49 @@ def _parse_browser_dependency_image_export(
 
     entries: dict[str, _BrowserDependencyTreeEntry] = {}
     root_entry: _BrowserDependencyTreeEntry | None = None
+    application_entries: dict[str, _BrowserDependencyTreeEntry] = {}
+    application_root: _BrowserDependencyTreeEntry | None = None
     for index_value, layer in enumerate(expected_layers):
         layer_digest = layer[7:]
+        layer_raw = regular[f"blobs/sha256/{layer_digest}"]
         entries, root_entry = _apply_browser_dependency_layer(
             entries,
             root_entry,
-            regular[f"blobs/sha256/{layer_digest}"],
+            layer_raw,
             layer_sha256=layer_digest,
             expected_bytes=expected_layer_sizes[index_value],
             expected_physical_members=expected_physical_members[index_value],
             expected_semantic_members=expected_semantic_members[index_value],
         )
+        application_entries, application_root = (
+            _apply_browser_dependency_layer(
+                application_entries,
+                application_root,
+                layer_raw,
+                layer_sha256=layer_digest,
+                expected_bytes=expected_layer_sizes[index_value],
+                expected_physical_members=expected_physical_members[index_value],
+                expected_semantic_members=expected_semantic_members[index_value],
+                target_path="/app",
+                maximum_regular_bytes=expected_application_bytes,
+            )
+        )
     if root_entry is None:
         raise LocalStagingAcceptanceError(
             "local acceptance browser dependency layer differs"
+        )
+    if (
+        application_root is None
+        or application_root.path != ""
+        or application_root.kind != "D"
+        or application_root.mode != _BROWSER_APPLICATION_ROOT_MODE
+        or application_root.user_id != _BROWSER_APPLICATION_ROOT_UID
+        or application_root.group_id != _BROWSER_APPLICATION_ROOT_GID
+        or application_root.layer_sha256 != expected_application_layer
+        or application_root.content
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser application source differs"
         )
     reconstructed = _serialize_browser_dependency_tree(entries, root_entry)
     observation = _observe_browser_dependency_archive(
@@ -3478,6 +3943,39 @@ def _parse_browser_dependency_image_export(
         raise LocalStagingAcceptanceError(
             "local acceptance browser dependency image differs"
         )
+    application_source_entries = tuple(
+        application_entries[path] for path in sorted(application_entries)
+    )
+    application_files = sum(
+        entry.kind == "F" for entry in application_source_entries
+    )
+    application_directories = sum(
+        entry.kind == "D" for entry in application_source_entries
+    )
+    application_bytes = sum(
+        len(entry.content)
+        for entry in application_source_entries
+        if entry.kind == "F"
+    )
+    application_sha256 = _browser_application_tree_sha256(
+        application_entries,
+        expected_sha256=expected_application_sha256,
+        expected_entries=expected_application_entries,
+        expected_files=expected_application_files,
+        expected_directories=expected_application_directories,
+        expected_bytes=expected_application_bytes,
+        expected_layer=expected_application_layer,
+    )
+    if (
+        len(application_source_entries) != expected_application_entries
+        or application_files != expected_application_files
+        or application_directories != expected_application_directories
+        or application_bytes != expected_application_bytes
+        or application_sha256 != expected_application_sha256
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser application source differs"
+        )
     return _BrowserDependencyImageSnapshot(
         image_id=source_image_id,
         rootfs_layers=expected_layers,
@@ -3485,6 +3983,10 @@ def _parse_browser_dependency_image_export(
         selected_entries=selected_entries,
         observation=observation,
         execution_authority=False,
+        application_entries=application_source_entries,
+        application_tree_sha256=application_sha256,
+        dependency_root=root_entry,
+        application_root=application_root,
     )
 
 
@@ -3705,6 +4207,1172 @@ def _close_browser_dependency_build_sources(
         raise LocalStagingAcceptanceError(
             "local acceptance browser dependency build source cleanup differs"
         )
+
+
+def _read_browser_dependency_audit_entries(
+    sources: tuple[_BrowserDependencyBuildSource, ...],
+) -> tuple[_BrowserDependencyTreeEntry, ...]:
+    """Copy both exact audit programs from their already-held descriptors."""
+
+    _validate_browser_dependency_build_sources(sources)
+    expected_paths = (
+        "procurement/tools/audit_staging_purchasing_browser.py",
+        "procurement/tools/audit_staging_purchasing_browser.mjs",
+    )
+    selected: list[_BrowserDependencyTreeEntry] = []
+    for source, expected_path in zip(
+        sources[-len(expected_paths):],
+        expected_paths,
+        strict=True,
+    ):
+        try:
+            relative = source.path.relative_to(
+                _BROWSER_DEPENDENCY_REPOSITORY_ROOT
+            ).as_posix()
+        except ValueError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser audit source differs"
+            ) from None
+        if relative != expected_path:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser audit source differs"
+            )
+        content = bytearray()
+        offset = 0
+        try:
+            while offset < source.size:
+                try:
+                    block = os.pread(
+                        source.descriptor,
+                        min(_CHUNK_BYTES, source.size - offset),
+                        offset,
+                    )
+                except InterruptedError:
+                    continue
+                if not block:
+                    break
+                content.extend(block)
+                offset += len(block)
+            extra = os.pread(source.descriptor, 1, source.size)
+        except (OSError, OverflowError, ValueError, TypeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser audit source differs"
+            ) from None
+        copied = bytes(content)
+        if (
+            offset != source.size
+            or extra
+            or hashlib.sha256(copied).hexdigest() != source.sha256
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser audit source differs"
+            )
+        selected.append(
+            _BrowserDependencyTreeEntry(
+                path=relative,
+                kind="F",
+                mode=source.mode,
+                user_id=source.user_id,
+                group_id=source.group_id,
+                layer_sha256=source.sha256,
+                content=copied,
+            )
+        )
+    _validate_browser_dependency_build_sources(sources)
+    return tuple(selected)
+
+
+def _validate_exact_browser_python_runtime_snapshot(
+    snapshot: _BrowserPythonRuntimeSnapshot,
+) -> None:
+    expected_observation = _BrowserPythonRuntimeObservation(
+        startup_sha256=_BROWSER_RUNTIME_STARTUP_SHA256,
+        stdlib_sha256=_BROWSER_RUNTIME_STDLIB_SHA256,
+        stdlib_entries=_BROWSER_RUNTIME_STDLIB_ENTRIES,
+        stdlib_regular_files=_BROWSER_RUNTIME_STDLIB_FILES,
+        stdlib_directories=_BROWSER_RUNTIME_STDLIB_DIRECTORIES,
+        stdlib_symlinks=_BROWSER_RUNTIME_STDLIB_SYMLINKS,
+        stdlib_regular_bytes=_BROWSER_RUNTIME_STDLIB_BYTES,
+        stdlib_zip_absent=True,
+        all_source_mounts_read_only=False,
+        execution_authority=False,
+    )
+    if (
+        type(snapshot) is not _BrowserPythonRuntimeSnapshot
+        or snapshot.observation != expected_observation
+        or snapshot.execution_authority is not False
+        or type(snapshot.entries) is not tuple
+        or len(snapshot.entries)
+        != len(_BROWSER_RUNTIME_STARTUP_FILES)
+        + _BROWSER_RUNTIME_STDLIB_ENTRIES
+        + 1
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    entries = _validate_browser_runtime_bundle_entries(
+        snapshot.entries,
+        require_parents=False,
+    )
+    by_path = {entry.path: entry for entry in entries}
+    startup_paths: set[str] = set()
+    for expectation in _BROWSER_RUNTIME_STARTUP_FILES:
+        path = str(expectation.path)
+        startup_paths.add(path)
+        entry = by_path.get(path)
+        if (
+            entry is None
+            or entry.kind != expectation.kind
+            or entry.mode != expectation.mode
+            or (entry.user_id, entry.group_id)
+            != (expectation.user_id, expectation.group_id)
+            or entry.provenance
+            != f"python-startup:{_BROWSER_RUNTIME_STARTUP_SHA256}"
+            or len(entry.content) != expectation.size
+            or (
+                expectation.kind == "F"
+                and hashlib.sha256(entry.content).hexdigest()
+                != expectation.payload
+            )
+            or (
+                expectation.kind == "L"
+                and entry.content
+                != expectation.payload.encode("ascii", errors="strict")
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+    root_path = str(_BROWSER_RUNTIME_STDLIB_ROOT)
+    root = by_path.get(root_path)
+    if (
+        root is None
+        or root.kind != "D"
+        or root.mode != 0o555
+        or (root.user_id, root.group_id)
+        != (_BROWSER_PYTHON_UID, _BROWSER_PYTHON_GID)
+        or root.provenance
+        != f"python-stdlib:{_BROWSER_RUNTIME_STDLIB_SHA256}"
+        or root.content
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    prefix = f"{root_path}/"
+    stdlib = tuple(
+        entry for entry in entries if entry.path.startswith(prefix)
+    )
+    if (
+        len(stdlib) != _BROWSER_RUNTIME_STDLIB_ENTRIES
+        or set(by_path) != startup_paths | {root_path} | {entry.path for entry in stdlib}
+        or str(_BROWSER_RUNTIME_STDLIB_ZIP) in by_path
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    digest = hashlib.sha256(_BROWSER_RUNTIME_STDLIB_DOMAIN)
+    regular_files = 0
+    directories = 0
+    symlinks = 0
+    regular_bytes = 0
+    for entry in stdlib:
+        relative = entry.path[len(prefix) :]
+        if (
+            _canonical_browser_dependency_relative_path(relative) != relative
+            or (entry.user_id, entry.group_id)
+            != (_BROWSER_PYTHON_UID, _BROWSER_PYTHON_GID)
+            or entry.provenance
+            != f"python-stdlib:{_BROWSER_RUNTIME_STDLIB_SHA256}"
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+        if entry.kind == "F":
+            regular_files += 1
+            regular_bytes += len(entry.content)
+            payload = hashlib.sha256(entry.content).digest()
+        elif entry.kind == "D":
+            directories += 1
+            payload = b""
+        else:
+            symlinks += 1
+            payload = entry.content
+        _update_browser_runtime_manifest(
+            digest,
+            kind=entry.kind.encode("ascii"),
+            path=relative.encode("ascii"),
+            mode=entry.mode,
+            size=len(entry.content),
+            payload=payload,
+        )
+    if (
+        regular_files != _BROWSER_RUNTIME_STDLIB_FILES
+        or directories != _BROWSER_RUNTIME_STDLIB_DIRECTORIES
+        or symlinks != _BROWSER_RUNTIME_STDLIB_SYMLINKS
+        or regular_bytes != _BROWSER_RUNTIME_STDLIB_BYTES
+        or digest.hexdigest() != _BROWSER_RUNTIME_STDLIB_SHA256
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+
+
+def _validate_browser_dependency_tree_entry_shape(
+    entry: _BrowserDependencyTreeEntry,
+    *,
+    allow_empty_path: bool = False,
+) -> None:
+    if (
+        type(entry) is not _BrowserDependencyTreeEntry
+        or type(allow_empty_path) is not bool
+        or type(entry.path) is not str
+        or type(entry.kind) is not str
+        or entry.kind not in {"F", "D"}
+        or type(entry.mode) is not int
+        or entry.mode < 0
+        or entry.mode > 0o7777
+        or type(entry.user_id) is not int
+        or entry.user_id < 0
+        or type(entry.group_id) is not int
+        or entry.group_id < 0
+        or type(entry.layer_sha256) is not str
+        or _SHA256_TEXT.fullmatch(entry.layer_sha256) is None
+        or type(entry.content) is not bytes
+        or (entry.kind == "D" and entry.content != b"")
+        or (
+            entry.path == ""
+            and (not allow_empty_path or entry.kind != "D")
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency snapshot differs"
+        )
+    if entry.path and (
+        _canonical_browser_dependency_relative_path(entry.path)
+        != entry.path
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser dependency snapshot differs"
+        )
+
+
+def _validate_exact_browser_dependency_snapshot(
+    snapshot: _BrowserDependencyImageSnapshot,
+) -> None:
+    if (
+        type(snapshot) is not _BrowserDependencyImageSnapshot
+        or snapshot.image_id != FROZEN_IMAGE_ID
+        or snapshot.rootfs_layers != FROZEN_IMAGE_ROOTFS_LAYERS
+        or snapshot.execution_authority is not False
+        or snapshot.application_tree_sha256
+        != _BROWSER_APPLICATION_TREE_SHA256
+        or type(snapshot.source_entries) is not tuple
+        or type(snapshot.selected_entries) is not tuple
+        or type(snapshot.application_entries) is not tuple
+        or type(snapshot.audit_entries) is not tuple
+        or len(snapshot.source_entries) != _BROWSER_DEPENDENCY_SOURCE_ENTRIES
+        or len(snapshot.selected_entries) != _BROWSER_DEPENDENCY_TREE_ENTRIES
+        or len(snapshot.application_entries) != _BROWSER_APPLICATION_TREE_ENTRIES
+        or len(snapshot.audit_entries) != 2
+        or type(snapshot.dependency_root) is not _BrowserDependencyTreeEntry
+        or type(snapshot.application_root) is not _BrowserDependencyTreeEntry
+        or snapshot.observation
+        != _BrowserDependencySourceObservation(
+            image_id=FROZEN_IMAGE_ID,
+            tree_sha256=_BROWSER_DEPENDENCY_TREE_SHA256,
+            entries=_BROWSER_DEPENDENCY_TREE_ENTRIES,
+            regular_files=_BROWSER_DEPENDENCY_TREE_FILES,
+            directories=_BROWSER_DEPENDENCY_TREE_DIRECTORIES,
+            symlinks=_BROWSER_DEPENDENCY_TREE_SYMLINKS,
+            regular_bytes=_BROWSER_DEPENDENCY_TREE_BYTES,
+            source_entries=_BROWSER_DEPENDENCY_SOURCE_ENTRIES,
+            source_regular_files=_BROWSER_DEPENDENCY_SOURCE_FILES,
+            source_directories=_BROWSER_DEPENDENCY_SOURCE_DIRECTORIES,
+            source_regular_bytes=_BROWSER_DEPENDENCY_SOURCE_BYTES,
+            record_rows=_BROWSER_DEPENDENCY_RECORD_ROWS,
+            distributions=_BROWSER_DEPENDENCY_DISTRIBUTIONS,
+            excluded_source_files=tuple(
+                (path, digest)
+                for path, _, digest in _BROWSER_DEPENDENCY_SOURCE_EXTRAS
+            ),
+            execution_authority=False,
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    for root in (snapshot.dependency_root, snapshot.application_root):
+        _validate_browser_dependency_tree_entry_shape(
+            root,
+            allow_empty_path=True,
+        )
+        if (
+            root.path != ""
+            or root.kind != "D"
+            or root.mode != 0o755
+            or (root.user_id, root.group_id) != (0, 0)
+            or root.layer_sha256 != _BROWSER_APPLICATION_WINNING_LAYER
+            or root.content
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+    for collection in (
+        snapshot.source_entries,
+        snapshot.selected_entries,
+        snapshot.application_entries,
+        snapshot.audit_entries,
+    ):
+        for entry in collection:
+            _validate_browser_dependency_tree_entry_shape(entry)
+    excluded = {value[0] for value in _BROWSER_DEPENDENCY_SOURCE_EXTRAS}
+    try:
+        source_by_path = {
+            entry.path: entry for entry in snapshot.source_entries
+        }
+        selected_by_path = {
+            entry.path: entry for entry in snapshot.selected_entries
+        }
+    except (AttributeError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        ) from None
+    if (
+        len(source_by_path) != len(snapshot.source_entries)
+        or len(selected_by_path) != len(snapshot.selected_entries)
+        or set(selected_by_path) != set(source_by_path) - excluded
+        or any(source_by_path[path] != entry for path, entry in selected_by_path.items())
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    for path, size, expected_sha256 in _BROWSER_DEPENDENCY_SOURCE_EXTRAS:
+        entry = source_by_path.get(path)
+        if (
+            entry is None
+            or entry.kind != "F"
+            or entry.mode != 0o644
+            or (entry.user_id, entry.group_id) != (0, 0)
+            or entry.layer_sha256 != _BROWSER_APPLICATION_WINNING_LAYER
+            or len(entry.content) != size
+            or hashlib.sha256(entry.content).hexdigest() != expected_sha256
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+    digest = hashlib.sha256(_BROWSER_DEPENDENCY_TREE_DOMAIN)
+    regular_files = 0
+    directories = 0
+    regular_bytes = 0
+    for entry in snapshot.selected_entries:
+        if (
+            type(entry) is not _BrowserDependencyTreeEntry
+            or entry.path in excluded
+            or _canonical_browser_dependency_relative_path(entry.path)
+            != entry.path
+            or entry.kind not in {"F", "D"}
+            or (entry.user_id, entry.group_id) != (0, 0)
+            or entry.layer_sha256 != _BROWSER_APPLICATION_WINNING_LAYER
+            or (entry.kind == "D" and entry.content)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+        if entry.kind == "F":
+            regular_files += 1
+            regular_bytes += len(entry.content)
+            payload = hashlib.sha256(entry.content).digest()
+        else:
+            directories += 1
+            payload = b""
+        _update_browser_runtime_manifest(
+            digest,
+            kind=entry.kind.encode("ascii"),
+            path=entry.path.encode("ascii"),
+            mode=entry.mode,
+            size=len(entry.content),
+            payload=payload,
+        )
+    if (
+        regular_files != _BROWSER_DEPENDENCY_TREE_FILES
+        or directories != _BROWSER_DEPENDENCY_TREE_DIRECTORIES
+        or regular_bytes != _BROWSER_DEPENDENCY_TREE_BYTES
+        or digest.hexdigest() != _BROWSER_DEPENDENCY_TREE_SHA256
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    _browser_dependency_layer_provenance_sha256(snapshot.selected_entries)
+    _browser_application_tree_sha256(
+        dict((entry.path, entry) for entry in snapshot.application_entries)
+    )
+    expected_audits = _BROWSER_DEPENDENCY_BUILD_FILES[-2:]
+    for entry, (source_path, source_bytes, source_sha256) in zip(
+        snapshot.audit_entries,
+        expected_audits,
+        strict=True,
+    ):
+        if (
+            type(entry) is not _BrowserDependencyTreeEntry
+            or entry.path
+            != source_path.relative_to(
+                _BROWSER_DEPENDENCY_REPOSITORY_ROOT
+            ).as_posix()
+            or entry.kind != "F"
+            or entry.mode != 0o644
+            or (entry.user_id, entry.group_id) != (1000, 1000)
+            or entry.layer_sha256 != source_sha256
+            or len(entry.content) != source_bytes
+            or hashlib.sha256(entry.content).hexdigest() != source_sha256
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+
+
+def _collect_browser_runtime_bundle_entries(
+    runtime: _BrowserPythonRuntimeSnapshot,
+    dependency: _BrowserDependencyImageSnapshot,
+) -> tuple[_BrowserRuntimeBundleEntry, ...]:
+    """Map all exact sources into one canonical future execution namespace."""
+
+    _validate_exact_browser_python_runtime_snapshot(runtime)
+    _validate_exact_browser_dependency_snapshot(dependency)
+    selected: list[_BrowserRuntimeBundleEntry] = list(runtime.entries)
+    selected.extend(
+        (
+            _BrowserRuntimeBundleEntry(
+                path="/runtime",
+                kind="D",
+                mode=dependency.application_root.mode,
+                user_id=dependency.application_root.user_id,
+                group_id=dependency.application_root.group_id,
+                provenance=(
+                    "application-layer:"
+                    + dependency.application_root.layer_sha256
+                ),
+                content=b"",
+            ),
+            _BrowserRuntimeBundleEntry(
+                path="/runtime/site-packages",
+                kind="D",
+                mode=dependency.dependency_root.mode,
+                user_id=dependency.dependency_root.user_id,
+                group_id=dependency.dependency_root.group_id,
+                provenance=(
+                    "dependency-layer:"
+                    + dependency.dependency_root.layer_sha256
+                ),
+                content=b"",
+            ),
+        )
+    )
+    selected.extend(
+        _BrowserRuntimeBundleEntry(
+            path=f"/runtime/{entry.path}",
+            kind=entry.kind,
+            mode=entry.mode,
+            user_id=entry.user_id,
+            group_id=entry.group_id,
+            provenance=f"application-layer:{entry.layer_sha256}",
+            content=entry.content,
+        )
+        for entry in dependency.application_entries
+    )
+    selected.extend(
+        _BrowserRuntimeBundleEntry(
+            path=f"/runtime/site-packages/{entry.path}",
+            kind=entry.kind,
+            mode=entry.mode,
+            user_id=entry.user_id,
+            group_id=entry.group_id,
+            provenance=f"dependency-layer:{entry.layer_sha256}",
+            content=entry.content,
+        )
+        for entry in dependency.selected_entries
+    )
+    selected.extend(
+        _BrowserRuntimeBundleEntry(
+            path=f"/runtime/{entry.path}",
+            kind=entry.kind,
+            mode=entry.mode,
+            user_id=entry.user_id,
+            group_id=entry.group_id,
+            provenance=f"audit-source:{entry.layer_sha256}",
+            content=entry.content,
+        )
+        for entry in dependency.audit_entries
+    )
+    return _complete_browser_runtime_bundle_parents(
+        tuple(sorted(selected, key=lambda entry: entry.path))
+    )
+
+
+def _validate_browser_runtime_bundle_entries(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+    *,
+    require_parents: bool = True,
+) -> tuple[_BrowserRuntimeBundleEntry, ...]:
+    """Validate one canonical, provenance-bound execution-tree payload."""
+
+    if (
+        type(entries) is not tuple
+        or not entries
+        or len(entries) > _BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT
+        or any(type(entry) is not _BrowserRuntimeBundleEntry for entry in entries)
+        or type(require_parents) is not bool
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    paths: dict[str, _BrowserRuntimeBundleEntry] = {}
+    folded: set[str] = set()
+    payload_bytes = 0
+    provenance_pattern = re.compile(
+        r"(?:python-startup|python-stdlib|dependency-layer|"
+        r"application-layer|audit-source|bundle-parent):[0-9a-f]{64}"
+    )
+    for entry in entries:
+        if (
+            type(entry.path) is not str
+            or type(entry.kind) is not str
+            or type(entry.provenance) is not str
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+        try:
+            encoded_path = entry.path.encode("ascii", errors="strict")
+            encoded_provenance = entry.provenance.encode(
+                "ascii", errors="strict"
+            )
+        except (AttributeError, UnicodeEncodeError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            ) from None
+        components = entry.path.split("/")
+        if (
+            not entry.path.startswith("/")
+            or entry.path == "/"
+            or entry.path.endswith("/")
+            or "//" in entry.path
+            or any(component in {"", ".", ".."} for component in components[1:])
+            or len(encoded_path) > _BROWSER_RUNTIME_PATH_BYTES_LIMIT
+            or len(components) - 1 > _BROWSER_RUNTIME_TREE_DEPTH_LIMIT
+            or any(
+                len(component.encode("ascii"))
+                > _BROWSER_RUNTIME_COMPONENT_BYTES_LIMIT
+                for component in components[1:]
+            )
+            or any(value < 0x20 or value == 0x7F for value in encoded_path)
+            or entry.kind not in {"F", "D", "L"}
+            or type(entry.mode) is not int
+            or entry.mode < 0
+            or entry.mode > 0o7777
+            or entry.mode & 0o7000
+            or type(entry.user_id) is not int
+            or entry.user_id < 0
+            or entry.user_id > 4_294_967_295
+            or type(entry.group_id) is not int
+            or entry.group_id < 0
+            or entry.group_id > 4_294_967_295
+            or provenance_pattern.fullmatch(entry.provenance) is None
+            or len(encoded_provenance) > 128
+            or type(entry.content) is not bytes
+            or (entry.kind == "D" and entry.content)
+            or (entry.kind == "L" and not entry.content)
+            or len(entry.content) > _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT
+            or entry.path in paths
+            or entry.path.casefold() in folded
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+        paths[entry.path] = entry
+        folded.add(entry.path.casefold())
+        payload_bytes += len(entry.content)
+        if payload_bytes > _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+    ordered = tuple(sorted(entries, key=lambda entry: entry.path))
+    for path, entry in paths.items():
+        components = path.split("/")[1:]
+        for index in range(1, len(components)):
+            ancestor = "/" + "/".join(components[:index])
+            if (
+                (ancestor in paths and paths[ancestor].kind != "D")
+                or (require_parents and ancestor not in paths)
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser runtime bundle differs"
+                )
+        if entry.kind != "L":
+            continue
+        selected_path = path
+        seen: set[str] = set()
+        while paths[selected_path].kind == "L":
+            if selected_path in seen:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser runtime bundle differs"
+                )
+            seen.add(selected_path)
+            selected_entry = paths[selected_path]
+            try:
+                target = selected_entry.content.decode("ascii", errors="strict")
+            except UnicodeDecodeError:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser runtime bundle differs"
+                ) from None
+            if (
+                len(selected_entry.content) > _BROWSER_RUNTIME_PATH_BYTES_LIMIT
+                or not target
+                or "\0" in target
+                or any(
+                    ord(value) < 0x20 or ord(value) == 0x7F
+                    for value in target
+                )
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser runtime bundle differs"
+                )
+            selected_path = posixpath.normpath(
+                target
+                if target.startswith("/")
+                else posixpath.join(posixpath.dirname(selected_path), target)
+            )
+            if not selected_path.startswith("/") or selected_path not in paths:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser runtime bundle differs"
+                )
+    return ordered
+
+
+def _complete_browser_runtime_bundle_parents(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+) -> tuple[_BrowserRuntimeBundleEntry, ...]:
+    selected = list(
+        _validate_browser_runtime_bundle_entries(
+            entries,
+            require_parents=False,
+        )
+    )
+    paths = {entry.path for entry in selected}
+    missing: set[str] = set()
+    for entry in selected:
+        components = entry.path.split("/")[1:]
+        for index in range(1, len(components)):
+            ancestor = "/" + "/".join(components[:index])
+            if ancestor not in paths:
+                missing.add(ancestor)
+    selected.extend(
+        _BrowserRuntimeBundleEntry(
+            path=path,
+            kind="D",
+            mode=0o555,
+            user_id=0,
+            group_id=0,
+            provenance=(
+                "bundle-parent:" + _BROWSER_RUNTIME_PARENT_POLICY_SHA256
+            ),
+            content=b"",
+        )
+        for path in sorted(missing)
+    )
+    return _validate_browser_runtime_bundle_entries(
+        tuple(sorted(selected, key=lambda entry: entry.path))
+    )
+
+
+def _encode_browser_runtime_bundle(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+) -> tuple[bytes, str, str, int]:
+    selected = _validate_browser_runtime_bundle_entries(entries)
+    manifest_entries: list[dict[str, object]] = []
+    payload_parts: list[bytes] = []
+    offset = 0
+    regular_bytes = 0
+    for entry in selected:
+        size = len(entry.content)
+        manifest_entries.append(
+            {
+                "group_id": entry.group_id,
+                "kind": entry.kind,
+                "mode": entry.mode,
+                "offset": offset,
+                "path": entry.path,
+                "provenance": entry.provenance,
+                "sha256": hashlib.sha256(entry.content).hexdigest(),
+                "size": size,
+                "user_id": entry.user_id,
+            }
+        )
+        payload_parts.append(entry.content)
+        offset += size
+        if entry.kind == "F":
+            regular_bytes += size
+    manifest = json.dumps(
+        {
+            "entries": manifest_entries,
+            "protocol": _BROWSER_RUNTIME_BUNDLE_PROTOCOL,
+        },
+        allow_nan=False,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+    if (
+        not manifest
+        or len(manifest) > _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT
+        or offset > _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    payload = b"".join(payload_parts)
+    raw = len(manifest).to_bytes(8, "big") + manifest + payload
+    return (
+        raw,
+        hashlib.sha256(manifest).hexdigest(),
+        hashlib.sha256(
+            _BROWSER_RUNTIME_BUNDLE_MAGIC + manifest + payload
+        ).hexdigest(),
+        regular_bytes,
+    )
+
+
+def _parse_browser_runtime_bundle(
+    raw: bytes,
+) -> tuple[tuple[_BrowserRuntimeBundleEntry, ...], str, str, int]:
+    if (
+        type(raw) is not bytes
+        or len(raw) < 9
+        or len(raw)
+        > 8
+        + _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT
+        + _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    manifest_bytes = int.from_bytes(raw[:8], "big")
+    if (
+        manifest_bytes <= 0
+        or manifest_bytes > _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT
+        or 8 + manifest_bytes > len(raw)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    manifest_raw = raw[8 : 8 + manifest_bytes]
+    payload = raw[8 + manifest_bytes :]
+    try:
+        manifest = parse_single_json_object(manifest_raw)
+        canonical = json.dumps(
+            manifest,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+        rows = manifest["entries"]
+        if (
+            canonical != manifest_raw
+            or set(manifest) != {"entries", "protocol"}
+            or manifest["protocol"] != _BROWSER_RUNTIME_BUNDLE_PROTOCOL
+            or type(rows) is not list
+            or not rows
+            or len(rows) > _BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT
+        ):
+            raise ValueError
+        selected: list[_BrowserRuntimeBundleEntry] = []
+        expected_offset = 0
+        regular_bytes = 0
+        expected_keys = {
+            "group_id",
+            "kind",
+            "mode",
+            "offset",
+            "path",
+            "provenance",
+            "sha256",
+            "size",
+            "user_id",
+        }
+        for row in rows:
+            if type(row) is not dict or set(row) != expected_keys:
+                raise ValueError
+            integer_values = (
+                row["group_id"],
+                row["mode"],
+                row["offset"],
+                row["size"],
+                row["user_id"],
+            )
+            if (
+                any(type(value) is not int or value < 0 for value in integer_values)
+                or row["offset"] != expected_offset
+                or row["size"] > len(payload) - expected_offset
+                or type(row["sha256"]) is not str
+                or _SHA256_TEXT.fullmatch(row["sha256"]) is None
+            ):
+                raise ValueError
+            content = payload[
+                expected_offset : expected_offset + row["size"]
+            ]
+            if hashlib.sha256(content).hexdigest() != row["sha256"]:
+                raise ValueError
+            entry = _BrowserRuntimeBundleEntry(
+                path=row["path"],
+                kind=row["kind"],
+                mode=row["mode"],
+                user_id=row["user_id"],
+                group_id=row["group_id"],
+                provenance=row["provenance"],
+                content=content,
+            )
+            selected.append(entry)
+            expected_offset += row["size"]
+            if row["kind"] == "F":
+                regular_bytes += row["size"]
+        if expected_offset != len(payload):
+            raise ValueError
+        entries = _validate_browser_runtime_bundle_entries(tuple(selected))
+        if tuple(selected) != entries:
+            raise ValueError
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        OverflowError,
+        RecursionError,
+        UnicodeDecodeError,
+        LocalStagingAcceptanceError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        ) from None
+    return (
+        entries,
+        hashlib.sha256(manifest_raw).hexdigest(),
+        hashlib.sha256(
+            _BROWSER_RUNTIME_BUNDLE_MAGIC + manifest_raw + payload
+        ).hexdigest(),
+        regular_bytes,
+    )
+
+
+def _read_browser_runtime_bundle_descriptor(
+    descriptor: int,
+    size: int,
+) -> bytes:
+    if (
+        type(descriptor) is not int
+        or descriptor <= 2
+        or descriptor > _BROWSER_WORKER_MAX_FD
+        or type(size) is not int
+        or size < 9
+        or size
+        > 8
+        + _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT
+        + _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    selected = bytearray()
+    offset = 0
+    try:
+        while offset < size:
+            try:
+                block = os.pread(
+                    descriptor,
+                    min(_CHUNK_BYTES, size - offset),
+                    offset,
+                )
+            except InterruptedError:
+                continue
+            if not block:
+                break
+            selected.extend(block)
+            offset += len(block)
+        extra = os.pread(descriptor, 1, size)
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        ) from None
+    if offset != size or extra:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    return bytes(selected)
+
+
+def _validate_pinned_browser_runtime_bundle(
+    bundle: _PinnedBrowserRuntimeBundle,
+) -> None:
+    if (
+        type(bundle) is not _PinnedBrowserRuntimeBundle
+        or bundle._owner_token is not _BROWSER_HANDLE_TOKEN
+        or (
+            bundle._source_token is not None
+            and bundle._source_token is not _BROWSER_FROZEN_RUNTIME_BUNDLE_TOKEN
+        )
+        or type(bundle.descriptor) is not int
+        or bundle.descriptor <= 2
+        or bundle.descriptor > _BROWSER_WORKER_MAX_FD
+        or type(bundle.target) is not str
+        or _BROWSER_RUNTIME_BUNDLE_MEMFD_TARGET.fullmatch(bundle.target)
+        is None
+        or type(bundle.device) is not int
+        or type(bundle.inode) is not int
+        or type(bundle.size) is not int
+        or type(bundle.sha256) is not str
+        or _SHA256_TEXT.fullmatch(bundle.sha256) is None
+        or type(bundle.manifest_sha256) is not str
+        or _SHA256_TEXT.fullmatch(bundle.manifest_sha256) is None
+        or type(bundle.entries) is not int
+        or bundle.entries <= 0
+        or bundle.entries > _BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT
+        or type(bundle.regular_bytes) is not int
+        or bundle.regular_bytes < 0
+        or bundle.execution_authority is not False
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        info = os.fstat(bundle.descriptor)
+        target = os.readlink(f"/proc/self/fd/{bundle.descriptor}")
+        descriptor_flags = fcntl.fcntl(bundle.descriptor, fcntl.F_GETFD)
+        status_flags = fcntl.fcntl(bundle.descriptor, fcntl.F_GETFL)
+        seals = fcntl.fcntl(bundle.descriptor, fcntl.F_GET_SEALS)
+    except (OSError, OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        ) from None
+    if (
+        (soft_limit != resource.RLIM_INFINITY and bundle.descriptor >= soft_limit)
+        or target != bundle.target
+        or descriptor_flags & fcntl.FD_CLOEXEC == 0
+        or os.get_inheritable(bundle.descriptor)
+        or status_flags & os.O_ACCMODE != os.O_RDONLY
+        or status_flags & os.O_NONBLOCK != 0
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 0
+        or (info.st_uid, info.st_gid) != (os.geteuid(), os.getegid())
+        or stat.S_IMODE(info.st_mode) != _BROWSER_RUNTIME_BUNDLE_MODE
+        or seals != _BROWSER_RUNTIME_BUNDLE_SEALS
+        or (info.st_dev, info.st_ino, info.st_size)
+        != (bundle.device, bundle.inode, bundle.size)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+    raw = _read_browser_runtime_bundle_descriptor(
+        bundle.descriptor,
+        bundle.size,
+    )
+    entries, manifest_sha256, bundle_sha256, regular_bytes = (
+        _parse_browser_runtime_bundle(raw)
+    )
+    if (
+        len(entries) != bundle.entries
+        or manifest_sha256 != bundle.manifest_sha256
+        or bundle_sha256 != bundle.sha256
+        or regular_bytes != bundle.regular_bytes
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle differs"
+        )
+
+
+def _validate_frozen_browser_runtime_bundle(
+    bundle: _PinnedBrowserRuntimeBundle,
+) -> None:
+    """Require the exact frozen aggregate; still grants no execution authority."""
+
+    _validate_pinned_browser_runtime_bundle(bundle)
+    if (
+        bundle._source_token is not _BROWSER_FROZEN_RUNTIME_BUNDLE_TOKEN
+        or bundle.entries != _BROWSER_RUNTIME_BUNDLE_EXPECTED_ENTRIES
+        or bundle.regular_bytes
+        != _BROWSER_RUNTIME_BUNDLE_EXPECTED_REGULAR_BYTES
+        or bundle.size != _BROWSER_RUNTIME_BUNDLE_EXPECTED_BYTES
+        or bundle.manifest_sha256
+        != _BROWSER_RUNTIME_BUNDLE_EXPECTED_MANIFEST_SHA256
+        or bundle.sha256 != _BROWSER_RUNTIME_BUNDLE_EXPECTED_SHA256
+        or bundle.execution_authority is not False
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance frozen browser runtime bundle differs"
+        )
+
+
+def _close_browser_runtime_bundle_descriptor(
+    descriptor: int,
+    expected_target: str,
+    identity: tuple[int, int] | None,
+) -> bool:
+    """Close only the still-owned memfd number; never a reused descriptor."""
+
+    if (
+        type(descriptor) is not int
+        or descriptor < 0
+        or type(expected_target) is not str
+        or _BROWSER_RUNTIME_BUNDLE_MEMFD_TARGET.fullmatch(expected_target)
+        is None
+        or (
+            identity is not None
+            and (
+                type(identity) is not tuple
+                or len(identity) != 2
+                or any(type(value) is not int for value in identity)
+            )
+        )
+    ):
+        return False
+    try:
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
+        info = os.fstat(descriptor)
+    except OSError as exc:
+        if exc.errno == errno.EBADF or not os.path.exists(
+            f"/proc/self/fd/{descriptor}"
+        ):
+            return False
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle cleanup differs"
+        ) from None
+    except (OverflowError, ValueError, TypeError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser runtime bundle cleanup differs"
+        ) from None
+    if (
+        target != expected_target
+        or (
+            identity is not None
+            and (info.st_dev, info.st_ino) != identity
+        )
+    ):
+        return False
+    os.close(descriptor)
+    return True
+
+
+def _seal_browser_runtime_bundle(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+) -> _PinnedBrowserRuntimeBundle:
+    """Seal supplied bytes without granting frozen-source or execution authority."""
+
+    raw, manifest_sha256, bundle_sha256, regular_bytes = (
+        _encode_browser_runtime_bundle(entries)
+    )
+    staging_descriptor = -1
+    sealed_descriptor = -1
+    staging_identity: tuple[int, int] | None = None
+    sealed_identity: tuple[int, int] | None = None
+    instance_name = (
+        f"{_BROWSER_RUNTIME_BUNDLE_MEMFD_NAME_PREFIX}-"
+        f"{os.urandom(16).hex()}"
+    )
+    expected_target = f"/memfd:{instance_name} (deleted)"
+    try:
+        staging_descriptor = os.memfd_create(
+            instance_name,
+            os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING,
+        )
+        staging_info = os.fstat(staging_descriptor)
+        staging_identity = (staging_info.st_dev, staging_info.st_ino)
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if (
+            staging_descriptor <= 2
+            or staging_descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and staging_descriptor >= soft_limit
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+        offset = 0
+        while offset < len(raw):
+            try:
+                written = os.write(staging_descriptor, raw[offset:])
+            except InterruptedError:
+                continue
+            if written <= 0:
+                raise OSError
+            offset += written
+        os.fchmod(staging_descriptor, _BROWSER_RUNTIME_BUNDLE_MODE)
+        fcntl.fcntl(
+            staging_descriptor,
+            fcntl.F_ADD_SEALS,
+            _BROWSER_RUNTIME_BUNDLE_SEALS,
+        )
+        sealed_descriptor = os.open(
+            f"/proc/self/fd/{staging_descriptor}",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        sealed_info = os.fstat(sealed_descriptor)
+        sealed_identity = (sealed_info.st_dev, sealed_info.st_ino)
+        if (
+            sealed_descriptor <= 2
+            or sealed_descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and sealed_descriptor >= soft_limit
+            )
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle differs"
+            )
+        if not _close_browser_runtime_bundle_descriptor(
+            staging_descriptor,
+            expected_target,
+            staging_identity,
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser runtime bundle cleanup differs"
+            )
+        staging_descriptor = -1
+        info = os.fstat(sealed_descriptor)
+        bundle = _PinnedBrowserRuntimeBundle(
+            descriptor=sealed_descriptor,
+            target=expected_target,
+            device=info.st_dev,
+            inode=info.st_ino,
+            size=info.st_size,
+            sha256=bundle_sha256,
+            manifest_sha256=manifest_sha256,
+            entries=len(entries),
+            regular_bytes=regular_bytes,
+            execution_authority=False,
+        )
+        bundle._owner_token = _BROWSER_HANDLE_TOKEN
+        _validate_pinned_browser_runtime_bundle(bundle)
+        return bundle
+    except BaseException:
+        if sealed_descriptor >= 0:
+            try:
+                _close_browser_runtime_bundle_descriptor(
+                    sealed_descriptor,
+                    expected_target,
+                    sealed_identity,
+                )
+            except BaseException:
+                pass
+        if staging_descriptor >= 0:
+            try:
+                _close_browser_runtime_bundle_descriptor(
+                    staging_descriptor,
+                    expected_target,
+                    staging_identity,
+                )
+            except BaseException:
+                pass
+        raise
 
 
 def _read_browser_worker_runner_source() -> bytes:
@@ -6703,7 +8371,12 @@ def parse_single_json_object(raw: bytes) -> Mapping[str, Any]:
             parse_constant=_reject_json_constant,
             parse_float=_finite_json_float,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        ValueError,
+        RecursionError,
+    ):
         raise LocalStagingAcceptanceError(
             "local acceptance Docker response differs"
         ) from None
@@ -6723,7 +8396,12 @@ def parse_single_json_array(raw: bytes) -> list[Mapping[str, Any]]:
             parse_constant=_reject_json_constant,
             parse_float=_finite_json_float,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        ValueError,
+        RecursionError,
+    ):
         raise LocalStagingAcceptanceError(
             "local acceptance Docker response differs"
         ) from None
@@ -7450,11 +9128,49 @@ def _observe_frozen_browser_dependency_source(
         )
         _require_success(exported)
         _validate_browser_dependency_build_sources(build_sources)
+        audit_entries = _read_browser_dependency_audit_entries(build_sources)
         snapshot = _parse_browser_dependency_image_export(exported.stdout)
         _validate_browser_dependency_build_sources(build_sources)
-        return snapshot
+        return replace(snapshot, audit_entries=audit_entries)
     finally:
         _close_browser_dependency_build_sources(build_sources)
+
+
+def _open_frozen_browser_runtime_bundle(
+    client: TrustedDockerClient,
+    config_root: Path,
+    *,
+    run_id: str,
+) -> _PinnedBrowserRuntimeBundle:
+    """Materialize sealed exact bytes; no process or capability is released."""
+
+    runtime = _snapshot_browser_python_runtime_source()
+    dependency = _observe_frozen_browser_dependency_source(
+        client,
+        config_root,
+        run_id=run_id,
+    )
+    entries = _collect_browser_runtime_bundle_entries(runtime, dependency)
+    bundle = _seal_browser_runtime_bundle(entries)
+    try:
+        if (
+            bundle.entries != _BROWSER_RUNTIME_BUNDLE_EXPECTED_ENTRIES
+            or bundle.regular_bytes
+            != _BROWSER_RUNTIME_BUNDLE_EXPECTED_REGULAR_BYTES
+            or bundle.size != _BROWSER_RUNTIME_BUNDLE_EXPECTED_BYTES
+            or bundle.manifest_sha256
+            != _BROWSER_RUNTIME_BUNDLE_EXPECTED_MANIFEST_SHA256
+            or bundle.sha256 != _BROWSER_RUNTIME_BUNDLE_EXPECTED_SHA256
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance frozen browser runtime bundle differs"
+            )
+        bundle._source_token = _BROWSER_FROZEN_RUNTIME_BUNDLE_TOKEN
+        _validate_frozen_browser_runtime_bundle(bundle)
+        return bundle
+    except BaseException:
+        bundle.close()
+        raise
 
 
 def create_materializer_volume(
