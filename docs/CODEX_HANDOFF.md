@@ -115,6 +115,49 @@ This is an operational checkpoint, not a replacement for the canonical specifica
   mandatory next gates. No later code may promote this source aggregate to
   execution authority without pinning or explicitly masking and reattesting
   those surfaces.
+- The native-runtime source checkpoint is committed as
+  `9b7079623a60ff971942706054d5555d188cb969` (tree
+  `d728551c38097b75d943d7c600c59aa3e9895edd`). It extends the sealed source
+  aggregate with the exact recursive native dependencies of the retained
+  CPython, stdlib-extension, and 20 selected third-party ELF objects: 304
+  native entries (287 regular files, four directories, 13 symlinks) and
+  21,772,212 regular bytes. The native manifest SHA-256 is
+  `f05a1558c91a1a8979a5f9251fc52bc3b0063d1dcfa99661457c54fadf7bab0b`.
+  It includes the complete pinned glibc `gconv` tree, complete `C.utf8`
+  locale tree, exact `locale.alias`, exact OpenSSL configuration, and the
+  required soname links and target DSOs. The expected `gconv-modules.cache`,
+  `locale-archive`, and `python313.zip` negative paths were absent at source
+  observation. The combined uniquely sealed, non-authorizing bundle is now
+  exactly 4,575 entries, 171,833,618 regular bytes, and 173,499,779 encoded
+  bytes, with manifest SHA-256
+  `1a176afff9196463367f3201f6e012ac874937a788abb325d9297ef890cd5edf`
+  and bundle SHA-256
+  `ff46c1cc615659888aeb9c01ad52aef00b45c595d87491646c00454cbb2a858c`.
+  It still returns `execution_authority=False` and has no launch caller.
+- Exact reviewed hashes for the native checkpoint are
+  `41cc5eb35b329a78931968458065ae87072c954680a2886b3d5cc05a54e48fdf`
+  for `run_local_staging_acceptance.py`,
+  `74f60159769d02acd362680a48006d21a48fb2a72f19b0097d7737f71031a709`
+  for focused tests,
+  `e35cfcc49ad5d854472cfa5d11662b6c45e0c9690af090014469aa95d59ddb20`
+  for `run_tests.py`, and `54134cfc824221be20ead21ad91cd077eab2ffe8f90470fae523229bc460dded`
+  / `7b944e22e8408a566034045bd93d8458df95fed59a61e262b13329fb8477c460`
+  for the persistent/supplier floor guards. Focused acceptance passed 41/41;
+  floor modules passed 12/12; discovery is exactly 1,505 with local floor 41;
+  `py_compile` and `git diff --check` pass. A live read-only bundle build
+  reproduced every exact count/hash above, peaked at 1,049,508 KiB RSS, and
+  returned the file-descriptor and Docker-resource inventories to baseline.
+  Attributable read-only reviews by `materialization_security_review`,
+  `materialization_test_review`, and `materialization_final_review` verified
+  this exact commit/tree and reported no remaining P0/P1/P2 in the stated
+  non-authorizing boundary.
+- That review does not grant projection or launch authority. A private
+  read-only projection must still suppress or bind ambient loader cache,
+  preload and hwcaps candidates, locale/NSS/resolver/TLS/zoneinfo lookup
+  surfaces, and exact environment selection. The credential-bearing runtime
+  graph also still lacks pinned Git, Node, and Chromium/helper closures. Those
+  are mandatory gates before actual browser execution; the immediate next
+  checkpoint is a credential-free guardian/private-projection sentinel gate.
 - Integrated Task 9 remains **NOT RUN**. No credential has been released and
   no gateway, worker, Chromium confirmation, Backup V2, APPLY, DRAFT/packet,
   private research replay, restart/restore, or combined-cgroup acceptance has
