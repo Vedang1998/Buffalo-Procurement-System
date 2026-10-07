@@ -6556,6 +6556,10 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 patch.object(
                     acceptance,
                     "_continue_browser_private_proc_guardian",
+                    return_value=(
+                        acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                        acceptance._BROWSER_PRIVATE_PROC_BLOCKER_ERRNO,
+                    ),
                 ) as continued,
                 self.assertRaises(KeyboardInterrupt),
             ):
@@ -6563,7 +6567,10 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     unittest.mock.sentinel.bundle,
                     generation=generation,
                 )
-            continued.assert_not_called()
+            continued.assert_called_once_with(
+                acquired[0],
+                generation=generation,
+            )
             self.assertEqual(len(acquired), 1)
             self.assertIsNone(acquired[0]._owner_token)
             self.assertEqual(

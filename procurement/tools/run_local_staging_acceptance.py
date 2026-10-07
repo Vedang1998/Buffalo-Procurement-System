@@ -9503,55 +9503,47 @@ def _observe_browser_containment_blocker(
     guardian_start_ticks = 0
     cleanup_complete = False
     body_error: BaseException | None = None
+    cleanup_errors: list[BaseException] = []
+    previous_signals = _block_browser_projection_signals()
     try:
-        previous_signals = _block_browser_projection_signals()
         try:
             guardian = _start_stopped_browser_private_proc_guardian(
                 generation=generation,
                 child_signal_mask=previous_signals,
             )
-        finally:
-            _restore_browser_projection_signals(previous_signals)
-        guardian_pid = guardian.process_id
-        guardian_start_ticks = guardian.process_start_ticks
-        proc_stage, proc_errno = _continue_browser_private_proc_guardian(
-            guardian,
-            generation=generation,
-        )
-        if (
-            proc_stage != _BROWSER_PRIVATE_PROC_BLOCKER_STAGE
-            or proc_errno != _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO
-        ):
-            raise LocalStagingAcceptanceError(
-                "local acceptance private proc blocker differs"
+            guardian_pid = guardian.process_id
+            guardian_start_ticks = guardian.process_start_ticks
+            proc_stage, proc_errno = _continue_browser_private_proc_guardian(
+                guardian,
+                generation=generation,
             )
-    except BaseException as exc:
-        body_error = exc
-    cleanup_errors: list[BaseException] = []
-    if guardian is not None:
-        cleanup_signals: frozenset[int] | None = None
-        try:
-            cleanup_signals = _block_browser_projection_signals()
-            _close_browser_prerequisite_guardian_lease(guardian)
+            if (
+                proc_stage != _BROWSER_PRIVATE_PROC_BLOCKER_STAGE
+                or proc_errno != _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance private proc blocker differs"
+                )
         except BaseException as exc:
-            cleanup_errors.append(exc)
-        finally:
-            if cleanup_signals is not None:
-                try:
-                    _restore_browser_projection_signals(cleanup_signals)
-                except BaseException as exc:
-                    cleanup_errors.append(exc)
-    cleanup_complete = not cleanup_errors
-    if body_error is not None:
+            body_error = exc
+        if guardian is not None:
+            try:
+                _close_browser_prerequisite_guardian_lease(guardian)
+            except BaseException as exc:
+                cleanup_errors.append(exc)
+        cleanup_complete = not cleanup_errors
+        if body_error is not None:
+            if cleanup_errors:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser containment and cleanup failed"
+                ) from body_error
+            raise body_error
         if cleanup_errors:
             raise LocalStagingAcceptanceError(
-                "local acceptance browser containment and cleanup failed"
-            ) from body_error
-        raise body_error
-    if cleanup_errors:
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser containment cleanup failed"
-        ) from cleanup_errors[0]
+                "local acceptance browser containment cleanup failed"
+            ) from cleanup_errors[0]
+    finally:
+        _restore_browser_projection_signals(previous_signals)
     return _BrowserContainmentBlockerObservation(
         protocol=_BROWSER_CONTAINMENT_PROTOCOL,
         generation=generation,
