@@ -5693,6 +5693,1154 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertEqual(stderr.getvalue(), "")
 
+    def test_browser_projection_policy_environment_manifest_and_negative_paths_are_exact(self):
+        policy = acceptance._browser_projection_policy_entries()
+        self.assertEqual(len(policy), 13)
+        self.assertEqual(
+            sum(len(entry.content) for entry in policy if entry.kind == "F"),
+            181,
+        )
+        self.assertEqual(
+            acceptance._browser_projection_policy_sha256(
+                policy,
+                expected_sha256=acceptance._BROWSER_PROJECTION_POLICY_SHA256,
+            ),
+            acceptance._BROWSER_PROJECTION_POLICY_SHA256,
+        )
+        self.assertEqual(
+            tuple(sorted(acceptance._BROWSER_PROJECTION_ENVIRONMENT)),
+            acceptance._BROWSER_PROJECTION_ENVIRONMENT,
+        )
+        self.assertTrue(
+            all(
+                not acceptance._BROWSER_PROJECTION_FORBIDDEN_ENVIRONMENT.fullmatch(
+                    name
+                )
+                for name, _ in acceptance._BROWSER_PROJECTION_ENVIRONMENT
+            )
+        )
+        self.assertIn("/etc/ld-nix.so.preload", acceptance._BROWSER_PROJECTION_NEGATIVE_PATHS)
+        self.assertIn(
+            str(acceptance._BROWSER_RUNTIME_LOCALE_ARCHIVE),
+            acceptance._BROWSER_PROJECTION_NEGATIVE_PATHS,
+        )
+        self.assertIn("/runtime/.pythonlibs", acceptance._BROWSER_PROJECTION_NEGATIVE_PATHS)
+        changed = tuple(
+            replace(entry, content=entry.content + b"x")
+            if entry.kind == "F"
+            else entry
+            for entry in policy
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._browser_projection_policy_sha256(
+                changed,
+                expected_sha256=acceptance._BROWSER_PROJECTION_POLICY_SHA256,
+            )
+        changed_environment = tuple(
+            (name, "/etc/passwd" if name == "SSL_CERT_FILE" else value)
+            for name, value in acceptance._BROWSER_PROJECTION_ENVIRONMENT
+        )
+        with patch.object(
+            acceptance,
+            "_BROWSER_PROJECTION_ENVIRONMENT",
+            changed_environment,
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._browser_projection_policy_entries()
+        with patch.object(
+            acceptance,
+            "_BROWSER_PROJECTION_NEGATIVE_PATHS",
+            acceptance._BROWSER_PROJECTION_NEGATIVE_PATHS[1:],
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._browser_projection_policy_entries()
+        with patch.object(
+            acceptance,
+            "_BROWSER_PROJECTION_POLICY_ENTRIES",
+            acceptance._BROWSER_PROJECTION_POLICY_ENTRIES
+            + (acceptance._BROWSER_PROJECTION_POLICY_ENTRIES[-1],),
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._browser_projection_policy_entries()
+
+    def test_browser_projection_materialization_binds_owned_root_and_is_read_only(self):
+        generation = "d" * 64
+        entry = acceptance._BrowserRuntimeBundleEntry(
+            "/",
+            "D",
+            0o555,
+            0,
+            0,
+            "projection-policy:" + "1" * 64,
+            b"",
+        )
+        bundle = unittest.mock.Mock(
+            descriptor=91,
+            size=99,
+            sha256="2" * 64,
+            manifest_sha256="3" * 64,
+            regular_bytes=0,
+        )
+        observation = unittest.mock.sentinel.projection
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary) / (
+                acceptance._BROWSER_PROJECTION_ROOT_PREFIX + generation
+            )
+            root.mkdir(mode=0o700)
+            info = root.stat(follow_symlinks=False)
+
+            def detached_mount() -> tuple[int, int, int]:
+                return (
+                    os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC),
+                    os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC),
+                    os.open(
+                        root,
+                        os.O_RDONLY
+                        | os.O_CLOEXEC
+                        | os.O_DIRECTORY
+                        | os.O_NOFOLLOW,
+                    ),
+                )
+
+            with (
+                patch.object(acceptance, "_validate_frozen_browser_runtime_bundle"),
+                patch.object(
+                    acceptance,
+                    "_read_browser_runtime_bundle_descriptor",
+                    return_value=b"bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_parse_browser_runtime_bundle",
+                    return_value=(
+                        (entry,),
+                        bundle.manifest_sha256,
+                        bundle.sha256,
+                        bundle.regular_bytes,
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_projection_entries",
+                    return_value=(entry,),
+                ),
+                patch.object(acceptance, "_browser_mount") as mounted,
+                patch.object(
+                    acceptance,
+                    "_open_detached_browser_projection_mount",
+                    side_effect=detached_mount,
+                ),
+                patch.object(
+                    acceptance,
+                    "_seal_detached_browser_projection_mount",
+                ) as sealed,
+                patch.object(
+                    acceptance,
+                    "_attach_detached_browser_projection_mount",
+                ) as attached,
+                patch.object(
+                    acceptance,
+                    "_browser_fstatfs_magic",
+                    return_value=acceptance._BROWSER_TMPFS_MAGIC,
+                ),
+                patch.object(
+                    acceptance,
+                    "_materialize_browser_projection_entries",
+                ) as materialized,
+                patch.object(
+                    acceptance,
+                    "_validate_materialized_browser_projection",
+                    return_value=observation,
+                ) as validated,
+                patch.object(acceptance, "_browser_unmount") as unmounted,
+            ):
+                returned, descriptor = (
+                    acceptance._materialize_browser_runtime_projection(
+                        bundle,
+                        root,
+                        generation=generation,
+                        expected_root_device=info.st_dev,
+                        expected_root_inode=info.st_ino,
+                    )
+                )
+                self.assertIs(returned, observation)
+                os.close(descriptor)
+                self.assertEqual(mounted.call_count, 1)
+                self.assertEqual(
+                    mounted.call_args_list[-1].args[3],
+                    acceptance._BROWSER_MS_REC
+                    | acceptance._BROWSER_MS_PRIVATE,
+                )
+                materialized.assert_called_once()
+                validated.assert_called_once()
+                sealed.assert_called_once()
+                attached.assert_called_once()
+                unmounted.assert_not_called()
+                mounted.reset_mock()
+                with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                    acceptance._materialize_browser_runtime_projection(
+                        bundle,
+                        root,
+                        generation=generation,
+                        expected_root_device=info.st_dev,
+                        expected_root_inode=info.st_ino + 1,
+                    )
+                mounted.assert_not_called()
+            with (
+                patch.object(acceptance, "_validate_frozen_browser_runtime_bundle"),
+                patch.object(
+                    acceptance,
+                    "_read_browser_runtime_bundle_descriptor",
+                    return_value=b"bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_parse_browser_runtime_bundle",
+                    return_value=(
+                        (entry,),
+                        bundle.manifest_sha256,
+                        bundle.sha256,
+                        bundle.regular_bytes,
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_projection_entries",
+                    return_value=(entry,),
+                ),
+                patch.object(acceptance, "_browser_mount"),
+                patch.object(
+                    acceptance,
+                    "_open_detached_browser_projection_mount",
+                    side_effect=detached_mount,
+                ),
+                patch.object(
+                    acceptance,
+                    "_seal_detached_browser_projection_mount",
+                ),
+                patch.object(
+                    acceptance,
+                    "_attach_detached_browser_projection_mount",
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_fstatfs_magic",
+                    return_value=acceptance._BROWSER_TMPFS_MAGIC,
+                ),
+                patch.object(
+                    acceptance,
+                    "_materialize_browser_projection_entries",
+                    side_effect=KeyboardInterrupt,
+                ),
+                patch.object(acceptance, "_browser_unmount") as unmounted,
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._materialize_browser_runtime_projection(
+                    bundle,
+                    root,
+                    generation=generation,
+                    expected_root_device=info.st_dev,
+                    expected_root_inode=info.st_ino,
+                )
+            unmounted.assert_not_called()
+            descriptor_baseline = set(os.listdir("/proc/self/fd"))
+            def queue_projection_interrupt(*_: object) -> None:
+                acceptance.signal.raise_signal(acceptance.signal.SIGINT)
+
+            with (
+                patch.object(
+                    acceptance,
+                    "_validate_frozen_browser_runtime_bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_read_browser_runtime_bundle_descriptor",
+                    return_value=b"bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_parse_browser_runtime_bundle",
+                    return_value=(
+                        (entry,),
+                        bundle.manifest_sha256,
+                        bundle.sha256,
+                        bundle.regular_bytes,
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_projection_entries",
+                    return_value=(entry,),
+                ),
+                patch.object(acceptance, "_browser_mount"),
+                patch.object(
+                    acceptance,
+                    "_open_detached_browser_projection_mount",
+                    side_effect=detached_mount,
+                ),
+                patch.object(
+                    acceptance,
+                    "_seal_detached_browser_projection_mount",
+                ),
+                patch.object(
+                    acceptance,
+                    "_attach_detached_browser_projection_mount",
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_fstatfs_magic",
+                    return_value=acceptance._BROWSER_TMPFS_MAGIC,
+                ),
+                patch.object(
+                    acceptance,
+                    "_materialize_browser_projection_entries",
+                    side_effect=queue_projection_interrupt,
+                ),
+                patch.object(
+                    acceptance,
+                    "_validate_materialized_browser_projection",
+                    return_value=observation,
+                ),
+                patch.object(acceptance, "_browser_unmount") as unmounted,
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._materialize_browser_runtime_projection(
+                    bundle,
+                    root,
+                    generation=generation,
+                    expected_root_device=info.st_dev,
+                    expected_root_inode=info.st_ino,
+                )
+            unmounted.assert_called_once()
+            self.assertEqual(
+                descriptor_baseline,
+                set(os.listdir("/proc/self/fd")),
+            )
+            descriptor_baseline = set(os.listdir("/proc/self/fd"))
+            with (
+                patch.object(
+                    acceptance,
+                    "_validate_frozen_browser_runtime_bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_read_browser_runtime_bundle_descriptor",
+                    return_value=b"bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_parse_browser_runtime_bundle",
+                    return_value=(
+                        (entry,),
+                        bundle.manifest_sha256,
+                        bundle.sha256,
+                        bundle.regular_bytes,
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_projection_entries",
+                    return_value=(entry,),
+                ),
+                patch.object(acceptance, "_browser_mount"),
+                patch.object(
+                    acceptance,
+                    "_open_detached_browser_projection_mount",
+                    side_effect=detached_mount,
+                ),
+                patch.object(
+                    acceptance,
+                    "_seal_detached_browser_projection_mount",
+                ),
+                patch.object(
+                    acceptance,
+                    "_attach_detached_browser_projection_mount",
+                    side_effect=KeyboardInterrupt,
+                ),
+                patch.object(
+                    acceptance,
+                    "_browser_fstatfs_magic",
+                    return_value=acceptance._BROWSER_TMPFS_MAGIC,
+                ),
+                patch.object(
+                    acceptance,
+                    "_materialize_browser_projection_entries",
+                ),
+                patch.object(
+                    acceptance,
+                    "_validate_materialized_browser_projection",
+                    return_value=observation,
+                ),
+                patch.object(acceptance, "_browser_unmount") as unmounted,
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._materialize_browser_runtime_projection(
+                    bundle,
+                    root,
+                    generation=generation,
+                    expected_root_device=info.st_dev,
+                    expected_root_inode=info.st_ino,
+                )
+            unmounted.assert_called_once()
+            self.assertEqual(
+                descriptor_baseline,
+                set(os.listdir("/proc/self/fd")),
+            )
+            descriptor_baseline = set(os.listdir("/proc/self/fd"))
+            with (
+                patch.object(
+                    acceptance,
+                    "_validate_frozen_browser_runtime_bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_read_browser_runtime_bundle_descriptor",
+                    side_effect=KeyboardInterrupt,
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._materialize_browser_runtime_projection(
+                    bundle,
+                    root,
+                    generation=generation,
+                    expected_root_device=info.st_dev,
+                    expected_root_inode=info.st_ino,
+                )
+            self.assertEqual(
+                descriptor_baseline,
+                set(os.listdir("/proc/self/fd")),
+            )
+            displaced = root.with_name(root.name + "-displaced")
+            def swap_root_during_attach(*_: object) -> None:
+                root.rename(displaced)
+                root.mkdir(mode=0o700)
+
+            try:
+                with (
+                    patch.object(
+                        acceptance,
+                        "_validate_frozen_browser_runtime_bundle",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_read_browser_runtime_bundle_descriptor",
+                        return_value=b"bundle",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_parse_browser_runtime_bundle",
+                        return_value=(
+                            (entry,),
+                            bundle.manifest_sha256,
+                            bundle.sha256,
+                            bundle.regular_bytes,
+                        ),
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_browser_projection_entries",
+                        return_value=(entry,),
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_browser_mount",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_open_detached_browser_projection_mount",
+                        side_effect=detached_mount,
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_seal_detached_browser_projection_mount",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_attach_detached_browser_projection_mount",
+                        side_effect=swap_root_during_attach,
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_materialize_browser_projection_entries",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_validate_materialized_browser_projection",
+                        return_value=observation,
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_browser_fstatfs_magic",
+                        return_value=acceptance._BROWSER_TMPFS_MAGIC,
+                    ),
+                    patch.object(acceptance, "_browser_unmount"),
+                    self.assertRaises(
+                        acceptance.LocalStagingAcceptanceError
+                    ),
+                ):
+                    acceptance._materialize_browser_runtime_projection(
+                        bundle,
+                        root,
+                        generation=generation,
+                        expected_root_device=info.st_dev,
+                        expected_root_inode=info.st_ino,
+                    )
+            finally:
+                if root.exists():
+                    root.rmdir()
+                if displaced.exists():
+                    displaced.rename(root)
+
+    def test_browser_clone3_and_private_proc_policy_fail_closed(self):
+        for selected_errno in (acceptance.errno.ENOSYS, acceptance.errno.EPERM):
+            with patch.object(
+                acceptance,
+                "_browser_syscall",
+                side_effect=OSError(selected_errno, "denied"),
+            ):
+                self.assertEqual(
+                    acceptance._probe_browser_clone3_policy(),
+                    selected_errno,
+                )
+        with patch.object(
+            acceptance,
+            "_browser_syscall",
+            side_effect=OSError(acceptance.errno.EINVAL, "reachable"),
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._probe_browser_clone3_policy()
+        with (
+            patch.object(
+                acceptance,
+                "_browser_syscall",
+                side_effect=[
+                    41,
+                    0,
+                    OSError(acceptance.errno.EPERM, "denied"),
+                ],
+            ),
+            patch.object(
+                acceptance,
+                "_browser_mount",
+                side_effect=OSError(acceptance.errno.EPERM, "denied"),
+            ),
+            patch.object(acceptance.os, "close") as closed,
+        ):
+            self.assertEqual(
+                acceptance._attempt_private_browser_procfs(),
+                (
+                    acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                    acceptance.errno.EPERM,
+                ),
+            )
+            closed.assert_called_once_with(41)
+        with (
+            patch.object(
+                acceptance,
+                "_browser_syscall",
+                side_effect=[41, 0, 42, 0],
+            ),
+            patch.object(acceptance.os, "close") as closed,
+        ):
+            self.assertEqual(
+                acceptance._attempt_private_browser_procfs(),
+                ("mounted", 0),
+            )
+            self.assertEqual(
+                [call.args[0] for call in closed.call_args_list],
+                [42, 41],
+            )
+
+    def test_browser_private_proc_guardian_is_stopped_mapped_and_residue_free(self):
+        generation = hashlib.sha256(b"focused-private-proc-guardian").hexdigest()
+        before_descriptors = set(os.listdir("/proc/self/fd"))
+        guardian = acceptance._start_stopped_browser_private_proc_guardian(
+            generation=generation
+        )
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            copy.copy(guardian)
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            copy.deepcopy(guardian)
+        process_id = guardian.process_id
+        try:
+            self.assertEqual(
+                acceptance._continue_browser_private_proc_guardian(
+                    guardian,
+                    generation=generation,
+                ),
+                (
+                    acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                    acceptance._BROWSER_PRIVATE_PROC_BLOCKER_ERRNO,
+                ),
+            )
+        finally:
+            acceptance._close_browser_prerequisite_guardian_lease(guardian)
+        self.assertFalse(Path(f"/proc/{process_id}").exists())
+        self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
+
+        guardian = acceptance._start_stopped_browser_private_proc_guardian(
+            generation=generation
+        )
+        process_id = guardian.process_id
+        real_metadata = acceptance._read_browser_pidfd_metadata
+        metadata_calls = 0
+
+        def interrupted_metadata(descriptor: int):
+            nonlocal metadata_calls
+            metadata_calls += 1
+            if metadata_calls == 1:
+                raise KeyboardInterrupt
+            return real_metadata(descriptor)
+
+        with patch.object(
+            acceptance,
+            "_read_browser_pidfd_metadata",
+            side_effect=interrupted_metadata,
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._close_browser_prerequisite_guardian_lease(guardian)
+        self.assertIsNone(guardian._owner_token)
+        self.assertEqual(
+            (guardian.pidfd, guardian.gate_write, guardian.status_read),
+            (-1, -1, -1),
+        )
+        self.assertFalse(Path(f"/proc/{process_id}").exists())
+
+        guardian = acceptance._start_stopped_browser_private_proc_guardian(
+            generation=generation
+        )
+        process_id = guardian.process_id
+        selected_pidfd = guardian.pidfd
+        real_close = acceptance.os.close
+        close_calls = 0
+
+        def interrupted_pidfd_close(descriptor: int) -> None:
+            nonlocal close_calls
+            if descriptor == selected_pidfd and close_calls == 0:
+                close_calls += 1
+                raise KeyboardInterrupt
+            real_close(descriptor)
+
+        with patch.object(
+            acceptance.os,
+            "close",
+            side_effect=interrupted_pidfd_close,
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._close_browser_prerequisite_guardian_lease(guardian)
+        self.assertIsNone(guardian._owner_token)
+        self.assertEqual(
+            (guardian.pidfd, guardian.gate_write, guardian.status_read),
+            (-1, -1, -1),
+        )
+        self.assertFalse(Path(f"/proc/{process_id}").exists())
+
+        guardian = acceptance._start_stopped_browser_private_proc_guardian(
+            generation=generation
+        )
+        process_id = guardian.process_id
+        real_pipe_validation = (
+            acceptance._validate_browser_guardian_pipe_handle
+        )
+        pipe_validation_calls = 0
+
+        def interrupted_pipe_validation(*args, **kwargs):
+            nonlocal pipe_validation_calls
+            pipe_validation_calls += 1
+            if pipe_validation_calls == 1:
+                raise KeyboardInterrupt
+            return real_pipe_validation(*args, **kwargs)
+
+        with patch.object(
+            acceptance,
+            "_validate_browser_guardian_pipe_handle",
+            side_effect=interrupted_pipe_validation,
+        ), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._close_browser_prerequisite_guardian_lease(guardian)
+        self.assertIsNone(guardian._owner_token)
+        self.assertEqual(
+            (guardian.pidfd, guardian.gate_write, guardian.status_read),
+            (-1, -1, -1),
+        )
+        self.assertFalse(Path(f"/proc/{process_id}").exists())
+
+        guardian = acceptance._start_stopped_browser_private_proc_guardian(
+            generation=generation
+        )
+        owned_gate_duplicate = os.dup(guardian.gate_write)
+        foreign_read, foreign_write = os.pipe2(os.O_CLOEXEC)
+        try:
+            os.close(guardian.gate_write)
+            os.dup2(foreign_write, guardian.gate_write, inheritable=False)
+            if foreign_write != guardian.gate_write:
+                os.close(foreign_write)
+                foreign_write = -1
+            foreign_identity = os.fstat(guardian.gate_write)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance._close_browser_prerequisite_guardian_lease(
+                    guardian
+                )
+            repeated_foreign = os.fstat(guardian.gate_write)
+            self.assertEqual(
+                (repeated_foreign.st_dev, repeated_foreign.st_ino),
+                (foreign_identity.st_dev, foreign_identity.st_ino),
+            )
+        finally:
+            for descriptor in (
+                owned_gate_duplicate,
+                foreign_read,
+                foreign_write,
+                guardian.gate_write,
+            ):
+                if descriptor < 0:
+                    continue
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+        guardian = acceptance._start_stopped_browser_private_proc_guardian(
+            generation=generation
+        )
+        owned_pidfd_duplicate = os.dup(guardian.pidfd)
+        foreign_process = os.fork()
+        if foreign_process == 0:
+            time.sleep(60.0)
+            os._exit(0)
+        foreign_pidfd = os.pidfd_open(foreign_process, 0)
+        try:
+            os.close(guardian.pidfd)
+            os.dup2(foreign_pidfd, guardian.pidfd, inheritable=False)
+            if foreign_pidfd != guardian.pidfd:
+                os.close(foreign_pidfd)
+                foreign_pidfd = -1
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance._close_browser_prerequisite_guardian_lease(
+                    guardian
+                )
+            self.assertFalse(
+                acceptance._browser_pidfd_is_terminal(guardian.pidfd)
+            )
+        finally:
+            try:
+                acceptance.signal.pidfd_send_signal(
+                    owned_pidfd_duplicate,
+                    acceptance.signal.SIGKILL,
+                )
+            except ProcessLookupError:
+                pass
+            acceptance._wait_browser_child_bounded(
+                guardian.process_id,
+                deadline=time.monotonic() + 5.0,
+            )
+            try:
+                acceptance.signal.pidfd_send_signal(
+                    guardian.pidfd,
+                    acceptance.signal.SIGKILL,
+                )
+            except ProcessLookupError:
+                pass
+            os.waitpid(foreign_process, 0)
+            for descriptor in (
+                owned_pidfd_duplicate,
+                foreign_pidfd,
+                guardian.pidfd,
+            ):
+                if descriptor < 0:
+                    continue
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        forked: list[int] = []
+        real_fork = os.fork
+        real_wait = acceptance._wait_browser_child_bounded
+        wait_calls = 0
+
+        def recording_fork() -> int:
+            selected = real_fork()
+            if selected > 1:
+                forked.append(selected)
+            return selected
+
+        def interrupted_wait(process_id: int, *, deadline: float) -> int:
+            nonlocal wait_calls
+            wait_calls += 1
+            if wait_calls == 1:
+                raise acceptance.LocalStagingAcceptanceError(
+                    "injected first wait failure"
+                )
+            return real_wait(process_id, deadline=deadline)
+
+        with (
+            patch.object(acceptance.os, "fork", side_effect=recording_fork),
+            patch.object(
+                acceptance,
+                "_read_browser_guardian_frame",
+                side_effect=acceptance.LocalStagingAcceptanceError(
+                    "injected post-stop failure"
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "_wait_browser_child_bounded",
+                side_effect=interrupted_wait,
+            ),
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._start_stopped_browser_private_proc_guardian(
+                generation=generation
+            )
+        self.assertEqual(len(forked), 1)
+        self.assertFalse(Path(f"/proc/{forked[0]}").exists())
+        self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
+
+        real_prctl = acceptance._browser_prctl
+
+        def hold_before_init_hardening(option: int, value: int) -> None:
+            if (
+                option == acceptance._BROWSER_PR_SET_PDEATHSIG
+                and value == int(acceptance.signal.SIGKILL)
+                and os.getpid() == 1
+                and os.getppid() == 0
+            ):
+                time.sleep(60.0)
+            real_prctl(option, value)
+
+        continuation_errors: list[BaseException] = []
+        inner_pid = 0
+        inner_pidfd = -1
+        with patch.object(
+            acceptance,
+            "_browser_prctl",
+            side_effect=hold_before_init_hardening,
+        ):
+            guardian = acceptance._start_stopped_browser_private_proc_guardian(
+                generation=generation
+            )
+
+            def continue_guardian() -> None:
+                try:
+                    acceptance._continue_browser_private_proc_guardian(
+                        guardian,
+                        generation=generation,
+                    )
+                except BaseException as exc:
+                    continuation_errors.append(exc)
+
+            continuation = threading.Thread(target=continue_guardian)
+            continuation.start()
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline and inner_pid == 0:
+                for candidate in Path("/proc").iterdir():
+                    if not candidate.name.isascii() or not candidate.name.isdigit():
+                        continue
+                    selected_pid = int(candidate.name)
+                    if selected_pid <= 1 or selected_pid == guardian.process_id:
+                        continue
+                    try:
+                        observed = acceptance._read_browser_worker_proc_stat(
+                            selected_pid
+                        )
+                    except acceptance.LocalStagingAcceptanceError:
+                        continue
+                    if observed.parent_pid == guardian.process_id:
+                        inner_pid = selected_pid
+                        break
+                if inner_pid == 0:
+                    time.sleep(0.01)
+            self.assertGreater(inner_pid, 1)
+            inner_pidfd = os.pidfd_open(inner_pid, 0)
+            acceptance._close_browser_prerequisite_guardian_lease(guardian)
+            self.assertTrue(
+                acceptance._browser_pidfd_is_terminal(inner_pidfd)
+            )
+            continuation.join(5.0)
+            self.assertFalse(continuation.is_alive())
+        try:
+            self.assertTrue(continuation_errors)
+        finally:
+            if inner_pidfd >= 0:
+                os.close(inner_pidfd)
+        self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
+
+    def test_browser_containment_blocker_withholds_provider_on_every_outcome(self):
+        bundle = unittest.mock.sentinel.bundle
+        guardian = unittest.mock.Mock(process_id=12345, process_start_ticks=67890)
+        generation = "e" * 64
+        with (
+            patch.object(acceptance, "_validate_frozen_browser_runtime_bundle"),
+            patch.object(
+                acceptance,
+                "_probe_browser_clone3_policy",
+                return_value=acceptance.errno.ENOSYS,
+            ),
+            patch.object(
+                acceptance,
+                "_start_stopped_browser_private_proc_guardian",
+                return_value=guardian,
+            ),
+            patch.object(
+                acceptance,
+                "_continue_browser_private_proc_guardian",
+                return_value=(
+                    acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                    acceptance.errno.EPERM,
+                ),
+            ),
+            patch.object(
+                acceptance,
+                "_close_browser_prerequisite_guardian_lease",
+            ) as cleaned,
+        ):
+            observed = acceptance._observe_browser_containment_blocker(
+                bundle,
+                generation=generation,
+            )
+        self.assertEqual(observed.projection_status, "NOT_RUN")
+        self.assertEqual(observed.cgroup_status, "NOT_RUN")
+        self.assertEqual(observed.credential_release_status, "WITHHELD")
+        self.assertEqual(observed.sentinel_provider_calls, 0)
+        self.assertEqual(observed.payload_processes, 0)
+        self.assertFalse(observed.execution_authority)
+        cleaned.assert_called_once_with(guardian)
+        for failure in (
+            ("fsopen", acceptance.errno.EPERM),
+            ("fsmount", acceptance.errno.EINVAL),
+            KeyboardInterrupt(),
+        ):
+            with (
+                patch.object(
+                    acceptance,
+                    "_validate_frozen_browser_runtime_bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_probe_browser_clone3_policy",
+                    return_value=acceptance.errno.ENOSYS,
+                ),
+                patch.object(
+                    acceptance,
+                    "_start_stopped_browser_private_proc_guardian",
+                    return_value=guardian,
+                ),
+                patch.object(
+                    acceptance,
+                    "_continue_browser_private_proc_guardian",
+                    side_effect=(
+                        failure
+                        if isinstance(failure, BaseException)
+                        else None
+                    ),
+                    return_value=(
+                        failure
+                        if isinstance(failure, tuple)
+                        else unittest.mock.DEFAULT
+                    ),
+                ),
+                patch.object(
+                    acceptance,
+                    "_close_browser_prerequisite_guardian_lease",
+                ) as cleaned,
+            ):
+                with self.assertRaises(
+                    KeyboardInterrupt
+                    if isinstance(failure, KeyboardInterrupt)
+                    else acceptance.LocalStagingAcceptanceError
+                ):
+                    acceptance._observe_browser_containment_blocker(
+                        bundle,
+                        generation=generation,
+                    )
+            cleaned.assert_called_once_with(guardian)
+
+    def test_browser_fabricated_sentinel_release_surface_is_absent_at_blocker(self):
+        self.assertFalse(hasattr(acceptance, "_BrowserReleaseProof"))
+        self.assertFalse(
+            hasattr(acceptance, "_release_browser_fabricated_sentinel")
+        )
+        module = ast.parse(Path(acceptance.__file__).read_text(encoding="utf-8"))
+        observer = next(
+            node
+            for node in module.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_observe_browser_containment_blocker"
+        )
+        names = {
+            selected.id
+            for selected in ast.walk(observer)
+            if isinstance(selected, ast.Name)
+        }
+        attributes = {
+            selected.attr
+            for selected in ast.walk(observer)
+            if isinstance(selected, ast.Attribute)
+        }
+        self.assertNotIn("provider", names)
+        self.assertNotIn("secret", names)
+        self.assertNotIn("write_browser_worker_secret", attributes)
+        self.assertNotIn("_release_browser_fabricated_sentinel", names)
+
+    def test_browser_private_proc_guardian_dies_with_supervisor_without_residue(self):
+        before_roots = tuple(sorted(Path("/tmp").glob("buffalo-browser-projection-*")))
+        cgroup_parent = Path("/sys/fs/cgroup/system.slice")
+        before_cgroups = tuple(sorted(cgroup_parent.glob("buffalo-browser-*")))
+        read_descriptor, write_descriptor = os.pipe2(os.O_CLOEXEC)
+        supervisor = os.fork()
+        if supervisor == 0:
+            try:
+                os.close(read_descriptor)
+                generation = hashlib.sha256(
+                    b"focused-supervisor-interruption"
+                ).hexdigest()
+
+                real_prctl = acceptance._browser_prctl
+
+                def hold_before_first_init_hardening(
+                    option: int,
+                    value: int,
+                ) -> None:
+                    if (
+                        option == acceptance._BROWSER_PR_SET_PDEATHSIG
+                        and value == int(acceptance.signal.SIGKILL)
+                        and os.getpid() == 1
+                        and os.getppid() == 0
+                    ):
+                        time.sleep(60.0)
+                    real_prctl(option, value)
+
+                with patch.object(
+                    acceptance,
+                    "_browser_prctl",
+                    side_effect=hold_before_first_init_hardening,
+                ):
+                    guardian = (
+                        acceptance._start_stopped_browser_private_proc_guardian(
+                            generation=generation
+                        )
+                    )
+                message = (
+                    f"{guardian.process_id} {guardian.process_start_ticks}\n"
+                ).encode("ascii")
+                os.write(write_descriptor, message)
+                with patch.object(
+                    acceptance,
+                    "_browser_prctl",
+                    side_effect=hold_before_first_init_hardening,
+                ):
+                    acceptance._continue_browser_private_proc_guardian(
+                        guardian,
+                        generation=generation,
+                    )
+            finally:
+                os._exit(0)
+        os.close(write_descriptor)
+        guardian_pid = guardian_start = inner_pid = inner_start = 0
+        guardian_pidfd = inner_pidfd = -1
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(read_descriptor, selectors.EVENT_READ)
+                self.assertTrue(selector.select(5.0))
+            raw = os.read(read_descriptor, 128)
+            guardian_pid, guardian_start = (
+                int(value) for value in raw.strip().split(b" ")
+            )
+            guardian_pidfd = os.pidfd_open(guardian_pid, 0)
+            guardian_info, guardian_bound, _, _ = (
+                acceptance._read_browser_pidfd_metadata(guardian_pidfd)
+            )
+            self.assertEqual(guardian_bound, guardian_pid)
+            self.assertGreater(guardian_info.st_ino, 0)
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline and inner_pid == 0:
+                for candidate in Path("/proc").iterdir():
+                    if not candidate.name.isascii() or not candidate.name.isdigit():
+                        continue
+                    selected_pid = int(candidate.name)
+                    if selected_pid <= 1 or selected_pid == guardian_pid:
+                        continue
+                    try:
+                        observed = acceptance._read_browser_worker_proc_stat(
+                            selected_pid
+                        )
+                    except acceptance.LocalStagingAcceptanceError:
+                        continue
+                    if observed.parent_pid == guardian_pid:
+                        inner_pid = selected_pid
+                        inner_start = observed.start_ticks
+                        break
+                if inner_pid == 0:
+                    time.sleep(0.01)
+            self.assertGreater(inner_pid, 1)
+            inner_pidfd = os.pidfd_open(inner_pid, 0)
+            self.assertEqual(
+                os.readlink(f"/proc/self/fd/{inner_pidfd}"),
+                "anon_inode:[pidfd]",
+            )
+            self.assertFalse(
+                acceptance._browser_pidfd_is_terminal(inner_pidfd)
+            )
+            self.assertEqual(
+                acceptance._read_browser_worker_proc_stat(
+                    inner_pid
+                ).start_ticks,
+                inner_start,
+            )
+            os.kill(supervisor, acceptance.signal.SIGKILL)
+            waited, status = os.waitpid(supervisor, 0)
+            self.assertEqual(waited, supervisor)
+            self.assertTrue(os.WIFSIGNALED(status))
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                if (
+                    acceptance._browser_pidfd_is_terminal(guardian_pidfd)
+                    and acceptance._browser_pidfd_is_terminal(inner_pidfd)
+                ):
+                    break
+                time.sleep(0.01)
+            else:
+                self.fail(
+                    "guardian or namespace init survived supervisor SIGKILL"
+                )
+            for process_id, start_ticks in (
+                (guardian_pid, guardian_start),
+                (inner_pid, inner_start),
+            ):
+                try:
+                    current = acceptance._read_browser_worker_proc_stat(
+                        process_id
+                    )
+                except acceptance.LocalStagingAcceptanceError:
+                    continue
+                self.assertNotEqual(current.start_ticks, start_ticks)
+        finally:
+            os.close(read_descriptor)
+            for descriptor in (guardian_pidfd, inner_pidfd):
+                if descriptor < 0:
+                    continue
+                try:
+                    if not acceptance._browser_pidfd_is_terminal(descriptor):
+                        acceptance.signal.pidfd_send_signal(
+                            descriptor,
+                            acceptance.signal.SIGKILL,
+                        )
+                except (OSError, acceptance.LocalStagingAcceptanceError):
+                    pass
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            try:
+                os.kill(supervisor, acceptance.signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                os.waitpid(supervisor, 0)
+            except ChildProcessError:
+                pass
+        self.assertEqual(
+            before_roots,
+            tuple(sorted(Path("/tmp").glob("buffalo-browser-projection-*"))),
+        )
+        self.assertEqual(
+            before_cgroups,
+            tuple(sorted(cgroup_parent.glob("buffalo-browser-*"))),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

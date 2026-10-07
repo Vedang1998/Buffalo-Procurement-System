@@ -10,6 +10,7 @@ before any repository module or credential is loaded.
 from __future__ import annotations
 
 import base64
+import ctypes
 import csv
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -482,6 +483,67 @@ _BROWSER_RUNTIME_BUNDLE_EXPECTED_SHA256 = (
 _BROWSER_RUNTIME_PARENT_POLICY_SHA256 = (
     "3a8831475b2d6b539f5de30f25dd35ea4d2869ca8c750465487ac160fe91ee17"
 )
+_BROWSER_PROJECTION_PROTOCOL = "BUFFALO_LOCAL_BROWSER_PROJECTION_V1"
+_BROWSER_PROJECTION_DOMAIN = b"BUFFALO_LOCAL_BROWSER_PROJECTION_V1\0"
+_BROWSER_PROJECTION_POLICY_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_PROJECTION_POLICY_V2\0"
+)
+_BROWSER_PROJECTION_POLICY_ENTRIES_DOMAIN = (
+    b"BUFFALO_LOCAL_BROWSER_PROJECTION_POLICY_ENTRIES_V1\0"
+)
+_BROWSER_PROJECTION_POLICY_SHA256 = (
+    "b31f20961531fa21ec8056de9e2f6100b3fe4b55ab906fd170243f1a432a66f1"
+)
+_BROWSER_PROJECTION_POLICY_ID_SHA256 = (
+    "c526a64e7489481b8183f8199af3a02f8f04b7dfef973968087c09c108b6b6f3"
+)
+_BROWSER_PROJECTION_EXPECTED_ENTRIES = 4_588
+_BROWSER_PROJECTION_EXPECTED_REGULAR_BYTES = 171_833_799
+_BROWSER_PROJECTION_EXPECTED_SHA256 = (
+    "1c142df8df4b6e9a775062c8fe718ff265025049835c4d69338d4e9b543fdbad"
+)
+_BROWSER_PROJECTION_ROOT_PREFIX = "buffalo-browser-projection-"
+_BROWSER_PROJECTION_TMPFS_BYTES = 256 * 1024 * 1024
+_BROWSER_PROJECTION_TMPFS_INODES = 6_000
+_BROWSER_PROJECTION_STATUS_LIMIT = 64 * 1024
+_BROWSER_CONTAINMENT_PROTOCOL = "BUFFALO_LOCAL_BROWSER_CONTAINMENT_V1"
+_BROWSER_CONTAINMENT_TIMEOUT_SECONDS = 120.0
+_BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS = 5.0
+_BROWSER_PRIVATE_PROC_BLOCKER_STAGE = "fsmount+legacy-mount"
+_BROWSER_PRIVATE_PROC_BLOCKER_ERRNO = errno.EPERM
+_BROWSER_CLONE3_SYSCALL = 435
+_BROWSER_FSOPEN_SYSCALL = 430
+_BROWSER_FSCONFIG_SYSCALL = 431
+_BROWSER_FSMOUNT_SYSCALL = 432
+_BROWSER_MOVE_MOUNT_SYSCALL = 429
+_BROWSER_PIVOT_ROOT_SYSCALL = 155
+_BROWSER_FSOPEN_CLOEXEC = 1
+_BROWSER_FSCONFIG_CMD_CREATE = 6
+_BROWSER_FSCONFIG_SET_STRING = 1
+_BROWSER_FSMOUNT_CLOEXEC = 1
+_BROWSER_MOVE_MOUNT_F_EMPTY_PATH = 0x00000004
+_BROWSER_MOVE_MOUNT_T_EMPTY_PATH = 0x00000040
+_BROWSER_MOUNT_SETATTR_SYSCALL = 442
+_BROWSER_AT_EMPTY_PATH = 0x00001000
+_BROWSER_MOUNT_ATTR_RDONLY = 0x00000001
+_BROWSER_MOUNT_ATTR_NOSUID = 0x00000002
+_BROWSER_MOUNT_ATTR_NODEV = 0x00000004
+_BROWSER_AT_FDCWD = -100
+_BROWSER_PR_SET_PDEATHSIG = 1
+_BROWSER_PR_SET_DUMPABLE = 4
+_BROWSER_PR_SET_NO_NEW_PRIVS = 38
+_BROWSER_MS_RDONLY = 1
+_BROWSER_MS_NOSUID = 2
+_BROWSER_MS_NODEV = 4
+_BROWSER_MS_NOEXEC = 8
+_BROWSER_MS_REMOUNT = 32
+_BROWSER_MS_REC = 16_384
+_BROWSER_MS_PRIVATE = 1 << 18
+_BROWSER_MNT_DETACH = 2
+_BROWSER_TMPFS_MAGIC = 0x01021994
+_BROWSER_PROJECTION_MASKED_SIGNALS = frozenset(
+    signal.valid_signals() - {signal.SIGKILL, signal.SIGSTOP}
+)
 _BROWSER_LIVE_PROCESS_STATES = frozenset({"R", "S"})
 _BROWSER_PROCESS_STATES = frozenset(
     {"R", "S", "D", "T", "t", "W", "X", "x", "Z", "P", "I"}
@@ -493,6 +555,7 @@ _BROWSER_WORKER_ENVIRONMENT = (
 )
 _BROWSER_HANDLE_TOKEN = object()
 _BROWSER_FROZEN_RUNTIME_BUNDLE_TOKEN = object()
+_BROWSER_GUARDIAN_LEASE_TOKEN = object()
 _SHA256_TEXT = re.compile(r"\A[0-9a-f]{64}\Z")
 _GIT_OID_TEXT = re.compile(r"\A[0-9a-f]{40}\Z")
 _CANONICAL_FD = re.compile(r"\A(?:[3-9]|[1-9][0-9]+)\Z")
@@ -993,6 +1056,169 @@ class _PinnedBrowserRuntimeBundle:
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle ownership differs"
         )
+
+
+@dataclass(frozen=True)
+class _BrowserProjectionPolicyEntry:
+    path: str
+    kind: str
+    mode: int
+    content: bytes
+
+
+@dataclass(frozen=True)
+class _BrowserProjectionObservation:
+    protocol: str
+    generation: str
+    source_bundle_sha256: str
+    source_manifest_sha256: str
+    policy_sha256: str
+    projection_sha256: str
+    entries: int
+    regular_bytes: int
+    mount_id: int
+    mount_read_only: bool
+    mount_nosuid: bool
+    mount_nodev: bool
+    environment: tuple[tuple[str, str], ...]
+    execution_authority: bool
+
+
+@dataclass(frozen=True)
+class _BrowserContainmentBlockerObservation:
+    protocol: str
+    generation: str
+    clone3_errno: int
+    guardian_pid: int
+    guardian_start_ticks: int
+    cgroup_path: str
+    projection_status: str
+    cgroup_status: str
+    credential_release_status: str
+    projection_sha256: str
+    projection_entries: int
+    proc_stage: str
+    proc_errno: int
+    sentinel_provider_calls: int
+    payload_processes: int
+    cleanup_complete: bool
+    execution_authority: bool
+
+
+@dataclass
+class _BrowserGuardianLease:
+    process_id: int
+    process_start_ticks: int
+    pidfd: int
+    pidfd_device: int
+    pidfd_inode: int
+    gate_write: int
+    gate_device: int
+    gate_inode: int
+    status_read: int
+    status_device: int
+    status_inode: int
+    _owner_token: object = field(
+        default=None,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __copy__(self) -> _BrowserGuardianLease:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite ownership differs"
+        )
+
+    def __deepcopy__(
+        self,
+        _: dict[int, object],
+    ) -> _BrowserGuardianLease:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite ownership differs"
+        )
+
+
+_BROWSER_PROJECTION_POLICY_ENTRIES = (
+    _BrowserProjectionPolicyEntry("/", "D", 0o555, b""),
+    _BrowserProjectionPolicyEntry("/.oldroot", "D", 0o555, b""),
+    _BrowserProjectionPolicyEntry("/dev", "D", 0o555, b""),
+    _BrowserProjectionPolicyEntry("/etc", "D", 0o555, b""),
+    _BrowserProjectionPolicyEntry("/etc/gai.conf", "F", 0o444, b""),
+    _BrowserProjectionPolicyEntry("/etc/group", "F", 0o444, b"root:x:0:\n"),
+    _BrowserProjectionPolicyEntry("/etc/host.conf", "F", 0o444, b""),
+    _BrowserProjectionPolicyEntry(
+        "/etc/hosts",
+        "F",
+        0o444,
+        b"127.0.0.1 localhost staging.example.test\n::1 localhost\n",
+    ),
+    _BrowserProjectionPolicyEntry(
+        "/etc/nsswitch.conf",
+        "F",
+        0o444,
+        b"passwd: files\ngroup: files\nhosts: files\nnetworks: files\n",
+    ),
+    _BrowserProjectionPolicyEntry(
+        "/etc/passwd",
+        "F",
+        0o444,
+        b"root:x:0:0:Buffalo contained browser:/runtime:/sbin/nologin\n",
+    ),
+    _BrowserProjectionPolicyEntry("/etc/resolv.conf", "F", 0o444, b""),
+    _BrowserProjectionPolicyEntry("/proc", "D", 0o555, b""),
+    _BrowserProjectionPolicyEntry("/tmp", "D", 0o1777, b""),
+)
+_BROWSER_PROJECTION_ENVIRONMENT = (
+    (
+        "GCONV_PATH",
+        "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+        "lib/gconv",
+    ),
+    ("LANG", "C.UTF-8"),
+    ("LC_ALL", "C.UTF-8"),
+    (
+        "LOCPATH",
+        "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+        "lib/locale",
+    ),
+    (
+        "OPENSSL_CONF",
+        "/nix/store/rfm5m2l26lqkskcvxn5bm5xqh6c8wqr5-openssl-3.6.0/"
+        "etc/ssl/openssl.cnf",
+    ),
+    (
+        "SSL_CERT_FILE",
+        "/runtime/site-packages/certifi/cacert.pem",
+    ),
+    ("TZ", "UTC"),
+)
+_BROWSER_PROJECTION_NEGATIVE_PATHS = (
+    "/etc/ld-nix.so.preload",
+    "/etc/ld.so.preload",
+    "/home",
+    "/nix/store/j193mfi0f921y0kfs8vjc1znnr45ispv-glibc-2.40-66/"
+    "etc/ld.so.cache",
+    str(_BROWSER_RUNTIME_GCONV_CACHE),
+    str(_BROWSER_RUNTIME_LOCALE_ARCHIVE),
+    str(_BROWSER_RUNTIME_STDLIB_ZIP),
+    "/nix/store/rfm5m2l26lqkskcvxn5bm5xqh6c8wqr5-openssl-3.6.0/"
+    "lib/engines-3",
+    "/nix/store/rfm5m2l26lqkskcvxn5bm5xqh6c8wqr5-openssl-3.6.0/"
+    "lib/ossl-modules",
+    "/root",
+    "/runtime/.pythonlibs",
+    "/runtime/site-packages/_virtualenv.pth",
+    "/runtime/site-packages/_virtualenv.py",
+    "/runtime/site-packages/buffalo-procurement-os.pth",
+    "/runtime/site-packages/sitecustomize.py",
+    "/runtime/site-packages/usercustomize.py",
+)
+_BROWSER_PROJECTION_FORBIDDEN_ENVIRONMENT = re.compile(
+    r"\A(?:LD_.*|GLIBC_TUNABLES|LOCALE_ARCHIVE|NIX_PATH|PYTHONHOME|"
+    r"PYTHONPATH|PYTHONUSERBASE|OPENSSL_ENGINES|OPENSSL_MODULES|"
+    r"REPLIT_LD_.*|REPLIT_NIX_.*)\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -5670,6 +5896,2054 @@ def _parse_browser_runtime_bundle(
     )
 
 
+def _update_browser_projection_digest(
+    digest: Any,
+    entry: _BrowserRuntimeBundleEntry,
+) -> None:
+    try:
+        path = entry.path.encode("ascii", errors="strict")
+        provenance = entry.provenance.encode("ascii", errors="strict")
+        if entry.kind == "F":
+            payload = hashlib.sha256(entry.content).digest()
+        elif entry.kind == "L":
+            payload = entry.content
+        elif entry.kind == "D":
+            payload = b""
+        else:
+            raise ValueError
+        digest.update(entry.kind.encode("ascii"))
+        digest.update(len(path).to_bytes(4, "big"))
+        digest.update(path)
+        digest.update(entry.mode.to_bytes(4, "big"))
+        digest.update(entry.user_id.to_bytes(4, "big"))
+        digest.update(entry.group_id.to_bytes(4, "big"))
+        digest.update(len(provenance).to_bytes(4, "big"))
+        digest.update(provenance)
+        digest.update(len(entry.content).to_bytes(8, "big"))
+        digest.update(len(payload).to_bytes(4, "big"))
+        digest.update(payload)
+    except (AttributeError, OverflowError, TypeError, UnicodeEncodeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection differs"
+        ) from None
+
+
+def _browser_projection_manifest_sha256(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+    *,
+    domain: bytes = _BROWSER_PROJECTION_DOMAIN,
+    expected_sha256: str | None = None,
+) -> str:
+    if (
+        type(entries) is not tuple
+        or not entries
+        or type(domain) is not bytes
+        or not domain
+        or (
+            expected_sha256 is not None
+            and (
+                type(expected_sha256) is not str
+                or _SHA256_TEXT.fullmatch(expected_sha256) is None
+            )
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection differs"
+        )
+    digest = hashlib.sha256(domain)
+    for entry in sorted(entries, key=lambda selected: selected.path):
+        if type(entry) is not _BrowserRuntimeBundleEntry:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection differs"
+            )
+        _update_browser_projection_digest(digest, entry)
+    observed = digest.hexdigest()
+    if expected_sha256 is not None and observed != expected_sha256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection differs"
+        )
+    return observed
+
+
+def _browser_projection_policy_sha256(
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+    *,
+    expected_sha256: str | None = None,
+) -> str:
+    if (
+        type(entries) is not tuple
+        or not entries
+        or type(_BROWSER_PROJECTION_ENVIRONMENT) is not tuple
+        or type(_BROWSER_PROJECTION_NEGATIVE_PATHS) is not tuple
+        or tuple(sorted(_BROWSER_PROJECTION_ENVIRONMENT))
+        != _BROWSER_PROJECTION_ENVIRONMENT
+        or tuple(sorted(_BROWSER_PROJECTION_NEGATIVE_PATHS))
+        != _BROWSER_PROJECTION_NEGATIVE_PATHS
+        or len(dict(_BROWSER_PROJECTION_ENVIRONMENT))
+        != len(_BROWSER_PROJECTION_ENVIRONMENT)
+        or len(set(_BROWSER_PROJECTION_NEGATIVE_PATHS))
+        != len(_BROWSER_PROJECTION_NEGATIVE_PATHS)
+        or (
+            expected_sha256 is not None
+            and (
+                type(expected_sha256) is not str
+                or _SHA256_TEXT.fullmatch(expected_sha256) is None
+            )
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection policy differs"
+        )
+    try:
+        environment = []
+        for name, value in _BROWSER_PROJECTION_ENVIRONMENT:
+            if (
+                type(name) is not str
+                or type(value) is not str
+                or not name
+                or "\0" in name
+                or "\0" in value
+                or _BROWSER_PROJECTION_FORBIDDEN_ENVIRONMENT.fullmatch(name)
+            ):
+                raise ValueError
+            name.encode("ascii", errors="strict")
+            value.encode("ascii", errors="strict")
+            environment.append([name, value])
+        negative_paths = []
+        for path in _BROWSER_PROJECTION_NEGATIVE_PATHS:
+            if (
+                type(path) is not str
+                or not path.startswith("/")
+                or path == "/"
+                or "\0" in path
+            ):
+                raise ValueError
+            path.encode("ascii", errors="strict")
+            negative_paths.append(path)
+        entry_sha256 = _browser_projection_manifest_sha256(
+            entries,
+            domain=_BROWSER_PROJECTION_POLICY_ENTRIES_DOMAIN,
+        )
+        policy = {
+            "entries_sha256": entry_sha256,
+            "environment": environment,
+            "mount": {
+                "filesystem": "tmpfs",
+                "flags": ["nodev", "nosuid", "readonly"],
+                "maximum_bytes": _BROWSER_PROJECTION_TMPFS_BYTES,
+                "maximum_inodes": _BROWSER_PROJECTION_TMPFS_INODES,
+                "private_recursive": True,
+            },
+            "negative_paths": negative_paths,
+            "projected_owner": {"gid": 0, "uid": 0},
+            "source_metadata_preserved_in_manifest": True,
+        }
+        raw = json.dumps(
+            policy,
+            ensure_ascii=True,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+    except (
+        AttributeError,
+        TypeError,
+        UnicodeEncodeError,
+        ValueError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection policy differs"
+        ) from None
+    digest = hashlib.sha256(_BROWSER_PROJECTION_POLICY_DOMAIN)
+    digest.update(len(raw).to_bytes(8, "big"))
+    digest.update(raw)
+    observed = digest.hexdigest()
+    if expected_sha256 is not None and observed != expected_sha256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection policy differs"
+        )
+    return observed
+
+
+def _browser_projection_policy_entries(
+) -> tuple[_BrowserRuntimeBundleEntry, ...]:
+    selected = tuple(
+        _BrowserRuntimeBundleEntry(
+            path=entry.path,
+            kind=entry.kind,
+            mode=entry.mode,
+            user_id=0,
+            group_id=0,
+            provenance=(
+                "projection-policy:" + _BROWSER_PROJECTION_POLICY_ID_SHA256
+            ),
+            content=entry.content,
+        )
+        for entry in _BROWSER_PROJECTION_POLICY_ENTRIES
+    )
+    if (
+        tuple(entry.path for entry in selected)
+        != tuple(sorted(entry.path for entry in selected))
+        or len({entry.path for entry in selected}) != len(selected)
+        or any(
+            entry.kind not in {"F", "D"}
+            or type(entry.mode) is not int
+            or entry.mode < 0
+            or entry.mode > 0o1777
+            or entry.user_id != 0
+            or entry.group_id != 0
+            or type(entry.content) is not bytes
+            or (entry.kind == "D" and entry.content)
+            for entry in selected
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection policy differs"
+        )
+    _browser_projection_policy_sha256(
+        selected,
+        expected_sha256=_BROWSER_PROJECTION_POLICY_SHA256,
+    )
+    return selected
+
+
+def _browser_projection_entries(
+    source_entries: tuple[_BrowserRuntimeBundleEntry, ...],
+) -> tuple[_BrowserRuntimeBundleEntry, ...]:
+    source = _validate_browser_runtime_bundle_entries(source_entries)
+    policy = _browser_projection_policy_entries()
+    source_paths = {entry.path for entry in source}
+    policy_paths = {entry.path for entry in policy}
+    negative = set(_BROWSER_PROJECTION_NEGATIVE_PATHS)
+    if (
+        source_paths & policy_paths
+        or source_paths & negative
+        or policy_paths & negative
+        or any("glibc-hwcaps" in entry.path.split("/") for entry in source)
+        or "/runtime/site-packages/certifi/cacert.pem" not in source_paths
+        or tuple(sorted(_BROWSER_PROJECTION_ENVIRONMENT))
+        != _BROWSER_PROJECTION_ENVIRONMENT
+        or len(dict(_BROWSER_PROJECTION_ENVIRONMENT))
+        != len(_BROWSER_PROJECTION_ENVIRONMENT)
+        or any(
+            _BROWSER_PROJECTION_FORBIDDEN_ENVIRONMENT.fullmatch(name)
+            for name, _ in _BROWSER_PROJECTION_ENVIRONMENT
+        )
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection differs"
+        )
+    combined = tuple(sorted(source + policy, key=lambda entry: entry.path))
+    regular_bytes = sum(
+        len(entry.content) for entry in combined if entry.kind == "F"
+    )
+    if (
+        len(combined) != _BROWSER_PROJECTION_EXPECTED_ENTRIES
+        or regular_bytes != _BROWSER_PROJECTION_EXPECTED_REGULAR_BYTES
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection differs"
+        )
+    _browser_projection_manifest_sha256(
+        combined,
+        expected_sha256=_BROWSER_PROJECTION_EXPECTED_SHA256,
+    )
+    return combined
+
+
+def _browser_libc() -> Any:
+    try:
+        return ctypes.CDLL(None, use_errno=True)
+    except (AttributeError, OSError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment syscall differs"
+        ) from None
+
+
+def _browser_mount(
+    source: bytes | None,
+    target: bytes,
+    filesystem: bytes | None,
+    flags: int,
+    data: bytes | None,
+) -> None:
+    if (
+        source is not None and type(source) is not bytes
+    ) or type(target) is not bytes or not target or (
+        filesystem is not None and type(filesystem) is not bytes
+    ) or type(flags) is not int or flags < 0 or (
+        data is not None and type(data) is not bytes
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment mount differs"
+        )
+    libc = _browser_libc()
+    try:
+        result = libc.mount(
+            ctypes.c_char_p(source),
+            ctypes.c_char_p(target),
+            ctypes.c_char_p(filesystem),
+            ctypes.c_ulong(flags),
+            ctypes.c_char_p(data),
+        )
+    except (AttributeError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment mount differs"
+        ) from None
+    if result != 0:
+        selected_errno = ctypes.get_errno()
+        raise OSError(selected_errno, os.strerror(selected_errno))
+
+
+def _browser_unmount(target: bytes, flags: int) -> None:
+    if type(target) is not bytes or not target or type(flags) is not int:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment mount differs"
+        )
+    libc = _browser_libc()
+    try:
+        result = libc.umount2(ctypes.c_char_p(target), ctypes.c_int(flags))
+    except (AttributeError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment mount differs"
+        ) from None
+    if result != 0:
+        selected_errno = ctypes.get_errno()
+        raise OSError(selected_errno, os.strerror(selected_errno))
+
+
+def _browser_syscall(number: int, *arguments: object) -> int:
+    if type(number) is not int or number <= 0:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment syscall differs"
+        )
+    libc = _browser_libc()
+    try:
+        result = int(libc.syscall(ctypes.c_long(number), *arguments))
+    except (AttributeError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment syscall differs"
+        ) from None
+    if result < 0:
+        selected_errno = ctypes.get_errno()
+        raise OSError(selected_errno, os.strerror(selected_errno))
+    return result
+
+
+def _block_browser_projection_signals() -> frozenset[int]:
+    try:
+        if len(os.listdir("/proc/self/task")) != 1:
+            raise OSError(errno.EBUSY, "projection process is multithreaded")
+        previous = signal.pthread_sigmask(
+            signal.SIG_BLOCK,
+            _BROWSER_PROJECTION_MASKED_SIGNALS,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection signal boundary differs"
+        ) from None
+    return frozenset(int(selected) for selected in previous)
+
+
+def _restore_browser_projection_signals(previous: frozenset[int]) -> None:
+    if (
+        type(previous) is not frozenset
+        or any(type(selected) is not int for selected in previous)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection signal boundary differs"
+        )
+    try:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection signal boundary differs"
+        ) from None
+
+
+def _open_detached_browser_projection_mount() -> tuple[int, int, int]:
+    filesystem_descriptor = mount_descriptor = root_descriptor = -1
+    try:
+        previous_signals = _block_browser_projection_signals()
+        try:
+            filesystem_descriptor = _browser_syscall(
+                _BROWSER_FSOPEN_SYSCALL,
+                ctypes.c_char_p(b"tmpfs"),
+                ctypes.c_uint(_BROWSER_FSOPEN_CLOEXEC),
+            )
+            for key, value in (
+                (b"size", str(_BROWSER_PROJECTION_TMPFS_BYTES).encode("ascii")),
+                (
+                    b"nr_inodes",
+                    str(_BROWSER_PROJECTION_TMPFS_INODES).encode("ascii"),
+                ),
+                (b"mode", b"0700"),
+                (b"uid", b"0"),
+                (b"gid", b"0"),
+            ):
+                _browser_syscall(
+                    _BROWSER_FSCONFIG_SYSCALL,
+                    ctypes.c_int(filesystem_descriptor),
+                    ctypes.c_uint(_BROWSER_FSCONFIG_SET_STRING),
+                    ctypes.c_char_p(key),
+                    ctypes.c_char_p(value),
+                    ctypes.c_int(0),
+                )
+            _browser_syscall(
+                _BROWSER_FSCONFIG_SYSCALL,
+                ctypes.c_int(filesystem_descriptor),
+                ctypes.c_uint(_BROWSER_FSCONFIG_CMD_CREATE),
+                ctypes.c_void_p(0),
+                ctypes.c_void_p(0),
+                ctypes.c_int(0),
+            )
+            mount_descriptor = _browser_syscall(
+                _BROWSER_FSMOUNT_SYSCALL,
+                ctypes.c_int(filesystem_descriptor),
+                ctypes.c_uint(_BROWSER_FSMOUNT_CLOEXEC),
+                ctypes.c_uint(0),
+            )
+            root_descriptor = os.open(
+                ".",
+                os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=mount_descriptor,
+            )
+        finally:
+            _restore_browser_projection_signals(previous_signals)
+        if (
+            filesystem_descriptor <= 2
+            or mount_descriptor <= 2
+            or root_descriptor <= 2
+            or _browser_fstatfs_magic(root_descriptor)
+            != _BROWSER_TMPFS_MAGIC
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection mount differs"
+            )
+        return filesystem_descriptor, mount_descriptor, root_descriptor
+    except BaseException as body_error:
+        cleanup_errors: list[BaseException] = []
+        descriptors = (
+            root_descriptor,
+            mount_descriptor,
+            filesystem_descriptor,
+        )
+        root_descriptor = mount_descriptor = filesystem_descriptor = -1
+        for descriptor in descriptors:
+            if descriptor < 0:
+                continue
+            try:
+                os.close(descriptor)
+            except BaseException as exc:
+                cleanup_errors.append(exc)
+        if cleanup_errors:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection mount cleanup differs"
+            ) from body_error
+        raise
+
+
+def _seal_detached_browser_projection_mount(mount_descriptor: int) -> None:
+    class _MountAttributes(ctypes.Structure):
+        _fields_ = (
+            ("attr_set", ctypes.c_uint64),
+            ("attr_clr", ctypes.c_uint64),
+            ("propagation", ctypes.c_uint64),
+            ("userns_fd", ctypes.c_uint64),
+        )
+
+    attributes = _MountAttributes(
+        _BROWSER_MOUNT_ATTR_RDONLY
+        | _BROWSER_MOUNT_ATTR_NOSUID
+        | _BROWSER_MOUNT_ATTR_NODEV,
+        0,
+        0,
+        0,
+    )
+    _browser_syscall(
+        _BROWSER_MOUNT_SETATTR_SYSCALL,
+        ctypes.c_int(mount_descriptor),
+        ctypes.c_char_p(b""),
+        ctypes.c_uint(_BROWSER_AT_EMPTY_PATH),
+        ctypes.byref(attributes),
+        ctypes.c_size_t(ctypes.sizeof(attributes)),
+    )
+
+
+def _attach_detached_browser_projection_mount(
+    mount_descriptor: int,
+    target_descriptor: int,
+) -> None:
+    _browser_syscall(
+        _BROWSER_MOVE_MOUNT_SYSCALL,
+        ctypes.c_int(mount_descriptor),
+        ctypes.c_char_p(b""),
+        ctypes.c_int(target_descriptor),
+        ctypes.c_char_p(b""),
+        ctypes.c_uint(
+            _BROWSER_MOVE_MOUNT_F_EMPTY_PATH
+            | _BROWSER_MOVE_MOUNT_T_EMPTY_PATH
+        ),
+    )
+
+
+def _browser_prctl(option: int, value: int) -> None:
+    if type(option) is not int or type(value) is not int:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian hardening differs"
+        )
+    libc = _browser_libc()
+    try:
+        result = libc.prctl(
+            ctypes.c_int(option),
+            ctypes.c_ulong(value),
+            ctypes.c_ulong(0),
+            ctypes.c_ulong(0),
+            ctypes.c_ulong(0),
+        )
+    except (AttributeError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian hardening differs"
+        ) from None
+    if result != 0:
+        selected_errno = ctypes.get_errno()
+        raise OSError(selected_errno, os.strerror(selected_errno))
+
+
+def _browser_fstatfs_magic(descriptor: int) -> int:
+    class _StatFs(ctypes.Structure):
+        _fields_ = (
+            ("f_type", ctypes.c_long),
+            ("f_bsize", ctypes.c_long),
+            ("f_blocks", ctypes.c_ulong),
+            ("f_bfree", ctypes.c_ulong),
+            ("f_bavail", ctypes.c_ulong),
+            ("f_files", ctypes.c_ulong),
+            ("f_ffree", ctypes.c_ulong),
+            ("f_fsid", ctypes.c_int * 2),
+            ("f_namelen", ctypes.c_long),
+            ("f_frsize", ctypes.c_long),
+            ("f_flags", ctypes.c_long),
+            ("f_spare", ctypes.c_long * 4),
+        )
+
+    if type(descriptor) is not int or descriptor < 0:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment filesystem differs"
+        )
+    selected = _StatFs()
+    libc = _browser_libc()
+    try:
+        result = libc.fstatfs(
+            ctypes.c_int(descriptor),
+            ctypes.byref(selected),
+        )
+    except (AttributeError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment filesystem differs"
+        ) from None
+    if result != 0:
+        selected_errno = ctypes.get_errno()
+        raise OSError(selected_errno, os.strerror(selected_errno))
+    return int(selected.f_type) & 0xFFFFFFFFFFFFFFFF
+
+
+def _write_browser_projection_file(
+    root_descriptor: int,
+    relative: str,
+    content: bytes,
+    mode: int,
+) -> None:
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            relative,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_CLOEXEC
+            | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=root_descriptor,
+        )
+        offset = 0
+        while offset < len(content):
+            try:
+                written = os.write(descriptor, content[offset:])
+            except InterruptedError:
+                continue
+            if written <= 0:
+                raise OSError(errno.EIO, "short projection write")
+            offset += written
+        os.fchmod(descriptor, mode)
+        os.fchown(descriptor, 0, 0)
+        info = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or stat.S_IMODE(info.st_mode) != mode
+            or (info.st_uid, info.st_gid) != (0, 0)
+            or info.st_nlink != 1
+            or info.st_size != len(content)
+        ):
+            raise OSError(errno.EIO, "projection file metadata differs")
+    except (OSError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection write differs"
+        ) from None
+    finally:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+def _materialize_browser_projection_entries(
+    root: Path,
+    root_descriptor: int,
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+) -> None:
+    if (
+        not isinstance(root, Path)
+        or not root.is_absolute()
+        or type(root_descriptor) is not int
+        or root_descriptor <= 2
+        or type(entries) is not tuple
+        or not entries
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection differs"
+        )
+    try:
+        old_umask = os.umask(0o077)
+        try:
+            directories = tuple(
+                sorted(
+                    (entry for entry in entries if entry.kind == "D"),
+                    key=lambda entry: (entry.path.count("/"), entry.path),
+                )
+            )
+            for entry in directories:
+                if entry.path == "/":
+                    continue
+                os.mkdir(entry.path[1:], 0o700, dir_fd=root_descriptor)
+            for entry in entries:
+                if entry.kind == "F":
+                    _write_browser_projection_file(
+                        root_descriptor,
+                        entry.path[1:],
+                        entry.content,
+                        entry.mode,
+                    )
+                elif entry.kind == "L":
+                    target = entry.content.decode("ascii", errors="strict")
+                    os.symlink(
+                        target,
+                        entry.path[1:],
+                        dir_fd=root_descriptor,
+                    )
+                    os.chown(
+                        entry.path[1:],
+                        0,
+                        0,
+                        dir_fd=root_descriptor,
+                        follow_symlinks=False,
+                    )
+            for entry in reversed(directories):
+                descriptor = (
+                    os.dup(root_descriptor)
+                    if entry.path == "/"
+                    else os.open(
+                        entry.path[1:],
+                        os.O_RDONLY
+                        | os.O_CLOEXEC
+                        | os.O_DIRECTORY
+                        | os.O_NOFOLLOW,
+                        dir_fd=root_descriptor,
+                    )
+                )
+                try:
+                    os.fchmod(descriptor, entry.mode)
+                    os.fchown(descriptor, 0, 0)
+                finally:
+                    os.close(descriptor)
+        finally:
+            os.umask(old_umask)
+    except LocalStagingAcceptanceError:
+        raise
+    except (
+        OSError,
+        OverflowError,
+        TypeError,
+        UnicodeDecodeError,
+        ValueError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection materialization differs"
+        ) from None
+
+
+def _browser_projection_inventory(root: Path) -> tuple[str, ...]:
+    selected: list[str] = ["/"]
+
+    def visit(path: Path, relative: str, depth: int) -> None:
+        if depth > _BROWSER_RUNTIME_TREE_DEPTH_LIMIT:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection inventory differs"
+            )
+        try:
+            with os.scandir(path) as iterator:
+                members = sorted(iterator, key=lambda item: item.name)
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection inventory differs"
+            ) from None
+        for member in members:
+            if (
+                not member.name
+                or member.name in {".", ".."}
+                or "/" in member.name
+                or "\0" in member.name
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser projection inventory differs"
+                )
+            child_relative = (
+                f"{relative}/{member.name}" if relative else f"/{member.name}"
+            )
+            selected.append(child_relative)
+            try:
+                if member.is_dir(follow_symlinks=False):
+                    visit(Path(member.path), child_relative, depth + 1)
+            except OSError:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser projection inventory differs"
+                ) from None
+
+    visit(root, "", 0)
+    if len(selected) > _BROWSER_RUNTIME_BUNDLE_ENTRY_LIMIT:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection inventory differs"
+        )
+    return tuple(selected)
+
+
+def _validate_materialized_browser_projection(
+    root: Path,
+    root_descriptor: int,
+    entries: tuple[_BrowserRuntimeBundleEntry, ...],
+    *,
+    generation: str,
+    source_bundle_sha256: str,
+    source_manifest_sha256: str,
+) -> _BrowserProjectionObservation:
+    expected = {entry.path: entry for entry in entries}
+    inventory = _browser_projection_inventory(root)
+    if len(inventory) != len(expected) or set(inventory) != set(expected):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection inventory differs"
+        )
+    regular_bytes = 0
+    root_device = os.fstat(root_descriptor).st_dev
+    for path in inventory:
+        entry = expected[path]
+        selected = root if path == "/" else root / path[1:]
+        try:
+            info = (
+                os.fstat(root_descriptor)
+                if path == "/"
+                else selected.lstat()
+            )
+            if (
+                info.st_dev != root_device
+                or (info.st_uid, info.st_gid) != (0, 0)
+                or stat.S_IMODE(info.st_mode) != entry.mode
+            ):
+                raise OSError
+            if entry.kind == "D":
+                if not stat.S_ISDIR(info.st_mode):
+                    raise OSError
+            elif entry.kind == "L":
+                if (
+                    not stat.S_ISLNK(info.st_mode)
+                    or info.st_nlink != 1
+                    or os.fsencode(os.readlink(selected)) != entry.content
+                ):
+                    raise OSError
+            elif entry.kind == "F":
+                if (
+                    not stat.S_ISREG(info.st_mode)
+                    or info.st_nlink != 1
+                    or info.st_size != len(entry.content)
+                ):
+                    raise OSError
+                descriptor = os.open(
+                    path[1:],
+                    os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+                    dir_fd=root_descriptor,
+                )
+                try:
+                    observed = bytearray()
+                    offset = 0
+                    while offset < len(entry.content):
+                        block = os.pread(
+                            descriptor,
+                            min(_CHUNK_BYTES, len(entry.content) - offset),
+                            offset,
+                        )
+                        if not block:
+                            break
+                        observed.extend(block)
+                        offset += len(block)
+                    if (
+                        offset != len(entry.content)
+                        or os.pread(descriptor, 1, offset)
+                        or bytes(observed) != entry.content
+                    ):
+                        raise OSError
+                finally:
+                    os.close(descriptor)
+                regular_bytes += len(entry.content)
+            else:
+                raise OSError
+        except (OSError, OverflowError, TypeError, ValueError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection contents differ"
+            ) from None
+    for path in _BROWSER_PROJECTION_NEGATIVE_PATHS:
+        try:
+            os.lstat(root / path[1:])
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection negative path differs"
+            ) from None
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection negative path differs"
+        )
+    flags = os.fstatvfs(root_descriptor).f_flag
+    if (
+        _browser_fstatfs_magic(root_descriptor) != _BROWSER_TMPFS_MAGIC
+        or flags & os.ST_RDONLY == 0
+        or flags & os.ST_NOSUID == 0
+        or flags & os.ST_NODEV == 0
+        or flags & os.ST_NOEXEC != 0
+        or regular_bytes != _BROWSER_PROJECTION_EXPECTED_REGULAR_BYTES
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection mount differs"
+        )
+    try:
+        probe = os.open(
+            ".write-probe",
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            0o600,
+            dir_fd=root_descriptor,
+        )
+    except OSError as exc:
+        if exc.errno != errno.EROFS:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection is writable"
+            ) from None
+    else:
+        os.close(probe)
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection is writable"
+        )
+    _, _, mount_id, _ = _read_browser_worker_fd_metadata(
+        os.getpid(),
+        root_descriptor,
+    )
+    projection_sha256 = _browser_projection_manifest_sha256(
+        entries,
+        expected_sha256=_BROWSER_PROJECTION_EXPECTED_SHA256,
+    )
+    return _BrowserProjectionObservation(
+        protocol=_BROWSER_PROJECTION_PROTOCOL,
+        generation=generation,
+        source_bundle_sha256=source_bundle_sha256,
+        source_manifest_sha256=source_manifest_sha256,
+        policy_sha256=_BROWSER_PROJECTION_POLICY_SHA256,
+        projection_sha256=projection_sha256,
+        entries=len(entries),
+        regular_bytes=regular_bytes,
+        mount_id=mount_id,
+        mount_read_only=True,
+        mount_nosuid=True,
+        mount_nodev=True,
+        environment=_BROWSER_PROJECTION_ENVIRONMENT,
+        execution_authority=False,
+    )
+
+
+def _materialize_browser_runtime_projection(
+    bundle: _PinnedBrowserRuntimeBundle,
+    root: Path,
+    *,
+    generation: str,
+    expected_root_device: int,
+    expected_root_inode: int,
+) -> tuple[_BrowserProjectionObservation, int]:
+    _validate_frozen_browser_runtime_bundle(bundle)
+    if (
+        not isinstance(root, Path)
+        or not root.is_absolute()
+        or type(generation) is not str
+        or _SHA256_TEXT.fullmatch(generation) is None
+        or root.name != _BROWSER_PROJECTION_ROOT_PREFIX + generation
+        or type(expected_root_device) is not int
+        or type(expected_root_inode) is not int
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser projection root differs"
+        )
+    underlying_descriptor = filesystem_descriptor = -1
+    mount_descriptor = root_descriptor = -1
+    attach_attempted = False
+    mounted_identity: tuple[int, int] | None = None
+    previous_projection_signals = _block_browser_projection_signals()
+    projection_signals_restored = False
+    try:
+        previous_signals = _block_browser_projection_signals()
+        try:
+            underlying_descriptor = os.open(
+                root,
+                os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW,
+            )
+        finally:
+            _restore_browser_projection_signals(previous_signals)
+        named_root = root.stat(follow_symlinks=False)
+        held_root = os.fstat(underlying_descriptor)
+        held_target = os.readlink(f"/proc/self/fd/{underlying_descriptor}")
+        if (
+            not stat.S_ISDIR(named_root.st_mode)
+            or not stat.S_ISDIR(held_root.st_mode)
+            or (named_root.st_dev, named_root.st_ino)
+            != (expected_root_device, expected_root_inode)
+            or (held_root.st_dev, held_root.st_ino)
+            != (expected_root_device, expected_root_inode)
+            or held_target != str(root)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection root differs"
+            )
+        raw = _read_browser_runtime_bundle_descriptor(
+            bundle.descriptor,
+            bundle.size,
+        )
+        source, manifest_sha256, bundle_sha256, regular_bytes = (
+            _parse_browser_runtime_bundle(raw)
+        )
+        if (
+            manifest_sha256 != bundle.manifest_sha256
+            or bundle_sha256 != bundle.sha256
+            or regular_bytes != bundle.regular_bytes
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection source differs"
+            )
+        entries = _browser_projection_entries(source)
+        _browser_mount(
+            None,
+            b"/",
+            None,
+            _BROWSER_MS_REC | _BROWSER_MS_PRIVATE,
+            None,
+        )
+        repeated_root = root.stat(follow_symlinks=False)
+        repeated_held = os.fstat(underlying_descriptor)
+        repeated_target = os.readlink(
+            f"/proc/self/fd/{underlying_descriptor}"
+        )
+        if (
+            (repeated_root.st_dev, repeated_root.st_ino)
+            != (expected_root_device, expected_root_inode)
+            or (repeated_held.st_dev, repeated_held.st_ino)
+            != (expected_root_device, expected_root_inode)
+            or repeated_target != str(root)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection root differs"
+            )
+        previous_signals = _block_browser_projection_signals()
+        try:
+            (
+                filesystem_descriptor,
+                mount_descriptor,
+                root_descriptor,
+            ) = _open_detached_browser_projection_mount()
+        finally:
+            _restore_browser_projection_signals(previous_signals)
+        mounted_root = os.fstat(root_descriptor)
+        mounted_identity = (mounted_root.st_dev, mounted_root.st_ino)
+        if not stat.S_ISDIR(mounted_root.st_mode):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection root differs"
+            )
+        projected_root = Path(f"/proc/self/fd/{root_descriptor}")
+        _materialize_browser_projection_entries(
+            projected_root,
+            root_descriptor,
+            entries,
+        )
+        _seal_detached_browser_projection_mount(mount_descriptor)
+        observation = _validate_materialized_browser_projection(
+            projected_root,
+            root_descriptor,
+            entries,
+            generation=generation,
+            source_bundle_sha256=bundle.sha256,
+            source_manifest_sha256=bundle.manifest_sha256,
+        )
+        final_underlying_named = root.stat(follow_symlinks=False)
+        final_underlying_held = os.fstat(underlying_descriptor)
+        if (
+            (final_underlying_named.st_dev, final_underlying_named.st_ino)
+            != (expected_root_device, expected_root_inode)
+            or (final_underlying_held.st_dev, final_underlying_held.st_ino)
+            != (expected_root_device, expected_root_inode)
+            or os.readlink(f"/proc/self/fd/{underlying_descriptor}")
+            != str(root)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection root differs"
+            )
+        attach_attempted = True
+        _attach_detached_browser_projection_mount(
+            mount_descriptor,
+            underlying_descriptor,
+        )
+        final_named = root.stat(follow_symlinks=False)
+        final_held = os.fstat(root_descriptor)
+        if (
+            (final_named.st_dev, final_named.st_ino)
+            != (final_held.st_dev, final_held.st_ino)
+            or os.readlink(f"/proc/self/fd/{root_descriptor}") != str(root)
+            or os.readlink(f"/proc/self/fd/{underlying_descriptor}")
+            != str(root)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection root differs"
+            )
+        previous_signals = _block_browser_projection_signals()
+        try:
+            selected_descriptor = mount_descriptor
+            mount_descriptor = -1
+            os.close(selected_descriptor)
+            selected_descriptor = filesystem_descriptor
+            filesystem_descriptor = -1
+            os.close(selected_descriptor)
+            selected_descriptor = underlying_descriptor
+            underlying_descriptor = -1
+            os.close(selected_descriptor)
+        finally:
+            _restore_browser_projection_signals(previous_signals)
+        _restore_browser_projection_signals(previous_projection_signals)
+        projection_signals_restored = True
+        return observation, root_descriptor
+    except BaseException as body_error:
+        cleanup_errors: list[BaseException] = []
+        if attach_attempted:
+            unmounted = False
+            for _ in range(2):
+                try:
+                    if root_descriptor < 0 or mounted_identity is None:
+                        raise LocalStagingAcceptanceError(
+                            "local acceptance browser projection mount ownership differs"
+                        )
+                    held = os.fstat(root_descriptor)
+                    if (
+                        (held.st_dev, held.st_ino) != mounted_identity
+                        or _browser_fstatfs_magic(root_descriptor)
+                        != _BROWSER_TMPFS_MAGIC
+                    ):
+                        raise LocalStagingAcceptanceError(
+                            "local acceptance browser projection mount ownership differs"
+                        )
+                    _browser_unmount(
+                        f"/proc/self/fd/{root_descriptor}".encode("ascii"),
+                        _BROWSER_MNT_DETACH,
+                    )
+                    unmounted = True
+                    break
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+                    detached = False
+                    if isinstance(exc, OSError) and exc.errno == errno.EINVAL:
+                        try:
+                            named = root.stat(follow_symlinks=False)
+                            held_target = os.fstat(underlying_descriptor)
+                            detached = (
+                                (named.st_dev, named.st_ino)
+                                == (expected_root_device, expected_root_inode)
+                                and (held_target.st_dev, held_target.st_ino)
+                                == (expected_root_device, expected_root_inode)
+                                and _browser_fstatfs_magic(
+                                    underlying_descriptor
+                                )
+                                != _BROWSER_TMPFS_MAGIC
+                            )
+                        except BaseException:
+                            detached = False
+                    if detached:
+                        unmounted = True
+                        break
+            if not unmounted:
+                cleanup_errors.append(
+                    LocalStagingAcceptanceError(
+                        "local acceptance browser projection mount cleanup differs"
+                    )
+                )
+        descriptors = (
+            root_descriptor,
+            mount_descriptor,
+            filesystem_descriptor,
+            underlying_descriptor,
+        )
+        root_descriptor = mount_descriptor = filesystem_descriptor = -1
+        underlying_descriptor = -1
+        for descriptor in descriptors:
+            if descriptor < 0:
+                continue
+            try:
+                os.close(descriptor)
+            except BaseException as exc:
+                cleanup_errors.append(exc)
+        if not projection_signals_restored:
+            try:
+                _restore_browser_projection_signals(
+                    previous_projection_signals
+                )
+            except BaseException as exc:
+                projection_signals_restored = True
+                cleanup_errors.append(exc)
+            else:
+                projection_signals_restored = True
+        if cleanup_errors:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser projection and cleanup differ"
+            ) from body_error
+        raise
+
+
+def _write_browser_guardian_frame(
+    descriptor: int,
+    value: Mapping[str, Any],
+    *,
+    deadline: float,
+) -> None:
+    _require_browser_channel_deadline(deadline)
+    framed = encode_browser_worker_frame(
+        value,
+        maximum_bytes=_BROWSER_PROJECTION_STATUS_LIMIT,
+    )
+    _browser_guardian_pipe_identity(descriptor, os.O_WRONLY)
+    os.set_blocking(descriptor, False)
+    _write_exact_browser_pipe(descriptor, framed, deadline)
+
+
+def _read_browser_guardian_frame(
+    descriptor: int,
+    *,
+    deadline: float,
+) -> Mapping[str, Any]:
+    _require_browser_channel_deadline(deadline)
+    _browser_guardian_pipe_identity(descriptor, os.O_RDONLY)
+    os.set_blocking(descriptor, False)
+    header = _read_exact_browser_pipe(descriptor, 4, deadline)
+    declared = int.from_bytes(header, "big")
+    if declared <= 0 or declared > _BROWSER_PROJECTION_STATUS_LIMIT:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian frame differs"
+        )
+    body = _read_exact_browser_pipe(descriptor, declared, deadline)
+    return decode_browser_worker_frame(
+        header + body,
+        maximum_bytes=_BROWSER_PROJECTION_STATUS_LIMIT,
+    )
+
+
+def _read_browser_guardian_armed_and_rearm(
+    descriptor: int,
+    supervisor_pidfd: int,
+    *,
+    expected_parent: int,
+    expected_pidfd_device: int,
+    expected_pidfd_inode: int,
+    generation: str,
+    deadline: float,
+) -> None:
+    _require_browser_channel_deadline(deadline)
+    if (
+        type(expected_parent) is not int
+        or expected_parent <= 1
+        or type(expected_pidfd_device) is not int
+        or type(expected_pidfd_inode) is not int
+        or type(generation) is not str
+        or _SHA256_TEXT.fullmatch(generation) is None
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite parent differs"
+        )
+    _browser_guardian_pipe_identity(descriptor, os.O_RDONLY)
+    pidfd_info, bound_pid, _, _ = _read_browser_pidfd_metadata(
+        supervisor_pidfd
+    )
+    if (
+        bound_pid != expected_parent
+        or (pidfd_info.st_dev, pidfd_info.st_ino)
+        != (expected_pidfd_device, expected_pidfd_inode)
+        or os.getppid() != expected_parent
+        or _browser_pidfd_is_terminal(supervisor_pidfd)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite parent changed"
+        )
+    os.set_blocking(descriptor, False)
+
+    def read_exact(count: int) -> bytes:
+        observed = bytearray()
+        with selectors.DefaultSelector() as selector:
+            selector.register(descriptor, selectors.EVENT_READ, "frame")
+            selector.register(
+                supervisor_pidfd,
+                selectors.EVENT_READ,
+                "supervisor",
+            )
+            while len(observed) < count:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite parent changed"
+                    )
+                try:
+                    ready = selector.select(remaining)
+                except InterruptedError:
+                    continue
+                except (OSError, ValueError):
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite parent changed"
+                    ) from None
+                if not ready or any(
+                    key.data == "supervisor" for key, _ in ready
+                ):
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite parent changed"
+                    )
+                try:
+                    block = os.read(descriptor, count - len(observed))
+                except (BlockingIOError, InterruptedError):
+                    continue
+                except OSError:
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser guardian frame differs"
+                    ) from None
+                if not block:
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser guardian frame differs"
+                    )
+                observed.extend(block)
+        return bytes(observed)
+
+    header = read_exact(4)
+    declared = int.from_bytes(header, "big")
+    if declared <= 0 or declared > _BROWSER_PROJECTION_STATUS_LIMIT:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian frame differs"
+        )
+    armed = decode_browser_worker_frame(
+        header + read_exact(declared),
+        maximum_bytes=_BROWSER_PROJECTION_STATUS_LIMIT,
+    )
+    if armed != {
+        "generation": generation,
+        "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        "stage": "ARMED",
+    }:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser private proc init differs"
+        )
+    _browser_prctl(_BROWSER_PR_SET_PDEATHSIG, int(signal.SIGKILL))
+    repeated_info, repeated_pid, _, _ = _read_browser_pidfd_metadata(
+        supervisor_pidfd
+    )
+    if (
+        repeated_pid != expected_parent
+        or (repeated_info.st_dev, repeated_info.st_ino)
+        != (expected_pidfd_device, expected_pidfd_inode)
+        or os.getppid() != expected_parent
+        or _browser_pidfd_is_terminal(supervisor_pidfd)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite parent changed"
+        )
+
+
+def _capture_browser_guardian_pipe_identity(
+    descriptor: int,
+    access: int,
+) -> tuple[int, int, int, bool]:
+    _browser_guardian_pipe_identity(descriptor, access)
+    try:
+        info = os.fstat(descriptor)
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        close_on_exec = bool(
+            fcntl.fcntl(descriptor, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
+        )
+    except (OSError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian pipe differs"
+        ) from None
+    return (
+        info.st_dev,
+        info.st_ino,
+        flags & ~os.O_NONBLOCK,
+        close_on_exec,
+    )
+
+
+def _write_browser_guardian_attested_frame(
+    descriptor: int,
+    value: Mapping[str, Any],
+    identity: tuple[int, int, int, bool],
+    *,
+    deadline: float,
+) -> None:
+    _require_browser_channel_deadline(deadline)
+    if (
+        type(identity) is not tuple
+        or len(identity) != 4
+        or any(type(selected) is not int for selected in identity[:3])
+        or type(identity[3]) is not bool
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian pipe differs"
+        )
+    try:
+        info = os.fstat(descriptor)
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        close_on_exec = bool(
+            fcntl.fcntl(descriptor, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
+        )
+    except (OSError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian pipe differs"
+        ) from None
+    if (
+        not stat.S_ISFIFO(info.st_mode)
+        or (
+            info.st_dev,
+            info.st_ino,
+            flags & ~os.O_NONBLOCK,
+            close_on_exec,
+        )
+        != identity
+        or identity[2] != os.O_WRONLY
+        or identity[3] is not True
+        or os.get_inheritable(descriptor)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian pipe differs"
+        )
+    framed = encode_browser_worker_frame(
+        value,
+        maximum_bytes=_BROWSER_PROJECTION_STATUS_LIMIT,
+    )
+    os.set_blocking(descriptor, False)
+    _write_exact_browser_pipe(descriptor, framed, deadline)
+
+
+def _browser_guardian_pipe_identity(descriptor: int, access: int) -> None:
+    try:
+        soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        info = os.fstat(descriptor)
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        descriptor_flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
+        if (
+            type(descriptor) is not int
+            or descriptor <= 2
+            or descriptor > _BROWSER_WORKER_MAX_FD
+            or (
+                soft_limit != resource.RLIM_INFINITY
+                and descriptor >= soft_limit
+            )
+            or access not in {os.O_RDONLY, os.O_WRONLY}
+            or not stat.S_ISFIFO(info.st_mode)
+            or flags not in {access, access | os.O_NONBLOCK}
+            or descriptor_flags & fcntl.FD_CLOEXEC == 0
+            or os.get_inheritable(descriptor)
+            or target != f"pipe:[{info.st_ino}]"
+        ):
+            raise OSError
+    except (OSError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian descriptors differ"
+        ) from None
+
+
+def _close_browser_guardian_descriptors(allowed: frozenset[int]) -> None:
+    if (
+        type(allowed) is not frozenset
+        or any(type(value) is not int or value < 0 for value in allowed)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian descriptors differ"
+        )
+    try:
+        observed = tuple(
+            int(value)
+            for value in os.listdir("/proc/self/fd")
+            if value.isascii() and value.isdigit()
+        )
+    except (OSError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian descriptors differ"
+        ) from None
+    for descriptor in observed:
+        if descriptor in allowed:
+            continue
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            if exc.errno != errno.EBADF:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser guardian descriptors differ"
+                ) from None
+
+
+def _normalize_browser_guardian_stdio() -> None:
+    read_descriptor = write_descriptor = -1
+    try:
+        named = os.stat("/dev/null", follow_symlinks=False)
+        read_descriptor = os.open(
+            "/dev/null",
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+        )
+        write_descriptor = os.open(
+            "/dev/null",
+            os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+        )
+        read_info = os.fstat(read_descriptor)
+        write_info = os.fstat(write_descriptor)
+        if (
+            not stat.S_ISCHR(named.st_mode)
+            or not stat.S_ISCHR(read_info.st_mode)
+            or not stat.S_ISCHR(write_info.st_mode)
+            or (read_info.st_dev, read_info.st_ino, read_info.st_rdev)
+            != (named.st_dev, named.st_ino, named.st_rdev)
+            or (write_info.st_dev, write_info.st_ino, write_info.st_rdev)
+            != (named.st_dev, named.st_ino, named.st_rdev)
+        ):
+            raise OSError(errno.EIO, "guardian null device differs")
+        os.dup2(read_descriptor, 0, inheritable=False)
+        os.dup2(write_descriptor, 1, inheritable=False)
+        os.dup2(write_descriptor, 2, inheritable=False)
+        for descriptor, access in (
+            (0, os.O_RDONLY),
+            (1, os.O_WRONLY),
+            (2, os.O_WRONLY),
+        ):
+            info = os.fstat(descriptor)
+            flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+            if (
+                (info.st_dev, info.st_ino, info.st_rdev)
+                != (named.st_dev, named.st_ino, named.st_rdev)
+                or flags & os.O_ACCMODE != access
+                or fcntl.fcntl(descriptor, fcntl.F_GETFD)
+                & fcntl.FD_CLOEXEC
+                == 0
+                or os.get_inheritable(descriptor)
+            ):
+                raise OSError(errno.EIO, "guardian standard descriptor differs")
+    except (OSError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian standard descriptors differ"
+        ) from None
+    finally:
+        for descriptor in (read_descriptor, write_descriptor):
+            if descriptor > 2:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+
+def _probe_browser_clone3_policy() -> int:
+    try:
+        _browser_syscall(
+            _BROWSER_CLONE3_SYSCALL,
+            ctypes.c_void_p(0),
+            ctypes.c_size_t(0),
+        )
+    except OSError as exc:
+        if exc.errno in {errno.ENOSYS, errno.EPERM}:
+            return exc.errno
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser clone3 is reachable without an approved path"
+        ) from None
+    raise LocalStagingAcceptanceError(
+        "local acceptance browser clone3 probe unexpectedly created a process"
+    )
+
+
+def _write_browser_user_namespace_maps(
+    process_id: int,
+    *,
+    pidfd: int,
+    expected_start_ticks: int,
+) -> None:
+    if (
+        type(process_id) is not int
+        or process_id <= 1
+        or type(pidfd) is not int
+        or pidfd <= 2
+        or type(expected_start_ticks) is not int
+        or expected_start_ticks <= 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser user namespace differs"
+        )
+    proc_descriptor = -1
+    selected = (
+        ("setgroups", b"deny\n"),
+        ("uid_map", f"0 {os.geteuid()} 1\n".encode("ascii")),
+        ("gid_map", f"0 {os.getegid()} 1\n".encode("ascii")),
+    )
+    try:
+        pidfd_info, bound_pid, _, _ = _read_browser_pidfd_metadata(pidfd)
+        before = _read_browser_worker_proc_stat(process_id)
+        proc_descriptor = os.open(
+            f"/proc/{process_id}",
+            os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW,
+        )
+        held = os.fstat(proc_descriptor)
+        named = os.stat(
+            f"/proc/{process_id}",
+            follow_symlinks=False,
+        )
+        if (
+            bound_pid != process_id
+            or _browser_pidfd_is_terminal(pidfd)
+            or before.start_ticks != expected_start_ticks
+            or (held.st_dev, held.st_ino) != (named.st_dev, named.st_ino)
+            or not stat.S_ISDIR(held.st_mode)
+            or pidfd_info.st_nlink == 0
+        ):
+            raise OSError(errno.ESRCH, "namespace owner changed")
+        for name, raw in selected:
+            descriptor = -1
+            try:
+                descriptor = os.open(
+                    name,
+                    os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+                    dir_fd=proc_descriptor,
+                )
+                offset = 0
+                while offset < len(raw):
+                    written = os.write(descriptor, raw[offset:])
+                    if written <= 0:
+                        raise OSError(errno.EIO, "short namespace-map write")
+                    offset += written
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+        after = _read_browser_worker_proc_stat(process_id)
+        if (
+            after.start_ticks != expected_start_ticks
+            or _browser_pidfd_is_terminal(pidfd)
+        ):
+            raise OSError(errno.ESRCH, "namespace owner changed")
+    except (
+        LocalStagingAcceptanceError,
+        OSError,
+        OverflowError,
+        TypeError,
+        ValueError,
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser user namespace differs"
+        ) from None
+    finally:
+        if proc_descriptor >= 0:
+            try:
+                os.close(proc_descriptor)
+            except OSError:
+                pass
+
+
+def _attempt_private_browser_procfs() -> tuple[str, int]:
+    filesystem_descriptor = -1
+    mount_descriptor = -1
+    try:
+        try:
+            filesystem_descriptor = _browser_syscall(
+                _BROWSER_FSOPEN_SYSCALL,
+                ctypes.c_char_p(b"proc"),
+                ctypes.c_uint(_BROWSER_FSOPEN_CLOEXEC),
+            )
+        except OSError as exc:
+            return "fsopen", exc.errno
+        try:
+            _browser_syscall(
+                _BROWSER_FSCONFIG_SYSCALL,
+                ctypes.c_int(filesystem_descriptor),
+                ctypes.c_uint(_BROWSER_FSCONFIG_CMD_CREATE),
+                ctypes.c_void_p(0),
+                ctypes.c_void_p(0),
+                ctypes.c_int(0),
+            )
+        except OSError as exc:
+            return "fsconfig", exc.errno
+        try:
+            mount_descriptor = _browser_syscall(
+                _BROWSER_FSMOUNT_SYSCALL,
+                ctypes.c_int(filesystem_descriptor),
+                ctypes.c_uint(_BROWSER_FSMOUNT_CLOEXEC),
+                ctypes.c_uint(0),
+            )
+        except OSError as exc:
+            fsmount_errno = exc.errno
+            try:
+                _browser_mount(
+                    b"proc",
+                    b"/proc",
+                    b"proc",
+                    _BROWSER_MS_NOSUID
+                    | _BROWSER_MS_NODEV
+                    | _BROWSER_MS_NOEXEC,
+                    None,
+                )
+            except OSError as legacy_exc:
+                if (
+                    fsmount_errno == _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO
+                    and legacy_exc.errno
+                    == _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO
+                ):
+                    return (
+                        _BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                        _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO,
+                    )
+                return "legacy-mount", legacy_exc.errno
+            try:
+                _browser_unmount(b"/proc", _BROWSER_MNT_DETACH)
+            except OSError:
+                return "legacy-mount-cleanup", errno.EIO
+            return "legacy-mounted", 0
+        try:
+            _browser_syscall(
+                _BROWSER_MOVE_MOUNT_SYSCALL,
+                ctypes.c_int(mount_descriptor),
+                ctypes.c_char_p(b""),
+                ctypes.c_int(_BROWSER_AT_FDCWD),
+                ctypes.c_char_p(b"/proc"),
+                ctypes.c_uint(_BROWSER_MOVE_MOUNT_F_EMPTY_PATH),
+            )
+        except OSError as exc:
+            return "move_mount", exc.errno
+        return "mounted", 0
+    finally:
+        for descriptor in (mount_descriptor, filesystem_descriptor):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+
+def _run_browser_private_proc_init(
+    result_write: int,
+    result_identity: tuple[int, int, int, bool],
+    gate_read: int,
+    guardian_pidfd: int,
+    generation: str,
+) -> None:
+    deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+    try:
+        _browser_prctl(_BROWSER_PR_SET_PDEATHSIG, int(signal.SIGKILL))
+        if (
+            (os.getpid(), os.getppid()) != (1, 0)
+            or _browser_pidfd_is_terminal(guardian_pidfd)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser private proc init differs"
+            )
+        os.unshare(os.CLONE_NEWNS)
+        _browser_mount(
+            None,
+            b"/",
+            None,
+            _BROWSER_MS_REC | _BROWSER_MS_PRIVATE,
+            None,
+        )
+        _close_browser_guardian_descriptors(
+            frozenset(
+                (0, 1, 2, result_write, gate_read, guardian_pidfd)
+            )
+        )
+        if _browser_pidfd_is_terminal(guardian_pidfd):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser private proc guardian changed"
+            )
+        _write_browser_guardian_attested_frame(
+            result_write,
+            {
+                "generation": generation,
+                "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+                "stage": "ARMED",
+            },
+            result_identity,
+            deadline=deadline,
+        )
+        armed = _read_browser_guardian_frame(
+            gate_read,
+            deadline=time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS,
+        )
+        if armed != {
+            "action": "PROBE",
+            "generation": generation,
+            "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        } or _browser_pidfd_is_terminal(guardian_pidfd):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser private proc guardian changed"
+            )
+        os.close(gate_read)
+        gate_read = -1
+        os.close(guardian_pidfd)
+        guardian_pidfd = -1
+        stage, selected_errno = _attempt_private_browser_procfs()
+        _write_browser_guardian_attested_frame(
+            result_write,
+            {
+                "errno": selected_errno,
+                "generation": generation,
+                "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+                "stage": stage,
+            },
+            result_identity,
+            deadline=deadline,
+        )
+    except BaseException:
+        try:
+            _write_browser_guardian_attested_frame(
+                result_write,
+                {
+                    "errno": errno.EPROTO,
+                    "generation": generation,
+                    "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+                    "stage": "inner-error",
+                },
+                result_identity,
+                deadline=time.monotonic()
+                + _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS,
+            )
+        except BaseException:
+            pass
+    finally:
+        for descriptor in (gate_read, guardian_pidfd, result_write):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        os._exit(0)
+
+
+def _wait_browser_child_bounded(process_id: int, *, deadline: float) -> int:
+    if (
+        type(process_id) is not int
+        or process_id <= 1
+        or type(deadline) is not float
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser child cleanup differs"
+        )
+    while time.monotonic() < deadline:
+        try:
+            waited, wait_status = os.waitpid(process_id, os.WNOHANG)
+        except (ChildProcessError, OSError):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser child cleanup differs"
+            ) from None
+        if waited == process_id:
+            return wait_status
+        if waited != 0:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser child cleanup differs"
+            )
+        time.sleep(0.005)
+    raise LocalStagingAcceptanceError(
+        "local acceptance browser child cleanup timed out"
+    )
+
+
+def _run_browser_private_proc_guardian(
+    generation: str,
+    expected_parent: int,
+    gate_read: int,
+    status_write: int,
+) -> None:
+    deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+    stage = "hardening"
+    guardian_pidfd = supervisor_pidfd = -1
+    supervisor_pidfd_device = supervisor_pidfd_inode = -1
+    parent_death_signal_armed = True
+    result_read = result_write = child_gate_read = child_gate_write = -1
+    child = -1
+    try:
+        for selected_signal in signal.valid_signals():
+            if selected_signal in {signal.SIGKILL, signal.SIGSTOP}:
+                continue
+            try:
+                signal.signal(selected_signal, signal.SIG_DFL)
+            except (OSError, RuntimeError, ValueError):
+                pass
+        _browser_prctl(_BROWSER_PR_SET_PDEATHSIG, int(signal.SIGKILL))
+        if os.getppid() != expected_parent:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite parent changed"
+            )
+        _browser_prctl(_BROWSER_PR_SET_DUMPABLE, 0)
+        _browser_prctl(_BROWSER_PR_SET_NO_NEW_PRIVS, 1)
+        os.setsid()
+        os.environ.clear()
+        _normalize_browser_guardian_stdio()
+        _close_browser_guardian_descriptors(
+            frozenset((0, 1, 2, gate_read, status_write))
+        )
+        _write_browser_guardian_frame(
+            status_write,
+            {
+                "descriptors": [
+                    [descriptor, os.readlink(f"/proc/self/fd/{descriptor}")]
+                    for descriptor in sorted((0, 1, 2, gate_read, status_write))
+                ],
+                "environment_entries": len(os.environ),
+                "generation": generation,
+                "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+                "stage": "HARDENED",
+            },
+            deadline=deadline,
+        )
+        os.kill(os.getpid(), signal.SIGSTOP)
+        deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+        start = _read_browser_guardian_frame(gate_read, deadline=deadline)
+        if start != {
+            "action": "START",
+            "generation": generation,
+            "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        }:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite generation differs"
+            )
+        stage = "userns"
+        _browser_prctl(_BROWSER_PR_SET_DUMPABLE, 1)
+        os.unshare(
+            os.CLONE_NEWUSER
+            | os.CLONE_NEWNS
+            | os.CLONE_NEWPID
+            | os.CLONE_NEWNET
+        )
+        _write_browser_guardian_frame(
+            status_write,
+            {
+                "generation": generation,
+                "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+                "stage": "USERNS",
+            },
+            deadline=deadline,
+        )
+        deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+        mapped = _read_browser_guardian_frame(gate_read, deadline=deadline)
+        if mapped != {
+            "action": "MAPPED",
+            "generation": generation,
+            "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        } or (os.geteuid(), os.getegid(), tuple(os.getgroups())) != (0, 0, ()):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite mapping differs"
+            )
+        _browser_prctl(_BROWSER_PR_SET_DUMPABLE, 0)
+        _browser_mount(
+            None,
+            b"/",
+            None,
+            _BROWSER_MS_REC | _BROWSER_MS_PRIVATE,
+            None,
+        )
+        stage = "private-proc"
+        guardian_pidfd = os.pidfd_open(os.getpid(), 0)
+        if guardian_pidfd <= 2 or _browser_pidfd_is_terminal(guardian_pidfd):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite pidfd differs"
+            )
+        result_read, result_write = os.pipe2(os.O_CLOEXEC)
+        child_gate_read, child_gate_write = os.pipe2(os.O_CLOEXEC)
+        result_identity = _capture_browser_guardian_pipe_identity(
+            result_write,
+            os.O_WRONLY,
+        )
+        supervisor_pidfd = os.pidfd_open(expected_parent, 0)
+        supervisor_info, supervisor_bound_pid, _, _ = (
+            _read_browser_pidfd_metadata(supervisor_pidfd)
+        )
+        supervisor_pidfd_device = supervisor_info.st_dev
+        supervisor_pidfd_inode = supervisor_info.st_ino
+        if (
+            supervisor_pidfd <= 2
+            or supervisor_bound_pid != expected_parent
+            or os.getppid() != expected_parent
+            or _browser_pidfd_is_terminal(supervisor_pidfd)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite parent changed"
+            )
+        _browser_prctl(_BROWSER_PR_SET_PDEATHSIG, 0)
+        parent_death_signal_armed = False
+        if (
+            os.getppid() != expected_parent
+            or _browser_pidfd_is_terminal(supervisor_pidfd)
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite parent changed"
+            )
+        child = os.fork()
+        if child == 0:
+            try:
+                _browser_prctl(
+                    _BROWSER_PR_SET_PDEATHSIG,
+                    int(signal.SIGKILL),
+                )
+                os.close(supervisor_pidfd)
+                supervisor_pidfd = -1
+                os.close(result_read)
+                os.close(child_gate_write)
+                _run_browser_private_proc_init(
+                    result_write,
+                    result_identity,
+                    child_gate_read,
+                    guardian_pidfd,
+                    generation,
+                )
+            finally:
+                os._exit(127)
+        os.close(result_write)
+        result_write = -1
+        os.close(child_gate_read)
+        child_gate_read = -1
+        _read_browser_guardian_armed_and_rearm(
+            result_read,
+            supervisor_pidfd,
+            expected_parent=expected_parent,
+            expected_pidfd_device=supervisor_pidfd_device,
+            expected_pidfd_inode=supervisor_pidfd_inode,
+            generation=generation,
+            deadline=time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS,
+        )
+        parent_death_signal_armed = True
+        os.close(supervisor_pidfd)
+        supervisor_pidfd = -1
+        os.close(guardian_pidfd)
+        guardian_pidfd = -1
+        _write_browser_guardian_frame(
+            child_gate_write,
+            {
+                "action": "PROBE",
+                "generation": generation,
+                "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+            },
+            deadline=time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS,
+        )
+        os.close(child_gate_write)
+        child_gate_write = -1
+        result = _read_browser_guardian_frame(
+            result_read,
+            deadline=time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS,
+        )
+        os.close(result_read)
+        result_read = -1
+        wait_status = _wait_browser_child_bounded(
+            child,
+            deadline=time.monotonic()
+            + _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS,
+        )
+        child = -1
+        if not os.WIFEXITED(wait_status) or os.WEXITSTATUS(wait_status) != 0:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser private proc init differs"
+            )
+        if (
+            type(result) is not dict
+            or set(result) != {"errno", "generation", "protocol", "stage"}
+            or result["generation"] != generation
+            or result["protocol"] != _BROWSER_CONTAINMENT_PROTOCOL
+            or type(result["errno"]) is not int
+            or type(result["stage"]) is not str
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser private proc evidence differs"
+            )
+        _write_browser_guardian_frame(
+            status_write,
+            result,
+            deadline=time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS,
+        )
+    except BaseException:
+        if not parent_death_signal_armed:
+            try:
+                _browser_prctl(
+                    _BROWSER_PR_SET_PDEATHSIG,
+                    int(signal.SIGKILL),
+                )
+            except BaseException:
+                pass
+        if child > 1:
+            try:
+                os.kill(child, signal.SIGKILL)
+            except OSError:
+                pass
+            try:
+                _wait_browser_child_bounded(
+                    child,
+                    deadline=time.monotonic()
+                    + _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS,
+                )
+            except LocalStagingAcceptanceError:
+                pass
+        try:
+            _write_browser_guardian_frame(
+                status_write,
+                {
+                    "errno": errno.EPROTO,
+                    "generation": generation,
+                    "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+                    "stage": "guardian-error-" + stage,
+                },
+                deadline=time.monotonic()
+                + _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS,
+            )
+        except BaseException:
+            pass
+    finally:
+        for descriptor in (
+            guardian_pidfd,
+            supervisor_pidfd,
+            result_read,
+            result_write,
+            child_gate_read,
+            child_gate_write,
+            gate_read,
+            status_write,
+        ):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        os._exit(0)
+
+
 def _read_browser_runtime_bundle_descriptor(
     descriptor: int,
     size: int,
@@ -6536,6 +8810,654 @@ def parse_browser_containment_text_evidence(
         worker_outer_pid=expected_worker_outer_pid,
         init_namespace_pids=init_namespace_pids,
         worker_namespace_pids=worker_namespace_pids,
+    )
+
+
+def _validate_browser_guardian_pipe_handle(
+    descriptor: int,
+    device: int,
+    inode: int,
+    access: int,
+) -> None:
+    try:
+        info = os.fstat(descriptor)
+        target = os.readlink(f"/proc/self/fd/{descriptor}")
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        descriptor_flags = fcntl.fcntl(descriptor, fcntl.F_GETFD)
+    except (OSError, OverflowError, TypeError, ValueError):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian pipe differs"
+        ) from None
+    if (
+        type(descriptor) is not int
+        or descriptor <= 2
+        or type(device) is not int
+        or type(inode) is not int
+        or access not in {os.O_RDONLY, os.O_WRONLY}
+        or not stat.S_ISFIFO(info.st_mode)
+        or (info.st_dev, info.st_ino) != (device, inode)
+        or target != f"pipe:[{inode}]"
+        or flags not in {access, access | os.O_NONBLOCK}
+        or descriptor_flags & fcntl.FD_CLOEXEC == 0
+        or os.get_inheritable(descriptor)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser guardian pipe differs"
+        )
+
+
+def _validate_browser_prerequisite_guardian_lease(
+    guardian: _BrowserGuardianLease,
+    *,
+    expected_state: str,
+) -> BrowserWorkerProcessStat:
+    if (
+        type(guardian) is not _BrowserGuardianLease
+        or guardian._owner_token is not _BROWSER_GUARDIAN_LEASE_TOKEN
+        or type(guardian.process_id) is not int
+        or guardian.process_id <= 1
+        or type(guardian.process_start_ticks) is not int
+        or guardian.process_start_ticks <= 0
+        or type(guardian.pidfd) is not int
+        or guardian.pidfd <= 2
+        or type(guardian.pidfd_device) is not int
+        or type(guardian.pidfd_inode) is not int
+        or expected_state not in _BROWSER_PROCESS_STATES
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite lease differs"
+        )
+    info, process_id, _, _ = _read_browser_pidfd_metadata(guardian.pidfd)
+    process = _read_browser_worker_proc_stat(guardian.process_id)
+    if (
+        process_id != guardian.process_id
+        or (info.st_dev, info.st_ino)
+        != (guardian.pidfd_device, guardian.pidfd_inode)
+        or _browser_pidfd_is_terminal(guardian.pidfd)
+        or process.parent_pid != os.getpid()
+        or process.process_group != guardian.process_id
+        or process.session_id != guardian.process_id
+        or process.start_ticks != guardian.process_start_ticks
+        or process.state != expected_state
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite lease differs"
+        )
+    _validate_browser_guardian_pipe_handle(
+        guardian.gate_write,
+        guardian.gate_device,
+        guardian.gate_inode,
+        os.O_WRONLY,
+    )
+    _validate_browser_guardian_pipe_handle(
+        guardian.status_read,
+        guardian.status_device,
+        guardian.status_inode,
+        os.O_RDONLY,
+    )
+    return process
+
+
+def _start_stopped_browser_private_proc_guardian(
+    *,
+    generation: str,
+) -> _BrowserGuardianLease:
+    if (
+        type(generation) is not str
+        or _SHA256_TEXT.fullmatch(generation) is None
+        or len(os.listdir("/proc/self/task")) != 1
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite preflight differs"
+        )
+    gate_read = gate_write = status_read = status_write = -1
+    child_gate_read = child_status_write = -1
+    process_id = pidfd = -1
+    try:
+        gate_read, gate_write = os.pipe2(os.O_CLOEXEC)
+        status_read, status_write = os.pipe2(os.O_CLOEXEC)
+        child_gate_read = gate_read
+        child_status_write = status_write
+        expected_gate_target = os.readlink(f"/proc/self/fd/{gate_write}")
+        expected_status_target = os.readlink(f"/proc/self/fd/{status_read}")
+        supervisor_pid = os.getpid()
+        process_id = os.fork()
+        if process_id == 0:
+            try:
+                os.close(gate_write)
+                os.close(status_read)
+                _run_browser_private_proc_guardian(
+                    generation,
+                    supervisor_pid,
+                    gate_read,
+                    status_write,
+                )
+            finally:
+                os._exit(127)
+        os.close(gate_read)
+        gate_read = -1
+        os.close(status_write)
+        status_write = -1
+        deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+        while True:
+            if time.monotonic() >= deadline:
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser prerequisite did not stop"
+                )
+            waited, wait_status = os.waitpid(
+                process_id,
+                os.WNOHANG | os.WUNTRACED,
+            )
+            if waited == process_id:
+                if (
+                    os.WIFSTOPPED(wait_status)
+                    and os.WSTOPSIG(wait_status) == signal.SIGSTOP
+                ):
+                    break
+                process_id = -1
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser prerequisite exited early"
+                )
+            time.sleep(0.005)
+        hardened = _read_browser_guardian_frame(status_read, deadline=deadline)
+        process = _read_browser_worker_proc_stat(process_id)
+        if (
+            process.state != "T"
+            or process.parent_pid != os.getpid()
+            or process.process_group != process_id
+            or process.session_id != process_id
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite identity differs"
+            )
+        pidfd = os.pidfd_open(process_id, 0)
+        pidfd_info, bound_pid, _, _ = _read_browser_pidfd_metadata(pidfd)
+        if bound_pid != process_id or _browser_pidfd_is_terminal(pidfd):
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite pidfd differs"
+            )
+        expected_targets = {
+            0: "/dev/null",
+            1: "/dev/null",
+            2: "/dev/null",
+            child_gate_read: expected_gate_target,
+            child_status_write: expected_status_target,
+        }
+        if hardened != {
+            "descriptors": [
+                [number, target]
+                for number, target in sorted(expected_targets.items())
+            ],
+            "environment_entries": 0,
+            "generation": generation,
+            "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+            "stage": "HARDENED",
+        }:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite hardening differs"
+            )
+        gate_info = os.fstat(gate_write)
+        status_info = os.fstat(status_read)
+        guardian = _BrowserGuardianLease(
+            process_id=process_id,
+            process_start_ticks=process.start_ticks,
+            pidfd=pidfd,
+            pidfd_device=pidfd_info.st_dev,
+            pidfd_inode=pidfd_info.st_ino,
+            gate_write=gate_write,
+            gate_device=gate_info.st_dev,
+            gate_inode=gate_info.st_ino,
+            status_read=status_read,
+            status_device=status_info.st_dev,
+            status_inode=status_info.st_ino,
+        )
+        guardian._owner_token = _BROWSER_GUARDIAN_LEASE_TOKEN
+        _validate_browser_prerequisite_guardian_lease(
+            guardian,
+            expected_state="T",
+        )
+        process_id = pidfd = gate_write = status_read = -1
+        return guardian
+    except BaseException as body_error:
+        cleanup_errors: list[BaseException] = []
+        if process_id > 1:
+            cleanup_deadline = (
+                time.monotonic()
+                + _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS
+            )
+            try:
+                if pidfd > 2:
+                    signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+                else:
+                    os.kill(process_id, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except BaseException as exc:
+                cleanup_errors.append(exc)
+            reaped = False
+            for _ in range(2):
+                try:
+                    _wait_browser_child_bounded(
+                        process_id,
+                        deadline=cleanup_deadline,
+                    )
+                    reaped = True
+                    break
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+            if not reaped:
+                cleanup_errors.append(
+                    LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite child remained"
+                    )
+                )
+        for descriptor in (
+            gate_read,
+            gate_write,
+            status_read,
+            status_write,
+            pidfd,
+        ):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+        if cleanup_errors:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite start and cleanup failed"
+            ) from body_error
+        raise
+
+
+def _continue_browser_private_proc_guardian(
+    guardian: _BrowserGuardianLease,
+    *,
+    generation: str,
+) -> tuple[str, int]:
+    _validate_browser_prerequisite_guardian_lease(
+        guardian,
+        expected_state="T",
+    )
+    deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+    _write_browser_guardian_frame(
+        guardian.gate_write,
+        {
+            "action": "START",
+            "generation": generation,
+            "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        },
+        deadline=deadline,
+    )
+    signal.pidfd_send_signal(guardian.pidfd, signal.SIGCONT)
+    user_namespace = _read_browser_guardian_frame(
+        guardian.status_read,
+        deadline=deadline,
+    )
+    if user_namespace != {
+        "generation": generation,
+        "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        "stage": "USERNS",
+    }:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite user namespace differs"
+        )
+    repeated = _read_browser_worker_proc_stat(guardian.process_id)
+    if (
+        repeated.start_ticks != guardian.process_start_ticks
+        or repeated.parent_pid != os.getpid()
+        or repeated.state not in _BROWSER_LIVE_PROCESS_STATES
+        or _browser_pidfd_is_terminal(guardian.pidfd)
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite identity changed"
+        )
+    _write_browser_user_namespace_maps(
+        guardian.process_id,
+        pidfd=guardian.pidfd,
+        expected_start_ticks=guardian.process_start_ticks,
+    )
+    deadline = time.monotonic() + _BROWSER_CONTAINMENT_TIMEOUT_SECONDS
+    _write_browser_guardian_frame(
+        guardian.gate_write,
+        {
+            "action": "MAPPED",
+            "generation": generation,
+            "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
+        },
+        deadline=deadline,
+    )
+    blocker = _read_browser_guardian_frame(
+        guardian.status_read,
+        deadline=deadline,
+    )
+    if (
+        type(blocker) is not dict
+        or set(blocker) != {"errno", "generation", "protocol", "stage"}
+        or blocker["generation"] != generation
+        or blocker["protocol"] != _BROWSER_CONTAINMENT_PROTOCOL
+        or type(blocker["stage"]) is not str
+        or type(blocker["errno"]) is not int
+        or blocker["errno"] < 0
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser private proc evidence differs"
+        )
+    _validate_browser_guardian_pipe_handle(
+        guardian.gate_write,
+        guardian.gate_device,
+        guardian.gate_inode,
+        os.O_WRONLY,
+    )
+    os.close(guardian.gate_write)
+    guardian.gate_write = -1
+    return blocker["stage"], blocker["errno"]
+
+
+def _close_browser_prerequisite_guardian_lease(
+    guardian: _BrowserGuardianLease,
+) -> None:
+    if (
+        type(guardian) is not _BrowserGuardianLease
+        or guardian._owner_token is not _BROWSER_GUARDIAN_LEASE_TOKEN
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite cleanup differs"
+        )
+    errors: list[BaseException] = []
+    cleanup_deadline = (
+        time.monotonic() + _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS
+    )
+    pidfd_bound = False
+    for _ in range(2):
+        try:
+            pidfd_info, bound_pid, _, _ = _read_browser_pidfd_metadata(
+                guardian.pidfd
+            )
+            if (
+                (pidfd_info.st_dev, pidfd_info.st_ino)
+                != (guardian.pidfd_device, guardian.pidfd_inode)
+                or bound_pid not in {guardian.process_id, None}
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser prerequisite cleanup differs"
+                )
+            pidfd_bound = True
+            break
+        except BaseException as exc:
+            errors.append(exc)
+    reaped = False
+    process_group_empty = False
+    if pidfd_bound:
+        process_group_bound = False
+        for _ in range(2):
+            try:
+                process = _read_browser_worker_proc_stat(
+                    guardian.process_id
+                )
+                if (
+                    process.pid != guardian.process_id
+                    or process.start_ticks != guardian.process_start_ticks
+                    or process.process_group != guardian.process_id
+                    or process.session_id != guardian.process_id
+                ):
+                    raise LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite cleanup differs"
+                    )
+                process_group_bound = True
+                break
+            except BaseException as exc:
+                errors.append(exc)
+        if process_group_bound:
+            for _ in range(2):
+                try:
+                    os.killpg(guardian.process_id, signal.SIGKILL)
+                    break
+                except ProcessLookupError:
+                    break
+                except BaseException as exc:
+                    errors.append(exc)
+        for _ in range(2):
+            try:
+                _wait_browser_child_bounded(
+                    guardian.process_id,
+                    deadline=cleanup_deadline,
+                )
+                reaped = True
+                break
+            except BaseException as exc:
+                errors.append(exc)
+        if reaped and process_group_bound:
+            while time.monotonic() < cleanup_deadline:
+                try:
+                    os.killpg(guardian.process_id, 0)
+                except ProcessLookupError:
+                    process_group_empty = True
+                    break
+                except BaseException as exc:
+                    errors.append(exc)
+                    break
+                time.sleep(0.005)
+            if not process_group_empty:
+                errors.append(
+                    LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite descendants remained"
+                    )
+                )
+
+    def close_pipe(
+        field_name: str,
+        device: int,
+        inode: int,
+        access: int,
+    ) -> None:
+        descriptor = getattr(guardian, field_name)
+        if descriptor < 0:
+            return
+        validated = False
+        for _ in range(2):
+            try:
+                _validate_browser_guardian_pipe_handle(
+                    descriptor,
+                    device,
+                    inode,
+                    access,
+                )
+                validated = True
+                break
+            except BaseException as exc:
+                errors.append(exc)
+        if not validated:
+            return
+        try:
+            os.close(descriptor)
+        except BaseException as exc:
+            errors.append(exc)
+            try:
+                _validate_browser_guardian_pipe_handle(
+                    descriptor,
+                    device,
+                    inode,
+                    access,
+                )
+            except BaseException:
+                setattr(guardian, field_name, -1)
+                return
+            try:
+                os.close(descriptor)
+            except BaseException as repeated_exc:
+                errors.append(repeated_exc)
+                try:
+                    _validate_browser_guardian_pipe_handle(
+                        descriptor,
+                        device,
+                        inode,
+                        access,
+                    )
+                except BaseException:
+                    setattr(guardian, field_name, -1)
+                return
+        setattr(guardian, field_name, -1)
+
+    close_pipe(
+        "gate_write",
+        guardian.gate_device,
+        guardian.gate_inode,
+        os.O_WRONLY,
+    )
+    close_pipe(
+        "status_read",
+        guardian.status_device,
+        guardian.status_inode,
+        os.O_RDONLY,
+    )
+    if pidfd_bound and reaped:
+        try:
+            repeated_info, repeated_pid, _, _ = _read_browser_pidfd_metadata(
+                guardian.pidfd
+            )
+            if (
+                (repeated_info.st_dev, repeated_info.st_ino)
+                != (guardian.pidfd_device, guardian.pidfd_inode)
+                or repeated_pid not in {guardian.process_id, None}
+            ):
+                raise LocalStagingAcceptanceError(
+                    "local acceptance browser prerequisite cleanup differs"
+                )
+            descriptor = guardian.pidfd
+            try:
+                os.close(descriptor)
+            except BaseException as exc:
+                errors.append(exc)
+                try:
+                    still_info, still_pid, _, _ = (
+                        _read_browser_pidfd_metadata(descriptor)
+                    )
+                    if (
+                        (still_info.st_dev, still_info.st_ino)
+                        != (guardian.pidfd_device, guardian.pidfd_inode)
+                        or still_pid not in {guardian.process_id, None}
+                    ):
+                        guardian.pidfd = -1
+                except BaseException:
+                    guardian.pidfd = -1
+                if guardian.pidfd >= 0:
+                    try:
+                        os.close(descriptor)
+                    except BaseException as repeated_exc:
+                        errors.append(repeated_exc)
+                        try:
+                            still_info, still_pid, _, _ = (
+                                _read_browser_pidfd_metadata(descriptor)
+                            )
+                            if (
+                                (still_info.st_dev, still_info.st_ino)
+                                != (
+                                    guardian.pidfd_device,
+                                    guardian.pidfd_inode,
+                                )
+                                or still_pid
+                                not in {guardian.process_id, None}
+                            ):
+                                guardian.pidfd = -1
+                        except BaseException:
+                            guardian.pidfd = -1
+                    else:
+                        guardian.pidfd = -1
+            else:
+                guardian.pidfd = -1
+        except BaseException as exc:
+            errors.append(exc)
+    complete = (
+        reaped
+        and process_group_empty
+        and guardian.gate_write == -1
+        and guardian.status_read == -1
+        and guardian.pidfd == -1
+    )
+    if complete:
+        guardian._owner_token = None
+    if errors or not complete:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite cleanup differs"
+        ) from None
+
+
+def _observe_browser_containment_blocker(
+    bundle: _PinnedBrowserRuntimeBundle,
+    *,
+    generation: str,
+) -> _BrowserContainmentBlockerObservation:
+    _validate_frozen_browser_runtime_bundle(bundle)
+    if (
+        type(generation) is not str
+        or _SHA256_TEXT.fullmatch(generation) is None
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment invocation differs"
+        )
+    clone3_errno = _probe_browser_clone3_policy()
+    guardian: _BrowserGuardianLease | None = None
+    proc_stage = ""
+    proc_errno = 0
+    guardian_pid = 0
+    guardian_start_ticks = 0
+    cleanup_complete = False
+    body_error: BaseException | None = None
+    try:
+        guardian = _start_stopped_browser_private_proc_guardian(
+            generation=generation,
+        )
+        guardian_pid = guardian.process_id
+        guardian_start_ticks = guardian.process_start_ticks
+        proc_stage, proc_errno = _continue_browser_private_proc_guardian(
+            guardian,
+            generation=generation,
+        )
+        if (
+            proc_stage != _BROWSER_PRIVATE_PROC_BLOCKER_STAGE
+            or proc_errno != _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO
+        ):
+            raise LocalStagingAcceptanceError(
+                "local acceptance private proc blocker differs"
+            )
+    except BaseException as exc:
+        body_error = exc
+    cleanup_errors: list[BaseException] = []
+    if guardian is not None:
+        try:
+            _close_browser_prerequisite_guardian_lease(guardian)
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+    cleanup_complete = not cleanup_errors
+    if body_error is not None:
+        if cleanup_errors:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser containment and cleanup failed"
+            ) from body_error
+        raise body_error
+    if cleanup_errors:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser containment cleanup failed"
+        ) from cleanup_errors[0]
+    return _BrowserContainmentBlockerObservation(
+        protocol=_BROWSER_CONTAINMENT_PROTOCOL,
+        generation=generation,
+        clone3_errno=clone3_errno,
+        guardian_pid=guardian_pid,
+        guardian_start_ticks=guardian_start_ticks,
+        cgroup_path="",
+        projection_status="NOT_RUN",
+        cgroup_status="NOT_RUN",
+        credential_release_status="WITHHELD",
+        projection_sha256="",
+        projection_entries=0,
+        proc_stage=proc_stage,
+        proc_errno=proc_errno,
+        sentinel_provider_calls=0,
+        payload_processes=0,
+        cleanup_complete=cleanup_complete,
+        execution_authority=False,
     )
 
 
