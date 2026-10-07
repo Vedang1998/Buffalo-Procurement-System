@@ -509,6 +509,10 @@ _BROWSER_PROJECTION_STATUS_LIMIT = 64 * 1024
 _BROWSER_CONTAINMENT_PROTOCOL = "BUFFALO_LOCAL_BROWSER_CONTAINMENT_V1"
 _BROWSER_CONTAINMENT_TIMEOUT_SECONDS = 120.0
 _BROWSER_GUARDIAN_CLEANUP_TIMEOUT_SECONDS = 5.0
+_BROWSER_SUPERVISOR_ENVIRONMENT_BYTES = 635
+_BROWSER_SUPERVISOR_ENVIRONMENT_SHA256 = (
+    "756362aa816bb8e4c40223056ecd1a1ec90d3dcb5d0657f72afc5f74984652e4"
+)
 _BROWSER_PRIVATE_PROC_BLOCKER_STAGE = "fsmount+legacy-mount"
 _BROWSER_PRIVATE_PROC_BLOCKER_ERRNO = errno.EPERM
 _BROWSER_CLONE3_SYSCALL = 435
@@ -7720,7 +7724,7 @@ def _run_browser_private_proc_guardian(
                     [descriptor, os.readlink(f"/proc/self/fd/{descriptor}")]
                     for descriptor in sorted((0, 1, 2, gate_read, status_write))
                 ],
-                "environment_entries": len(os.environ),
+                "python_environment_entries": len(os.environ),
                 "generation": generation,
                 "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
                 "stage": "HARDENED",
@@ -8930,10 +8934,21 @@ def _reap_browser_process_group_children(process_group: int) -> int:
 def _start_stopped_browser_private_proc_guardian(
     *,
     generation: str,
+    child_signal_mask: frozenset[int] | None = None,
 ) -> _BrowserGuardianLease:
     if (
         type(generation) is not str
         or _SHA256_TEXT.fullmatch(generation) is None
+        or (
+            child_signal_mask is not None
+            and (
+                type(child_signal_mask) is not frozenset
+                or any(
+                    type(selected) is not int
+                    for selected in child_signal_mask
+                )
+            )
+        )
         or len(os.listdir("/proc/self/task")) != 1
     ):
         raise LocalStagingAcceptanceError(
@@ -8950,9 +8965,21 @@ def _start_stopped_browser_private_proc_guardian(
         expected_gate_target = os.readlink(f"/proc/self/fd/{gate_write}")
         expected_status_target = os.readlink(f"/proc/self/fd/{status_read}")
         supervisor_pid = os.getpid()
-        process_id = os.fork()
+        previous_signals = _block_browser_projection_signals()
+        selected_child_signal_mask = (
+            previous_signals
+            if child_signal_mask is None
+            else child_signal_mask
+        )
+        try:
+            process_id = os.fork()
+        finally:
+            _restore_browser_projection_signals(previous_signals)
         if process_id == 0:
             try:
+                _restore_browser_projection_signals(
+                    selected_child_signal_mask
+                )
                 os.close(gate_write)
                 os.close(status_read)
                 _run_browser_private_proc_guardian(
@@ -9017,7 +9044,7 @@ def _start_stopped_browser_private_proc_guardian(
                 [number, target]
                 for number, target in sorted(expected_targets.items())
             ],
-            "environment_entries": 0,
+            "python_environment_entries": 0,
             "generation": generation,
             "protocol": _BROWSER_CONTAINMENT_PROTOCOL,
             "stage": "HARDENED",
@@ -9424,6 +9451,36 @@ def _close_browser_prerequisite_guardian_lease(
         ) from None
 
 
+def _validate_browser_prerequisite_supervisor_environment_raw(
+    raw: bytes,
+) -> str:
+    if (
+        type(raw) is not bytes
+        or len(raw) != _BROWSER_SUPERVISOR_ENVIRONMENT_BYTES
+        or not raw.startswith(b"LD_LIBRARY_PATH=/nix/store/")
+        or raw.count(b"\0") != 1
+        or not raw.endswith(b"\0")
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite environment differs"
+        )
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != _BROWSER_SUPERVISOR_ENVIRONMENT_SHA256:
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite environment differs"
+        )
+    return digest
+
+
+def _validate_browser_prerequisite_supervisor_environment() -> str:
+    return _validate_browser_prerequisite_supervisor_environment_raw(
+        _read_browser_proc_value(
+            "/proc/self/environ",
+            maximum_bytes=_BROWSER_SUPERVISOR_ENVIRONMENT_BYTES,
+        )
+    )
+
+
 def _observe_browser_containment_blocker(
     bundle: _PinnedBrowserRuntimeBundle,
     *,
@@ -9437,6 +9494,7 @@ def _observe_browser_containment_blocker(
         raise LocalStagingAcceptanceError(
             "local acceptance browser containment invocation differs"
         )
+    _validate_browser_prerequisite_supervisor_environment()
     clone3_errno = _probe_browser_clone3_policy()
     guardian: _BrowserGuardianLease | None = None
     proc_stage = ""
@@ -9446,9 +9504,14 @@ def _observe_browser_containment_blocker(
     cleanup_complete = False
     body_error: BaseException | None = None
     try:
-        guardian = _start_stopped_browser_private_proc_guardian(
-            generation=generation,
-        )
+        previous_signals = _block_browser_projection_signals()
+        try:
+            guardian = _start_stopped_browser_private_proc_guardian(
+                generation=generation,
+                child_signal_mask=previous_signals,
+            )
+        finally:
+            _restore_browser_projection_signals(previous_signals)
         guardian_pid = guardian.process_id
         guardian_start_ticks = guardian.process_start_ticks
         proc_stage, proc_errno = _continue_browser_private_proc_guardian(
@@ -9466,10 +9529,18 @@ def _observe_browser_containment_blocker(
         body_error = exc
     cleanup_errors: list[BaseException] = []
     if guardian is not None:
+        cleanup_signals: frozenset[int] | None = None
         try:
+            cleanup_signals = _block_browser_projection_signals()
             _close_browser_prerequisite_guardian_lease(guardian)
         except BaseException as exc:
             cleanup_errors.append(exc)
+        finally:
+            if cleanup_signals is not None:
+                try:
+                    _restore_browser_projection_signals(cleanup_signals)
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
     cleanup_complete = not cleanup_errors
     if body_error is not None:
         if cleanup_errors:

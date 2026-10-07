@@ -6489,6 +6489,101 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         self.assertFalse(Path(f"/proc/{forked[0]}").exists())
         self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
 
+        forked.clear()
+
+        def interrupt_after_fork() -> int:
+            selected = real_fork()
+            if selected > 1:
+                forked.append(selected)
+                acceptance.signal.raise_signal(acceptance.signal.SIGINT)
+            return selected
+
+        try:
+            with (
+                patch.object(
+                    acceptance.os,
+                    "fork",
+                    side_effect=interrupt_after_fork,
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._start_stopped_browser_private_proc_guardian(
+                    generation=generation
+                )
+            self.assertEqual(len(forked), 1)
+            self.assertFalse(Path(f"/proc/{forked[0]}").exists())
+        finally:
+            if forked and Path(f"/proc/{forked[0]}").exists():
+                try:
+                    os.kill(forked[0], acceptance.signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    os.waitpid(forked[0], 0)
+                except ChildProcessError:
+                    pass
+        self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
+
+        acquired: list[acceptance._BrowserGuardianLease] = []
+        real_start = acceptance._start_stopped_browser_private_proc_guardian
+
+        def interrupt_after_guardian_acquisition(**kwargs):
+            selected = real_start(**kwargs)
+            acquired.append(selected)
+            acceptance.signal.raise_signal(acceptance.signal.SIGINT)
+            return selected
+
+        try:
+            with (
+                patch.object(
+                    acceptance,
+                    "_validate_frozen_browser_runtime_bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_validate_browser_prerequisite_supervisor_environment",
+                ),
+                patch.object(
+                    acceptance,
+                    "_probe_browser_clone3_policy",
+                    return_value=acceptance.errno.ENOSYS,
+                ),
+                patch.object(
+                    acceptance,
+                    "_start_stopped_browser_private_proc_guardian",
+                    side_effect=interrupt_after_guardian_acquisition,
+                ),
+                patch.object(
+                    acceptance,
+                    "_continue_browser_private_proc_guardian",
+                ) as continued,
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                acceptance._observe_browser_containment_blocker(
+                    unittest.mock.sentinel.bundle,
+                    generation=generation,
+                )
+            continued.assert_not_called()
+            self.assertEqual(len(acquired), 1)
+            self.assertIsNone(acquired[0]._owner_token)
+            self.assertEqual(
+                (
+                    acquired[0].pidfd,
+                    acquired[0].gate_write,
+                    acquired[0].status_read,
+                ),
+                (-1, -1, -1),
+            )
+            self.assertFalse(
+                Path(f"/proc/{acquired[0].process_id}").exists()
+            )
+        finally:
+            if acquired and acquired[0]._owner_token is not None:
+                acceptance._close_browser_prerequisite_guardian_lease(
+                    acquired[0]
+                )
+        self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
+
         real_prctl = acceptance._browser_prctl
 
         def hold_before_init_hardening(option: int, value: int) -> None:
@@ -6562,8 +6657,79 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         bundle = unittest.mock.sentinel.bundle
         guardian = unittest.mock.Mock(process_id=12345, process_start_ticks=67890)
         generation = "e" * 64
+        safe_environment = b"LD_LIBRARY_PATH=/nix/store/safe/lib\0"
+        safe_environment_sha256 = hashlib.sha256(safe_environment).hexdigest()
+        with (
+            patch.object(
+                acceptance,
+                "_BROWSER_SUPERVISOR_ENVIRONMENT_BYTES",
+                len(safe_environment),
+            ),
+            patch.object(
+                acceptance,
+                "_BROWSER_SUPERVISOR_ENVIRONMENT_SHA256",
+                safe_environment_sha256,
+            ),
+        ):
+            self.assertEqual(
+                acceptance._validate_browser_prerequisite_supervisor_environment_raw(
+                    safe_environment
+                ),
+                safe_environment_sha256,
+            )
+            for changed in (
+                bytearray(safe_environment),
+                safe_environment[:-1],
+                safe_environment + b"EXTRA=value\0",
+                b"SECRET=value\0",
+            ):
+                with self.subTest(environment=changed), self.assertRaises(
+                    acceptance.LocalStagingAcceptanceError
+                ):
+                    acceptance._validate_browser_prerequisite_supervisor_environment_raw(
+                        changed
+                    )
+            with patch.object(
+                acceptance,
+                "_read_browser_proc_value",
+                return_value=safe_environment,
+            ) as read_environment:
+                self.assertEqual(
+                    acceptance._validate_browser_prerequisite_supervisor_environment(),
+                    safe_environment_sha256,
+                )
+            read_environment.assert_called_once_with(
+                "/proc/self/environ",
+                maximum_bytes=len(safe_environment),
+            )
         with (
             patch.object(acceptance, "_validate_frozen_browser_runtime_bundle"),
+            patch.object(
+                acceptance,
+                "_validate_browser_prerequisite_supervisor_environment",
+                side_effect=acceptance.LocalStagingAcceptanceError(
+                    "unsafe initial environment"
+                ),
+            ),
+            patch.object(acceptance, "_probe_browser_clone3_policy") as clone3,
+            patch.object(
+                acceptance,
+                "_start_stopped_browser_private_proc_guardian",
+            ) as started,
+            self.assertRaises(acceptance.LocalStagingAcceptanceError),
+        ):
+            acceptance._observe_browser_containment_blocker(
+                bundle,
+                generation=generation,
+            )
+        clone3.assert_not_called()
+        started.assert_not_called()
+        with (
+            patch.object(acceptance, "_validate_frozen_browser_runtime_bundle"),
+            patch.object(
+                acceptance,
+                "_validate_browser_prerequisite_supervisor_environment",
+            ),
             patch.object(
                 acceptance,
                 "_probe_browser_clone3_policy",
@@ -6607,6 +6773,10 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 patch.object(
                     acceptance,
                     "_validate_frozen_browser_runtime_bundle",
+                ),
+                patch.object(
+                    acceptance,
+                    "_validate_browser_prerequisite_supervisor_environment",
                 ),
                 patch.object(
                     acceptance,
