@@ -6591,6 +6591,114 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 )
         self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
 
+        real_close = acceptance._close_browser_prerequisite_guardian_lease
+        for permanent_failure in (False, True):
+            failed_acquisitions: list[
+                acceptance._BrowserGuardianLease
+            ] = []
+            cleanup_calls = 0
+
+            def interrupt_before_cleanup(**kwargs):
+                selected = real_start(**kwargs)
+                failed_acquisitions.append(selected)
+                acceptance.signal.raise_signal(acceptance.signal.SIGINT)
+                return selected
+
+            def fail_cleanup(
+                selected: acceptance._BrowserGuardianLease,
+            ) -> None:
+                nonlocal cleanup_calls
+                cleanup_calls += 1
+                if permanent_failure or cleanup_calls == 1:
+                    raise acceptance.LocalStagingAcceptanceError(
+                        "injected cleanup failure"
+                    )
+                real_close(selected)
+
+            try:
+                with (
+                    self.subTest(permanent_failure=permanent_failure),
+                    patch.object(
+                        acceptance,
+                        "_validate_frozen_browser_runtime_bundle",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_validate_browser_prerequisite_supervisor_environment",
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_probe_browser_clone3_policy",
+                        return_value=acceptance.errno.ENOSYS,
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_start_stopped_browser_private_proc_guardian",
+                        side_effect=interrupt_before_cleanup,
+                    ),
+                    patch.object(
+                        acceptance,
+                        "_continue_browser_private_proc_guardian",
+                        return_value=(
+                            acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                            acceptance._BROWSER_PRIVATE_PROC_BLOCKER_ERRNO,
+                        ),
+                    ) as continued,
+                    patch.object(
+                        acceptance,
+                        "_close_browser_prerequisite_guardian_lease",
+                        side_effect=fail_cleanup,
+                    ),
+                    self.assertRaisesRegex(
+                        acceptance.LocalStagingAcceptanceError,
+                        "containment cleanup failed",
+                    ),
+                ):
+                    acceptance._observe_browser_containment_blocker(
+                        unittest.mock.sentinel.bundle,
+                        generation=generation,
+                    )
+                self.assertEqual(cleanup_calls, 2)
+                self.assertEqual(len(failed_acquisitions), 1)
+                continued.assert_called_once_with(
+                    failed_acquisitions[0],
+                    generation=generation,
+                )
+                if permanent_failure:
+                    self.assertIsNotNone(
+                        failed_acquisitions[0]._owner_token
+                    )
+                    self.assertTrue(
+                        Path(
+                            f"/proc/{failed_acquisitions[0].process_id}"
+                        ).exists()
+                    )
+                else:
+                    self.assertIsNone(failed_acquisitions[0]._owner_token)
+                    self.assertEqual(
+                        (
+                            failed_acquisitions[0].pidfd,
+                            failed_acquisitions[0].gate_write,
+                            failed_acquisitions[0].status_read,
+                        ),
+                        (-1, -1, -1),
+                    )
+                    self.assertFalse(
+                        Path(
+                            f"/proc/{failed_acquisitions[0].process_id}"
+                        ).exists()
+                    )
+            finally:
+                if (
+                    failed_acquisitions
+                    and failed_acquisitions[0]._owner_token is not None
+                ):
+                    real_close(failed_acquisitions[0])
+            self.assertEqual(
+                before_descriptors,
+                set(os.listdir("/proc/self/fd")),
+            )
+
         real_prctl = acceptance._browser_prctl
 
         def hold_before_init_hardening(option: int, value: int) -> None:

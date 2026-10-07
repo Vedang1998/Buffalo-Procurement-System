@@ -9504,6 +9504,7 @@ def _observe_browser_containment_blocker(
     cleanup_complete = False
     body_error: BaseException | None = None
     cleanup_errors: list[BaseException] = []
+    restore_error: BaseException | None = None
     previous_signals = _block_browser_projection_signals()
     try:
         try:
@@ -9527,23 +9528,37 @@ def _observe_browser_containment_blocker(
         except BaseException as exc:
             body_error = exc
         if guardian is not None:
-            try:
-                _close_browser_prerequisite_guardian_lease(guardian)
-            except BaseException as exc:
-                cleanup_errors.append(exc)
-        cleanup_complete = not cleanup_errors
-        if body_error is not None:
-            if cleanup_errors:
-                raise LocalStagingAcceptanceError(
-                    "local acceptance browser containment and cleanup failed"
-                ) from body_error
-            raise body_error
-        if cleanup_errors:
-            raise LocalStagingAcceptanceError(
-                "local acceptance browser containment cleanup failed"
-            ) from cleanup_errors[0]
+            for _ in range(2):
+                try:
+                    _close_browser_prerequisite_guardian_lease(guardian)
+                    break
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+                    if guardian._owner_token is None:
+                        break
+        cleanup_complete = (
+            not cleanup_errors
+            and (
+                guardian is None
+                or guardian._owner_token is None
+            )
+        )
     finally:
-        _restore_browser_projection_signals(previous_signals)
+        try:
+            _restore_browser_projection_signals(previous_signals)
+        except BaseException as exc:
+            restore_error = exc
+    if cleanup_errors:
+        message = (
+            "local acceptance browser containment and cleanup failed"
+            if body_error is not None
+            else "local acceptance browser containment cleanup failed"
+        )
+        raise LocalStagingAcceptanceError(message) from cleanup_errors[0]
+    if body_error is not None:
+        raise body_error
+    if restore_error is not None:
+        raise restore_error
     return _BrowserContainmentBlockerObservation(
         protocol=_BROWSER_CONTAINMENT_PROTOCOL,
         generation=generation,
