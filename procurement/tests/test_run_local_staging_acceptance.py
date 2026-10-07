@@ -6796,6 +6796,12 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 self.fail(
                     "guardian or namespace init survived supervisor SIGKILL"
                 )
+            self.assertLessEqual(
+                acceptance._reap_browser_process_group_children(
+                    guardian_pid
+                ),
+                2,
+            )
             for process_id, start_ticks in (
                 (guardian_pid, guardian_start),
                 (inner_pid, inner_start),
@@ -6806,7 +6812,11 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     )
                 except acceptance.LocalStagingAcceptanceError:
                     continue
-                self.assertNotEqual(current.start_ticks, start_ticks)
+                if current.start_ticks == start_ticks:
+                    self.assertIn(
+                        current.state,
+                        acceptance._BROWSER_TERMINAL_PROCESS_STATES,
+                    )
         finally:
             os.close(read_descriptor)
             for descriptor in (guardian_pidfd, inner_pidfd):

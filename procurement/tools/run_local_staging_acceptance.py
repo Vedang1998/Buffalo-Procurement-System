@@ -545,6 +545,7 @@ _BROWSER_PROJECTION_MASKED_SIGNALS = frozenset(
     signal.valid_signals() - {signal.SIGKILL, signal.SIGSTOP}
 )
 _BROWSER_LIVE_PROCESS_STATES = frozenset({"R", "S"})
+_BROWSER_TERMINAL_PROCESS_STATES = frozenset({"X", "x", "Z"})
 _BROWSER_PROCESS_STATES = frozenset(
     {"R", "S", "D", "T", "t", "W", "X", "x", "Z", "P", "I"}
 )
@@ -8898,6 +8899,34 @@ def _validate_browser_prerequisite_guardian_lease(
     return process
 
 
+def _reap_browser_process_group_children(process_group: int) -> int:
+    if (
+        type(process_group) is not int
+        or process_group <= 1
+        or process_group > _BROWSER_LINUX_PID_MAX
+    ):
+        raise LocalStagingAcceptanceError(
+            "local acceptance browser prerequisite descendants differ"
+        )
+    reaped = 0
+    while True:
+        try:
+            process_id, _ = os.waitpid(-process_group, os.WNOHANG)
+        except ChildProcessError:
+            return reaped
+        except OSError:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite descendants differ"
+            ) from None
+        if process_id == 0:
+            return reaped
+        if process_id <= 1:
+            raise LocalStagingAcceptanceError(
+                "local acceptance browser prerequisite descendants differ"
+            )
+        reaped += 1
+
+
 def _start_stopped_browser_private_proc_guardian(
     *,
     generation: str,
@@ -9188,6 +9217,7 @@ def _close_browser_prerequisite_guardian_lease(
             errors.append(exc)
     reaped = False
     process_group_empty = False
+    adopted_descendants = 0
     if pidfd_bound:
         process_group_bound = False
         for _ in range(2):
@@ -9230,6 +9260,11 @@ def _close_browser_prerequisite_guardian_lease(
         if reaped and process_group_bound:
             while time.monotonic() < cleanup_deadline:
                 try:
+                    adopted_descendants += (
+                        _reap_browser_process_group_children(
+                            guardian.process_id
+                        )
+                    )
                     os.killpg(guardian.process_id, 0)
                 except ProcessLookupError:
                     process_group_empty = True
@@ -9238,6 +9273,12 @@ def _close_browser_prerequisite_guardian_lease(
                     errors.append(exc)
                     break
                 time.sleep(0.005)
+            if adopted_descendants > 1:
+                errors.append(
+                    LocalStagingAcceptanceError(
+                        "local acceptance browser prerequisite descendants differ"
+                    )
+                )
             if not process_group_empty:
                 errors.append(
                     LocalStagingAcceptanceError(
