@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-06 (UTC)
+**Updated:** 2026-10-08 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,120 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-08 enforced-runtime continuation — FAIL-CLOSED PRIVATE-PROC BLOCKER / INTEGRATED TASK 9 NOT RUN / NO PUBLISHED CANDIDATE
+
+- The owner authorized continuation through exact runtime materialization,
+  containment, fabricated release-boundary proof and the already-approved
+  local Option-B Task-9 acceptance, with an explicit stop at a concrete
+  external blocker. The permanent boundaries were preserved: no Railway
+  mutation or administrator credential, external database, remote private
+  payload, public endpoint, Shopify action, real purchase, supplier
+  transmission, `main` merge, PR #24 change or Replit shutdown occurred.
+  `procurement/docs/PHASE_STATUS.md` is unchanged because no official phase or
+  program milestone moved.
+- The final reviewed source candidate is
+  `c4c837d43fe3437f5e4d43fe77fab5934a4aa074` (tree
+  `0c300141d66fc81412a8f81d111c83d583dca285`) on
+  `codex/railway-staging-delivery`. Its runner SHA-256 is
+  `de133e3206a655295f70384fd6dfc01648da52338c8aea22d27ed7b23dff4328`
+  and its focused-test SHA-256 is
+  `8cec8e2dfcfbdc47235792782d4faa5e6ba73159ee03747366ba496e3e9ae340`.
+  The exact test-runner and floor-guard hashes are respectively
+  `c575fb7f5d1d6d6c43fc8cf97aecbe6884fa9660515ee10238055ed8342cc863`,
+  `9e7c22d09cc6e25a8b64e1140c0190e2fe92d5437b78ff30024a465559a3f649`
+  and `e2b5a3d38fc91591ca7c64885c27de93b68473e4f30c3d84a583c9ff20b0aaa3`.
+- Exact source materialization remains non-authorizing. The uniquely sealed
+  bundle contains 4,575 entries, 171,833,618 regular bytes and 173,499,779
+  encoded bytes; its manifest SHA-256 is
+  `1a176afff9196463367f3201f6e012ac874937a788abb325d9297ef890cd5edf`
+  and bundle SHA-256 is
+  `ff46c1cc615659888aeb9c01ad52aef00b45c595d87491646c00454cbb2a858c`.
+  The independently reviewed detached-tmpfs projection primitive contains
+  4,588 entries and 171,833,799 regular bytes, with projection SHA-256
+  `1c142df8df4b6e9a775062c8fe718ff265025049835c4d69338d4e9b543fdbad`
+  and policy SHA-256
+  `b31f20961531fa21ec8056de9e2f6100b3fe4b55ab906fd170243f1a432a66f1`.
+  Kernel-backed proof established exact held-root binding, read-only/nosuid/
+  nodev sealing, executable-file semantics, cancellation cleanup and empty
+  teardown. This proves projection construction only; no payload executed from
+  it and it does not grant execution authority.
+- The prerequisite guardian is a fixed, private, non-authorizing probe. Before
+  clone3 or fork it now requires the dedicated supervisor's initial raw
+  `/proc/self/environ` to be exactly 635 bytes, one public Nix-wrapper
+  `LD_LIBRARY_PATH` entry and SHA-256
+  `756362aa816bb8e4c40223056ecd1a1ec90d3dcb5d0657f72afc5f74984652e4`.
+  Any ambient or credential-bearing initial environment stops before process
+  creation. One signal mask spans fork ownership, caller lease assignment,
+  continuation and up to two exact cleanup attempts. Deferred signal delivery
+  happens only after cleanup; cleanup errors take precedence over cancellation
+  and cannot be hidden by a pending SIGINT. Tests cover post-fork and
+  post-lease signal delivery, transient cleanup retry, irrecoverable injected
+  cleanup, foreign descriptor/process refusal, supervisor death and complete
+  process-group reaping.
+- A fresh live probe ran from the exact scrubbed supervisor environment. It
+  rebuilt and revalidated the exact sealed bundle, observed clone3 `ENOSYS`
+  (`errno=38`), then reached the approved private-proc prerequisite in a new
+  user/PID/mount/network namespace. Both the fd-based `fsmount(proc)` path and
+  isolated legacy `mount(proc)` path returned `EPERM` (`errno=1`). The guardian
+  and namespace init were reaped, all held descriptors closed, and projection
+  root, cgroup and FD inventories returned exactly to baseline. The returned
+  observation was `projection_status=NOT_RUN`, `cgroup_status=NOT_RUN`,
+  `credential_release_status=WITHHELD`, provider calls 0, payload processes 0,
+  `cleanup_complete=true` and `execution_authority=false`.
+- This is the concrete external stop condition. The accepted containment
+  design requires a fresh private procfs; ambient `/proc` is explicitly
+  rejected because it permits host-root/process escape. The credential-free
+  stopped-guardian fallback makes clone3 `ENOSYS` non-blocking, and cgroup
+  controller availability was not generalized into a blocker. Proceeding now
+  requires either a platform permission change that allows the approved
+  private proc mount or separately approved design authority for a privileged
+  broker/proc-FD boundary. No weaker fallback was installed.
+- Machine evidence on the exact candidate is PASS. Focused acceptance passed
+  48/48; repeated guardian/environment stress passed 40/40; exact floor guards
+  passed 3/3 plus 9/9; discovery equals the exact 1,512 global floor with local
+  floor 48 and no registration/minimum error. The authoritative disposable
+  PostgreSQL-16 suite passed 1,512 discovered / 1,512 executed / 1,512 passed
+  in 1,434.556 seconds, with failures, errors, skips, expected failures and
+  unexpected successes all zero. Its log SHA-256 is
+  `c37f3218495aefc03a4faab433f3e5540d217f92617e7a0d3d5498b80aec127c`.
+  Startup validation passed 10/10 in 0.004 seconds. `uv lock --check`, Python
+  compilation, `git diff --check`, exact-hash checks and high-confidence
+  added-line secret patterns passed. A disposable database directory retained
+  by an intentionally interrupted superseded suite was proven stopped,
+  unopened and task-owned, then removed; final projection, cgroup, process,
+  descriptor and disposable-database inventories are clean.
+- Earlier evidence is preserved rather than relabeled. The first 1,512-test
+  attempt against `a98927d` produced 1,510 passes plus one failure and one error
+  because a prior test's persistent child-subreaper state adopted the guardian
+  namespace-init zombie; the identity-bound process-group cleanup correction
+  is in descendant `fb189fb`. Later runs against `6fd808f` and `ea6bda3` were
+  deliberately interrupted when independent review found signal-handoff and
+  cleanup-error-precedence defects. Only the complete `c4c837d` run above is
+  acceptance evidence.
+- Independent read-only reviews `final_broad_review` and
+  `final_checkpoint_review` re-anchored on the exact final commit/tree/hashes,
+  reproduced the prior cancellation failures, and reported no remaining
+  P0/P1/P2. These are attributable internal independent reviews, not an
+  external/Claude review. They add no authority beyond this fail-closed local
+  checkpoint.
+- Gate state is therefore: sealed source **PASS**; detached immutable
+  projection construction **PASS**; actual contained execution environment
+  **NOT RUN**; containment prerequisite **FAIL** on the external private-proc
+  permission; credential/capability release **NOT RUN / WITHHELD** (the safety
+  invariant that the provider was never called is **PASS**); browser, Backup
+  V2, APPLY, DRAFT/packet, private research replay, restart/restore and combined
+  resource acceptance **NOT RUN**; cleanup **PASS**; focused/full/startup
+  validation **PASS**; independent checkpoint review **PASS**. Integrated Task
+  9 remains incomplete and no phase is complete.
+- Publication remains **FAIL / no published candidate**. The local branch is
+  ahead of tracked origin
+  `bfcd2bc8f0da5c33b1f63bae59737ad19057a3dc`; `gh` is unauthenticated and the
+  configured SSH transport has neither a known-host record nor a private key.
+  No blind push, history synthesis, new PR, PR #24 mutation or `main` mutation
+  was attempted. The exact next authority boundary is platform/broker approval
+  for private procfs, followed by rerunning the still-NOT-RUN containment,
+  credential-release and integrated Task-9 gates on a newly frozen candidate.
 
 ### 2026-10-06 authorized continuation — CLEANUP P2 RESOLVED / SEALED SOURCE MATERIALIZATION PASS / IMMUTABLE PROJECTION AND INTEGRATED TASK 9 PENDING
 
