@@ -17,6 +17,12 @@ the sole writer. No official milestone advanced; PHASE_STATUS is unchanged.
 The seven-file recovery was reviewed selectively, without merge or cherry-pick;
 its disposition remains in [RECOVERY_REVIEW_2026-10-17](RECOVERY_REVIEW_2026-10-17.md).
 
+Local reviewed material checkpoint: `593926c355dc4bd23ea5b190e7d364b3e2074f91`, tree
+`c10783fb6a41664d827cdd09a13f99416cb50c77`. A clean detached local source-bound
+diagnostic completed with cleanup and the same FAIL/WITHHELD status; it was
+not a GitHub event or hosted acceptance run. The following documentation-only
+checkpoint preserves that evidence.
+
 Implemented and measured in disposable native Cloud resources:
 
 - Retained supervisor → guardian → namespace PID 1 → stopped PID 2 topology,

@@ -20,6 +20,22 @@ Recovery commit `fe15815de527175b144cbbd61a2f9d4c16b5c72c` was reviewed as a
 seven-file delta; see [the disposition](RECOVERY_REVIEW_2026-10-17.md). There was
 no merge/cherry-pick or adoption of its unapproved validation bridge.
 
+### Exact local material checkpoint and source-bound diagnostic
+
+- Local material commit `593926c355dc4bd23ea5b190e7d364b3e2074f91`, tree `c10783fb6a41664d827cdd09a13f99416cb50c77`.
+- A disposable clean detached local clone of that commit ran the actual diagnostic
+  entrypoint and bound all source files before observing namespace/projection
+  evidence. The supplied local metadata was a test invocation, **not an observed
+  GitHub push event**. Commit/tree matched; cleanup completed; the temporary
+  checkout was removed. Result remained HOST_CAPABILITY=FAIL/INCOMPLETE_PREFLIGHT,
+  HOST_RUNTIME_UNSEALED, WITHHELD, provider0/payload0, authorityfalse,
+  sentinel_exec/cgroup NOT_RUN. This does not satisfy Task3 hosted acceptance.
+- Local diagnostic log SHA256 `2ce154b64eba6cd9ff6121b37924112158f4821e084117a19cda423ab2bce1c8`.
+- The following documentation-only commit records this evidence. Material code
+  remains the reviewed and fully tested checkpoint above. Publication remains
+  blocked by the first unpublished commit's GH007 author metadata; the owner
+  history exception is still pending. Preserve the complete local chain.
+
 ## Machine results
 
 Final authoritative result: **FAIL**, not a waived gate; 778.352 seconds, exit1.
