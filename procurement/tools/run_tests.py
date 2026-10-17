@@ -33,6 +33,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_development_forecast_joint_horizon.py": 22,
     "test_forecasting.py": 16,
     "test_historical_sales_review_api.py": 17,
+    "test_hosted_synthetic_source.py": 23,
     "test_identity_investigation.py": 32,
     "test_inventory.py": 16,
     "test_local_access.py": 13,

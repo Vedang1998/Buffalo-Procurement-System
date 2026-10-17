@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-08 (UTC)
+**Updated:** 2026-10-17 (America/New_York)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,115 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-17 local Mac continuation — LOCKED PYTHON READY / PORTABLE SOURCE CHECKS REVIEWED / HOSTED VALIDATION ORDER UNRESOLVED
+
+- The owner designated Codex as sole implementation writer in the local Mac
+  repository and prohibited Replit SSH, Railway development, deployment,
+  production access, private-data transfer, Shopify, and real purchasing.
+  Read-only subagent `source_audit` performed source investigation and narrow
+  independent review; it did not write files. No phase boundary was crossed.
+- Execution is local host `Mac`, Darwin 25.4.0 / arm64, macOS 26.4.1 build
+  `25E253`. Working directory and Git root both resolve to
+  `/Users/Odoo/Developer/Buffalo-Procurement-System`. Initial worktree was
+  clean. Branch `codex/hosted-synthetic-acceptance`, full HEAD
+  `99f265e9ab12dfcd970b3072a57d5f2c5163cc07`, tree
+  `c4beee642cb87f9b1c08f3c03d09111a0f635bc3`, matched tracked origin with
+  ahead/behind `0/0` and the live remote ref. No reset, source reconstruction,
+  history rewrite, or repeated baseline publication occurred.
+- Live remote ledger was rechecked after the local changes: acceptance branch
+  remains `99f265e9ab12dfcd970b3072a57d5f2c5163cc07`; staging-delivery remains
+  `cb0969059b0b85241d611124910d691e49212881`; `main` remains
+  `f308ac666a2377f540e528bc873463daecc20cf8`; PR #24 remains draft/open with
+  head `e25704e117a3c5bede843cac65ddfdeb7f30024f`. The accepted baseline is
+  published, superseding only the October 8 publication blocker below.
+  Unpublished work or private inputs from the former host are unknown and
+  were not reconstructed or treated as recovered.
+- Local setup installed CI-pinned `uv 0.12.3` in ignored
+  `.local/bootstrap/bin/uv`, Python 3.13.15 through uv, and all 23 locked
+  runtime distributions in `.venv`. Both manifests require Python
+  `>=3.13,<3.14`; the shell's preexisting Python 3.14 was not used for tests.
+  `uv lock --check` and `uv sync --frozen` passed. `uv.lock`, both Python
+  manifests, `pnpm-lock.yaml`, and `pnpm-workspace.yaml` are byte-unchanged.
+  Homebrew PostgreSQL 16.14 is available. Shell Node is v22.19.0 and pnpm is
+  11.25.0; the workspace explicitly excludes Darwin native packages, so no
+  JavaScript dependency rewrite or claim of hosted browser closure occurred.
+- Authenticated GitHub plugin access was independently verified as
+  `Vedang1998`, with repository push/admin permissions and Actions-run read
+  access. The acceptance branch has zero workflow runs. The plugin does not
+  expose the Actions permission-setting endpoint; workflow-specific write
+  capability is not proven by repository permissions alone. Terminal `gh`
+  had an invalid saved login. Its browser flow was cancelled after the owner
+  directed use of the connected GitHub plugin. No credential was requested in
+  chat, copied from a connector, or persisted in repository evidence.
+- Actual published source contains the approved October 10 design/plan, but
+  **does not contain** `.github/workflows/hosted-synthetic-acceptance.yml` or
+  a positive hosted capability probe. Task 1 is already reflected in published
+  history. Task 2 now has a bounded, uncommitted portable source-binding
+  component, `procurement/tools/hosted_synthetic_source.py`, and 23 adversarial
+  tests. It checks trusted event/ref/repository metadata, detached SHA/tree,
+  baseline ancestry, staged/untracked changes, index hiding flags, and exact
+  raw bytes/modes of every tracked file twice. It retains bounded hashes for
+  the workflow, source checker, legacy runner/worker, and Python dependencies.
+  It refuses a missing committed workflow and returns no execution authority.
+  It is not a workflow policy validator, containment probe, or immutable
+  runtime lease; Task 2 remains incomplete.
+- Narrow independent review found and remediation closed four defects:
+  hidden/stale worktree bytes, executable Git clean filters, ancestry grafts,
+  and partial-clone lazy fetching. The final checker uses read-only plumbing,
+  refuses grafts/hidden index flags, disables lazy fetch and all Git
+  transports, and never invokes filter-capable `git status`. Reviewer
+  `source_audit` independently reran 23/23 and reported no remaining P0–P2
+  against final source SHA-256
+  `939e7b106d28e4e784bc03c72442374bd6d37af1857bab59965e323f8b554726`
+  and test SHA-256
+  `6095fb1eacfee0cdb29b7a764dd3b9644b1c62d6ed2f2f13bcb752c4b208e2f3`.
+  This is supplemental component review, **not G5/full-candidate acceptance**.
+- Machine evidence: the portable baseline passed **127/127** across 12
+  selected modules using a fresh task-owned PostgreSQL 16.14 `_test` database,
+  with server-side loopback attested and every abnormal counter zero. The
+  cluster was stopped and removed. An initial attempt without a database
+  produced 25 setup errors; a first disposable cluster startup failed because
+  macOS requires an explicit locale. The corrected invocation used
+  `LC_ALL=C`; no database or application check was bypassed. Final focused
+  source plus portable adjacent checks passed **34/34**, startup checks
+  passed **10/10** before and after changes, and AST parsing, dependency lock,
+  and `git diff --check` passed. Local bounded baseline/discovery logs are in
+  ignored `.local/evidence`; they are not hosted or private-input acceptance.
+- Existing per-module floors are unchanged; the new 23-test module raises
+  the global floor from 1,512 to **1,535**, with both exact floor guards
+  updated. Native Mac global discovery yields **1,488 loader entries** and
+  one failed module import because the preserved containment module requires
+  `fcntl.F_SEAL_SEAL`. The exact global-discovery guard consequently fails;
+  neither 1,488 nor 1,535 is claimed as an executed full-suite PASS. No Linux
+  test was skipped, weakened, patched for Mac, or relabeled.
+- The concrete publication dependency is described in
+  `docs/superpowers/specs/2026-10-17-hosted-validation-bridge-proposal.md`.
+  Task 3 requires the full Linux suite before publishing the workflow, but
+  the existing CI triggers only `main`/PR-to-main and the approved initial
+  hosted graph permits capability/focused validation only. Additionally, the
+  preserved live guardian test expects the former host's exact procfs EPERM;
+  a successful mount would fail that expectation. The latter is a conditional
+  source finding, not a measured GitHub failure. The proposal requests only a
+  reviewed validation-only branch push before full hosted validation; it does
+  not approve altering that regression or bypassing any resulting failure.
+- Gate ledger: published baseline **PASS**; locked local Python setup
+  **PASS**; selected portable checks **PASS**; supplemental source-component
+  review **PASS**; full Linux validation **NOT RUN**; complete Task 2
+  **INCOMPLETE**; new candidate publication **NOT RUN**; host capability,
+  executable harness, synthetic browser workflow, backup/restore, integrated
+  resource/cleanup, and private research acceptance **NOT RUN**. Local
+  disposable-database cleanup is **PASS**, independently of those later gates.
+  Official Phase 4/6, operational readiness, mapping/pricing capabilities,
+  and PO permissions are unchanged; `PHASE_STATUS.md` is unchanged.
+- All changes remain local and uncommitted on the existing acceptance branch;
+  there is no new PR or published candidate. The next source work remains
+  Task 2's workflow contract and success-capable probe. Before publication,
+  the owner must resolve the specific validation-order proposal or designate
+  an authorized Linux validation path satisfying the original order. This is
+  a newly evidenced prerequisite, not another approval of the existing
+  synthetic objective. Preserve the full-suite/independent-review gates and
+  stop before capability execution or Tasks 4–9 without their required proof.
 
 ### 2026-10-08 enforced-runtime continuation — FAIL-CLOSED PRIVATE-PROC BLOCKER / INTEGRATED TASK 9 NOT RUN / NO PUBLISHED CANDIDATE
 
