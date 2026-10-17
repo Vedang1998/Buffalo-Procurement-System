@@ -1,0 +1,189 @@
+"""Non-authorizing hosted namespace prerequisite diagnostic.
+
+This deliberately cannot report HOST_CAPABILITY=PASS. A mount-attempt result is
+not a retained namespace lease, cgroup/projection proof, or release authority.
+The existing exact-EPERM observer and its assertions remain unchanged.
+"""
+from __future__ import annotations
+
+import ctypes
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import sys
+
+# Direct isolated invocation imports only reviewed tools from this directory.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hosted_synthetic_source import HostedSourceError, bind_hosted_source
+
+
+_ENVIRONMENT = {"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"}
+_NAMESPACE_STAGES = frozenset({
+    "fsopen", "fsconfig", "fsmount+legacy-mount", "legacy-mount",
+    "legacy-mount-cleanup", "legacy-mounted", "move_mount", "mounted",
+    "inner-error", "guardian-error-hardening", "guardian-error-userns",
+    "guardian-error-private-proc",
+})
+
+
+class HostedDiagnosticError(RuntimeError):
+    pass
+
+
+def _require_clean_supervisor() -> None:
+    with open("/proc/self/environ", "rb") as stream:
+        raw = stream.read(129)
+    expected = {f"{key}={value}".encode() for key, value in _ENVIRONMENT.items()}
+    if (len(raw) > 128 or not raw.endswith(b"\0")
+            or len(raw.split(b"\0")[:-1]) != len(expected)
+            or set(raw.split(b"\0")[:-1]) != expected
+            or dict(os.environ) != _ENVIRONMENT
+            or len(os.listdir("/proc/self/task")) != 1):
+        raise HostedDiagnosticError("supervisor_boundary_refused")
+    # Some kernels omit task/<tid>/children. Read kernel process metadata;
+    # never reap or signal an existing unrelated child to establish this check.
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            raw_stat = (entry / "stat").read_bytes()
+        except FileNotFoundError:
+            continue
+        tail = raw_stat.rpartition(b") ")[2].split()
+        if len(tail) < 2 or not tail[1].isdigit():
+            raise HostedDiagnosticError("supervisor_process_inventory_refused")
+        if int(tail[1]) == os.getpid():
+            raise HostedDiagnosticError("supervisor_children_refused")
+    # Listing /proc/self/fd includes its transient directory descriptor.
+    for name in os.listdir("/proc/self/fd"):
+        try:
+            os.fstat(int(name))
+        except OSError:
+            continue
+        if int(name) > 2:
+            raise HostedDiagnosticError("supervisor_descriptors_refused")
+
+
+def _namespace_attempt(backend, generation: str) -> dict:
+    _require_clean_supervisor()
+    if len(generation) != 64 or any(c not in "0123456789abcdef" for c in generation):
+        raise HostedDiagnosticError("generation_refused")
+    result = {
+        "stage": "NOT_RUN", "errno": None, "cleanup_complete": False,
+        "reason": "INCOMPLETE_PREFLIGHT",
+    }
+    guardian = None
+    cleanup_errors = []
+    body_error = None
+    start_attempted = False
+    previous_subreaper = ctypes.c_int()
+    try:
+        libc = backend._browser_libc()
+        if libc.prctl(37, ctypes.byref(previous_subreaper), 0, 0, 0) != 0:
+            raise HostedDiagnosticError("subreaper_observation_refused")
+        previous_signals = backend._block_browser_projection_signals()
+    except (KeyboardInterrupt, SystemExit):
+        return dict(result, reason="CANCELLED", cleanup_complete=True)
+    except Exception:
+        # No child, descriptor, subreaper mutation, or provider exists yet.
+        return dict(result, reason="NAMESPACE_PREREQUISITE_REFUSED", cleanup_complete=True)
+    try:
+        try:
+            backend._browser_prctl(36, 1)
+            start_attempted = True
+            guardian = backend._start_stopped_browser_private_proc_guardian(
+                generation=generation, child_signal_mask=previous_signals,
+            )
+            stage, number = backend._continue_browser_private_proc_guardian(
+                guardian, generation=generation,
+            )
+            if (type(stage) is not str or stage not in _NAMESPACE_STAGES
+                    or type(number) is not int or not 0 <= number <= 4095):
+                raise HostedDiagnosticError("namespace_evidence_refused")
+            result.update(stage=stage, errno=number)
+        except BaseException as exc:
+            body_error = exc
+        if guardian is not None:
+            for _ in range(2):
+                try:
+                    backend._close_browser_prerequisite_guardian_lease(guardian)
+                    break
+                except BaseException as exc:
+                    cleanup_errors.append(exc)
+                    if guardian._owner_token is None:
+                        break
+        try:
+            backend._browser_prctl(36, previous_subreaper.value)
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+        result["cleanup_complete"] = (
+            not cleanup_errors
+            and ((guardian is None and not start_attempted)
+                 or (guardian is not None and guardian._owner_token is None))
+        )
+    finally:
+        try:
+            backend._restore_browser_projection_signals(previous_signals)
+        except (KeyboardInterrupt, SystemExit) as exc:
+            if body_error is None:
+                body_error = exc
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+            result["cleanup_complete"] = False
+    if cleanup_errors or not result["cleanup_complete"]:
+        result["reason"] = "CLEANUP_FAILED"
+    elif isinstance(body_error, (KeyboardInterrupt, SystemExit)):
+        result["reason"] = "CANCELLED"
+    elif body_error is not None:
+        result["reason"] = "NAMESPACE_PREREQUISITE_REFUSED"
+    return result
+
+
+def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT") -> dict:
+    return {
+        "contract": "BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1",
+        "repository": "Vedang1998/Buffalo-Procurement-System",
+        "ref": "refs/heads/codex/hosted-synthetic-acceptance",
+        "commit": binding.commit if binding is not None else None,
+        "tree": binding.tree if binding is not None else None,
+        "source_files": dict(binding.files) if binding is not None else {},
+        "HOST_CAPABILITY": "FAIL",
+        "reason": observation["reason"] if observation is not None else reason,
+        "namespace_attempt": observation,
+        "projection": "NOT_RUN", "cgroup": "NOT_RUN",
+        "credential_release": "WITHHELD", "provider_calls": 0,
+        "payload_processes": 0, "execution_authority": False,
+        "procfs_scope": "ACCEPTANCE_TOOLING",
+        "railway_compatibility": "NOT_PROVEN",
+    }
+
+
+def main(arguments=None) -> int:
+    args = list(sys.argv[1:] if arguments is None else arguments)
+    binding = None
+    try:
+        _require_clean_supervisor()
+        if len(args) != 4:
+            raise HostedDiagnosticError("invocation_refused")
+        root = Path(__file__).resolve().parents[2]
+        binding = bind_hosted_source(
+            root, repository=args[0], event=args[1], ref=args[2], sha=args[3],
+        )
+        # Import only after trusted workflow metadata and source binding.
+        import run_local_staging_acceptance as backend
+        generation = hashlib.sha256(os.urandom(32)).hexdigest()
+        observation = _namespace_attempt(backend, generation)
+        result = _report(binding, observation)
+    except (HostedDiagnosticError, HostedSourceError, OSError, AttributeError, ImportError):
+        # Neither raw exceptions, command output, paths, nor environment escape.
+        result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED")
+    encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    print(encoded)
+    print("evidence_sha256=" + hashlib.sha256(encoded.encode()).hexdigest())
+    return 130 if result["reason"] == "CANCELLED" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

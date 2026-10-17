@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 from copy import deepcopy
+import ctypes
 from datetime import date
 import hashlib
 import html
@@ -548,6 +549,30 @@ def _start_capture_listener(port, received):
 
 
 class PrivateResearchBrowserAuditTests(unittest.TestCase):
+    def setUp(self):
+        # Production run() establishes this before launching Chromium. Match
+        # that precondition even when this module/test runs first, and restore
+        # the incoming state instead of contaminating later containment tests.
+        libc = ctypes.CDLL(None, use_errno=True)
+        previous = ctypes.c_int()
+        self.assertEqual(libc.prctl(37, ctypes.byref(previous), 0, 0, 0), 0)
+        self.addCleanup(
+            lambda: self.assertEqual(libc.prctl(36, previous.value, 0, 0, 0), 0)
+        )
+        _load_tool()._enable_child_subreaper()
+
+    def _own_test_server(self, server, thread):
+        # A browser cleanup exception must not strand the independent HTTP
+        # fixture or its thread and make subsequent security checks fail.
+        def cleanup():
+            try:
+                server.shutdown()
+            finally:
+                server.server_close()
+                thread.join(timeout=5)
+            self.assertFalse(thread.is_alive())
+        self.addCleanup(cleanup)
+
     def test_expectations_reject_unknown_mixed_and_partial_contract_tuples(self):
         tool = _load_tool()
         cases = (
@@ -1575,6 +1600,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                     server, thread = _start_synthetic_viewer(
                         app_port, workspace, secret, tool
                     )
+                    self._own_test_server(server, thread)
                     try:
                         browser, browser_handle = tool._start_browser(
                             chromium,
@@ -1660,6 +1686,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                 tool,
                 auth_required=False,
             )
+            self._own_test_server(server, thread)
             browser, browser_handle = tool._start_browser(
                 chromium, root / "profile", cdp_port, root / "chromium.stderr"
             )
@@ -1731,6 +1758,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
             capture, capture_thread = _start_capture_listener(
                 external_port, received
             )
+            self._own_test_server(capture, capture_thread)
             server, thread = _start_synthetic_viewer(
                 app_port,
                 workspace,
@@ -1738,6 +1766,7 @@ print(json.dumps(sorted(forbidden & set(sys.modules))))
                 tool,
                 attack_origin=f"http://127.0.0.1:{external_port}",
             )
+            self._own_test_server(server, thread)
             browser, browser_handle = tool._start_browser(
                 chromium, root / "profile", cdp_port, root / "chromium.stderr"
             )

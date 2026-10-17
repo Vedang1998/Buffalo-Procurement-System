@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-08 (UTC)
+**Updated:** 2026-10-17 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,137 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-17 Cloud continuation — DIAGNOSTIC PREFIX / FULL ACCEPTANCE NOT COMPLETE
+
+The owner's long-horizon mandate authorizes one-writer Cloud development,
+synthetic repairs, read-only review and non-force publication of recoverable
+checkpoints. It does not accept incomplete gates or authorize production actions.
+This entry supersedes earlier host-specific current-state claims; their historical
+evidence is retained below. No official milestone changed; PHASE_STATUS is unchanged.
+
+- Repository `Vedang1998/Buffalo-Procurement-System`, active branch
+  `codex/hosted-synthetic-acceptance`. Verified starting commit
+  `99f265e9ab12dfcd970b3072a57d5f2c5163cc07`, tree
+  `c4beee642cb87f9b1c08f3c03d09111a0f635bc3`. The checkpoint containing this entry
+  is an incomplete development checkpoint, not Task 3 acceptance. The subsequent
+  evidence entry records its exact published commit/tree and hosted run.
+- Reviewed recovery `fe15815de527175b144cbbd61a2f9d4c16b5c72c`, tree
+  `43d087cb1eb6121eee97d08dd8fbcaff4b39b2d5`, as a seven-file delta. Selected the
+  useful source binder/tests/registration approach and hardened resource ownership,
+  bounded output and cancellation. No merge/cherry-pick; no validation bridge adopted.
+  [Recovery disposition](RECOVERY_REVIEW_2026-10-17.md) records each file.
+- Added exact-source binding, a namespace prerequisite diagnostic and the minimal
+  branch-only GitHub Ubuntu 24.04 workflow. Trusted repository/event/ref/SHA/ancestry/
+  clean-detached assertions precede repository code. Pinned actions, read-only
+  permissions, no persisted checkout credentials, isolated `-I -S -B` Python and
+  scrubbed environments remain explicit. Exact focused populations are 36+16+7;
+  skips, expected failures and unexpected successes fail the gate. No artifacts,
+  secret provider, OIDC, production endpoint or payload release exists.
+- The diagnostic **always returns HOST_CAPABILITY=FAIL** and WITHHELD. Successful
+  namespace mounting is INCOMPLETE_PREFLIGHT, not a containment lease or PASS.
+  Legacy observer and its exact-EPERM tests are unchanged. Native Cloud component
+  evidence reached `mounted`, errno 0 and cleanup_complete=true with provider 0,
+  payload 0, projection/cgroup NOT_RUN and execution_authority=false. That component
+  screen was not source-bound hosted acceptance; commit/tree were null.
+- Native Cloud differs from the command sandbox: native UID 1000 sees root-owned
+  system Git and can mount private proc in new USER/MOUNT/PID/NET namespaces. The
+  sandbox maps system ownership to nobody and exposes read-only UID maps/cgroups.
+  Native cgroup v2 is read/write but current UID lacks an owned writable delegation;
+  no sudo or connected user-systemd manager was available. No permissions,
+  AppArmor/sysctls, cgroup ownership or security checks were changed.
+
+Validation and review:
+
+- Current registration is 1,571 tests across 92 modules: baseline 1,512 plus source 36,
+  diagnostic 16 and workflow 7. Focused source/diagnostic/workflow/runner/floor checks
+  passed 95/95; the separate reviewer independently ran 59/59 under `-I -S -B`.
+  Startup hardening passed 10/10; earlier browser/source/merge regressions passed 69/69.
+- The first complete native run (before setup repairs and the 23 diagnostic/workflow
+  tests) discovered 1,548, executed 1,517, passed 1,490, failures 11/errors 22, all skip/
+  expected-failure/unexpected-success counters 0. Its log SHA256 is
+  `09e0ab324ed3904f79f008d193bb7119652098f18eea3a9b56279debca9d8b4d`.
+  Two earlier interrupted runs are superseded diagnostics, never PASS evidence.
+- Final full-suite result: IN PROGRESS on the unchanged reviewed code; final results must be recorded before closeout. Log SHA256: pending completion.
+- Setup diagnosis corrected local modes only (post-merge hook 0755; inert browser
+  worker 0644) and uses umask 0022 only for synthetic test processes. Exact production
+  mode validators were preserved. 142 affected tests passed while three native-PG
+  classes initially failed setup. Extracting tools/support from the existing exact
+  PostgreSQL 16.14 image made those classes reach the existing catalog-fingerprint
+  refusal; installing a Docker server alone was insufficient.
+- Fresh disposable read-only catalog measurements established 141 views and 3,297
+  routines on both public builds. View hash matches the pin on 16.14 and 16.9.
+  Routine hash 16.14=`546654ce1aeef28739988a7d81bf391f51d194f25ea84b93dd7fc60fbc71ef57`;
+  Debian 16.9=`7e6bc3de9d639c9e9e5f6f3651bcec2ad0af5fbc3d43bbf00889468f9282bfb8`;
+  required=`78d732c718df86f8709d3d69b3dc74b9ae96e5ce0a69a1223e2b0265acd22387`.
+  The accepted prior host used a Nix 16.9 build; matching the minor version alone
+  does not recreate the accepted fingerprint. No hashes, role checks or fixtures
+  were changed to authorize a different catalog.
+- One existing private-browser test fixture lacked the production launcher's
+  subreaper prerequisite and unconditional HTTP cleanup. It now establishes/
+  restores the incoming subreaper state and independently registers shutdown,
+  close and join. No browser assertions or production cleanup checks were weakened.
+  The reviewer verified incoming subreaper 0 and 1 restoration.
+- Separate read-only Codex reviews `recovery_review`, `acceptance_path` and
+  `inspect_workflow` covered source ownership/cancellation, diagnostic/workflow
+  authority and the business audit. Reproduced issues were fixed: unbounded Git
+  capture, ancestor/mode races, actual SIGINT descriptor handoff, canonical stage
+  filtering, signal-restoration failure precedence, prerequisite exception handling
+  and expected-failure acceptance. Final reviews found no remaining P0/P1/P2 in
+  their stated scopes. These are internal same-model-family subreviews, **not
+  independent external, Claude/Cursor or owner business-rule acceptance**.
+- Frozen hashes and the bounded hosted evidence are recorded with the published
+  checkpoint. No application business source, dependency manifest or lockfile
+  changed. Changed files are tooling, test fixture/registration, workflow and docs.
+  Secret/private-data checks precede publication; no private records are included.
+
+Environment and cleanup:
+
+The tested Install script and Start skill are saved outside the repository at
+`/workspace/.cloud-setup/buffalo/install.sh` and `start-skill.md`, and in the Cloud
+environment configuration draft. Tools are native Python 3.13.5, uv 0.12.3,
+Node 24.19.0, pnpm 10.34.7, TypeScript 5.9.3, Docker 28.4.0, Git 2.52.0 and
+PostgreSQL 16.14. All 23 locked Python packages are compatible; 14 import checks,
+frozen installation, lock validation and JavaScript syntax checks pass. The 16.9
+public image was only a diagnostic comparison, not a substituted acceptance
+runtime. Saving configuration does not publish/apply it or prove fresh-task
+restoration. No credentials are saved in scripts/configuration.
+
+Owned disposable databases/containers and active browser/server processes are
+removed after checks. Earlier stopped Chromium/PostgreSQL zombie entries adopted
+by this container's non-reaping PID 1 cannot be reaped by this session; they are not
+running resources and hold no descriptors. Do not claim a zero-process-residue
+host result. New diagnostic cleanup is recorded separately from those earlier
+fixture attempts. No production app, private research replay or real purchase ran.
+
+Remaining critical path and exact next action:
+
+1. Continue approved Task 2: retain a new namespace lease with exact PID 1/PID 2,
+   private-proc flags/host invisibility; add the tiny executable sealed tmpfs
+   sentinel and owned cgroup v2 enrollment/limits/membership/zero-OOM proof; release
+   the fabricated 43 bytes only after every same-generation attestation. Add stale
+   resource, cancellation, foreign replacement and cleanup regressions. Cloud's
+   delegation limitation blocks live proof here, not authorized implementation.
+2. Measure that complete source-bound preflight on the approved GitHub executor's
+   native launcher path. This diagnostic prefix cannot satisfy Task 3. Resolve the
+   exact runtime/catalog and historical EPERM full-suite incompatibilities with
+   accepted artifacts or separately reviewed narrow portability work; do not
+   manufacture pins, success observations or loosen assertions.
+3. Only after accepted full hosted capability PASS, continue Tasks 4–9: executable
+   supervisor/worker, Option B browser2 DRAFTs/3 lines/14 members/$282+$7=$289,
+   restart/restore/isolation/resource/audit/cleanup proof. Those totals remain
+   historical synthetic controls, not a new hosted reproduction.
+4. [The consolidated business audit](BUSINESS_READINESS_2026-10-17.md) preserves
+   reviewed identity history and distinguishes historical September evidence from
+   missing current inventory/sales/incoming, supplier mappings/packs/prices/fees/
+   calendars, ABC/cost/availability and operational forecast authority.
+
+Railway compatibility and real purchasing readiness remain NOT PROVEN. There are
+23 calendar days to November 9; hosted synthetic delivery is plausible but not
+measured end to end, while real operational readiness is at risk until current
+inputs and commercial authority are resolved. No production completion date is
+promised. No main change, PR 24 merge, Railway deployment, production DB access,
+Shopify action, private transfer, supplier transmission or real purchasing occurred.
 
 ### 2026-10-08 enforced-runtime continuation — FAIL-CLOSED PRIVATE-PROC BLOCKER / INTEGRATED TASK 9 NOT RUN / NO PUBLISHED CANDIDATE
 

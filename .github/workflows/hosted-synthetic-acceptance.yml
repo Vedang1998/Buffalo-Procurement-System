@@ -1,0 +1,71 @@
+name: Hosted synthetic acceptance diagnostic
+
+on:
+  push:
+    branches: [codex/hosted-synthetic-acceptance]
+
+permissions:
+  contents: read
+
+jobs:
+  capability-preflight:
+    if: github.repository == 'Vedang1998/Buffalo-Procurement-System' && github.event_name == 'push' && github.ref == 'refs/heads/codex/hosted-synthetic-acceptance'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact event source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify trusted source before repository code
+        shell: bash
+        env:
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          EXPECTED_EVENT: ${{ github.event_name }}
+          EXPECTED_REF: ${{ github.ref }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$EXPECTED_REPOSITORY" = Vedang1998/Buffalo-Procurement-System
+          test "$EXPECTED_EVENT" = push
+          test "$EXPECTED_REF" = refs/heads/codex/hosted-synthetic-acceptance
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          if git symbolic-ref --quiet HEAD; then exit 1; fi
+          git merge-base --is-ancestor cb0969059b0b85241d611124910d691e49212881 HEAD
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          observed_tree=$(git rev-parse 'HEAD^{tree}')
+          [[ "$observed_tree" =~ ^[0-9a-f]{40}$ ]]
+          printf 'source_commit=%s\nsource_tree=%s\n' "$EXPECTED_SHA" "$observed_tree"
+
+      - name: Prepare Python for the diagnostic
+        id: python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13.5'
+          architecture: x64
+          check-latest: false
+          update-environment: false
+
+      - name: Focused source and diagnostic validation
+        shell: bash
+        env:
+          DIAGNOSTIC_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import pathlib,sys,unittest; root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]; modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow"]]; assert [item.countTestCases() for item in modules] == [36,16,7]; suite=unittest.TestSuite(modules); result=unittest.TextTestRunner(verbosity=2).run(suite); raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 59 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)'
+
+      - name: Observe namespace prerequisite with all release authority withheld
+        shell: bash
+        env:
+          DIAGNOSTIC_PYTHON: ${{ steps.python.outputs.python-path }}
+          EXPECTED_REPOSITORY: ${{ github.repository }}
+          EXPECTED_EVENT: ${{ github.event_name }}
+          EXPECTED_REF: ${{ github.ref }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B procurement/tools/hosted_synthetic_capability.py "$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"
