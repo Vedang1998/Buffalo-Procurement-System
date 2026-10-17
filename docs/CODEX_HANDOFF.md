@@ -22,8 +22,11 @@ evidence is retained below. No official milestone changed; PHASE_STATUS is uncha
   `codex/hosted-synthetic-acceptance`. Verified starting commit
   `99f265e9ab12dfcd970b3072a57d5f2c5163cc07`, tree
   `c4beee642cb87f9b1c08f3c03d09111a0f635bc3`. The checkpoint containing this entry
-  is an incomplete development checkpoint, not Task 3 acceptance. The subsequent
-  evidence entry records its exact published commit/tree and hosted run.
+  is an incomplete development checkpoint, not Task 3 acceptance. Publication was
+  attempted but GitHub rejected it with GH007 because the
+  pre-existing Git author email is private. No hosted run exists. The owner
+  exception for recreating the unpublished metadata is pending; no history was
+  rewritten. Future commits use the verified public GitHub noreply identity.
 - Reviewed recovery `fe15815de527175b144cbbd61a2f9d4c16b5c72c`, tree
   `43d087cb1eb6121eee97d08dd8fbcaff4b39b2d5`, as a seven-file delta. Selected the
   useful source binder/tests/registration approach and hardened resource ownership,
@@ -51,16 +54,41 @@ evidence is retained below. No official milestone changed; PHASE_STATUS is uncha
 
 Validation and review:
 
-- Current registration is 1,571 tests across 92 modules: baseline 1,512 plus source 36,
-  diagnostic 16 and workflow 7. Focused source/diagnostic/workflow/runner/floor checks
-  passed 95/95; the separate reviewer independently ran 59/59 under `-I -S -B`.
+- Current registration is 1,573 tests across 92 modules: baseline 1,512 plus source 36,
+  diagnostic 16 and workflow 7, plus two causal nested-fixture cleanup tests. Focused source/diagnostic/workflow/runner/floor/nested-fixture cleanup checks
+  passed 97/97 after the cleanup repair; the separate reviewer independently ran 59/59 under `-I -S -B`.
   Startup hardening passed 10/10; earlier browser/source/merge regressions passed 69/69.
 - The first complete native run (before setup repairs and the 23 diagnostic/workflow
   tests) discovered 1,548, executed 1,517, passed 1,490, failures 11/errors 22, all skip/
   expected-failure/unexpected-success counters 0. Its log SHA256 is
   `09e0ab324ed3904f79f008d193bb7119652098f18eea3a9b56279debca9d8b4d`.
   Two earlier interrupted runs are superseded diagnostics, never PASS evidence.
-- Final full-suite result: IN PROGRESS on the unchanged reviewed code; final results must be recorded before closeout. Log SHA256: pending completion.
+- The second completed native run discovered 1,571, executed 1,540, passed 1,535,
+  failures 1/errors 7, all other abnormal counters 0, in 777.771 seconds. Log
+  SHA256 `f84b598caf9e45600588f91442de8547b0b6a69f30de7fb301927c51eecc5855`.
+  Remaining causes were four absent exact Nix runtime checks, unchanged historical
+  EPERM expectation versus actual native mounting success, and three catalog
+  fixture setup errors leaving 31 tests unexecuted. Full acceptance remains FAIL.
+- The first full-suite attempt after the nested cleanup repair was interrupted
+  by a Cloud environment restart during the historical database tests. It has no
+  final summary and is not completed validation. The stopped owned container was
+  verified (synthetic database/user, loopback command, host networking and tmpfs;
+  exit 255/OOMKilled=false), then removed including its environment metadata.
+  The restart cause is not established; environment configuration remained an
+  unpublished draft. Source/tools survived and 14 imports plus required modes
+  were reverified. Interrupted log SHA256:
+  `fa4d12cbdcca0f07d31b75ba94d256c4c6d50f1dbc7f6e7f4d0749afe76fd606`.
+- Final clean retry after all code changes and the restart discovered 1,573,
+  executed 1,542 and passed 1,537, with 1 failure and 7 errors in 771.885 seconds
+  (exit 1). Skips, expected failures and unexpected successes were all zero.
+  The same four exact-Nix-runtime errors, historical EPERM mismatch and three
+  catalog fixture setup errors remain; 31 tests did not execute. No fixture
+  cleanup errors occurred. Log SHA256:
+  `97eecbe36154fe9177c27e7b6d7f7ad800d9675fe0bfbeea802d0afc57ee5c50`.
+  Startup validation again passed 10/10; its log SHA256 is
+  `684a2c8e6282975a75626fe0e40afece3ca25536f07857ead4ceac8335d22b74`.
+  The read-only reviewer verified these summaries and the unchanged reviewed
+  source/fixture hashes. This is completed failed validation, not acceptance.
 - Setup diagnosis corrected local modes only (post-merge hook 0755; inert browser
   worker 0644) and uses umask 0022 only for synthetic test processes. Exact production
   mode validators were preserved. 142 affected tests passed while three native-PG
@@ -80,6 +108,19 @@ Validation and review:
   restores the incoming subreaper state and independently registers shutdown,
   close and join. No browser assertions or production cleanup checks were weakened.
   The reviewer verified incoming subreaper 0 and 1 restoration.
+- Final resource inventory found a second existing fixture defect: the price-stage
+  class manually invokes nested database setup before registering any outer
+  cleanup. Catalog refusal skipped the stop callback; a TemporaryDirectory
+  finalizer then removed a live database directory. The orphan exited before an
+  identity-bound cleanup verifier could act; that verifier correctly refused the
+  changed identity. No signal was sent to an unverified process.
+  The writer registered the cleanup bridge before setup, registered storage
+  cleanup immediately and propagated collected nested cleanup errors. Two causal
+  tests independently pass: stop precedes removal exactly once; setup and cleanup
+  errors both remain visible. A live disposable nested-setup check retains its
+  catalog error (0 tests, 1 setup error, exit 5) and separately proves one descendant
+  stopped/reaped. The final full wrapper uses an external subreaping supervisor.
+  Fixture SHA256 `62b8407ca961c3b02c1694bdaac54a49f6ab44fa5a55f7fc9b46d7ae38a04aa4`.
 - Separate read-only Codex reviews `recovery_review`, `acceptance_path` and
   `inspect_workflow` covered source ownership/cancellation, diagnostic/workflow
   authority and the business audit. Reproduced issues were fixed: unbounded Git
@@ -88,10 +129,30 @@ Validation and review:
   and expected-failure acceptance. Final reviews found no remaining P0/P1/P2 in
   their stated scopes. These are internal same-model-family subreviews, **not
   independent external, Claude/Cursor or owner business-rule acceptance**.
-- Frozen hashes and the bounded hosted evidence are recorded with the published
-  checkpoint. No application business source, dependency manifest or lockfile
+- Initial reviewed local source checkpoint:
+  `af2acfc6c4a0a1025854c586d3328b6ef886584c`, tree
+  `97d63d15ebadff0e686cf5f05eecce681dfe4c38`. Its attempted non-force push failed;
+  remote acceptance branch remains the starting 99f265e9 commit/tree above.
+  Hosted evidence is NOT RUN, not a failed measured GitHub capability result.
+  Diagnostic/workflow hashes are recorded below. No application business source, dependency manifest or lockfile
   changed. Changed files are tooling, test fixture/registration, workflow and docs.
   Secret/private-data checks precede publication; no private records are included.
+
+Exact reviewed source identities (SHA256):
+
+| Component | SHA256 |
+| --- | --- |
+| Source binder | `5ff26df387b25a19e12680a41cd16c7de7f0ba86e3f9cb2525c258415fed81b6` |
+| Namespace diagnostic | `cf13341b9c9f5c37ed156782e8e9fc4a3c4f7fe4100d2b9ebef9de3ebf04941d` |
+| Diagnostic tests | `d16fc3fb9c564e3dd63ef868b4f7923a6a7525a1635f06af2fb146665bbd7136` |
+| Workflow | `5ede9476d2a4f8f21fac99e1180755499d96b7902294661085796de8fb0ea8e8` |
+| Workflow tests | `e94eb8b74e2c1e16d8c9d12e058027d27e1066ae052b5cd19f087f98a3a38449` |
+
+Cleanup code checkpoint: `212a889340d25e5d36f4f49793ffb9190e015a5f`, tree
+`09636b00a2ad3020dee1cb097d60288fb399d8f1`. Both local code checkpoints remain
+unpublished because the first contains the GH007-rejected author metadata.
+The subsequent documentation commit records completed evidence without changing
+reviewed code. No published branch was rewritten or advanced.
 
 Environment and cleanup:
 
@@ -99,18 +160,21 @@ The tested Install script and Start skill are saved outside the repository at
 `/workspace/.cloud-setup/buffalo/install.sh` and `start-skill.md`, and in the Cloud
 environment configuration draft. Tools are native Python 3.13.5, uv 0.12.3,
 Node 24.19.0, pnpm 10.34.7, TypeScript 5.9.3, Docker 28.4.0, Git 2.52.0 and
-PostgreSQL 16.14. All 23 locked Python packages are compatible; 14 import checks,
+PostgreSQL 16.14, plus provided Chromium 154.0.8037.57. All 23 locked Python packages are compatible; 14 import checks,
 frozen installation, lock validation and JavaScript syntax checks pass. The 16.9
 public image was only a diagnostic comparison, not a substituted acceptance
 runtime. Saving configuration does not publish/apply it or prove fresh-task
 restoration. No credentials are saved in scripts/configuration.
 
-Owned disposable databases/containers and active browser/server processes are
-removed after checks. Earlier stopped Chromium/PostgreSQL zombie entries adopted
-by this container's non-reaping PID 1 cannot be reaped by this session; they are not
-running resources and hold no descriptors. Do not claim a zero-process-residue
-host result. New diagnostic cleanup is recorded separately from those earlier
-fixture attempts. No production app, private research replay or real purchase ran.
+The final retry removed its owned synthetic database container and its external
+supervisor reaped 154 orphaned test descendants. The final inventory found no
+Docker containers, live application/browser/PostgreSQL test processes or owned
+temporary database directories. Independent `/proc` review confirmed no live
+PostgreSQL, Chromium or Uvicorn processes. Earlier attempts left stopped zombie
+entries under the old non-reaping PID 1; the environment restart removed that
+historical process state. No temporary credentials or running test resources
+remain in the reusable environment. No production app, private research replay
+or real purchase ran.
 
 Remaining critical path and exact next action:
 
