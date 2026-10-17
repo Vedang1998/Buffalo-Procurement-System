@@ -737,11 +737,53 @@ class SyntheticStagingPriceStageUnitTests(unittest.TestCase):
             self.assertNotIn(REGISTERED_OPERATOR_BOOK_REF, source)
 
 
+class SyntheticStagingPriceStageCleanupTests(unittest.TestCase):
+    def _failed_nested_setup(self, *, cleanup_fails):
+        events = []
+
+        class NestedFixture(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                def stop():
+                    events.append("stop")
+                    if cleanup_fails:
+                        raise RuntimeError("synthetic cleanup refused")
+                cls.addClassCleanup(lambda: events.append("remove"))
+                cls.addClassCleanup(stop)
+                events.append("start")
+                raise RuntimeError("synthetic setup refused")
+
+        class OuterProbe(SyntheticStagingPriceStagePostgresTests):
+            def test_body(self):
+                events.append("body")
+
+        result = unittest.TestResult()
+        with mock.patch.object(staging_fixture, "SyntheticStagingDatabasePostgresTests", NestedFixture):
+            unittest.TestSuite([OuterProbe("test_body")]).run(result)
+        self.assertEqual(events, ["start", "stop", "remove"])
+        self.assertEqual(result.testsRun, 0)
+        self.assertEqual(NestedFixture._class_cleanups, [])
+        self.assertEqual(OuterProbe._class_cleanups, [])
+        self.assertIn("synthetic setup refused", result.errors[0][1])
+        return result
+
+    def test_nested_setup_failure_stops_before_directory_removal_once(self):
+        result = self._failed_nested_setup(cleanup_fails=False)
+        self.assertEqual(len(result.errors), 1)
+
+    def test_nested_cleanup_failure_is_reported_with_setup_failure(self):
+        result = self._failed_nested_setup(cleanup_fails=True)
+        self.assertEqual(len(result.errors), 2)
+        self.assertIn("synthetic cleanup refused", result.errors[1][1])
+
+
 class SyntheticStagingPriceStagePostgresTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         fixture = staging_fixture.SyntheticStagingDatabasePostgresTests
+        # unittest will not call tearDownClass when this nested setup fails.
+        cls.addClassCleanup(cls._cleanup_nested_fixture, fixture)
         fixture.setUpClass()
         cls.fixture = fixture
         cls.target = fixture._target
@@ -750,6 +792,7 @@ class SyntheticStagingPriceStagePostgresTests(unittest.TestCase):
         cls.storage_temporary = tempfile.TemporaryDirectory(
             prefix="buffalo-stopped-price-stage-"
         )
+        cls.addClassCleanup(cls.storage_temporary.cleanup)
         cls.storage = LocalFilesystemStorage(cls.storage_temporary.name)
         cls.environment = {
             "DATABASE_URL": cls.runtime_url,
@@ -768,13 +811,16 @@ class SyntheticStagingPriceStagePostgresTests(unittest.TestCase):
             "BUFFALO_ENABLE_SYNTHETIC_PRICE_REPLACEMENT": "1",
         }
 
-    @classmethod
-    def tearDownClass(cls) -> None:
-        try:
-            cls.storage_temporary.cleanup()
-        finally:
-            cls.fixture.doClassCleanups()
-        super().tearDownClass()
+    @staticmethod
+    def _cleanup_nested_fixture(fixture) -> None:
+        fixture.doClassCleanups()
+        # doClassCleanups collects errors instead of propagating them. Bridge
+        # those errors to the outer result so cleanup cannot silently succeed.
+        if fixture.tearDown_exceptions:
+            raise ExceptionGroup(
+                "nested synthetic database cleanup failed",
+                [value for _, value, _ in fixture.tearDown_exceptions],
+            )
 
     def test_01_refusals_and_real_ambiguous_commit_recovery(self):
         fixture = load_registered_operator_fixture()
