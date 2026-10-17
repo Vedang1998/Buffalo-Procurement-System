@@ -10,7 +10,98 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### 2026-10-17 Cloud continuation — DIAGNOSTIC PREFIX / FULL ACCEPTANCE NOT COMPLETE
+### 2026-10-17 retained namespace and projection checkpoint — ACCEPTANCE INCOMPLETE
+
+This entry supersedes the diagnostic-prefix status below. Codex Cloud remains
+the sole writer. No official milestone advanced; PHASE_STATUS is unchanged.
+The seven-file recovery was reviewed selectively, without merge or cherry-pick;
+its disposition remains in [RECOVERY_REVIEW_2026-10-17](RECOVERY_REVIEW_2026-10-17.md).
+
+Implemented and measured in disposable native Cloud resources:
+
+- Retained supervisor → guardian → namespace PID 1 → stopped PID 2 topology,
+  exact UID/GID maps, independent namespace/process identity observations,
+  private propagation and private procfs with nosuid/nodev/noexec. The mapped
+  guardian re-execs the current host Python through verified descriptors before
+  forking: a fork alone retained the old memory-namespace ownership and made
+  independent inspection of nondumpable descendants fail. This diagnostic
+  host runtime is explicitly UNSEALED, not an accepted payload closure.
+- A namespace-local tiny tmpfs projection contains only the fixed 341-byte
+  static ELF sentinel. Measured read-only/nosuid/nodev/executable flags, EROFS
+  on write, exact inode/device/mount identity and owned teardown. Both staging
+  and leaf mounts are private to the disposable namespace. The sentinel has
+  **never executed**. Projection materialization is not pre-exec containment
+  proof; stopped cgroup enrollment must precede any eventual sentinel exec.
+- Abrupt init/supervisor death before and after attachment left zero host paths.
+  A moved owned mount was removed by its held identity. A same-content foreign
+  bind mount was preserved and caused CLEANUP_FAILED. Empty or unterminated
+  mount evidence now refuses before or after detach; it cannot prove absence.
+- Pre-ownership prctl/signal refusal and cancellation produce bounded canonical
+  diagnostic JSON. No raw exception or environment is emitted.
+- Two minimal application security repairs: require canonical base64url token
+  signatures (the old malformed-token test sometimes changed only unused pad
+  bits); classify ENOENT/ESRCH during process-stat reads as process absence,
+  while permission and malformed-record errors still refuse. The signature
+  alias was not a replay bypass; one-time nonce checks remained effective.
+
+Every diagnostic still reports HOST_CAPABILITY=FAIL, HOST_RUNTIME_UNSEALED,
+WITHHELD, provider_calls=0, payload_processes=0 and execution_authority=false.
+Cgroup and sentinel execution are NOT_RUN. Native component measurements are
+not a GitHub-hosted acceptance run. The projection is torn down before its
+observation is returned; it is not retained authority for later execution.
+
+Validation, exact source identities, review disposition and resource inventory
+are recorded in [HOSTED_PREFLIGHT_PROGRESS_2026-10-17](HOSTED_PREFLIGHT_PROGRESS_2026-10-17.md).
+Current registration: **1,668 tests / 94 modules**. Exact hosted-focused modules:
+36 source + 21 capability + 7 workflow + 65 namespace + 22 projection = 151.
+Legacy acceptance implementation, browser worker and exact-EPERM assertions are
+unchanged. Dependency manifests and lockfiles are unchanged. Application source
+has the two repairs above; the original setup-only no-source-change description
+below refers to the earlier checkpoint, not this later authorized development.
+
+Current critical path:
+
+1. GitHub rejected the first local checkpoint with GH007 private-author-email
+   protection. Remote hosted branch remains 99f265e9ab12dfcd970b3072a57d5f2c5163cc07,
+   tree c4beee642cb87f9b1c08f3c03d09111a0f635bc3. The owner exception to preserve
+   originals and recreate only unpublished metadata/replay successors remains
+   pending. No history rewrite, bypass or alternative publication occurred.
+2. Complete Task 2 cgroup ownership/stopped enrollment/exact limits and membership/
+   zero-OOM evidence, then actual sentinel execution and the fabricated 43-byte
+   one-shot release gate. These are still **unimplemented**, not merely waiting
+   for a host. Native Cloud has cgroup v2 but no writable delegation for UID1000;
+   the GitHub Ubuntu runner is unmeasured. Do not create a new root broker,
+   change cgroup permissions or weaken containment to bypass this dependency.
+3. Preserve the full-suite failures from absent exact Nix runtime closures,
+   legacy EPERM-versus-success expectation and PostgreSQL catalog mismatch.
+   Matching PostgreSQL's minor version does not reproduce the accepted Nix
+   catalog fingerprint. No runtime pin, fingerprint or security assertion changed.
+4. Task 3 needs complete source-bound hosted capability PASS and attributable
+   review. Tasks 4–9 (runtime closure, worker, Option B browser, backup/restore,
+   resource/cleanup acceptance) remain NOT RUN. No external/Claude/Cursor or
+   owner acceptance is represented by the internal Codex subreviews.
+
+The next executable development task is the owned-cgroup/stopped-enrollment
+integration at the existing Task 2 boundary, using an evidenced authorized
+launcher privilege path. Publication and a usable delegation are separate
+prerequisites to the remaining live proofs. Continue from this checkpoint;
+do not repeat settled catalog investigations or infer acceptance from test code.
+
+The consolidated [business-readiness matrix](BUSINESS_READINESS_2026-10-17.md)
+retains historical corrected-V3 controls and current October data/commercial
+blockers. Railway compatibility is NOT PROVEN; real purchasing is blocked.
+A hosted synthetic workflow before November 9 remains conditional, with no
+measured completion date. Operational purchasing by that date remains at risk.
+No production application, private replay, production database, Shopify,
+supplier transmission, deployment or purchase ran.
+
+The tested Install script and Start skill are outside the checkout under
+/workspace/.cloud-setup/buffalo and saved to the Cloud configuration draft.
+Lightweight startup imports 18 modules and starts no service or acceptance run.
+Saving a draft is not publishing it or proving fresh-task restoration; local-only
+commits are not reliably restorable until the publication blocker is resolved.
+
+### 2026-10-17 historical diagnostic-prefix checkpoint — FULL ACCEPTANCE NOT COMPLETE
 
 The owner's long-horizon mandate authorizes one-writer Cloud development,
 synthetic repairs, read-only review and non-force publication of recoverable

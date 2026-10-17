@@ -3270,7 +3270,7 @@ def _proc_record(pid: int) -> tuple[str, int, int, int]:
         raise StagingSupervisorError("process ID is invalid")
     try:
         raw = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
         raise ProcessLookupError(pid) from None
     except (OSError, UnicodeError) as exc:
         raise StagingSupervisorError("process identity is unavailable") from exc

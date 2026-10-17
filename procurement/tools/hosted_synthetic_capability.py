@@ -142,6 +142,8 @@ def _namespace_attempt(backend, generation: str) -> dict:
 
 
 def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT") -> dict:
+    private = observation.get("private_proc") if observation is not None else None
+    projection = "MATERIALIZATION_CHECK_ONLY" if type(private) is dict and "projection" in private else "NOT_RUN"
     return {
         "contract": "BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1",
         "repository": "Vedang1998/Buffalo-Procurement-System",
@@ -152,7 +154,8 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT") ->
         "HOST_CAPABILITY": "FAIL",
         "reason": observation["reason"] if observation is not None else reason,
         "namespace_attempt": observation,
-        "projection": "NOT_RUN", "cgroup": "NOT_RUN",
+        "runtime": "HOST_RUNTIME_UNSEALED",
+        "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": "NOT_RUN",
         "credential_release": "WITHHELD", "provider_calls": 0,
         "payload_processes": 0, "execution_authority": False,
         "procfs_scope": "ACCEPTANCE_TOOLING",
@@ -172,10 +175,19 @@ def main(arguments=None) -> int:
             root, repository=args[0], event=args[1], ref=args[2], sha=args[3],
         )
         # Import only after trusted workflow metadata and source binding.
-        import run_local_staging_acceptance as backend
+        from hosted_synthetic_namespace import NamespaceProofError, observe_private_proc
+        from run_local_staging_acceptance import LocalStagingAcceptanceError
         generation = hashlib.sha256(os.urandom(32)).hexdigest()
-        observation = _namespace_attempt(backend, generation)
-        result = _report(binding, observation)
+        try:
+            observation = observe_private_proc(generation)
+        except (NamespaceProofError, LocalStagingAcceptanceError):
+            # The observer encloses every owned transition in its cleanup
+            # envelope. These exceptions are pre-ownership prerequisite checks.
+            result = _report(binding, reason="NAMESPACE_PREREQUISITE_REFUSED")
+        else:
+            result = _report(binding, observation)
+    except (KeyboardInterrupt, SystemExit):
+        result = _report(binding, reason="CANCELLED")
     except (HostedDiagnosticError, HostedSourceError, OSError, AttributeError, ImportError):
         # Neither raw exceptions, command output, paths, nor environment escape.
         result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED")

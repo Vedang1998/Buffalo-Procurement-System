@@ -31,6 +31,8 @@ SOURCE_PATHS = (
     WORKFLOW,
     "procurement/tools/hosted_synthetic_source.py",
     "procurement/tools/hosted_synthetic_capability.py",
+    "procurement/tools/hosted_synthetic_namespace.py",
+    "procurement/tools/hosted_synthetic_projection.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

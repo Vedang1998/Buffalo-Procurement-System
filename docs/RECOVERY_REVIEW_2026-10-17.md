@@ -22,9 +22,9 @@ competing implementation already present in the active branch.
 | --- | --- |
 | `procurement/tools/hosted_synthetic_source.py` | Useful new Task 2 component, selectively adapted. Original Git capture checked its limit only after buffering output; original path traversal could race ancestor replacement and read mode from a different file. Both corrected. |
 | `procurement/tests/test_hosted_synthetic_source.py` | Useful 23-test base, adapted and extended to 36 tests for bounded capture, process reaping, path/mode races and actual signal cancellation. |
-| `procurement/tools/run_tests.py` | Useful registration pattern. Recovery's 23-test floor superseded by the actual 36-test source module; new diagnostic/workflow modules add 16 and 7 tests; a separate nested-fixture repair adds two causal tests. |
-| `procurement/tests/test_persistent_mapping_foundation_contract.py` | Useful floor guard; recovery's 1,535 total superseded by 1,573. |
-| `procurement/tests/test_supplier_format_conformance.py` | Same disposition; exact total is 1,573 across 92 registered modules. |
+| `procurement/tools/run_tests.py` | Useful registration pattern. Recovery's 23-test floor superseded by the actual 36-test source module; current capability/workflow/namespace/projection populations are 21/7/65/22; nested-fixture cleanup adds two tests and application security repairs add three. |
+| `procurement/tests/test_persistent_mapping_foundation_contract.py` | Useful floor guard; recovery's 1,535 total superseded by 1,668. |
+| `procurement/tests/test_supplier_format_conformance.py` | Same disposition; exact total is 1,668 across 94 registered modules. |
 | `docs/CODEX_HANDOFF.md` | Mac-specific status is historical and outdated for this Cloud checkout. Replaced by a fresh Cloud evidence entry; not copied as current validation. |
 | `docs/superpowers/specs/2026-10-17-hosted-validation-bridge-proposal.md` | Not adopted. It is explicitly an unapproved validation-order/workflow proposal, not implementation authority. Its lack-of-Linux premise is outdated in Cloud. The old pinned-runtime/full-validation issue remains real and separately reported. |
 
@@ -86,7 +86,7 @@ This screen is not the required same-generation capability proof. No cgroup
 permissions, kernel policies, procfs checks or legacy EPERM observer were
 weakened. The old exact Nix/Replit runtime closure is not installed here.
 
-The new diagnostic workflow is intended to measure only namespace prerequisites
+The diagnostic workflow is designed to measure namespace and unexecuted projection components
 on the approved GitHub Ubuntu 24.04 VM. Its push was rejected by GitHub GH007
 (private author email), so no hosted run occurred; complete capability is unproven. HTTPS Git
 access works; Actions API access currently receives proxy CONNECT 403.

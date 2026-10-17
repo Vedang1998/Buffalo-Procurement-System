@@ -295,13 +295,17 @@ class StagingAccessTests(unittest.TestCase):
             clock=self.clock, maximum_challenges=2
         )
         altered = challenges.create()
-        replacement = "A" if altered.cookie_token[-1] != "A" else "B"
+        prefix, encoded = altered.cookie_token.rsplit(".", 1)
+        signature = bytearray(base64.urlsafe_b64decode(encoded + "="))
+        signature[0] ^= 1
+        replacement = base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
         self.assertFalse(
             challenges.consume_after_admission(
-                altered.cookie_token[:-1] + replacement,
+                prefix + "." + replacement,
                 altered.form_token,
             )
         )
+
         first = challenges.create()
         second = challenges.create()
         third = challenges.create()
@@ -328,6 +332,20 @@ class StagingAccessTests(unittest.TestCase):
                 outstanding.cookie_token, outstanding.form_token
             )
         )
+
+    def test_noncanonical_signature_aliases_refuse_without_consuming_challenge(self):
+        challenges = LoginChallengeStore(clock=self.clock)
+        issued = challenges.create()
+        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        canonical = alphabet.index(issued.cookie_token[-1])
+        self.assertEqual(canonical & 3, 0)
+        for bits in (1, 2, 3):
+            alias = issued.cookie_token[:-1] + alphabet[canonical | bits]
+            self.assertEqual(base64.urlsafe_b64decode(alias.rsplit(".", 1)[1] + "="),
+                             base64.urlsafe_b64decode(issued.cookie_token.rsplit(".", 1)[1] + "="))
+            self.assertFalse(challenges.consume_after_admission(alias, issued.form_token))
+        self.assertTrue(challenges.consume_after_admission(issued.cookie_token, issued.form_token))
+        self.assertFalse(challenges.consume_after_admission(issued.cookie_token, issued.form_token))
 
     def test_cookie_contract_is_host_only_secure_and_strict(self):
         session = cookie_settings(SESSION_COOKIE, max_age=SESSION_ABSOLUTE_SECONDS)

@@ -511,6 +511,8 @@ class LoginChallengeStore:
             supplied_signature = base64.urlsafe_b64decode(encoded_signature + "=")
         except (ValueError, binascii.Error):
             return None
+        if base64.urlsafe_b64encode(supplied_signature).rstrip(b"=").decode("ascii") != encoded_signature:
+            return None
         expected_signature = hmac.digest(self._signing_key, payload, "sha256")
         if len(supplied_signature) != 32 or not hmac.compare_digest(
             supplied_signature, expected_signature

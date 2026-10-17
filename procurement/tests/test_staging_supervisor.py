@@ -590,6 +590,26 @@ class SupervisorControlTests(unittest.TestCase):
 
 
 class SupervisorChildTests(unittest.TestCase):
+    def test_process_disappearance_during_stat_read_is_absence(self):
+        identity = ProcessIdentity(pid=123, start_ticks=456, process_group=123, session_id=123)
+        for error in (FileNotFoundError(), ProcessLookupError()):
+            with self.subTest(error=type(error).__name__), mock.patch.object(Path, "read_text", side_effect=error):
+                with self.assertRaises(ProcessLookupError):
+                    staging_supervisor._proc_record(123)
+                self.assertFalse(identity.is_live())
+                with mock.patch.object(Path, "iterdir", return_value=iter([Path('/proc/123')])):
+                    self.assertEqual(staging_supervisor._owned_process_group_members(identity), ())
+
+    def test_process_permission_and_malformed_records_remain_fail_closed(self):
+        identity = ProcessIdentity(pid=123, start_ticks=456, process_group=123, session_id=123)
+        for changes in ({"side_effect": PermissionError()}, {"return_value": "malformed"}):
+            with self.subTest(changes=changes), mock.patch.object(Path, "read_text", **changes):
+                with self.assertRaises(StagingSupervisorError):
+                    identity.is_live()
+                with mock.patch.object(Path, "iterdir", return_value=iter([Path('/proc/123')])):
+                    with self.assertRaises(StagingSupervisorError):
+                        staging_supervisor._owned_process_group_members(identity)
+
     def test_process_isolation_binds_exact_identity_command_environment_and_fds(self):
         contract, specs = _isolation_fixture()
         contract.validate_children(specs)

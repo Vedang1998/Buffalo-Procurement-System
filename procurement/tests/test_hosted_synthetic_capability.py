@@ -172,6 +172,74 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         self.assertIsNone(report["commit"])
         self.assertEqual(report["provider_calls"], 0)
 
+    def test_source_refusal_precedes_retained_namespace_observation(self):
+        with patch.object(capability, 'bind_hosted_source', side_effect=source.HostedSourceError('refused')), \
+             patch('hosted_synthetic_namespace.observe_private_proc') as observe, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+        observe.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue().splitlines()[0])['reason'],
+                         'SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED')
+
+    def test_bound_namespace_evidence_still_cannot_authorize_release(self):
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        observation = dict(reason='INCOMPLETE_PREFLIGHT', cleanup_complete=True,
+                           private_proc={'members': [1, 2], 'projection': {'sentinel_exec': 'NOT_RUN'}},
+                           runtime='HOST_RUNTIME_UNSEALED')
+        with patch.object(capability, 'bind_hosted_source', return_value=binding) as bind, \
+             patch('hosted_synthetic_namespace.observe_private_proc', return_value=observation) as observe, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+        bind.assert_called_once()
+        observe.assert_called_once()
+        self.assertRegex(observe.call_args.args[0], r'^[0-9a-f]{64}$')
+        result = json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(result['namespace_attempt'], observation)
+        self.assertEqual(result['projection'], 'MATERIALIZATION_CHECK_ONLY')
+        self.assertEqual(result['sentinel_exec'], 'NOT_RUN')
+        self.assertEqual(result['HOST_CAPABILITY'], 'FAIL')
+        self.assertEqual(result['credential_release'], 'WITHHELD')
+        self.assertEqual(result['provider_calls'], 0)
+        self.assertFalse(result['execution_authority'])
+
+    def _preownership_main_refusal(self, selected):
+        import hosted_synthetic_namespace as namespace
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        target = namespace.backend
+        if selected == 'prctl':
+            refused = patch.object(target, '_browser_libc')
+        else:
+            refused = patch.object(target, '_block_browser_projection_signals',
+                                   side_effect=target.LocalStagingAcceptanceError('synthetic-private-value'))
+        with refused as operation, patch.object(capability, 'bind_hosted_source', return_value=binding), \
+             patch.object(namespace.os, 'fork') as fork, contextlib.redirect_stdout(io.StringIO()) as output:
+            if selected == 'prctl':
+                operation.return_value.prctl.return_value = -1
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+        fork.assert_not_called()
+        lines = output.getvalue().splitlines()
+        result = json.loads(lines[0])
+        self.assertEqual(result['reason'], 'NAMESPACE_PREREQUISITE_REFUSED')
+        self.assertEqual(result['HOST_CAPABILITY'], 'FAIL')
+        self.assertEqual(result['credential_release'], 'WITHHELD')
+        self.assertEqual(result['provider_calls'], 0)
+        self.assertEqual(lines[1], 'evidence_sha256=' + hashlib.sha256(lines[0].encode()).hexdigest())
+        self.assertNotIn('synthetic-private-value', output.getvalue())
+
+    def test_main_prctl_preownership_refusal_is_canonical(self):
+        self._preownership_main_refusal('prctl')
+
+    def test_main_mask_preownership_refusal_is_canonical(self):
+        self._preownership_main_refusal('mask')
+
+    def test_main_preownership_cancellation_is_canonical_and_has_no_observer(self):
+        with patch.object(capability, 'bind_hosted_source', side_effect=KeyboardInterrupt), \
+             patch('hosted_synthetic_namespace.observe_private_proc') as observe, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 130)
+        observe.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue().splitlines()[0])['reason'], 'CANCELLED')
+
     def test_clean_initial_environment_and_ambient_secret_refusal_in_fresh_process(self):
         self.clean.stop()
         code = (
