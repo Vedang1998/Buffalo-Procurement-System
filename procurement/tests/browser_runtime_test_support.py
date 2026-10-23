@@ -4,12 +4,45 @@ import ctypes
 import hashlib
 import os
 from pathlib import Path
+import selectors
+import signal
 import stat
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import run_local_staging_acceptance as acceptance
+
+
+def run_owned_test_process(arguments, *, output, environment, timeout):
+    """Bound one test session; kill its group before reaping its held leader."""
+    process = subprocess.Popen(
+        arguments, env=environment, stdin=subprocess.DEVNULL,
+        stdout=output, stderr=subprocess.STDOUT, start_new_session=True,
+    )
+    descriptor = -1
+    try:
+        descriptor = os.pidfd_open(process.pid, 0)
+        with selectors.DefaultSelector() as ready:
+            ready.register(descriptor, selectors.EVENT_READ)
+            if not ready.select(timeout):
+                raise TimeoutError("isolated test supervisor deadline exceeded")
+    finally:
+        try:
+            # No poll/wait has reaped this direct child: its PID/session
+            # cannot be reused while signaling only this owned group.
+            try:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            finally:
+                process.wait(timeout=5)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+    return process.returncode
 
 
 def _has_direct_children():

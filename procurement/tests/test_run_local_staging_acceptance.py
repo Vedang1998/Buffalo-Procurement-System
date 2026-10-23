@@ -18,7 +18,7 @@ import selectors
 import stat
 import sys
 import tarfile
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, TemporaryFile
 import threading
 import time
 import unittest
@@ -28,7 +28,7 @@ import run_local_staging_acceptance as acceptance
 import run_local_staging_browser_worker as browser_worker
 from browser_runtime_test_support import (
     DIRECT_PYTHON_CHILD_HARDENING, current_python_file_expectation,
-    synthetic_python_closure, owned_subreaper,
+    synthetic_python_closure, owned_subreaper, run_owned_test_process,
 )
 
 
@@ -6337,10 +6337,86 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 [42, 41],
             )
 
-    @owned_subreaper()
     def test_browser_private_proc_guardian_is_stopped_mapped_and_residue_free(self):
+        # Earlier browser/Git fixtures may have adopted zombies awaiting their
+        # outer supervisor. Never reap those children or borrow their state.
+        environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"}
+        unrelated = acceptance.subprocess.Popen(
+            [sys.executable, "-I", "-S", "-B", "-c", "pass"],
+            env=environment, stdin=acceptance.subprocess.DEVNULL,
+            stdout=acceptance.subprocess.DEVNULL, stderr=acceptance.subprocess.DEVNULL,
+        )
+        unrelated_pidfd = -1
+        try:
+            unrelated_pidfd = os.pidfd_open(unrelated.pid, 0)
+            with selectors.DefaultSelector() as ready:
+                ready.register(unrelated_pidfd, selectors.EVENT_READ)
+                self.assertTrue(ready.select(5), "owned causal fixture did not exit")
+            before = acceptance._read_browser_worker_proc_stat(unrelated.pid)
+            self.assertEqual(before.state, "Z")
+            program = """
+import resource, sys
+resource.setrlimit(resource.RLIMIT_FSIZE, (65536, 65536))
+sys.path[:0] = sys.argv[1:]
+from test_run_local_staging_acceptance import RunLocalStagingAcceptanceTests
+case = RunLocalStagingAcceptanceTests()
+case._private_proc_lifecycle_assertions()
+print('ISOLATED_LIFECYCLE_PASS')
+"""
+            with TemporaryFile() as output:
+                returncode = run_owned_test_process(
+                    [sys.executable, "-I", "-S", "-B", "-c", program,
+                     str(Path(acceptance.__file__).resolve().parent),
+                     str(Path(__file__).resolve().parent)],
+                    environment=environment, output=output, timeout=30,
+                )
+                output.seek(0)
+                diagnostic = output.read(65537)
+            self.assertLessEqual(len(diagnostic), 65536)
+            self.assertEqual(returncode, 0, diagnostic.decode(errors="replace"))
+            self.assertEqual(diagnostic, b"ISOLATED_LIFECYCLE_PASS\n")
+            self.assertEqual(
+                acceptance._read_browser_worker_proc_stat(unrelated.pid), before
+            )
+            # WNOWAIT proves the isolated case did not reap this parent's child.
+            self.assertEqual(
+                os.waitid(os.P_PID, unrelated.pid, os.WEXITED | os.WNOWAIT).si_pid,
+                unrelated.pid,
+            )
+        finally:
+            try:
+                unrelated.kill()
+                unrelated.wait(timeout=5)
+            finally:
+                if unrelated_pidfd >= 0:
+                    os.close(unrelated_pidfd)
+
+    @owned_subreaper()
+    def _private_proc_lifecycle_assertions(self):
         generation = hashlib.sha256(b"focused-private-proc-guardian").hexdigest()
         before_descriptors = set(os.listdir("/proc/self/fd"))
+        # Cancellation must also kill an ordinary foreign-PID fixture that has
+        # no guardian death signal. This clean supervisor adopts/reaps only
+        # that identified child; the caller's unrelated child remains outside.
+        with TemporaryFile() as output:
+            with self.assertRaisesRegex(TimeoutError, "deadline"):
+                run_owned_test_process(
+                    [sys.executable, "-I", "-S", "-B", "-c",
+                     "import os,time; child=os.fork(); "
+                     "print(child,flush=True) if child else None; time.sleep(60)"],
+                    environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+                    output=output, timeout=3,
+                )
+            output.seek(0)
+            child = int(output.read(32))
+            child_pidfd = os.pidfd_open(child, 0)
+            try:
+                with selectors.DefaultSelector() as terminal:
+                    terminal.register(child_pidfd, selectors.EVENT_READ)
+                    self.assertTrue(terminal.select(5))
+                self.assertEqual(os.waitpid(child, 0)[0], child)
+            finally:
+                os.close(child_pidfd)
         guardian = acceptance._start_stopped_browser_private_proc_guardian(
             generation=generation
         )
