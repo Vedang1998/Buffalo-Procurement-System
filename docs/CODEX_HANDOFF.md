@@ -10,6 +10,65 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-23 portable fixture checkpoint — NON-GREEN
+
+The metadata recovery is complete and published as recorded below. Continued
+test repairs are frozen at `b236f759fe1754358df976ef36feb9c4a4a0bca2`, tree
+`01e81038c415104af8719065db87160cfd26b7e7`. See
+[CLOUD_FIXTURE_CHECKPOINT_2026-10-23](CLOUD_FIXTURE_CHECKPOINT_2026-10-23.md)
+for source/review identities, test accounting, bounded log hashes and publication.
+
+The completed full authoritative run executed the exact candidate above on
+2026-10-23, 18:33:15–18:49:30 UTC: **1,674 discovered = 1,663 executed + 11
+unexecuted**. The executed methods are **1,661 passed + one failed + one
+errored**. Two reported error events comprise that method error (database 09)
+and one transfer class-setup error, which blocked all 11 transfer methods.
+There were no module, teardown or subtest errors; skips, expected failures and
+unexpected successes were all zero. Runtime was 971.814 seconds, exit 1,
+without timeout. The runner correctly rejects discovered/executed mismatch.
+
+All ten frozen file hashes still match; HEAD/tree and the worktree stayed
+unchanged. Exact candidate startup validation passed 10/10. The full-order
+runtime lifecycle check passed. Acceptance remains **NON-GREEN**.
+
+The run removed its exact synthetic PostgreSQL container and reaped 156 owned
+descendants. A separate post-run and post-installer native inventory found zero
+live database/browser/application processes, Docker containers, temporary
+database directories, traversal errors or host projection paths. Eight
+nonrunning database/browser zombie entries from the earlier interrupted attempt
+remain under PID1; this account cannot reap foreign children. Six pre-existing
+anonymous Docker volumes remain unattributed and untouched. No environment
+snapshot was published, and this inventory does not claim their contents are safe.
+
+
+Production Nix/catalog pins and validators remain unchanged. Disposable runtime
+and pristine PostgreSQL fixtures now exercise the actual checks portably. The
+private-proc lifecycle uses an isolated owned test supervisor, preserving exact
+identity/no-residue assertions and proving timeout cleanup without reaping an
+unrelated parent child. Six new methods bring discovery/floor to 1,674 in 94 modules.
+Application source, manifests, lockfiles and workflows did not change.
+
+Remaining PostgreSQL blocker: extracted user-owned pg_dump fails the unchanged
+trusted-executable check. Database 09 stops before applying 30.00; database 10 sees
+the initialized 9.50 and fails as a consequence. Transfer setup blocks11 methods.
+Do not fake tool ownership or weaken the expected price or security validator.
+
+Native cgroup controllers are present but usable writable delegation is absent.
+Task 2 still lacks stopped enrollment, exact limits/membership/OOM proof, sentinel
+execution and one-shot fabricated release. HOST_CAPABILITY remains
+FAIL/INCOMPLETE_PREFLIGHT; runtime remains HOST_RUNTIME_UNSEALED. Browser/restart/
+restore is NOT RUN and Railway is NOT_PROVEN. GitHub Actions observation is
+UNVERIFIED because the API path hit proxy 403. Internal Codex review is internal;
+independent Claude review remains NOT ASSESSED, with an exact candidate prepared.
+
+Next: on a supported host, validate genuine root-owned PostgreSQL 16 programs
+using the unchanged validator, rerun the 31 affected integration methods, and
+continue same-launcher cgroup/sentinel work only with supported delegation.
+Full validation and independent review remain mandatory after material repairs;
+Tasks 4–9 stay gated. No official phase advanced. No production, deployment,
+private-data, main/PR #24, Shopify, supplier or purchasing authorization changed.
+
+
 ### 2026-10-23 metadata recovery published — NON-GREEN
 
 The owner-approved five-commit metadata repair is published and freshly fetched
