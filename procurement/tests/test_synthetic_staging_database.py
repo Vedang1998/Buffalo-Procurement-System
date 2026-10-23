@@ -24,6 +24,7 @@ from procurement_os.staging_config import (
     EXPECTED_APP_SERVICE_ID, EXPECTED_ENVIRONMENT_ID,
     EXPECTED_POSTGRES_SERVICE_ID, EXPECTED_PROJECT_ID,
 )
+import synthetic_staging_test_support as fixture_support
 from procurement_os import synthetic_staging_database as staging_database
 from procurement_os.database_lifecycle import (
     DatabaseLifecycleError,
@@ -57,6 +58,34 @@ class SyntheticStagingDatabaseContractTests(unittest.TestCase):
             postgres_service_id=EXPECTED_POSTGRES_SERVICE_ID,
             transfer_manifest_sha256=self.TRANSFER_MANIFEST,
         )
+
+    def test_pristine_catalog_override_restores_when_verification_refuses(self):
+        original = staging_database.CORE_SYSTEM_ROUTINE_SHA256
+        connection = mock.MagicMock()
+        with (
+            mock.patch.object(fixture_support, "_routine_digest", return_value="a" * 64),
+            mock.patch.object(staging_database, "_verify_core_global_privilege_envelope",
+                              side_effect=SyntheticStagingDatabaseError("synthetic refusal")) as verify,
+        ):
+            with self.assertRaisesRegex(SyntheticStagingDatabaseError, "synthetic refusal"):
+                with fixture_support.pristine_core_catalog_expectation(connection):
+                    self.fail("refused verification must not enter fixture")
+        verify.assert_called_once_with(connection)
+        self.assertEqual(staging_database.CORE_SYSTEM_ROUTINE_SHA256, original)
+        self.assertFalse(fixture_support._active_baseline)
+
+    def test_pristine_catalog_destination_mismatch_refuses_before_override(self):
+        original = staging_database.CORE_SYSTEM_ROUTINE_SHA256
+        with (
+            mock.patch.object(fixture_support, "_routine_digest", side_effect=["a" * 64, "b" * 64]),
+            mock.patch.object(staging_database, "_verify_core_global_privilege_envelope") as verify,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "source/destination"):
+                with fixture_support.pristine_core_catalog_expectation(mock.MagicMock(), mock.MagicMock()):
+                    self.fail("different destination baseline must refuse")
+        verify.assert_not_called()
+        self.assertEqual(staging_database.CORE_SYSTEM_ROUTINE_SHA256, original)
+        self.assertFalse(fixture_support._active_baseline)
 
     def test_exact_target_is_accepted_without_connecting(self):
         self.target().validate_static()
@@ -194,7 +223,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 "-l",
                 str(root / "postgres.log"),
                 "-o",
-                f"-h 127.0.0.1 -p {cls._port} -k {root}",
+                f"-h 127.0.0.1 -p {cls._port} -k {root} -c timezone=UTC",
                 "-m",
                 "fast",
                 "-w",
@@ -278,7 +307,7 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
                 "-l",
                 str(log),
                 "-o",
-                f"-h 127.0.0.1 -p {cls._port} -k {root}",
+                f"-h 127.0.0.1 -p {cls._port} -k {root} -c timezone=UTC",
                 "-w",
                 "start",
             ]
@@ -303,6 +332,11 @@ class SyntheticStagingDatabasePostgresTests(unittest.TestCase):
             f"postgresql://{RUNTIME_LOGIN}@127.0.0.1:{cls._port}/"
             f"{cls.SENTINEL_DATABASE}"
         )
+
+        with psycopg.connect(cls._postgres_admin_url, autocommit=True) as baseline:
+            cls._pristine_routine_digest = cls.enterClassContext(
+                fixture_support.pristine_core_catalog_expectation(baseline)
+            )
 
         with psycopg.connect(cls._postgres_admin_url, autocommit=True) as conn:
             conn.execute(

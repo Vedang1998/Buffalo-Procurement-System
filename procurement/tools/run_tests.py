@@ -73,7 +73,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_private_research_workspace.py": 9,
     "test_readiness.py": 21,
     "test_replenishment.py": 9,
-    "test_run_local_staging_acceptance.py": 48,
+    "test_run_local_staging_acceptance.py": 50,
     "test_review.py": 3,
     "test_sales.py": 18,
     "test_serve_private_research.py": 7,
@@ -111,9 +111,9 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_synthetic_price_replacement_postgres.py": 14,
     "test_synthetic_staging_price_stage.py": 18,
     "test_synthetic_staging_backup_v2.py": 15,
-    "test_synthetic_staging_database.py": 24,
+    "test_synthetic_staging_database.py": 26,
     "test_synthetic_staging_transfer.py": 18,
-    "test_test_runner.py": 24,
+    "test_test_runner.py": 26,
     "test_vendor_rules.py": 16,
 }
 GLOBAL_MINIMUM_TESTS = sum(REQUIRED_MODULE_MINIMUMS.values())

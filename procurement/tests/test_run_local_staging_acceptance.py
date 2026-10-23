@@ -26,6 +26,10 @@ from unittest.mock import patch
 
 import run_local_staging_acceptance as acceptance
 import run_local_staging_browser_worker as browser_worker
+from browser_runtime_test_support import (
+    DIRECT_PYTHON_CHILD_HARDENING, current_python_file_expectation,
+    synthetic_python_closure, owned_subreaper,
+)
 
 
 IMAGE_ID = acceptance.FROZEN_IMAGE_ID
@@ -1085,6 +1089,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 result_write,
             )
             with (
+                current_python_file_expectation(),
                 acceptance.open_pinned_browser_python_executable() as runtime,
                 acceptance.open_pinned_browser_worker_runner() as runner,
                 patch.object(acceptance.subprocess, "Popen") as spawn,
@@ -1165,43 +1170,122 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
 
     def test_browser_python_runtime_source_is_exact_but_non_authorizing(self):
         with (
+            synthetic_python_closure(),
             patch.object(acceptance.subprocess, "Popen") as spawned,
             patch.object(acceptance, "write_browser_worker_frame") as frame,
             patch.object(acceptance, "write_browser_worker_secret") as secret,
         ):
             observed = acceptance._observe_browser_python_runtime_source()
+            self.assertEqual(
+                observed,
+                acceptance._BrowserPythonRuntimeObservation(
+                    startup_sha256=(
+                        acceptance._BROWSER_RUNTIME_STARTUP_SHA256
+                    ),
+                    stdlib_sha256=(
+                        acceptance._BROWSER_RUNTIME_STDLIB_SHA256
+                    ),
+                    stdlib_entries=3,
+                    stdlib_regular_files=1,
+                    stdlib_directories=1,
+                    stdlib_symlinks=1,
+                    stdlib_regular_bytes=acceptance._BROWSER_RUNTIME_STDLIB_BYTES,
+                    stdlib_zip_absent=True,
+                    native_sha256=(
+                        acceptance._BROWSER_RUNTIME_NATIVE_SHA256
+                    ),
+                    native_entries=5,
+                    native_regular_files=3,
+                    native_directories=2,
+                    native_symlinks=0,
+                    native_regular_bytes=27,
+                    gconv_cache_absent=True,
+                    locale_archive_absent=True,
+                    all_source_mounts_read_only=False,
+                    execution_authority=False,
+                ),
+            )
+            spawned.assert_not_called()
+            frame.assert_not_called()
+            secret.assert_not_called()
+
+    def test_frozen_runtime_pins_and_missing_inputs_remain_fail_closed(self):
         self.assertEqual(
-            observed,
-            acceptance._BrowserPythonRuntimeObservation(
-                startup_sha256=(
-                    "5f0b49198f006b36808508d976d2b9e35410839e0f34700a208877d815b10934"
-                ),
-                stdlib_sha256=(
-                    "91e877d25cd89b60c1125fbaca143c88ef9d7a06c019ab86de658d9f9f4e4600"
-                ),
-                stdlib_entries=3_251,
-                stdlib_regular_files=3_137,
-                stdlib_directories=113,
-                stdlib_symlinks=1,
-                stdlib_regular_bytes=102_170_195,
-                stdlib_zip_absent=True,
-                native_sha256=(
-                    "f05a1558c91a1a8979a5f9251fc52bc3b0063d1dcfa99661457c54fadf7bab0b"
-                ),
-                native_entries=304,
-                native_regular_files=287,
-                native_directories=4,
-                native_symlinks=13,
-                native_regular_bytes=21_772_212,
-                gconv_cache_absent=True,
-                locale_archive_absent=True,
-                all_source_mounts_read_only=False,
-                execution_authority=False,
-            ),
+            (acceptance._BROWSER_RUNTIME_STARTUP_SHA256,
+             acceptance._BROWSER_RUNTIME_STDLIB_SHA256,
+             acceptance._BROWSER_RUNTIME_NATIVE_SHA256),
+            ("5f0b49198f006b36808508d976d2b9e35410839e0f34700a208877d815b10934",
+             "91e877d25cd89b60c1125fbaca143c88ef9d7a06c019ab86de658d9f9f4e4600",
+             "f05a1558c91a1a8979a5f9251fc52bc3b0063d1dcfa99661457c54fadf7bab0b"),
         )
-        spawned.assert_not_called()
+        self.assertEqual(
+            (acceptance._BROWSER_RUNTIME_STDLIB_ENTRIES,
+             acceptance._BROWSER_RUNTIME_STDLIB_FILES,
+             acceptance._BROWSER_RUNTIME_STDLIB_DIRECTORIES,
+             acceptance._BROWSER_RUNTIME_STDLIB_SYMLINKS,
+             acceptance._BROWSER_RUNTIME_STDLIB_BYTES,
+             acceptance._BROWSER_RUNTIME_NATIVE_ENTRIES,
+             acceptance._BROWSER_RUNTIME_NATIVE_REGULAR_FILES,
+             acceptance._BROWSER_RUNTIME_NATIVE_DIRECTORIES,
+             acceptance._BROWSER_RUNTIME_NATIVE_SYMLINKS,
+             acceptance._BROWSER_RUNTIME_NATIVE_BYTES),
+            (3251, 3137, 113, 1, 102170195, 304, 287, 4, 13, 21772212),
+        )
+        with (
+            patch.object(acceptance.os, "open", side_effect=FileNotFoundError),
+            patch.object(acceptance.subprocess, "Popen") as spawn,
+            patch.object(acceptance, "write_browser_worker_frame") as frame,
+            patch.object(acceptance, "write_browser_worker_secret") as secret,
+        ):
+            for acquire, error in (
+                (acceptance.open_pinned_browser_python_executable, FileNotFoundError),
+                (acceptance._snapshot_browser_python_runtime_source, acceptance.LocalStagingAcceptanceError),
+            ):
+                with self.subTest(acquire=acquire.__name__), self.assertRaises(error):
+                    acquire()
+        spawn.assert_not_called()
         frame.assert_not_called()
         secret.assert_not_called()
+
+    def test_synthetic_runtime_fixture_retains_bytes_and_refuses_source_drift(self):
+        with synthetic_python_closure():
+            snapshot = acceptance._snapshot_browser_python_runtime_source()
+            acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
+            for field in ("_BROWSER_PYTHON_EXECUTABLE", "_BROWSER_RUNTIME_STDLIB_ROOT",
+                          "_BROWSER_RUNTIME_GCONV_ROOT", "_BROWSER_RUNTIME_LOCALE_ROOT"):
+                path = getattr(acceptance, field)
+                if path.is_dir():
+                    path = next(value for value in path.iterdir() if value.is_file() and not value.is_symlink())
+                original, mode = path.read_bytes(), stat.S_IMODE(path.stat().st_mode)
+                path.chmod(0o600)
+                path.write_bytes(original + b"changed")
+                path.chmod(mode)
+                try:
+                    with self.subTest(field=field), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                        acceptance._snapshot_browser_python_runtime_source()
+                    acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
+                finally:
+                    path.chmod(0o600)
+                    path.write_bytes(original)
+                    path.chmod(mode)
+            for name in ("_BROWSER_RUNTIME_STDLIB_ZIP", "_BROWSER_RUNTIME_GCONV_CACHE",
+                         "_BROWSER_RUNTIME_LOCALE_ARCHIVE"):
+                path = getattr(acceptance, name)
+                mode = stat.S_IMODE(path.parent.stat().st_mode)
+                path.parent.chmod(0o700)
+                path.write_bytes(b"unexpected")
+                path.parent.chmod(mode)
+                try:
+                    with self.subTest(name=name), self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                        acceptance._snapshot_browser_python_runtime_source()
+                finally:
+                    path.parent.chmod(0o700)
+                    path.unlink()
+                    path.parent.chmod(mode)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance._validate_exact_browser_python_runtime_snapshot(replace(snapshot, execution_authority=True))
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
 
     def test_browser_python_runtime_source_observation_rejects_drift(self):
         def manifest_sha256(
@@ -2505,70 +2589,74 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                     acceptance._close_browser_dependency_build_sources(sources)
 
     def test_browser_python_runtime_snapshot_retains_exact_bytes(self):
-        snapshot = acceptance._snapshot_browser_python_runtime_source()
-        acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
-        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
-            acceptance._validate_exact_browser_python_runtime_snapshot(
-                replace(snapshot, entries=None)
-            )
-        self.assertFalse(snapshot.execution_authority)
-        self.assertEqual(snapshot.observation.stdlib_entries, 3_251)
-        self.assertEqual(snapshot.observation.native_entries, 304)
-        self.assertEqual(len(snapshot.entries), 3_564)
-        by_path = {entry.path: entry for entry in snapshot.entries}
-        python = by_path[str(acceptance._BROWSER_PYTHON_EXECUTABLE)]
-        self.assertEqual(
-            hashlib.sha256(python.content).hexdigest(),
-            acceptance._BROWSER_PYTHON_SHA256,
-        )
-        stdlib_link = by_path[
-            str(acceptance._BROWSER_RUNTIME_STDLIB_ROOT / "site-packages")
-            + "/_sysconfigdata__linux_x86_64-linux-gnu.py"
-        ]
-        self.assertEqual(
-            stdlib_link.content,
-            b"../_sysconfigdata__linux_x86_64-linux-gnu.py",
-        )
-        self.assertNotIn(str(acceptance._BROWSER_RUNTIME_STDLIB_ZIP), by_path)
-        self.assertNotIn(str(acceptance._BROWSER_RUNTIME_GCONV_CACHE), by_path)
-        self.assertNotIn(str(acceptance._BROWSER_RUNTIME_LOCALE_ARCHIVE), by_path)
-        self.assertEqual(
-            acceptance._browser_native_runtime_sha256(
-                tuple(
-                    entry
-                    for entry in snapshot.entries
-                    if entry.provenance.startswith("native-runtime:")
+        with synthetic_python_closure():
+            snapshot = acceptance._snapshot_browser_python_runtime_source()
+            acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance._validate_exact_browser_python_runtime_snapshot(
+                    replace(snapshot, entries=None)
                 )
-            ),
-            acceptance._BROWSER_RUNTIME_NATIVE_SHA256,
-        )
-        native_path = str(
-            acceptance._BROWSER_RUNTIME_NATIVE_FILES[0].path
-        )
-        native_entry = by_path[native_path]
-        changed_native = tuple(
-            replace(entry, content=entry.content + b"x")
-            if entry.path == native_path
-            else entry
-            for entry in snapshot.entries
-        )
-        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
-            acceptance._validate_exact_browser_python_runtime_snapshot(
-                replace(snapshot, entries=changed_native)
+            self.assertFalse(snapshot.execution_authority)
+            self.assertEqual(snapshot.observation.stdlib_entries, 3)
+            self.assertEqual(snapshot.observation.native_entries, 5)
+            self.assertEqual(len(snapshot.entries), 12)
+            by_path = {entry.path: entry for entry in snapshot.entries}
+            python = by_path[str(acceptance._BROWSER_PYTHON_EXECUTABLE)]
+            self.assertEqual(
+                hashlib.sha256(python.content).hexdigest(),
+                acceptance._BROWSER_PYTHON_SHA256,
             )
-        self.assertEqual(by_path[native_path], native_entry)
-        self.assertTrue(
-            all(
-                entry.provenance.startswith(
-                    (
-                        "python-startup:",
-                        "python-stdlib:",
-                        "native-runtime:",
+            stdlib_link = by_path[
+                str(acceptance._BROWSER_RUNTIME_STDLIB_ROOT / "site-packages")
+                + "/_sysconfigdata__linux_x86_64-linux-gnu.py"
+            ]
+            self.assertEqual(
+                stdlib_link.content,
+                b"../_sysconfigdata__linux_x86_64-linux-gnu.py",
+            )
+            self.assertNotIn(str(acceptance._BROWSER_RUNTIME_STDLIB_ZIP), by_path)
+            self.assertNotIn(str(acceptance._BROWSER_RUNTIME_GCONV_CACHE), by_path)
+            self.assertNotIn(str(acceptance._BROWSER_RUNTIME_LOCALE_ARCHIVE), by_path)
+            self.assertEqual(
+                acceptance._browser_native_runtime_sha256(
+                    tuple(
+                        entry
+                        for entry in snapshot.entries
+                        if entry.provenance.startswith("native-runtime:")
                     )
-                )
+                ),
+                acceptance._BROWSER_RUNTIME_NATIVE_SHA256,
+            )
+            native_path = str(
+                acceptance._BROWSER_RUNTIME_NATIVE_FILES[0].path
+            )
+            native_entry = by_path[native_path]
+            changed_native = tuple(
+                replace(entry, content=entry.content + b"x")
+                if entry.path == native_path
+                else entry
                 for entry in snapshot.entries
             )
-        )
+            with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+                acceptance._validate_exact_browser_python_runtime_snapshot(
+                    replace(snapshot, entries=changed_native)
+                )
+            self.assertEqual(by_path[native_path], native_entry)
+            self.assertTrue(
+                all(
+                    entry.provenance.startswith(
+                        (
+                            "python-startup:",
+                            "python-stdlib:",
+                            "native-runtime:",
+                        )
+                    )
+                    for entry in snapshot.entries
+                )
+            )
+
+        with self.assertRaises(acceptance.LocalStagingAcceptanceError):
+            acceptance._validate_exact_browser_python_runtime_snapshot(snapshot)
 
     def test_browser_runtime_bundle_namespace_is_exact_and_provenance_bound(self):
         E = acceptance._BrowserRuntimeBundleEntry
@@ -4532,6 +4620,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         ready_read = ready_write = gate_read = gate_write = -1
         held_descriptor = -1
         with (
+            current_python_file_expectation(),
             acceptance.open_pinned_browser_python_executable() as runtime,
             TemporaryDirectory() as descriptor_temporary,
         ):
@@ -4544,7 +4633,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             try:
                 ready_read, ready_write = os.pipe2(os.O_CLOEXEC)
                 gate_read, gate_write = os.pipe2(os.O_CLOEXEC)
-                code = (
+                code = DIRECT_PYTHON_CHILD_HARDENING + (
                     "import os,sys;"
                     "tuple(os.set_inheritable(int(value),False) "
                     "for value in sys.argv[1:5]);"
@@ -4987,7 +5076,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                         if nonblocking_ready
                         else ""
                     )
-                    dirty_code = (
+                    dirty_code = DIRECT_PYTHON_CHILD_HARDENING + (
                         "import fcntl,os,sys;"
                         "tuple(os.set_inheritable(int(value),False) "
                         "for value in sys.argv[1:]);"
@@ -5125,7 +5214,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 try:
                     cwd_ready_read, cwd_ready_write = os.pipe2(os.O_CLOEXEC)
                     cwd_gate_read, cwd_gate_write = os.pipe2(os.O_CLOEXEC)
-                    cwd_code = (
+                    cwd_code = DIRECT_PYTHON_CHILD_HARDENING + (
                         "import os,sys;"
                         "tuple(os.set_inheritable(int(value),False) "
                         "for value in sys.argv[1:4]);"
@@ -5278,7 +5367,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         self.assertEqual(os.fstat(0), standard_input)
 
         with TemporaryDirectory() as temporary:
-            original = acceptance._BROWSER_PYTHON_EXECUTABLE.read_bytes()
+            original = b"synthetic pinned runtime bytes; never executed"
             root = Path(temporary)
             candidate = root / "python"
             candidate.write_bytes(original)
@@ -5290,6 +5379,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 _BROWSER_PYTHON_SHA256=hashlib.sha256(original).hexdigest(),
                 _BROWSER_PYTHON_UID=os.geteuid(),
                 _BROWSER_PYTHON_GID=os.getegid(),
+                _BROWSER_PYTHON_MODE=0o555,
             ):
                 held = acceptance.open_pinned_browser_python_executable()
                 with self.assertRaises(acceptance.LocalStagingAcceptanceError):
@@ -6247,6 +6337,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 [42, 41],
             )
 
+    @owned_subreaper()
     def test_browser_private_proc_guardian_is_stopped_mapped_and_residue_free(self):
         generation = hashlib.sha256(b"focused-private-proc-guardian").hexdigest()
         before_descriptors = set(os.listdir("/proc/self/fd"))
@@ -6259,15 +6350,16 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
             copy.deepcopy(guardian)
         process_id = guardian.process_id
         try:
-            self.assertEqual(
+            self.assertIn(
                 acceptance._continue_browser_private_proc_guardian(
                     guardian,
                     generation=generation,
                 ),
-                (
-                    acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
-                    acceptance._BROWSER_PRIVATE_PROC_BLOCKER_ERRNO,
-                ),
+                {
+                    (acceptance._BROWSER_PRIVATE_PROC_BLOCKER_STAGE,
+                     acceptance._BROWSER_PRIVATE_PROC_BLOCKER_ERRNO),
+                    ("mounted", 0), ("legacy-mounted", 0),
+                },
             )
         finally:
             acceptance._close_browser_prerequisite_guardian_lease(guardian)
@@ -6714,6 +6806,7 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         continuation_errors: list[BaseException] = []
         inner_pid = 0
         inner_pidfd = -1
+        continuation = None
         with patch.object(
             acceptance,
             "_browser_prctl",
@@ -6723,49 +6816,60 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
                 generation=generation
             )
 
-            def continue_guardian() -> None:
-                try:
-                    acceptance._continue_browser_private_proc_guardian(
-                        guardian,
-                        generation=generation,
-                    )
-                except BaseException as exc:
-                    continuation_errors.append(exc)
-
-            continuation = threading.Thread(target=continue_guardian)
-            continuation.start()
-            deadline = time.monotonic() + 10.0
-            while time.monotonic() < deadline and inner_pid == 0:
-                for candidate in Path("/proc").iterdir():
-                    if not candidate.name.isascii() or not candidate.name.isdigit():
-                        continue
-                    selected_pid = int(candidate.name)
-                    if selected_pid <= 1 or selected_pid == guardian.process_id:
-                        continue
+            try:
+                def continue_guardian() -> None:
                     try:
-                        observed = acceptance._read_browser_worker_proc_stat(
-                            selected_pid
+                        acceptance._continue_browser_private_proc_guardian(
+                            guardian,
+                            generation=generation,
                         )
-                    except acceptance.LocalStagingAcceptanceError:
-                        continue
-                    if observed.parent_pid == guardian.process_id:
-                        inner_pid = selected_pid
-                        break
-                if inner_pid == 0:
-                    time.sleep(0.01)
-            self.assertGreater(inner_pid, 1)
-            inner_pidfd = os.pidfd_open(inner_pid, 0)
-            acceptance._close_browser_prerequisite_guardian_lease(guardian)
-            self.assertTrue(
-                acceptance._browser_pidfd_is_terminal(inner_pidfd)
-            )
-            continuation.join(5.0)
-            self.assertFalse(continuation.is_alive())
-        try:
-            self.assertTrue(continuation_errors)
-        finally:
-            if inner_pidfd >= 0:
-                os.close(inner_pidfd)
+                    except BaseException as exc:
+                        continuation_errors.append(exc)
+
+                continuation = threading.Thread(target=continue_guardian)
+                continuation.start()
+                deadline = time.monotonic() + 10.0
+                while time.monotonic() < deadline and inner_pid == 0:
+                    for candidate in Path("/proc").iterdir():
+                        if not candidate.name.isascii() or not candidate.name.isdigit():
+                            continue
+                        selected_pid = int(candidate.name)
+                        if selected_pid <= 1 or selected_pid == guardian.process_id:
+                            continue
+                        try:
+                            observed = acceptance._read_browser_worker_proc_stat(
+                                selected_pid
+                            )
+                        except acceptance.LocalStagingAcceptanceError:
+                            continue
+                        if observed.parent_pid == guardian.process_id:
+                            inner_pid = selected_pid
+                            break
+                    if inner_pid == 0:
+                        time.sleep(0.01)
+                self.assertGreater(inner_pid, 1)
+                inner_pidfd = os.pidfd_open(inner_pid, 0)
+                acceptance._close_browser_prerequisite_guardian_lease(guardian)
+                self.assertTrue(
+                    acceptance._browser_pidfd_is_terminal(inner_pidfd)
+                )
+                self.assertFalse(Path(f"/proc/{inner_pid}").exists())
+                self.assertIsNone(guardian._owner_token)
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(guardian.process_id, 0)
+            finally:
+                try:
+                    if guardian._owner_token is not None:
+                        acceptance._close_browser_prerequisite_guardian_lease(guardian)
+                finally:
+                    try:
+                        if continuation is not None:
+                            continuation.join(5.0)
+                            self.assertFalse(continuation.is_alive())
+                    finally:
+                        if inner_pidfd >= 0:
+                            os.close(inner_pidfd)
+        self.assertTrue(continuation_errors)
         self.assertEqual(before_descriptors, set(os.listdir("/proc/self/fd")))
 
     def test_browser_containment_blocker_withholds_provider_on_every_outcome(self):
@@ -6880,6 +6984,8 @@ class RunLocalStagingAcceptanceTests(unittest.TestCase):
         self.assertFalse(observed.execution_authority)
         cleaned.assert_called_once_with(guardian)
         for failure in (
+            ("mounted", 0),
+            ("legacy-mounted", 0),
             ("fsopen", acceptance.errno.EPERM),
             ("fsmount", acceptance.errno.EINVAL),
             KeyboardInterrupt(),

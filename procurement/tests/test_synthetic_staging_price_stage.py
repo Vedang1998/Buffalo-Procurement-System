@@ -740,16 +740,25 @@ class SyntheticStagingPriceStageUnitTests(unittest.TestCase):
 class SyntheticStagingPriceStageCleanupTests(unittest.TestCase):
     def _failed_nested_setup(self, *, cleanup_fails):
         events = []
+        contract = staging_fixture.staging_database
+        original = contract.CORE_SYSTEM_ROUTINE_SHA256
+        outer_test = self
 
         class NestedFixture(unittest.TestCase):
             @classmethod
             def setUpClass(cls):
                 def stop():
+                    outer_test.assertEqual(contract.CORE_SYSTEM_ROUTINE_SHA256, original)
                     events.append("stop")
                     if cleanup_fails:
                         raise RuntimeError("synthetic cleanup refused")
-                cls.addClassCleanup(lambda: events.append("remove"))
+                def remove():
+                    outer_test.assertEqual(contract.CORE_SYSTEM_ROUTINE_SHA256, original)
+                    events.append("remove")
+                cls.addClassCleanup(remove)
                 cls.addClassCleanup(stop)
+                cls.enterClassContext(mock.patch.object(contract, "CORE_SYSTEM_ROUTINE_SHA256", "a" * 64))
+                outer_test.assertEqual(contract.CORE_SYSTEM_ROUTINE_SHA256, "a" * 64)
                 events.append("start")
                 raise RuntimeError("synthetic setup refused")
 
@@ -757,14 +766,20 @@ class SyntheticStagingPriceStageCleanupTests(unittest.TestCase):
             def test_body(self):
                 events.append("body")
 
-        result = unittest.TestResult()
-        with mock.patch.object(staging_fixture, "SyntheticStagingDatabasePostgresTests", NestedFixture):
-            unittest.TestSuite([OuterProbe("test_body")]).run(result)
-        self.assertEqual(events, ["start", "stop", "remove"])
-        self.assertEqual(result.testsRun, 0)
-        self.assertEqual(NestedFixture._class_cleanups, [])
-        self.assertEqual(OuterProbe._class_cleanups, [])
-        self.assertIn("synthetic setup refused", result.errors[0][1])
+        for _ in range(2):
+            events.clear()
+            result = unittest.TestResult()
+            with mock.patch.object(staging_fixture, "SyntheticStagingDatabasePostgresTests", NestedFixture):
+                unittest.TestSuite([OuterProbe("test_body")]).run(result)
+            self.assertEqual(events, ["start", "stop", "remove"])
+            self.assertEqual(result.testsRun, 0)
+            self.assertEqual(NestedFixture._class_cleanups, [])
+            self.assertEqual(OuterProbe._class_cleanups, [])
+            self.assertIn("synthetic setup refused", result.errors[0][1])
+            self.assertEqual(len(result.errors), 2 if cleanup_fails else 1)
+            if cleanup_fails:
+                self.assertIn("synthetic cleanup refused", result.errors[1][1])
+            self.assertEqual(contract.CORE_SYSTEM_ROUTINE_SHA256, original)
         return result
 
     def test_nested_setup_failure_stops_before_directory_removal_once(self):

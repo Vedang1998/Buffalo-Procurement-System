@@ -44,6 +44,7 @@ from procurement_os.synthetic_staging_transfer import (
     verify_transfer_artifact,
 )
 import transfer_synthetic_staging as transfer_cli
+from synthetic_staging_test_support import pristine_core_catalog_expectation
 
 
 class SyntheticStagingTransferUnitTests(unittest.TestCase):
@@ -485,7 +486,7 @@ class _PostgresCluster:
                 "-l",
                 str(self.log),
                 "-o",
-                f"-h 127.0.0.1 -p {self.port} -k {self.root}",
+                f"-h 127.0.0.1 -p {self.port} -k {self.root} -c timezone=UTC",
                 "-w",
                 "start",
             ]
@@ -579,6 +580,13 @@ class SyntheticStagingTransferTests(unittest.TestCase):
         cls.addClassCleanup(cls._source.stop)
         cls._destination.start()
         cls.addClassCleanup(cls._destination.stop)
+        with (
+            psycopg.connect(cls._source.url("postgres"), autocommit=True) as source,
+            psycopg.connect(cls._destination.url("postgres"), autocommit=True) as destination,
+        ):
+            cls._pristine_routine_digest = cls.enterClassContext(
+                pristine_core_catalog_expectation(source, destination)
+            )
         cls._source.scaffold(sentinel=False)
 
         from initialize_synthetic_demo import (

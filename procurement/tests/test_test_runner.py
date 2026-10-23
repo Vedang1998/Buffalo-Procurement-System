@@ -38,6 +38,37 @@ def run_inner_test(case: type[unittest.TestCase]) -> runner.TestRunSummary:
 
 
 class TestFailClosedResults(unittest.TestCase):
+    def test_class_setup_error_preserves_unexecuted_method_count(self):
+        class FailedSetup(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                raise RuntimeError("synthetic class setup failure")
+
+            def test_one(self):
+                self.fail("must not execute")
+
+            def test_two(self):
+                self.fail("must not execute")
+
+        summary = run_inner_test(FailedSetup)
+        self.assertEqual((summary.discovered, summary.executed, summary.passes,
+                          summary.failures, summary.errors), (2, 0, 0, 0, 1))
+        self.assertFalse(summary.clean)
+
+    def test_class_teardown_error_preserves_actual_success_count(self):
+        class FailedTeardown(unittest.TestCase):
+            @classmethod
+            def tearDownClass(cls):
+                raise RuntimeError("synthetic class teardown failure")
+
+            def test_one(self):
+                pass
+
+        summary = run_inner_test(FailedTeardown)
+        self.assertEqual((summary.discovered, summary.executed, summary.passes,
+                          summary.failures, summary.errors), (1, 1, 1, 0, 1))
+        self.assertFalse(summary.clean)
+
     def test_expected_failure_is_rejected_and_not_counted_as_pass(self):
         class ExpectedFailure(unittest.TestCase):
             @unittest.expectedFailure
