@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-17 (UTC)
+**Updated:** 2026-10-23 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,30 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-23 metadata recovery published — NON-GREEN
+
+The owner-approved five-commit metadata repair is published and freshly fetched
+at `0302ca1d75ecd4bebdefd29fe8bb33a32af2a760`, unchanged source tree
+`f09ec211b168284a50920df2c4daf3c017414995`. The published base remains
+`99f265e9ab12dfcd970b3072a57d5f2c5163cc07`. See
+[METADATA_RECOVERY_2026-10-23](METADATA_RECOVERY_2026-10-23.md) for the complete
+old-to-new map, identity provenance, byte/tree/ancestry verification, scan and
+publication evidence. Original private metadata and the bundle remain private.
+
+This supersedes the publication blocker below, without rewriting historical
+test evidence. The retained run has 1,668 discovered / 1,637 executed / 1,632
+passed / one failed method / four errored methods plus three class-setup errors.
+The 31 blocked methods are database18 + price-stage2 + transfer11. Seven errors
+are events, not seven additional executed methods. Acceptance is NON-GREEN.
+
+Next executable work is the authorized portable test-fixture/accounting repairs,
+then the existing Task2 cgroup enrollment/sentinel/release implementation. Keep
+production runtime/catalog pins, fail-closed validators and real tampering
+assertions. The owner authorizes portable lifecycle tests; Cloud need not imitate
+the old Replit EPERM failure. Supported writable delegation remains unproven.
+Tasks4–9 remain gated; independent Claude review remains NOT ASSESSED. Codex is
+the sole writer; no production/deployment/private-data/purchasing scope changed.
 
 ### 2026-10-17 retained namespace and projection checkpoint — ACCEPTANCE INCOMPLETE
 
