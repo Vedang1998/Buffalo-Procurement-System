@@ -54,7 +54,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Observe namespace', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,25,11,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 205', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,28,11,65,22,28,18,10]', 'result.wasSuccessful()', 'result.testsRun == 218', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -112,7 +112,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_user_manager_service_is_bounded_and_keeps_same_launcher(self):
         for fragment in ('/usr/bin/systemd-run --user --quiet --wait --pipe --collect --service-type=exec --expand-environment=no',
-                         '--unit="$unit"', '--working-directory="$(pwd -P)"', "--property='Delegate=memory pids'",
+                         '--unit="$unit"', '--slice=app.slice', '--working-directory="$(pwd -P)"', "--property='Delegate=memory pids'",
                          '--property=DelegateSubgroup=supervisor', '--property=RuntimeMaxSec=120s', '--property=TimeoutStartSec=10s',
                          '--property=TimeoutStopSec=5s', '--property=KillMode=control-group',
                          '--property=NoNewPrivileges=yes', '--property=MemoryMax=512M', '--property=TasksMax=64',

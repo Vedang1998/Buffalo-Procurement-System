@@ -10,78 +10,52 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### 2026-10-26 critical-path cgroup component and host observation — WIP
+### 2026-10-26 critical-path cgroup component and supported host probe — WIP
 
-Latest actual host result:829ea51 source-bound GitHub run40363964335 passes
-focused203 and proves native PostgreSQL16.15 metadata/version. Current service
-ancestry lacks delegation, but a user systemd manager exists. The authorized
-next configuration is a bounded nonce-owned `systemd-run --user` service with
-Delegate=memory pids and DelegateSubgroup=supervisor, running the same scrubbed
-supervisor. This unprivileged supported route is now implemented for one bounded
-capability observation; no sudo exception is activated or currently requested.
-Focused workflow lifecycle coverage raises counts to205/1732/96modules. Results
-remain pending until exact publication/job observation. See the checkpoint report.
+Latest observed published material: `829ea51e113ca1946d4600c976d1a7630c766be6`,
+tree `0fc99e3568b258175e626451633120e749f0cca7`. Source-bound GitHub run40363964335
+passes focused203 and proves native PostgreSQL16.15 metadata/version. Its current
+system service lacks delegation; a user systemd manager socket exists. This is
+not proof of platform-wide impossibility. The exact report is preserved under
+[review/2026-10-26-critical-path](review/2026-10-26-critical-path/manifest.json).
 
+The supported, unprivileged user-service configuration now uses a random unit,
+Delegate=memory pids, DelegateSubgroup=supervisor, fixed manager/runtime/stop
+bounds and the same scrubbed source-bound supervisor. Source binding precedes
+any delegatee write. Controller availability is distinct from enablement: a
+new helper verifies the exact owned empty unit root, real cgroup2 identity,
+outer limits and two-process supervisor leaf before enabling only memory/pids
+in that root. No ancestor/permission/kernel-policy change or sudo is used.
+Observed manager absence is labeled NOT_FOUND_OBSERVED, not full cleanup proof.
+The next published run must establish actual delivery; no capability is assumed.
 
-Initial material published/fetched at `da082cef7b6bec8c29265cc892be3afd374fa7e4`,
-tree `eb69c619cc2bd2b30876dc6412ae936ef385641c`, from b4044194. Exact frozen
-hosted199/related88/startup10 passed. GitHub40361057089 passed focused199 but
-failed the diagnostic; public summary/log detail was unavailable. A subsequent
-bounded notice-annotation correction adds one workflow test (hosted200,
-registration/floor1727 in96modules) without new privileges or lower gates.
+The new owned cgroup lease component enforces exact limits, stopped/childless
+init enrollment, G/I pidfd/start/lineage checks, membership/OOM proof and owned
+empty cleanup. It remains unconnected to the namespace handshake and unproven
+against live delegation. Exclusive delegation access is required; name-based
+cleanup is not atomic against hostile same-UID writers. The strict supervisor
+FD assertion is preserved; an owned close_fds child resolves the measured extra
+runner FD. Sentinel, sealed runtime and release-provider gates remain incomplete.
+
+Precommit focused hosted218/218 passes; discovery/floor1745 in97modules registers
+without errors. Frozen validation follows before publication. Prior exact
+829ea51 validation was hosted203/203, related88/88 and startup10/10. The unchanged
+full native suite was not rerun to reproduce pg_dump refusal. Historical df147b2
+NON-GREEN accounting and container50/50 retain their original attribution.
+
 See [CRITICAL_PATH_CHECKPOINT_2026-10-26](CRITICAL_PATH_CHECKPOINT_2026-10-26.md)
-for executable changes, scoped evidence, exact host alternative and production
-rollover/cutover authority. All prior thirteen evidence hashes were verified.
+for executable changes, internal findings, host observations and the specific
+proposed production rollover/cutover contract. November prices were not activated;
+current approved catalog/inventory/sales/incoming/terms remain unestablished.
+Claude review NOT_ASSESSED; internal Codex reviews do not satisfy external review.
+Browser confirmation/BackupV2/APPLY/review-edit-reject/vendor DRAFT/packet/restart/
+restore/resource gates NOT_RUN. Railway NOT_PROVEN; no official phase changed.
 
-
-The public notice from b1529ccfbf6014d493664cb4d5f8740e7998175f run40362033756 /
-job121709746382 is now observable. Focused200 passed; the report refused with
-SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED, commit/tree null and host_prerequisites
-null. PG/cgroup observation never ran. Do not infer a host restriction from this
-result or enable the proposed privileged configuration before diagnosing it.
-A bounded follow-up preserves all checks and exposes only code-owned refusal
-categories, phase and numeric errno; no raw exceptions/environment/paths. Two
-regressions increase hosted count to202 and global discovery/floor to1729/96.
-
-
-The classified public report at6ae3d8581ce4158530e824f834e89a8f45546c88
-(run40362998397/job121713122485, focused202PASS) identified SUPERVISOR /
-supervisor_descriptors_refused: an inherited runner FD above2, not a PostgreSQL
-or kernel-delegation failure. The launch fix now creates the actual reviewed
-supervisor with close_fds=True, exact isolated interpreter/arguments, scrubbed
-environment and120-second timeout. The outer launcher preserves its own FDs;
-the strict inner supervisor assertion is unchanged. A causal regression passes
-an inheritable synthetic FD: direct invocation refuses, while the owned clean
-child reaches deliberate source-event refusal, with the parent FD unchanged.
-This raises hosted/floor counts to203 and1730/96modules respectively.
-
-Task2 now has an owned cgroup2 component with exact limits, stopped/childless
-init enrollment, G/I pidfd/start/lineage checks, membership/OOM proof and
-identity-bound empty cleanup. It is not integrated into the namespace handshake
-and has not run against supported live delegation. Exclusive delegation access
-is required before use; pathname cleanup is not atomic against hostile same-UID
-writers. No credential release or sentinel/browser execution is enabled.
-
-The same source-bound launcher now observes fixed native PostgreSQL16 metadata/
-version and current-ancestry delegation before namespace mutations. Missing
-prerequisites suppress repeated host failures; bounded public job-summary output
-preserves diagnostic exit status. No sudo/workflow privilege rule was relaxed.
-A standard systemd User=runner/Delegate=memory pids transient service is the
-smallest proposed supported alternative and needs owner approval before enabling.
-
-Focused validation: hosted199/199; related88/88; startup10/10. Registration/floor
-is1726/96modules. No unchanged full native rerun; the earlier df147b2 full-suite
-NON-GREEN accounting and container50/50 remain separately attributed. Claude
-review NOT_ASSESSED; internal scoped Codex reviews do not satisfy it. November
-production rollover/mapped-offer activation remain blocked on the concrete
-business/backup/SQL contract in the linked report. No real prices were activated.
-
-Next: observe the exact published hosted prerequisite report; if no delegation,
-obtain the narrowly specified supported systemd configuration approval. Then
-connect the reviewed cgroup lease to stopped-I/PROBE and I/W proof using that same
-launcher, retaining no release authority until sentinel/runtime/review gates pass.
-Canonical browser/restart/restore gates NOT_RUN; Railway NOT_PROVEN. No official
-phase, source pin, dependency version, production or purchasing boundary changed.
+Next: publish/fetch the exact tested candidate and observe one bounded user-service
+attempt. If supported, connect the cgroup lease to stopped-I/PROBE and exact I/W
+proof under the same launcher. If kernel/platform restrictions refuse it, retain
+the failure and propose the smallest equivalent supported configuration without
+weakening containment. Credentials remain withheld throughout these diagnostics.
 
 
 ### 2026-10-26 trusted-tool repair and container fixture proof — NON-GREEN
@@ -598,7 +572,7 @@ Shopify action, private transfer, supplier transmission or real purchasing occur
   PostgreSQL-16 suite passed 1,512 discovered / 1,512 executed / 1,512 passed
   in 1,434.556 seconds, with failures, errors, skips, expected failures and
   unexpected successes all zero. Its log SHA-256 is
-  `c37f3218495aefc03a4faab433f3e5540d217f92617e7a0d3d5498b80aec127c`.
+  `c37f3218495aefc03a4faab433f3e5540d218f92617e7a0d3d5498b80aec127c`.
   Startup validation passed 10/10 in 0.004 seconds. `uv lock --check`, Python
   compilation, `git diff --check`, exact-hash checks and high-confidence
   added-line secret patterns passed. A disposable database directory retained
@@ -814,7 +788,7 @@ Shopify action, private transfer, supplier transmission or real purchasing occur
   materializer lifecycle `f31e425`, and isolated browser-worker protocol
   `1457f2d`, bounded browser-worker transport `13bedcc`, exact process
   preflight `74237f2`, inert pinned worker launch specification `63484e7`, and
-  bounded containment text evidence `8217413`, exact non-authorizing
+  bounded containment text evidence `8218413`, exact non-authorizing
   browser-Python runtime-source observation `b07f70b`, and exact frozen-image
   dependency-source observation `06a0339`. This handoff update is
   a documentation-only child of that source checkpoint. The tracked staging
@@ -1072,7 +1046,7 @@ Shopify action, private transfer, supplier transmission or real purchasing occur
   `ldconfig` cache, hostname, and hosts bytes are volatile. After excluding
   only those six documented files, both 9,988-object / 7,732-regular-file
   filesystems have the identical normalized manifest SHA-256
-  `986029114b256fef2cbdee922db1568c0bc9217cfcd3e598e6c61b8e78b90250`;
+  `986029114b256fef2cbdee922db1568c0bc9218cfcd3e598e6c61b8e78b90250`;
   both OCI `Config` objects hash to
   `0b11bfbde4dc1d244be2d93de8eda7166940168ff623f52e59fd1af155844bf7`.
   This proves normalized content/config reproducibility, not byte-identical
@@ -2024,7 +1998,7 @@ Shopify action, private transfer, supplier transmission or real purchasing occur
   `codex/private-v2-research-input`. Preserved material is
   `aebadb66744a72588005c7367a70fdd85dcc3c47` / tree
   `ced867f985ee463729fdeee686a6607baf5e078e`; preserved handoff is
-  `996408b33217a2ba9cb32a7c8a061e4554e8dc1d` / tree
+  `996408b33218a2ba9cb32a7c8a061e4554e8dc1d` / tree
   `67fee7672880f2772714c77b6bea0cba15e77f02`. The two original
   validation-incomplete archives remain byte-unchanged: code SHA-256
   `d34d1a0fe4df22a9c0b1af78f150e92574710374aa5059429ecffd3babf6d2b7`
@@ -2422,7 +2396,7 @@ Shopify action, private transfer, supplier transmission or real purchasing occur
   with SHA-256
   `acbe37ac0f3c628e2035d1bdc6161116f3038d3bfd77c772f8506788c2280998`.
   Startup validation separately passed **10/10**, log SHA-256
-  `b9c37738f7e36a217480772a37fa4a76f5531320ee39c8a363f9facbe1956630`.
+  `b9c37738f7e36a218480772a37fa4a76f5531320ee39c8a363f9facbe1956630`.
 - Chronology correction: the previous hard stop was
   `2026-09-15T11:15:34Z`; final source `20dd65ad...` at 07:54:24Z and accepted
   price-browser records around 07:55Z preceded it, but the prior recovery backup
@@ -2733,7 +2707,7 @@ that earlier checkpoint; the strict-acceptance entry above is controlling.
   `3953c77e8226148191cea69684d0808c48e7da669f358ef4fa0b1bb98327d8ac`.
 - Three correction-specific setup attempts are preserved separately and are not
   accepted workflow/test runs. Browser setup root
-  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-browser-f2bdd16-final-20260913T174400Z`
+  `/home/runner/workspace/.ai-auth/codex/evidence/sunday-forecast-browser-f2bdd16-final-20260913T174500Z`
   stopped before server/workflow startup because the launcher interpreter lacked
   Psycopg; its `server.log` SHA-256 is
   `203a64b3eade7c17af6b34bf363b863b559a52f7afd9acf78b8adc193520d78e`.

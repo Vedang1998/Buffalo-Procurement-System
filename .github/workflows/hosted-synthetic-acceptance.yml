@@ -56,7 +56,7 @@ jobs:
           DIAGNOSTIC_PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
           set -euo pipefail
-          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import pathlib,sys,unittest; root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]; modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow","test_hosted_synthetic_namespace","test_hosted_synthetic_projection","test_hosted_synthetic_cgroup","test_hosted_synthetic_host"]]; assert [item.countTestCases() for item in modules] == [36,25,11,65,22,28,18]; suite=unittest.TestSuite(modules); result=unittest.TextTestRunner(verbosity=2).run(suite); raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 205 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)'
+          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import pathlib,sys,unittest; root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]; modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow","test_hosted_synthetic_namespace","test_hosted_synthetic_projection","test_hosted_synthetic_cgroup","test_hosted_synthetic_host","test_hosted_synthetic_user_service"]]; assert [item.countTestCases() for item in modules] == [36,28,11,65,22,28,18,10]; suite=unittest.TestSuite(modules); result=unittest.TextTestRunner(verbosity=2).run(suite); raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 218 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)'
 
       - name: Observe namespace prerequisite with all release authority withheld
         shell: bash
@@ -77,13 +77,13 @@ jobs:
           [[ "$nonce" =~ ^[0-9a-f-]{36}$ ]]
           unit="buffalo-hosted-$nonce.service"
           manager_env=(/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus")
-          "${manager_env[@]}" /usr/bin/timeout --signal=TERM --kill-after=5s 150s /usr/bin/systemd-run --user --quiet --wait --pipe --collect --service-type=exec --expand-environment=no --unit="$unit" --working-directory="$(pwd -P)" --property='Delegate=memory pids' --property=DelegateSubgroup=supervisor --property=RuntimeMaxSec=120s --property=TimeoutStartSec=10s --property=TimeoutStopSec=5s --property=KillMode=control-group --property=NoNewPrivileges=yes --property=MemoryMax=512M --property=TasksMax=64 \
-            /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import subprocess,sys; raise SystemExit(subprocess.run([sys.executable,"-I","-S","-B","procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True,env={"PATH":"/usr/bin:/bin","LC_ALL":"C.UTF-8"},timeout=110).returncode)' "$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA" > "$report" || status=$?
+          "${manager_env[@]}" /usr/bin/timeout --signal=TERM --kill-after=5s 150s /usr/bin/systemd-run --user --quiet --wait --pipe --collect --service-type=exec --expand-environment=no --unit="$unit" --slice=app.slice --working-directory="$(pwd -P)" --property='Delegate=memory pids' --property=DelegateSubgroup=supervisor --property=RuntimeMaxSec=120s --property=TimeoutStartSec=10s --property=TimeoutStopSec=5s --property=KillMode=control-group --property=NoNewPrivileges=yes --property=MemoryMax=512M --property=TasksMax=64 \
+            /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import subprocess,sys; raise SystemExit(subprocess.run([sys.executable,"-I","-S","-B","procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True,env={"PATH":"/usr/bin:/bin","LC_ALL":"C.UTF-8"},timeout=110).returncode)' "$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA" --user-service-unit "$unit" > "$report" || status=$?
           client_status=$status
           unit_cleanup=UNVERIFIED
           for attempt in 1 2 3 4 5; do
             query_status=0
-            load_state=$("${manager_env[@]}" /usr/bin/timeout 3s /usr/bin/systemctl --user show "$unit" --property=LoadState --value 2>/dev/null) || query_status=$?
+            load_state=$("${manager_env[@]}" /usr/bin/timeout --signal=TERM --kill-after=1s 3s /usr/bin/systemctl --user show "$unit" --property=LoadState --value 2>/dev/null) || query_status=$?
             if test "$load_state" = not-found && { test "$query_status" = 0 || test "$query_status" = 1; }; then unit_cleanup=NOT_FOUND_OBSERVED; break; fi
             sleep 0.1
           done

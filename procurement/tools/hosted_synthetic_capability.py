@@ -43,6 +43,8 @@ _REFUSAL_CODES = frozenset({
     'source_event_invalid', 'source_file_changed', 'source_file_cleanup_failed', 'source_file_invalid',
     'source_file_unavailable', 'source_index_flags_invalid', 'source_mode_mismatch',
     'source_path_changed', 'source_path_indirection', 'source_root_invalid', 'source_root_mismatch',
+    'delegation_unit_mismatch', 'delegation_scope_mismatch', 'delegation_controls_unavailable',
+    'delegation_readback_refused', 'delegation_supervisor_members_refused',
 })
 
 
@@ -163,7 +165,7 @@ def _namespace_attempt(backend, generation: str) -> dict:
     return result
 
 
-def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None, refusal=None) -> dict:
+def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None, refusal=None, delegation=None) -> dict:
     private = observation.get("private_proc") if observation is not None else None
     projection = "MATERIALIZATION_CHECK_ONLY" if type(private) is dict and "projection" in private else "NOT_RUN"
     return {
@@ -178,6 +180,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
         "namespace_attempt": observation,
         "host_prerequisites": host,
         "refusal": refusal,
+        "delegation_bootstrap": delegation,
         "runtime": "HOST_RUNTIME_UNSEALED",
         "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": "NOT_RUN",
         "credential_release": "WITHHELD", "provider_calls": 0,
@@ -190,10 +193,11 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
 def main(arguments=None) -> int:
     args = list(sys.argv[1:] if arguments is None else arguments)
     binding = None
+    host = delegation = None
     phase = 'SUPERVISOR'
     try:
         _require_clean_supervisor()
-        if len(args) != 4:
+        if len(args) not in (4, 6) or (len(args) == 6 and args[4] != '--user-service-unit'):
             raise HostedDiagnosticError("invocation_refused")
         root = Path(__file__).resolve().parents[2]
         phase = 'SOURCE_BINDING'
@@ -203,31 +207,39 @@ def main(arguments=None) -> int:
         # Import only after trusted workflow metadata and source binding.
         from hosted_synthetic_namespace import NamespaceCleanupError, NamespaceProofError, observe_private_proc
         from hosted_synthetic_host import observe_host_prerequisites
-        from hosted_synthetic_cgroup import CgroupCleanupError
+        from hosted_synthetic_cgroup import CgroupCleanupError, CgroupProofError
         from run_local_staging_acceptance import LocalStagingAcceptanceError
         generation = hashlib.sha256(os.urandom(32)).hexdigest()
         phase = 'HOST_PREREQUISITES'
         try:
+            if len(args) == 6:
+                from hosted_synthetic_user_service import prepare_user_service
+                phase = 'USER_SERVICE_DELEGATION'
+                delegation = prepare_user_service(args[5])
+            phase = 'HOST_PREREQUISITES'
             host = observe_host_prerequisites()
             # Do not repeat namespace/projection mutations when a required
             # same-launcher prerequisite is already known to be unavailable.
             phase = 'NAMESPACE'
             observation = observe_private_proc(generation) if host['prerequisites_available'] else None
         except (CgroupCleanupError, NamespaceCleanupError):
-            result = _report(binding, reason='CLEANUP_FAILED')
+            result = _report(binding, reason='CLEANUP_FAILED', host=host, delegation=delegation)
+        except CgroupProofError as error:
+            result = _report(binding, reason='USER_SERVICE_DELEGATION_REFUSED',
+                             refusal=_fixed_refusal(phase, error), host=host, delegation=delegation)
         except (NamespaceProofError, LocalStagingAcceptanceError):
             # The observer encloses every owned transition in its cleanup
             # envelope. These exceptions are pre-ownership prerequisite checks.
-            result = _report(binding, reason="NAMESPACE_PREREQUISITE_REFUSED")
+            result = _report(binding, reason="NAMESPACE_PREREQUISITE_REFUSED", host=host, delegation=delegation)
         else:
-            result = _report(binding, observation, host=host,
+            result = _report(binding, observation, host=host, delegation=delegation,
                              reason='HOST_PREREQUISITES_REFUSED' if observation is None else 'INCOMPLETE_PREFLIGHT')
     except (KeyboardInterrupt, SystemExit):
-        result = _report(binding, reason="CANCELLED")
+        result = _report(binding, reason="CANCELLED", host=host, delegation=delegation)
     except (HostedDiagnosticError, HostedSourceError, OSError, AttributeError, ImportError) as error:
         # Neither raw exceptions, command output, paths, nor environment escape.
         result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED",
-                         refusal=_fixed_refusal(phase, error))
+                         refusal=_fixed_refusal(phase, error), host=host, delegation=delegation)
     encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
     print(encoded)
     print("evidence_sha256=" + hashlib.sha256(encoded.encode()).hexdigest())

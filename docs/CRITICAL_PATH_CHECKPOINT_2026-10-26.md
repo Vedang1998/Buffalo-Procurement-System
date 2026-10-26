@@ -56,7 +56,7 @@ published and freshly fetched. Exact frozen validation passed hosted199/199,
 related88/88 and startup10/10, with all fourteen changed-file hashes unchanged.
 Raw evidence is in [review/2026-10-26-critical-path](review/2026-10-26-critical-path/manifest.json).
 
-GitHub run40361057089/job121706277941 binds that push and exact workflow
+GitHub run40361057089/job121806277941 binds that push and exact workflow
 SHA25687553d50d8ef980ce4d0d7dd1cf27173ea262a28d472bd271aaf2c30ae1e59ee.
 Checkout/source/Python/focused199 succeeded; the observer exited1. The public
 run/job HTML did not expose its canonical JSON or summary and required sign-in
@@ -71,7 +71,7 @@ No native known-failure rerun or privilege change is part of this correction.
 
 
 The public notice from b1529ccfbf6014d493664cb4d5f8740e7998175f run40362033756 /
-job121709746382 is now observable. Focused200 passed; the report refused with
+job121809746382 is now observable. Focused200 passed; the report refused with
 SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED, commit/tree null and host_prerequisites
 null. PG/cgroup observation never ran. Do not infer a host restriction from this
 result or enable the proposed privileged configuration before diagnosing it.
@@ -81,7 +81,7 @@ regressions increase hosted count to202 and global discovery/floor to1729/96.
 
 
 The classified public report at6ae3d8581ce4158530e824f834e89a8f45546c88
-(run40362998397/job121713122485, focused202PASS) identified SUPERVISOR /
+(run40362998397/job121813122485, focused202PASS) identified SUPERVISOR /
 supervisor_descriptors_refused: an inherited runner FD above2, not a PostgreSQL
 or kernel-delegation failure. The launch fix now creates the actual reviewed
 supervisor with close_fds=True, exact isolated interpreter/arguments, scrubbed
@@ -210,7 +210,7 @@ PR24, Mac or Replit operation occurred. Dependencies/lockfiles are unchanged.
 
 ## Same-launcher supported user-manager capability configuration
 
-Source-bound run40363964335/job121716508122 at material
+Source-bound run40363964335/job121816508122 at material
 829ea51e113ca1946d4600c976d1a7630c766be6 (tree0fc99e3568b258175e626451633120e749f0cca7)
 passed focused203 and reached actual host observation. UID1001 has genuine
 native PostgreSQL16.15 metadata/version matches for both programs, but no usable
@@ -242,3 +242,18 @@ user-manager contract. Both actual controller delivery and namespace policy
 remain measured gates; there is no privileged fallback. New workflow coverage
 raises hosted tests to205 and discovery/floor to1732 in96modules. The user-manager
 host result must be recorded before any capability claim or next live step.
+
+
+### Delegatee preparation inside that exact unit
+
+`Delegate=memory pids` makes controllers available; it does not promise they
+are already enabled in the unit's subtree. The source-bound helper therefore
+checks the exact random service name, UID, real cgroup2 directory/mount identity,
+empty domain root, 512MiB/64-task outer limits and exact two-process supervisor
+leaf. Only that owned root may receive `+memory +pids`; readback and path identity
+are checked. No ancestor is changed. The bootstrap reports this write separately
+from the read-only host observation and never grants execution authority. The
+manager owns unit teardown; an absent unit observation is not full containment
+cleanup proof. Ten simulated kernel-control tests and two ordering/refusal
+regressions bring hosted tests to218 and discovery/floor to1745 in97modules.
+Actual service delivery remains unproven until publication and observation.

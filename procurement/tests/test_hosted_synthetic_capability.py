@@ -251,6 +251,67 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue().splitlines()[0])['reason'], 'CLEANUP_FAILED')
         self.assertNotIn('private-value', output.getvalue())
 
+    def test_user_delegation_is_after_source_and_before_host_observation(self):
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        order = []
+        def bound(*args, **kwargs):
+            order.append('source')
+            return binding
+        def prepared(unit):
+            order.append('delegation')
+            return {'unit': unit, 'execution_authority': False}
+        def observed():
+            order.append('host')
+            return {'prerequisites_available': False}
+        with patch.object(capability, 'bind_hosted_source', side_effect=bound), \
+             patch('hosted_synthetic_user_service.prepare_user_service', side_effect=prepared), \
+             patch('hosted_synthetic_host.observe_host_prerequisites', side_effect=observed), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40, '--user-service-unit', 'test-unit']), 1)
+        self.assertEqual(order, ['source', 'delegation', 'host'])
+        result = json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(result['delegation_bootstrap'], {'unit': 'test-unit', 'execution_authority': False})
+        self.assertEqual(result['provider_calls'], 0)
+
+    def test_user_delegation_refusal_prevents_host_and_namespace_attempts(self):
+        from hosted_synthetic_cgroup import CgroupProofError
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        with patch.object(capability, 'bind_hosted_source', return_value=binding), \
+             patch('hosted_synthetic_user_service.prepare_user_service', side_effect=CgroupProofError('delegation_scope_mismatch')), \
+             patch('hosted_synthetic_host.observe_host_prerequisites') as host, \
+             patch('hosted_synthetic_namespace.observe_private_proc') as namespace, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40, '--user-service-unit', 'test-unit']), 1)
+        host.assert_not_called()
+        namespace.assert_not_called()
+        result = json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(result['reason'], 'USER_SERVICE_DELEGATION_REFUSED')
+        self.assertEqual(result['refusal']['code'], 'delegation_scope_mismatch')
+        self.assertFalse(result['execution_authority'])
+
+    def test_completed_prerequisites_survive_later_namespace_refusal(self):
+        from hosted_synthetic_namespace import NamespaceProofError, NamespaceCleanupError
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        host = {'prerequisites_available': True}
+        delegation = {'controller_write_attempts': 1, 'execution_authority': False}
+        for error in (NamespaceProofError('private-value'), NamespaceCleanupError('private-value'),
+                      OSError(1, 'private-value'), KeyboardInterrupt()):
+            with self.subTest(error=type(error).__name__), \
+                 patch.object(capability, 'bind_hosted_source', return_value=binding), \
+                 patch('hosted_synthetic_user_service.prepare_user_service', return_value=delegation), \
+                 patch('hosted_synthetic_host.observe_host_prerequisites', return_value=host), \
+                 patch('hosted_synthetic_namespace.observe_private_proc', side_effect=error), \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertIn(capability.main(['repo', 'push', 'ref', 'a'*40,
+                                              '--user-service-unit', 'test-unit']), (1, 130))
+            result = json.loads(output.getvalue().splitlines()[0])
+            self.assertEqual(result['host_prerequisites'], host)
+            self.assertEqual(result['delegation_bootstrap'], delegation)
+            self.assertEqual(result['credential_release'], 'WITHHELD')
+            self.assertEqual(result['provider_calls'], 0)
+            self.assertFalse(result['execution_authority'])
+            self.assertNotIn('private-value', output.getvalue())
+
     def _preownership_main_refusal(self, selected):
         import hosted_synthetic_namespace as namespace
         binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
