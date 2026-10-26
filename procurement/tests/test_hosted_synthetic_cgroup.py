@@ -1,9 +1,13 @@
 """Deterministic kernel-boundary simulations, never live delegation evidence."""
 from pathlib import Path
 import copy
+import json
+from types import SimpleNamespace
 import os
 import signal
 import tempfile
+import subprocess
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
@@ -17,6 +21,33 @@ MEMORY = 64 * 1024**2
 
 
 class HostedCgroupParsingTests(unittest.TestCase):
+    def test_real_subreaper_and_kernel_sigchld_flags_guard_numeric_migration(self):
+        program=r'''
+import ctypes,os,signal,sys
+sys.path.insert(0,sys.argv[1])
+import hosted_synthetic_cgroup as c
+c.backend._block_browser_projection_signals()
+c.backend._browser_prctl(36,1)
+c._require_unreaped_lifecycle()
+c.backend._browser_prctl(36,0)
+try:c._require_unreaped_lifecycle();raise AssertionError('subreaper0 accepted')
+except c.CgroupProofError:pass
+c.backend._browser_prctl(36,1)
+class Action(ctypes.Structure):
+ _fields_=[('handler',ctypes.c_void_p),('mask',ctypes.c_ulong*16),('flags',ctypes.c_int),('restorer',ctypes.c_void_p)]
+libc=ctypes.CDLL(None,use_errno=True)
+for handler,flags in ((None,2),(1,0)):
+ action=Action();action.handler=handler;action.flags=flags
+ assert libc.sigaction(signal.SIGCHLD,ctypes.byref(action),None)==0
+ try:c._require_unreaped_lifecycle();raise AssertionError('auto-reaping accepted')
+ except c.CgroupProofError:pass
+print('subreaper and kernel autoreap guards verified; no migration')
+'''
+        result=subprocess.run([sys.executable,'-I','-S','-B','-c',program,str(Path(cg.__file__).parent)],
+                              capture_output=True,timeout=5)
+        self.assertEqual(result.returncode,0,result.stderr.decode())
+        self.assertIn(b'guards verified',result.stdout)
+
     def test_finite_canonical_values(self):
         self.assertEqual(cg.parse_scalar(b'0\n'), 0)
         self.assertEqual(cg.parse_scalar(b'18446744073709551615\n'), 2**64 - 1)
@@ -70,11 +101,14 @@ class HostedCgroupParsingTests(unittest.TestCase):
 
 class HostedCgroupLeaseTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch('hosted_synthetic_launcher.inspect_host_identity', return_value={}))
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.directory = self.root / 'delegated'
         self.directory.mkdir(mode=0o700)
         self.files(self.directory, {'cgroup.type': b'domain\n', 'cgroup.procs': b'',
-                                   'cgroup.threads': b'', 'cgroup.subtree_control': b'memory pids\n'})
+                                   'cgroup.threads': b'', 'cgroup.subtree_control': b'memory pids\n',
+                                   'memory.max': b'536870912\n', 'memory.current': b'4096\n',
+                                   'memory.peak': b'8192\n', 'memory.events': EVENTS, 'pids.max': b'64\n'})
         self.real_mkdir = os.mkdir
         self.real_rmdir = os.rmdir
         real_pwrite = os.pwrite
@@ -103,6 +137,7 @@ class HostedCgroupLeaseTests(unittest.TestCase):
         self.files(path, {'cgroup.type': b'domain\n', 'cgroup.procs': b'', 'cgroup.threads': b'',
             'cgroup.events': b'populated 0\nfrozen 0\n', 'cgroup.subtree_control': b'',
             'memory.max': b'max\n', 'memory.oom.group': b'0\n', 'memory.events': EVENTS,
+            'memory.current': b'0\n', 'memory.peak': b'0\n',
             'pids.max': b'max\n'})
 
     def rmdir(self, name, *, dir_fd=None):
@@ -135,12 +170,77 @@ class HostedCgroupLeaseTests(unittest.TestCase):
         lease.close()
         self.assertFalse((self.directory / lease.name).exists())
 
+    def test_outer_and_child_charges_are_separate_and_bounded(self):
+        lease=self.create()
+        self.files(self.directory,{'memory.current':b'16384\n','memory.peak':b'32768\n'})
+        self.change(**{'memory.current':b'4096\n','memory.peak':b'8192\n'})
+        result=lease.attest(())
+        self.assertEqual(result['enclosing_service_memory']['peak'],32768)
+        self.assertEqual(result['child_memory']['peak'],8192)
+        self.assertEqual(result['charge_scope'],'CHILD_POST_MIGRATION_AND_ENCLOSING_SERVICE')
+        self.assertEqual(result['child_memory']['events_schema'],cg.MEMORY_EVENTS_SCHEMA)
+        lease.close()
+        self.assertTrue(lease.final_resources['generation_child_removed'])
+        self.assertFalse(lease.final_resources['full_service_lifetime_observed'])
+        self.assertEqual(lease.final_resources['enclosing_service_memory']['peak'],32768)
+
+    def test_unrelated_write_permission_on_any_control_refuses(self):
+        for name in ('cgroup.procs','cgroup.subtree_control','memory.max','memory.events'):
+            lease=self.create();path=self.directory/lease.name/name
+            with self.subTest(name=name):
+                path.chmod(0o666)
+                with self.assertRaises(cg.CgroupProofError):lease.attest(())
+                path.chmod(0o644);lease.close()
+
+    def test_outer_drift_during_child_removal_cannot_pass_cleanup(self):
+        for name,value in (('memory.events',EVENTS.replace(b'oom 0',b'oom 1')),
+                           ('memory.peak',b'536870913\n'),('pids.max',b'65\n')):
+            with self.subTest(name=name):
+                lease=self.create();old=(self.directory/name).read_bytes()
+                def remove_then_drift(child, *, dir_fd=None):
+                    self.rmdir(child,dir_fd=dir_fd)
+                    (self.directory/name).write_bytes(value)
+                with patch.object(cg.os,'rmdir',side_effect=remove_then_drift), \
+                     self.assertRaises(cg.CgroupCleanupError):
+                    lease.close()
+                self.assertFalse((self.directory/lease.name).exists())
+                self.assertTrue(lease.closed and lease.cleanup_failed)
+                self.assertTrue(all(fd.number==-1 for fd in (*lease.controls.values(),lease.child,lease.parent)))
+                with self.assertRaises(cg.CgroupCleanupError):lease.close()
+                (self.directory/name).write_bytes(old)
+
+    def test_outer_oom_limit_and_peak_drift_refuse_and_cleanup_stays_failed(self):
+        for name,value in (('memory.events',EVENTS.replace(b'oom 0',b'oom 1')),
+                           ('memory.max',b'1073741824\n'),('memory.peak',b'536870913\n'),
+                           ('memory.peak',b'4096\n'),('memory.current',b'16384\n')):
+            with self.subTest(name=name,value=value):
+                lease=self.create();old=(self.directory/name).read_bytes()
+                (self.directory/name).write_bytes(value)
+                with self.assertRaises(cg.CgroupProofError):lease.attest(())
+                with self.assertRaises(cg.CgroupCleanupError):lease.close()
+                self.assertTrue(lease.closed and lease.cleanup_failed)
+                self.assertFalse((self.directory/lease.name).exists())
+                (self.directory/name).write_bytes(old)
+
+    def test_failed_boundary_and_close_preserve_first_error_and_close_other_fds(self):
+        lease=self.create();original=cg.CgroupProofError('boundary')
+        selected=lease.controls['cgroup.type'];close=selected.close
+        def failing_close():
+            close();raise OSError('secondary close failure')
+        with patch.object(cg,'_signal_boundary',side_effect=original),patch.object(selected,'close',side_effect=failing_close), \
+             patch.object(cg.os,'rmdir') as remove,self.assertRaises(cg.CgroupCleanupError) as caught:
+            lease.close()
+        self.assertIs(caught.exception.__cause__,original)
+        self.assertTrue(lease.closed and lease.cleanup_failed)
+        self.assertTrue(all(fd.number==-1 for fd in (*lease.controls.values(),lease.child,lease.parent)))
+        remove.assert_not_called()
+
     def test_wrong_generation_or_unbounded_memory_refuses_before_open(self):
         for generation, limit in (('z'*64, MEMORY), ('a'*63, MEMORY), (GENERATION, True),
                                   (GENERATION, 0), (GENERATION, 5*1024**3), (GENERATION, 4097)):
             with self.subTest(generation=generation, limit=limit), self.assertRaises(cg.CgroupProofError):
                 cg.CgroupLease.create(self.directory, generation=generation, memory_max=limit)
-        self.assertEqual(len(list(self.directory.iterdir())), 4)
+        self.assertEqual(len(list(self.directory.iterdir())), 9)
 
     def test_parent_member_or_missing_controller_refuses_without_child(self):
         for key, value in (('cgroup.procs', b'44\n'), ('cgroup.threads', b'44\n'),
@@ -151,7 +251,7 @@ class HostedCgroupLeaseTests(unittest.TestCase):
                 with self.assertRaises(cg.CgroupProofError):
                     self.create()
                 (self.directory / key).write_bytes(original)
-        self.assertEqual(len(list(self.directory.iterdir())), 4)
+        self.assertEqual(len(list(self.directory.iterdir())), 9)
 
     def test_preexisting_child_is_never_removed(self):
         foreign = self.directory / ('buffalo-' + GENERATION)
@@ -238,14 +338,22 @@ class HostedCgroupLeaseTests(unittest.TestCase):
 
     def test_unmasked_boundary_refuses_before_owned_mutation(self):
         lease = self.create()
-        with patch.object(cg, '_signal_boundary', side_effect=cg.CgroupProofError('unmasked')), \
+        original = cg.CgroupProofError('unmasked')
+        descriptors = [*lease.controls.values(), lease.child, lease.parent]
+        with patch.object(cg, '_signal_boundary', side_effect=original), \
              patch.object(cg.os, 'pwrite') as write, patch.object(cg.os, 'rmdir') as remove:
-            for operation in (lambda: lease.attest(()), lease.close):
-                with self.assertRaises(cg.CgroupProofError):
-                    operation()
+            with self.assertRaises(cg.CgroupProofError):
+                lease.attest(())
+            with self.assertRaises(cg.CgroupCleanupError) as caught:
+                lease.close()
+            self.assertIs(caught.exception.__cause__, original)
+            with self.assertRaises(cg.CgroupCleanupError):
+                lease.close()
         write.assert_not_called()
         remove.assert_not_called()
-        lease.close()
+        self.assertTrue(lease.closed and lease.cleanup_failed)
+        self.assertTrue(all(item.number == -1 for item in descriptors))
+        self.assertTrue((self.directory / lease.name).is_dir())
 
     def test_renamed_original_removed_but_foreign_replacement_preserved(self):
         lease = self.create()
@@ -303,21 +411,24 @@ class HostedCgroupLeaseTests(unittest.TestCase):
             lease.verify()
         parent.close.assert_called_once()
 
-    def enrollment(self, *, stopped=True, children=b'', start=88, parent=123, terminal=False, foreign_guardian=False):
+    def enrollment(self, *, stopped=True, children=b'', start=88, parent=123, terminal=False, foreign_guardian=False, guardian_state='T'):
         lease = self.create()
         descriptor = Mock(number=77)
         guardian_descriptor = Mock(number=78)
         pid = 124
         supervisor = os.getpid()
-        process = dict(pid=pid, state='T' if stopped else 'S', start=start, parent=parent, group=123)
+        process = dict(pid=pid, state='T' if stopped else 'S', start=start, parent=parent, group=123, session=123)
         real_listdir = os.listdir
         real_read = ns._read
         real_readlink = os.readlink
+        real_stat = os.stat
         def read(path, maximum):
             if path == '/proc/self/fdinfo/77':
                 return b'Pid:\t124\n'
             if path == '/proc/self/fdinfo/78':
                 return b'Pid:\t123\n'
+            if path.endswith('/status'):
+                return json.dumps({'nspid': [pid,1] if path==f'/proc/{pid}/status' else [123]}).encode()
             if path.endswith('/children'):
                 return children
             if path == f'/proc/{pid}/cgroup':
@@ -332,11 +443,16 @@ class HostedCgroupLeaseTests(unittest.TestCase):
                                'cgroup.events': b'populated 1\nfrozen 0\n'})
             else:
                 original_write(name, value)
-        contexts = [patch.object(ns, '_read', side_effect=read), patch.object(ns, '_process', side_effect=lambda number:
+        namespaces={'self':dict(user=[1,7],net=[1,8],mnt=[1,9],pid=[1,4]), '123':dict(user=[1,1],net=[1,2],mnt=[1,3],pid=[1,4]), '124':dict(user=[1,1],net=[1,2],mnt=[1,5],pid=[1,6])}
+        contexts = [patch.object(cg, '_require_unreaped_lifecycle'),
+                    patch.object(ns, '_namespaces', side_effect=lambda pid: namespaces[pid]),
+                    patch.object(ns, 'parse_status', side_effect=json.loads),
+                    patch.object(os, 'stat', side_effect=lambda path,*a,**k: SimpleNamespace(st_dev=1,st_ino=6) if path=='/proc/123/ns/pid_for_children' else real_stat(path,*a,**k)),
+                    patch.object(ns, '_read', side_effect=read), patch.object(ns, '_process', side_effect=lambda number:
                         process if number == pid else dict(parent=supervisor + int(foreign_guardian),
-                                                           group=123, session=123, start=87, state='S')),
+                                                           group=123, session=123, start=87, state=guardian_state)),
                     patch.object(os, 'readlink', side_effect=lambda path: 'anon_inode:[pidfd]' if path in ('/proc/self/fd/77', '/proc/self/fd/78') else real_readlink(path)),
-                    patch.object(os, 'listdir', side_effect=lambda path: [str(pid)] if path == f'/proc/{pid}/task' else real_listdir(path)),
+                    patch.object(os, 'listdir', side_effect=lambda path: [str(pid)] if path == f'/proc/{pid}/task' else (['123'] if path=='/proc/123/task' else real_listdir(path))),
                     patch.object(cg.backend, '_browser_pidfd_is_terminal', return_value=terminal),
                     patch.object(lease, '_write', side_effect=write)]
         for context in contexts:
@@ -350,10 +466,24 @@ class HostedCgroupLeaseTests(unittest.TestCase):
             self.assertEqual(lease.enroll_stopped_init(**args)['members'], [124])
         send.assert_not_called()
 
+    def test_namespace_nspid_and_reaping_refusals_precede_migration(self):
+        for failure in ('subreaper','namespace','namespace_denied','nspid','guardian_threads'):
+            lease,_,args=self.enrollment()
+            changes={
+                'subreaper':patch.object(cg,'_require_unreaped_lifecycle',side_effect=cg.CgroupProofError('subreaper')),
+                'namespace':patch.object(ns,'_namespaces',return_value=dict(user=[1,1],net=[1,2],mnt=[1,3],pid=[1,4])),
+                'namespace_denied':patch.object(ns,'_namespaces',side_effect=ns.NamespaceProofError('denied')),
+                'nspid':patch.object(ns,'parse_status',return_value={'nspid':[124,2]}),
+                'guardian_threads':patch.object(cg.os,'listdir',return_value=['123','999'])}
+            with self.subTest(failure=failure),changes[failure],patch.object(lease,'attest',return_value={}), \
+                 patch.object(lease,'_write') as write,self.assertRaises((cg.CgroupProofError,ns.NamespaceProofError)):
+                lease.enroll_stopped_init(**args)
+            write.assert_not_called();lease.close()
+
     def test_running_stale_parented_or_childful_init_is_not_enrolled(self):
         # One fresh lease per subcase, so refusal cannot inherit prior state.
         for options in ({'stopped': False}, {'children': b'125 '}, {'start': 89},
-                        {'parent': 122}, {'terminal': True}, {'foreign_guardian': True}):
+                        {'parent': 122}, {'terminal': True}, {'foreign_guardian': True}, {'guardian_state': 'S'}):
             with self.subTest(options=options):
                 lease, _, args = self.enrollment(**options)
                 with self.assertRaises(cg.CgroupProofError):

@@ -55,12 +55,20 @@ def parse_postdrop_status(raw, *, uid, gid):
 
 
 
-def inspect_postdrop_identity(*, uid, gid, unit, initial_user_namespace):
-    _require(type(unit) is str and _UNIT.fullmatch(unit), 'bootstrap_unit_refused')
+def inspect_host_identity(*, uid=None, gid=None):
+    """Shared final-host-supervisor gate; never an administrative caller gate."""
+    uid = os.geteuid() if uid is None else uid
+    gid = os.getegid() if gid is None else gid
     with open('/proc/self/status', 'rb') as stream:
         result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
     _require(os.getresuid() == (uid,)*3 and os.getresgid() == (gid,)*3
              and os.getgroups() == [], 'bootstrap_ids_refused')
+    return result
+
+
+def inspect_postdrop_identity(*, uid, gid, unit, initial_user_namespace):
+    _require(type(unit) is str and _UNIT.fullmatch(unit), 'bootstrap_unit_refused')
+    result = inspect_host_identity(uid=uid, gid=gid)
     info = os.stat('/proc/self/ns/user')
     _require(type(initial_user_namespace) is tuple and len(initial_user_namespace) == 2
              and all(type(x) is int and x > 0 for x in initial_user_namespace)

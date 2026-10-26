@@ -38,6 +38,8 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_user_service.py",
     "procurement/tools/hosted_synthetic_bootstrap.py",
     "procurement/tools/hosted_synthetic_launcher.py",
+    "procurement/tools/hosted_synthetic_identity.py",
+    "procurement/tools/hosted_synthetic_pid1_regression.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

@@ -32,6 +32,8 @@ def _controllers(raw):
 
 @_resource_operation
 def prepare_user_service(unit: str, *, manager: str = 'user') -> dict:
+    from hosted_synthetic_launcher import inspect_host_identity
+    inspect_host_identity()
     _require(type(unit) is str and re.fullmatch(
         r'buffalo-hosted-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.service', unit),
         'delegation_unit_mismatch')

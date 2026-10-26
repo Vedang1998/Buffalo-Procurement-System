@@ -14,6 +14,9 @@ import hosted_synthetic_namespace as ns
 
 
 class HostedSyntheticHostTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('hosted_synthetic_launcher.inspect_host_identity', return_value={}))
+
     def program_fixture(self, *, after_changes=None, version=b'pg_dump (PostgreSQL) 16.14\n'):
         content = b'root-owned synthetic program bytes'
         before = dict(st_dev=3, st_ino=22, st_uid=0, st_gid=0, st_mode=stat.S_IFREG | 0o755,

@@ -331,6 +331,22 @@ def _hardening(parent):
     backend._browser_prctl(38, 1)
 
 
+def _require_mapped_identity():
+    """U1 mount coordinator, not a zero-capability host/payload entry."""
+    raw = _read('/proc/self/status', 16384)
+    current = parse_status(raw)
+    _require(current['uid'] == current['gid'] == [0]*4 and current['groups'] == []
+             and current['no_new_privs'] == 1 and os.getresuid() == os.getresgid() == (0,)*3)
+    caps = {}
+    for name in ('CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb'):
+        values = re.findall(rb'(?m)^' + name.encode() + rb':\s*([0-9a-f]{16})$', raw)
+        _require(len(values) == 1)
+        caps[name] = int(values[0], 16)
+    last = _integer(_read('/proc/sys/kernel/cap_last_cap', 32).strip())
+    _require(last < 64 and caps['CapInh'] == caps['CapAmb'] == 0
+             and caps['CapPrm'] == caps['CapEff'] == caps['CapBnd'] == (1 << (last + 1))-1)
+
+
 def _runtime_images():
     """Bind readable ELF/loader identities, without claiming runtime closure."""
     current_identity = _identity(os.stat('/proc/self/exe'))
@@ -509,6 +525,7 @@ def _resume_guardian(arguments):
                 continue
             _require(int(name) in expected)
         _resume_signal_state(packet['mask'])
+        _require_mapped_identity()
         current = _process(os.getpid())
         _require(current == packet['process'] and current['parent'] == supervisor
                  and current['group'] == current['session'] == os.getpid()
@@ -617,8 +634,9 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
     backend._browser_mount(None, b"/", None, (1 << 18) | 16384, None)
     backend._close_browser_guardian_descriptors(frozenset((0, 1, 2, gate.number, status.number, guardian_pidfd.number)))
     _send(status, generation, "ARMED", deadline)
-    if cgroup_required:
-        os.kill(os.getpid(), signal.SIGSTOP)
+    # PID-namespace init does not honor a self-generated SIGSTOP. Stay blocked
+    # on this generation-bound pipe while the ancestor guardian stops us via
+    # its retained pidfd. Only a verified enrollment ACK lets G send PROBE.
     _receive(gate, generation, "PROBE", deadline)
     _require(not backend._browser_pidfd_is_terminal(guardian_pidfd.number))
     guardian_pidfd.close()
@@ -724,7 +742,7 @@ def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outsi
     os.unshare(os.CLONE_NEWUSER | os.CLONE_NEWNS | os.CLONE_NEWPID | os.CLONE_NEWNET)
     _send(status, generation, "USERNS", deadline)
     _receive(gate, generation, "MAPPED", deadline)
-    _require((os.geteuid(), os.getegid(), os.getgroups()) == (0, 0, []))
+    _require_mapped_identity()
     backend._browser_prctl(4, 0)
     parent = _pidfd(supervisor)
     _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
@@ -733,6 +751,9 @@ def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outsi
 
 def _guardian_enrollment(gate, status, child, init_fd, generation, deadline):
     # Both G and I stop before S enrolls I; G retains its unreaped child.
+    init_fd.verify()
+    _require(not backend._browser_pidfd_is_terminal(init_fd.number))
+    signal.pidfd_send_signal(init_fd.number, signal.SIGSTOP)
     _wait(child, deadline, stopped=True)
     init_fd.verify()
     process = _process(child)
@@ -887,6 +908,8 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
     """Run in a fresh scrubbed single-thread supervisor; return no authority."""
     from hosted_synthetic_capability import _require_clean_supervisor
     _require_clean_supervisor()
+    from hosted_synthetic_launcher import inspect_host_identity
+    inspect_host_identity()
     _require(type(generation) is str and re.fullmatch(r"[0-9a-f]{64}", generation) is not None
              and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL)
     from hosted_synthetic_cgroup import CgroupLease, CgroupCleanupError
@@ -906,6 +929,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
     evidence = None
     cgroup = None
     cgroup_evidence = None
+    resource_cleanup = None
     enrolled = None
     process_descriptors = []
     errors = []
@@ -1017,6 +1041,8 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
         if cgroup is not None:
             try:
                 cgroup.close()
+                resource_cleanup = cgroup.final_resources
+                _require(type(resource_cleanup) is dict)
             except BaseException as exc:
                 errors.append(exc)
         for descriptor in [*reversed(process_descriptors), child_fd, *reversed(descriptors)]:
@@ -1044,6 +1070,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
         reason = "CLEANUP_FAILED"
     return dict(reason=reason, cleanup_complete=not errors and (process < 0 or reaped),
                 refusal_location=refusal_location, cgroup_evidence=cgroup_evidence,
+                resource_cleanup=resource_cleanup,
                 cgroup='COMPONENT_OBSERVATION_ONLY' if cgroup_evidence is not None else 'NOT_RUN',
                 runtime="HOST_RUNTIME_UNSEALED",
                 private_proc=evidence, HOST_CAPABILITY="FAIL", provider_calls=0,

@@ -15,6 +15,7 @@ import hosted_synthetic_cgroup as cg
 
 class HostedSyntheticEnrollmentTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch('hosted_synthetic_launcher.inspect_host_identity', return_value={}))
         self.lease = Mock(path='/unit/buffalo-' + 'a'*64)
         self.guardian = Mock(number=10)
         self.init = Mock(number=11)
@@ -89,7 +90,7 @@ class HostedSyntheticEnrollmentTests(unittest.TestCase):
                  self.assertRaises(ns.NamespaceProofError):
                 ns._guardian_enrollment(Mock(), Mock(), 102, self.init, 'a'*64, 1.0)
             stop.assert_called_once_with(os.getpid(), signal.SIGSTOP)
-        self.resume.assert_not_called()
+        self.assertTrue(all(call.args == (11, signal.SIGSTOP) for call in self.resume.call_args_list))
 
     def test_guardian_requires_enrollment_path_and_unchanged_init(self):
         process = {'state': 'T', 'parent': os.getpid(), 'group': os.getpid(), 'start': 300}
@@ -99,7 +100,8 @@ class HostedSyntheticEnrollmentTests(unittest.TestCase):
              patch.object(ns.os, 'kill'), patch.object(ns, '_receive', return_value=ack), \
              patch.object(ns, '_read', side_effect=lambda p, n: ('0::' + ('/unit/supervisor' if p == '/proc/self/cgroup' else self.lease.path) + '\n').encode()):
             ns._guardian_enrollment(Mock(), Mock(), 102, self.init, 'a'*64, 1.0)
-        self.resume.assert_called_once_with(11, signal.SIGCONT)
+        self.assertEqual([call.args for call in self.resume.call_args_list],
+                         [(11, signal.SIGSTOP), (11, signal.SIGCONT)])
 
     def test_wrong_delegation_precedes_lease_or_fork(self):
         with patch('hosted_synthetic_capability._require_clean_supervisor'), \
@@ -171,7 +173,7 @@ class HostedSyntheticEnrollmentTests(unittest.TestCase):
     def test_outer_cleanup_reaps_before_lease_close_and_preserves_failure(self):
         for failure in ('enroll', 'retained', 'pair', 'lease_close'):
             events = []
-            lease = Mock()
+            lease = Mock(final_resources={})
             def enroll(*args):
                 args[-1].append(self.init)
                 events.append('enroll')
@@ -279,9 +281,10 @@ if guardian==0:
  child=-1
  try:
   n._hardening(supervisor); os.setsid()
+  release_read,release_write=os.pipe()
   child=os.fork()
   if child==0:
-   n._hardening(os.getppid()); os.kill(os.getpid(),signal.SIGSTOP); os._exit(0)
+   n._hardening(os.getppid()); os.read(release_read,1); os._exit(0)
   fd=n._pidfd(child)
   original=n._read
   def read(path, maximum=n._LIMIT):
@@ -290,6 +293,7 @@ if guardian==0:
    return original(path,maximum)
   n._read=read
   n._guardian_enrollment(gr,sw,child,fd,generation,deadline)
+  os.write(release_write,b"x")
   n._wait(child,deadline); child=-1;fd.close()
   os._exit(0)
  except BaseException:

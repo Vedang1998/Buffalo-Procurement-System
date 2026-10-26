@@ -195,6 +195,7 @@ def verify_postdrop_access(root, unit):
                                                    dir_fd=directory.number))
             control.verify()
             _require(os.fstat(control.number).st_uid == os.geteuid()
+                     and not os.fstat(control.number).st_mode & 0o022
                      and ns._mount_id(control) == ns._mount_id(directory), 'bootstrap_cgroup_access_refused')
             control.close()
             control = None
@@ -306,7 +307,7 @@ def _decode_report(raw, plan):
 
 
 @_resource_operation
-def run_native_plan(plan):
+def run_native_plan(plan, *, source_root=None, account=None):
     """Dormant execution implementation: no CLI/workflow path calls this yet.
 
     Independent review must precede its later activation. The source-bound
@@ -321,15 +322,27 @@ def run_native_plan(plan):
     rebuilt = plan_native_bootstrap(root=plan.root, python=plan.python, repository=repository,
                                     event=event, ref=ref, commit=commit, uid=plan.uid, gid=plan.gid,
                                     unit=plan.unit, initial_user_namespace=plan.initial_user_namespace)
-    _require(plan == rebuilt and os.getresuid() == (plan.uid,)*3 and os.getresgid() == (plan.gid,)*3
-             and ns._identity(os.stat('/proc/self/ns/user')) == plan.initial_user_namespace)
-    binding = bind_hosted_source(Path(plan.root), repository=repository, event=event, ref=ref, sha=commit)
+    _require(plan == rebuilt and ns._identity(os.stat('/proc/self/ns/user')) == plan.initial_user_namespace)
+    # The historical shared-runner identity route is no longer executable.
+    from hosted_synthetic_identity import AccountLease
+    _require(type(account) is AccountLease and account._owner is account,
+             'dedicated_account_required')
+    account.verify_root()
+    selected=account.identity
+    _require(os.getresuid()==(selected.operator_uid,)*3 and os.getresgid()==(selected.operator_gid,)*3
+             and plan.uid==selected.uid and plan.gid==selected.gid
+             and plan.root==selected.root+'/repo' and plan.unit==selected.unit
+             and type(source_root) is str and source_root!=plan.root)
+    binding = bind_hosted_source(Path(source_root), repository=repository, event=event, ref=ref, sha=commit)
     before = inspect_native_prerequisites()
     error = None
     cleanup_errors = []
     code = raw = absence = None
     try:
-        code, raw = _collect_native_client(plan.argv, cwd=plan.root)
+        _require(account.service_attempted is False and account.service_acknowledged is False,
+                 'native_attempt_cannot_be_retried')
+        account.service_attempted=True
+        code, raw = _collect_native_client(plan.argv, cwd=source_root)
         _require(code in (0, 1), 'bootstrap_client_refused')
     except BaseException as selected:
         error = selected
@@ -351,6 +364,17 @@ def run_native_plan(plan):
     report = _decode_report(raw, plan)
     _require(report.get('tree') == binding.tree and report.get('source_files') == dict(binding.files),
              'bootstrap_report_source_refused')
+    observation=report.get('namespace_attempt')
+    no_namespace=(report.get('reason')=='HOST_PREREQUISITES_REFUSED'
+                  and 'namespace_attempt' in report and observation is None)
+    namespace_clean=(report.get('reason')=='INCOMPLETE_PREFLIGHT' and type(observation) is dict
+                     and observation.get('cleanup_complete') is True
+                     and observation.get('reason')=='INCOMPLETE_PREFLIGHT'
+                     and type(observation.get('resource_cleanup')) is dict
+                     and observation['resource_cleanup'].get('generation_child_removed') is True)
+    if not (no_namespace or namespace_clean):
+        raise BootstrapCleanupError('native_resource_cleanup_uncertain_identity_retained')
+    account.service_acknowledged=True
     return {'contract': 'BUFFALO_NATIVE_BOOTSTRAP_OBSERVATION_V1', 'report': report,
             'native_prerequisites': before, 'client_returncode': code,
             'service_absence': absence, 'ancestors_unchanged': True,

@@ -48,15 +48,16 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_repository_python_has_no_site_or_ambient_environment(self):
         launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
-        self.assertEqual(len(launches), 3)
+        self.assertEqual(len(launches), 4)
         self.assertTrue(launches[0].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertTrue(launches[2].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[2])
-        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[2])
+        self.assertTrue(launches[3].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[3])
+        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[3])
+        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[1])
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,12,65,22,28,20,11,17,28]', 'result.wasSuccessful()', 'result.testsRun == 272', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,12,66,22,35,20,11,17,30,15,4]', 'result.wasSuccessful()', 'result.testsRun == 301', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -131,8 +132,8 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
                                        cwd=ROOT, env=environment, pass_fds=(fd,), capture_output=True, timeout=5)
             result = json.loads(completed.stdout.splitlines()[0])
             self.assertEqual(completed.returncode, 1)
-            self.assertEqual(result['refusal']['phase'], 'SOURCE_BINDING')
-            self.assertEqual(result['refusal']['code'], 'source_event_invalid')
+            self.assertEqual(result['refusal']['phase'], 'POSTDROP_IDENTITY')
+            self.assertEqual(result['refusal']['code'], 'POSTDROP_PREREQUISITE_REFUSED')
             self.assertEqual(result['provider_calls'], 0)
             self.assertFalse(result['execution_authority'])
             self.assertIsNone(result['host_prerequisites'])

@@ -10,6 +10,39 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-26 consolidated Claude remediation — REQUEST CHANGES, NON-GREEN
+
+Owner reports actual external Claude review of `3c1ae555b82aa650011254a9b1f8e8c4367601bb`
+with verdict REQUEST CHANGES. It does not cover b35c036d or this new delta. Its
+238-test run is not GitHub environment reproduction. Original reviewer-reported
+tool/model/session, exact finding numbering and execution limitations are not yet
+available; requested while implementation continued, never invented.
+
+Based on published b852181/tree d7c14ccc, this delta repairs PID1 parent-origin
+stop, full final-supervisor entry checks, unreaped numeric-migration prerequisites,
+signal-boundary descriptor cleanup and child/outer memory accounting. It adds a
+real CLONE_NEWPID/cgroup_required regression with explicitly simulated cgroup writes
+and a dedicated per-run identity path with dormant activation wiring. Shared-UID
+native fallback refuses. Lost native acknowledgments or failed cleanup cannot
+authorize account recycling. No account or privileged service was executed.
+
+See [consolidated report](CLAUDE_REMEDIATION_2026-10-26.md) and the
+[finding ledger](review/2026-10-26-consolidated-remediation/findings.json).
+Frozen source/test/publication identities follow in the evidence closeout. No
+finding is VERIFIED_CLOSED by writer assertion. One scoped independent Claude
+re-review remains pending; internal reviews do not satisfy it.
+
+S namespace readback against nondumpable children is unproven and may refuse.
+Actual cgroup migration/external full-service kill-path cleanup remain unproved.
+Dedicated identity alone does not exclude same-UID workers from controls; runtime
+closure/worker isolation remain missing implementation, UNSEALED. Privileged
+activation and credential release remain disabled. Sentinel/browser/BackupV2/APPLY/
+DRAFT/packet/restart/restore NOT_RUN. Full supported-candidate authoritative suite
+remains required; the unchanged native-Cloud pg_dump failure was not repeated.
+Canonical phase numbering, production/business boundaries and historical evidence
+are unchanged. Next: consolidate actual review metadata and perform the one exact
+read-only re-review before any privileged same-host proof.
+
 ### 2026-10-26 approved empty-groups bootstrap implementation — WIP, NON-GREEN
 
 New authority: the owner approved a minimum native bootstrap on the ephemeral

@@ -19,6 +19,7 @@ import hosted_synthetic_source as source
 
 class HostedSyntheticCapabilityTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch('hosted_synthetic_launcher.inspect_host_identity', return_value={}))
         self.guardian = SimpleNamespace(_owner_token=object())
         self.backend = Mock()
         self.backend._browser_libc.return_value.prctl.return_value = 0

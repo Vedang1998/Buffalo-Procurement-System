@@ -34,6 +34,28 @@ def mountinfo(number=45, options=b"rw,nosuid,nodev,noexec", optional=b"", target
 
 
 class HostedSyntheticNamespaceTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch("hosted_synthetic_launcher.inspect_host_identity", return_value={}))
+
+    def test_mapped_coordinator_requires_four_ids_nnp_and_scoped_capabilities(self):
+        # Mapped U1 mount authority is distinct from zero-cap host/payload entry.
+        cap=(1<<41)-1
+        raw=(b'Pid:\t9\nPPid:\t8\nNSpid:\t9\nUid:\t0 0 0 0\nGid:\t0 0 0 0\nGroups:\t\nNoNewPrivs:\t1\n'+
+             b''.join((key+':\t'+format(value,'016x')+'\n').encode() for key,value in
+                      [('CapInh',0),('CapPrm',cap),('CapEff',cap),('CapBnd',cap),('CapAmb',0)]))
+        for changed in (None,b'Uid:\t0 0 0 1',b'Gid:\t0 1 0 0',b'NoNewPrivs:\t0',
+                        b'CapAmb:\t0000000000000001',b'CapEff:\t0000000000000000'):
+            observed=raw
+            if changed is not None:
+                key=changed.split(b':')[0]
+                observed=b'\n'.join(changed if line.startswith(key+b':') else line for line in raw.split(b'\n'))
+            with self.subTest(changed=changed),patch.object(namespace,'_read',side_effect=lambda path,n:
+                 b'40\n' if path.endswith('cap_last_cap') else observed), \
+                 patch.object(namespace.os,'getresuid',return_value=(0,)*3),patch.object(namespace.os,'getresgid',return_value=(0,)*3):
+                if changed is None:namespace._require_mapped_identity()
+                else:
+                    with self.assertRaises(namespace.NamespaceProofError):namespace._require_mapped_identity()
+
     def test_pid_one_parent_zero_and_command_parentheses(self):
         self.assertEqual(namespace.parse_process_stat(process_stat(), 1),
                          dict(pid=1, state="R", parent=0, group=0, session=0, start=123))
@@ -312,6 +334,8 @@ class HostedSyntheticNamespaceTests(unittest.TestCase):
         program = f'''import sys,os,signal,json
 sys.path.insert(0,{root!r})
 import hosted_synthetic_namespace as n
+import hosted_synthetic_launcher as launcher
+launcher.inspect_host_identity=lambda: dict()  # This is a simulated cleanup-boundary test.
 def guardian(gate,status,generation,supervisor,deadline,*unused):
  n._hardening(supervisor); os.setsid()
  n._send(status,generation,'STOPPED',deadline)
@@ -436,6 +460,8 @@ print('cleanup failure preserved')
 from unittest.mock import patch
 sys.path.insert(0,{root!r})
 import hosted_synthetic_namespace as n
+import hosted_synthetic_launcher as launcher
+launcher.inspect_host_identity=lambda: dict()  # This is a simulated cleanup-boundary test.
 gate,unused=n._pipe(); other,status=n._pipe()
 unused.close(); other.close()
 parent=n._pidfd(os.getppid())
@@ -514,6 +540,8 @@ with patch.object(n.os,'execve',side_effect=execute):
 from unittest.mock import patch
 sys.path.insert(0,{root!r})
 import hosted_synthetic_namespace as n
+import hosted_synthetic_launcher as launcher
+launcher.inspect_host_identity=lambda: dict()  # This is a simulated cleanup-boundary test.
 own=n._pidfd(os.getpid()); parent=n._pidfd(os.getppid())
 ir,iw=n._pipe(); rr,rw=n._pipe()
 created=[]
@@ -565,6 +593,8 @@ print("owned pre-ARMED child reaped")
 from unittest.mock import patch
 sys.path.insert(0,ROOT)
 import hosted_synthetic_namespace as n
+import hosted_synthetic_launcher as launcher
+launcher.inspect_host_identity=lambda: dict()  # This is a simulated cleanup-boundary test.
 n.backend._browser_prctl(36,1)
 r,w=os.pipe2(os.O_CLOEXEC)
 outer=os.getpid()
@@ -664,6 +694,8 @@ finally:
         program = f'''import sys,os,signal,json,ctypes
 sys.path.insert(0,{root!r})
 import hosted_synthetic_namespace as n
+import hosted_synthetic_launcher as launcher
+launcher.inspect_host_identity=lambda: dict()  # This is a simulated cleanup-boundary test.
 before=ctypes.c_int()
 assert n.backend._browser_libc().prctl(37,ctypes.byref(before),0,0,0)==0
 mask=signal.pthread_sigmask(signal.SIG_BLOCK, [])

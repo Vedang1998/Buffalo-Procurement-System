@@ -92,6 +92,8 @@ def _require_clean_supervisor() -> None:
 
 def _namespace_attempt(backend, generation: str) -> dict:
     _require_clean_supervisor()
+    from hosted_synthetic_launcher import inspect_host_identity
+    inspect_host_identity()
     if len(generation) != 64 or any(c not in "0123456789abcdef" for c in generation):
         raise HostedDiagnosticError("generation_refused")
     result = {
@@ -213,6 +215,7 @@ def main(arguments=None) -> int:
         # Defense in depth for direct invocation: read back native drop before
         # Git subprocesses, controller access or namespace work. The native
         # launcher's stdlib-only gate already checked before dispatching us.
+        from hosted_synthetic_launcher import inspect_host_identity, LauncherRefusal
         if len(args) == 10:
             from hosted_synthetic_bootstrap import BootstrapRefusal, verify_postdrop_identity
             phase = 'POSTDROP_IDENTITY'
@@ -220,6 +223,13 @@ def main(arguments=None) -> int:
                 postdrop = verify_postdrop_identity(uid=int(args[6]), gid=int(args[7]), unit=args[5],
                                                     initial_user_namespace=(int(args[8]), int(args[9])))
             except BootstrapRefusal:
+                return _emit(_report(reason='POSTDROP_PREREQUISITE_REFUSED',
+                                     refusal={'phase': phase, 'code': 'POSTDROP_PREREQUISITE_REFUSED', 'errno': None}))
+        else:
+            phase = 'POSTDROP_IDENTITY'
+            try:
+                postdrop = inspect_host_identity()
+            except (LauncherRefusal, OSError):
                 return _emit(_report(reason='POSTDROP_PREREQUISITE_REFUSED',
                                      refusal={'phase': phase, 'code': 'POSTDROP_PREREQUISITE_REFUSED', 'errno': None}))
         phase = 'SOURCE_BINDING'

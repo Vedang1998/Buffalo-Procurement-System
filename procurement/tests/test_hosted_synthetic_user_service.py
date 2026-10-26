@@ -16,6 +16,7 @@ ROOT = '/user.slice/user-1001.slice/user@1001.service/app.slice/' + UNIT
 
 class HostedSyntheticUserServiceTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch('hosted_synthetic_launcher.inspect_host_identity', return_value={}))
         self.parent = Mock(number=10, identity=(7, 10))
         self.supervisor = Mock(number=11, identity=(7, 11))
         self.control = Mock(number=12, identity=(7, 12))

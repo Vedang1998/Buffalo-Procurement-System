@@ -1,0 +1,18 @@
+{
+  "reviewed_commit": "3c1ae555b82aa650011254a9b1f8e8c4367601bb",
+  "reviewed_tree": "3de6508ec0b173b575b7ce4cacc73129af9011a7",
+  "reviewer": "Claude Code",
+  "verdict": "REQUEST CHANGES",
+  "provenance": "Owner consolidated remediation instruction, 2026-10-26; actual external review reported by owner",
+  "reviewer_reported_tool_version": null,
+  "reviewer_reported_model": null,
+  "reviewer_reported_session": null,
+  "reviewer_reported_execution_limitations": null,
+  "original_review_text_available": false,
+  "exact_original_finding_numbers_available": false,
+  "reported_test_run_count": 238,
+  "review_test_result_detail": "NOT_PROVIDED",
+  "github_environment_reproduction": false,
+  "b35c036d_and_later_review_coverage": false,
+  "metadata_request": "Original attribution/numbered findings requested asynchronously; no answer received at preparation time"
+}

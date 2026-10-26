@@ -168,12 +168,20 @@ def observe_supervisor_identity() -> dict:
     checks = dict(nonroot_uid_consistent=len(set(uids)) == 1 and uids[0] > 0,
                   gid_consistent=len(set(gids)) == 1,
                   supplementary_groups_empty=os.getgroups() == [])
+    from hosted_synthetic_launcher import inspect_host_identity, LauncherRefusal
+    try:
+        inspect_host_identity()
+        checks['full_postdrop_identity'] = True
+    except (LauncherRefusal, OSError):
+        checks['full_postdrop_identity'] = False
     return dict(contract='BUFFALO_SUPERVISOR_IDENTITY_V1', **checks,
                 eligible_for_user_mapping=all(checks.values()), execution_authority=False)
 
 
 @_resource_operation
 def observe_host_prerequisites() -> dict:
+    from hosted_synthetic_launcher import inspect_host_identity
+    inspect_host_identity()
     programs = {name: _program(name) for name in ('pg_dump', 'pg_restore')}
     try:
         delegation = _delegation()

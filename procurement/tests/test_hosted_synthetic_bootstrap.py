@@ -39,6 +39,46 @@ def plan(**changes):
 
 
 class HostedSyntheticBootstrapTests(unittest.TestCase):
+    def test_every_supervisor_entry_rejects_retained_authority_before_effects(self):
+        import hosted_synthetic_capability as capability
+        import hosted_synthetic_host as host
+        import hosted_synthetic_user_service as service
+        import hosted_synthetic_cgroup as cg
+        mutations = [{'Groups':'1001'}, {'NoNewPrivs':'0'}]
+        for name in ('Uid','Gid'):
+            for index in range(4):
+                values=['1001']*4;values[index]='0'
+                mutations.append({name:' '.join(values)})
+        mutations.extend({key:'0000000000000001'} for key in boot._CAPABILITIES)
+        for changed in mutations:
+            with self.subTest(changed=changed), \
+                 patch.object(launcher,'open',create=True,side_effect=lambda *a,**k: io.BytesIO(status(**changed))), \
+                 patch.object(launcher.os,'geteuid',return_value=UID),patch.object(launcher.os,'getegid',return_value=GID), \
+                 patch.object(capability,'_require_clean_supervisor'),patch.object(cg,'_signal_boundary'), \
+                 patch.object(capability,'bind_hosted_source') as binding,patch.object(ns.os,'fork') as fork, \
+                 patch.object(cg,'_open_directory') as opening,patch.object(host,'_program') as program:
+                for suffix in ([],['--user-service-unit',UNIT],['--native-bootstrap',UNIT,'1001','1001','5','123']):
+                    with contextlib.redirect_stdout(io.StringIO()) as output:
+                        self.assertEqual(capability.main(['repo','push','ref','a'*40,*suffix]),1)
+                    self.assertEqual(json.loads(output.getvalue().splitlines()[0])['reason'],'POSTDROP_PREREQUISITE_REFUSED')
+                for invoke in (lambda: ns.observe_private_proc('a'*64),
+                               lambda: capability._namespace_attempt(Mock(),'a'*64),
+                               lambda: service.prepare_user_service.__wrapped__(UNIT),
+                               lambda: cg.CgroupLease.create(Path('/sys/fs/cgroup/unit'),generation='a'*64,memory_max=4096),
+                               host.observe_host_prerequisites.__wrapped__):
+                    with self.assertRaises(launcher.LauncherRefusal):invoke()
+                binding.assert_not_called();fork.assert_not_called();opening.assert_not_called();program.assert_not_called()
+
+    def test_host_readback_success_requires_libc_ids_and_empty_groups_too(self):
+        with patch.object(launcher,'open',create=True,side_effect=lambda *a,**k:io.BytesIO(status())), \
+             patch.object(launcher.os,'getresuid',return_value=(UID,)*3), \
+             patch.object(launcher.os,'getresgid',return_value=(GID,)*3), \
+             patch.object(launcher.os,'getgroups',return_value=[]):
+            self.assertEqual(launcher.inspect_host_identity(uid=UID,gid=GID)['capabilities'],
+                             {key:0 for key in boot._CAPABILITIES})
+            with patch.object(launcher.os,'getgroups',return_value=[GID]),self.assertRaises(launcher.LauncherRefusal):
+                launcher.inspect_host_identity(uid=UID,gid=GID)
+
     def test_cli_never_opens_review_gate_from_args_or_environment(self):
         with patch.object(boot, 'run_native_plan') as execute, \
              patch.dict(os.environ, {'BOOTSTRAP_REVIEW':'PASS'}):
@@ -287,12 +327,18 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
             boot.verify_postdrop_access.__wrapped__(Path('/work/repo'),UNIT)
 
     def _owned_run(self, failure):
-        selected=plan();events=[]
+        import hosted_synthetic_identity as identity
+        account=object.__new__(identity.AccountLease);account._owner=account
+        account.service_attempted=False;account.service_acknowledged=False
+        account.identity=identity.DedicatedIdentity(UNIT.removeprefix('buffalo-hosted-').removesuffix('.service'),950,951,UID,GID)
+        selected=plan(uid=950,gid=951,root=account.identity.root+'/repo');events=[]
         binding=Mock(tree='b'*40,files=())
         report={'commit':'a'*40,'tree':'b'*40,'source_files':{},'repository':selected.source[0],'ref':selected.source[2],
                 'execution_authority':False,'provider_calls':0,'payload_processes':0,'credential_release':'WITHHELD',
                 'contract':'BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1','HOST_CAPABILITY':'FAIL','sentinel_exec':'NOT_RUN',
                 'runtime':'HOST_RUNTIME_UNSEALED','railway_compatibility':'NOT_PROVEN'}
+        report.update(reason='HOST_PREREQUISITES_REFUSED',namespace_attempt=None)
+        if failure=='resource_cleanup':report.update(reason='CLEANUP_FAILED',namespace_attempt={'cleanup_complete':False})
         first=json.dumps(report,sort_keys=True,separators=(',',':')).encode()
         raw=first+b'\nevidence_sha256='+hashlib.sha256(first).hexdigest().encode()+b'\n'
         def client(*args,**kwargs):
@@ -310,6 +356,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
             events.append('inspect')
             return {'ancestors':failure=='drift' and events.count('inspect')==2}
         with patch('hosted_synthetic_capability._require_clean_supervisor'), \
+             patch.object(account,'verify_root'), \
              patch('hosted_synthetic_source.bind_hosted_source',return_value=binding), \
              patch.object(boot.os,'getresuid',return_value=(UID,)*3),patch.object(boot.os,'getresgid',return_value=(GID,)*3), \
              patch.object(boot.os,'stat',return_value=Mock(st_dev=5,st_ino=123)), \
@@ -318,7 +365,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
              patch.object(boot,'_observe_unit_absence',side_effect=absence):
             try:
                 invoke=boot.run_native_plan if failure=='deferred_cancel' else boot.run_native_plan.__wrapped__
-                return invoke(selected)
+                return invoke(selected,source_root='/work/source',account=account)
             finally:
                 self.assertEqual(events,['inspect','client','absence','inspect'])
 
@@ -336,7 +383,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
         self.assertEqual(signal.pthread_sigmask(signal.SIG_BLOCK,[]),before)
 
     def test_drift_or_unknown_service_lifecycle_is_cleanup_failure(self):
-        for failure in ('drift','cleanup'):
+        for failure in ('drift','cleanup','resource_cleanup'):
             with self.subTest(failure=failure),self.assertRaises(boot.BootstrapCleanupError):self._owned_run(failure)
 
     def test_successful_transport_is_only_component_evidence(self):

@@ -35,8 +35,11 @@ _CGROUP2_MAGIC = 0x63677270
 _MAXIMUM = 4096
 _CONTROLS = ('cgroup.type', 'cgroup.procs', 'cgroup.threads', 'cgroup.events',
              'cgroup.subtree_control', 'memory.max', 'memory.oom.group',
-             'memory.events', 'pids.max')
+             'memory.current', 'memory.peak', 'memory.events', 'pids.max')
 _WRITABLE = frozenset(('cgroup.procs', 'memory.max', 'memory.oom.group', 'pids.max'))
+# Explicit version-bound parser policy, not a claim about a kernel version.
+# Unknown keys refuse compatibility; they are never dropped or assumed safe.
+MEMORY_EVENTS_SCHEMA = 'BUFFALO_MEMORY_EVENTS_SIX_KEYS_V1'
 _MEMORY_KEYS = frozenset(('low', 'high', 'max', 'oom', 'oom_kill', 'oom_group_kill'))
 
 
@@ -72,6 +75,42 @@ def require_zero_oom_delta(before: dict, after: dict) -> None:
                          for value in selected.values()))
     _require(all(after[key] >= before[key] for key in _MEMORY_KEYS)
              and all(after[key] == before[key] for key in ('oom', 'oom_kill', 'oom_group_kill')))
+
+
+def _memory_observation(read, limit, previous=None):
+    current = parse_scalar(read('memory.current'))
+    peak = parse_scalar(read('memory.peak'))
+    events = parse_memory_events(read('memory.events'))
+    _require(parse_scalar(read('memory.max')) == limit and 0 <= current <= peak <= limit
+             and all(events[key] == 0 for key in ('oom', 'oom_kill', 'oom_group_kill')))
+    if previous is not None:
+        require_zero_oom_delta(previous['events'], events)
+        _require(peak >= previous['peak'])
+    return dict(current=current, peak=peak, limit=limit, events=events,
+                events_schema=MEMORY_EVENTS_SCHEMA)
+
+
+def _require_unreaped_lifecycle():
+    """S owns orphan adoption and cannot auto-reap during numeric migration.
+
+    This is a lifecycle guarantee, not an atomic pidfd-to-cgroup operation.
+    G never waits/reaps after requesting enrollment and before ACK; if G dies,
+    S adopts I and delays all waits until the enrollment attempt has ended.
+    """
+    _signal_boundary()
+    subreaper = ctypes.c_int()
+    _require(backend._browser_libc().prctl(37, ctypes.byref(subreaper), 0, 0, 0) == 0
+             and subreaper.value == 1)
+    # Linux/glibc x86-64 sigaction ABI, the exact supported runner architecture.
+    # Python getsignal alone cannot detect SA_NOCLDWAIT installed by native code.
+    _require(os.uname().machine == 'x86_64')
+    class Sigaction(ctypes.Structure):
+        _fields_ = [('handler', ctypes.c_void_p), ('mask', ctypes.c_ulong * 16),
+                    ('flags', ctypes.c_int), ('restorer', ctypes.c_void_p)]
+    action = Sigaction()
+    libc = ctypes.CDLL(None, use_errno=True)
+    _require(libc.sigaction(signal.SIGCHLD, None, ctypes.byref(action)) == 0
+             and not action.handler and not action.flags & 2)  # SA_NOCLDWAIT
 
 
 def _filesystem(fd):
@@ -140,6 +179,8 @@ class CgroupLease:
         # Caller owns the outer cancellation envelope through final cleanup.
         # Never return a newly acquired lease across an unmasked signal edge.
         _signal_boundary()
+        from hosted_synthetic_launcher import inspect_host_identity
+        inspect_host_identity()
         _require(type(generation) is str and re.fullmatch('[0-9a-f]{64}', generation))
         _require(type(memory_max) is int and 4096 <= memory_max < 5 * 1024**3
                  and memory_max % os.sysconf('SC_PAGE_SIZE') == 0)
@@ -152,12 +193,19 @@ class CgroupLease:
         lease.path = str(delegation)[len('/sys/fs/cgroup'):] + '/' + lease.name
         lease.memory_max = memory_max
         lease.baseline = None
+        lease.outer_memory = None
+        lease.child_memory = None
+        lease.final_resources = None
         lease.closed = False
         lease.cleanup_failed = False
         lease._owner = lease
         created = False
         try:
             lease.parent_mount = ns._mount_id(lease.parent)
+            _require(memory_max <= 512 * 1024**2
+                     and parse_scalar(_read_at(lease.parent, 'pids.max')) == 64)
+            lease.outer_memory = _memory_observation(lambda name: _read_at(lease.parent, name),
+                                                     512 * 1024**2)
             _require(_read_at(lease.parent, 'cgroup.type') == b'domain\n'
                      and _read_at(lease.parent, 'cgroup.procs') == b''
                      and _read_at(lease.parent, 'cgroup.threads') == b'')
@@ -230,6 +278,8 @@ class CgroupLease:
             descriptor.verify()
             _require(ns._identity(os.stat(name, dir_fd=self.child.number, follow_symlinks=False))
                      == descriptor.identity and ns._mount_id(descriptor) == self.child_mount)
+            control_info=os.fstat(descriptor.number)
+            _require(control_info.st_uid==os.geteuid() and not control_info.st_mode & 0o022)
 
     def _read(self, name):
         self.verify()
@@ -262,8 +312,14 @@ class CgroupLease:
                  == backend.BrowserCgroupEvents(populated=bool(members), frozen=False))
         events = parse_memory_events(self._read('memory.events'))
         require_zero_oom_delta(self.baseline, events)
+        self.child_memory = _memory_observation(self._read, self.memory_max, self.child_memory)
+        self.outer_memory = _memory_observation(lambda name: _read_at(self.parent, name),
+                                                512 * 1024**2, self.outer_memory)
+        _require(parse_scalar(_read_at(self.parent, 'pids.max')) == 64)
         return dict(path=self.path, identity=list(self.child.identity), memory_max=self.memory_max,
                     pids_max=2, memory_oom_group=1, members=sorted(members), memory_events=events,
+                    child_memory=dict(self.child_memory), enclosing_service_memory=dict(self.outer_memory),
+                    charge_scope='CHILD_POST_MIGRATION_AND_ENCLOSING_SERVICE',
                     execution_authority=False)
 
     def enroll_stopped_init(self, *, pid: int, pidfd, start: int, guardian: int,
@@ -277,6 +333,7 @@ class CgroupLease:
         self.attest(())
 
         def stopped():
+            _require_unreaped_lifecycle()
             for selected, number in ((pidfd, pid), (guardian_pidfd, guardian)):
                 selected.verify()
                 _require(os.readlink(f'/proc/self/fd/{selected.number}') == 'anon_inode:[pidfd]'
@@ -284,10 +341,23 @@ class CgroupLease:
                          == [str(number).encode()] and not backend._browser_pidfd_is_terminal(selected.number))
             outer = ns._process(guardian)
             _require(outer['parent'] == supervisor and outer['group'] == outer['session'] == guardian
-                     and outer['start'] == guardian_start and outer['state'] in ('S', 'T'))
+                     and outer['start'] == guardian_start and outer['state'] == 'T')
             observed = ns._process(pid)
             _require(observed['state'] == 'T' and observed['start'] == start
-                     and observed['parent'] == guardian and observed['group'] == guardian)
+                     and observed['parent'] == guardian and observed['group'] == observed['session'] == guardian)
+            _require(sorted(os.listdir(f'/proc/{guardian}/task')) == [str(guardian)])
+            _require(ns.parse_status(ns._read(f'/proc/{guardian}/status', 16384))['nspid'] == [guardian]
+                     and ns.parse_status(ns._read(f'/proc/{pid}/status', 16384))['nspid'] == [pid, 1])
+            # Refuse if the host cannot independently read these identities;
+            # do not replace them with the guardian's assertion.
+            namespaces = ns._namespaces(str(pid))
+            guardian_namespaces = ns._namespaces(str(guardian))
+            supervisor_namespaces = ns._namespaces('self')
+            _require(namespaces['user'] == guardian_namespaces['user'] != supervisor_namespaces['user']
+                     and namespaces['net'] == guardian_namespaces['net'] != supervisor_namespaces['net']
+                     and namespaces['mnt'] != guardian_namespaces['mnt']
+                     and guardian_namespaces['pid'] == supervisor_namespaces['pid'] != namespaces['pid']
+                     and list(ns._identity(os.stat(f'/proc/{guardian}/ns/pid_for_children'))) == namespaces['pid'])
             _require(sorted(os.listdir(f'/proc/{pid}/task')) == [str(pid)]
                      and ns._read(f'/proc/{pid}/task/{pid}/children', 4096) == b'')
             for outside in (guardian, supervisor):
@@ -301,7 +371,6 @@ class CgroupLease:
         return self.attest((pid,))
 
     def close(self):
-        _signal_boundary()
         _require(self._owner is self)
         if self.closed:
             if self.cleanup_failed:
@@ -309,6 +378,9 @@ class CgroupLease:
             return
         errors = []
         try:
+            # A failed boundary forbids filesystem mutation, but does not
+            # relinquish descriptor cleanup or terminal-state obligations.
+            _signal_boundary()
             self.parent.verify()
             self.child.verify()
             _filesystem(self.child.number)
@@ -332,6 +404,10 @@ class CgroupLease:
             if self.baseline is not None:
                 try:
                     require_zero_oom_delta(self.baseline, parse_memory_events(_read_at(self.child, 'memory.events')))
+                    self.child_memory = _memory_observation(lambda name: _read_at(self.child, name),
+                                                            self.memory_max, self.child_memory)
+                    self.outer_memory = _memory_observation(lambda name: _read_at(self.parent, name),
+                                                            512 * 1024**2, self.outer_memory)
                 except BaseException as error:
                     # Bad resource evidence still permits removing the exact
                     # empty owned child, but can never certify cleanup PASS.
@@ -341,6 +417,13 @@ class CgroupLease:
             os.rmdir(owned[0], dir_fd=self.parent.number)
             _require(all(ns._identity(os.stat(name, dir_fd=self.parent.number, follow_symlinks=False))
                          != self.child.identity for name in os.listdir(self.parent.number)))
+            self.outer_memory = _memory_observation(lambda name: _read_at(self.parent, name),
+                                                    512 * 1024**2, self.outer_memory)
+            _require(parse_scalar(_read_at(self.parent, 'pids.max')) == 64)
+            self.final_resources = dict(child_memory=self.child_memory,
+                                        enclosing_service_memory=self.outer_memory,
+                                        generation_child_removed=True,
+                                        full_service_lifetime_observed=False)
         except BaseException as error:
             errors.append(error)
         for descriptor in (*reversed(tuple(self.controls.values())), self.child, self.parent):
