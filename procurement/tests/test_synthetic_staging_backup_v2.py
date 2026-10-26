@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import contextmanager
 import hashlib
 import io
 import json
@@ -786,6 +787,67 @@ class SyntheticStagingBackupV2Tests(unittest.TestCase):
                 SyntheticStagingBackupError, "trusted pg_dump executable differs"
             ):
                 staging_backup._postgres_dump()
+
+    @contextmanager
+    def _program_metadata(self, selected, *, owners=None, modes=None):
+        """Model filesystem ownership unavailable to an unprivileged test user."""
+        path = Path(selected)
+        owners, modes = owners or {}, modes or {}
+
+        def metadata(current, **kwargs):
+            kind = stat.S_IFREG if current == path else stat.S_IFDIR
+            mode = modes.get(str(current), kind | 0o755)
+            return os.stat_result((mode, 1, 1, 1, owners.get(str(current), 0),
+                                   0, 1, 0, 0, 0))
+
+        with (
+            mock.patch.object(staging_backup.shutil, "which", return_value=str(path)),
+            mock.patch.object(Path, "resolve", return_value=path),
+            mock.patch.object(Path, "stat", autospec=True, side_effect=metadata),
+            mock.patch.object(staging_backup.os, "access", return_value=True),
+            mock.patch.object(staging_backup.subprocess, "run", return_value=
+                              subprocess.CompletedProcess([], 0, "pg_dump (PostgreSQL) 16.14\n")) as execute,
+        ):
+            yield execute
+
+    def test_system_program_rejects_replaceable_ancestor_before_execution(self):
+        selected = "/usr/lib/postgresql/16/bin/pg_dump"
+        for ancestor in ("/usr/lib/postgresql/16/bin", "/usr/lib", "/usr", "/"):
+            with self.subTest(ancestor=ancestor), self._program_metadata(
+                selected, owners={ancestor: 1000}
+            ) as execute:
+                with self.assertRaisesRegex(SyntheticStagingBackupError, "trusted pg_dump executable differs"):
+                    staging_backup._postgres_dump()
+                execute.assert_not_called()
+
+    def test_system_program_accepts_complete_root_owned_chain(self):
+        selected = "/usr/lib/postgresql/16/bin/pg_dump"
+        with self._program_metadata(selected) as execute:
+            self.assertEqual(staging_backup._postgres_dump(), selected)
+            self.assertEqual(execute.call_args.args[0], [selected, "--version"])
+            self.assertEqual(execute.call_args.kwargs["env"], {
+                "PATH": "/usr/lib/postgresql/16/bin", "LANG": "C.UTF-8"})
+
+    def test_system_program_retains_writable_and_symlink_ancestor_refusal(self):
+        selected = "/usr/lib/postgresql/16/bin/pg_dump"
+        for mode in (stat.S_IFDIR | 0o775, stat.S_IFLNK | 0o755):
+            with self.subTest(mode=mode), self._program_metadata(
+                selected, modes={"/usr/lib/postgresql": mode}
+            ) as execute:
+                with self.assertRaises(SyntheticStagingBackupError):
+                    staging_backup._postgres_dump()
+                execute.assert_not_called()
+
+    def test_historical_managed_nix_store_exception_is_not_expanded(self):
+        store = "/nix/store/" + "a" * 32 + "-postgresql-16.9"
+        selected = store + "/bin/pg_dump"
+        with self._program_metadata(selected, owners={selected: 1000, store: 1000}):
+            self.assertEqual(staging_backup._postgres_dump(), selected)
+        outside = "/tmp" + selected
+        with self._program_metadata(outside, owners={outside: 1000}) as execute:
+            with self.assertRaises(SyntheticStagingBackupError):
+                staging_backup._postgres_dump()
+            execute.assert_not_called()
 
     def test_operator_cli_passes_only_explicit_inputs_and_prints_digest(self):
         recovery, storage, _source, _snapshot, provisioner_url = (

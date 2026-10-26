@@ -79,31 +79,30 @@ def _trusted_program(name: str) -> str:
         raise SyntheticStagingBackupError(
             f"trusted {name} executable is unavailable"
         ) from exc
+    managed_nix_store = re.match(
+        r"^/nix/store/[0-9a-z]{32}-[^/]+/(?:.+/)?[^/]+$", str(path)
+    ) is not None
     if (
         not path.is_absolute()
         or not stat.S_ISREG(info.st_mode)
         or stat.S_IMODE(info.st_mode) & 0o022
         or not os.access(path, os.X_OK)
-        or (
-            info.st_uid != 0
-            and re.match(
-                r"^/nix/store/[0-9a-z]{32}-[^/]+/(?:.+/)?[^/]+$",
-                str(path),
-            )
-            is None
-        )
+        or (info.st_uid != 0 and not managed_nix_store)
     ):
         raise SyntheticStagingBackupError(
             f"trusted {name} executable differs"
         )
     _require_canonical_path(path)
     for parent in path.parents:
-        if parent == Path(parent.anchor):
-            continue
         parent_info = parent.stat(follow_symlinks=False)
-        if not stat.S_ISDIR(parent_info.st_mode) or stat.S_IMODE(
-            parent_info.st_mode
-        ) & 0o022:
+        # A user-owned 0755 directory can rename/replace a root-owned leaf.
+        # Preserve the historical managed Nix-store exception; spelling a Nix
+        # path is not a new authority to construct a user-controlled store.
+        if (
+            not stat.S_ISDIR(parent_info.st_mode)
+            or stat.S_IMODE(parent_info.st_mode) & 0o022
+            or (parent_info.st_uid != 0 and not managed_nix_store)
+        ):
             raise SyntheticStagingBackupError(
                 f"trusted {name} executable differs"
             )
