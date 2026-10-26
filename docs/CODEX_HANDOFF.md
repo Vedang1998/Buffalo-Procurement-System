@@ -12,7 +12,12 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### 2026-10-26 critical-path cgroup component and host observation — WIP
 
-Continuation from published `b4044194137669f6203c85276af8f23d0e500cea`.
+Initial material published/fetched at `da082cef7b6bec8c29265cc892be3afd374fa7e4`,
+tree `eb69c619cc2bd2b30876dc6412ae936ef385641c`, from b4044194. Exact frozen
+hosted199/related88/startup10 passed. GitHub40361057089 passed focused199 but
+failed the diagnostic; public summary/log detail was unavailable. A subsequent
+bounded notice-annotation correction adds one workflow test (hosted200,
+registration/floor1727 in96modules) without new privileges or lower gates.
 See [CRITICAL_PATH_CHECKPOINT_2026-10-26](CRITICAL_PATH_CHECKPOINT_2026-10-26.md)
 for executable changes, scoped evidence, exact host alternative and production
 rollover/cutover authority. All prior thirteen evidence hashes were verified.

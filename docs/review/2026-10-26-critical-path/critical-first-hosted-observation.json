@@ -1,0 +1,21 @@
+{
+  "commit": "da082cef7b6bec8c29265cc892be3afd374fa7e4",
+  "run_id": 40361057089,
+  "job_id": 121706277941,
+  "event": "push",
+  "ref": "refs/heads/codex/hosted-synthetic-acceptance",
+  "conclusion": "failure",
+  "successful_steps": [
+    "checkout",
+    "source verification",
+    "Python preparation",
+    "focused199"
+  ],
+  "failed_step": "host observer",
+  "exit_code": 1,
+  "diagnostic_json_observed": false,
+  "specific_host_refusal_observed": false,
+  "workflow_sha256": "87553d50d8ef980ce4d0d7dd1cf27173ea262a28d472bd271aaf2c30ae1e59ee",
+  "public_workflow_bytes_match": true,
+  "attribution": "public HTML observation by internal Codex host_audit; detailed logs require sign-in"
+}

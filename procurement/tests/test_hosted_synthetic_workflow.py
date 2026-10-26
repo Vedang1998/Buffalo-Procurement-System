@@ -1,6 +1,7 @@
 """Fail-closed source contract for the deliberately incomplete hosted workflow."""
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,7 +48,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Observe namespace', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,23,7,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 199', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,23,8,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 200', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -64,6 +65,16 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
                          'test "$(wc -c < "$report")" -le 65536',
                          'cat "$report" >> "$GITHUB_STEP_SUMMARY"', 'exit "$status"'):
             self.assertIn(fragment, self.text)
+
+    def test_public_notice_escapes_command_data_without_changing_failure(self):
+        block = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1]
+        commands = '\n'.join(line[10:] for line in block.splitlines())
+        result = subprocess.run(['/bin/bash', '-c', 'diagnostic="$1"; status=1;\n' + commands,
+                                 'annotation-test', '{"test":"100%\r\n::error::synthetic"}'],
+                                env={'PATH': '/usr/bin:/bin'}, capture_output=True, timeout=3)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, b'::notice title=Credential-free host prerequisites::{"test":"100%25%0D%0A::error::synthetic"}\n')
+        self.assertEqual(result.stderr, b'')
 
 
 if __name__ == '__main__':

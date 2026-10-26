@@ -39,7 +39,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_host.py": 18,
     "test_hosted_synthetic_namespace.py": 65,
     "test_hosted_synthetic_projection.py": 22,
-    "test_hosted_synthetic_workflow.py": 7,
+    "test_hosted_synthetic_workflow.py": 8,
     "test_identity_investigation.py": 32,
     "test_inventory.py": 16,
     "test_local_access.py": 13,

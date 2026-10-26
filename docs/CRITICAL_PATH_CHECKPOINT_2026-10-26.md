@@ -48,6 +48,27 @@ bounded canonical output to its public job summary outside the scrubbed process;
 it preserves the actual failure exit code, exact branch-only trigger, pinned
 actions, ten-minute bound, read-only permission, no credentials and no sudo.
 
+## Published material and observability correction
+
+Initial material `da082cef7b6bec8c29265cc892be3afd374fa7e4`, tree
+`eb69c619cc2bd2b30876dc6412ae936ef385641c`, was secret-scanned, ordinarily
+published and freshly fetched. Exact frozen validation passed hosted199/199,
+related88/88 and startup10/10, with all fourteen changed-file hashes unchanged.
+Raw evidence is in [review/2026-10-26-critical-path](review/2026-10-26-critical-path/manifest.json).
+
+GitHub run40361057089/job121706277941 binds that push and exact workflow
+SHA25687553d50d8ef980ce4d0d7dd1cf27173ea262a28d472bd271aaf2c30ae1e59ee.
+Checkout/source/Python/focused199 succeeded; the observer exited1. The public
+run/job HTML did not expose its canonical JSON or summary and required sign-in
+for logs. Therefore specific host refusal and hosted cleanup were unobserved;
+step failure alone does not prove a kernel restriction.
+
+The follow-up changes observability only: a bounded fixed-title notice annotation
+escapes percent/CR/LF and retains the diagnostic exit code. A shell-executed
+regression proves synthetic annotation-command text cannot inject a new command.
+This adds one workflow test: hosted200, total discovery/floor1727 in96modules.
+No native known-failure rerun or privilege change is part of this correction.
+
 ## Host capability and smallest proposed alternative
 
 Native Cloud's retained complete observation remains authoritative: no genuine

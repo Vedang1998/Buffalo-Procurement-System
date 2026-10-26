@@ -1,0 +1,42 @@
+{
+  "critical-frozen-hosted.txt": {
+    "bytes": 34221,
+    "sha256": "d70d85bb34134ae309ca337ce3d7e0787868373b7dbc4ab8adc8509018af3c07",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-frozen-related.txt": {
+    "bytes": 18239,
+    "sha256": "3ba92d1aaacf4529e58e8883d8bb97ccb490c4febcf3698b9474b50f7310c0cd",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-frozen-validation.json": {
+    "bytes": 2153,
+    "sha256": "470d7ea4601a63f00d848012dc019f37f1ba4926fba6439152755672f3c32736",
+    "transformation": "none"
+  },
+  "critical-material-publication.json": {
+    "bytes": 976,
+    "sha256": "7b30261050f855ee84b2e5cf143955b33c49ad8a4f602d618965a2e682baf28c",
+    "transformation": "none"
+  },
+  "critical-discovery.json": {
+    "bytes": 78,
+    "sha256": "d53955505f87944f67455633accf730ffa72525e9506ff96d407f36975ba319f",
+    "transformation": "none"
+  },
+  "critical-cleanup.json": {
+    "bytes": 652,
+    "sha256": "0defec4fab89234b81fdb65cf3b9df3bc194907404d9ddbbc5f33c6929a4af80",
+    "transformation": "none"
+  },
+  "critical-first-hosted-observation.json": {
+    "bytes": 692,
+    "sha256": "9ceee9a13d5f3535624d3a77806f59b5190d586a0aee506747ea40e8ea5a80ca",
+    "transformation": "none"
+  }
+}

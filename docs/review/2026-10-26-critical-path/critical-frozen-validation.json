@@ -1,0 +1,36 @@
+{
+  "commit": "da082cef7b6bec8c29265cc892be3afd374fa7e4",
+  "tree": "eb69c619cc2bd2b30876dc6412ae936ef385641c",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "87553d50d8ef980ce4d0d7dd1cf27173ea262a28d472bd271aaf2c30ae1e59ee",
+    "docs/CODEX_HANDOFF.md": "230616d65a0d17f7a24f8d6016176bfe3d241a5d0740126e9ef222de3e0a41b4",
+    "docs/CRITICAL_PATH_CHECKPOINT_2026-10-26.md": "7dd2f4a91000684644702d42be41eabcd5a62b93902ff51093e9f0fe8754575e",
+    "procurement/tests/test_hosted_synthetic_capability.py": "563753fc4441bc0d4e1d48e7f447b0ff1e87338de8fe2a68baf9d3539443be49",
+    "procurement/tests/test_hosted_synthetic_cgroup.py": "7c34fc966ccff057d8e11e37da05de03ac75bd4d07512514e078d141a1e4743c",
+    "procurement/tests/test_hosted_synthetic_host.py": "9d8820bcfa11df82c2c5aa16ef01cdb44fdb365c823a30d29a2f09acbe340144",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "86001f3f69425b4b066c18d1f48c4ef9bd9fe337b45dffa3865e5d9ec4f8c049",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "c96fa7535f184ed0c58eacfb189b7c7db7452567ac9407f5c2aba750a10defac",
+    "procurement/tests/test_supplier_format_conformance.py": "c605843c0aa0ef1bde90e213ce5fe748592e50776004f1b92a66a1d73907e17e",
+    "procurement/tools/hosted_synthetic_capability.py": "cc73e9f32411b810c4fe56e64f9bb2b92ac515dde3c02edac07a42ea350dbced",
+    "procurement/tools/hosted_synthetic_cgroup.py": "fa6edbd01f554bfe1ee811edd70ba4b40b4e34c9709515d1bcadeac909f4d148",
+    "procurement/tools/hosted_synthetic_host.py": "d2496828e8ce00137b24df3f97b53ef775a21dbe71eff4b4700fbfb4f9fb7466",
+    "procurement/tools/hosted_synthetic_source.py": "e4dcd04672eaaa127d199b28f1ddac514f4a1e98a1f9c8d7b5afcf38a0466e01",
+    "procurement/tools/run_tests.py": "d5aa45a4390b7701a71c7376b497edeaa73356eb25c9749661f39dcad391b9b0"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 3.023
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.532
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}
