@@ -1,0 +1,117 @@
+{
+  "README.md": {
+    "bytes": 11087,
+    "sha256": "9f2a1104dbc0397dd3e7aabfac4e08e92150b3d50cd9cd4b656e5b7a01b9427a",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "external-review.json": {
+    "bytes": 870,
+    "sha256": "1b80f2cd8a3e8657e2330ecf013762b172462fb55bb78dc137ae4470ce747b3a",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "findings.json": {
+    "bytes": 7517,
+    "sha256": "f060de85f251fe58af37b80b8b7d2387eeec9408430ba0cc7756453961c6c4ca",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "internal-review.json": {
+    "bytes": 2019,
+    "sha256": "e84e2188b8d7198820ded3dd95cac3ebfc8cbf5f66f31355d30e067fb84e430e",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-cleanup.json": {
+    "bytes": 652,
+    "sha256": "0defec4fab89234b81fdb65cf3b9df3bc194907404d9ddbbc5f33c6929a4af80",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-dependency-identities.json": {
+    "bytes": 1219,
+    "sha256": "e9f9e97b0a0024043a5dd1b96e5b148445cf5a30e64870996d3062fb99886a53",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-final-causal-py313.txt": {
+    "bytes": 8038,
+    "sha256": "b136f2cc2a0eff7f41fd1a107007124fa6a18192c2ca26a039956307577e1d9e",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-final-causal.txt": {
+    "bytes": 2015,
+    "sha256": "3edd46e80d147182675d29da516b7b245b5bddac661b5c0380a1b9827c57c3d4",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-final-identity-causal.txt": {
+    "bytes": 8656,
+    "sha256": "bf49cd41a310aae1236bd1bd952f3ec55b5268e37fc3890900fb016cc2e170e7",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-first-focused.txt": {
+    "bytes": 14850,
+    "sha256": "ccc04ed889d60ebbca7ff3191f54770d2b031e7cc36b316b39a2352665ffc923",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-discovery.json": {
+    "bytes": 4475,
+    "sha256": "a72586c9a7116e44f1651d377f1e3956697dafbd51855462917332ed1762aed4",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-frozen-hosted.txt": {
+    "bytes": 53621,
+    "sha256": "643f731af05119e5126b85192c3b79a4e324b5de7609d3f8d2e98c324975e241",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-pid1.txt": {
+    "bytes": 3050,
+    "sha256": "5934da8ebac83f6a481b7449c6c6cc1eb763ae7b6c6e30587e93f02ed6963236",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "50afcc0b990db05cb550e6137e848b4ee3771d30cbf7cf6877ef3f0f9ea0ef1e",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-frozen-validation.json": {
+    "bytes": 4720,
+    "sha256": "a3bb01097d4dd332294d627838b83fb5b2857cb24b20e3f126c39b9ad5f4395f",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-hosted-observation.json": {
+    "bytes": 2473,
+    "sha256": "c10b4819de678a93bc9daef9a6b3254ac66404cd259063ba876b6b43ab0b826b",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-hosted-pid1-reconstructed.json": {
+    "bytes": 148,
+    "sha256": "4bd66e0723c927ad9c871e74e8aa7663cfbb5d8ca0eec38172b16f9378efed3c",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-material-publication.json": {
+    "bytes": 976,
+    "sha256": "f6e5f975b5616f45a2faa77e464ed44b0bee5726ee9e463865cf33812a562953",
+    "transformation": "none or authored evidence record; see README scope"
+  },
+  "remediation-pid1-debug.txt": {
+    "bytes": 788,
+    "sha256": "99e593dc70d8db83d4a36f87320d9f328241b3afff6dc507c7df2443d23b4081",
+    "transformation": "none; raw log extension changed to txt"
+  },
+  "remediation-source-identities.json": {
+    "bytes": 2160,
+    "sha256": "2e4a0b1a56ed39d8335cc58d44f9a02f77f0cd3d2bba57785b373345d560cfc6",
+    "transformation": "none or authored evidence record; see README scope"
+  }
+}

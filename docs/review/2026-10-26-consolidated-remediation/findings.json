@@ -159,5 +159,9 @@
       ],
       "remaining": "Dedicated identity path implemented but privileged live proof NOT_RUN. Same-host-UID workers still require a closed runtime/control-access boundary; no exclusive-access PASS"
     }
-  ]
+  ],
+  "material_commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "material_tree": "6271745239da49a24e3664ed2623977a7d21de07",
+  "frozen_evidence": "remediation-frozen-validation.json",
+  "hosted_evidence": "remediation-hosted-observation.json"
 }

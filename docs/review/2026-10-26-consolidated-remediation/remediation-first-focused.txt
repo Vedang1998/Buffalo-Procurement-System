@@ -1,0 +1,169 @@
+............F................................................................................................EF...............EEEEE.......................E...................................................
+======================================================================
+ERROR: test_actual_sigint_waits_for_owned_cleanup (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_actual_sigint_waits_for_owned_cleanup)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 695, in test_actual_sigint_waits_for_owned_cleanup
+    result = self._isolated_refusal('def cancelled():\n os.kill(os.getpid(),signal.SIGINT)\n raise OSError("synthetic fork refusal")\nn.os.fork=cancelled')
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 679, in _isolated_refusal
+    run = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", program],
+                         env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+                         capture_output=True, text=True, timeout=5, check=True)
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/workspace/Buffalo-Procurement-System/.venv/bin/python', '-I', '-S', '-B', '-c', 'import sys,os,signal,json,ctypes\nsys.path.insert(0,\'/workspace/Buffalo-Procurement-System/procurement/tools\')\nimport hosted_synthetic_namespace as n\nbefore=ctypes.c_int()\nassert n.backend._browser_libc().prctl(37,ctypes.byref(before),0,0,0)==0\nmask=signal.pthread_sigmask(signal.SIG_BLOCK, [])\ndef cancelled():\n os.kill(os.getpid(),signal.SIGINT)\n raise OSError("synthetic fork refusal")\nn.os.fork=cancelled\nresult=n.observe_private_proc("a"*64)\nafter=ctypes.c_int()\nassert n.backend._browser_libc().prctl(37,ctypes.byref(after),0,0,0)==0\nassert before.value==after.value\nassert signal.pthread_sigmask(signal.SIG_BLOCK, [])==mask\nn.__dict__["_require"](result["cleanup_complete"])\nprint(json.dumps(result))\n']' returned non-zero exit status 1.
+
+======================================================================
+ERROR: test_invalid_generation_has_no_process_side_effect (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_invalid_generation_has_no_process_side_effect) (value=None)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 702, in test_invalid_generation_has_no_process_side_effect
+    namespace.observe_private_proc(value)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 895, in observe_private_proc
+    inspect_host_identity()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 63, in inspect_host_identity
+    result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 49, in parse_postdrop_status
+    _require(fields['NoNewPrivs'] == b'1', 'bootstrap_nnp_refused')
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 15, in _require
+    raise LauncherRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: bootstrap_nnp_refused
+
+======================================================================
+ERROR: test_invalid_generation_has_no_process_side_effect (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_invalid_generation_has_no_process_side_effect) (value='')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 702, in test_invalid_generation_has_no_process_side_effect
+    namespace.observe_private_proc(value)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 895, in observe_private_proc
+    inspect_host_identity()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 63, in inspect_host_identity
+    result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 49, in parse_postdrop_status
+    _require(fields['NoNewPrivs'] == b'1', 'bootstrap_nnp_refused')
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 15, in _require
+    raise LauncherRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: bootstrap_nnp_refused
+
+======================================================================
+ERROR: test_invalid_generation_has_no_process_side_effect (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_invalid_generation_has_no_process_side_effect) (value='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 702, in test_invalid_generation_has_no_process_side_effect
+    namespace.observe_private_proc(value)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 895, in observe_private_proc
+    inspect_host_identity()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 63, in inspect_host_identity
+    result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 49, in parse_postdrop_status
+    _require(fields['NoNewPrivs'] == b'1', 'bootstrap_nnp_refused')
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 15, in _require
+    raise LauncherRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: bootstrap_nnp_refused
+
+======================================================================
+ERROR: test_invalid_generation_has_no_process_side_effect (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_invalid_generation_has_no_process_side_effect) (value='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 702, in test_invalid_generation_has_no_process_side_effect
+    namespace.observe_private_proc(value)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 895, in observe_private_proc
+    inspect_host_identity()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 63, in inspect_host_identity
+    result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 49, in parse_postdrop_status
+    _require(fields['NoNewPrivs'] == b'1', 'bootstrap_nnp_refused')
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 15, in _require
+    raise LauncherRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: bootstrap_nnp_refused
+
+======================================================================
+ERROR: test_invalid_generation_has_no_process_side_effect (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_invalid_generation_has_no_process_side_effect) (value='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 702, in test_invalid_generation_has_no_process_side_effect
+    namespace.observe_private_proc(value)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 895, in observe_private_proc
+    inspect_host_identity()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 63, in inspect_host_identity
+    result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 49, in parse_postdrop_status
+    _require(fields['NoNewPrivs'] == b'1', 'bootstrap_nnp_refused')
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 15, in _require
+    raise LauncherRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: bootstrap_nnp_refused
+
+======================================================================
+ERROR: test_partial_start_failure_restores_subreaper_signals_and_descriptors (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_partial_start_failure_restores_subreaper_signals_and_descriptors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 691, in test_partial_start_failure_restores_subreaper_signals_and_descriptors
+    result = self._isolated_refusal('def refused(): raise OSError("synthetic fork refusal")\nn.os.fork=refused')
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 679, in _isolated_refusal
+    run = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", program],
+                         env={"PATH": "/usr/bin:/bin", "LC_ALL": "C.UTF-8"},
+                         capture_output=True, text=True, timeout=5, check=True)
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/workspace/Buffalo-Procurement-System/.venv/bin/python', '-I', '-S', '-B', '-c', 'import sys,os,signal,json,ctypes\nsys.path.insert(0,\'/workspace/Buffalo-Procurement-System/procurement/tools\')\nimport hosted_synthetic_namespace as n\nbefore=ctypes.c_int()\nassert n.backend._browser_libc().prctl(37,ctypes.byref(before),0,0,0)==0\nmask=signal.pthread_sigmask(signal.SIG_BLOCK, [])\ndef refused(): raise OSError("synthetic fork refusal")\nn.os.fork=refused\nresult=n.observe_private_proc("a"*64)\nafter=ctypes.c_int()\nassert n.backend._browser_libc().prctl(37,ctypes.byref(after),0,0,0)==0\nassert before.value==after.value\nassert signal.pthread_sigmask(signal.SIG_BLOCK, [])==mask\nn.__dict__["_require"](result["cleanup_complete"])\nprint(json.dumps(result))\n']' returned non-zero exit status 1.
+
+======================================================================
+FAIL: test_real_stopped_guardian_and_init_use_simulated_enrollment_only (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_real_stopped_guardian_and_init_use_simulated_enrollment_only) (failure='none')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_enrollment.py", line 349, in test_real_stopped_guardian_and_init_use_simulated_enrollment_only
+    self.assertEqual(result.returncode, 0, result.stderr.decode())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "<string>", line 55, in <module>
+    n._wait(guardian,deadline);reaped=True
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 310, in _wait
+    raise NamespaceProofError("namespace_timeout")
+hosted_synthetic_namespace.NamespaceProofError: namespace_timeout
+
+
+======================================================================
+FAIL: test_child_cleanup_failure_overrides_successful_supervisor_fallback (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_child_cleanup_failure_overrides_successful_supervisor_fallback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_namespace.py", line 336, in test_child_cleanup_failure_overrides_successful_supervisor_fallback
+    self.assertEqual(run.returncode, 0, run.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "<string>", line 14, in <module>
+    result=n.observe_private_proc('a'*64)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 895, in observe_private_proc
+    inspect_host_identity()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 63, in inspect_host_identity
+    result = parse_postdrop_status(stream.read(16385), uid=uid, gid=gid)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 49, in parse_postdrop_status
+    _require(fields['NoNewPrivs'] == b'1', 'bootstrap_nnp_refused')
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_launcher.py", line 15, in _require
+    raise LauncherRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: bootstrap_nnp_refused
+
+
+----------------------------------------------------------------------
+Ran 202 tests in 6.673s
+
+FAILED (failures=2, errors=7)

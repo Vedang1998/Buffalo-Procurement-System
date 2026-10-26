@@ -1,0 +1,8 @@
+PASS: 18 dependency/application/tool imports; Python 3.13.5
+fastapi==0.141.1
+uvicorn==0.52.1
+httpx==0.28.1
+psycopg==3.3.4
+psycopg-binary==3.3.4
+argon2-cffi==25.1.0
+python-multipart==0.0.32

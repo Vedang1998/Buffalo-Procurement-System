@@ -1,0 +1,61 @@
+{
+  "attribution": "Internal Codex public-page observation; not external review",
+  "observed_at": "2026-10-26T21:22:05.360751+00:00",
+  "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+  "run_id": 40403625770,
+  "job_id": 121855637415,
+  "job_url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40403625770/job/121855637415",
+  "overall_conclusion": "FAILURE",
+  "focused_validation": {
+    "public_step_conclusion": "success",
+    "started_at": "2026-10-26T21:21:28Z",
+    "completed_at": "2026-10-26T21:21:40Z",
+    "exact_workflow_requires": "301 executed successfully; zero skips/xfail/xpass",
+    "raw_test_transcript_accessible": false
+  },
+  "real_pid1_regression": {
+    "public_step_conclusion": "failure",
+    "exit_code": 78,
+    "classification_from_published_contract": "NOT_RUN",
+    "public_notice": "exit=78 sha256=4bd66e0723c927ad9c871e74e8aa7663cfbb5d8ca0eec38172b16f9378efed3c scope=REAL_PID_NAMESPACE_SIMULATED_CGROUP_ONLY",
+    "raw_report_accessible": false,
+    "errno_or_kernel_policy_cause": "NOT_OBSERVED"
+  },
+  "review_gate": {
+    "public_step_conclusion": "skipped",
+    "exit78_attributable_to_this_step": false,
+    "native_activation": "DISABLED_IN_SOURCE"
+  },
+  "public_source_verification": {
+    "workflow_sha256": "2965bf54ec19eb9e97cfdf6433758e534998a5dc09d82c5130842ffb7f395d70",
+    "pid1_source_sha256": "5b7a3e423a010d30b67a7ac1abf1d72cb6205e94a06e55a2ef49834ce9214bb3",
+    "both_equal_exact_commit_git_blobs": true
+  },
+  "page_observers": [
+    "Codex /root/host_audit",
+    "Codex /root"
+  ],
+  "limitations": [
+    "Public logs require sign-in",
+    "No rerun or activation performed",
+    "Cloud simulated-migration lifecycle pass is separate from GitHub NOT_RUN and unexecuted real containment"
+  ],
+  "source_derived_report_reconstruction": {
+    "payload": {
+      "real_pid1_regression": "NOT_RUN",
+      "reason": "UNPRIVILEGED_NAMESPACE_CAPABILITY_UNAVAILABLE",
+      "probe_returncode": 1,
+      "execution_authority": false
+    },
+    "bytes": 148,
+    "sha256": "4bd66e0723c927ad9c871e74e8aa7663cfbb5d8ca0eec38172b16f9378efed3c",
+    "matches_public_digest": true,
+    "direct_stdout_read": false,
+    "method": "Exact published json.dumps serialization plus newline; independently compare to public notice. No errno or stderr reconstruction.",
+    "verified_by": [
+      "Codex /root",
+      "Codex /root/host_audit"
+    ]
+  }
+}

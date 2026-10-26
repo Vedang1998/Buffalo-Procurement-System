@@ -11,8 +11,15 @@ continued. Unknown attribution fields remain null, not invented.
 
 Implementation base: `b85218198cd421fc41ba985465d1dae847334bb3`, tree
 `d7c14cccae0e64d3d4e3e70458714e21b5794bc2`. Published history is preserved. Exact
-frozen material, execution logs and publication proof are supplied in the evidence
-follow-up. Official phase numbering/status, application business source and
+frozen material is `5e62c8e3a7030e60f77108517f5f9e06c7fc06a3`, tree
+`6271745239da49a24e3664ed2623977a7d21de07`. The documentation-only evidence
+follow-up carries raw logs and ordinary-push/fresh-fetch proof in the
+[combined review package](review/2026-10-26-consolidated-remediation/README.md).
+Frozen hosted301, related88, startup10 and imports18 pass. Real Cloud PID1 eleven
+cases pass with simulated cgroup migration. Discovery1828/101 modules is not a
+full-suite pass. GitHub run40403625770 passes focused301 but the separate realPID1
+step exits78/NOT_RUN; overall FAILURE and review-gate step SKIPPED. No unchanged
+retry or restriction bypass occurs. Official phase numbering/status, application business source and
 dependency/lockfile identities remain unchanged.
 
 ## Repairs and their limits

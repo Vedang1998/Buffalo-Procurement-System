@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import hosted_synthetic_pid1_regression as r;print(r._case("success"))
+                                                       ~~~~~~~^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_pid1_regression.py", line 203, in _case
+    assert ns._read(f'/proc/self/task/{os.getpid()}/children',4096)==b'' and fds()==original_fds
+           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 52, in _read
+    descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+FileNotFoundError: [Errno 2] No such file or directory: '/proc/self/task/865742/children'

@@ -1,0 +1,69 @@
+{
+  "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+  "base": "b85218198cd421fc41ba985465d1dae847334bb3",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "2965bf54ec19eb9e97cfdf6433758e534998a5dc09d82c5130842ffb7f395d70",
+    "docs/CLAUDE_REMEDIATION_2026-10-26.md": "40a2b8cf5be06c73847d9a57b11aa98a95747f539c25481a2620f0186974e32c",
+    "docs/CODEX_HANDOFF.md": "b4929bdfa316c1d5ba3d62e79970de411b58aef825a2aac87c654badba7e2a9a",
+    "docs/review/2026-10-26-consolidated-remediation/external-review.json": "1b80f2cd8a3e8657e2330ecf013762b172462fb55bb78dc137ae4470ce747b3a",
+    "docs/review/2026-10-26-consolidated-remediation/findings.json": "c18bd832b9583cf23a2b9b034603aa1246dcff558be8d90637fb41cffceb71ef",
+    "procurement/tests/test_hosted_synthetic_bootstrap.py": "03b2a4481d845152625f34ccedaea6f67b0a359757cbeb0b1a0b6d6d509fce51",
+    "procurement/tests/test_hosted_synthetic_capability.py": "53e13640a560a1eccd42024cf404c9a24e408275a4886e66cdb4da9ca8e7605e",
+    "procurement/tests/test_hosted_synthetic_cgroup.py": "842294fb845258b7b2f41c5e731099b08c344a559b7e6ca74ebd7e757bff5d02",
+    "procurement/tests/test_hosted_synthetic_enrollment.py": "d850de8a3bc8bc78dfe1d3636c0ac43e4d4b7fb2274fdae24d1d11e9834e0411",
+    "procurement/tests/test_hosted_synthetic_host.py": "22e4f17f320bf695bee41773cd9dbb6f37fe5aef341cc3965ab9241497b0fa03",
+    "procurement/tests/test_hosted_synthetic_identity.py": "b5a1e21fd775ba59115099e1053ee5506cf1bdd4e6772f33312250fcf0162ed5",
+    "procurement/tests/test_hosted_synthetic_namespace.py": "edc8673ff87f8885d66dffac11e2fa67a921f882fa128ea4f496064d233ecc54",
+    "procurement/tests/test_hosted_synthetic_pid1_regression.py": "b13a0c0697eddbf2b37d473b510537fa52b812fc3475c1ba6c8564408e45c604",
+    "procurement/tests/test_hosted_synthetic_user_service.py": "fb473c84c092eab1be5e671c5efd4df3578200af3120cd91303cf628770dfebd",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "8da4685e7346c6e4d30a65d78eec66afc752a124c25fc69d5a0ecd38337975b5",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "6ea61cec6da403b0d21f4ee72106889d43bfa7fc33ebf64cc6f5b24661b001bf",
+    "procurement/tests/test_supplier_format_conformance.py": "2449dd13f0fbf52b5678eee82ca0e38804e7248fcf312b39e74f82689f8cec80",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "e77721ed7e9a07da6c065214025c243a87b4892e4dfc13a91e8691083ee856d0",
+    "procurement/tools/hosted_synthetic_capability.py": "0fb577f1197aadbfa89b2d186fd3e28ab7899ffffafb80c58ea3783e10b9e37c",
+    "procurement/tools/hosted_synthetic_cgroup.py": "0b0017bacfd82d4a386a6f5df10d28ba5fd30bc7f1ea50d3ba68c4b9bd33e124",
+    "procurement/tools/hosted_synthetic_host.py": "622a2213d398f87eb7c26de1ae3f0ff9a899029fc8138c079088041a44705e24",
+    "procurement/tools/hosted_synthetic_identity.py": "6a60331ebadc649d8d738fa4f8e9a88bfc29e6404e231bad7d0b5baa45040691",
+    "procurement/tools/hosted_synthetic_launcher.py": "dd6e12c76c8ccd66b2d412f3eb51308339c16473ba63911f53645fac1863298e",
+    "procurement/tools/hosted_synthetic_namespace.py": "097ffdb25fd643c8068f4bed842bb8cbd0062bc4779554d37d39de4fa0fe418b",
+    "procurement/tools/hosted_synthetic_pid1_regression.py": "5b7a3e423a010d30b67a7ac1abf1d72cb6205e94a06e55a2ef49834ce9214bb3",
+    "procurement/tools/hosted_synthetic_source.py": "d7e2ef5c8b22ec9ce89622aae2dacbb821429d0cd8159a097c716746b781b8d0",
+    "procurement/tools/hosted_synthetic_user_service.py": "e1006bdffb3ca49d7c9cf7be07088d114e01b6b7b929e9d8155430aebdb74a2e",
+    "procurement/tools/run_tests.py": "1e72119b68d55cdb160982095c38f3fc733402640f84d0d09fff30c63d69ef50"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 6.239,
+      "sha256": "643f731af05119e5126b85192c3b79a4e324b5de7609d3f8d2e98c324975e241"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.482,
+      "sha256": "50afcc0b990db05cb550e6137e848b4ee3771d30cbf7cf6877ef3f0f9ea0ef1e"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.565,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "pid1": {
+      "returncode": 0,
+      "seconds": 11.369,
+      "sha256": "5934da8ebac83f6a481b7449c6c6cc1eb763ae7b6c6e30587e93f02ed6963236"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

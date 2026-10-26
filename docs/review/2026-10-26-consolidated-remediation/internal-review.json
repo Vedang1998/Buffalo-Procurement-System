@@ -1,0 +1,33 @@
+{
+  "scope": "Internal Codex read-only static review; NOT independent external review; agents did not rerun tests",
+  "material_commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "reviews": [
+    {
+      "reviewer": "Codex /root/harness_audit",
+      "files": {
+        "procurement/tools/hosted_synthetic_pid1_regression.py": "5b7a3e423a010d30b67a7ac1abf1d72cb6205e94a06e55a2ef49834ce9214bb3",
+        "procurement/tools/hosted_synthetic_namespace.py": "097ffdb25fd643c8068f4bed842bb8cbd0062bc4779554d37d39de4fa0fe418b",
+        "procurement/tools/hosted_synthetic_cgroup.py": "0b0017bacfd82d4a386a6f5df10d28ba5fd30bc7f1ea50d3ba68c4b9bd33e124"
+      },
+      "disposition": "No remaining concrete scoped P0/P1/P2 after fixing assertion/timeout false-PASS paths; real delegated migration and external approval excluded"
+    },
+    {
+      "reviewer": "Codex /root/cleanup_audit",
+      "files": {
+        "procurement/tools/hosted_synthetic_cgroup.py": "0b0017bacfd82d4a386a6f5df10d28ba5fd30bc7f1ea50d3ba68c4b9bd33e124",
+        "procurement/tools/hosted_synthetic_namespace.py": "097ffdb25fd643c8068f4bed842bb8cbd0062bc4779554d37d39de4fa0fe418b"
+      },
+      "disposition": "Three production repairs rechecked; recommended post-rmdir drift test added subsequently by writer and frozen-run; whole-service lifetime OPEN"
+    },
+    {
+      "reviewer": "Codex /root/host_audit",
+      "files": {
+        "procurement/tools/hosted_synthetic_identity.py": "6a60331ebadc649d8d738fa4f8e9a88bfc29e6404e231bad7d0b5baa45040691",
+        "procurement/tools/hosted_synthetic_bootstrap.py": "e77721ed7e9a07da6c065214025c243a87b4892e4dfc13a91e8691083ee856d0",
+        "procurement/tests/test_hosted_synthetic_identity.py": "b5a1e21fd775ba59115099e1053ee5506cf1bdd4e6772f33312250fcf0162ed5"
+      },
+      "disposition": "No further scoped production blocker; false-PASS test baselines corrected and rechecked; native execution/runtime/worker exclusion NOT proven"
+    }
+  ],
+  "independent_external_review_satisfied": false
+}

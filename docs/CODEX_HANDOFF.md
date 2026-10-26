@@ -28,9 +28,24 @@ authorize account recycling. No account or privileged service was executed.
 
 See [consolidated report](CLAUDE_REMEDIATION_2026-10-26.md) and the
 [finding ledger](review/2026-10-26-consolidated-remediation/findings.json).
-Frozen source/test/publication identities follow in the evidence closeout. No
-finding is VERIFIED_CLOSED by writer assertion. One scoped independent Claude
-re-review remains pending; internal reviews do not satisfy it.
+Published material `5e62c8e3a7030e60f77108517f5f9e06c7fc06a3`, tree
+`6271745239da49a24e3664ed2623977a7d21de07`, was secret-scanned, ordinarily pushed
+on this branch and freshly fetched with matching identities. Frozen hosted
+301/301, related88/88, startup10/10 and imports18/18 passed. Eleven actual
+CLONE_NEWPID lifecycle cases passed on Cloud with simulated cgroup migration;
+the source/tree and changed-file hashes stayed unchanged throughout execution.
+Discovery/floor1828 in101 modules is not a full-suite pass. The later evidence
+descendant changes documentation only and skips CI.
+
+Exact GitHub run40403625770/job121855637415 passed focused301, then its separate
+PID1 capability step exited78/NOT_RUN; review gate SKIPPED, overall FAILURE.
+The public digest matches a source-derived unshare return1 report, recorded as
+reconstruction rather than direct log read. Errno/kernel-policy cause unobserved.
+No unchanged retry or restriction bypass. Local gate check separately exited78.
+See the [one combined review package](review/2026-10-26-consolidated-remediation/README.md).
+Ledger: six REPAIRED_PENDING_REVIEW, three OPEN, zero VERIFIED_CLOSED or explicitly
+deferred. Independent Claude re-review is pending and has not been invoked here;
+internal reviews do not satisfy it.
 
 S namespace readback against nondumpable children is unproven and may refuse.
 Actual cgroup migration/external full-service kill-path cleanup remain unproved.

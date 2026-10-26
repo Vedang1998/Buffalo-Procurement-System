@@ -1,0 +1,23 @@
+{
+  "material_commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "material_tree": "6271745239da49a24e3664ed2623977a7d21de07",
+  "source_files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "2965bf54ec19eb9e97cfdf6433758e534998a5dc09d82c5130842ffb7f395d70",
+    "procurement/tools/hosted_synthetic_source.py": "d7e2ef5c8b22ec9ce89622aae2dacbb821429d0cd8159a097c716746b781b8d0",
+    "procurement/tools/hosted_synthetic_capability.py": "0fb577f1197aadbfa89b2d186fd3e28ab7899ffffafb80c58ea3783e10b9e37c",
+    "procurement/tools/hosted_synthetic_namespace.py": "097ffdb25fd643c8068f4bed842bb8cbd0062bc4779554d37d39de4fa0fe418b",
+    "procurement/tools/hosted_synthetic_projection.py": "a7dd7716851985c0897e6ed9c7e40e2ddff0a146e1b8a65ab143c0afe100d64b",
+    "procurement/tools/hosted_synthetic_cgroup.py": "0b0017bacfd82d4a386a6f5df10d28ba5fd30bc7f1ea50d3ba68c4b9bd33e124",
+    "procurement/tools/hosted_synthetic_host.py": "622a2213d398f87eb7c26de1ae3f0ff9a899029fc8138c079088041a44705e24",
+    "procurement/tools/hosted_synthetic_user_service.py": "e1006bdffb3ca49d7c9cf7be07088d114e01b6b7b929e9d8155430aebdb74a2e",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "e77721ed7e9a07da6c065214025c243a87b4892e4dfc13a91e8691083ee856d0",
+    "procurement/tools/hosted_synthetic_launcher.py": "dd6e12c76c8ccd66b2d412f3eb51308339c16473ba63911f53645fac1863298e",
+    "procurement/tools/hosted_synthetic_identity.py": "6a60331ebadc649d8d738fa4f8e9a88bfc29e6404e231bad7d0b5baa45040691",
+    "procurement/tools/hosted_synthetic_pid1_regression.py": "5b7a3e423a010d30b67a7ac1abf1d72cb6205e94a06e55a2ef49834ce9214bb3",
+    "procurement/tools/run_local_staging_acceptance.py": "de133e3206a655295f70384fd6dfc01648da52338c8aea22d27ed7b23dff4328",
+    "procurement/tools/run_local_staging_browser_worker.py": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+    "procurement/pyproject.toml": "18624c7486a4c99ea071c5b646d837e6e562962060d94fa897352d3b018769fc",
+    "pyproject.toml": "c83fa94b31129a28040b199c4fdb6902287646bf306129066eadcc810fe1d346",
+    "uv.lock": "f8613b17cb90ca5e3070e13c47cd6d53a60a8c314257d5588986cf92d0717be9"
+  }
+}
