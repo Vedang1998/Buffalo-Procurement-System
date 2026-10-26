@@ -1,0 +1,9 @@
+{
+  "commit": "b35c036d06b5db495cec297a6b928417b82cffae",
+  "tree": "f7162be46d70caa70adc0507f39dedc0275dfeb2",
+  "scope": "discovery only; no test execution",
+  "discovered": 1799,
+  "modules": 99,
+  "floor": 1799,
+  "errors": []
+}

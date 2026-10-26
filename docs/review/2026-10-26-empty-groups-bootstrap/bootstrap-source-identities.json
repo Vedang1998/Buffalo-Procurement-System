@@ -1,0 +1,22 @@
+{
+  "material_commit": "b35c036d06b5db495cec297a6b928417b82cffae",
+  "tree": "f7162be46d70caa70adc0507f39dedc0275dfeb2",
+  "source_files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "186a2d75154fa09a57b6e0ea5a58c426617613deb8ff5f8959a644e7b3663c31",
+    "procurement/tools/hosted_synthetic_source.py": "f8498925c7152f53a60b22dac9d160310dee468672847141da70532ff623a797",
+    "procurement/tools/hosted_synthetic_capability.py": "27cade8583c8836fa94e097a4ae353cc1bff18b59db14e710da6f6657b97b2a2",
+    "procurement/tools/hosted_synthetic_namespace.py": "6e71cf5c6853a3e77a283d68b0cfc9850b205e656e5379af0e489a049c1505e7",
+    "procurement/tools/hosted_synthetic_projection.py": "a7dd7716851985c0897e6ed9c7e40e2ddff0a146e1b8a65ab143c0afe100d64b",
+    "procurement/tools/hosted_synthetic_cgroup.py": "fa6edbd01f554bfe1ee811edd70ba4b40b4e34c9709515d1bcadeac909f4d148",
+    "procurement/tools/hosted_synthetic_host.py": "f6a8fd40849ce854b616d6432504b1b683a6836ffc1590e588e45445de712497",
+    "procurement/tools/hosted_synthetic_user_service.py": "68d77fe399c85cd5cfaa0b558222415971ef038ac8f7974ab0b07a53fa638abd",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "e2ccac774f2c9d89d2ca576d090a954c8fbfa7894b7a469721533fe3df214ea1",
+    "procurement/tools/hosted_synthetic_launcher.py": "503a129e0d54bd6437902b44d9a2fba6ec797cb6479e0e4463de4608dc58f245",
+    "procurement/tools/run_local_staging_acceptance.py": "de133e3206a655295f70384fd6dfc01648da52338c8aea22d27ed7b23dff4328",
+    "procurement/tools/run_local_staging_browser_worker.py": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+    "procurement/pyproject.toml": "18624c7486a4c99ea071c5b646d837e6e562962060d94fa897352d3b018769fc",
+    "pyproject.toml": "c83fa94b31129a28040b199c4fdb6902287646bf306129066eadcc810fe1d346",
+    "uv.lock": "f8613b17cb90ca5e3070e13c47cd6d53a60a8c314257d5588986cf92d0717be9"
+  },
+  "scope": "source identity; not live dependency/runtime attestation"
+}

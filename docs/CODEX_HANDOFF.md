@@ -27,9 +27,19 @@ enrollment, source binding and release assertions remain. Ancestor mutation is
 refused. Exact privileged argv is dormant; CLI/workflow exit78 before any service
 until independent review. No root repository code or live bootstrap was executed.
 
-Hosted272/272 pre-freeze pass; discovery/floor1799 in99 modules, not a passing full
-suite. The source-bound frozen results/publication follow-up will identify the
-exact material; see [bootstrap report](EMPTY_GROUPS_BOOTSTRAP_2026-10-26.md).
+Published/tested material: `b35c036d06b5db495cec297a6b928417b82cffae`, tree
+`f7162be46d70caa70adc0507f39dedc0275dfeb2`. Ordinary branch-only push and fresh fetch
+verified; main/PR24/recovery refs unchanged. Frozen hosted272/272, related88/88,
+startup10/10 and imports18/18 pass. Clean HEAD/hashes stayed unchanged during tests.
+Discovery/floor1799 in99 modules is not a passing full suite. This later closeout
+changes documentation/evidence only and explicitly skips CI. See the
+[bootstrap report](EMPTY_GROUPS_BOOTSTRAP_2026-10-26.md) and
+[exact new review package](review/2026-10-26-empty-groups-bootstrap/README.md).
+Exact GitHub run40384581205/job121789355348 passed the focused step whose frozen
+workflow asserts272 clean executions; the review gate then exited78 as designed.
+Overall job FAILURE, not containment success. Public per-test logs/gate stdout
+require sign-in and were not read; observed step states and the exit78 annotation
+are retained separately from the local raw frozen logs. No service is reached.
 Historical1765 discovery, prior failed native runs and container50/50 remain
 separate evidence. No unchanged native-Cloud full-suite rerun occurred.
 

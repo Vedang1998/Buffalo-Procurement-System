@@ -8,9 +8,12 @@ writer. Independent Claude review of this new delta must precede privileged live
 execution. The earlier frozen-candidate review does not cover this delta.
 
 Review base: `010aef5baf02f1c9bc038583f59cb314d6e8ee97`, tree
-`42228c6217d1d51f1bb15da231d508cac0399703`. The implementation preserves that
-published lineage. The evidence follow-up records the exact tested material and
-ordinary branch-only publication. No history rewrite or email investigation is
+`42228c6217d1d51f1bb15da231d508cac0399703`. Published/tested material:
+`b35c036d06b5db495cec297a6b928417b82cffae`, tree
+`f7162be46d70caa70adc0507f39dedc0275dfeb2`. Ordinary branch-only publication and
+fresh fetch verified both identities. The implementation preserves the published
+lineage. The later documentation/evidence tree is separate, explicitly skips CI,
+and receives no new test PASS attribution. No history rewrite or email investigation is
 needed; the previously verified account-linked noreply identity is unchanged.
 
 ## Implemented, with privileged invocation disabled
@@ -65,7 +68,9 @@ a privileged sudo monitor and manager cleanup remain explicit live-review risks.
 
 ## Machine validation and limits
 
-Pre-freeze hosted tests: 272/272 pass. New tests cover native serialization and
+Frozen material tests: hosted272/272, related88/88 and startup10/10 pass; imports
+18/18 pass. Clean HEAD and changed-file hashes remained unchanged across execution.
+New tests cover native serialization and
 ordering, isolated CLI refusal, retained authority, malformed readback, causal
 pre-Git/pre-write failures, explicit manager scopes, post-drop access, bounded
 output, cleanup precedence and strict source/report decoding. Ordinary disposable
@@ -74,12 +79,20 @@ simulated native/lifecycle operations; it does not establish privileged cleanup.
 
 Discovery is 1,799 tests in 99 registered modules, with floor 1,799 and no module
 registration/minimum errors. This is discovery, not execution. Frozen material
-test logs and source/dependency hashes follow in the review package. The complete
+test logs and source/dependency hashes are in the [review package](review/2026-10-26-empty-groups-bootstrap/README.md). The complete
 authoritative suite on the supported candidate remains required after the live
 prerequisites; the known unchanged native-Cloud pg_dump refusal was not rerun.
 Historical failures and separately scoped container 50/50 remain attributed to
 their original executed commits. No test counts are summed across launches to
 claim integrated acceptance.
+
+The exact published material's GitHub run40384581205/job121789355348 has a
+successful focused step (the source-pinned workflow requires272 clean executions)
+and a failed review-gate step with public exit78 annotation. Overall FAILURE is
+expected at this deliberate gate, not a host capability result. Public raw test
+logs and gate JSON require sign-in and were not observed. Root and internal
+host_audit verified public step states and the exact source behavior; no privilege
+or service path is reached. Local raw test transcripts remain separately retained.
 
 Upstream systemd v255, util-linux v2.39.3 and Linux v6.8 source research supports
 the command construction. It is not attestation of installed runner binaries.

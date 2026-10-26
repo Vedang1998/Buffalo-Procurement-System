@@ -1,0 +1,53 @@
+{
+  "attribution": "Internal Codex host_audit public-page observation, independently checked by root against public job HTML",
+  "observed_at_utc": "2026-10-26T19:15:20.679829+00:00",
+  "commit": "b35c036d06b5db495cec297a6b928417b82cffae",
+  "tree": "f7162be46d70caa70adc0507f39dedc0275dfeb2",
+  "run_id": 40384581205,
+  "job_id": 121789355348,
+  "job_url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40384581205/job/121789355348",
+  "overall_conclusion": "FAILURE",
+  "steps": [
+    {
+      "data-name": "Focused source and diagnostic validation",
+      "data-number": "5",
+      "data-conclusion": "success",
+      "data-external-id": "6ff7dbd4-8710-4f70-a763-47247745bf1d",
+      "data-expand": "",
+      "data-started-at": "2026-10-26T19:12:18Z",
+      "data-completed-at": "2026-10-26T19:12:28Z",
+      "data-log-url": "/Vedang1998/Buffalo-Procurement-System/commit/b35c036d06b5db495cec297a6b928417b82cffae/checks/121789355348/logs/5"
+    },
+    {
+      "data-name": "Review gate before hosted execution",
+      "data-number": "6",
+      "data-conclusion": "failure",
+      "data-external-id": "3216f1bd-0cb3-476b-b218-c8e9b8fa04f1",
+      "data-expand": "true",
+      "data-started-at": "2026-10-26T19:12:28Z",
+      "data-completed-at": "2026-10-26T19:12:28Z",
+      "data-log-url": "/Vedang1998/Buffalo-Procurement-System/commit/b35c036d06b5db495cec297a6b928417b82cffae/checks/121789355348/logs/6"
+    }
+  ],
+  "review_gate_public_annotation": "Process completed with exit code 78.",
+  "raw_test_transcript_observed": false,
+  "gate_stdout_json_observed": false,
+  "focused_assertions_from_exact_workflow": {
+    "tests_run": 272,
+    "successful": true,
+    "skipped": 0,
+    "expected_failures": 0,
+    "unexpected_successes": 0
+  },
+  "source_verified_behavior": "Unconditional CLI exit78 before any service creation or privilege command",
+  "job_html_sha256": "fb57d81fa3f5d75e98bfd415864255f612db22e84ac13e1ae27de59ee5579fba",
+  "job_html_bytes": 205217,
+  "limitations": [
+    "Public logs require sign-in; no raw per-test or gate-stdout transcript claimed",
+    "No new native bootstrap, containment or integrated acceptance proof"
+  ],
+  "public_source_hashes_verified_by_host_audit": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "186a2d75154fa09a57b6e0ea5a58c426617613deb8ff5f8959a644e7b3663c31",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "e2ccac774f2c9d89d2ca576d090a954c8fbfa7894b7a469721533fe3df214ea1"
+  }
+}

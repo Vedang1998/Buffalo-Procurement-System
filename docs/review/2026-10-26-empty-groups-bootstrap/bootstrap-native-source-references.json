@@ -1,0 +1,40 @@
+{
+  "scope": "public upstream source research; not installed binary attestation",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/systemd/systemd/v255/src/run/run.c",
+      "bytes": 79537,
+      "sha256": "675238d084c864121f3ea84dd11c6cc251577a4dbe9b9365d7fdbce33cb7beb4"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/systemd/systemd/v255/src/shared/bus-unit-util.c",
+      "bytes": 115830,
+      "sha256": "7b5a2c9711c36b56256427795b046996c36e2a278dc9b45773fcd836cdb8e1d7"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/systemd/systemd/v255/src/core/dbus-execute.c",
+      "bytes": 167421,
+      "sha256": "d5822f669bdff78f54b1ab54ad48525745aacfee570c5a00212f2f0062f19a35"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/systemd/systemd/v255/src/core/exec-invoke.c",
+      "bytes": 214490,
+      "sha256": "33da124c5cd657c09c2325641425a99be6df50e40e92d2bb18441f209d29ae46"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.service.xml",
+      "bytes": 105777,
+      "sha256": "439322b120014971f37e0a96adc6cb827367846ff6c16f193e9ec4b15931033b"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/util-linux/util-linux/v2.39.3/sys-utils/setpriv.c",
+      "bytes": 27768,
+      "sha256": "6a99ba149a4f8e879bac200c3ce080a2386194f3d4cfcd60d5d140bf34dbbea7"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/torvalds/linux/v6.8/kernel/user_namespace.c",
+      "bytes": 36560,
+      "sha256": "468c52b1237dacd246180c18a9676fa86f81a252b6c005fe3fcb269148f1828f"
+    }
+  ]
+}

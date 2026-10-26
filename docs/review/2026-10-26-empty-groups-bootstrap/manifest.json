@@ -1,0 +1,77 @@
+{
+  "bootstrap-frozen-hosted.txt": {
+    "bytes": 47919,
+    "sha256": "ad36e6fabcbc6c126a5fedef491fecdb7cee4803727d98362ec224b9c3d4625d",
+    "transformation": "none; extension changed to txt"
+  },
+  "bootstrap-frozen-related.txt": {
+    "bytes": 18239,
+    "sha256": "55ec0d65097dae3ce74422bf23e7d1fda2150a8a700aa38e33325d0f59b4b1ef",
+    "transformation": "none; extension changed to txt"
+  },
+  "bootstrap-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+    "transformation": "none; extension changed to txt"
+  },
+  "bootstrap-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "transformation": "none; extension changed to txt"
+  },
+  "bootstrap-frozen-validation.json": {
+    "bytes": 2295,
+    "sha256": "8d287a616c6bedd9f08fee3810eddb0a038af048e384a2e5a953a97f3d709503",
+    "transformation": "none"
+  },
+  "bootstrap-frozen-discovery.json": {
+    "bytes": 233,
+    "sha256": "9b9f4fa57405a5d380269b9be6e45f9c76bd24af9e2a47224d5a24b12b72ee4d",
+    "transformation": "none"
+  },
+  "bootstrap-dependency-identities.json": {
+    "bytes": 1099,
+    "sha256": "888ffb98da76ef3af1e46566681377e6ac8917df43aa8d455afe2bdb3fa488cb",
+    "transformation": "none"
+  },
+  "bootstrap-source-identities.json": {
+    "bytes": 1971,
+    "sha256": "5ecdfc962c6be3dedd23af5273499e613a5ee3049501bbd6c23e98faf0d5f4f0",
+    "transformation": "none"
+  },
+  "bootstrap-material-publication.json": {
+    "bytes": 976,
+    "sha256": "bee40c4e8a6e0fbb1ddcef2e3fc63e4169dbca30e6f2d703068d7bd5c27129a3",
+    "transformation": "none"
+  },
+  "bootstrap-native-source-references.json": {
+    "bytes": 1593,
+    "sha256": "df1db5f5ed592bcb814b5a7fc8181ba1409b93c79b2d9b906a6fa9d088a97398",
+    "transformation": "none"
+  },
+  "bootstrap-inert-native-plan.json": {
+    "bytes": 2353,
+    "sha256": "f2853897395e26d9d9dc7bff44f5c18eb36893d2785136a7f8e0cb821e03d0d4",
+    "transformation": "none"
+  },
+  "bootstrap-internal-review.json": {
+    "bytes": 2689,
+    "sha256": "394dedb4f5035f1bb5200e8907c20a610aa275ca9a5f6b6a471f24e9ffe55b6b",
+    "transformation": "none"
+  },
+  "bootstrap-hosted-observation.json": {
+    "bytes": 2484,
+    "sha256": "1d4c8fd3acf490242a968f007b022f5bcb33da64981dc1656b6a0cccfaa075f1",
+    "transformation": "none"
+  },
+  "bootstrap-cleanup.json": {
+    "bytes": 652,
+    "sha256": "0defec4fab89234b81fdb65cf3b9df3bc194907404d9ddbbc5f33c6929a4af80",
+    "transformation": "none"
+  },
+  "README.md": {
+    "bytes": 7832,
+    "sha256": "9988dc659d53934d06694528ceedfa73e8dd7633df5cc8ef1c5e8a4759796599",
+    "transformation": "authored read-only review request"
+  }
+}
