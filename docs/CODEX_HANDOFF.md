@@ -12,6 +12,17 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### 2026-10-26 critical-path cgroup component and host observation — WIP
 
+Latest actual host result:829ea51 source-bound GitHub run40363964335 passes
+focused203 and proves native PostgreSQL16.15 metadata/version. Current service
+ancestry lacks delegation, but a user systemd manager exists. The authorized
+next configuration is a bounded nonce-owned `systemd-run --user` service with
+Delegate=memory pids and DelegateSubgroup=supervisor, running the same scrubbed
+supervisor. This unprivileged supported route is now implemented for one bounded
+capability observation; no sudo exception is activated or currently requested.
+Focused workflow lifecycle coverage raises counts to205/1732/96modules. Results
+remain pending until exact publication/job observation. See the checkpoint report.
+
+
 Initial material published/fetched at `da082cef7b6bec8c29265cc892be3afd374fa7e4`,
 tree `eb69c619cc2bd2b30876dc6412ae936ef385641c`, from b4044194. Exact frozen
 hosted199/related88/startup10 passed. GitHub40361057089 passed focused199 but

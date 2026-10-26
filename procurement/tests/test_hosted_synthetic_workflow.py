@@ -5,6 +5,8 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+import shlex
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,16 +45,16 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertNotIn('procurement/', self.text.split('- name: Prepare Python', 1)[0])
 
     def test_repository_python_has_no_site_or_ambient_environment(self):
-        launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line]
+        launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
         self.assertEqual(len(launches), 2)
-        for line in launches:
-            self.assertTrue(line.startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertTrue(launches[0].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertTrue(launches[1].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
         self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[1])
         self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[1])
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Observe namespace', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,25,9,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 203', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,25,11,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 205', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -107,6 +109,45 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
             self.assertTrue(os.get_inheritable(fd))
         finally:
             os.close(fd)
+
+    def test_user_manager_service_is_bounded_and_keeps_same_launcher(self):
+        for fragment in ('/usr/bin/systemd-run --user --quiet --wait --pipe --collect --service-type=exec --expand-environment=no',
+                         '--unit="$unit"', '--working-directory="$(pwd -P)"', "--property='Delegate=memory pids'",
+                         '--property=DelegateSubgroup=supervisor', '--property=RuntimeMaxSec=120s', '--property=TimeoutStartSec=10s',
+                         '--property=TimeoutStopSec=5s', '--property=KillMode=control-group',
+                         '--property=NoNewPrivileges=yes', '--property=MemoryMax=512M', '--property=TasksMax=64',
+                         'XDG_RUNTIME_DIR="/run/user/$uid"', 'DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus"'):
+            self.assertIn(fragment, self.text)
+        self.assertNotIn('systemctl --user stop', self.text)
+        self.assertNotIn('reset-failed', self.text)
+
+    def test_manager_failure_status_and_unobserved_cleanup_never_pass(self):
+        block = self.text.split('          # Begin owned user-service diagnostic.', 1)[1]
+        block = block.split('          # End owned user-service diagnostic.', 1)[0]
+        block = '\n'.join(line[10:] for line in block.splitlines()[1:])
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            manager = directory / 'manager'
+            control = directory / 'control'
+            output = directory / 'output'
+            trace = directory / 'trace'
+            for observed, manager_status, query_status, expected_cleanup in (
+                ('not-found', 1, 0, 'NOT_FOUND_OBSERVED'), ('loaded', 1, 0, 'UNVERIFIED'),
+                ('not-found', 124, 0, 'UNVERIFIED'), ('not-found', 1, 1, 'NOT_FOUND_OBSERVED'),
+                ('not-found', 1, 124, 'UNVERIFIED'),
+            ):
+                manager.write_text(f'#!{sys.executable}\nimport sys\nfrom pathlib import Path\nPath({str(trace)!r}).write_text(repr(sys.argv[1:]))\nprint("synthetic diagnostic")\nsys.exit({manager_status})\n')
+                manager.chmod(0o700)
+                control.write_text(f'#!{sys.executable}\nimport sys\nassert sys.argv[1:3]==["--user","show"]\nprint({observed!r})\nsys.exit({query_status})\n')
+                control.chmod(0o700)
+                simulated = block.replace('/usr/bin/systemd-run', shlex.quote(str(manager))).replace('/usr/bin/systemctl', shlex.quote(str(control)))
+                code = 'set -euo pipefail; report="$1"; DIAGNOSTIC_PYTHON="$2"; EXPECTED_REPOSITORY=test; EXPECTED_EVENT=push; EXPECTED_REF=test; EXPECTED_SHA=test; status=0;\n' + simulated + '\nexit "$status"'
+                run = subprocess.run(['/bin/bash', '-c', code, 'lifecycle-test', str(output), sys.executable],
+                                     env={'PATH': '/usr/bin:/bin'}, capture_output=True, timeout=5)
+                self.assertEqual(run.returncode, 1, run.stderr)
+                self.assertIn(('load_state='+expected_cleanup).encode(), run.stdout)
+                self.assertEqual(output.read_text(), 'synthetic diagnostic\n')
+                self.assertIn('--collect', trace.read_text())
 
 
 if __name__ == '__main__':

@@ -207,3 +207,38 @@ remain NOT_RUN. The historical container fixtures do not establish these gates.
 Railway remains NOT_PROVEN. No deployment, production database, private-data,
 Shopify, real purchasing, PO release, supplier transmission, main/default branch,
 PR24, Mac or Replit operation occurred. Dependencies/lockfiles are unchanged.
+
+## Same-launcher supported user-manager capability configuration
+
+Source-bound run40363964335/job121716508122 at material
+829ea51e113ca1946d4600c976d1a7630c766be6 (tree0fc99e3568b258175e626451633120e749f0cca7)
+passed focused203 and reached actual host observation. UID1001 has genuine
+native PostgreSQL16.15 metadata/version matches for both programs, but no usable
+delegation in /system.slice/hosted-compute-agent.service ancestry. A user systemd
+manager socket is present. This is a measured current-launcher limitation, not
+proof of platform-wide impossibility. The canonical public report is preserved
+in the review package (SHA2566f5c87661044dff4a52e1e88e3b982adb26716cc6f65337a6ccb2530a87030d2).
+
+That observation supports trying the standard unprivileged user-manager route
+within existing capability-test authority. The workflow now creates one random
+nonce-named transient user service using systemd-run --user, Delegate=memory pids,
+DelegateSubgroup=supervisor, Type=exec, --wait/--pipe/--collect, literal arguments
+and fixed working directory. The same isolated, close_fds supervisor runs inside
+it. Manager connection variables are confined to the client; the actual
+supervisor's environment remains exactly PATH/LC_ALL. No sudo, host permission
+change, root broker or kernel-policy override is introduced.
+
+Activation is bounded10s, runtime120s, stop5s and client150s. KillMode=control-group,
+NoNewPrivileges,512MiB and64task manager limits apply to this credential-free
+probe. After return, bounded read-only queries observe only its exact random
+unit name. No stop/reset/delete by unbound name occurs. NOT_FOUND_OBSERVED is
+manager-state observation, not complete namespace/resource cleanup proof.
+Client timeout/lost acknowledgement remains UNVERIFIED even if a missing unit
+is observed; no later-creation safety is inferred. The focused shell regression
+simulates failure, nonzero not-found queries, timeout and unresolved cleanup.
+
+Official systemd v255 documents DelegateSubgroup (added254) and this standard
+user-manager contract. Both actual controller delivery and namespace policy
+remain measured gates; there is no privileged fallback. New workflow coverage
+raises hosted tests to205 and discovery/floor to1732 in96modules. The user-manager
+host result must be recorded before any capability claim or next live step.

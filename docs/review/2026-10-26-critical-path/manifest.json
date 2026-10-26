@@ -38,5 +38,10 @@
     "bytes": 692,
     "sha256": "9ceee9a13d5f3535624d3a77806f59b5190d586a0aee506747ea40e8ea5a80ca",
     "transformation": "none"
+  },
+  "critical-host-prerequisites-829ea51.json": {
+    "bytes": 3148,
+    "sha256": "6f5c87661044dff4a52e1e88e3b982adb26716cc6f65337a6ccb2530a87030d2",
+    "transformation": "canonical public annotation, no trailing newline"
   }
 }
