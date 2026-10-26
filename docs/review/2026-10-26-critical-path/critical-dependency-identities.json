@@ -1,0 +1,27 @@
+{
+  "material_commit": "3c1ae555b82aa650011254a9b1f8e8c4367601bb",
+  "dependency_files": {
+    "pyproject.toml": {
+      "git_blob": "cda9d42b291b1101c66b2f916a23b7625ef117a6",
+      "sha256": "c83fa94b31129a28040b199c4fdb6902287646bf306129066eadcc810fe1d346"
+    },
+    "procurement/pyproject.toml": {
+      "git_blob": "5c7ea636c0b7739e2ab1042852907170da67cb45",
+      "sha256": "18624c7486a4c99ea071c5b646d837e6e562962060d94fa897352d3b018769fc"
+    },
+    "uv.lock": {
+      "git_blob": "08936304ff38518ed9fe6b632613231c62a2c689",
+      "sha256": "f8613b17cb90ca5e3070e13c47cd6d53a60a8c314257d5588986cf92d0717be9"
+    },
+    "package.json": {
+      "git_blob": "dca71cc977605274cb9a513fb68dc444ac4a390e",
+      "sha256": "70cea0f4dad2fe6eac92d937b9f09dea474c1f2372d747950885b0875e59d601"
+    },
+    "pnpm-lock.yaml": {
+      "git_blob": "8b4a6fc64848ac8a207bf103c4d43976f20c5589",
+      "sha256": "cbfa1288e6d50e0b7ea11978eee21173616583e0a2a525eaf4280aede4ca6bb8"
+    }
+  },
+  "manifests_and_lockfiles_unchanged_from_b404": true,
+  "application_business_source_unchanged_from_b404": true
+}

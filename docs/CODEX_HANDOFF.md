@@ -12,20 +12,26 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### 2026-10-26 critical-path enrollment implementation — WIP, NON-GREEN
 
+Published/tested material: `3c1ae555b82aa650011254a9b1f8e8c4367601bb`, tree
+`3de6508ec0b173b575b7ce4cacc73129af9011a7`. Ordinary branch-only push and fresh
+fetch verified. This later closeout changes documentation/evidence only; its
+commit uses [skip ci] to avoid another unchanged hosted refusal. No new test or
+capability PASS is inferred for that documentation tree.
+
 The hosted platform now has measured native PostgreSQL16.15 and owned writable
 memory/pids delegation in the same unprivileged user-service launcher. Material
 af6afca388f8020ea8ef5b079850d47bf425af52 proved those prerequisites; its later
 mapped-identity assertion refused. The assertion was preserved.
 
-Exact diagnosis at published `eb736550fa8402ee26f7f5937ce882959b5a356f`, tree
-`c9b400b7b63f33af95b74557c90eca2aad3c9abd`, run40370106003/job121738230784:
-nonroot UID consistent=true, GID consistent=true, supplementary_groups_empty=false.
-The source-bound identity gate stopped BEFORE controller writes, host probing or
-namespace creation. Provider/payload counts0, release WITHHELD. Owned user-service
-NOT_FOUND_OBSERVED. Canonical2373-byte report SHA256
-97787f0958e986c0d4253d6c6bd04ed0948fda6bb90bc79a23fd76cdf33363a4 and all13 source
-hashes were independently reconstructed/verified. This is a supported-launch
-identity limitation, not evidence of a namespace kernel-policy prohibition.
+Exact final GitHub run40372140134/job121745375279 binds that material and passed
+focused238; overall result FAIL. Identity: nonroot UID consistent=true, GID
+consistent=true, supplementary_groups_empty=false. The source-bound identity gate
+stopped BEFORE controller writes, host probing or namespace creation. Provider/
+payload counts0, release WITHHELD. Owned user-service NOT_FOUND_OBSERVED.
+Canonical2373-byte report SHA256
+6d731daa925240f59b53dbe1c1f5e87520d3ac1a621fe59362b11c218b63bc2f and all13 source
+hashes were independently reconstructed/verified by root and internal host_audit.
+This is a supported-launch identity limitation, not a namespace kernel-policy ban.
 
 Task2 now wires the owned cgroup lease into the optional strict namespace mode:
 sealed mode, lease-before-fork, ARMED then stopped I, stopped G while S enrolls I,
@@ -36,11 +42,12 @@ explicit cgroup mode cannot fall back. The detached sentinel is still unexecuted
 runtime unsealed and all credential gates withheld. Exclusive delegation access
 remains required; the component does not defeat hostile same-UID pathname races.
 
-Focused hosted238/238 passed, including17 enrollment tests. A real disposable
+Exact frozen hosted238/238, related88/88 and startup10/10 passed, with source
+hashes and clean HEAD unchanged during execution; includes17 enrollment tests. A real disposable
 G/I subprocess test covers actual stops and enrollment/ACK/resume failure cleanup
 with explicitly simulated cgroup writes. It is not live cgroup acceptance.
-Discovery/floor is1765/98modules; frozen validation follows before publication.
-Previous exact eb73655 validation passed221/88/10 and GitHub focused221.
+Discovery/floor is1765/98modules with no registration error. Imports18/18 pass.
+The full native suite was deliberately not rerun to reproduce its known refusal.
 No unchanged full native rerun; historical df147b2 NON-GREEN and container50/50
 retain their original executed-source attribution.
 
@@ -53,8 +60,9 @@ Claude independent review NOT_ASSESSED; internal Codex scoped reviews do not cou
 Browser confirmation/BackupV2/APPLY/review-edit-reject/two vendor DRAFTs/three lines/
 14 packet members/$289/restart/restore/resource acceptance NOT_RUN. Railway NOT_PROVEN.
 
-Next executable development check is the frozen focused/startup validation and
-exact publication. The next live prerequisite needs owner-approved supported
+Next executable action: independent Claude read-only review using
+[the exact review package](review/2026-10-26-critical-path/README.md). The next
+live prerequisite needs owner-approved supported
 provisioning that starts the same unprivileged launcher with supplementary groups
 already empty, before unprivileged GID-map denial. User-manager NNP stays enabled;
 no setgroups workaround, sudo, root application or kernel-policy change is enabled.

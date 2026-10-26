@@ -108,5 +108,80 @@
     "bytes": 976,
     "sha256": "f3561506f42903144ddaae4bc84c2f44a124a8266eaa9066ce575af644b5fdbb",
     "transformation": "none"
+  },
+  "critical-3c1ae55-host-identity.json": {
+    "bytes": 2373,
+    "sha256": "6d731daa925240f59b53dbe1c1f5e87520d3ac1a621fe59362b11c218b63bc2f",
+    "transformation": "strict base64 reassembly of indexed public notices; canonical JSON, no trailing newline"
+  },
+  "critical-enrollment-frozen-hosted.txt": {
+    "bytes": 41496,
+    "sha256": "ae4f62363a1ce3296958fc01465edb7c6a3a5214cd37fa0dca38189fb8688ebb",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-enrollment-frozen-related.txt": {
+    "bytes": 18239,
+    "sha256": "6c27d22debd7f509bd8cae83b25b0fe9ac7b1940b8878d5bc7848affb71015e0",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-enrollment-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-enrollment-frozen-validation.json": {
+    "bytes": 6005,
+    "sha256": "b13c0a337d56e1182063beb6234b8dd954eddd5cc65eb455bd98d33b2bd574ff",
+    "transformation": "none"
+  },
+  "critical-enrollment-discovery.json": {
+    "bytes": 148,
+    "sha256": "95890142724e9f414a1163a26b0a29e524814fd79a575b48ce69066e5bc9254d",
+    "transformation": "none"
+  },
+  "critical-enrollment-publication.json": {
+    "bytes": 976,
+    "sha256": "6447e507216bffa41581b6a581a73c856b4f5e8390c6e506a17f79b85a8e5087",
+    "transformation": "none"
+  },
+  "critical-final-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-final-cleanup.json": {
+    "bytes": 652,
+    "sha256": "0defec4fab89234b81fdb65cf3b9df3bc194907404d9ddbbc5f33c6929a4af80",
+    "transformation": "none"
+  },
+  "critical-enrollment-first.txt": {
+    "bytes": 3206,
+    "sha256": "16f65b33341fdb17698b5ceb9ab4aac1fcc0a37f763b684d69db232b1fca7537",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-enrollment-causal.txt": {
+    "bytes": 1863,
+    "sha256": "866a59942e164690bf0a2d8b787338a1a2478395f4f356bc07c6d351efdd22dd",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-final-hosted-observation.json": {
+    "bytes": 811,
+    "sha256": "81ba6d0a9bc4920e4b6be10ecc4a340661f020d322f82a4c0f74ca1bb0551099",
+    "transformation": "none"
+  },
+  "critical-internal-review.json": {
+    "bytes": 2180,
+    "sha256": "73789895659f30e759cf3317d3f51491b9eb46191f66910615ad67be823f5918",
+    "transformation": "none"
+  },
+  "critical-dependency-identities.json": {
+    "bytes": 1093,
+    "sha256": "7e51e2c4d91d0e0a840b74d9501f233c7f528b043fd182c8deb8b30e95b08bf0",
+    "transformation": "none"
+  },
+  "README.md": {
+    "bytes": 5433,
+    "sha256": "572b923952083db9d54e0453d3f8cb8beaad6e4d4f77823ad7d8317f937add65",
+    "transformation": "authored read-only review instructions"
   }
 }

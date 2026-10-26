@@ -1,0 +1,20 @@
+{
+  "material_commit": "3c1ae555b82aa650011254a9b1f8e8c4367601bb",
+  "material_tree": "3de6508ec0b173b575b7ce4cacc73129af9011a7",
+  "run": 40372140134,
+  "job": 121745375279,
+  "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40372140134/job/121745375279",
+  "job_result": "FAILURE",
+  "focused_test_step": "238 PASSED",
+  "canonical_report_sha256": "6d731daa925240f59b53dbe1c1f5e87520d3ac1a621fe59362b11c218b63bc2f",
+  "workflow_sha256": "7e17ae2e6a311e76c01a4e49986a9f6900b109a3bd4572ef9e2cca470cb95239",
+  "source_hashes_verified": 13,
+  "unit": "buffalo-hosted-1037313e-c4f6-44c0-9a86-9b765fcf3118.service",
+  "unit_observation": "NOT_FOUND_OBSERVED",
+  "client_status": 1,
+  "independent_external_review": false,
+  "observers": [
+    "Codex root",
+    "Codex host_audit"
+  ]
+}

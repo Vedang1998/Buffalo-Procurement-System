@@ -1,132 +1,102 @@
-# October 26 critical-path implementation — WIP, NON-GREEN
+# October 26 critical-path checkpoint — WIP, NON-GREEN
 
-Base: `b4044194137669f6203c85276af8f23d0e500cea`, tree
-`273123a18b0245ba634109c6af2665b26ca368b9`. The base and all thirteen published
-review evidence hashes were verified before work. Metadata recovery is already
-published; no recovery rewrite, identity investigation or repackaging occurred.
-Codex is the sole writer. Official phase numbering/status is unchanged.
+Material is published and recoverable, but integrated acceptance is incomplete.
+GitHub supplies native PostgreSQL16.15 and owned writable cgroup delegation in
+the same unprivileged launcher. The measured remaining launch blocker is
+**nonempty supplementary groups**. The empty-groups security assertion is intact.
+The final identity gate stops before any controller write or namespace attempt.
 
-## Material implementation
+Repository: Vedang1998/Buffalo-Procurement-System
+Branch: codex/hosted-synthetic-acceptance
+Base: b4044194137669f6203c85276af8f23d0e500cea
+Base tree:273123a18b0245ba634109c6af2665b26ca368b9
+Tested/published material:**3c1ae555b82aa650011254a9b1f8e8c4367601bb**
+Material tree:**3de6508ec0b173b575b7ce4cacc73129af9011a7**
 
-The new `hosted_synthetic_cgroup.py` implements the owned Task2 cgroup component:
-actual cgroup2 filesystem verification, held directory/control/mount identities,
-finite page-aligned memory limit below 5 GiB, pids.max=2, memory.oom.group=1,
-strict counters and zero OOM deltas, exact process/thread membership, and
-stopped/childless/single-thread init enrollment without a resume operation.
-Enrollment checks both I and G pidfds/start identities, G parent S, and G/S
-outside the limited child before and after the write. The caller must retain
-unreaped ownership and the deferred-cancellation envelope.
+Ordinary acceptance-branch-only publication and fresh fetch verified. No history
+rewrite, main/default-branch or PR24 change. Metadata recovery was already
+published and was not repeated. The base's thirteen evidence hashes were verified.
+Codex remained sole writer. Official phase numbering/status did not change.
 
-Cleanup removes only an observed empty original, handles renamed originals,
-preserves observed replacements and unexpected members, closes owned descriptors,
-and makes cleanup failure sticky. OOM violations still fail while permitting
-safe removal of an empty original. Copied leases cannot act as the owner.
-Linux name-based mkdir/open and rmdir are not atomic identity-conditional
-operations: the eventual composition must establish exclusive delegation access
-and exclude untrusted cgroup filesystem writers. This component alone does not
-prove security against hostile concurrent same-UID pathname replacement.
+The final documentation/evidence descendant has a separate tree. It preserves
+all material source/workflow/test/dependency bytes. Its explicit [skip ci] commit
+avoids rerunning the unchanged hosted refusal; it makes no new PASS claim.
 
-The lease is now connected through an optional strict namespace mode. It
-preserves ARMED/PDEATHSIG, retains stopped I and G, enrolls I before PROBE, and
-checks inherited exact I/W membership. Live proof remains blocked by launch identity. Sentinel
-execution, retained runtime closure and the one-shot fabricated release remain
-incomplete. No credential-bearing execution is enabled.
+## Implementation completed
 
-The new `hosted_synthetic_host.py` runs only a bounded read-only prerequisite
-observation in the existing scrubbed, source-bound diagnostic. It measures
-fixed native pg_dump/pg_restore paths, root-owned non-writable ancestor and leaf
-metadata, content hashes, exact major16 versions and current cgroup ancestry.
-Version subprocess output is capped at256 bytes with a3-second deadline and
-owned child cleanup. Program atime changes are permitted; identity/content
-metadata changes refuse. This is metadata/version observation, not invocation
-of the application Backup V2 validator or acceptance of a runtime closure.
+- Owned cgroup2 component: real filesystem and held directory/control/mount
+  identities; finite page-aligned memory below5GiB; pids.max=2; oom.group=1;
+  exact membership and zero OOM deltas; stopped, childless single-thread init
+  enrollment with G/I pidfd/start/lineage checks and G/S outside the limited child.
+- Supported bounded systemd-run --user service: exact random app.slice unit,
+  delegated memory/pids, separate supervisor leaf, 512MiB/64-task outer budget,
+  NNP, literal arguments and scrubbed close_fds supervisor. Source binding
+  precedes enabling controllers only in its owned empty unit root. No ancestor,
+  permission, kernel-policy or sudo operation is introduced.
+- Strict optional namespace/cgroup integration: mode is sealed into the guardian
+  bootstrap. S creates the256MiB child lease before G fork. I sends ARMED then
+  stops; G waits for I and stops too. S binds/enrolls I before ACK/resume. G checks
+  I's generation cgroup path before I resume/PROBE. S independently checks retained
+  I/W identities, NSpid, membership, limits and OOM counters. Reaping precedes
+  empty lease removal. Explicit cgroup mode cannot fall back to namespace-only.
+- Native PG metadata/version observer, initial boolean-only identity refusal and
+  bounded canonical public evidence. Indexed base64 notices avoid GitHub's4096
+  annotation truncation and bind the full report with SHA256.
 
-Missing PostgreSQL or delegation prerequisites now prevent repeating namespace
-mutations. Reports retain HOST_CAPABILITY=FAIL, runtime UNSEALED, provider_calls=0,
-credential_release=WITHHELD and execution_authority=false. The workflow writes
-bounded canonical output to its public job summary outside the scrubbed process;
-it preserves the actual failure exit code, exact branch-only trigger, pinned
-actions, ten-minute bound, read-only permission, no credentials and no sudo.
+Cleanup is ownership-bound and fails closed. Copied leases cannot clean originals;
+OOM violations remain failures even if empty resources can be removed. Unknown
+members/replacements are preserved. Linux mkdir/open/rmdir are not atomic
+identity-conditional operations: eventual composition must establish exclusive
+delegation access and exclude hostile same-UID writers. No stronger race guarantee
+is claimed. Current host Python runtime remains unsealed.
 
-## Published material and observability correction
+The detached sentinel remains unexecuted. No fabricated release provider or
+credential-bearing browser executes. Component evidence may say
+COMPONENT_OBSERVATION_ONLY, never HOST_CAPABILITY=PASS.
 
-Initial material `da082cef7b6bec8c29265cc892be3afd374fa7e4`, tree
-`eb69c619cc2bd2b30876dc6412ae936ef385641c`, was secret-scanned, ordinarily
-published and freshly fetched. Exact frozen validation passed hosted199/199,
-related88/88 and startup10/10, with all fourteen changed-file hashes unchanged.
-Raw evidence is in [review/2026-10-26-critical-path](review/2026-10-26-critical-path/manifest.json).
+## Source-bound host observations
 
-GitHub run40361057089/job121806277941 binds that push and exact workflow
-SHA25687553d50d8ef980ce4d0d7dd1cf27173ea262a28d472bd271aaf2c30ae1e59ee.
-Checkout/source/Python/focused199 succeeded; the observer exited1. The public
-run/job HTML did not expose its canonical JSON or summary and required sign-in
-for logs. Therefore specific host refusal and hosted cleanup were unobserved;
-step failure alone does not prove a kernel restriction.
+| Material | Run/job | Observed result |
+|---|---|---|
+|829ea51e113ca1946d4600c976d1a7630c766be6|40363964335/121716508122|PG16.15 system metadata/version; current service lacks delegation; user manager present.|
+|af6afca388f8020ea8ef5b079850d47bf425af52|40368541492/121732717740|Same user-service launcher has PG16.15 plus owned writable delegation; one controller write. Later mapped-identity assertion refuses; namespace cleanup true; unit absent observed.|
+|eb736550fa8402ee26f7f5937ce882959b5a356f|40370106003/121738230784|Complete canonical boolean identity report: UID/GID consistent, supplementary groups not empty. Stops before controller/host/namespace work.|
+|3c1ae555b82aa650011254a9b1f8e8c4367601bb|40372140134/121745375279|Focused238 succeeds; same identity refusal before mutations. Overall job FAILURE.|
 
-The follow-up changes observability only: a bounded fixed-title notice annotation
-escapes percent/CR/LF and retains the diagnostic exit code. A shell-executed
-regression proves synthetic annotation-command text cannot inject a new command.
-This adds one workflow test: hosted200, total discovery/floor1727 in96modules.
-No native known-failure rerun or privilege change is part of this correction.
+[Final job](https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40372140134/job/121745375279).
+Final canonical report:2373bytes, SHA256
+`6d731daa925240f59b53dbe1c1f5e87520d3ac1a621fe59362b11c218b63bc2f`.
+All13 reported source hashes match exact Git objects. Workflow6799bytes SHA256
+`7e17ae2e6a311e76c01a4e49986a9f6900b109a3bd4572ef9e2cca470cb95239`.
+Final provider/payload counts0, credentials WITHHELD, execution_authority=false.
+Its owned unit was NOT_FOUND_OBSERVED with client status1; this manager observation
+is not full namespace/resource acceptance.
 
+At af6afca, `_guardian:722` checks mapped UID/GID/empty supplementary groups.
+`os.unshare` is line719 and the USERNS/MAPPED handshake already completed. Do not
+mislabel this as a namespace syscall refusal or kernel-policy ban. Its annotation
+was truncated to4096bytes (exact prefix preserved, not fabricated complete JSON).
+Later complete reports establish the initial supplementary-group limitation.
 
-The public notice from b1529ccfbf6014d493664cb4d5f8740e7998175f run40362033756 /
-job121809746382 is now observable. Focused200 passed; the report refused with
-SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED, commit/tree null and host_prerequisites
-null. PG/cgroup observation never ran. Do not infer a host restriction from this
-result or enable the proposed privileged configuration before diagnosing it.
-A bounded follow-up preserves all checks and exposes only code-owned refusal
-categories, phase and numeric errno; no raw exceptions/environment/paths. Two
-regressions increase hosted count to202 and global discovery/floor to1729/96.
+Native Cloud's previously measured lack of trusted root-owned PG tools/delegation
+was not retested. The earlier container50/50 remains fixture-only evidence. The
+hosted diagnostic no longer repeats known namespace failure on unsuitable identity.
 
+## Supported launch change proposed for owner approval
 
-The classified public report at6ae3d8581ce4158530e824f834e89a8f45546c88
-(run40362998397/job121813122485, focused202PASS) identified SUPERVISOR /
-supervisor_descriptors_refused: an inherited runner FD above2, not a PostgreSQL
-or kernel-delegation failure. The launch fix now creates the actual reviewed
-supervisor with close_fds=True, exact isolated interpreter/arguments, scrubbed
-environment and120-second timeout. The outer launcher preserves its own FDs;
-the strict inner supervisor assertion is unchanged. A causal regression passes
-an inheritable synthetic FD: direct invocation refuses, while the owned clean
-child reaches deliberate source-event refusal, with the parent FD unchanged.
-This raises hosted/floor counts to203 and1730/96modules respectively.
-
-## Host capability and smallest proposed alternative
-
-Native Cloud's retained complete observation remains authoritative: no genuine
-trusted native PostgreSQL16 tools, no writable cgroup delegation, no supported
-privilege/system-manager helper. It was not rerun. The ordinary container's
-50/50 fixture proof remains valid only for that earlier tested material and
-fixture environment; it does not supply same-launcher native delegation.
-
-Official public GitHub runner documentation supports passwordless sudo on full
-Ubuntu VMs. The Ubuntu24.04 image documentation lists PostgreSQL16.15; actual
-identity/version and delegation still require observation. systemd documents
-Delegate=memory pids with User= ownership, but requesting controllers does not
-prove they were supplied. No unprivileged user-manager delegation guarantee was
-found. The current workflow expressly prohibits sudo.
-
-If the bounded hosted observation finds no delegation, the smallest proposed
-owner-approved configuration change is a nonce-scoped native systemd transient
-service on the GitHub Ubuntu24.04 VM: User=runner, Delegate=memory pids, bounded
-runtime/cleanup, and the same environment-cleared reviewed unprivileged launcher.
-A reviewed bootstrap would place the launcher in its own supervisor leaf before
-enabling child-domain controllers. Verify genuine native PostgreSQL16 and actual
-owned-child control/enrollment in that same service. Repeat current-generation
-containment before every eventual release; a separate root probe grants nothing.
-No root application execution, new privilege broker, sysctl change, ad hoc
-chmod/chown, privileged Docker or containment weakening is proposed or enabled.
-This changes the existing no-sudo contract and needs owner approval before use.
-
-Public documentation observed2026-10-26 (mutable upstream, hashes bind these
-observations rather than a runner image):
-
-- github/docs `content/actions/reference/runners/github-hosted-runners.md`:
-  SHA256 `2ba4307f64e55251e63555e97a51381e4eb36334693a464c743522a09546a148`.
-- actions/runner-images `images/ubuntu/Ubuntu2404-Readme.md`:
-  SHA256 `01917c6c12c3efc53f2b803f5b25268bc4477aedb38705742123b041bba0a409`.
-- systemd/systemd `docs/CGROUP_DELEGATION.md`:
-  SHA256 `7a542a153328ea1af0e7fa15a1ac1e908d9b9484f4d39a804ffc18df18f0a50f`.
+Smallest proposed supported launch contract, requiring owner approval before
+implementation of privileged provisioning: a platform-owned native service
+bootstrap clears supplementary groups BEFORE dropping to the verified nonroot
+runner UID/GID, removes ambient/inheritable capabilities and enables NNP, then
+executes the same exact reviewed scrubbed supervisor inside its nonce-owned
+delegated cgroup. No application or browser runs as root; native PostgreSQL16
+checks, stopped enrollment, all namespace/identity assertions, limits and release
+ordering remain unchanged. Re-prove each property in that same current generation.
+An empty systemd SupplementaryGroups= setting alone is insufficient because
+User='s configured groups may still be inherited. Do not remove NNP, add a Docker
+root broker, change host kernel policy or attempt setgroups after mapping denial.
+No privileged implementation or command has been activated. A platform with
+documented equivalent initial credentials is also acceptable after review.
 
 ## November rollover and mapped-offer boundary
 
@@ -176,159 +146,64 @@ catalog, inventory, complete prior-day sales and reconciled incoming also remain
 unestablished by verified current evidence; no private/provider data was queried.
 November1 precedes the November9 objective; commercial readiness is not proven.
 
-## Validation and review
+## Actual validation and acceptance gates
 
-Prechange hosted baseline:151/151. Current focused hosted group:199/199,
-related legacy-containment/runner/floor contracts:88/88, startup:10/10.
-Discovery/floor increased from1678 in94 modules to1726 in96 modules; no floor
-was lowered. The new cgroup suite uses explicit filesystem/kernel simulations;
-these are not live cgroup proof. Scoped internal Codex reviews found and drove
-repairs for copied ownership, OOM cleanup, real empty-controller file format,
-cancellation/mount checks, temporary descriptor cleanup, atime and bounded
-version-output handling. These are internal reviews, not Claude/Cursor.
+Exact3c1ae555 frozen results: **hosted238/238; related88/88; startup10/10**.
+Source hashes, HEAD and clean worktree were unchanged across execution. Hosted
+GitHub focused238 also passed. Local lightweight dependency/tool imports18/18 pass.
+Discovery only is1765 tests in98 registered modules; no floor was lowered.
 
-The unchanged full native suite was deliberately not rerun to reproduce its
-known pg_dump refusal. Preserve the historical exact material df147b2 result:
-1678 discovered=1667 executed+11 unexecuted;1667 executed=1665 passed+one failed
-method+one errored method. Two error events include the transfer class-setup
-error. Container50/50, startup10/10 and focused results are separate evidence;
-never add them to synthesize a green full-suite total.
+Seventeen new enrollment tests include real disposable G/I stops and cleanup with
+explicitly simulated cgroup operations. Failures at enrollment, ACK, resume,
+retained-pair proof and lease cleanup remain failures. Tests cover PID/start/path/
+membership mismatch, malformed sealed mode, no-fallback and namespace-only behavior.
+These tests do not establish live cgroup enforcement or integrated acceptance.
+Pre-freeze failing test logs remain in the package with their original outcomes.
 
-Independent Claude review remains NOT_ASSESSED. The review package must bind
-this final published material, the complete diff from b404, focused raw logs,
-source manifest, observed hosted job and both known limitations. Reviewers are
-read-only. Cursor is warranted for the eventual real production rollover SQL,
-identity and pricing contract, not a substitute for current broad review.
-No callable external reviewer is available in this environment.
+No unchanged full native rerun was made merely to reproduce pg_dump refusal.
+Historical exact df147b2:1678 discovered=1667 executed+11 unexecuted;
+1667 executed=1665 passed+one failed method+one method error. Two error events
+include a separate transfer class-setup error. Original historical evidence remains
+1668 discovered/1637 executed/1632 passed/one failed/four method errors/three
+class-setup errors/31 unexecuted. Class errors are not additional executed methods.
+Neither historical result is green. Container50/50 is separately attributed;
+do not combine scoped runs into an invented authoritative-suite PASS.
 
-Hosted browser confirmation/BackupV2 binding/APPLY/review-edit-reject/two vendor
-DRAFTs/three lines/14 packet members/$289/restart/restore/resource acceptance
-remain NOT_RUN. The historical container fixtures do not establish these gates.
-Railway remains NOT_PROVEN. No deployment, production database, private-data,
-Shopify, real purchasing, PO release, supplier transmission, main/default branch,
-PR24, Mac or Replit operation occurred. Dependencies/lockfiles are unchanged.
+| Gate | Result |
+|---|---|
+|Exact material/dependency identities|Verified; application business source, manifests and lockfiles unchanged from b404.|
+|Native PG16 + same-launcher owned delegation|Observed at af6afca; not a BackupV2 invocation or complete runtime closure.|
+|Current supported initial identity|FAIL: supplementary groups nonempty; no controller/namespace retry.|
+|Wired stopped enrollment/live containment|Implemented and focused-tested; live proof NOT_RUN.|
+|Sentinel execution/cleanup + one-shot release|NOT_RUN; provider0 and release WITHHELD.|
+|Operator VALIDATED → browser confirmation → BackupV2 → APPLY|NOT_RUN.|
+|Review/edit/reject → vendor DRAFT → reconciled packet|NOT_RUN; canonical two DRAFTs/three lines/14 members/$289 remain required, not preseeded.|
+|Restart/restore/resource acceptance|NOT_RUN.|
+|Independent Claude review|NOT_ASSESSED. Internal Codex reviews are internal.|
+|Railway readiness|NOT_PROVEN; no deployment.|
+|November/current real purchasing|Not ready; business authority and current approved inputs remain absent.|
 
-## Same-launcher supported user-manager capability configuration
+## Review, continuity and exact next action
 
-Source-bound run40363964335/job121816508122 at material
-829ea51e113ca1946d4600c976d1a7630c766be6 (tree0fc99e3568b258175e626451633120e749f0cca7)
-passed focused203 and reached actual host observation. UID1001 has genuine
-native PostgreSQL16.15 metadata/version matches for both programs, but no usable
-delegation in /system.slice/hosted-compute-agent.service ancestry. A user systemd
-manager socket is present. This is a measured current-launcher limitation, not
-proof of platform-wide impossibility. The canonical public report is preserved
-in the review package (SHA2566f5c87661044dff4a52e1e88e3b982adb26716cc6f65337a6ccb2530a87030d2).
+[Independent review package](review/2026-10-26-critical-path/README.md) freezes the
+exact base/material/tree, diff scope, raw test logs, dependency/source hashes,
+publication, canonical hosted evidence, cleanup and internal review attribution.
+No actual Claude/Cursor review occurred. Cursor is reserved for targeted SQL,
+identity/pricing risk when production contract implementation is authorized.
 
-That observation supports trying the standard unprivileged user-manager route
-within existing capability-test authority. The workflow now creates one random
-nonce-named transient user service using systemd-run --user, Delegate=memory pids,
-DelegateSubgroup=supervisor, Type=exec, --wait/--pipe/--collect, literal arguments
-and fixed working directory. The same isolated, close_fds supervisor runs inside
-it. Manager connection variables are confined to the client; the actual
-supervisor's environment remains exactly PATH/LC_ALL. No sudo, host permission
-change, root broker or kernel-policy override is introduced.
+Next executable action is Claude's read-only adversarial review of that exact
+material. In parallel, obtain the supported initial-empty-groups launch authority
+specified above. Codex then implements the narrowly approved bootstrap, proves
+initial identity/current-generation enrollment and cleanup, and continues retained
+sentinel/release gates before the existing browser scenario. No kernel workaround,
+assertion weakening or speculative production rollover is an authorized substitute.
 
-Activation is bounded10s, runtime120s, stop5s and client150s. KillMode=control-group,
-NoNewPrivileges,512MiB and64task manager limits apply to this credential-free
-probe. After return, bounded read-only queries observe only its exact random
-unit name. No stop/reset/delete by unbound name occurs. NOT_FOUND_OBSERVED is
-manager-state observation, not complete namespace/resource cleanup proof.
-Client timeout/lost acknowledgement remains UNVERIFIED even if a missing unit
-is observed; no later-creation safety is inferred. The focused shell regression
-simulates failure, nonzero not-found queries, timeout and unresolved cleanup.
+No live app/database/browser, containers, temporary databases or projection paths
+remain locally. Eight old PID1-owned zombies and six unattributed October17 volumes
+remain untouched. No new credential or test resource enters the saved setup.
+The reusable Install remains unchanged; Start continuity is updated separately as
+a saved draft, not a published snapshot or verified fresh-task restoration.
 
-Official systemd v255 documents DelegateSubgroup (added254) and this standard
-user-manager contract. Both actual controller delivery and namespace policy
-remain measured gates; there is no privileged fallback. New workflow coverage
-raises hosted tests to205 and discovery/floor to1732 in96modules. The user-manager
-host result must be recorded before any capability claim or next live step.
-
-
-### Delegatee preparation inside that exact unit
-
-`Delegate=memory pids` makes controllers available; it does not promise they
-are already enabled in the unit's subtree. The source-bound helper therefore
-checks the exact random service name, UID, real cgroup2 directory/mount identity,
-empty domain root, 512MiB/64-task outer limits and exact two-process supervisor
-leaf. Only that owned root may receive `+memory +pids`; readback and path identity
-are checked. No ancestor is changed. The bootstrap reports this write separately
-from the read-only host observation and never grants execution authority. The
-manager owns unit teardown; an absent unit observation is not full containment
-cleanup proof. Ten simulated kernel-control tests and two ordering/refusal
-regressions bring hosted tests to218 and discovery/floor to1745 in97modules.
-Actual service delivery remains unproven until publication and observation.
-
-
-### Actual user-service result and bounded identity diagnosis
-
-Material `af6afca388f8020ea8ef5b079850d47bf425af52`, tree
-`1a79aa633abae625e97290d2982622b372551d3f`, passed frozen hosted218/related88/
-startup10 and GitHub's focused218 gate in run40368541492/job121732717740. The
-same launcher observed native PostgreSQL16.15 and usable owned delegation after
-one controller write. Namespace cleanup passed and its exact unit was observed
-not found. Credentials/provider/payload authority remained withheld/zero.
-
-The diagnostic refused at `_guardian:722`: at that exact source this is the
-mapped UID/GID/empty-supplementary-groups assertion. `os.unshare` is line719 and
-the USERNS/MAPPED handshake preceded the refusal. This is NOT evidence of a
-namespace syscall/kernel-policy refusal. The failing tuple member was not
-reported. Preserve the assertion. Unprivileged GID mapping requires setgroups
-deny; inherited supplementary groups cannot then be cleared inside that user
-namespace. An upfront boolean-only identity observation now refuses before any
-delegatee write or namespace attempt if initial groups/credentials are ineligible.
-This diagnoses the launch requirement without repeating that namespace failure.
-
-GitHub truncated the notice at4096bytes. The exact prefix is retained, explicitly
-not valid complete JSON; the tree remains independently Git-verified. Bounded
-base64 notices now frame the complete canonical report in up to8 parts of3000
-characters with indices, count and a whole-report SHA256. Reassembly tests cover
-command-looking input, multiple parts, the maximum length and oversized refusal.
-This changes observability only; neither the diagnostic failure nor gates pass.
-Three regressions raise hosted tests to221 and discovery/floor to1748/97modules.
-
-
-## Current measured blocker and security-equivalent proposal
-
-Exact eb736550fa8402ee26f7f5937ce882959b5a356f/tree
-c9b400b7b63f33af95b74557c90eca2aad3c9abd passed frozen221/88/10; public
-run40370106003/job121738230784 passed focused221. Root reconstructed both notice
-parts, verified canonical JSON/whole SHA256 and all13 source hashes against Git.
-UID consistency and GID consistency pass; supplementary_groups_empty=false.
-The upfront gate refuses BEFORE delegatee writes, program probing or namespace
-execution. Service absence was observed; no credentials or payload were released.
-This supersedes any earlier suggestion that the platform necessarily lacks
-delegation or refuses namespace creation. The actual obstacle is initial groups.
-
-Smallest proposed supported launch contract, requiring owner approval before
-implementation of privileged provisioning: a platform-owned native service
-bootstrap clears supplementary groups BEFORE dropping to the verified nonroot
-runner UID/GID, removes ambient/inheritable capabilities and enables NNP, then
-executes the same exact reviewed scrubbed supervisor inside its nonce-owned
-delegated cgroup. No application or browser runs as root; native PostgreSQL16
-checks, stopped enrollment, all namespace/identity assertions, limits and release
-ordering remain unchanged. Re-prove each property in that same current generation.
-An empty systemd SupplementaryGroups= setting alone is insufficient because
-User='s configured groups may still be inherited. Do not remove NNP, add a Docker
-root broker, change host kernel policy or attempt setgroups after mapping denial.
-No privileged implementation or command has been activated. A platform with
-documented equivalent initial credentials is also acceptable after review.
-
-## Strict stopped-enrollment integration
-
-The sealed diagnostic bootstrap now carries an exact boolean cgroup-required
-mode. S creates the lease before G fork. I sends ARMED and stops; G retains I,
-reports its PID/start, then stops too. S observes G's stop, binds I's pidfd,
-validates lineage and enrolls I. Only after acknowledgment may G resume; G
-rechecks I and its exact generation cgroup path before resuming I and PROBE.
-W inherits enrollment. S independently rechecks outer I/W identities, namespace
-PIDs, exact process/thread membership, limits and OOM counters before CLOSE.
-Cleanup reaps owned processes before empty cgroup removal; foreign members are
-never killed or moved. Explicit mode cannot fall back to namespace-only execution.
-
-Seventeen new causal tests include real disposable G/I stops with simulated
-cgroup enrollment, enrollment/ACK/resume failures, retained-pair identity and
-membership changes, cleanup ordering/failure precedence, malformed sealed mode,
-and legacy namespace-only no-lease behavior. Hosted238/238 precommit passes;
-discovery/floor increases to1765/98modules. Existing guardrails remain FAIL /
-WITHHELD; cgroup evidence can say COMPONENT_OBSERVATION_ONLY, never acceptance.
-No supported live execution of this new integration has yet occurred.
+No production access, Railway deployment, private-data transfer, Shopify activity,
+real purchasing, PO release, supplier transmission, main/PR24 modification, Mac,
+Replit SSH or Replit shutdown occurred. No automatic future resumption is promised.

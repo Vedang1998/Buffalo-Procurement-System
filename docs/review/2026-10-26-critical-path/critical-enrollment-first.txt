@@ -1,0 +1,40 @@
+.......................................................................EE....................E.
+======================================================================
+ERROR: test_completed_prerequisites_survive_later_namespace_refusal (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_completed_prerequisites_survive_later_namespace_refusal) (error='NamespaceProofError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_capability.py", line 328, in test_completed_prerequisites_survive_later_namespace_refusal
+    self.assertIn(capability.main(['repo', 'push', 'ref', 'a'*40,
+                  ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  '--user-service-unit', 'test-unit']), (1, 130))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_capability.py", line 230, in main
+    options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path'])} if delegation is not None else {}
+                                                     ~~~~~~~~~~^^^^^^^^^^^^^
+KeyError: 'root_path'
+
+======================================================================
+ERROR: test_completed_prerequisites_survive_later_namespace_refusal (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_completed_prerequisites_survive_later_namespace_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_capability.py", line 330, in test_completed_prerequisites_survive_later_namespace_refusal
+    result = json.loads(output.getvalue().splitlines()[0])
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+IndexError: list index out of range
+
+======================================================================
+ERROR: test_user_delegation_is_after_source_and_before_host_observation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_user_delegation_is_after_source_and_before_host_observation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_capability.py", line 272, in test_user_delegation_is_after_source_and_before_host_observation
+    self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40, '--user-service-unit', 'test-unit']), 1)
+                     ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_capability.py", line 230, in main
+    options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path'])} if delegation is not None else {}
+                                                     ~~~~~~~~~~^^^^^^^^^^^^^
+KeyError: 'root_path'
+
+----------------------------------------------------------------------
+Ran 94 tests in 1.793s
+
+FAILED (errors=3)

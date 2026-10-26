@@ -1,0 +1,29 @@
+............F....
+======================================================================
+FAIL: test_real_stopped_guardian_and_init_use_simulated_enrollment_only (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_real_stopped_guardian_and_init_use_simulated_enrollment_only)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_enrollment.py", line 324, in test_real_stopped_guardian_and_init_use_simulated_enrollment_only
+    self.assertEqual(result.returncode, 0, result.stderr.decode())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "<string>", line 8, in <module>
+    gr,gw=n._pipe(); sr,sw=n._pipe()
+          ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 203, in _pipe
+    return tuple(_Descriptor.capture(number) for number in numbers)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 203, in <genexpr>
+    return tuple(_Descriptor.capture(number) for number in numbers)
+                 ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 176, in capture
+    _require(type(number) is int and number > 2)
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_namespace.py", line 48, in _require
+    raise NamespaceProofError("namespace_proof_refused")
+hosted_synthetic_namespace.NamespaceProofError: namespace_proof_refused
+
+
+----------------------------------------------------------------------
+Ran 17 tests in 0.147s
+
+FAILED (failures=1)

@@ -1,0 +1,43 @@
+{
+  "kind": "INTERNAL_CODEX_REVIEW_ONLY",
+  "external_claude": "NOT_ASSESSED",
+  "external_cursor": "NOT_ASSESSED",
+  "reviewers": [
+    {
+      "name": "/root/harness_audit",
+      "scope": "cgroup ownership, user-service boundary and stopped enrollment integration/tests",
+      "remaining_concrete_P0_P2_in_scoped_static_review": 0,
+      "did_execute_tests": false
+    },
+    {
+      "name": "/root/host_audit",
+      "scope": "host prerequisite trust, user-service bootstrap, bounded public reports and independent source/evidence verification within Codex",
+      "remaining_concrete_P0_P2_in_scoped_static_review": 0,
+      "did_execute_tests": false
+    }
+  ],
+  "fixes_driven_by_internal_review": [
+    "copied lease ownership and OOM cleanup",
+    "real empty cgroup control format and descriptor cleanup",
+    "program atime tolerance and bounded version output",
+    "exact app.slice unit path",
+    "retain completed evidence on later refusal",
+    "outer report reflects cgroup component observation"
+  ],
+  "material_commit": "3c1ae555b82aa650011254a9b1f8e8c4367601bb",
+  "reviewed_hashes": {
+    "procurement/tools/hosted_synthetic_namespace.py": "6e71cf5c6853a3e77a283d68b0cfc9850b205e656e5379af0e489a049c1505e7",
+    "procurement/tools/hosted_synthetic_capability.py": "5b1e7bfc23ca0ab5848b172780c559ddad025dcb3362f3cd84c34cc4f1aaf7b8",
+    "procurement/tools/hosted_synthetic_cgroup.py": "fa6edbd01f554bfe1ee811edd70ba4b40b4e34c9709515d1bcadeac909f4d148",
+    "procurement/tools/hosted_synthetic_host.py": "f6a8fd40849ce854b616d6432504b1b683a6836ffc1590e588e45445de712497",
+    "procurement/tools/hosted_synthetic_user_service.py": "68e40606a2e21eceaa7e266235b1122531ef3c5040c8710b41fd11803dd5d8ef",
+    "procurement/tests/test_hosted_synthetic_enrollment.py": "ce2de7ff45267dd562a22c83dc5256b4051ec4f798d50de3f0f90f3b50eff52c"
+  },
+  "limitations": [
+    "no external independent review",
+    "no supported live stopped cgroup enrollment",
+    "simulated cgroup writes in real-stop protocol tests",
+    "no sentinel execution or credential release",
+    "exclusive delegation access required; no protection claim against hostile same-UID pathname races"
+  ]
+}
