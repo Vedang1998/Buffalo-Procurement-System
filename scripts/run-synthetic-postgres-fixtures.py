@@ -186,7 +186,7 @@ raise SystemExit(0 if result.wasSuccessful() and result.testsRun == discovered a
                '--tmpfs', '/tmp:rw,nosuid,nodev,size=1g,mode=1777',
                '--tmpfs', '/var/lib/postgresql/data:rw,nosuid,nodev,size=1m,mode=700,uid=1000,gid=1000',
                '--env', 'PATH=/usr/lib/postgresql/16/bin:/usr/bin:/bin',
-               '--env', 'LANG=C.UTF-8', '--workdir', '/src', '--entrypoint', '/usr/bin/python3.13']
+               '--env', 'LANG=C.UTF-8', '--workdir', '/src', '--entrypoint', '/src/.venv/bin/python']
     for source, target in mounts:
         command += ['--mount', f'type=bind,src={source},dst={target},readonly']
     command += [IMAGE, '-I', '-S', '-B', '/run-fixtures.py', mode]
