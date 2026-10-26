@@ -22,6 +22,16 @@ See [CRITICAL_PATH_CHECKPOINT_2026-10-26](CRITICAL_PATH_CHECKPOINT_2026-10-26.md
 for executable changes, scoped evidence, exact host alternative and production
 rollover/cutover authority. All prior thirteen evidence hashes were verified.
 
+
+The public notice from b1529ccfbf6014d493664cb4d5f8740e7998175f run40362033756 /
+job121709746382 is now observable. Focused200 passed; the report refused with
+SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED, commit/tree null and host_prerequisites
+null. PG/cgroup observation never ran. Do not infer a host restriction from this
+result or enable the proposed privileged configuration before diagnosing it.
+A bounded follow-up preserves all checks and exposes only code-owned refusal
+categories, phase and numeric errno; no raw exceptions/environment/paths. Two
+regressions increase hosted count to202 and global discovery/floor to1729/96.
+
 Task2 now has an owned cgroup2 component with exact limits, stopped/childless
 init enrollment, G/I pidfd/start/lineage checks, membership/OOM proof and
 identity-bound empty cleanup. It is not integrated into the namespace handshake

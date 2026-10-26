@@ -34,7 +34,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_forecasting.py": 16,
     "test_historical_sales_review_api.py": 17,
     "test_hosted_synthetic_source.py": 36,
-    "test_hosted_synthetic_capability.py": 23,
+    "test_hosted_synthetic_capability.py": 25,
     "test_hosted_synthetic_cgroup.py": 28,
     "test_hosted_synthetic_host.py": 18,
     "test_hosted_synthetic_namespace.py": 65,

@@ -32,6 +32,28 @@ class HostedDiagnosticError(RuntimeError):
     pass
 
 
+_REFUSAL_CODES = frozenset({
+    'supervisor_boundary_refused', 'supervisor_process_inventory_refused',
+    'supervisor_children_refused', 'supervisor_descriptors_refused', 'invocation_refused',
+    'source_signal_boundary_invalid', 'source_git_unavailable', 'source_git_output_limit',
+    'source_git_refused', 'source_git_cleanup_failed', 'source_oid_invalid',
+    'source_git_layout_invalid', 'source_checkout_not_detached', 'source_commit_mismatch',
+    'source_checkout_changed', 'source_root_changed',
+    'source_blob_invalid', 'source_blob_missing', 'source_bytes_mismatch', 'source_checkout_dirty',
+    'source_event_invalid', 'source_file_changed', 'source_file_cleanup_failed', 'source_file_invalid',
+    'source_file_unavailable', 'source_index_flags_invalid', 'source_mode_mismatch',
+    'source_path_changed', 'source_path_indirection', 'source_root_invalid', 'source_root_mismatch',
+})
+
+
+def _fixed_refusal(phase, error):
+    """Only code-owned categories/numeric errno; never exception text or paths."""
+    code = str(error)
+    return dict(phase=phase, code=code if code in _REFUSAL_CODES else 'UNCLASSIFIED_REFUSAL',
+                errno=error.errno if isinstance(error, OSError) and type(error.errno) is int
+                and 0 < error.errno <= 4095 else None)
+
+
 def _require_clean_supervisor() -> None:
     with open("/proc/self/environ", "rb") as stream:
         raw = stream.read(129)
@@ -141,7 +163,7 @@ def _namespace_attempt(backend, generation: str) -> dict:
     return result
 
 
-def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None) -> dict:
+def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None, refusal=None) -> dict:
     private = observation.get("private_proc") if observation is not None else None
     projection = "MATERIALIZATION_CHECK_ONLY" if type(private) is dict and "projection" in private else "NOT_RUN"
     return {
@@ -155,6 +177,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
         "reason": observation["reason"] if observation is not None else reason,
         "namespace_attempt": observation,
         "host_prerequisites": host,
+        "refusal": refusal,
         "runtime": "HOST_RUNTIME_UNSEALED",
         "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": "NOT_RUN",
         "credential_release": "WITHHELD", "provider_calls": 0,
@@ -167,11 +190,13 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
 def main(arguments=None) -> int:
     args = list(sys.argv[1:] if arguments is None else arguments)
     binding = None
+    phase = 'SUPERVISOR'
     try:
         _require_clean_supervisor()
         if len(args) != 4:
             raise HostedDiagnosticError("invocation_refused")
         root = Path(__file__).resolve().parents[2]
+        phase = 'SOURCE_BINDING'
         binding = bind_hosted_source(
             root, repository=args[0], event=args[1], ref=args[2], sha=args[3],
         )
@@ -181,10 +206,12 @@ def main(arguments=None) -> int:
         from hosted_synthetic_cgroup import CgroupCleanupError
         from run_local_staging_acceptance import LocalStagingAcceptanceError
         generation = hashlib.sha256(os.urandom(32)).hexdigest()
+        phase = 'HOST_PREREQUISITES'
         try:
             host = observe_host_prerequisites()
             # Do not repeat namespace/projection mutations when a required
             # same-launcher prerequisite is already known to be unavailable.
+            phase = 'NAMESPACE'
             observation = observe_private_proc(generation) if host['prerequisites_available'] else None
         except (CgroupCleanupError, NamespaceCleanupError):
             result = _report(binding, reason='CLEANUP_FAILED')
@@ -197,9 +224,10 @@ def main(arguments=None) -> int:
                              reason='HOST_PREREQUISITES_REFUSED' if observation is None else 'INCOMPLETE_PREFLIGHT')
     except (KeyboardInterrupt, SystemExit):
         result = _report(binding, reason="CANCELLED")
-    except (HostedDiagnosticError, HostedSourceError, OSError, AttributeError, ImportError):
+    except (HostedDiagnosticError, HostedSourceError, OSError, AttributeError, ImportError) as error:
         # Neither raw exceptions, command output, paths, nor environment escape.
-        result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED")
+        result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED",
+                         refusal=_fixed_refusal(phase, error))
     encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
     print(encoded)
     print("evidence_sha256=" + hashlib.sha256(encoded.encode()).hexdigest())

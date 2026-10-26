@@ -185,6 +185,26 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue().splitlines()[0])['reason'],
                          'SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED')
 
+    def test_allowlisted_source_failure_reports_phase_without_raw_output(self):
+        with patch.object(capability, 'bind_hosted_source', side_effect=source.HostedSourceError('source_git_refused')), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+        self.assertEqual(json.loads(output.getvalue().splitlines()[0])['refusal'],
+                         {'phase': 'SOURCE_BINDING', 'code': 'source_git_refused', 'errno': None})
+
+    def test_supervisor_category_is_bounded_and_unknown_text_is_withheld(self):
+        for error, code in ((capability.HostedDiagnosticError('supervisor_descriptors_refused'), 'supervisor_descriptors_refused'),
+                            (PermissionError(13, 'synthetic-private-path'), 'UNCLASSIFIED_REFUSAL')):
+            with patch.object(capability, '_require_clean_supervisor', side_effect=error), \
+                 patch.object(capability, 'bind_hosted_source') as bind, \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+            bind.assert_not_called()
+            refusal = json.loads(output.getvalue().splitlines()[0])['refusal']
+            self.assertEqual((refusal['phase'], refusal['code']), ('SUPERVISOR', code))
+            self.assertEqual(refusal['errno'], 13 if isinstance(error, OSError) else None)
+            self.assertNotIn('synthetic-private-path', output.getvalue())
+
     def test_bound_namespace_evidence_still_cannot_authorize_release(self):
         binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
         observation = dict(reason='INCOMPLETE_PREFLIGHT', cleanup_complete=True,

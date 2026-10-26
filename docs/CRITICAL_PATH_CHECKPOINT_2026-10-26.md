@@ -69,6 +69,16 @@ regression proves synthetic annotation-command text cannot inject a new command.
 This adds one workflow test: hosted200, total discovery/floor1727 in96modules.
 No native known-failure rerun or privilege change is part of this correction.
 
+
+The public notice from b1529ccfbf6014d493664cb4d5f8740e7998175f run40362033756 /
+job121709746382 is now observable. Focused200 passed; the report refused with
+SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED, commit/tree null and host_prerequisites
+null. PG/cgroup observation never ran. Do not infer a host restriction from this
+result or enable the proposed privileged configuration before diagnosing it.
+A bounded follow-up preserves all checks and exposes only code-owned refusal
+categories, phase and numeric errno; no raw exceptions/environment/paths. Two
+regressions increase hosted count to202 and global discovery/floor to1729/96.
+
 ## Host capability and smallest proposed alternative
 
 Native Cloud's retained complete observation remains authoritative: no genuine
