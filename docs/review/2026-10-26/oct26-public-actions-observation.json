@@ -1,0 +1,46 @@
+{
+  "observed_date": "2026-10-26",
+  "source": "ordinary public GitHub run/job/workflow pages read by internal Codex reviewer",
+  "api": "Forbidden",
+  "current": {
+    "run_id": 40348308393,
+    "job_id": 121661125981,
+    "commit": "df147b2085283048afed1084686e3ccd20b99fe8",
+    "event": "push",
+    "branch": "codex/hosted-synthetic-acceptance",
+    "conclusion": "failure",
+    "duration_seconds": 31,
+    "job_duration_seconds": 26,
+    "successful_steps": [
+      "checkout",
+      "trusted-source verification",
+      "Python preparation",
+      "151-test focused gate"
+    ],
+    "failed_step": "Observe namespace prerequisite with all release authority withheld",
+    "exit_code": 1,
+    "focused_step_started": "2026-10-26T15:20:31Z",
+    "focused_step_completed": "2026-10-26T15:20:37Z"
+  },
+  "prior": {
+    "run_id": 40345207116,
+    "job_id": 121650179666,
+    "commit": "272043700f211264850eb5bf3ab70fb4d8f2b764",
+    "event": "push",
+    "branch": "codex/hosted-synthetic-acceptance",
+    "conclusion": "failure",
+    "duration_seconds": 22,
+    "same_step_dispositions": true
+  },
+  "workflow": {
+    "path": ".github/workflows/hosted-synthetic-acceptance.yml",
+    "bytes": 3573,
+    "sha256": "ea05e42dda07cea0228d7c210c7e4837ae4b12b546a59114d9c371d5dae6ec6a",
+    "public_committed_bytes_match": true
+  },
+  "raw_logs": "sign-in required",
+  "diagnostic_json_observed": false,
+  "specific_host_refusal_observed": false,
+  "hosted_cleanup_observed": false,
+  "failure_not_proof_of_specific_host_restriction": true
+}

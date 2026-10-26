@@ -1,0 +1,12 @@
+{
+  "commit": "df147b2085283048afed1084686e3ccd20b99fe8",
+  "tree": "07e7ebe710523e60c6293f28ed8bec58d495229e",
+  "pid": 815362,
+  "start_ticks": "69405449",
+  "started": "2026-10-26T15:19:13.143371+00:00",
+  "status": "FINISHED",
+  "returncode": 1,
+  "timeout": false,
+  "finished": "2026-10-26T15:36:25.273787+00:00",
+  "source_unchanged": true
+}

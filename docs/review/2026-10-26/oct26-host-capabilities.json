@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-26",
+  "uid": 1000,
+  "euid": 1000,
+  "self_cgroup": "0::/",
+  "controllers": [
+    "cpuset",
+    "cpu",
+    "io",
+    "memory",
+    "hugetlb",
+    "pids"
+  ],
+  "enabled": [
+    "cpuset",
+    "cpu",
+    "io",
+    "memory",
+    "hugetlb",
+    "pids"
+  ],
+  "directories": [
+    {
+      "relative": ".",
+      "uid": 0,
+      "mode": "0o755",
+      "writable": false
+    },
+    {
+      "relative": "docker",
+      "uid": 0,
+      "mode": "0o755",
+      "writable": false
+    },
+    {
+      "relative": "init",
+      "uid": 0,
+      "mode": "0o755",
+      "writable": false
+    }
+  ],
+  "errors": [],
+  "cap_effective": "0000000000000000",
+  "helpers": {
+    "sudo": null,
+    "doas": null,
+    "pkexec": null,
+    "cgcreate": null,
+    "cgexec": null
+  },
+  "system_pg16_present": false,
+  "writable_delegation": false,
+  "authority": false
+}

@@ -1,0 +1,9 @@
+{
+  "scope": "checkpoint dependency observation; not a runtime closure attestation",
+  "config_path": ".venv/pyvenv.cfg",
+  "config_sha256": "20ff933de361ba39d7144055989b386d5dd0712a16cfec94d6f2634782f1d5c2",
+  "config_bytes": "home = /usr/bin\nimplementation = CPython\nuv = 0.12.3\nversion_info = 3.13.5\ninclude-system-site-packages = false\nprompt = repl-nix-workspace\n",
+  "python_link": "/usr/bin/python3.13",
+  "resolved_python": "/usr/bin/python3.13",
+  "resolved_python_sha256": "889c603f0d17cb54060951bcf4c4f9b8c9ebd9e52b392c70209bbb9755d797d9"
+}

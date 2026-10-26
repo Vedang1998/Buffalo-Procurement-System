@@ -1,0 +1,7 @@
+{
+  "commit": "272043700f211264850eb5bf3ab70fb4d8f2b764",
+  "case": "owned-container rename followed by SIGTERM",
+  "returncode": 130,
+  "owned_full_id": "1709592a5ace8b6a84da81f1e0c42bbee07411e5dba489d95ee3db5be5963a43",
+  "owned_container_absent": true
+}

@@ -1,0 +1,8 @@
+{
+  "case": "successful create with lost acknowledgement",
+  "returncode": 1,
+  "owned_full_id": "c02357aa6f812425c8b964b0a7984e07825844e17b0dbd298d05aed6a2c8d97d",
+  "owned_container_absent": true,
+  "ambiguous_create_not_certified": true,
+  "driver": "external virtualenv correction diagnostic"
+}

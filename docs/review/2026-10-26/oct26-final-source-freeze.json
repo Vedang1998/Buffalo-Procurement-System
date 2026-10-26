@@ -1,0 +1,12 @@
+{
+  "commit": "df147b2085283048afed1084686e3ccd20b99fe8",
+  "tree": "07e7ebe710523e60c6293f28ed8bec58d495229e",
+  "files": {
+    "procurement/src/procurement_os/synthetic_staging_backup_v2.py": "2cef9229f65f02022bc32783973b8e576fd006cdc11a3a608a8849654be8886d",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "c3dad3bb3833cee24bbdef22d78cf811aa838022852a4b073d4999dee1cf7b37",
+    "procurement/tests/test_supplier_format_conformance.py": "33e5c09873208ce2e41dc1a4a2fc4d8c7691893a1b0b0ceec214d632253ea0e4",
+    "procurement/tests/test_synthetic_staging_backup_v2.py": "59073b8fc7955286fe93468653b5297e25a0a699834a63de7c955b2410cff73c",
+    "procurement/tools/run_tests.py": "5574091fbd4b734e0eff7fd6fee76705fba6d7387cb758b5997674bebe69243c",
+    "scripts/run-synthetic-postgres-fixtures.py": "63376fab35795caea28ce0b7e3071769eeebef12ae8a9b8e093b7df2ff65271d"
+  }
+}

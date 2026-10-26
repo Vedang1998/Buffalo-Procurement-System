@@ -1,0 +1,67 @@
+{
+  "oct26-final-authoritative.txt": {
+    "bytes": 309315,
+    "sha256": "34a09060c42a378d5ddda333521fb450ff2735c251c3ddce9a019856370cb6fd",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "oct26-final-authoritative-state.json": {
+    "bytes": 349,
+    "sha256": "22d4551d2a31079f2fed7c83b82741a7a24ed30c0c143b5f66330d244b15bb00",
+    "transformation": "none"
+  },
+  "oct26-final-container-50.txt": {
+    "bytes": 14945,
+    "sha256": "8306cdbb1bce5e905a36eee8d47ac9efab0d2c81baccf583e99c832d541dfcdd",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "oct26-final-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "oct26-final-source-freeze.json": {
+    "bytes": 889,
+    "sha256": "238fd74421bee3ce1be1b5ae578bc1596f1b4b87368270b8d3059f3657cc0858",
+    "transformation": "none"
+  },
+  "oct26-fixture-cancellation.json": {
+    "bytes": 257,
+    "sha256": "a97d97e6f349278c00e0dee4c233265b7d414461549918dd1a34e272ca736896",
+    "transformation": "none"
+  },
+  "oct26-create-transport-fault.json": {
+    "bytes": 299,
+    "sha256": "2b1cc5df01f314838e1cbaa705162c5b64479f1b45f8903e2d80c3170aa7f76f",
+    "transformation": "none"
+  },
+  "oct26-fixture-replacement.json": {
+    "bytes": 469,
+    "sha256": "aedfd499d94f270207098483796ead22580d78d92a5505bf6918513f5b5c8e64",
+    "transformation": "none"
+  },
+  "oct26-host-capabilities.json": {
+    "bytes": 863,
+    "sha256": "29e86f2e58fe005987000ac6fe2a05c69588ef7af1c606ea636041be4cfa8e4c",
+    "transformation": "none"
+  },
+  "oct26-public-actions-observation.json": {
+    "bytes": 1536,
+    "sha256": "496ac1b18f447aa5da8d507fa475cfb0c6f06d0e3b3203a5c825cf138c57570d",
+    "transformation": "none"
+  },
+  "oct26-venv-provenance.json": {
+    "bytes": 558,
+    "sha256": "5e2faf81260a2a1c7a24567b4302c8368f1683a6f5f0d5449abadc02616004d5",
+    "transformation": "none"
+  },
+  "oct26-final-material-publication.json": {
+    "bytes": 975,
+    "sha256": "c66ffef66e5de7efd4dd213bfcb54a4224ddc0eec740fdf300266b416ad5aab1",
+    "transformation": "none"
+  },
+  "oct26-post-validation-cleanup.json": {
+    "bytes": 652,
+    "sha256": "0defec4fab89234b81fdb65cf3b9df3bc194907404d9ddbbc5f33c6929a4af80",
+    "transformation": "none"
+  }
+}

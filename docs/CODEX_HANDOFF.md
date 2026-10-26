@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-23 (UTC)
+**Updated:** 2026-10-26 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,70 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-26 trusted-tool repair and container fixture proof — NON-GREEN
+
+Published material: `df147b2085283048afed1084686e3ccd20b99fe8`, tree
+`07e7ebe710523e60c6293f28ed8bec58d495229e`. See
+[CLOUD_VALIDATION_CHECKPOINT_2026-10-26](CLOUD_VALIDATION_CHECKPOINT_2026-10-26.md)
+for the exact review range, raw scanned synthetic evidence, source/dependency
+identities, publication proof, cleanup cases and independent-review package.
+
+Ordinary trusted PostgreSQL executables now require root-owned ancestors;
+otherwise a user-owned directory could replace a root-owned program. Four new
+regression methods raise discovery/floors to 1,678 in 94 modules. The historical
+managed Nix-store exception is unchanged. A reusable unprivileged, network-none,
+read-only container fixture runner uses genuine PostgreSQL 16 tools, raw source
+binding and full-ID-owned cleanup. A nested verifier dependency failure was
+fixed by retaining the locked virtualenv interpreter; its failed run is retained.
+
+The exact material's native full run discovered 1,678, executed 1,667 and passed
+1,665: one failed method, one method error and one class-setup error (two error
+events), leaving 11 transfer methods unexecuted. No skips/xfail/xpass or module,
+teardown/subtest errors. Exit 1, 1,027.513 seconds, no timeout; six frozen source
+hashes match. Trusted host pg_dump refusal still stops test09 before APPLY;
+test10's 9.5000-versus-30 failure is the dependent fixture state. Do not weaken
+these checks or add results across environments to call the suite green.
+
+Separately, the exact committed container runner passed 50/50 (19 backup + 31
+real PG integration methods) in 88.144 seconds, including Backup V2/APPLY and
+distinct-cluster transfer/restore. Startup passed 10/10 and imports 18/18.
+This is CONTAINER_FIXTURES_ONLY, not hosted browser acceptance. All owned test
+containers/services/databases were removed; old eight zombies and six
+unattributed volumes remain documented. No snapshot was published.
+
+Public GitHub run40348308393/job121661125981 binds this material push and
+workflow bytes: checkout/source/Python/focused151 gate succeeded; the intentionally
+non-authorizing namespace diagnostic failed with exit1. Detailed JSON/cleanup
+logs require sign-in; API returns Forbidden. Do not infer a specific GitHub
+host restriction from the exit code. Native Cloud was separately measured:
+UID1000 has no supported installer or writable delegated cgroup; all three
+visible cgroup directories/controls are root-owned and unwritable.
+
+Task2 cgroup lease/stopped PID1 enrollment/exact I-W membership, limits and OOM
+proof, retained sentinel execution and one-shot release remain incomplete.
+Hosted provider was not invoked. Tasks4–9/browser/289-dollar canonical scenario/
+integrated restart/restore/resource acceptance remain NOT RUN. Independent
+Claude review is NOT ASSESSED; internal Codex reviews are not its substitute.
+Railway compatibility is NOT_PROVEN. Main, PR #24, workflows, dependency
+manifests/lockfiles and official PHASE_STATUS are unchanged by this checkpoint.
+
+[PURCHASING_CRITICAL_PATH_2026-10-26](PURCHASING_CRITICAL_PATH_2026-10-26.md)
+separates missing implementation from current-data evidence. Owner edit/reject,
+tier recalculation, net-need arithmetic and separate vendor drafts exist;
+production mapped-offer integration and general FUTURE-to-CURRENT rollover do
+not. November 1 rollover precedes the November 9 objective. Current catalog,
+inventory/sales, approved November terms and reconciled incoming have not been
+established by verified current evidence.
+No delivery or real-purchasing readiness claim is supported.
+
+Next unblocker: supported Cloud provisioning of genuine system PostgreSQL16
+programs and a writable cgroup subtree for the same reviewed launcher, plus
+attributable independent review. Verify those capabilities, then continue the
+owned lease/stopped enrollment/sentinel/release path without a privilege broker
+or weakened guarantees. The explicit container fixture command is reproducible
+now; it grants no later release authority. No production/deployment/private-data,
+Shopify, purchasing, main/PR #24 or other operational boundary changed.
 
 ### 2026-10-23 portable fixture checkpoint — NON-GREEN
 

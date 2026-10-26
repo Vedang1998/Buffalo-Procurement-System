@@ -1,0 +1,10 @@
+{
+  "case": "renamed original and same-name matching-label replacement on cancellation",
+  "returncode": 1,
+  "original_full_id": "504d78f0bf475f3d61934aded35f4f20dbb527cd8344bba887ff3f1b505d06c1",
+  "original_removed": true,
+  "replacement_full_id": "66aa764590ad81e9ba3728102786d4a68ffc1fbd237a7ea91f3d7c1f767b610a",
+  "replacement_preserved_by_driver": true,
+  "cleanup_failure_precedes_cancellation": true,
+  "driver": "external virtualenv correction diagnostic"
+}
