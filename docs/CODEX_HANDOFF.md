@@ -10,6 +10,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-26 approved empty-groups bootstrap implementation — WIP, NON-GREEN
+
+New authority: the owner approved a minimum native bootstrap on the ephemeral
+GitHub Ubuntu host, with independent Claude review of this delta BEFORE privileged
+live execution. This resolves the provisioning decision in the preceding entry.
+Codex remains sole writer; no second owner approval is needed solely on success.
+
+Based on published `010aef5baf02f1c9bc038583f59cb314d6e8ee97` (tree
+`42228c6217d1d51f1bb15da231d508cac0399703`), this implementation adds native-only
+two-stage setpriv planning, a stdlib post-drop launcher, same-process identity and
+access readback, explicit owned system-manager delegation, bounded collection and
+failure cleanup. All five host capability sets must be zero before repository
+child dispatch/Git. Existing identity, trusted PostgreSQL, namespace, stopped
+enrollment, source binding and release assertions remain. Ancestor mutation is
+refused. Exact privileged argv is dormant; CLI/workflow exit78 before any service
+until independent review. No root repository code or live bootstrap was executed.
+
+Hosted272/272 pre-freeze pass; discovery/floor1799 in99 modules, not a passing full
+suite. The source-bound frozen results/publication follow-up will identify the
+exact material; see [bootstrap report](EMPTY_GROUPS_BOOTSTRAP_2026-10-26.md).
+Historical1765 discovery, prior failed native runs and container50/50 remain
+separate evidence. No unchanged native-Cloud full-suite rerun occurred.
+
+Independent Claude review NOT_ASSESSED. Internal Codex reviews are internal only.
+Live bootstrap/containment/stopped enrollment/privileged cleanup NOT_RUN; exclusive
+cgroup access unproven, same-UID race limitation preserved, runtime UNSEALED.
+Sentinel NOT_RUN, release WITHHELD, browser/BackupV2/APPLY/DRAFT/packet/restart/
+restore NOT_RUN. Railway NOT_PROVEN. No phase or production business scope changed.
+
+Next executable action: read-only independent review of the exact published new
+delta, then reviewed activation and a bounded credential-free same-host proof.
+No approval request is pending for the already-approved provisioning contract.
+Proceed with sentinel/release and synthetic business acceptance only when their
+applicable gates pass. Existing production/deployment/private-data/Shopify/real
+purchasing/main/PR24 boundaries remain unchanged.
+
 ### 2026-10-26 critical-path enrollment implementation — WIP, NON-GREEN
 
 Published/tested material: `3c1ae555b82aa650011254a9b1f8e8c4367601bb`, tree

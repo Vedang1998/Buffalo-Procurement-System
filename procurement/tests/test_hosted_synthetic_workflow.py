@@ -48,15 +48,15 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_repository_python_has_no_site_or_ambient_environment(self):
         launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
-        self.assertEqual(len(launches), 2)
+        self.assertEqual(len(launches), 3)
         self.assertTrue(launches[0].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertTrue(launches[1].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[1])
-        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[1])
+        self.assertTrue(launches[2].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[2])
+        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[2])
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
-        focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Observe namespace', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,29,11,65,22,28,20,10,17]', 'result.wasSuccessful()', 'result.testsRun == 238', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,12,65,22,28,20,11,17,28]', 'result.wasSuccessful()', 'result.testsRun == 272', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -73,6 +73,18 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
                          'test "$(wc -c < "$report")" -le 65536',
                          'cat "$report" >> "$GITHUB_STEP_SUMMARY"', 'exit "$status"'):
             self.assertIn(fragment, self.text)
+
+    def test_review_gate_exits_before_any_live_service_command(self):
+        observer=self.text.split('- name: Review gate before hosted execution',1)[1]
+        body=observer.split('          set -euo pipefail\n',1)[1].split('          report=$(mktemp)',1)[0]
+        commands='\n'.join(line[10:] for line in body.splitlines())
+        result=subprocess.run(['/bin/bash','-c','set -euo pipefail;\n'+commands+'\nprintf LIVE_SERVICE_REACHED'],
+                              cwd=ROOT,env={'PATH':'/usr/bin:/bin','DIAGNOSTIC_PYTHON':sys.executable},
+                              capture_output=True,timeout=5)
+        self.assertEqual(result.returncode,78,result.stderr.decode())
+        self.assertNotIn(b'LIVE_SERVICE_REACHED',result.stdout)
+        self.assertEqual(json.loads(result.stdout)['privileged_processes_started'],0)
+        self.assertNotIn('sudo ',self.text)
 
     def test_public_notice_chunks_reconstruct_exact_bytes_and_keep_failure(self):
         block = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1]
@@ -102,7 +114,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertEqual(result.stdout, b'')
 
     def test_owned_launch_drops_extra_descriptor_preserving_parent_and_assertion(self):
-        observer = self.text.split('- name: Observe namespace', 1)[1]
+        observer = self.text.split('- name: Review gate', 1)[1]
         code = re.search(r"-c '([^']+)'", observer).group(1)
         fd = os.open(os.devnull, os.O_RDONLY)
         try:

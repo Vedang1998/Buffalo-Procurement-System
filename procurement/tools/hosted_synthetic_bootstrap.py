@@ -1,0 +1,369 @@
+"""Review-gated native bootstrap for the ephemeral GitHub acceptance VM.
+
+This module is always unprivileged. Only maintained system binaries appear in
+its privileged command prefix. CLI execution is deliberately unavailable until
+independent review of this exact delta; neither argv nor environment can open
+that gate. Planning and deterministic tests grant no live execution authority.
+"""
+from dataclasses import dataclass
+import errno
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import selectors
+import signal
+import stat
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from hosted_synthetic_source import _resource_operation
+import hosted_synthetic_launcher as launcher
+import hosted_synthetic_namespace as ns
+
+
+_ENVIRONMENT = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'}
+_UNIT = re.compile(r'buffalo-hosted-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.service\Z')
+_CAPABILITIES = ('CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb')
+_NATIVE = ('sudo', 'timeout', 'systemd-run', 'systemctl', 'setpriv', 'env', 'true')
+
+
+BootstrapRefusal = launcher.LauncherRefusal
+
+
+class BootstrapCleanupError(BootstrapRefusal):
+    pass
+
+
+def _require(value, code='bootstrap_prerequisite_refused'):
+    if not value:
+        raise BootstrapRefusal(code)
+
+
+def _positive(value):
+    _require(type(value) is int and 0 < value <= 2**31 - 1)
+    return str(value)
+
+
+def _path(value):
+    _require(type(value) is str and re.fullmatch(r'/[A-Za-z0-9_./+\-]+', value)
+             and '..' not in Path(value).parts and str(Path(value)) == value)
+    return value
+
+
+def _quote(token):
+    # ':' disables environment expansion; percent specifiers are independently
+    # rejected. No shell, control characters or systemd specifier expansion.
+    _require(type(token) is str and token and all(32 <= ord(c) <= 126 for c in token) and '%' not in token)
+    return '"' + token.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+@dataclass(frozen=True)
+class NativeBootstrapPlan:
+    argv: tuple[str, ...]
+    unit: str
+    uid: int
+    gid: int
+    initial_user_namespace: tuple[int, int]
+    root: str
+    python: str
+    source: tuple[str, str, str, str]
+
+
+def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
+                          uid, gid, unit, initial_user_namespace):
+    """Pure argv construction. Never creates a unit or calls sudo."""
+    from hosted_synthetic_source import REPOSITORY, REF
+    _path(root); _path(python)
+    _positive(uid); _positive(gid)
+    _require(repository == REPOSITORY and event == 'push' and ref == REF
+             and type(commit) is str and re.fullmatch('[0-9a-f]{40}', commit)
+             and type(unit) is str and _UNIT.fullmatch(unit))
+    _require(type(initial_user_namespace) is tuple and len(initial_user_namespace) == 2
+             and all(type(x) is int and 0 < x < 2**64 for x in initial_user_namespace))
+    # setpriv changes IDs before processing groups. Two exec stages enforce the
+    # requested order: first clear groups while root, then drop IDs/capabilities.
+    chain = ('/usr/bin/setpriv', '--clear-groups', '--no-new-privs', '--',
+             '/usr/bin/setpriv', f'--reuid={uid}', f'--regid={gid}', '--keep-groups',
+             '--inh-caps=-all', '--ambient-caps=-all', '--bounding-set=-all', '--no-new-privs', '--',
+             '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin', 'LC_ALL=C.UTF-8',
+             python, '-I', '-S', '-B', root + '/procurement/tools/hosted_synthetic_launcher.py',
+             repository, event, ref, commit, '--native-bootstrap', unit, str(uid), str(gid),
+             str(initial_user_namespace[0]), str(initial_user_namespace[1]))
+    properties = (f'User={uid}', f'Group={gid}', 'Delegate=memory pids',
+                  'DelegateSubgroup=supervisor', 'NoNewPrivileges=yes',
+                  'CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP', 'AmbientCapabilities=',
+                  'CPUAccounting=no', 'IOAccounting=no', 'IPAccounting=no',
+                  'MemoryAccounting=yes', 'TasksAccounting=yes',
+                  'TimeoutStartSec=120s', 'TimeoutStopSec=5s', 'KillMode=control-group',
+                  'MemoryMax=512M', 'TasksMax=64',
+                  'ExecStartEx=:!' + ' '.join(_quote(token) for token in chain))
+    # ! omits credential switching only: User/Group still own the delegated
+    # unit and NNP/capability/resource controls still apply to native setpriv.
+    # Type=oneshot supports two ExecStart records. A failed first command skips
+    # the fixed, unprivileged true. TimeoutStartSec bounds the diagnostic start command; outer timeout also
+    # bounds the client across the fixed trailing command.
+    argv = ('/usr/bin/sudo', '-n', '--', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin', 'LC_ALL=C.UTF-8',
+            '/usr/bin/timeout', '--signal=TERM', '--kill-after=5s', '150s',
+            '/usr/bin/systemd-run', '--system', '--no-ask-password', '--quiet', '--wait', '--pipe', '--collect',
+            '--service-type=oneshot', '--expand-environment=no', '--slice=system.slice',
+            '--unit=' + unit, '--working-directory=' + root,
+            *(('--property=' + value) for value in properties), '--', '/usr/bin/true')
+    return NativeBootstrapPlan(tuple(argv), unit, uid, gid, initial_user_namespace, root, python,
+                               (repository, event, ref, commit))
+
+
+@_resource_operation
+def inspect_native_prerequisites():
+    """Read only. Refuse missing tools or required ancestor controller changes."""
+    _require(os.getuid() == os.geteuid() and os.geteuid() > 0, 'bootstrap_operator_identity_refused')
+    programs = {}
+    for name in _NATIVE:
+        path = Path('/usr/bin') / name
+        for parent in (Path('/'), Path('/usr'), Path('/usr/bin')):
+            info = parent.lstat()
+            _require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022)
+        before = path.lstat()
+        _require(stat.S_ISREG(before.st_mode) and before.st_uid == 0 and before.st_mode & 0o111
+                 and not before.st_mode & 0o022 and not before.st_mode & (0o2000 if name == 'sudo' else 0o6000)
+                 and 0 < before.st_size <= 32 * 1024**2)
+        descriptor = ns._acquire(lambda: os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC))
+        try:
+            _require(descriptor.identity == ns._identity(before))
+            data = os.pread(descriptor.number, before.st_size + 1, 0)
+            _require(len(data) == before.st_size)
+            try:
+                os.getxattr(descriptor.number, 'security.capability')
+            except OSError as error:
+                _require(error.errno == errno.ENODATA)
+            else:
+                raise BootstrapRefusal('bootstrap_native_file_capability_refused')
+            identity = lambda value: (value.st_dev, value.st_ino, value.st_mode, value.st_uid,
+                                      value.st_gid, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+            _require(identity(before) == identity(os.fstat(descriptor.number)) == identity(path.lstat()))
+            programs[name] = {'path': str(path), 'sha256': hashlib.sha256(data).hexdigest(),
+                              'identity': list(descriptor.identity)}
+        finally:
+            descriptor.close()
+    ancestors = {}
+    for path in ('/sys/fs/cgroup', '/sys/fs/cgroup/system.slice'):
+        info = os.lstat(path)
+        _require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022)
+        directory = ns._acquire(lambda: os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC))
+        try:
+            import hosted_synthetic_cgroup as cg
+            cg._filesystem(directory.number)
+            from hosted_synthetic_user_service import _controllers
+            enabled = _controllers(cg._read_at(directory, 'cgroup.subtree_control'))
+            _require({b'memory', b'pids'}.issubset(enabled), 'bootstrap_ancestor_controllers_refused')
+            _require(cg._read_at(directory, 'cgroup.type') == b'domain\n')
+            ancestors[path] = {'identity': list(directory.identity), 'mount_id': ns._mount_id(directory),
+                               'controllers': sorted(value.decode() for value in enabled)}
+        finally:
+            directory.close()
+    return {'programs': programs, 'ancestors': ancestors, 'execution_authority': False}
+
+
+parse_postdrop_status = launcher.parse_postdrop_status
+
+@_resource_operation
+def verify_postdrop_identity(*, uid, gid, unit, initial_user_namespace):
+    result = launcher.inspect_postdrop_identity(uid=uid, gid=gid, unit=unit,
+                                               initial_user_namespace=initial_user_namespace)
+    result.update(process=ns._process(os.getpid()), execution_authority=False)
+    return result
+
+
+@_resource_operation
+def verify_postdrop_access(root, unit):
+    """Check access in the dropped process, before controller writes."""
+    import hosted_synthetic_cgroup as cg
+    _require(type(unit) is str and _UNIT.fullmatch(unit))
+    directory = control = workspace = None
+    try:
+        workspace = ns._acquire(lambda: os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC))
+        info = os.fstat(workspace.number)
+        _require(info.st_uid == os.geteuid() and not info.st_mode & 0o022
+                 and os.access(root, os.R_OK | os.W_OK | os.X_OK), 'bootstrap_source_access_refused')
+        directory = cg._open_directory(Path('/sys/fs/cgroup/system.slice') / unit)
+        for name in ('cgroup.procs', 'cgroup.subtree_control'):
+            control = ns._acquire(lambda: os.open(name, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+                                                   dir_fd=directory.number))
+            control.verify()
+            _require(os.fstat(control.number).st_uid == os.geteuid()
+                     and ns._mount_id(control) == ns._mount_id(directory), 'bootstrap_cgroup_access_refused')
+            control.close()
+            control = None
+        _require(cg.parse_scalar(cg._read_at(directory, 'memory.max')) == 512 * 1024**2
+                 and cg.parse_scalar(cg._read_at(directory, 'pids.max')) == 64,
+                 'bootstrap_resource_limits_refused')
+        return {'contract': 'BUFFALO_POSTDROP_ACCESS_V1', 'source_identity': list(workspace.identity),
+                'source_read_write_search': True, 'delegation_identity': list(directory.identity),
+                'delegation_control_open': True, 'outer_memory_max': 512 * 1024**2,
+                'outer_pids_max': 64, 'controller_writes': 0, 'execution_authority': False}
+    finally:
+        errors = []
+        for descriptor in (control, directory, workspace):
+            if descriptor is not None:
+                try:
+                    descriptor.close()
+                except BaseException as error:
+                    errors.append(error)
+        if errors:
+            raise BootstrapCleanupError('bootstrap_access_cleanup_failed') from errors[0]
+
+
+def _collect_native_client(argv, *, cwd):
+    """Bounded direct-child ownership; stderr is never included in reports."""
+    process = None
+    try:
+        process = subprocess.Popen(argv, cwd=cwd, env=_ENVIRONMENT, close_fds=True,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, bufsize=0)
+        deadline = time.monotonic() + 165  # native timeout150 + kill5 + reap grace
+        output = {process.stdout: bytearray(), process.stderr: bytearray()}
+        limits = {process.stdout: 65536, process.stderr: 4096}
+        with selectors.DefaultSelector() as selector:
+            for stream in output:
+                selector.register(stream, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                _require(remaining > 0, 'bootstrap_client_timeout')
+                ready = selector.select(remaining)
+                _require(ready, 'bootstrap_client_timeout')
+                for key, _ in ready:
+                    stream = key.fileobj
+                    chunk = os.read(stream.fileno(), min(4096, limits[stream] + 1 - len(output[stream])))
+                    if not chunk:
+                        selector.unregister(stream)
+                        continue
+                    output[stream].extend(chunk)
+                    _require(len(output[stream]) <= limits[stream], 'bootstrap_client_output_refused')
+        remaining = deadline - time.monotonic()
+        _require(remaining > 0, 'bootstrap_client_timeout')
+        code = process.wait(timeout=remaining)
+        return code, bytes(output[process.stdout])
+    finally:
+        if process is not None:
+            errors = []
+            try:
+                if process.poll() is None:
+                    process.send_signal(signal.SIGTERM)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                process.wait(timeout=5)
+            except BaseException as error:
+                errors.append(error)
+            for stream in (process.stdout, process.stderr):
+                try:
+                    stream.close()
+                except BaseException as error:
+                    errors.append(error)
+            if errors:
+                raise BootstrapCleanupError('bootstrap_client_cleanup_failed') from errors[0]
+
+
+def _observe_unit_absence(unit):
+    _require(type(unit) is str and _UNIT.fullmatch(unit))
+    # Read-only queries. Never stop/delete a service by an unbound name.
+    for _ in range(5):
+        result = subprocess.run(['/usr/bin/timeout', '--signal=TERM', '--kill-after=1s', '3s',
+                                 '/usr/bin/systemctl', '--system', '--no-ask-password', 'show', unit,
+                                 '--property=LoadState', '--value'], env=_ENVIRONMENT,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, timeout=5, check=False)
+        if result.returncode in (0, 1) and result.stdout == b'not-found\n':
+            return 'NOT_FOUND_OBSERVED'
+        time.sleep(0.1)
+    raise BootstrapRefusal('bootstrap_unit_lifecycle_unverified')
+
+
+def _decode_report(raw, plan):
+    _require(type(raw) is bytes and len(raw) <= 65536, 'bootstrap_report_refused')
+    lines = raw.splitlines()
+    _require(len(lines) == 2 and len(lines[0]) <= 16384, 'bootstrap_report_refused')
+    _require(lines[1] == b'evidence_sha256=' + hashlib.sha256(lines[0]).hexdigest().encode(), 'bootstrap_report_refused')
+    try:
+        report = json.loads(lines[0])
+    except (ValueError, UnicodeError):
+        raise BootstrapRefusal('bootstrap_report_refused') from None
+    _require(type(report) is dict and json.dumps(report, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() == lines[0]
+             and report.get('commit') == plan.source[3] and report.get('repository') == plan.source[0]
+             and report.get('ref') == plan.source[2] and report.get('execution_authority') is False
+             and report.get('contract') == 'BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1'
+             and report.get('HOST_CAPABILITY') == 'FAIL' and report.get('sentinel_exec') == 'NOT_RUN'
+             and report.get('runtime') == 'HOST_RUNTIME_UNSEALED' and report.get('railway_compatibility') == 'NOT_PROVEN'
+             and type(report.get('provider_calls')) is int and report['provider_calls'] == 0
+             and type(report.get('payload_processes')) is int and report['payload_processes'] == 0
+             and report.get('credential_release') == 'WITHHELD', 'bootstrap_report_refused')
+    return report
+
+
+@_resource_operation
+def run_native_plan(plan):
+    """Dormant execution implementation: no CLI/workflow path calls this yet.
+
+    Independent review must precede its later activation. The source-bound
+    caller is unprivileged; only the fixed native argv prefix runs privileged.
+    A lifecycle observation is not exclusive-access or containment acceptance.
+    """
+    from hosted_synthetic_source import bind_hosted_source
+    from hosted_synthetic_capability import _require_clean_supervisor
+    _require_clean_supervisor()
+    _require(type(plan) is NativeBootstrapPlan)
+    repository, event, ref, commit = plan.source
+    rebuilt = plan_native_bootstrap(root=plan.root, python=plan.python, repository=repository,
+                                    event=event, ref=ref, commit=commit, uid=plan.uid, gid=plan.gid,
+                                    unit=plan.unit, initial_user_namespace=plan.initial_user_namespace)
+    _require(plan == rebuilt and os.getresuid() == (plan.uid,)*3 and os.getresgid() == (plan.gid,)*3
+             and ns._identity(os.stat('/proc/self/ns/user')) == plan.initial_user_namespace)
+    binding = bind_hosted_source(Path(plan.root), repository=repository, event=event, ref=ref, sha=commit)
+    before = inspect_native_prerequisites()
+    error = None
+    cleanup_errors = []
+    code = raw = absence = None
+    try:
+        code, raw = _collect_native_client(plan.argv, cwd=plan.root)
+        _require(code in (0, 1), 'bootstrap_client_refused')
+    except BaseException as selected:
+        error = selected
+    # No later-creation safety is inferred on failed/lost client acknowledgment.
+    # Native timeout and manager start/stop bounds still apply; absence alone
+    # never turns a timeout or cancellation into a passing execution.
+    try:
+        absence = _observe_unit_absence(plan.unit)
+    except BaseException as selected:
+        cleanup_errors.append(selected)
+    try:
+        _require(inspect_native_prerequisites() == before, 'bootstrap_native_or_ancestor_drift')
+    except BaseException as selected:
+        cleanup_errors.append(selected)
+    if cleanup_errors:
+        raise BootstrapCleanupError('bootstrap_cleanup_unverified') from cleanup_errors[0]
+    if error is not None:
+        raise error
+    report = _decode_report(raw, plan)
+    _require(report.get('tree') == binding.tree and report.get('source_files') == dict(binding.files),
+             'bootstrap_report_source_refused')
+    return {'contract': 'BUFFALO_NATIVE_BOOTSTRAP_OBSERVATION_V1', 'report': report,
+            'native_prerequisites': before, 'client_returncode': code,
+            'service_absence': absence, 'ancestors_unchanged': True,
+            'execution_authority': False, 'runtime_closure': 'UNSEALED'}
+
+
+def main(arguments=None):
+    # Deliberately unconditional. No flag, caller-supplied PASS, review file or
+    # ambient variable activates privilege. Activation awaits actual Claude
+    # findings and a separate reviewed wiring change.
+    print('{"bootstrap_execution":"DISABLED_PENDING_INDEPENDENT_REVIEW","privileged_processes_started":0}')
+    return 78
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

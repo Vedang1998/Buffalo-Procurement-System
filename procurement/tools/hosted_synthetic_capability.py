@@ -185,6 +185,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
         "refusal": refusal,
         "delegation_bootstrap": delegation,
         "supervisor_identity": identity,
+        "postdrop_identity": None, "postdrop_access": None,
         "runtime": "HOST_RUNTIME_UNSEALED",
         "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": cgroup,
         "credential_release": "WITHHELD", "provider_calls": 0,
@@ -199,12 +200,28 @@ def main(arguments=None) -> int:
     binding = None
     host = delegation = None
     identity = None
+    postdrop = access = None
     phase = 'SUPERVISOR'
     try:
         _require_clean_supervisor()
-        if len(args) not in (4, 6) or (len(args) == 6 and args[4] != '--user-service-unit'):
+        if (len(args) not in (4, 6, 10) or (len(args) == 6 and args[4] != '--user-service-unit')
+                or (len(args) == 10 and (args[4] != '--native-bootstrap'
+                    or any(not value.isascii() or not value.isdecimal() or value.startswith('0')
+                           or len(value) > 20 for value in args[6:])))):
             raise HostedDiagnosticError("invocation_refused")
         root = Path(__file__).resolve().parents[2]
+        # Defense in depth for direct invocation: read back native drop before
+        # Git subprocesses, controller access or namespace work. The native
+        # launcher's stdlib-only gate already checked before dispatching us.
+        if len(args) == 10:
+            from hosted_synthetic_bootstrap import BootstrapRefusal, verify_postdrop_identity
+            phase = 'POSTDROP_IDENTITY'
+            try:
+                postdrop = verify_postdrop_identity(uid=int(args[6]), gid=int(args[7]), unit=args[5],
+                                                    initial_user_namespace=(int(args[8]), int(args[9])))
+            except BootstrapRefusal:
+                return _emit(_report(reason='POSTDROP_PREREQUISITE_REFUSED',
+                                     refusal={'phase': phase, 'code': 'POSTDROP_PREREQUISITE_REFUSED', 'errno': None}))
         phase = 'SOURCE_BINDING'
         binding = bind_hosted_source(
             root, repository=args[0], event=args[1], ref=args[2], sha=args[3],
@@ -213,6 +230,7 @@ def main(arguments=None) -> int:
         from hosted_synthetic_namespace import NamespaceCleanupError, NamespaceProofError, observe_private_proc
         from hosted_synthetic_host import observe_host_prerequisites, observe_supervisor_identity
         from hosted_synthetic_cgroup import CgroupCleanupError, CgroupProofError
+        from hosted_synthetic_bootstrap import BootstrapRefusal, BootstrapCleanupError, verify_postdrop_identity, verify_postdrop_access
         from run_local_staging_acceptance import LocalStagingAcceptanceError
         generation = hashlib.sha256(os.urandom(32)).hexdigest()
         phase = 'HOST_PREREQUISITES'
@@ -221,10 +239,14 @@ def main(arguments=None) -> int:
             result = _report(binding, reason='SUPERVISOR_IDENTITY_PREREQUISITE_REFUSED', identity=identity)
             return _emit(result)
         try:
-            if len(args) == 6:
+            if len(args) == 10:
+                phase = 'POSTDROP_ACCESS'
+                access = verify_postdrop_access(root, args[5])
+            if len(args) in (6, 10):
                 from hosted_synthetic_user_service import prepare_user_service
                 phase = 'USER_SERVICE_DELEGATION'
-                delegation = prepare_user_service(args[5])
+                delegation = (prepare_user_service(args[5], manager='system') if len(args) == 10
+                              else prepare_user_service(args[5]))
             phase = 'HOST_PREREQUISITES'
             host = observe_host_prerequisites()
             # Do not repeat namespace/projection mutations when a required
@@ -232,7 +254,7 @@ def main(arguments=None) -> int:
             phase = 'NAMESPACE'
             options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path'])} if delegation is not None else {}
             observation = observe_private_proc(generation, **options) if host['prerequisites_available'] else None
-        except (CgroupCleanupError, NamespaceCleanupError):
+        except (CgroupCleanupError, NamespaceCleanupError, BootstrapCleanupError):
             result = _report(binding, reason='CLEANUP_FAILED', host=host, delegation=delegation)
         except CgroupProofError as error:
             result = _report(binding, reason='USER_SERVICE_DELEGATION_REFUSED',
@@ -241,6 +263,9 @@ def main(arguments=None) -> int:
             # The observer encloses every owned transition in its cleanup
             # envelope. These exceptions are pre-ownership prerequisite checks.
             result = _report(binding, reason="NAMESPACE_PREREQUISITE_REFUSED", host=host, delegation=delegation)
+        except BootstrapRefusal:
+            result = _report(binding, reason='POSTDROP_PREREQUISITE_REFUSED',
+                             refusal={'phase': phase, 'code': 'POSTDROP_PREREQUISITE_REFUSED', 'errno': None})
         else:
             result = _report(binding, observation, host=host, delegation=delegation,
                              reason='HOST_PREREQUISITES_REFUSED' if observation is None else 'INCOMPLETE_PREFLIGHT')
@@ -251,6 +276,8 @@ def main(arguments=None) -> int:
         result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED",
                          refusal=_fixed_refusal(phase, error), host=host, delegation=delegation)
     result['supervisor_identity'] = identity
+    result['postdrop_identity'] = postdrop
+    result['postdrop_access'] = access
     return _emit(result)
 
 

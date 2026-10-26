@@ -65,6 +65,22 @@ class HostedSyntheticUserServiceTests(unittest.TestCase):
         self.assertEqual(self.prepare()['controller_write_attempts'], 0)
         self.write.assert_not_called()
 
+    def test_system_manager_path_requires_explicit_mode_and_same_owned_controls(self):
+        self.current = '/system.slice/' + UNIT + '/supervisor'
+        with self.assertRaises(cg.CgroupProofError):
+            self.prepare()
+        self.write.assert_not_called()
+        with self.assertRaises(cg.CgroupProofError):
+            service.prepare_user_service.__wrapped__(UNIT, manager='unknown')
+        self.write.assert_not_called()
+        result = service.prepare_user_service.__wrapped__(UNIT, manager='system')
+        self.assertEqual(result['lifecycle_owner'], 'SYSTEMD_SYSTEM_MANAGER')
+        self.assertEqual(result['root_path'], '/system.slice/' + UNIT)
+        self.assertEqual(result['controller_write_attempts'], 1)
+        self.current = ROOT + '/supervisor'
+        with self.assertRaises(cg.CgroupProofError):
+            service.prepare_user_service.__wrapped__(UNIT, manager='system')
+
     def test_wrong_unit_or_ancestor_never_gets_write_authority(self):
         for unit in ('main.service', '../' + UNIT, '', None, UNIT.replace('a', 'A')):
             with self.subTest(unit=unit), self.assertRaises(cg.CgroupProofError):

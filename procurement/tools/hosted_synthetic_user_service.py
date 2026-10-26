@@ -31,14 +31,16 @@ def _controllers(raw):
 
 
 @_resource_operation
-def prepare_user_service(unit: str) -> dict:
+def prepare_user_service(unit: str, *, manager: str = 'user') -> dict:
     _require(type(unit) is str and re.fullmatch(
         r'buffalo-hosted-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.service', unit),
         'delegation_unit_mismatch')
     current = backend.parse_browser_cgroup_path(ns._read('/proc/self/cgroup', 4096))
     uid = os.geteuid()
-    _require(uid == os.getuid() and uid > 0 and current ==
-        f'/user.slice/user-{uid}.slice/user@{uid}.service/app.slice/{unit}/supervisor',
+    _require(manager in ('user', 'system'), 'delegation_scope_mismatch')
+    expected_path = (f'/user.slice/user-{uid}.slice/user@{uid}.service/app.slice/{unit}/supervisor'
+                     if manager == 'user' else f'/system.slice/{unit}/supervisor')
+    _require(uid == os.getuid() and uid > 0 and current == expected_path,
         'delegation_scope_mismatch')
     parent_path = Path('/sys/fs/cgroup' + current).parent
     supervisor_path = parent_path / 'supervisor'
@@ -103,7 +105,8 @@ def prepare_user_service(unit: str) -> dict:
                     root_path=str(parent_path)[len('/sys/fs/cgroup'):], identity=list(parent.identity),
                     mount_id=mount, enabled_before=sorted(x.decode() for x in before),
                     enabled_after=['memory', 'pids'], controller_write_attempts=writes,
-                    execution_authority=False, provider_calls=0, lifecycle_owner='SYSTEMD_USER_MANAGER')
+                    execution_authority=False, provider_calls=0,
+                    lifecycle_owner='SYSTEMD_USER_MANAGER' if manager == 'user' else 'SYSTEMD_SYSTEM_MANAGER')
     finally:
         errors = []
         for descriptor in (control, supervisor, parent):

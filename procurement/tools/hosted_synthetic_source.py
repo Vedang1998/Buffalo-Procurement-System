@@ -36,6 +36,8 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_cgroup.py",
     "procurement/tools/hosted_synthetic_host.py",
     "procurement/tools/hosted_synthetic_user_service.py",
+    "procurement/tools/hosted_synthetic_bootstrap.py",
+    "procurement/tools/hosted_synthetic_launcher.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

@@ -56,9 +56,9 @@ jobs:
           DIAGNOSTIC_PYTHON: ${{ steps.python.outputs.python-path }}
         run: |
           set -euo pipefail
-          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import pathlib,sys,unittest; root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]; modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow","test_hosted_synthetic_namespace","test_hosted_synthetic_projection","test_hosted_synthetic_cgroup","test_hosted_synthetic_host","test_hosted_synthetic_user_service","test_hosted_synthetic_enrollment"]]; assert [item.countTestCases() for item in modules] == [36,29,11,65,22,28,20,10,17]; suite=unittest.TestSuite(modules); result=unittest.TextTestRunner(verbosity=2).run(suite); raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 238 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)'
+          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import pathlib,sys,unittest; root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]; modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow","test_hosted_synthetic_namespace","test_hosted_synthetic_projection","test_hosted_synthetic_cgroup","test_hosted_synthetic_host","test_hosted_synthetic_user_service","test_hosted_synthetic_enrollment","test_hosted_synthetic_bootstrap"]]; assert [item.countTestCases() for item in modules] == [36,33,12,65,22,28,20,11,17,28]; suite=unittest.TestSuite(modules); result=unittest.TextTestRunner(verbosity=2).run(suite); raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 272 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)'
 
-      - name: Observe namespace prerequisite with all release authority withheld
+      - name: Review gate before hosted execution
         shell: bash
         env:
           DIAGNOSTIC_PYTHON: ${{ steps.python.outputs.python-path }}
@@ -68,6 +68,9 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # Required independent review is not a caller-supplied PASS flag.
+          # This entry always exits78 before any live service or privilege call.
+          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B procurement/tools/hosted_synthetic_bootstrap.py
           report=$(mktemp)
           trap 'rm -f "$report"' EXIT
           status=0

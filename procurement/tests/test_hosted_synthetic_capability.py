@@ -336,6 +336,76 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
             self.assertFalse(result['execution_authority'])
             self.assertNotIn('private-value', output.getvalue())
 
+    def test_native_postdrop_refusal_precedes_git_and_all_host_work(self):
+        from hosted_synthetic_bootstrap import BootstrapRefusal
+        args=['repo','push','ref','a'*40,'--native-bootstrap','unit','1001','1001','5','123']
+        with patch('hosted_synthetic_bootstrap.verify_postdrop_identity',side_effect=BootstrapRefusal('private-value')), \
+             patch.object(capability,'bind_hosted_source') as bind, \
+             patch('hosted_synthetic_bootstrap.verify_postdrop_access') as access, \
+             patch('hosted_synthetic_user_service.prepare_user_service') as prepare, \
+             patch('hosted_synthetic_host.observe_host_prerequisites') as host, \
+             patch('hosted_synthetic_namespace.observe_private_proc') as namespace, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(args),1)
+        for action in (bind,access,prepare,host,namespace):action.assert_not_called()
+        report=json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(report['reason'],'POSTDROP_PREREQUISITE_REFUSED')
+        self.assertEqual(report['provider_calls'],0)
+        self.assertNotIn('private-value',output.getvalue())
+
+    def test_native_postdrop_access_precedes_system_delegation(self):
+        args=['repo','push','ref','a'*40,'--native-bootstrap','unit','1001','1001','5','123']
+        order=[]
+        def observed(name,value):
+            def call(*args,**kwargs):order.append(name);return value
+            return call
+        binding=SimpleNamespace(commit='a'*40,tree='b'*40,files=())
+        with patch('hosted_synthetic_bootstrap.verify_postdrop_identity',side_effect=observed('postdrop',{'groups':[]})), \
+             patch.object(capability,'bind_hosted_source',side_effect=observed('source',binding)), \
+             patch('hosted_synthetic_bootstrap.verify_postdrop_access',side_effect=observed('access',{'controller_writes':0})), \
+             patch('hosted_synthetic_user_service.prepare_user_service',side_effect=observed('delegation',{'root_path':'/system.slice/unit'})) as prepare, \
+             patch('hosted_synthetic_host.observe_host_prerequisites',side_effect=observed('host',{'prerequisites_available':True})), \
+             patch('hosted_synthetic_namespace.observe_private_proc',side_effect=observed('namespace',{'reason':'INCOMPLETE_PREFLIGHT'})) as namespace, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(args),1)
+        self.assertEqual(order,['postdrop','source','access','delegation','host','namespace'])
+        prepare.assert_called_once_with('unit',manager='system')
+        self.assertEqual(namespace.call_args.kwargs,{'delegation':Path('/sys/fs/cgroup/system.slice/unit')})
+        report=json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(report['postdrop_identity'],{'groups':[]})
+        self.assertEqual(report['postdrop_access'],{'controller_writes':0})
+        self.assertFalse(report['execution_authority'])
+
+    def test_postdrop_access_failure_or_cleanup_error_stops_before_delegation(self):
+        from hosted_synthetic_bootstrap import BootstrapRefusal, BootstrapCleanupError
+        args=['repo','push','ref','a'*40,'--native-bootstrap','unit','1001','1001','5','123']
+        for error,reason in ((BootstrapRefusal('private-value'),'POSTDROP_PREREQUISITE_REFUSED'),
+                             (BootstrapCleanupError('private-value'),'CLEANUP_FAILED')):
+            with self.subTest(error=type(error).__name__), \
+                 patch('hosted_synthetic_bootstrap.verify_postdrop_identity',return_value={'groups':[]}), \
+                 patch.object(capability,'bind_hosted_source',return_value=SimpleNamespace(commit='a'*40,tree='b'*40,files=())), \
+                 patch('hosted_synthetic_bootstrap.verify_postdrop_access',side_effect=error), \
+                 patch('hosted_synthetic_user_service.prepare_user_service') as prepare, \
+                 patch('hosted_synthetic_namespace.observe_private_proc') as namespace, \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(capability.main(args),1)
+            prepare.assert_not_called();namespace.assert_not_called()
+            report=json.loads(output.getvalue().splitlines()[0])
+            self.assertEqual(report['reason'],reason)
+            self.assertEqual(report['postdrop_identity'],{'groups':[]})
+            self.assertIsNone(report['postdrop_access'])
+            self.assertNotIn('private-value',output.getvalue())
+
+    def test_malformed_native_identity_arguments_precede_source_and_drop_checks(self):
+        original=['repo','push','ref','a'*40,'--native-bootstrap','unit','1001','1001','5','123']
+        with patch.object(capability,'bind_hosted_source') as bind, \
+             patch('hosted_synthetic_bootstrap.verify_postdrop_identity') as identity:
+            for offset,value in ((4,'--other'),(6,'0'),(6,'01'),(7,'-1'),(8,'1'*21),(9,'١')):
+                args=original.copy();args[offset]=value
+                with self.subTest(offset=offset,value=value),contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(capability.main(args),1)
+        bind.assert_not_called();identity.assert_not_called()
+
     def _preownership_main_refusal(self, selected):
         import hosted_synthetic_namespace as namespace
         binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
