@@ -436,13 +436,14 @@ def _resume_namespaces(original, expected):
 
 
 def _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
-                    outside_uid, outside_gid, original_namespaces):
+                    outside_uid, outside_gid, original_namespaces, cgroup_required=False):
     # fork preserves mm->user_ns. Exec after mapping creates the new mm under
     # U1, permitting independent nondumpable child inspection in that namespace.
     executable, images = _runtime_images()
     bootstrap = _acquire(lambda: os.memfd_create('buffalo-diagnostic', os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING))
     descriptors = (gate, status, parent)
     packet = dict(generation=generation, supervisor=supervisor, deadline=deadline,
+                  cgroup_required=cgroup_required,
                   outside_uid=outside_uid, outside_gid=outside_gid,
                   original_namespaces=original_namespaces, namespaces=_namespaces('self'),
                   process=_process(os.getpid()), images=images,
@@ -484,7 +485,8 @@ def _resume_guardian(arguments):
     _require(json.dumps(packet, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() == encoded
              and type(packet) is dict and set(packet) == {
                  'generation', 'supervisor', 'deadline', 'outside_uid', 'outside_gid',
-                 'original_namespaces', 'namespaces', 'process', 'images', 'descriptors', 'mask'})
+                 'original_namespaces', 'namespaces', 'process', 'images', 'descriptors', 'mask', 'cgroup_required'})
+    _require(type(packet['cgroup_required']) is bool)
     _require(type(packet['descriptors']) is list and len(packet['descriptors']) == 3)
     gate, status, parent = [_resume_descriptor(value) for value in packet['descriptors']]
     _require(len({number, gate.number, status.number, parent.number}) == 4)
@@ -518,7 +520,8 @@ def _resume_guardian(arguments):
         _require(_image_is_mapped(packet['images']['loader']))
         _resume_supervisor(parent, supervisor)
         _mapped_guardian(gate, status, parent, packet['generation'], supervisor, packet['deadline'],
-                         packet['outside_uid'], packet['outside_gid'], packet['original_namespaces'])
+                         packet['outside_uid'], packet['outside_gid'], packet['original_namespaces'],
+                         packet['cgroup_required'])
         return 0
     except BaseException as exc:
         _child_failure(status, packet['generation'], packet['deadline'], exc)
@@ -605,7 +608,7 @@ def _private_evidence(outside_uid, outside_gid, original_namespaces, root):
                 proc_identity=list(_identity(os.stat("/proc"))))
 
 
-def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outside_gid, original_namespaces):
+def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False):
     # PID1 death tears down all nested children; guardian death is bound by pidfd.
     backend._browser_prctl(1, int(signal.SIGKILL))
     _require((os.getpid(), os.getppid()) == (1, 0)
@@ -614,6 +617,8 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
     backend._browser_mount(None, b"/", None, (1 << 18) | 16384, None)
     backend._close_browser_guardian_descriptors(frozenset((0, 1, 2, gate.number, status.number, guardian_pidfd.number)))
     _send(status, generation, "ARMED", deadline)
+    if cgroup_required:
+        os.kill(os.getpid(), signal.SIGSTOP)
     _receive(gate, generation, "PROBE", deadline)
     _require(not backend._browser_pidfd_is_terminal(guardian_pidfd.number))
     guardian_pidfd.close()
@@ -660,7 +665,7 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
 
 
 def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
-                generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces):
+                generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False):
     child = -1
     init_fd = None
     try:
@@ -669,7 +674,7 @@ def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
         child = os.fork()
         if child == 0:
             try:
-                _init(inner_read, result_write, own, generation, deadline, outside_uid, outside_gid, original_namespaces)
+                _init(inner_read, result_write, own, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required)
                 os._exit(0)
             except BaseException as exc:
                 _child_failure(result_write, generation, deadline, exc)
@@ -705,7 +710,7 @@ def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
     return child, init_fd
 
 
-def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces):
+def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False):
     backend._block_browser_projection_signals()
     _hardening(supervisor)
     os.setsid()
@@ -723,17 +728,92 @@ def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outsi
     backend._browser_prctl(4, 0)
     parent = _pidfd(supervisor)
     _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
-                     outside_uid, outside_gid, original_namespaces)
+                     outside_uid, outside_gid, original_namespaces, cgroup_required)
+
+
+def _guardian_enrollment(gate, status, child, init_fd, generation, deadline):
+    # Both G and I stop before S enrolls I; G retains its unreaped child.
+    _wait(child, deadline, stopped=True)
+    init_fd.verify()
+    process = _process(child)
+    _require(process['state'] == 'T' and process['parent'] == os.getpid()
+             and process['group'] == os.getpid()
+             and not backend._browser_pidfd_is_terminal(init_fd.number))
+    _send(status, generation, 'ENROLL_INIT', deadline, pid=child, start=process['start'])
+    os.kill(os.getpid(), signal.SIGSTOP)
+    ack = _receive(gate, generation, 'ENROLLED', deadline, fields=('pid', 'start', 'path'))
+    current = backend.parse_browser_cgroup_path(_read('/proc/self/cgroup', 4096))
+    _require(current.endswith('/supervisor') and ack['pid'] == child and ack['start'] == process['start']
+             and ack['path'] == str(Path(current).parent / ('buffalo-' + generation))
+             and backend.parse_browser_cgroup_path(_read(f'/proc/{child}/cgroup', 4096)) == ack['path'])
+    init_fd.verify()
+    _require(_process(child) == process and not backend._browser_pidfd_is_terminal(init_fd.number))
+    signal.pidfd_send_signal(init_fd.number, signal.SIGCONT)
+
+
+def _supervisor_enrollment(lease, gate, status, guardian_fd, guardian, guardian_start,
+                          generation, deadline, owners):
+    request = _receive(status, generation, 'ENROLL_INIT', deadline, fields=('pid', 'start'))
+    pid, start = request['pid'], request['start']
+    _require(type(pid) is int and 1 < pid <= 2**31 - 1 and type(start) is int and 0 < start < 2**64
+             and pid not in (os.getpid(), guardian))
+    _wait(guardian, deadline, stopped=True)
+    init_fd = _pidfd(pid)
+    owners.append(init_fd)
+    _require(_process(guardian)['state'] == 'T')
+    lease.enroll_stopped_init(pid=pid, pidfd=init_fd, start=start, guardian=guardian,
+                             guardian_pidfd=guardian_fd, guardian_start=guardian_start,
+                             supervisor=os.getpid())
+    _send(gate, generation, 'ENROLLED', deadline, pid=pid, start=start, path=lease.path)
+    guardian_fd.verify()
+    signal.pidfd_send_signal(guardian_fd.number, signal.SIGCONT)
+    return dict(pid=pid, start=start, pidfd=init_fd)
+
+
+def _attest_cgroup_pair(lease, outer, enrolled, guardian_fd, guardian, guardian_start, owners):
+    _require(type(outer) is dict and set(outer) == {'init_pid', 'init_start', 'worker_pid', 'worker_start'}
+             and all(type(value) is int and value > 0 for value in outer.values())
+             and outer['init_pid'] == enrolled['pid'] and outer['init_start'] == enrolled['start']
+             and len({os.getpid(), guardian, outer['init_pid'], outer['worker_pid']}) == 4)
+    worker_fd = _pidfd(outer['worker_pid'])
+    owners.append(worker_fd)
+
+    def verify():
+        for descriptor in (guardian_fd, enrolled['pidfd'], worker_fd):
+            descriptor.verify()
+            _require(not backend._browser_pidfd_is_terminal(descriptor.number))
+        g = _process(guardian)
+        _require(g['start'] == guardian_start and g['parent'] == os.getpid()
+                 and g['group'] == g['session'] == guardian)
+        for name, parent, namespace_pid in (('init', guardian, 1), ('worker', outer['init_pid'], 2)):
+            pid = outer[name + '_pid']
+            process = _process(pid)
+            _require(process['start'] == outer[name + '_start'] and process['parent'] == parent
+                     and process['group'] == process['session'] == guardian
+                     and (process['state'] == 'T' if name == 'worker' else process['state'] in ('R', 'S')))
+            _require(parse_status(_read(f'/proc/{pid}/status', 16384))['nspid'] == [pid, namespace_pid]
+                     and sorted(os.listdir(f'/proc/{pid}/task')) == [str(pid)]
+                     and backend.parse_browser_cgroup_path(_read(f'/proc/{pid}/cgroup', 4096)) == lease.path)
+        for pid in (os.getpid(), guardian):
+            path = backend.parse_browser_cgroup_path(_read(f'/proc/{pid}/cgroup', 4096))
+            _require(path != lease.path and not path.startswith(lease.path + '/'))
+
+    verify()
+    evidence = lease.attest((outer['init_pid'], outer['worker_pid']))
+    verify()
+    return evidence
 
 
 def _mapped_guardian(gate, status, parent, generation, supervisor, deadline,
-                     outside_uid, outside_gid, original_namespaces):
+                     outside_uid, outside_gid, original_namespaces, cgroup_required=False):
     backend._browser_mount(None, b"/", None, (1 << 18) | 16384, None)
     own = _pidfd(os.getpid())
     inner_read, inner_write = _pipe()
     result_read, result_write = _pipe()
     child, init_fd = _start_init(own, parent, inner_read, inner_write, result_read, result_write,
-                                 generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces)
+                                 generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required)
+    if cgroup_required:
+        _guardian_enrollment(gate, status, child, init_fd, generation, deadline)
     parent.close()
     own.close()
     _send(inner_write, generation, "PROBE", deadline)
@@ -775,7 +855,9 @@ def _mapped_guardian(gate, status, parent, generation, supervisor, deadline,
     _require(parse_status(_read(f"/proc/{worker['pid']}/status", 16384))["nspid"] == [worker["pid"], 2]
              and _namespaces(str(worker["pid"])) == init_namespaces
              and _process(worker["pid"]) == worker)
-    _send(status, generation, "RETAINED", deadline, evidence=evidence)
+    outer = dict(init_pid=child, init_start=init_start, worker_pid=worker['pid'], worker_start=worker['start'])
+    _send(status, generation, "RETAINED", deadline, evidence=evidence,
+          **({'outer': outer} if cgroup_required else {}))
     _receive(gate, generation, "CLOSE", deadline)
     _require(_process(child)["start"] == init_start and not backend._browser_pidfd_is_terminal(init_fd.number))
     _finish_private_probe(inner_write, result_read, worker_fd, init_fd, child, generation, deadline)
@@ -801,12 +883,17 @@ def _finish_private_probe(inner_write, result_read, worker_fd, init_fd, child, g
         raise NamespaceCleanupError('guardian_cleanup_refused') from errors[0]
 
 
-def observe_private_proc(generation: str) -> dict:
+def observe_private_proc(generation: str, *, delegation: Path | None = None) -> dict:
     """Run in a fresh scrubbed single-thread supervisor; return no authority."""
     from hosted_synthetic_capability import _require_clean_supervisor
     _require_clean_supervisor()
     _require(type(generation) is str and re.fullmatch(r"[0-9a-f]{64}", generation) is not None
              and signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL)
+    from hosted_synthetic_cgroup import CgroupLease, CgroupCleanupError
+    if delegation is not None:
+        current = backend.parse_browser_cgroup_path(_read('/proc/self/cgroup', 4096))
+        _require(type(delegation) is Path or isinstance(delegation, Path))
+        _require(current.endswith('/supervisor') and delegation == Path('/sys/fs/cgroup' + current).parent)
     original_namespaces = _namespaces("self")
     previous_subreaper = ctypes.c_int()
     _require(backend._browser_libc().prctl(37, ctypes.byref(previous_subreaper), 0, 0, 0) == 0)
@@ -817,6 +904,10 @@ def observe_private_proc(generation: str) -> dict:
     child_fd = None
     reaped = False
     evidence = None
+    cgroup = None
+    cgroup_evidence = None
+    enrolled = None
+    process_descriptors = []
     errors = []
     reason = "NAMESPACE_PROOF_REFUSED"
     refusal_location = None
@@ -824,6 +915,8 @@ def observe_private_proc(generation: str) -> dict:
     try:
         try:
             backend._browser_prctl(36, 1)
+            if delegation is not None:
+                cgroup = CgroupLease.create(delegation, generation=generation, memory_max=256 * 1024**2)
             for _ in range(2):
                 descriptors.extend(_pipe())
             gate_read, gate_write, status_read, status_write = descriptors
@@ -834,7 +927,7 @@ def observe_private_proc(generation: str) -> dict:
                 try:
                     backend._restore_browser_projection_signals(previous_mask)
                     _guardian(gate_read, status_write, generation, parent, deadline,
-                              outside_uid, outside_gid, original_namespaces)
+                              outside_uid, outside_gid, original_namespaces, cgroup is not None)
                     os._exit(0)
                 except BaseException as exc:
                     _child_failure(status_write, generation, deadline, exc)
@@ -853,7 +946,15 @@ def observe_private_proc(generation: str) -> dict:
             _receive(status_read, generation, "USERNS", deadline)
             backend._write_browser_user_namespace_maps(process, pidfd=child_fd.number, expected_start_ticks=process_start)
             _send(gate_write, generation, "MAPPED", deadline)
-            evidence = _receive(status_read, generation, "RETAINED", deadline, fields=("evidence",))["evidence"]
+            if cgroup is not None:
+                enrolled = _supervisor_enrollment(cgroup, gate_write, status_read, child_fd,
+                                                  process, process_start, generation, deadline, process_descriptors)
+            retained = _receive(status_read, generation, "RETAINED", deadline,
+                                fields=("evidence", "outer") if cgroup is not None else ("evidence",))
+            evidence = retained['evidence']
+            if cgroup is not None:
+                cgroup_evidence = _attest_cgroup_pair(cgroup, retained['outer'], enrolled,
+                                                     child_fd, process, process_start, process_descriptors)
             _send(gate_write, generation, "CLOSE", deadline)
             _receive(status_read, generation, "CLEAN", deadline)
             _wait(process, deadline)
@@ -862,7 +963,7 @@ def observe_private_proc(generation: str) -> dict:
         except BaseException as exc:
             reason = "CANCELLED" if isinstance(exc, (KeyboardInterrupt, SystemExit)) else "NAMESPACE_PROOF_REFUSED"
             refusal_location = _failure_location(exc)
-            if isinstance(exc, NamespaceCleanupError):
+            if isinstance(exc, (NamespaceCleanupError, CgroupCleanupError)):
                 errors.append(exc)
         # Keep the direct child unreaped until its group has been signaled on
         # failure; this anchors group identity and prevents numeric PID reuse.
@@ -907,7 +1008,18 @@ def observe_private_proc(generation: str) -> dict:
                         time.sleep(0.005)
             except BaseException as exc:
                 errors.append(exc)
-        for descriptor in [child_fd, *reversed(descriptors)]:
+        for descriptor in process_descriptors:
+            try:
+                descriptor.verify()
+                _require(backend._browser_pidfd_is_terminal(descriptor.number))
+            except BaseException as exc:
+                errors.append(exc)
+        if cgroup is not None:
+            try:
+                cgroup.close()
+            except BaseException as exc:
+                errors.append(exc)
+        for descriptor in [*reversed(process_descriptors), child_fd, *reversed(descriptors)]:
             if descriptor is not None:
                 try:
                     descriptor.close()
@@ -931,7 +1043,8 @@ def observe_private_proc(generation: str) -> dict:
     if errors or (process > 1 and not reaped):
         reason = "CLEANUP_FAILED"
     return dict(reason=reason, cleanup_complete=not errors and (process < 0 or reaped),
-                refusal_location=refusal_location,
+                refusal_location=refusal_location, cgroup_evidence=cgroup_evidence,
+                cgroup='COMPONENT_OBSERVATION_ONLY' if cgroup_evidence is not None else 'NOT_RUN',
                 runtime="HOST_RUNTIME_UNSEALED",
                 private_proc=evidence, HOST_CAPABILITY="FAIL", provider_calls=0,
                 payload_processes=0, credential_release="WITHHELD", execution_authority=False)

@@ -168,6 +168,9 @@ def _namespace_attempt(backend, generation: str) -> dict:
 def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None, refusal=None, delegation=None, identity=None) -> dict:
     private = observation.get("private_proc") if observation is not None else None
     projection = "MATERIALIZATION_CHECK_ONLY" if type(private) is dict and "projection" in private else "NOT_RUN"
+    cgroup = 'COMPONENT_OBSERVATION_ONLY' if (type(observation) is dict
+        and observation.get('cgroup') == 'COMPONENT_OBSERVATION_ONLY'
+        and type(observation.get('cgroup_evidence')) is dict) else 'NOT_RUN'
     return {
         "contract": "BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1",
         "repository": "Vedang1998/Buffalo-Procurement-System",
@@ -183,7 +186,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
         "delegation_bootstrap": delegation,
         "supervisor_identity": identity,
         "runtime": "HOST_RUNTIME_UNSEALED",
-        "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": "NOT_RUN",
+        "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": cgroup,
         "credential_release": "WITHHELD", "provider_calls": 0,
         "payload_processes": 0, "execution_authority": False,
         "procfs_scope": "ACCEPTANCE_TOOLING",
@@ -227,7 +230,8 @@ def main(arguments=None) -> int:
             # Do not repeat namespace/projection mutations when a required
             # same-launcher prerequisite is already known to be unavailable.
             phase = 'NAMESPACE'
-            observation = observe_private_proc(generation) if host['prerequisites_available'] else None
+            options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path'])} if delegation is not None else {}
+            observation = observe_private_proc(generation, **options) if host['prerequisites_available'] else None
         except (CgroupCleanupError, NamespaceCleanupError):
             result = _report(binding, reason='CLEANUP_FAILED', host=host, delegation=delegation)
         except CgroupProofError as error:

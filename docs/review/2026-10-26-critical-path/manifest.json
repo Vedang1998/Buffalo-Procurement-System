@@ -78,5 +78,35 @@
     "bytes": 4096,
     "sha256": "c79cfeea210cd8d74e9d3be3a0030674b73cb4cdd9047da6dd1f08b6346cd69e",
     "transformation": "none; GitHub-truncated 4096-byte public annotation, not complete JSON"
+  },
+  "critical-eb73655-host-identity.json": {
+    "bytes": 2373,
+    "sha256": "97787f0958e986c0d4253d6c6bd04ed0948fda6bb90bc79a23fd76cdf33363a4",
+    "transformation": "strict base64 reassembly of indexed public notices; canonical JSON, no trailing newline"
+  },
+  "critical-identity-frozen-hosted.txt": {
+    "bytes": 38377,
+    "sha256": "deb2b36a20ea4b4d2af3677e3c3cad8488c185878ed58d8b7638ae7d7ea5cea6",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-identity-frozen-related.txt": {
+    "bytes": 18239,
+    "sha256": "b1aa4185073ab908810cd7d216d01b257035353b21c594de112a57f8505c2d3a",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-identity-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-identity-frozen-validation.json": {
+    "bytes": 4859,
+    "sha256": "ee7b1c2350773bcbfbaa229bfa45e0566ae969974c36e78998e27a66da68c087",
+    "transformation": "none"
+  },
+  "critical-identity-publication.json": {
+    "bytes": 976,
+    "sha256": "f3561506f42903144ddaae4bc84c2f44a124a8266eaa9066ce575af644b5fdbb",
+    "transformation": "none"
   }
 }

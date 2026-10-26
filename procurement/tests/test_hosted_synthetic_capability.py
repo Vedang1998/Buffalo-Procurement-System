@@ -261,7 +261,7 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
             return binding
         def prepared(unit):
             order.append('delegation')
-            return {'unit': unit, 'execution_authority': False}
+            return {'unit': unit, 'execution_authority': False, 'root_path': '/unit'}
         def observed():
             order.append('host')
             return {'prerequisites_available': False}
@@ -272,7 +272,7 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
             self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40, '--user-service-unit', 'test-unit']), 1)
         self.assertEqual(order, ['source', 'delegation', 'host'])
         result = json.loads(output.getvalue().splitlines()[0])
-        self.assertEqual(result['delegation_bootstrap'], {'unit': 'test-unit', 'execution_authority': False})
+        self.assertEqual(result['delegation_bootstrap'], {'unit': 'test-unit', 'execution_authority': False, 'root_path': '/unit'})
         self.assertEqual(result['provider_calls'], 0)
 
     def test_inherited_groups_refuse_before_any_host_mutation_or_namespace_attempt(self):
@@ -316,18 +316,19 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         from hosted_synthetic_namespace import NamespaceProofError, NamespaceCleanupError
         binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
         host = {'prerequisites_available': True}
-        delegation = {'controller_write_attempts': 1, 'execution_authority': False}
+        delegation = {'controller_write_attempts': 1, 'execution_authority': False, 'root_path': '/unit'}
         for error in (NamespaceProofError('private-value'), NamespaceCleanupError('private-value'),
                       OSError(1, 'private-value'), KeyboardInterrupt()):
             with self.subTest(error=type(error).__name__), \
                  patch.object(capability, 'bind_hosted_source', return_value=binding), \
                  patch('hosted_synthetic_user_service.prepare_user_service', return_value=delegation), \
                  patch('hosted_synthetic_host.observe_host_prerequisites', return_value=host), \
-                 patch('hosted_synthetic_namespace.observe_private_proc', side_effect=error), \
+                 patch('hosted_synthetic_namespace.observe_private_proc', side_effect=error) as observe, \
                  contextlib.redirect_stdout(io.StringIO()) as output:
                 self.assertIn(capability.main(['repo', 'push', 'ref', 'a'*40,
                                               '--user-service-unit', 'test-unit']), (1, 130))
             result = json.loads(output.getvalue().splitlines()[0])
+            self.assertEqual(observe.call_args.kwargs, {'delegation': Path('/sys/fs/cgroup/unit')})
             self.assertEqual(result['host_prerequisites'], host)
             self.assertEqual(result['delegation_bootstrap'], delegation)
             self.assertEqual(result['credential_release'], 'WITHHELD')

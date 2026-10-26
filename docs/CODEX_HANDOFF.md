@@ -10,63 +10,57 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### 2026-10-26 critical-path cgroup component and supported host probe — WIP
+### 2026-10-26 critical-path enrollment implementation — WIP, NON-GREEN
 
-Latest observed material: `af6afca388f8020ea8ef5b079850d47bf425af52`, tree
-`1a79aa633abae625e97290d2982622b372551d3f`. Exact frozen hosted218/related88/
-startup10 passed; GitHub run40368541492/job121732717740 passed focused218 and
-proved native PostgreSQL16.15 plus owned user-service delegation in that same
-launcher. One controller write enabled memory/pids. Namespace cleanup passed
-and its exact service was observed absent. The refusal `_guardian:722` is the
-post-map UID/GID/empty-supplementary-groups assertion, NOT the namespace syscall
-(line719). The failing tuple member remains unobserved. GitHub's notice was
-truncated at4096bytes; its exact prefix is preserved as incomplete evidence.
+The hosted platform now has measured native PostgreSQL16.15 and owned writable
+memory/pids delegation in the same unprivileged user-service launcher. Material
+af6afca388f8020ea8ef5b079850d47bf425af52 proved those prerequisites; its later
+mapped-identity assertion refused. The assertion was preserved.
 
-An upfront boolean-only supervisor-identity gate now refuses before any cgroup
-write or namespace attempt when inherited groups/IDs cannot meet this contract.
-The group invariant remains unchanged. Indexed bounded base64 notices preserve
-the complete report and digest. Focused identity/framing tests60/60 pass; hosted
-population is221, discovery/floor1748/97modules, pending frozen validation and
-one read-only identity observation. No repeated unchanged namespace failure is
-needed when this launch gate refuses.
+Exact diagnosis at published `eb736550fa8402ee26f7f5937ce882959b5a356f`, tree
+`c9b400b7b63f33af95b74557c90eca2aad3c9abd`, run40370106003/job121738230784:
+nonroot UID consistent=true, GID consistent=true, supplementary_groups_empty=false.
+The source-bound identity gate stopped BEFORE controller writes, host probing or
+namespace creation. Provider/payload counts0, release WITHHELD. Owned user-service
+NOT_FOUND_OBSERVED. Canonical2373-byte report SHA256
+97787f0958e986c0d4253d6c6bd04ed0948fda6bb90bc79a23fd76cdf33363a4 and all13 source
+hashes were independently reconstructed/verified. This is a supported-launch
+identity limitation, not evidence of a namespace kernel-policy prohibition.
 
-The supported, unprivileged user-service configuration now uses a random unit,
-Delegate=memory pids, DelegateSubgroup=supervisor, fixed manager/runtime/stop
-bounds and the same scrubbed source-bound supervisor. Source binding precedes
-any delegatee write. Controller availability is distinct from enablement: a
-new helper verifies the exact owned empty unit root, real cgroup2 identity,
-outer limits and two-process supervisor leaf before enabling only memory/pids
-in that root. No ancestor/permission/kernel-policy change or sudo is used.
-Observed manager absence is labeled NOT_FOUND_OBSERVED, not full cleanup proof.
-The next published run must establish actual delivery; no capability is assumed.
+Task2 now wires the owned cgroup lease into the optional strict namespace mode:
+sealed mode, lease-before-fork, ARMED then stopped I, stopped G while S enrolls I,
+generation-bound acknowledgment, checked cgroup path before I resume/PROBE,
+retained exact I/W pidfd/start/NSpid/membership/limits/OOM evidence, and group
+reaping before empty lease cleanup. Namespace-only mode remains non-authorizing;
+explicit cgroup mode cannot fall back. The detached sentinel is still unexecuted,
+runtime unsealed and all credential gates withheld. Exclusive delegation access
+remains required; the component does not defeat hostile same-UID pathname races.
 
-The new owned cgroup lease component enforces exact limits, stopped/childless
-init enrollment, G/I pidfd/start/lineage checks, membership/OOM proof and owned
-empty cleanup. It remains unconnected to the namespace handshake and unproven
-against live delegation. Exclusive delegation access is required; name-based
-cleanup is not atomic against hostile same-UID writers. The strict supervisor
-FD assertion is preserved; an owned close_fds child resolves the measured extra
-runner FD. Sentinel, sealed runtime and release-provider gates remain incomplete.
+Focused hosted238/238 passed, including17 enrollment tests. A real disposable
+G/I subprocess test covers actual stops and enrollment/ACK/resume failure cleanup
+with explicitly simulated cgroup writes. It is not live cgroup acceptance.
+Discovery/floor is1765/98modules; frozen validation follows before publication.
+Previous exact eb73655 validation passed221/88/10 and GitHub focused221.
+No unchanged full native rerun; historical df147b2 NON-GREEN and container50/50
+retain their original executed-source attribution.
 
-The af6afca frozen validation and source-bound public observation are preserved
-under the critical-path review manifest. Earlier observations retain their own
-source attribution. The unchanged
-full native suite was not rerun to reproduce pg_dump refusal. Historical df147b2
-NON-GREEN accounting and container50/50 retain their original attribution.
+[CRITICAL_PATH_CHECKPOINT_2026-10-26](CRITICAL_PATH_CHECKPOINT_2026-10-26.md)
+and [review evidence](review/2026-10-26-critical-path/manifest.json) preserve source,
+raw logs, historical errors and the production rollover/cutover proposal. Pricing
+production source/flags and all dependencies/lockfiles remain unchanged. Current
+approved catalog/inventory/prior-day sales/incoming/November terms are unestablished.
+Claude independent review NOT_ASSESSED; internal Codex scoped reviews do not count.
+Browser confirmation/BackupV2/APPLY/review-edit-reject/two vendor DRAFTs/three lines/
+14 packet members/$289/restart/restore/resource acceptance NOT_RUN. Railway NOT_PROVEN.
 
-See [CRITICAL_PATH_CHECKPOINT_2026-10-26](CRITICAL_PATH_CHECKPOINT_2026-10-26.md)
-for executable changes, internal findings, host observations and the specific
-proposed production rollover/cutover contract. November prices were not activated;
-current approved catalog/inventory/sales/incoming/terms remain unestablished.
-Claude review NOT_ASSESSED; internal Codex reviews do not satisfy external review.
-Browser confirmation/BackupV2/APPLY/review-edit-reject/vendor DRAFT/packet/restart/
-restore/resource gates NOT_RUN. Railway NOT_PROVEN; no official phase changed.
-
-Next: publish/fetch the exact tested candidate and observe one bounded user-service
-attempt. If supported, connect the cgroup lease to stopped-I/PROBE and exact I/W
-proof under the same launcher. If kernel/platform restrictions refuse it, retain
-the failure and propose the smallest equivalent supported configuration without
-weakening containment. Credentials remain withheld throughout these diagnostics.
+Next executable development check is the frozen focused/startup validation and
+exact publication. The next live prerequisite needs owner-approved supported
+provisioning that starts the same unprivileged launcher with supplementary groups
+already empty, before unprivileged GID-map denial. User-manager NNP stays enabled;
+no setgroups workaround, sudo, root application or kernel-policy change is enabled.
+The concrete proposed launcher contract is in the checkpoint report. No official
+phase changed, no main/PR24/production/deployment/private-data/Shopify/purchasing
+operation occurred, and no automatic future resumption is promised.
 
 
 ### 2026-10-26 trusted-tool repair and container fixture proof — NON-GREEN

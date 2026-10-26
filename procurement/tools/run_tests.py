@@ -36,6 +36,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_source.py": 36,
     "test_hosted_synthetic_capability.py": 29,
     "test_hosted_synthetic_cgroup.py": 28,
+    "test_hosted_synthetic_enrollment.py": 17,
     "test_hosted_synthetic_host.py": 20,
     "test_hosted_synthetic_user_service.py": 10,
     "test_hosted_synthetic_namespace.py": 65,

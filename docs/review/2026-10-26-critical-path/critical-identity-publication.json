@@ -1,0 +1,21 @@
+{
+  "commit": "eb736550fa8402ee26f7f5937ce882959b5a356f",
+  "tree": "c9b400b7b63f33af95b74557c90eca2aad3c9abd",
+  "ordinary_branch_only_push": true,
+  "fresh_fetch_verified": true,
+  "objects_scanned": 28,
+  "private_metadata_hits": 0,
+  "high_confidence_secret_hits": 0,
+  "before": {
+    "refs/heads/codex/hosted-synthetic-acceptance": "af6afca388f8020ea8ef5b079850d47bf425af52",
+    "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+    "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c",
+    "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f"
+  },
+  "after": {
+    "refs/heads/codex/hosted-synthetic-acceptance": "eb736550fa8402ee26f7f5937ce882959b5a356f",
+    "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+    "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c",
+    "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f"
+  }
+}

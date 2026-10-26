@@ -26,9 +26,9 @@ operations: the eventual composition must establish exclusive delegation access
 and exclude untrusted cgroup filesystem writers. This component alone does not
 prove security against hostile concurrent same-UID pathname replacement.
 
-The lease is not yet connected to the namespace handshake. The next integration
-must preserve the existing ARMED/PDEATHSIG handshake, retain stopped I and G,
-enroll I before PROBE, then prove inherited exact I/W membership. Sentinel
+The lease is now connected through an optional strict namespace mode. It
+preserves ARMED/PDEATHSIG, retains stopped I and G, enrolls I before PROBE, and
+checks inherited exact I/W membership. Live proof remains blocked by launch identity. Sentinel
 execution, retained runtime closure and the one-shot fabricated release remain
 incomplete. No credential-bearing execution is enabled.
 
@@ -285,3 +285,50 @@ characters with indices, count and a whole-report SHA256. Reassembly tests cover
 command-looking input, multiple parts, the maximum length and oversized refusal.
 This changes observability only; neither the diagnostic failure nor gates pass.
 Three regressions raise hosted tests to221 and discovery/floor to1748/97modules.
+
+
+## Current measured blocker and security-equivalent proposal
+
+Exact eb736550fa8402ee26f7f5937ce882959b5a356f/tree
+c9b400b7b63f33af95b74557c90eca2aad3c9abd passed frozen221/88/10; public
+run40370106003/job121738230784 passed focused221. Root reconstructed both notice
+parts, verified canonical JSON/whole SHA256 and all13 source hashes against Git.
+UID consistency and GID consistency pass; supplementary_groups_empty=false.
+The upfront gate refuses BEFORE delegatee writes, program probing or namespace
+execution. Service absence was observed; no credentials or payload were released.
+This supersedes any earlier suggestion that the platform necessarily lacks
+delegation or refuses namespace creation. The actual obstacle is initial groups.
+
+Smallest proposed supported launch contract, requiring owner approval before
+implementation of privileged provisioning: a platform-owned native service
+bootstrap clears supplementary groups BEFORE dropping to the verified nonroot
+runner UID/GID, removes ambient/inheritable capabilities and enables NNP, then
+executes the same exact reviewed scrubbed supervisor inside its nonce-owned
+delegated cgroup. No application or browser runs as root; native PostgreSQL16
+checks, stopped enrollment, all namespace/identity assertions, limits and release
+ordering remain unchanged. Re-prove each property in that same current generation.
+An empty systemd SupplementaryGroups= setting alone is insufficient because
+User='s configured groups may still be inherited. Do not remove NNP, add a Docker
+root broker, change host kernel policy or attempt setgroups after mapping denial.
+No privileged implementation or command has been activated. A platform with
+documented equivalent initial credentials is also acceptable after review.
+
+## Strict stopped-enrollment integration
+
+The sealed diagnostic bootstrap now carries an exact boolean cgroup-required
+mode. S creates the lease before G fork. I sends ARMED and stops; G retains I,
+reports its PID/start, then stops too. S observes G's stop, binds I's pidfd,
+validates lineage and enrolls I. Only after acknowledgment may G resume; G
+rechecks I and its exact generation cgroup path before resuming I and PROBE.
+W inherits enrollment. S independently rechecks outer I/W identities, namespace
+PIDs, exact process/thread membership, limits and OOM counters before CLOSE.
+Cleanup reaps owned processes before empty cgroup removal; foreign members are
+never killed or moved. Explicit mode cannot fall back to namespace-only execution.
+
+Seventeen new causal tests include real disposable G/I stops with simulated
+cgroup enrollment, enrollment/ACK/resume failures, retained-pair identity and
+membership changes, cleanup ordering/failure precedence, malformed sealed mode,
+and legacy namespace-only no-lease behavior. Hosted238/238 precommit passes;
+discovery/floor increases to1765/98modules. Existing guardrails remain FAIL /
+WITHHELD; cgroup evidence can say COMPONENT_OBSERVATION_ONLY, never acceptance.
+No supported live execution of this new integration has yet occurred.
