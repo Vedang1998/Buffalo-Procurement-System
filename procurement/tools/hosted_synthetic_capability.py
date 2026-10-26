@@ -141,7 +141,7 @@ def _namespace_attempt(backend, generation: str) -> dict:
     return result
 
 
-def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT") -> dict:
+def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None) -> dict:
     private = observation.get("private_proc") if observation is not None else None
     projection = "MATERIALIZATION_CHECK_ONLY" if type(private) is dict and "projection" in private else "NOT_RUN"
     return {
@@ -154,6 +154,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT") ->
         "HOST_CAPABILITY": "FAIL",
         "reason": observation["reason"] if observation is not None else reason,
         "namespace_attempt": observation,
+        "host_prerequisites": host,
         "runtime": "HOST_RUNTIME_UNSEALED",
         "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": "NOT_RUN",
         "credential_release": "WITHHELD", "provider_calls": 0,
@@ -175,17 +176,25 @@ def main(arguments=None) -> int:
             root, repository=args[0], event=args[1], ref=args[2], sha=args[3],
         )
         # Import only after trusted workflow metadata and source binding.
-        from hosted_synthetic_namespace import NamespaceProofError, observe_private_proc
+        from hosted_synthetic_namespace import NamespaceCleanupError, NamespaceProofError, observe_private_proc
+        from hosted_synthetic_host import observe_host_prerequisites
+        from hosted_synthetic_cgroup import CgroupCleanupError
         from run_local_staging_acceptance import LocalStagingAcceptanceError
         generation = hashlib.sha256(os.urandom(32)).hexdigest()
         try:
-            observation = observe_private_proc(generation)
+            host = observe_host_prerequisites()
+            # Do not repeat namespace/projection mutations when a required
+            # same-launcher prerequisite is already known to be unavailable.
+            observation = observe_private_proc(generation) if host['prerequisites_available'] else None
+        except (CgroupCleanupError, NamespaceCleanupError):
+            result = _report(binding, reason='CLEANUP_FAILED')
         except (NamespaceProofError, LocalStagingAcceptanceError):
             # The observer encloses every owned transition in its cleanup
             # envelope. These exceptions are pre-ownership prerequisite checks.
             result = _report(binding, reason="NAMESPACE_PREREQUISITE_REFUSED")
         else:
-            result = _report(binding, observation)
+            result = _report(binding, observation, host=host,
+                             reason='HOST_PREREQUISITES_REFUSED' if observation is None else 'INCOMPLETE_PREFLIGHT')
     except (KeyboardInterrupt, SystemExit):
         result = _report(binding, reason="CANCELLED")
     except (HostedDiagnosticError, HostedSourceError, OSError, AttributeError, ImportError):

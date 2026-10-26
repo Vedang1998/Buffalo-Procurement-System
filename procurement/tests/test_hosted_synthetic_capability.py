@@ -29,6 +29,10 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         self.clean = patch.object(capability, "_require_clean_supervisor")
         self.clean.start()
         self.addCleanup(self.clean.stop)
+        host = patch('hosted_synthetic_host.observe_host_prerequisites',
+                     return_value={'prerequisites_available': True})
+        host.start()
+        self.addCleanup(host.stop)
         self.generation = hashlib.sha256(b"synthetic namespace diagnostic").hexdigest()
 
     def close(self, guardian):
@@ -201,6 +205,31 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         self.assertEqual(result['credential_release'], 'WITHHELD')
         self.assertEqual(result['provider_calls'], 0)
         self.assertFalse(result['execution_authority'])
+
+    def test_missing_host_prerequisite_prevents_namespace_mutations(self):
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        with patch.object(capability, 'bind_hosted_source', return_value=binding), \
+             patch('hosted_synthetic_host.observe_host_prerequisites', return_value={'prerequisites_available': False}), \
+             patch('hosted_synthetic_namespace.observe_private_proc') as observe, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+        observe.assert_not_called()
+        result = json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(result['reason'], 'HOST_PREREQUISITES_REFUSED')
+        self.assertEqual(result['provider_calls'], 0)
+        self.assertFalse(result['execution_authority'])
+
+    def test_host_cleanup_failure_is_not_a_capability_refusal(self):
+        from hosted_synthetic_cgroup import CgroupCleanupError
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        with patch.object(capability, 'bind_hosted_source', return_value=binding), \
+             patch('hosted_synthetic_host.observe_host_prerequisites', side_effect=CgroupCleanupError('private-value')), \
+             patch('hosted_synthetic_namespace.observe_private_proc') as observe, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40]), 1)
+        observe.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue().splitlines()[0])['reason'], 'CLEANUP_FAILED')
+        self.assertNotIn('private-value', output.getvalue())
 
     def _preownership_main_refusal(self, selected):
         import hosted_synthetic_namespace as namespace

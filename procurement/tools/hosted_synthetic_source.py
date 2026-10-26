@@ -33,6 +33,8 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_capability.py",
     "procurement/tools/hosted_synthetic_namespace.py",
     "procurement/tools/hosted_synthetic_projection.py",
+    "procurement/tools/hosted_synthetic_cgroup.py",
+    "procurement/tools/hosted_synthetic_host.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

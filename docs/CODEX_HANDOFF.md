@@ -10,6 +10,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-26 critical-path cgroup component and host observation — WIP
+
+Continuation from published `b4044194137669f6203c85276af8f23d0e500cea`.
+See [CRITICAL_PATH_CHECKPOINT_2026-10-26](CRITICAL_PATH_CHECKPOINT_2026-10-26.md)
+for executable changes, scoped evidence, exact host alternative and production
+rollover/cutover authority. All prior thirteen evidence hashes were verified.
+
+Task2 now has an owned cgroup2 component with exact limits, stopped/childless
+init enrollment, G/I pidfd/start/lineage checks, membership/OOM proof and
+identity-bound empty cleanup. It is not integrated into the namespace handshake
+and has not run against supported live delegation. Exclusive delegation access
+is required before use; pathname cleanup is not atomic against hostile same-UID
+writers. No credential release or sentinel/browser execution is enabled.
+
+The same source-bound launcher now observes fixed native PostgreSQL16 metadata/
+version and current-ancestry delegation before namespace mutations. Missing
+prerequisites suppress repeated host failures; bounded public job-summary output
+preserves diagnostic exit status. No sudo/workflow privilege rule was relaxed.
+A standard systemd User=runner/Delegate=memory pids transient service is the
+smallest proposed supported alternative and needs owner approval before enabling.
+
+Focused validation: hosted199/199; related88/88; startup10/10. Registration/floor
+is1726/96modules. No unchanged full native rerun; the earlier df147b2 full-suite
+NON-GREEN accounting and container50/50 remain separately attributed. Claude
+review NOT_ASSESSED; internal scoped Codex reviews do not satisfy it. November
+production rollover/mapped-offer activation remain blocked on the concrete
+business/backup/SQL contract in the linked report. No real prices were activated.
+
+Next: observe the exact published hosted prerequisite report; if no delegation,
+obtain the narrowly specified supported systemd configuration approval. Then
+connect the reviewed cgroup lease to stopped-I/PROBE and I/W proof using that same
+launcher, retaining no release authority until sentinel/runtime/review gates pass.
+Canonical browser/restart/restore gates NOT_RUN; Railway NOT_PROVEN. No official
+phase, source pin, dependency version, production or purchasing boundary changed.
+
+
 ### 2026-10-26 trusted-tool repair and container fixture proof — NON-GREEN
 
 Published material: `df147b2085283048afed1084686e3ccd20b99fe8`, tree
