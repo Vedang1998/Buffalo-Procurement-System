@@ -32,6 +32,18 @@ A bounded follow-up preserves all checks and exposes only code-owned refusal
 categories, phase and numeric errno; no raw exceptions/environment/paths. Two
 regressions increase hosted count to202 and global discovery/floor to1729/96.
 
+
+The classified public report at6ae3d8581ce4158530e824f834e89a8f45546c88
+(run40362998397/job121713122485, focused202PASS) identified SUPERVISOR /
+supervisor_descriptors_refused: an inherited runner FD above2, not a PostgreSQL
+or kernel-delegation failure. The launch fix now creates the actual reviewed
+supervisor with close_fds=True, exact isolated interpreter/arguments, scrubbed
+environment and120-second timeout. The outer launcher preserves its own FDs;
+the strict inner supervisor assertion is unchanged. A causal regression passes
+an inheritable synthetic FD: direct invocation refuses, while the owned clean
+child reaches deliberate source-event refusal, with the parent FD unchanged.
+This raises hosted/floor counts to203 and1730/96modules respectively.
+
 Task2 now has an owned cgroup2 component with exact limits, stopped/childless
 init enrollment, G/I pidfd/start/lineage checks, membership/OOM proof and
 identity-bound empty cleanup. It is not integrated into the namespace handshake

@@ -1,7 +1,10 @@
 """Fail-closed source contract for the deliberately incomplete hosted workflow."""
 from pathlib import Path
+import json
+import os
 import re
 import subprocess
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,11 +47,12 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertEqual(len(launches), 2)
         for line in launches:
             self.assertTrue(line.startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertIn('hosted_synthetic_capability.py "$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[1])
+        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[1])
+        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[1])
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Observe namespace', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,25,8,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 202', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,25,9,65,22,28,18]', 'result.wasSuccessful()', 'result.testsRun == 203', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -75,6 +79,34 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, b'::notice title=Credential-free host prerequisites::{"test":"100%25%0D%0A::error::synthetic"}\n')
         self.assertEqual(result.stderr, b'')
+
+    def test_owned_launch_drops_extra_descriptor_preserving_parent_and_assertion(self):
+        observer = self.text.split('- name: Observe namespace', 1)[1]
+        code = re.search(r"-c '([^']+)'", observer).group(1)
+        fd = os.open(os.devnull, os.O_RDONLY)
+        try:
+            os.set_inheritable(fd, True)
+            identity = os.fstat(fd)
+            arguments = ['synthetic-invalid-repository', 'push', 'refs/heads/codex/hosted-synthetic-acceptance', 'a'*40]
+            environment = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'}
+            direct = subprocess.run([sys.executable, '-I', '-S', '-B',
+                                     'procurement/tools/hosted_synthetic_capability.py', *arguments],
+                                    cwd=ROOT, env=environment, pass_fds=(fd,), capture_output=True, timeout=5)
+            refused = json.loads(direct.stdout.splitlines()[0])
+            self.assertEqual(refused['refusal']['code'], 'supervisor_descriptors_refused')
+            completed = subprocess.run([sys.executable, '-I', '-S', '-B', '-c', code, *arguments],
+                                       cwd=ROOT, env=environment, pass_fds=(fd,), capture_output=True, timeout=5)
+            result = json.loads(completed.stdout.splitlines()[0])
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(result['refusal']['phase'], 'SOURCE_BINDING')
+            self.assertEqual(result['refusal']['code'], 'source_event_invalid')
+            self.assertEqual(result['provider_calls'], 0)
+            self.assertFalse(result['execution_authority'])
+            self.assertIsNone(result['host_prerequisites'])
+            self.assertEqual(os.fstat(fd), identity)
+            self.assertTrue(os.get_inheritable(fd))
+        finally:
+            os.close(fd)
 
 
 if __name__ == '__main__':
