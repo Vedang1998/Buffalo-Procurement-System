@@ -157,6 +157,21 @@ def _delegation() -> dict:
     return result
 
 
+def observe_supervisor_identity() -> dict:
+    """Boolean-only launch requirements; never change groups or credentials.
+
+    Unprivileged gid mapping requires setgroups=deny. Inherited supplementary
+    groups cannot then be cleared inside that namespace. Refuse before mutation
+    when the platform has not provided the required empty-group launcher.
+    """
+    uids, gids = os.getresuid(), os.getresgid()
+    checks = dict(nonroot_uid_consistent=len(set(uids)) == 1 and uids[0] > 0,
+                  gid_consistent=len(set(gids)) == 1,
+                  supplementary_groups_empty=os.getgroups() == [])
+    return dict(contract='BUFFALO_SUPERVISOR_IDENTITY_V1', **checks,
+                eligible_for_user_mapping=all(checks.values()), execution_authority=False)
+
+
 @_resource_operation
 def observe_host_prerequisites() -> dict:
     programs = {name: _program(name) for name in ('pg_dump', 'pg_restore')}

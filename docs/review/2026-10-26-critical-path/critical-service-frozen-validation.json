@@ -1,0 +1,48 @@
+{
+  "commit": "af6afca388f8020ea8ef5b079850d47bf425af52",
+  "tree": "1a79aa633abae625e97290d2982622b372551d3f",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "83f238a009c514e83edc3e88afb711249e600e24f2f2dca9d976c9825c2e6d56",
+    "docs/CODEX_HANDOFF.md": "f5b998f597dc4e1aba7f599263d0b2ecfcd37bbd88ab32d7f0d6cacd8a9f2d8d",
+    "docs/CRITICAL_PATH_CHECKPOINT_2026-10-26.md": "ff133078664c015c49c3f14259dd67bf957adda27a2fb547aef52341b1b9ae79",
+    "docs/review/2026-10-26-critical-path/critical-cleanup.json": "0defec4fab89234b81fdb65cf3b9df3bc194907404d9ddbbc5f33c6929a4af80",
+    "docs/review/2026-10-26-critical-path/critical-discovery.json": "d53955505f87944f67455633accf730ffa72525e9506ff96d407f36975ba319f",
+    "docs/review/2026-10-26-critical-path/critical-first-hosted-observation.json": "9ceee9a13d5f3535624d3a77806f59b5190d586a0aee506747ea40e8ea5a80ca",
+    "docs/review/2026-10-26-critical-path/critical-frozen-hosted.txt": "d70d85bb34134ae309ca337ce3d7e0787868373b7dbc4ab8adc8509018af3c07",
+    "docs/review/2026-10-26-critical-path/critical-frozen-related.txt": "3ba92d1aaacf4529e58e8883d8bb97ccb490c4febcf3698b9474b50f7310c0cd",
+    "docs/review/2026-10-26-critical-path/critical-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-26-critical-path/critical-frozen-validation.json": "470d7ea4601a63f00d848012dc019f37f1ba4926fba6439152755672f3c32736",
+    "docs/review/2026-10-26-critical-path/critical-host-prerequisites-829ea51.json": "6f5c87661044dff4a52e1e88e3b982adb26716cc6f65337a6ccb2530a87030d2",
+    "docs/review/2026-10-26-critical-path/critical-material-publication.json": "7b30261050f855ee84b2e5cf143955b33c49ad8a4f602d618965a2e682baf28c",
+    "docs/review/2026-10-26-critical-path/manifest.json": "396227f3ef41f63436bd7423ddc393d62524e9dbd98dfcc29758873696913324",
+    "procurement/tests/test_hosted_synthetic_capability.py": "5511f8abf7775c33c6c24740440cb93ca8cb1b9036e58e0e7a76ce66e9defd06",
+    "procurement/tests/test_hosted_synthetic_cgroup.py": "7c34fc966ccff057d8e11e37da05de03ac75bd4d07512514e078d141a1e4743c",
+    "procurement/tests/test_hosted_synthetic_host.py": "9d8820bcfa11df82c2c5aa16ef01cdb44fdb365c823a30d29a2f09acbe340144",
+    "procurement/tests/test_hosted_synthetic_user_service.py": "224164f014252006791f890dbb12db44671ac77ee9c242947e8526643930bf30",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "9b359ad644c49e95b1c8861ad48d7ded0119555eacf610158a1fae4789bcaaaf",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "eac93e22cfc2a71f5beca9f62fbe36398de2fd6438f9c8d77e5c54d9b15e1719",
+    "procurement/tests/test_supplier_format_conformance.py": "92e5e4d3e0ae3c8a26ca89888ae7b75ce588e6fea3cc739b6ad1c0aed931c648",
+    "procurement/tools/hosted_synthetic_capability.py": "746bd4ca6100ac5eabda9c86fe4c36d1e5b575f7e05e36b4d1fc26e4ad783ded",
+    "procurement/tools/hosted_synthetic_cgroup.py": "fa6edbd01f554bfe1ee811edd70ba4b40b4e34c9709515d1bcadeac909f4d148",
+    "procurement/tools/hosted_synthetic_host.py": "d2496828e8ce00137b24df3f97b53ef775a21dbe71eff4b4700fbfb4f9fb7466",
+    "procurement/tools/hosted_synthetic_source.py": "dfb17bd8c83f01a553a7f9ff6626f2c2e20aa29786c37097de70cc597a5b5737",
+    "procurement/tools/hosted_synthetic_user_service.py": "68e40606a2e21eceaa7e266235b1122531ef3c5040c8710b41fd11803dd5d8ef",
+    "procurement/tools/run_tests.py": "9674db6d5931219d1c22ac6360b668f89269ab4e44f299193f0a0749ccc7fca7"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 4.952
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.69
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.116
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

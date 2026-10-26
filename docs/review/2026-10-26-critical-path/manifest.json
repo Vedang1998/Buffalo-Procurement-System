@@ -43,5 +43,40 @@
     "bytes": 3148,
     "sha256": "6f5c87661044dff4a52e1e88e3b982adb26716cc6f65337a6ccb2530a87030d2",
     "transformation": "canonical public annotation, no trailing newline"
+  },
+  "critical-service-frozen-hosted.txt": {
+    "bytes": 37774,
+    "sha256": "7f0fbb9db4fad06437b15c9dcaba3958f3acc9bdfe119d24c0b8a9054bb171eb",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-service-frozen-related.txt": {
+    "bytes": 18239,
+    "sha256": "ba174fff3e1747d4d715aa0332c83411fb6635bbf9f17bebda1cb6b3238a5f89",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-service-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "transformation": "none; log extension changed to txt only"
+  },
+  "critical-service-frozen-validation.json": {
+    "bytes": 3819,
+    "sha256": "ac7c1516705f49605a4eac36a94302d7c13393ea20faf88a2c3a1319fae52def",
+    "transformation": "none"
+  },
+  "critical-service-discovery.json": {
+    "bytes": 202,
+    "sha256": "a9f5b1e5ac20e3549933a56c7a9187fe84ee233d6c0cfcad4c48466dddaf6059",
+    "transformation": "none"
+  },
+  "critical-service-publication.json": {
+    "bytes": 976,
+    "sha256": "6efb72dacc63c14479e089c58d1c450eb8109a8dcf3eaf214c414962d8b15f8e",
+    "transformation": "none"
+  },
+  "critical-af6afca-truncated-annotation.txt": {
+    "bytes": 4096,
+    "sha256": "c79cfeea210cd8d74e9d3be3a0030674b73cb4cdd9047da6dd1f08b6346cd69e",
+    "transformation": "none; GitHub-truncated 4096-byte public annotation, not complete JSON"
   }
 }

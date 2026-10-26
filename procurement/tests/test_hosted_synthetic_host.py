@@ -110,6 +110,27 @@ class HostedSyntheticHostTests(unittest.TestCase):
         self.assertEqual(result['cgroup_write_attempts'], 0)
         self.assertEqual(result['provider_calls'], 0)
 
+    def test_supervisor_identity_requires_empty_groups_without_modification(self):
+        for groups, eligible in (([], True), ([1001], False), ([65534, 65534], False)):
+            with self.subTest(groups=groups), patch.object(os, 'getresuid', return_value=(1001,)*3), \
+                 patch.object(os, 'getresgid', return_value=(1001,)*3), \
+                 patch.object(os, 'getgroups', return_value=groups), \
+                 patch.object(os, 'setgroups') as mutate:
+                result = host.observe_supervisor_identity()
+            self.assertEqual(result['eligible_for_user_mapping'], eligible)
+            self.assertEqual(result['supplementary_groups_empty'], not groups)
+            self.assertFalse(result['execution_authority'])
+            self.assertNotIn('groups', result)
+            mutate.assert_not_called()
+
+    def test_supervisor_identity_refuses_root_or_mixed_credentials(self):
+        for uids, gids in (((0, 0, 0), (1001,)*3), ((1001, 0, 1001), (1001,)*3),
+                           ((1001,)*3, (1001, 0, 1001))):
+            with self.subTest(uids=uids, gids=gids), patch.object(os, 'getresuid', return_value=uids), \
+                 patch.object(os, 'getresgid', return_value=gids), \
+                 patch.object(os, 'getgroups', return_value=[]):
+                self.assertFalse(host.observe_supervisor_identity()['eligible_for_user_mapping'])
+
     def test_either_missing_requirement_blocks(self):
         for program, candidates in (('UNAVAILABLE', ['/owned']), ('SYSTEM_METADATA_AND_VERSION_MATCH', [])):
             with self.subTest(program=program), patch.object(host, '_program', return_value={'status': program}), \

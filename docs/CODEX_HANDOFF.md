@@ -12,12 +12,23 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ### 2026-10-26 critical-path cgroup component and supported host probe — WIP
 
-Latest observed published material: `829ea51e113ca1946d4600c976d1a7630c766be6`,
-tree `0fc99e3568b258175e626451633120e749f0cca7`. Source-bound GitHub run40363964335
-passes focused203 and proves native PostgreSQL16.15 metadata/version. Its current
-system service lacks delegation; a user systemd manager socket exists. This is
-not proof of platform-wide impossibility. The exact report is preserved under
-[review/2026-10-26-critical-path](review/2026-10-26-critical-path/manifest.json).
+Latest observed material: `af6afca388f8020ea8ef5b079850d47bf425af52`, tree
+`1a79aa633abae625e97290d2982622b372551d3f`. Exact frozen hosted218/related88/
+startup10 passed; GitHub run40368541492/job121732717740 passed focused218 and
+proved native PostgreSQL16.15 plus owned user-service delegation in that same
+launcher. One controller write enabled memory/pids. Namespace cleanup passed
+and its exact service was observed absent. The refusal `_guardian:722` is the
+post-map UID/GID/empty-supplementary-groups assertion, NOT the namespace syscall
+(line719). The failing tuple member remains unobserved. GitHub's notice was
+truncated at4096bytes; its exact prefix is preserved as incomplete evidence.
+
+An upfront boolean-only supervisor-identity gate now refuses before any cgroup
+write or namespace attempt when inherited groups/IDs cannot meet this contract.
+The group invariant remains unchanged. Indexed bounded base64 notices preserve
+the complete report and digest. Focused identity/framing tests60/60 pass; hosted
+population is221, discovery/floor1748/97modules, pending frozen validation and
+one read-only identity observation. No repeated unchanged namespace failure is
+needed when this launch gate refuses.
 
 The supported, unprivileged user-service configuration now uses a random unit,
 Delegate=memory pids, DelegateSubgroup=supervisor, fixed manager/runtime/stop
@@ -37,9 +48,9 @@ cleanup is not atomic against hostile same-UID writers. The strict supervisor
 FD assertion is preserved; an owned close_fds child resolves the measured extra
 runner FD. Sentinel, sealed runtime and release-provider gates remain incomplete.
 
-Precommit focused hosted218/218 passes; discovery/floor1745 in97modules registers
-without errors. Frozen validation follows before publication. Prior exact
-829ea51 validation was hosted203/203, related88/88 and startup10/10. The unchanged
+The af6afca frozen validation and source-bound public observation are preserved
+under the critical-path review manifest. Earlier observations retain their own
+source attribution. The unchanged
 full native suite was not rerun to reproduce pg_dump refusal. Historical df147b2
 NON-GREEN accounting and container50/50 retain their original attribution.
 

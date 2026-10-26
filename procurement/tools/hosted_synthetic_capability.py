@@ -165,7 +165,7 @@ def _namespace_attempt(backend, generation: str) -> dict:
     return result
 
 
-def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None, refusal=None, delegation=None) -> dict:
+def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", host=None, refusal=None, delegation=None, identity=None) -> dict:
     private = observation.get("private_proc") if observation is not None else None
     projection = "MATERIALIZATION_CHECK_ONLY" if type(private) is dict and "projection" in private else "NOT_RUN"
     return {
@@ -181,6 +181,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
         "host_prerequisites": host,
         "refusal": refusal,
         "delegation_bootstrap": delegation,
+        "supervisor_identity": identity,
         "runtime": "HOST_RUNTIME_UNSEALED",
         "projection": projection, "sentinel_exec": "NOT_RUN", "cgroup": "NOT_RUN",
         "credential_release": "WITHHELD", "provider_calls": 0,
@@ -194,6 +195,7 @@ def main(arguments=None) -> int:
     args = list(sys.argv[1:] if arguments is None else arguments)
     binding = None
     host = delegation = None
+    identity = None
     phase = 'SUPERVISOR'
     try:
         _require_clean_supervisor()
@@ -206,11 +208,15 @@ def main(arguments=None) -> int:
         )
         # Import only after trusted workflow metadata and source binding.
         from hosted_synthetic_namespace import NamespaceCleanupError, NamespaceProofError, observe_private_proc
-        from hosted_synthetic_host import observe_host_prerequisites
+        from hosted_synthetic_host import observe_host_prerequisites, observe_supervisor_identity
         from hosted_synthetic_cgroup import CgroupCleanupError, CgroupProofError
         from run_local_staging_acceptance import LocalStagingAcceptanceError
         generation = hashlib.sha256(os.urandom(32)).hexdigest()
         phase = 'HOST_PREREQUISITES'
+        identity = observe_supervisor_identity()
+        if not identity['eligible_for_user_mapping']:
+            result = _report(binding, reason='SUPERVISOR_IDENTITY_PREREQUISITE_REFUSED', identity=identity)
+            return _emit(result)
         try:
             if len(args) == 6:
                 from hosted_synthetic_user_service import prepare_user_service
@@ -240,6 +246,11 @@ def main(arguments=None) -> int:
         # Neither raw exceptions, command output, paths, nor environment escape.
         result = _report(binding, reason="SOURCE_OR_SUPERVISOR_PREREQUISITE_REFUSED",
                          refusal=_fixed_refusal(phase, error), host=host, delegation=delegation)
+    result['supervisor_identity'] = identity
+    return _emit(result)
+
+
+def _emit(result):
     encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
     print(encoded)
     print("evidence_sha256=" + hashlib.sha256(encoded.encode()).hexdigest())

@@ -33,6 +33,8 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
                      return_value={'prerequisites_available': True})
         host.start()
         self.addCleanup(host.stop)
+        self.enterContext(patch('hosted_synthetic_host.observe_supervisor_identity',
+                                return_value={'eligible_for_user_mapping': True}))
         self.generation = hashlib.sha256(b"synthetic namespace diagnostic").hexdigest()
 
     def close(self, guardian):
@@ -272,6 +274,27 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
         result = json.loads(output.getvalue().splitlines()[0])
         self.assertEqual(result['delegation_bootstrap'], {'unit': 'test-unit', 'execution_authority': False})
         self.assertEqual(result['provider_calls'], 0)
+
+    def test_inherited_groups_refuse_before_any_host_mutation_or_namespace_attempt(self):
+        binding = SimpleNamespace(commit='a'*40, tree='b'*40, files=())
+        identity = {'eligible_for_user_mapping': False, 'supplementary_groups_empty': False}
+        with patch.object(capability, 'bind_hosted_source', return_value=binding), \
+             patch('hosted_synthetic_host.observe_supervisor_identity', return_value=identity), \
+             patch('hosted_synthetic_user_service.prepare_user_service') as prepare, \
+             patch('hosted_synthetic_host.observe_host_prerequisites') as observe, \
+             patch('hosted_synthetic_namespace.observe_private_proc') as namespace, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(capability.main(['repo', 'push', 'ref', 'a'*40,
+                                              '--user-service-unit', 'test-unit']), 1)
+        prepare.assert_not_called()
+        observe.assert_not_called()
+        namespace.assert_not_called()
+        result = json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(result['reason'], 'SUPERVISOR_IDENTITY_PREREQUISITE_REFUSED')
+        self.assertEqual(result['supervisor_identity'], identity)
+        self.assertEqual(result['provider_calls'], 0)
+        self.assertIsNone(result['delegation_bootstrap'])
+        self.assertIsNone(result['namespace_attempt'])
 
     def test_user_delegation_refusal_prevents_host_and_namespace_attempts(self):
         from hosted_synthetic_cgroup import CgroupProofError

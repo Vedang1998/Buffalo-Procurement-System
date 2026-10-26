@@ -1,6 +1,8 @@
 """Fail-closed source contract for the deliberately incomplete hosted workflow."""
 from pathlib import Path
 import json
+import base64
+import hashlib
 import os
 import re
 import subprocess
@@ -54,7 +56,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Observe namespace', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,28,11,65,22,28,18,10]', 'result.wasSuccessful()', 'result.testsRun == 218', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,29,11,65,22,28,20,10]', 'result.wasSuccessful()', 'result.testsRun == 221', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -72,15 +74,32 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
                          'cat "$report" >> "$GITHUB_STEP_SUMMARY"', 'exit "$status"'):
             self.assertIn(fragment, self.text)
 
-    def test_public_notice_escapes_command_data_without_changing_failure(self):
+    def test_public_notice_chunks_reconstruct_exact_bytes_and_keep_failure(self):
         block = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1]
         commands = '\n'.join(line[10:] for line in block.splitlines())
-        result = subprocess.run(['/bin/bash', '-c', 'diagnostic="$1"; status=1;\n' + commands,
-                                 'annotation-test', '{"test":"100%\r\n::error::synthetic"}'],
-                                env={'PATH': '/usr/bin:/bin'}, capture_output=True, timeout=3)
+        for raw in ('{"test":"100%\r\n::error::synthetic"}', 'a'*12000, 'b'*16384):
+            with self.subTest(size=len(raw)):
+                result = subprocess.run(['/bin/bash', '-c', 'set -euo pipefail; diagnostic="$1"; status=1;\n' + commands,
+                                         'annotation-test', raw], env={'PATH': '/usr/bin:/bin'},
+                                        capture_output=True, timeout=3)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr, b'')
+                lines = result.stdout.splitlines()
+                self.assertTrue(1 <= len(lines) <= 8)
+                encoded = []
+                digest = hashlib.sha256(raw.encode()).hexdigest().encode()
+                for index, line in enumerate(lines):
+                    self.assertLess(len(line), 4096)
+                    matched = re.fullmatch(rb'::notice title=Buffalo diagnostic part::v1 index=([0-7]) count=([1-8]) sha256=([0-9a-f]{64}) data=([A-Za-z0-9+/=]{1,3000})', line)
+                    self.assertIsNotNone(matched)
+                    self.assertEqual((int(matched[1]), int(matched[2]), matched[3]), (index, len(lines), digest))
+                    encoded.append(matched[4])
+                self.assertEqual(base64.b64decode(b''.join(encoded), validate=True), raw.encode())
+        result = subprocess.run(['/bin/bash', '-c', 'set -euo pipefail; diagnostic="$1"; status=1;\n' + commands,
+                                 'annotation-test', 'a'*16385], env={'PATH': '/usr/bin:/bin'},
+                                capture_output=True, timeout=3)
         self.assertEqual(result.returncode, 1)
-        self.assertEqual(result.stdout, b'::notice title=Credential-free host prerequisites::{"test":"100%25%0D%0A::error::synthetic"}\n')
-        self.assertEqual(result.stderr, b'')
+        self.assertEqual(result.stdout, b'')
 
     def test_owned_launch_drops_extra_descriptor_preserving_parent_and_assertion(self):
         observer = self.text.split('- name: Observe namespace', 1)[1]

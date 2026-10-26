@@ -257,3 +257,31 @@ manager owns unit teardown; an absent unit observation is not full containment
 cleanup proof. Ten simulated kernel-control tests and two ordering/refusal
 regressions bring hosted tests to218 and discovery/floor to1745 in97modules.
 Actual service delivery remains unproven until publication and observation.
+
+
+### Actual user-service result and bounded identity diagnosis
+
+Material `af6afca388f8020ea8ef5b079850d47bf425af52`, tree
+`1a79aa633abae625e97290d2982622b372551d3f`, passed frozen hosted218/related88/
+startup10 and GitHub's focused218 gate in run40368541492/job121732717740. The
+same launcher observed native PostgreSQL16.15 and usable owned delegation after
+one controller write. Namespace cleanup passed and its exact unit was observed
+not found. Credentials/provider/payload authority remained withheld/zero.
+
+The diagnostic refused at `_guardian:722`: at that exact source this is the
+mapped UID/GID/empty-supplementary-groups assertion. `os.unshare` is line719 and
+the USERNS/MAPPED handshake preceded the refusal. This is NOT evidence of a
+namespace syscall/kernel-policy refusal. The failing tuple member was not
+reported. Preserve the assertion. Unprivileged GID mapping requires setgroups
+deny; inherited supplementary groups cannot then be cleared inside that user
+namespace. An upfront boolean-only identity observation now refuses before any
+delegatee write or namespace attempt if initial groups/credentials are ineligible.
+This diagnoses the launch requirement without repeating that namespace failure.
+
+GitHub truncated the notice at4096bytes. The exact prefix is retained, explicitly
+not valid complete JSON; the tree remains independently Git-verified. Bounded
+base64 notices now frame the complete canonical report in up to8 parts of3000
+characters with indices, count and a whole-report SHA256. Reassembly tests cover
+command-looking input, multiple parts, the maximum length and oversized refusal.
+This changes observability only; neither the diagnostic failure nor gates pass.
+Three regressions raise hosted tests to221 and discovery/floor to1748/97modules.
