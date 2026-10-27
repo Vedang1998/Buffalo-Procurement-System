@@ -1,0 +1,202 @@
+test_consumer_cannot_relabel_current_host_root_as_projected_exec (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_cannot_relabel_current_host_root_as_projected_exec) ... ok
+test_copied_handle_cannot_close_original (test_hosted_synthetic_runtime.HostedRuntimeTests.test_copied_handle_cannot_close_original) ... ok
+test_distinct_library_candidates_refuse_instead_of_guessing (test_hosted_synthetic_runtime.HostedRuntimeTests.test_distinct_library_candidates_refuse_instead_of_guessing) ... ok
+test_dynamic_string_table_must_map_to_one_file_backed_segment (test_hosted_synthetic_runtime.HostedRuntimeTests.test_dynamic_string_table_must_map_to_one_file_backed_segment) ... ok
+test_dynamic_termination_and_bounds_are_required (test_hosted_synthetic_runtime.HostedRuntimeTests.test_dynamic_termination_and_bounds_are_required) ... ok
+test_elf_interpreter_and_needed_are_extracted_without_execution (test_hosted_synthetic_runtime.HostedRuntimeTests.test_elf_interpreter_and_needed_are_extracted_without_execution) ... ok
+test_equal_library_aliases_are_accepted_and_missing_libraries_refuse (test_hosted_synthetic_runtime.HostedRuntimeTests.test_equal_library_aliases_are_accepted_and_missing_libraries_refuse) ... ok
+test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes (test_hosted_synthetic_runtime.HostedRuntimeTests.test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes) ... ok
+test_identity_gate_precedes_every_projection_effect (test_hosted_synthetic_runtime.HostedRuntimeTests.test_identity_gate_precedes_every_projection_effect) ... ok
+test_interpreter_must_be_an_absolute_canonical_path (test_hosted_synthetic_runtime.HostedRuntimeTests.test_interpreter_must_be_an_absolute_canonical_path) ... ok
+test_needed_names_cannot_select_paths_or_loader_tokens (test_hosted_synthetic_runtime.HostedRuntimeTests.test_needed_names_cannot_select_paths_or_loader_tokens) ... ok
+test_sealed_bundle_refuses_write_and_has_no_writer_descriptor (test_hosted_synthetic_runtime.HostedRuntimeTests.test_sealed_bundle_refuses_write_and_has_no_writer_descriptor) ... ok
+test_search_override_and_injected_loader_tags_refuse (test_hosted_synthetic_runtime.HostedRuntimeTests.test_search_override_and_injected_loader_tags_refuse) ... ok
+test_user_owned_or_writable_native_source_is_not_promoted_to_trust (test_hosted_synthetic_runtime.HostedRuntimeTests.test_user_owned_or_writable_native_source_is_not_promoted_to_trust) ... ok
+test_wrong_architecture_class_and_truncated_tables_refuse (test_hosted_synthetic_runtime.HostedRuntimeTests.test_wrong_architecture_class_and_truncated_tables_refuse) ... ok
+test_capability_drop_cannot_target_ordinary_host_identity (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_capability_drop_cannot_target_ordinary_host_identity) ... ok
+test_capability_failure_prevents_policy_or_success (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_capability_failure_prevents_policy_or_success) ... ok
+test_clone3_is_enosys_and_clone_rejects_every_namespace_flag (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_clone3_is_enosys_and_clone_rejects_every_namespace_flag) ... ok
+test_filter_requires_nnp_before_installation (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_filter_requires_nnp_before_installation) ... ok
+test_namespace_mount_handle_and_process_authority_are_denied (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_namespace_mount_handle_and_process_authority_are_denied) ... ok
+test_ordinary_process_thread_and_io_calls_remain_allowed (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_ordinary_process_thread_and_io_calls_remain_allowed) ... ok
+test_other_architectures_and_x32_are_killed (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_other_architectures_and_x32_are_killed) ... ok
+test_policy_is_fixed_and_hash_bound (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_policy_is_fixed_and_hash_bound) ... ok
+test_projected_root_check_precedes_irreversible_changes (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_projected_root_check_precedes_irreversible_changes) ... ok
+test_real_filter_blocks_syscalls_and_preserves_ordinary_fork (test_hosted_synthetic_worker.HostedWorkerPolicyTests.test_real_filter_blocks_syscalls_and_preserves_ordinary_fork) ... ok
+test_actual_sigint_waits_for_owned_cleanup (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_actual_sigint_waits_for_owned_cleanup) ... ok
+test_child_cleanup_failure_overrides_successful_supervisor_fallback (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_child_cleanup_failure_overrides_successful_supervisor_fallback) ... ok
+test_child_cleanup_failure_survives_protocol_hops (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_child_cleanup_failure_survives_protocol_hops) ... ok
+test_child_cleanup_frame_rejects_boolean_substitution (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_child_cleanup_frame_rejects_boolean_substitution) ... ok
+test_descriptor_foreign_replacement_is_not_closed (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_descriptor_foreign_replacement_is_not_closed) ... ok
+test_descriptor_inheritability_drift_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_descriptor_inheritability_drift_refuses) ... ok
+test_descriptor_owner_copy_cannot_close_original (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_descriptor_owner_copy_cannot_close_original) ... ok
+test_diagnostic_resume_requires_owned_sealed_bootstrap (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_diagnostic_resume_requires_owned_sealed_bootstrap) ... ok
+test_environment_refusal_precedes_namespace_or_fork (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_environment_refusal_precedes_namespace_or_fork) ... ok
+test_extra_frame_authority_field_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_extra_frame_authority_field_refuses) ... ok
+test_failure_diagnostic_never_echoes_arbitrary_exception (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_failure_diagnostic_never_echoes_arbitrary_exception) ... ok
+test_guardian_final_cleanup_attempts_every_owner_and_preserves_failure (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_guardian_final_cleanup_attempts_every_owner_and_preserves_failure) ... ok
+test_init_armed_handshake_failure_kills_and_reaps (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_init_armed_handshake_failure_kills_and_reaps) ... ok
+test_init_inner_pipe_close_failure_kills_and_reaps_before_rearm (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_init_inner_pipe_close_failure_kills_and_reaps_before_rearm) ... ok
+test_init_parent_verification_failure_kills_and_reaps (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_init_parent_verification_failure_kills_and_reaps) ... ok
+test_init_pidfd_acquisition_failure_retains_raw_child_ownership (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_init_pidfd_acquisition_failure_retains_raw_child_ownership) ... ok
+test_init_result_pipe_close_failure_kills_and_reaps_before_rearm (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_init_result_pipe_close_failure_kills_and_reaps_before_rearm) ... ok
+test_invalid_generation_has_no_process_side_effect (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_invalid_generation_has_no_process_side_effect) ... ok
+test_long_host_uptime_remains_valid (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_long_host_uptime_remains_valid) ... ok
+test_mapped_coordinator_requires_four_ids_nnp_and_scoped_capabilities (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mapped_coordinator_requires_four_ids_nnp_and_scoped_capabilities) ... ok
+test_mapping_accepts_kernel_padding (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mapping_accepts_kernel_padding) ... ok
+test_mapping_rejects_boolean_expected_identity (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mapping_rejects_boolean_expected_identity) ... ok
+test_mapping_rejects_broad_or_different_authority (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mapping_rejects_broad_or_different_authority) ... ok
+test_mapping_requires_bounded_canonical_numbers (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mapping_requires_bounded_canonical_numbers) ... ok
+test_mount_capture_failure_never_enters_legacy_fallback (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_capture_failure_never_enters_legacy_fallback) ... ok
+test_mount_cleanup_attempts_both_owners_and_overrides_body (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_cleanup_attempts_both_owners_and_overrides_body) ... ok
+test_mount_duplicate_flags_malformed_and_oversize_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_duplicate_flags_malformed_and_oversize_refuse) ... ok
+test_mount_duplicate_identity_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_duplicate_identity_refuses) ... ok
+test_mount_each_missing_security_flag_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_each_missing_security_flag_refuses) ... ok
+test_mount_foreign_target_filesystem_and_root_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_foreign_target_filesystem_and_root_refuse) ... ok
+test_mount_missing_identity_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_missing_identity_refuses) ... ok
+test_mount_selected_by_held_identity_not_first_path (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_selected_by_held_identity_not_first_path) ... ok
+test_mount_shared_master_and_unknown_propagation_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_mount_shared_master_and_unknown_propagation_refuse) ... ok
+test_namespace_permission_refusal_is_precise_and_bounded (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_namespace_permission_refusal_is_precise_and_bounded) ... ok
+test_new_allocation_capture_failure_closes_owned_fd (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_new_allocation_capture_failure_closes_owned_fd) ... ok
+test_new_allocation_failure_preserves_foreign_replacement (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_new_allocation_failure_preserves_foreign_replacement) ... ok
+test_new_allocation_fcntl_failure_closes_bound_owner (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_new_allocation_fcntl_failure_closes_bound_owner) ... ok
+test_new_allocation_initial_fstat_failure_closes_raw_owner (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_new_allocation_initial_fstat_failure_closes_raw_owner) ... ok
+test_only_fsmount_syscall_refusal_uses_explicit_legacy_fallback (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_only_fsmount_syscall_refusal_uses_explicit_legacy_fallback) ... ok
+test_other_mount_propagation_also_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_other_mount_propagation_also_refuses) ... ok
+test_partial_pipe_capture_closes_both_new_descriptors (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_partial_pipe_capture_closes_both_new_descriptors) ... ok
+test_partial_pipe_capture_preserves_replaced_endpoint_and_closes_other (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_partial_pipe_capture_preserves_replaced_endpoint_and_closes_other) ... ok
+test_partial_start_failure_restores_subreaper_signals_and_descriptors (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_partial_start_failure_restores_subreaper_signals_and_descriptors) ... ok
+test_pid_one_parent_zero_and_command_parentheses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_pid_one_parent_zero_and_command_parentheses) ... ok
+test_pipe_close_failure_still_attempts_other_endpoint (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_pipe_close_failure_still_attempts_other_endpoint) ... ok
+test_private_and_outer_namespace_pid_views_are_distinct (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_private_and_outer_namespace_pid_views_are_distinct) ... ok
+test_process_identity_mismatch_and_boolean_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_process_identity_mismatch_and_boolean_refuse) ... ok
+test_process_noncanonical_numbers_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_process_noncanonical_numbers_refuse) ... ok
+test_process_shape_truncation_and_bounds_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_process_shape_truncation_and_bounds_refuse) ... ok
+test_readable_diagnostic_runtime_images_are_non_authorizing_identities (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_readable_diagnostic_runtime_images_are_non_authorizing_identities) ... ok
+test_reexec_carries_only_owned_protocol_bootstrap_and_null_stdio (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_reexec_carries_only_owned_protocol_bootstrap_and_null_stdio) ... ok
+test_replaced_executable_path_refuses_before_reading_or_executing (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_replaced_executable_path_refuses_before_reading_or_executing) ... ok
+test_resume_foreign_descriptor_is_not_mutated (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_resume_foreign_descriptor_is_not_mutated) ... ok
+test_resume_namespace_drift_or_missing_transition_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_resume_namespace_drift_or_missing_transition_refuses) ... ok
+test_resume_owned_descriptor_restores_cloexec_and_rechecks_identity (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_resume_owned_descriptor_restores_cloexec_and_rechecks_identity) ... ok
+test_resume_signal_mask_or_sigchld_drift_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_resume_signal_mask_or_sigchld_drift_refuses) ... ok
+test_resume_terminal_supervisor_refuses_after_rearming_without_child (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_resume_terminal_supervisor_refuses_after_rearming_without_child) ... ok
+test_stale_generation_frame_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_stale_generation_frame_refuses) ... ok
+test_stale_pidfd_still_kills_and_reaps_owned_child_preserving_foreign_fd (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_stale_pidfd_still_kills_and_reaps_owned_child_preserving_foreign_fd) ... ok
+test_status_duplicate_keys_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_status_duplicate_keys_refuse) ... ok
+test_status_missing_and_malformed_keys_refuse (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_status_missing_and_malformed_keys_refuse) ... ok
+test_status_namespace_pid_mismatch_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_status_namespace_pid_mismatch_refuses) ... ok
+test_status_wrong_credential_cardinality_refuses (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_status_wrong_credential_cardinality_refuses) ... ok
+test_stopped_pid_two_topology (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_stopped_pid_two_topology) ... ok
+test_supervisor_death_after_init_armed_kills_and_reaps_both (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_supervisor_death_after_init_armed_kills_and_reaps_both) ... ok
+test_supervisor_death_before_init_armed_kills_and_reaps_init (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_supervisor_death_before_init_armed_kills_and_reaps_init) ... ok
+test_ack_or_descriptor_failure_never_resumes (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_ack_or_descriptor_failure_never_resumes) ... ok
+test_bad_or_replayed_request_precedes_ownership_and_write (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_bad_or_replayed_request_precedes_ownership_and_write) ... ok
+test_component_report_never_becomes_acceptance (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_component_report_never_becomes_acceptance) ... ok
+test_enrollment_precedes_ack_and_only_guardian_resume (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_enrollment_precedes_ack_and_only_guardian_resume) ... ok
+test_guardian_must_still_be_stopped (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_guardian_must_still_be_stopped) ... ok
+test_guardian_rejects_mismatched_ack_before_init_resume (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_guardian_rejects_mismatched_ack_before_init_resume) ... ok
+test_guardian_requires_enrollment_path_and_unchanged_init (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_guardian_requires_enrollment_path_and_unchanged_init) ... ok
+test_lease_creation_refusal_precedes_fork_without_fallback (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_lease_creation_refusal_precedes_fork_without_fallback) ... FAIL
+test_missing_or_malformed_sealed_mode_refuses_before_descriptor_resume (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_missing_or_malformed_sealed_mode_refuses_before_descriptor_resume) ... ok
+test_namespace_only_path_does_not_create_lease (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_namespace_only_path_does_not_create_lease) ... ok
+test_no_ack_or_resume_after_enrollment_failure (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_no_ack_or_resume_after_enrollment_failure) ... ok
+test_outer_cleanup_reaps_before_lease_close_and_preserves_failure (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_outer_cleanup_reaps_before_lease_close_and_preserves_failure) ... ERROR
+test_real_stopped_guardian_and_init_use_simulated_enrollment_only (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_real_stopped_guardian_and_init_use_simulated_enrollment_only) ... ok
+test_resume_failure_retains_both_owned_identities_for_outer_cleanup (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_resume_failure_retains_both_owned_identities_for_outer_cleanup) ... ok
+test_retained_pair_identity_or_membership_change_refuses (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_retained_pair_identity_or_membership_change_refuses) ... ok
+test_retained_pair_rechecks_processes_and_exact_membership (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_retained_pair_rechecks_processes_and_exact_membership) ... ok
+test_wrong_delegation_precedes_lease_or_fork (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_wrong_delegation_precedes_lease_or_fork) ... ok
+test_allowlisted_source_failure_reports_phase_without_raw_output (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_allowlisted_source_failure_reports_phase_without_raw_output) ... ok
+test_body_failure_cleans_owned_guardian_without_echoing_error (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_body_failure_cleans_owned_guardian_without_echoing_error) ... ok
+test_bound_namespace_evidence_still_cannot_authorize_release (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_bound_namespace_evidence_still_cannot_authorize_release) ... ok
+test_canonical_combined_eperm_and_move_mount_are_preserved (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_canonical_combined_eperm_and_move_mount_are_preserved) ... ok
+test_clean_initial_environment_and_ambient_secret_refusal_in_fresh_process (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_clean_initial_environment_and_ambient_secret_refusal_in_fresh_process) ... ok
+test_cleanup_failure_is_bounded_and_overrides_body_cancellation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_cleanup_failure_is_bounded_and_overrides_body_cancellation) ... ok
+test_completed_prerequisites_survive_later_namespace_refusal (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_completed_prerequisites_survive_later_namespace_refusal) ... FAIL
+test_deferred_cancellation_arrives_after_cleanup (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_deferred_cancellation_arrives_after_cleanup) ... ok
+test_environment_refusal_occurs_before_any_backend_operation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_environment_refusal_occurs_before_any_backend_operation) ... ok
+test_failed_signal_restoration_is_cleanup_failure (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_failed_signal_restoration_is_cleanup_failure) ... ok
+test_host_cleanup_failure_is_not_a_capability_refusal (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_host_cleanup_failure_is_not_a_capability_refusal) ... ok
+test_inherited_groups_refuse_before_any_host_mutation_or_namespace_attempt (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_inherited_groups_refuse_before_any_host_mutation_or_namespace_attempt) ... ok
+test_invalid_generation_refuses_before_backend_operation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_invalid_generation_refuses_before_backend_operation) ... ok
+test_main_mask_preownership_refusal_is_canonical (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_main_mask_preownership_refusal_is_canonical) ... ok
+test_main_prctl_preownership_refusal_is_canonical (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_main_prctl_preownership_refusal_is_canonical) ... ok
+test_main_preownership_cancellation_is_canonical_and_has_no_observer (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_main_preownership_cancellation_is_canonical_and_has_no_observer) ... ok
+test_malformed_mount_result_refuses_and_cleans (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_malformed_mount_result_refuses_and_cleans) ... ok
+test_malformed_native_identity_arguments_precede_source_and_drop_checks (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_malformed_native_identity_arguments_precede_source_and_drop_checks) ... ok
+test_missing_host_prerequisite_prevents_namespace_mutations (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_missing_host_prerequisite_prevents_namespace_mutations) ... ok
+test_mount_attempt_success_is_still_incomplete_and_nonauthorizing (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_mount_attempt_success_is_still_incomplete_and_nonauthorizing) ... ok
+test_mount_refusal_preserves_stage_errno_and_no_release (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_mount_refusal_preserves_stage_errno_and_no_release) ... ok
+test_native_postdrop_access_precedes_system_delegation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_native_postdrop_access_precedes_system_delegation) ... FAIL
+test_native_postdrop_refusal_precedes_git_and_all_host_work (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_native_postdrop_refusal_precedes_git_and_all_host_work) ... ok
+test_ordinary_invocation_remains_failure_without_source_or_process (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_ordinary_invocation_remains_failure_without_source_or_process) ... ok
+test_postdrop_access_failure_or_cleanup_error_stops_before_delegation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_postdrop_access_failure_or_cleanup_error_stops_before_delegation) ... ok
+test_preownership_backend_refusals_are_bounded (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_preownership_backend_refusals_are_bounded) ... ok
+test_source_refusal_precedes_retained_namespace_observation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_source_refusal_precedes_retained_namespace_observation) ... ok
+test_start_failure_does_not_claim_unobserved_cleanup (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_start_failure_does_not_claim_unobserved_cleanup) ... ok
+test_supervisor_category_is_bounded_and_unknown_text_is_withheld (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_supervisor_category_is_bounded_and_unknown_text_is_withheld) ... ok
+test_terminal_cleanup_error_is_not_retried_against_released_lease (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_terminal_cleanup_error_is_not_retried_against_released_lease) ... ok
+test_unclosed_lease_cannot_claim_cleanup (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_unclosed_lease_cannot_claim_cleanup) ... ok
+test_user_delegation_is_after_source_and_before_host_observation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_user_delegation_is_after_source_and_before_host_observation) ... ok
+test_user_delegation_refusal_prevents_host_and_namespace_attempts (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_user_delegation_refusal_prevents_host_and_namespace_attempts) ... ok
+
+======================================================================
+ERROR: test_outer_cleanup_reaps_before_lease_close_and_preserves_failure (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_outer_cleanup_reaps_before_lease_close_and_preserves_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_enrollment.py", line 214, in test_outer_cleanup_reaps_before_lease_close_and_preserves_failure
+    self.assertLess(events.index('reap'), events.index('close'))
+                    ~~~~~~~~~~~~^^^^^^^^
+ValueError: 'reap' is not in list
+
+======================================================================
+FAIL: test_lease_creation_refusal_precedes_fork_without_fallback (test_hosted_synthetic_enrollment.HostedSyntheticEnrollmentTests.test_lease_creation_refusal_precedes_fork_without_fallback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_enrollment.py", line 229, in test_lease_creation_refusal_precedes_fork_without_fallback
+    create.assert_called_once()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 958, in assert_called_once
+    raise AssertionError(msg)
+AssertionError: Expected 'create' to have been called once. Called 0 times.
+
+======================================================================
+FAIL: test_completed_prerequisites_survive_later_namespace_refusal (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_completed_prerequisites_survive_later_namespace_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_capability.py", line 332, in test_completed_prerequisites_survive_later_namespace_refusal
+    self.assertEqual(observe.call_args.kwargs, {'delegation': Path('/sys/fs/cgroup/unit')})
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'del[37 chars]nit'), 'source_binding': namespace(commit='aaa[94 chars]=())} != {'del[37 chars]nit')}
+- {'delegation': PosixPath('/sys/fs/cgroup/unit'),
+?                                                ^
+
++ {'delegation': PosixPath('/sys/fs/cgroup/unit')}
+?                                                ^
+
+-  'source_binding': namespace(commit='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+-                              tree='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+-                              files=())}
+
+======================================================================
+FAIL: test_native_postdrop_access_precedes_system_delegation (test_hosted_synthetic_capability.HostedSyntheticCapabilityTests.test_native_postdrop_access_precedes_system_delegation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_capability.py", line 374, in test_native_postdrop_access_precedes_system_delegation
+    self.assertEqual(namespace.call_args.kwargs,{'delegation':Path('/sys/fs/cgroup/system.slice/unit')})
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'del[50 chars]nit'), 'source_binding': namespace(commit='aaa[94 chars]=())} != {'del[50 chars]nit')}
+- {'delegation': PosixPath('/sys/fs/cgroup/system.slice/unit'),
+?                                                             ^
+
++ {'delegation': PosixPath('/sys/fs/cgroup/system.slice/unit')}
+?                                                             ^
+
+-  'source_binding': namespace(commit='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+-                              tree='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+-                              files=())}
+
+----------------------------------------------------------------------
+Ran 141 tests in 2.051s
+
+FAILED (failures=3, errors=1)

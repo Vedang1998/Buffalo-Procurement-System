@@ -1,0 +1,46 @@
+{
+  "commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
+  "tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced",
+  "base": "4dd50dea0eb719776b166f0708e8177239780975",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "0e8ffb78d1b684084de5116181977b63177013125c9a76c4177435eebd837d74",
+    "docs/CODEX_HANDOFF.md": "0ae77d4ce56267dd76cd9a95029c37fb36aaf3fb96591c241ed65928fa16e1be",
+    "procurement/tests/hosted_apply_step_fixture.mjs": "bcc80cc83ff7d7e1d1550c30c4008e05c6b3033f76b9a2a820c06154d7e97228",
+    "procurement/tests/test_hosted_synthetic_apply_step.py": "75d69c44b62af86419f9d2160e38087fb34cb183b35bebbc9853d0bfd7f51b5a",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "b1daeb24ad14b365f9d57c3a30f6e5ebd8cf13e8e23e57f47aa369042adef6c8",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "660fa7b3095a42c0abcf05926baed73d801de5751a94ac30677915b06b4aad5d",
+    "procurement/tests/test_supplier_format_conformance.py": "c9685d49991d09f459e080968b3a7558ea31e9bce6b732a8868fdbad36eed7b0",
+    "procurement/tools/hosted_synthetic_apply_step.mjs": "5666aafef73323fc6312b0e73a66c7b28459b3519f2912fe08fdc2cc6381c466",
+    "procurement/tools/hosted_synthetic_source.py": "ea38a98496d0650ac8925c4611f9611c2f1259c9cd85421ef53a6b613270ba31",
+    "procurement/tools/run_tests.py": "3e5f1374d4d67180ab44452c26beb8d85d3d48aab5564c4ee08ff2434b3c02ad"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 10.111,
+      "sha256": "3ffb3a2c4eebe26becd5af7c3805b735c240e640311139c4a3db4a9b289d314f"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.787,
+      "sha256": "152bb59922c10289854c8f26502e0b962bfa23050f8145500923b9a75894c3cb"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.666,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.215,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

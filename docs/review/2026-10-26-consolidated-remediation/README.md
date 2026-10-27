@@ -18,10 +18,15 @@ Base tree: `d7c14cccae0e64d3d4e3e70458714e21b5794bc2`
 The owner's actual external Claude review is recorded in `external-review.json`:
 reviewed commit `3c1ae555b82aa650011254a9b1f8e8c4367601bb`, tree
 `3de6508ec0b173b575b7ce4cacc73129af9011a7`, verdict REQUEST CHANGES. The reported
-238-test execution is not GitHub environment reproduction. Its original text,
-reviewer-reported tool version/model/session and limitations have not arrived;
-those fields remain null. No review coverage is attributed to b35c036d or this
-new candidate. Reconcile the original numbered findings when that text is supplied.
+238-test execution is not GitHub environment reproduction. On October 27 the owner
+supplied attribution: Claude Code CLI 2.1.310, session
+`session_01JyrJEUAi36GJ6AfNcmBBxV`, configured/last-served model `claude-opus-5-5`.
+This is owner-supplied attribution, not a fresh inspection of the Claude account.
+Original prose, exact finding numbers and detailed execution limitations remain
+unavailable. No review coverage is attributed to b35c036d or this new candidate.
+Reconcile the original numbered findings when that text is supplied. This packet's
+frozen target remains unchanged; the later implementation delta is recorded in
+`../2026-10-27-runtime-control-lifecycle/README.md`.
 
 The machine-readable `findings.json` maps the owner's P1 and eight P2 topics to
 code and causal tests. Topic IDs are explicitly not invented Claude finding numbers.

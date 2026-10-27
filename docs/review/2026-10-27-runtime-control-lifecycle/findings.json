@@ -1,0 +1,171 @@
+{
+  "external_review": "../2026-10-26-consolidated-remediation/external-review.json",
+  "numbering_policy": "Owner-summary topic IDs, NOT invented Claude finding numbers; reconcile exact original P1/eight P2 IDs when raw review arrives",
+  "allowed_statuses": [
+    "OPEN",
+    "REPAIRED_PENDING_REVIEW",
+    "VERIFIED_CLOSED",
+    "EXPLICITLY_DEFERRED"
+  ],
+  "writer_cannot_verify_closure": true,
+  "privileged_activation": "DISABLED",
+  "credential_release": "WITHHELD",
+  "findings": [
+    {
+      "topic_id": "OWNER-P1-PID1",
+      "external_finding_number": null,
+      "severity": "P1",
+      "title": "Namespace PID1 self-stop",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "procurement/tools/hosted_synthetic_namespace.py:_init/_guardian_enrollment",
+        "procurement/tools/hosted_synthetic_pid1_regression.py"
+      ],
+      "tests": [
+        "real CLONE_NEWPID eleven-case driver; actual PID1 and production cgroup_required=True helpers",
+        "hosted enrollment causal tests"
+      ],
+      "remaining": "Real cgroup writes remain simulated in this lifecycle test; actual containment NOT_RUN"
+    },
+    {
+      "topic_id": "OWNER-P2-CREDENTIALS",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "Full entry credentials before effects",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "procurement/tools/hosted_synthetic_launcher.py:inspect_host_identity",
+        "procurement/tools/hosted_synthetic_capability.py:main",
+        "procurement/tools/hosted_synthetic_namespace.py:observe_private_proc/_require_mapped_identity",
+        "procurement/tools/hosted_synthetic_user_service.py:prepare_user_service",
+        "procurement/tools/hosted_synthetic_host.py:observe_host_prerequisites"
+      ],
+      "tests": [
+        "test_every_supervisor_entry_rejects_retained_authority_before_effects",
+        "test_mapped_coordinator_requires_four_ids_nnp_and_scoped_capabilities"
+      ],
+      "remaining": "Final native post-drop live readback NOT_RUN; mapped U1 phase authority is explicitly distinct"
+    },
+    {
+      "topic_id": "OWNER-P2-NUMERIC-PID",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "Numeric migration and lifecycle ownership",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "procurement/tools/hosted_synthetic_cgroup.py:_require_unreaped_lifecycle/enroll_stopped_init"
+      ],
+      "tests": [
+        "test_real_subreaper_and_kernel_sigchld_flags_guard_numeric_migration",
+        "test_namespace_nspid_and_reaping_refusals_precede_migration",
+        "real PID1 death/adoption cases with simulated migration"
+      ],
+      "remaining": "Not an atomic pidfd write. S namespace readback may refuse nondumpable children; real delegated migration gate OPEN pending independent/liveness proof"
+    },
+    {
+      "topic_id": "OWNER-P2-CLOSE-BOUNDARY",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "Descriptor closure after failed signal precondition",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "procurement/tools/hosted_synthetic_cgroup.py:CgroupLease.close"
+      ],
+      "tests": [
+        "test_unmasked_boundary_refuses_before_owned_mutation",
+        "test_failed_boundary_and_close_preserve_first_error_and_close_other_fds"
+      ],
+      "remaining": "No path mutation after failed precondition; original cause and sticky failure retained"
+    },
+    {
+      "topic_id": "OWNER-P2-EXTERNAL-CLEANUP",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "External full-service cleanup",
+      "status": "OPEN",
+      "code": [
+        "procurement/tools/hosted_synthetic_observer.py",
+        "procurement/tools/hosted_synthetic_quarantine.py",
+        "procurement/tools/hosted_synthetic_lifecycle.py",
+        "procurement/tools/hosted_synthetic_identity.py:AccountLease"
+      ],
+      "tests": [
+        "20 observer / 10 quarantine / 22 lifecycle registered tests; actual unprivileged pipe and deferred-SIGINT components",
+        "exact invocation/start/membership refusal before native signals; descriptor-failure proof refusal"
+      ],
+      "remaining": "Dormant external observer, separate accounting envelope, persistent private identity quarantine and executable six-case lifecycle driver implemented. Native same-generation normal/cancel/kill/ACK-timeout/partial-setup proof NOT_RUN. Timeout means20s namespace deadline, not120s systemd startup timeout. Terminal state is distinct from successful descriptor closure. Quarantine is never drained cleanup."
+    },
+    {
+      "topic_id": "OWNER-P2-MEMORY",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "Child versus aggregate memory accounting",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "procurement/tools/hosted_synthetic_cgroup.py",
+        "procurement/tools/hosted_synthetic_observer.py:sample/finish_service"
+      ],
+      "tests": [
+        "separate child/enclosing counters and OOM/peak/limit drift tests; external observer aggregate lifetime tests"
+      ],
+      "remaining": "Child accounting excludes some pre-migration charges. New owned external accounting slice retains the same512MiB/64-task aggregate ceiling while service exits; final kernel counters and exact subtree removal required. Actual live whole-service measurement NOT_RUN. Different launches are not one resource PASS."
+    },
+    {
+      "topic_id": "OWNER-P2-RUNTIME",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "Executable/interpreter/library runtime closure",
+      "status": "OPEN",
+      "code": [
+        "procurement/tools/hosted_synthetic_runtime.py",
+        "procurement/tools/hosted_synthetic_application_runtime.py",
+        "procurement/tools/hosted_synthetic_wheels.py",
+        "procurement/tools/hosted_synthetic_runtime_regression.py"
+      ],
+      "tests": [
+        "20 runtime / 23 wheel / 14 application registered tests",
+        "4dd50de kernel diagnostic3/3 and application3/3; sealed exec, 51 mapped ELF identities, original wheels, required missing-dependency refusals"
+      ],
+      "remaining": "Diagnostic and current application import closure use actual sealed projection/exec.4dd50de application regular bytes81844207 under80MiB. Frozen Nix/OCI inputs unchanged. Full application/browser/PG lifecycle closure remains UNSEALED; supported GitHub runtime ownership/ELF compatibility not proven; no accepted browser input substitution."
+    },
+    {
+      "topic_id": "OWNER-P2-EVENT-SCHEMA",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "memory.events compatibility policy",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "procurement/tools/hosted_synthetic_cgroup.py:MEMORY_EVENTS_SCHEMA/parse_memory_events"
+      ],
+      "tests": [
+        "test_malformed_counters_refuse",
+        "test_oom_increment_or_any_decrease_refuses"
+      ],
+      "remaining": "Exact six-key versioned schema retained. Unknown keys fail compatibility; no alleged observed future-kernel failure or ignored safety event"
+    },
+    {
+      "topic_id": "OWNER-P2-CONTROL-EXCLUSION",
+      "external_finding_number": null,
+      "severity": "P2",
+      "title": "Exclusive delegated-control authority",
+      "status": "OPEN",
+      "code": [
+        "procurement/tools/hosted_synthetic_worker.py",
+        "procurement/tools/hosted_synthetic_runtime.py:_enter_projection",
+        "procurement/tools/hosted_synthetic_namespace.py",
+        "procurement/tools/hosted_synthetic_identity.py"
+      ],
+      "tests": [
+        "14 worker registered tests: capability/securebits/NNP/filter, inherited descriptors and control-path refusal",
+        "actual private projection/old-root detachment component; actual mapped worker/control boundary NOT_RUN"
+      ],
+      "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
+    }
+  ],
+  "material_commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
+  "material_tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced",
+  "frozen_evidence": "oct27-final-component-frozen-validation.json",
+  "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
+  "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "independent_re_review": "NOT_RECEIVED_NOT_AUTOMATICALLY_INVOKED"
+}

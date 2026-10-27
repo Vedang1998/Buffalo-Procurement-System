@@ -1,0 +1,19 @@
+{
+  "observed_tools": {
+    "python": "Python 3.13.5",
+    "uv": "uv 0.12.3 (x86_64-unknown-linux-gnu)",
+    "node": "v24.19.0",
+    "pnpm": "10.34.7",
+    "typescript": "Version 5.9.3",
+    "git_path": "git version 2.52.0",
+    "git_native": "git version 2.47.3",
+    "gh": "gh version 2.46.0 (2025-01-13 Debian 2.46.0-3)",
+    "docker": "Docker version 28.4.0, build d8eb465",
+    "postgresql": "pg_dump (PostgreSQL) 16.14 (Debian 16.14-1.pgdg13+1)",
+    "chromium": "Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)"
+  },
+  "install_script_sha256": "efcf77d9f74d541449d2c8f5cadd7ac4437c95f0bfc548885d0fc6fc6331c283",
+  "install_validation": "Prior installer previously tested; new repository-local maintenance.auto=false and gc.autoDetach=false commands executed/read back, complete updated script bash -n passed; full updated installer not rerun",
+  "configuration": "Draft only; snapshot publication and fresh-task restoration NOT_VERIFIED",
+  "production_or_acceptance_startup": false
+}

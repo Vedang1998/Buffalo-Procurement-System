@@ -1,0 +1,13 @@
+test_browser_private_proc_guardian_dies_with_supervisor_without_residue (test_run_local_staging_acceptance.RunLocalStagingAcceptanceTests.test_browser_private_proc_guardian_dies_with_supervisor_without_residue) ... ok
+test_supervisor_death_before_init_armed_kills_and_reaps_init (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_supervisor_death_before_init_armed_kills_and_reaps_init) ... ok
+test_supervisor_death_after_init_armed_kills_and_reaps_init (unittest.loader._FailedTest.test_supervisor_death_after_init_armed_kills_and_reaps_init) ... ERROR
+
+======================================================================
+ERROR: test_supervisor_death_after_init_armed_kills_and_reaps_init (unittest.loader._FailedTest.test_supervisor_death_after_init_armed_kills_and_reaps_init)
+----------------------------------------------------------------------
+AttributeError: type object 'HostedSyntheticNamespaceTests' has no attribute 'test_supervisor_death_after_init_armed_kills_and_reaps_init'. Did you mean: 'test_supervisor_death_after_init_armed_kills_and_reaps_both'?
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.431s
+
+FAILED (errors=1)

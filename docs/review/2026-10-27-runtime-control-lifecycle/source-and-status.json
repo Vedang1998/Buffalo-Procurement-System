@@ -1,0 +1,78 @@
+{
+  "material_commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
+  "material_tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced",
+  "source_history": [
+    {
+      "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
+      "tree": "04dd9127eb81a911e1b9a0aeb36f9f6b50926b9d"
+    },
+    {
+      "commit": "ac122157a562f8d90007d76476db2d044fefc8b7",
+      "tree": "2b67889917dd3807c23f6726dc15f82ac3717b43"
+    },
+    {
+      "commit": "aa5fe65b30c9b6ac8aabd71d7d216d04f45aa733",
+      "tree": "a81d357ac9084ed80c9c5d6b82000a361e812462"
+    },
+    {
+      "commit": "b78e3ee69fcd1a841926fba5a377d7ef116d2af7",
+      "tree": "144b97a0a7f1097fb31241f15da90f180da41f59"
+    },
+    {
+      "commit": "afd6ecad4c54490d99804c23f16b53913772fdc9",
+      "tree": "39b631e1adfe6374a87ac4f2ae79f0e7c4f8c2e2"
+    },
+    {
+      "commit": "d1c416d1afe4192f56f1369b158ea4b4533d8d65",
+      "tree": "8f932530bb08a72859a5c543bd1fff770048ec4b"
+    },
+    {
+      "commit": "4dd50dea0eb719776b166f0708e8177239780975",
+      "tree": "3890ff1e138ff343e9c855fc4577bebf9bfd4a45"
+    },
+    {
+      "commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
+      "tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced"
+    }
+  ],
+  "original_published_lineage_preserved": true,
+  "business_application_schema_rules_manifests_lockfiles_unchanged_from": "8842a9b7ec77619134af9881a814dd88f4ca004d",
+  "unchanged_paths": [
+    "procurement/src",
+    "procurement/db",
+    "procurement/config",
+    "pyproject.toml",
+    "procurement/pyproject.toml",
+    "uv.lock",
+    "package.json",
+    "pnpm-lock.yaml"
+  ],
+  "frozen_review_target_unchanged": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "runtime_kernel_evidence_commit": "4dd50dea0eb719776b166f0708e8177239780975",
+  "full_authoritative_suite": "NOT_RUN_SUPPORTED_REVIEWED_CANDIDATE_REQUIRED",
+  "privileged_activation": "DISABLED",
+  "credential_release": "WITHHELD",
+  "integrated_acceptance": "NON_GREEN",
+  "original_external_review": "REQUEST_CHANGES_ON_3c1ae555_ONLY",
+  "internal_review": {
+    "scope": "Codex read-only path investigation; never external Claude review",
+    "reviewers": [
+      "app_runtime_inputs",
+      "cleanup_audit",
+      "harness_audit"
+    ],
+    "tests_run_by_reviewers": false,
+    "writer_ran_tests": true,
+    "remaining_independent_review": "REQUIRED"
+  },
+  "historical_failed_counts": {
+    "discovered": 1668,
+    "executed": 1637,
+    "passed": 1632,
+    "failed_methods": 1,
+    "method_errors": 4,
+    "class_setup_errors": 3,
+    "unexecuted": 31,
+    "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
+  }
+}

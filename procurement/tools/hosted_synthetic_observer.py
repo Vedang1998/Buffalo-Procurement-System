@@ -5,7 +5,7 @@ The accounting envelope is a fresh nonce-owned slice with the SAME aggregate
 All native activation remains dormant behind independent review. An absent
 unit, cached sample, child report or caller-supplied PASS is not cleanup proof.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import wraps
 import errno
 import fcntl
@@ -366,7 +366,11 @@ class ExternalObserver:
             self.verify()
             boot._require(not _children(self.root) and self.read('cgroup.procs')==self.read('cgroup.threads')==b''
                           and _events_empty(self.read('cgroup.events')))
-            self.sample()
+            final=self.sample()
+            # finish_service's snapshot is provisional: residual charges can
+            # still change before stopping the now-empty accounting envelope.
+            # Publish the last validated kernel sample, never the earlier copy.
+            self.proof=replace(self.proof,aggregate=final)
             code,_=boot._collect_native_client(_native(('/usr/bin/systemctl','--system','--no-ask-password','stop',self.slice_unit)),cwd='/')
             boot._require(code==0)
             _await_absence(self.slice_unit,self.path,self.invocation)
@@ -386,6 +390,7 @@ def require_drain_proof(proof, account):
                   and proof._owner._owner is proof._owner and proof._owner.account is account
                   and proof._owner.proof is proof and proof._owner.closed and not proof._owner.failed
                   and proof._owner.descriptors_closed_successfully is True
+                  and proof.aggregate is proof._owner.aggregate
                   and (proof.uid,proof.gid,proof.unit)==(account.identity.uid,account.identity.gid,account.identity.unit),
                   'external_drain_proof_required')
 

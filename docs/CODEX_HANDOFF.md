@@ -10,6 +10,50 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 mapping, owner review and final resource evidence — continuing
+
+Published source before this delta is `d4ca8caaa94ecef76aa0faee094e4a7a44cccd55`,
+tree `4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced`. Its frozen 439 hosted, 88 related,
+10 startup and 18 import checks passed; discovery was 1,966 / 109 modules, not a
+full-suite execution. The adjacent review packet preserves these exact logs and
+all earlier failed/component evidence. Six findings remain pending independent
+review, three OPEN. No Claude re-review has been received or automatically called.
+
+This descendant implements two further inert browser components. Mapping performs
+fresh intake, seven exact candidate decisions and five separate selections through
+25 guarded POSTs. It binds selected decision identity to the existing UUIDv5
+contract and rejects source-type coercion, other offers, stale/preseeded state,
+preview drift, legacy fields, duplicate/replayed requests and altered redirects.
+The owner-review component performs two RUN_ONLY exclusions, ACCEPT/EDIT/REJECT,
+independent economics previews and separate vendor DRAFT confirmation. It checks
+actual synthetic supplier SKUs, pack/ordered-unit conversions, applied CS2/BT18
+and BASE tiers, per-vendor minima/shortfalls/fees, distinct PO UUIDs, persisted tier
+continuity and captured stock. Three bounded artifact links are observed, without
+claiming download, 14-member packet verification, restart or restore.
+
+Internal static reviews found and the writer repaired actual DOM `br`/text-content
+compatibility and incomplete final economic/identity assertions. The scripted
+fixture now reflects source-defined Southern DOLLAR20 and Western DOLLAR120 terms
+with 18 shortfall; its multipack orders eight units, not 24 qualifying bottles.
+Actual API/gateway renderers are exercised for confirmation form compatibility.
+The registered new modules have 20 mapping and 23 review tests. Together with three
+new observer regressions, registration increases to 2,012 tests / 111 modules and
+the hosted focused gate to 485. Discovery is never reported as passing execution.
+
+The external observer now exports its final pre-stop aggregate sample rather than
+the earlier service-drain snapshot. Final OOM/read failure cannot accept a cached
+proof or stop an unverified slice; stale proof and aggregate mismatch refuse.
+All 45 observer/lifecycle tests passed; subsequent 115 affected tests passed before
+the final DRAFT assertions. Frozen descendant results follow after publication.
+
+All components remain dormant and non-authorizing. Full runtime/browser closure,
+worker/control exclusion and native full-service cleanup remain OPEN pending the
+combined review and actual same-generation proof. Independent preparation,
+download/restart adapter work remains; the live gate is not a blanket coding stop.
+Continue that work after publishing this tested component. Actual browser-phase
+process/identity/network composition still needs the precise contract decision
+recorded in the review packet. No production or canonical phase milestone changed.
+
 ### 2026-10-27 staging APPLY component — independent implementation
 
 Published lifecycle material: `4dd50dea0eb719776b166f0708e8177239780975`, tree

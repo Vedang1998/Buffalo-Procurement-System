@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_runtime_regression.py", line 136, in <module>
+    if __name__=='__main__':raise SystemExit(main(sys.argv[1:]))
+                                             ~~~~^^^^^^^^^^^^^^
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_runtime_regression.py", line 130, in main
+    binding=bind_hosted_source(root,repository=REPOSITORY,event='push',ref=REF,sha=arguments[1])
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_source.py", line 339, in bind_hosted_source
+    bindings = _bind_files(root, records)
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_source.py", line 299, in _bind_files
+    raw = _file_bytes(root, relative, mode)
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_source.py", line 95, in guarded
+    raise error
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_source.py", line 86, in guarded
+    result = function(*args, **kwargs)
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_source.py", line 239, in _file_bytes
+    with _held_source_file(root, relative) as descriptor:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/tmp/buffalo-runtime-ac122157-clone/procurement/tools/hosted_synthetic_source.py", line 210, in _held_source_file
+    raise HostedSourceError("source_path_changed")
+hosted_synthetic_source.HostedSourceError: source_path_changed

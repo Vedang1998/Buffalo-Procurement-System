@@ -45,7 +45,7 @@ export function canonicalIntent(value) {
   return JSON.stringify(Object.fromEntries(INTENT_FIELDS.map(key => [key, value[key]])));
 }
 
-function snapshotBinding(value) {
+export function snapshotBinding(value) {
   let entries = 0;
   const copy = (selected, depth = 0) => {
     requireValue(++entries <= 1000 && depth <= 5);
@@ -65,7 +65,7 @@ function snapshotBinding(value) {
   return JSON.parse(raw);
 }
 
-function armSinglePost(page, pathname, fields, csrfSha256) {
+export function armSinglePost(page, pathname, fields, csrfSha256) {
   let attempted = false, refused = false;
   // Adapter contract: intercept ALL mutations before forwarding. Closing this
   // allowance restores its existing deny policy; it never disables the guard.

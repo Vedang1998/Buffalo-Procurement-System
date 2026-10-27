@@ -1,0 +1,49 @@
+{
+  "commit": "d1c416d1afe4192f56f1369b158ea4b4533d8d65",
+  "tree": "8f932530bb08a72859a5c543bd1fff770048ec4b",
+  "base": "b78e3ee69fcd1a841926fba5a377d7ef116d2af7",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "94be7bbe4cdc6418b6146def3744992972e59572d81c1c44669c993ef8299875",
+    "docs/CODEX_HANDOFF.md": "b17c79905fa200da45d908836f823fb990bae885fde172717574f416cf3aa52d",
+    "procurement/tests/test_hosted_synthetic_application_runtime.py": "f93fb9be7c2727d18243c022b06966fbc19b07a2572002742d036b3ca1bde3db",
+    "procurement/tests/test_hosted_synthetic_wheels.py": "9986b3c7e45b8c0fe6c412d9e93bece4091530398a5d934f60db18e5095ab6a6",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "fe85465ff366c38e86172b29c7ee527398e93576841603fb1f9614e7ad81884d",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "213a4259ef34f882e46c999b2a38bd9da2370792fb33e69e0b44ccd6ce83c7a1",
+    "procurement/tests/test_supplier_format_conformance.py": "691a5657611ef3ba1adb2d223432a3278a8dea10b23554e8b070ad68b704e5f6",
+    "procurement/tools/hosted_synthetic_application_runtime.py": "2f3e4384a129446773e3f2d050c0da0f667fa30bc24ac454183c473f5c05e686",
+    "procurement/tools/hosted_synthetic_runtime.py": "d8805fececed12c41160139d4700380a1747093cde61a8610f336f746c455c82",
+    "procurement/tools/hosted_synthetic_runtime_regression.py": "babeae4cfdd0d548934e93e1f0270e8c65120163450c58e88129282fbe0a483a",
+    "procurement/tools/hosted_synthetic_source.py": "1c3a48a2bd36e74932c04286108d3eaa8b80fc6edf91f3a066530ed573a2786c",
+    "procurement/tools/hosted_synthetic_wheels.py": "4808a61e942dc0692272ff693bdbb8fa533183751c2ab2d6d29eed6f4ba800dd",
+    "procurement/tools/run_tests.py": "0e464ef7b96009b1a421422f2296a9e6de5f311e08a1f4fa75f4ab81fc0937e1"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 6.996,
+      "sha256": "e11ecd7f2562695893d79e5298ee2ef504b7b65fc9b81adeaa5720120b70153a"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.58,
+      "sha256": "365fec050fd7b117588fa83d0f90915772363f75d6f6f5164b9458b45890fcca"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.666,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.115,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

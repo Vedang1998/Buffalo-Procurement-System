@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/tmp/buffalo-runtime-ac122157/procurement/tools/hosted_synthetic_runtime_regression.py", line 117, in <module>
+    if __name__=='__main__':raise SystemExit(main(sys.argv[1:]))
+                                             ~~~~^^^^^^^^^^^^^^
+  File "/tmp/buffalo-runtime-ac122157/procurement/tools/hosted_synthetic_runtime_regression.py", line 111, in main
+    binding=bind_hosted_source(root,repository=REPOSITORY,event='push',ref=REF,sha=arguments[1])
+  File "/tmp/buffalo-runtime-ac122157/procurement/tools/hosted_synthetic_source.py", line 330, in bind_hosted_source
+    raise HostedSourceError("source_git_layout_invalid")
+hosted_synthetic_source.HostedSourceError: source_git_layout_invalid

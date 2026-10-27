@@ -142,10 +142,45 @@ class HostedObserverTests(unittest.TestCase):
 
     def test_copied_or_unowned_proof_cannot_release_identity(self):
         value=fixture();proof=observer.DrainProof('c'*64,'a'*40,'b'*40,UNIT,900,900,{},False,value,observer._TOKEN)
-        value.proof=proof;value.closed=True;value.descriptors_closed_successfully=True
+        value.proof=proof;value.aggregate=proof.aggregate;value.closed=True;value.descriptors_closed_successfully=True
         observer.require_drain_proof(proof,value.account)
         for selected in (replace(proof),replace(proof,uid=901),replace(proof,_token=object()),{}):
             with self.subTest(selected=type(selected)),self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(selected,value.account)
+
+    def test_last_pre_stop_sample_replaces_provisional_drain_evidence(self):
+        value=fixture();data=counters()
+        with patch.object(value,'verify'),patch.object(observer,'_await_absence'),patch.object(observer,'_removed'), \
+             patch.object(observer,'_children',return_value=[]),patch.object(value,'read',side_effect=data.__getitem__), \
+             patch('hosted_synthetic_identity.identity_processes',return_value=[]), \
+             patch.object(boot,'_collect_native_client',return_value=(0,b'')) as native:
+            provisional=value.finish_service(operation_succeeded=False)
+            self.assertEqual(provisional.aggregate['peak'],1234)
+            data['memory.peak']=b'2048\n';data['memory.current']=b'128\n'
+            value.close()
+        native.assert_called_once()
+        self.assertEqual(value.proof.aggregate['peak'],2048)
+        self.assertEqual(value.proof.aggregate['current'],128)
+        observer.require_drain_proof(value.proof,value.account)
+        with self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(provisional,value.account)
+
+    def test_failed_final_sample_cannot_stop_slice_or_accept_earlier_proof(self):
+        value=fixture();data=counters()
+        with patch.object(value,'verify'),patch.object(observer,'_await_absence'),patch.object(observer,'_removed'), \
+             patch.object(observer,'_children',return_value=[]),patch.object(value,'read',side_effect=data.__getitem__), \
+             patch('hosted_synthetic_identity.identity_processes',return_value=[]), \
+             patch.object(boot,'_collect_native_client') as native:
+            provisional=value.finish_service(operation_succeeded=False)
+            data['memory.events']=b'low 0\nhigh 0\nmax 0\noom 1\noom_kill 0\noom_group_kill 0\n'
+            with self.assertRaises(boot.BootstrapCleanupError):value.close()
+        native.assert_not_called()
+        self.assertTrue(value.closed and value.failed and value.account.uncertain)
+        with self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(provisional,value.account)
+
+    def test_drain_proof_cannot_export_a_different_aggregate(self):
+        value=fixture();aggregate={'peak':1};value.aggregate={'peak':2}
+        value.proof=observer.DrainProof('c'*64,'a'*40,'b'*40,UNIT,900,900,aggregate,False,value,observer._TOKEN)
+        value.closed=True;value.descriptors_closed_successfully=True
+        with self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(value.proof,value.account)
 
     def test_manager_schema_rejects_unknown_properties_and_changed_limits(self):
         base={'Id':observer.slice_name(UNIT),'LoadState':'loaded','ActiveState':'active',

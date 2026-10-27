@@ -1,0 +1,8 @@
+test_browser_private_proc_guardian_dies_with_supervisor_without_residue (test_run_local_staging_acceptance.RunLocalStagingAcceptanceTests.test_browser_private_proc_guardian_dies_with_supervisor_without_residue) ... ok
+test_supervisor_death_before_init_armed_kills_and_reaps_init (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_supervisor_death_before_init_armed_kills_and_reaps_init) ... ok
+test_supervisor_death_after_init_armed_kills_and_reaps_both (test_hosted_synthetic_namespace.HostedSyntheticNamespaceTests.test_supervisor_death_after_init_armed_kills_and_reaps_both) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.673s
+
+OK

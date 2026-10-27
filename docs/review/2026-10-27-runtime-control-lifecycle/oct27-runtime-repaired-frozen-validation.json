@@ -1,0 +1,54 @@
+{
+  "commit": "aa5fe65b30c9b6ac8aabd71d7d216d04f45aa733",
+  "tree": "a81d357ac9084ed80c9c5d6b82000a361e812462",
+  "base": "8842a9b7ec77619134af9881a814dd88f4ca004d",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "beff48a1d21ffa49cd4725ddaae75cf6cbbaf430ca44fc648c7c391a42557b92",
+    "docs/CODEX_HANDOFF.md": "45ed95dab59dd3df5442eaa652c478d02b7ac774614dbf44260fba745c8991d0",
+    "docs/review/2026-10-26-consolidated-remediation/external-review.json": "8885c49259b5e8bbd949152a14d9b93d02c3300434b9b13668eb2274e4f392f9",
+    "docs/review/2026-10-26-consolidated-remediation/manifest.json": "99b65be29c34381b36461fb24b851e8e56f2d18c6f708fb69a457253ec96dc45",
+    "procurement/tests/test_hosted_synthetic_capability.py": "ccb7e7938fdec040a45c2f4f22c0220cad0633d7b006c7b10058665cbfe44e80",
+    "procurement/tests/test_hosted_synthetic_enrollment.py": "605596652772beeafdbf53bb2f9959211db906b1ad6371d237c91449a896af85",
+    "procurement/tests/test_hosted_synthetic_runtime.py": "baa0b87a5fc9bda28943e549e6b078430a8800a63f676aac6c71e06b3d0adf94",
+    "procurement/tests/test_hosted_synthetic_worker.py": "afc3ef14e1105a8aa5fc5ac51706ecb93e283fdb52685b3d2515ebf5f4284291",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "56d891b893baf18b0257b0ce4f8aaf219ad1ef013dc37ccabc8f4ca514900b4f",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "000d7cd37e1fd61a8c2b758f674b18e8edd1c345d32023a0d85468349eb7a40f",
+    "procurement/tests/test_supplier_format_conformance.py": "dda0d19fac649c154336e6e8000fe1d7837aca42b7f32c17dea060663e1206a4",
+    "procurement/tools/hosted_synthetic_capability.py": "3ade3d3474123bc76d2b2f973c85457ed5ac0beb0f00db05c5ac74d0c62cf6df",
+    "procurement/tools/hosted_synthetic_namespace.py": "e9f529a618d13795931996aea3017afb72ab381763d3705a1ead7917c36bc316",
+    "procurement/tools/hosted_synthetic_runtime.py": "e7c97033c081140bb65c423c7f29b5c20806aa7d59fbe3ddd73b1f1482d1df3a",
+    "procurement/tools/hosted_synthetic_runtime_regression.py": "7dfad23a8d1c131f72fbec14f291d6d932045c3a663cdeb4d20e44b86bc95809",
+    "procurement/tools/hosted_synthetic_source.py": "b581d51ead211d695f03deceb0ea8e50fa6c7aa080edec5795aeeba5a19fda27",
+    "procurement/tools/hosted_synthetic_worker.py": "6f64ac5f66b2f09863514415a7d9b68bbf11c42a13228f8ae3fee6575e3159e9",
+    "procurement/tools/run_tests.py": "5e0dc824b96e64160abeebe5da63687efdaad2eac44526b9a433bb5685719fa3"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 6.341,
+      "sha256": "400fe895283d2b2052a91664d5caa62a0529e31067539ee7f5681e68c6ce23ee"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.532,
+      "sha256": "2616c1f8a1f0a5502d4e158cc749e8bd0ffb6387241d30e2081607eba0f4a940"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.115,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.616,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

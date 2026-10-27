@@ -1,0 +1,278 @@
+{
+  "README.md": {
+    "bytes": 14408,
+    "sha256": "36ddb90224b9ba40915a1f1c3761a0d27fb6c7bcfa7110a4705dc259bfe7b1ea"
+  },
+  "cloud-setup-status.json": {
+    "bytes": 1005,
+    "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
+  },
+  "findings.json": {
+    "bytes": 8747,
+    "sha256": "b35cd749d3983e89b9f3e967f30c2cff4508383d29ae313ae50c2c1adebf4445"
+  },
+  "oct27-application-cancellation.txt": {
+    "bytes": 2767,
+    "sha256": "adaa05fd176317e1d82f8846ca7943d0be23492a8ba84492e15a4c726dcdb34e"
+  },
+  "oct27-application-causal.txt": {
+    "bytes": 3205,
+    "sha256": "de40fae16ba0dea3b8c0270701d087934847ce3ab5e7f89909c8da8aca01ee66"
+  },
+  "oct27-application-first-kernel.txt": {
+    "bytes": 9532,
+    "sha256": "4e0e7ab9d5a502fafb1dcbd3d48b509b4955821d31f30c4fe7aa1f442cc20411"
+  },
+  "oct27-application-frozen-hosted.txt": {
+    "bytes": 71109,
+    "sha256": "a55799d9d395976a9d224b674ff73462437c7e6cb8769c3f6a755ba060acbb44"
+  },
+  "oct27-application-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-application-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-application-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "7bbe0d53f0e118af3806d5ece78db5d518c9866408e932c9da966f7cc1545504"
+  },
+  "oct27-application-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-application-frozen-validation.json": {
+    "bytes": 2682,
+    "sha256": "c8ca3ccf251d812f2e2190ce9b3f5725bef413b5ae5eb1bab27aef179f1a5376"
+  },
+  "oct27-application-publication.json": {
+    "bytes": 976,
+    "sha256": "6b8870b8b1250ee87e353a1f9720a070e154c2176b6a244f64910c50aac20d48"
+  },
+  "oct27-application-repaired-frozen-hosted.txt": {
+    "bytes": 71328,
+    "sha256": "e11ecd7f2562695893d79e5298ee2ef504b7b65fc9b81adeaa5720120b70153a"
+  },
+  "oct27-application-repaired-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-application-repaired-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-application-repaired-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "365fec050fd7b117588fa83d0f90915772363f75d6f6f5164b9458b45890fcca"
+  },
+  "oct27-application-repaired-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-application-repaired-frozen-validation.json": {
+    "bytes": 2681,
+    "sha256": "0763aa25b5eb2767c1e57b46ca5c7165074673e16fe5f3725d4046e09e83dd81"
+  },
+  "oct27-application-repaired-kernel.txt": {
+    "bytes": 9532,
+    "sha256": "cd8e3375910059aa0a7ef3457c81785a9c985b1cf91ee1b8cd7d03393faff7a2"
+  },
+  "oct27-apply-step-isolated.txt": {
+    "bytes": 2826,
+    "sha256": "f98cf45676b681b8cf5cc32747f2d53136aeb9b018285cf752daf82a4fae22b6"
+  },
+  "oct27-apply-step-reviewed.txt": {
+    "bytes": 2826,
+    "sha256": "baca89518e4a6624dfa5ba5bdd89bbd10c87546c428330684c8ebb2aecbfc610"
+  },
+  "oct27-external-wiring-channel.txt": {
+    "bytes": 22430,
+    "sha256": "dc0495a553466b90137c2b024bf2c54e049c2e301b58ab195784e4444cce4191"
+  },
+  "oct27-external-wiring-first.txt": {
+    "bytes": 22204,
+    "sha256": "cb676c79cafa7b4a37a8443531399d9158019557fe88b99c83694d4e01393532"
+  },
+  "oct27-final-component-discovery.json": {
+    "bytes": 250,
+    "sha256": "ad43a1f7c925b7c1c8a0aa486aef97387c487c162974739dfa0528bff235d225"
+  },
+  "oct27-final-component-frozen-hosted.txt": {
+    "bytes": 77761,
+    "sha256": "3ffb3a2c4eebe26becd5af7c3805b735c240e640311139c4a3db4a9b289d314f"
+  },
+  "oct27-final-component-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-final-component-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-final-component-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "152bb59922c10289854c8f26502e0b962bfa23050f8145500923b9a75894c3cb"
+  },
+  "oct27-final-component-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-final-component-frozen-validation.json": {
+    "bytes": 2291,
+    "sha256": "0ce2587e6ded4d8e8dc2707a3b4ca579693daa8d1dd6de570299c3d894b1f2e4"
+  },
+  "oct27-final-component-publication.json": {
+    "bytes": 976,
+    "sha256": "02e84f05d21e962aa5f086b6e962d44bab36c6e4f0cab6bbc02e59ebf35dacef"
+  },
+  "oct27-final-residual-inventory.json": {
+    "bytes": 180,
+    "sha256": "0e56b2a62a5a7c1e6eda2c8a8f7579ef8206925a008c172a5d3c0143ae4e6a24"
+  },
+  "oct27-fixture-residue-causal.txt": {
+    "bytes": 30799,
+    "sha256": "4df0ebbb28a39c4f543017712a72b71b494120f3567bacf90319d401bd932c6c"
+  },
+  "oct27-lifecycle-application-kernel.txt": {
+    "bytes": 9532,
+    "sha256": "b7e36788ea3a23f4430d4a17ef87f79effd055bcc8d78a0e16bd7962a1ca1f7e"
+  },
+  "oct27-lifecycle-causal.txt": {
+    "bytes": 7285,
+    "sha256": "01413a50213d4d7ed9e5047d69682472c2ba5ba22d1d29b5b90c8f1acffbc75b"
+  },
+  "oct27-lifecycle-diagnostic-kernel.txt": {
+    "bytes": 1484,
+    "sha256": "06f75d9c313e6b35c5ce5d8b89764b9954485b2331db46be5c49e620b4f6b897"
+  },
+  "oct27-lifecycle-discovery.json": {
+    "bytes": 250,
+    "sha256": "6829849f458ef8066cbf2326fd5f8d7e02375cd28afe6c1ffa5776140c2f6922"
+  },
+  "oct27-lifecycle-frozen-hosted.txt": {
+    "bytes": 75034,
+    "sha256": "2647ad474ea8c61132bad7cb59c4cbda0e5e96a195c65f4375d3bb7cd7acfca1"
+  },
+  "oct27-lifecycle-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-lifecycle-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-lifecycle-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "d0e4e69adf385faeba209c504e35425a66aa722c75fb0d30afa6239b764313f0"
+  },
+  "oct27-lifecycle-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-lifecycle-frozen-validation.json": {
+    "bytes": 2780,
+    "sha256": "48ef6ce79b9f30f2bdaaae2b36e8e3ee2425f3dde470e7057211ab73110ccf9c"
+  },
+  "oct27-lifecycle-publication.json": {
+    "bytes": 976,
+    "sha256": "4df00a97d22f89ccb9e0cacc0f4f7de407d30d26b860f5f4111f42910fbd69ba"
+  },
+  "oct27-observer-frozen-hosted.txt": {
+    "bytes": 65123,
+    "sha256": "123af689bf095042275d051e223c865fd00d074f35a12d65c587e8658846cc12"
+  },
+  "oct27-observer-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-observer-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-observer-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "8135b04daf962b77524b06e8c2b5e0435781ddfde39593b1b018be6813dcb3b8"
+  },
+  "oct27-observer-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-observer-frozen-validation.json": {
+    "bytes": 4178,
+    "sha256": "fa4a9d556a1bb5341855cfc1dfca3f7f4a2881104ec5fe8d5f98ae50bdcfba4f"
+  },
+  "oct27-observer-publication.json": {
+    "bytes": 976,
+    "sha256": "833d79d132d2987cdce7dda0f783262c52b289c2b3569720a762be7d833e4f97"
+  },
+  "oct27-process-residue-focused-repair.txt": {
+    "bytes": 700,
+    "sha256": "1a5f6aefdd353e66bd20da31b4a6acef8ffd9192c944c209300e6b6b40e77232"
+  },
+  "oct27-process-residue-focused.txt": {
+    "bytes": 1201,
+    "sha256": "f5e9388a6df7357a3fb0db4c16ea3c605d93b310c38889072557182acdc120e0"
+  },
+  "oct27-runtime-frozen-kernel-clone.txt": {
+    "bytes": 1484,
+    "sha256": "29269b6051241d109e38824423a213ef781d06293c4f2f29c0995d311ded4b5d"
+  },
+  "oct27-runtime-frozen-kernel.txt": {
+    "bytes": 738,
+    "sha256": "a7c227e13c35197afbea167b48264d44087cb6f4425196428a6c3c31a8ad6e09"
+  },
+  "oct27-runtime-frozen-related.txt": {
+    "bytes": 19100,
+    "sha256": "8170811343bed5136442d7b311bd3e2f50aae3fd150dbea8fcd314a1388e6563"
+  },
+  "oct27-runtime-publication.json": {
+    "bytes": 976,
+    "sha256": "4c26cc641928c323a64329b840dfa14929a7df0ad32072bfab85d95dd36b3af7"
+  },
+  "oct27-runtime-repaired-frozen-hosted.txt": {
+    "bytes": 59679,
+    "sha256": "400fe895283d2b2052a91664d5caa62a0529e31067539ee7f5681e68c6ce23ee"
+  },
+  "oct27-runtime-repaired-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-runtime-repaired-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-runtime-repaired-frozen-kernel-serial.txt": {
+    "bytes": 1484,
+    "sha256": "62c4fd3cc9158cd1817add21254589edf846dfe1a3cb958ba4faae16fd191248"
+  },
+  "oct27-runtime-repaired-frozen-kernel.txt": {
+    "bytes": 1655,
+    "sha256": "904ac082967de16250eb93a91da77536dee60eda15cce7d5f7f405e7e895150d"
+  },
+  "oct27-runtime-repaired-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "2616c1f8a1f0a5502d4e158cc749e8bd0ffb6387241d30e2081607eba0f4a940"
+  },
+  "oct27-runtime-repaired-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-runtime-repaired-frozen-validation.json": {
+    "bytes": 3323,
+    "sha256": "d4d5862d5882e2d37028d2aac7c049d1a0529c19633783fdf92c1ab2422b33d2"
+  },
+  "oct27-runtime-wiring-first.txt": {
+    "bytes": 29743,
+    "sha256": "abb972d712271443c793d079c9e4c4ae33a7b0779647668443584f1d6dcd0f6a"
+  },
+  "oct27-runtime-wiring-focused-repair.txt": {
+    "bytes": 26376,
+    "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
+  },
+  "source-and-status.json": {
+    "bytes": 2651,
+    "sha256": "2a096897a5b009dcf8e909b34203051561471ca0cefd393357b992f01df48532"
+  }
+}
