@@ -30,7 +30,7 @@ def fixture():
     value.service=Mock(number=11);value.generation_dir=Mock(number=12)
     value.actors={role:Mock(number=20+index) for index,role in enumerate(observer._ROLES)}
     value.generation='c'*64;value.invocation='d'*32;value.service_invocation='e'*32
-    value.closed=False;value.failed=False;value.creation_acknowledged=True;value.work_acknowledged=True
+    value.closed=False;value.failed=False;value.descriptors_closed_successfully=False;value.creation_acknowledged=True;value.work_acknowledged=True
     value.aggregate=None;value.proof=None
     return value
 
@@ -65,6 +65,7 @@ class HostedObserverTests(unittest.TestCase):
         value=fixture();value.actors['worker'].close.side_effect=OSError('synthetic')
         with self.assertRaises(boot.BootstrapCleanupError):value._close_descriptors()
         self.assertTrue(value.closed and value.failed)
+        self.assertFalse(value.descriptors_closed_successfully)
         value.root.close.assert_called_once();value.service.close.assert_called_once()
         for item in value.controls.values():item.close.assert_called_once()
 
@@ -141,7 +142,7 @@ class HostedObserverTests(unittest.TestCase):
 
     def test_copied_or_unowned_proof_cannot_release_identity(self):
         value=fixture();proof=observer.DrainProof('c'*64,'a'*40,'b'*40,UNIT,900,900,{},False,value,observer._TOKEN)
-        value.proof=proof;value.closed=True
+        value.proof=proof;value.closed=True;value.descriptors_closed_successfully=True
         observer.require_drain_proof(proof,value.account)
         for selected in (replace(proof),replace(proof,uid=901),replace(proof,_token=object()),{}):
             with self.subTest(selected=type(selected)),self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(selected,value.account)

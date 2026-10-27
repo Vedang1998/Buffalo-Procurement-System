@@ -10,6 +10,37 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 dormant lifecycle fault driver — NON-GREEN
+
+Latest verified published material: `d1c416d1afe4192f56f1369b158ea4b4533d8d65`,
+tree `8f932530bb08a72859a5c543bd1fff770048ec4b`. Frozen402 hosted/88 related/
+10 startup/18 imports passed; inert activation78. The repaired application kernel
+component passed three cases again:81,829,520 sealed regular bytes,51 mapped ELFs,
+124 current application files and680 original-wheel files. Exact remote identities
+were freshly fetched after an ordinary branch-only push; protected refs unchanged.
+
+This delta adds the missing dormant executable lifecycle driver using the same
+account, launcher, observer and cleanup paths. Fixed cases are normal, actual
+operator SIGINT deferred through cleanup, manager SIGKILL after verified SIGSTOP
+and actual ACK, ACK EOF, ACK deadline expiry, and partial provisioning after the
+acknowledged locked/no-sudo account stage. The timeout case exercises the existing
+20-second namespace deadline, not systemd's separate120-second startup timeout.
+No environment/CLI/caller-PASS switch activates native privilege. Every native
+signal targets only the exact source/generation/invocation/retained-actor binding.
+Unacknowledged/ambiguous cases retain the journal and identity; a successful
+negative assertion never marks quarantine as cleanup or resource acceptance.
+
+Internal review caught an evidence defect: terminal observer state did not prove
+all descriptor closures succeeded. That success is now tracked separately and
+required for drain proof; failing-close regression cannot report closure PASS.
+424 hosted tests passed before freeze, including22 new lifecycle tests. Real
+unprivileged pipe HOLD/DROP and deferred SIGINT components execute; privileged
+commands remain simulated. Discovery floor becomes1951 across108 modules.
+Actual normal/cancel/manager-kill/timeout/partial-setup host results remain NOT_RUN
+pending combined Claude review and reviewed activation. Full supported suite is
+still required; no unchanged native pg_dump failure or GitHub unshare failure was
+repeated. Final evidence/re-review ledger follows at the frozen checkpoint.
+
 ### 2026-10-27 application kernel component and cancellation repair
 
 Frozen `afd6ecad4c54490d99804c23f16b53913772fdc9`, tree

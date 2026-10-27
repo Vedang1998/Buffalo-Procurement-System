@@ -218,7 +218,7 @@ def verify_postdrop_access(root, unit):
             raise BootstrapCleanupError('bootstrap_access_cleanup_failed') from errors[0]
 
 
-def _collect_native_client(argv, *, cwd, observer=None):
+def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None):
     """Bounded direct-child ownership; stderr is never included in reports."""
     process = None
     try:
@@ -254,10 +254,15 @@ def _collect_native_client(argv, *, cwd, observer=None):
                             _require(_PREFIX+json.dumps(frame,sort_keys=True,separators=(',',':')).encode()==line,
                                      'observer_frame_schema_refused')
                             acknowledgment=observer.bind_ready(frame)
-                            _require(len(acknowledgment)<=256 and os.write(process.stdin.fileno(),acknowledgment)==len(acknowledgment),
-                                     'observer_acknowledgment_failed')
-                            process.stdin.close()
-                            observer.acknowledge_sent();observer_acknowledged=True
+                            mode='SEND' if lifecycle is None else lifecycle.before_ack(observer,frame)
+                            _require(mode in ('SEND','HOLD','DROP'),'lifecycle_ack_mode_refused')
+                            if mode=='SEND':
+                                _require(len(acknowledgment)<=256 and os.write(process.stdin.fileno(),acknowledgment)==len(acknowledgment),
+                                         'observer_acknowledgment_failed')
+                                process.stdin.close();observer.acknowledge_sent()
+                                if lifecycle is not None:lifecycle.after_ack(observer)
+                            elif mode=='DROP':process.stdin.close()
+                            observer_acknowledged=True
                             output[stream]=bytearray(tail)
         remaining = deadline - time.monotonic()
         _require(remaining > 0, 'bootstrap_client_timeout')
@@ -323,7 +328,7 @@ def _decode_report(raw, plan):
 
 
 @_resource_operation
-def run_native_plan(plan, *, source_root=None, account=None):
+def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
     """Dormant execution implementation: no CLI/workflow path calls this yet.
 
     Independent review must precede its later activation. The source-bound
@@ -350,20 +355,27 @@ def run_native_plan(plan, *, source_root=None, account=None):
              and plan.root==selected.root+'/repo' and plan.unit==selected.unit
              and type(source_root) is str and source_root!=plan.root)
     binding = bind_hosted_source(Path(source_root), repository=repository, event=event, ref=ref, sha=commit)
+    if lifecycle is not None:
+        from hosted_synthetic_lifecycle import require_case
+        require_case(lifecycle,account.identity,commit)
+        _require(lifecycle.binding==binding)
     before = inspect_native_prerequisites()
+    if lifecycle is not None:lifecycle.native_observed(before)
     from hosted_synthetic_observer import ExternalObserver
     observer=None;error=None;cleanup_errors=[];code=raw=report=None
     try:
         _require(account.service_attempted is False and account.service_acknowledged is False,
                  'native_attempt_cannot_be_retried')
         observer=ExternalObserver.create(account,binding)
+        if lifecycle is not None:lifecycle.observer_created(observer)
         account.journal.record('service_start_attempt')
         account.service_attempted=True
-        code,raw=_collect_native_client(plan.argv,cwd=source_root,observer=observer)
+        code,raw=_collect_native_client(plan.argv,cwd=source_root,observer=observer,**({} if lifecycle is None else {'lifecycle':lifecycle}))
         _require(code in (0,1),'bootstrap_client_refused')
         report=_decode_report(raw,plan)
         _require(report.get('tree')==binding.tree and report.get('source_files')==dict(binding.files),
                  'bootstrap_report_source_refused')
+        if lifecycle is not None:lifecycle.report_received(report)
         observation=report.get('namespace_attempt')
         namespace_clean=(report.get('reason')=='INCOMPLETE_PREFLIGHT' and type(observation) is dict
                          and observation.get('cleanup_complete') is True and observation.get('reason')=='INCOMPLETE_PREFLIGHT'

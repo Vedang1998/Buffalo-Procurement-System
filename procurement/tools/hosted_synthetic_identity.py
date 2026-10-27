@@ -217,8 +217,11 @@ class AccountLease:
     def __init__(self):raise boot.BootstrapRefusal('use_explicit_account_provisioning')
 
     @classmethod
-    def create(cls, identity, source, commit):
+    def create(cls, identity, source, commit, *, lifecycle=None):
         validate(identity)
+        if lifecycle is not None:
+            from hosted_synthetic_lifecycle import require_case
+            require_case(lifecycle,identity,commit)
         boot._require(os.getresuid()==(identity.operator_uid,)*3 and os.getresgid()==(identity.operator_gid,)*3)
         platform=inspect_account_platform();inspect_account(identity,present=False)
         boot._require(not identity_processes(identity) and not os.path.lexists(identity.root)
@@ -234,6 +237,7 @@ class AccountLease:
         lease.drain_proof=None
         lease.journal=Quarantine.create(identity,commit)
         try:
+            if lifecycle is not None:lifecycle.account_created(lease)
             for index,command in enumerate(provisioning_commands(identity,source,commit)):
                 lease.journal.record(f'provision_attempt_{index}')
                 code,output=boot._collect_native_client(command,cwd=source)
@@ -255,6 +259,7 @@ class AccountLease:
                 if index>=5:lease.verify_root()
                 lease.journal.record(f'provision_ack_{index}',
                     {'staging_identity':list(lease.root_identity)} if index>=4 else None)
+                if lifecycle is not None:lifecycle.provisioned(index)
             return lease
         except BaseException as error:
             # A timed-out account tool may have committed a database mutation.
@@ -318,7 +323,7 @@ class AccountLease:
             raise boot.BootstrapCleanupError('dedicated_cleanup_unverified_identity_retained') from error
 
 
-def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit):
+def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None):
     """Complete dormant wiring; CLI/workflow review gate never calls this."""
     from hosted_synthetic_source import bind_hosted_source, _resource_operation
     from hosted_synthetic_capability import _require_clean_supervisor
@@ -326,14 +331,19 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
     def execute():
         _require_clean_supervisor()
         binding=bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit)
-        lease=AccountLease.create(identity,source,commit)
+        if lifecycle is not None:
+            from hosted_synthetic_lifecycle import require_case
+            require_case(lifecycle,identity,commit)
+            boot._require(lifecycle.binding==binding)
+        options={} if lifecycle is None else {'lifecycle':lifecycle}
+        lease=AccountLease.create(identity,source,commit,**options)
         body_error=None
         try:
             initial=os.stat('/proc/self/ns/user')
             plan=boot.plan_native_bootstrap(root=identity.root+'/repo',python=python,repository=repository,
                 event=event,ref=ref,commit=commit,uid=identity.uid,gid=identity.gid,unit=identity.unit,
                 initial_user_namespace=(initial.st_dev,initial.st_ino))
-            result=boot.run_native_plan(plan,source_root=source,account=lease)
+            result=boot.run_native_plan(plan,source_root=source,account=lease,**options)
             boot._require(result['report']['tree']==binding.tree)
         except BaseException as error:
             body_error=error

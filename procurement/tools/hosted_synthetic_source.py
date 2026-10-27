@@ -47,6 +47,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_worker.py",
     "procurement/tools/hosted_synthetic_observer.py",
     "procurement/tools/hosted_synthetic_quarantine.py",
+    "procurement/tools/hosted_synthetic_lifecycle.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

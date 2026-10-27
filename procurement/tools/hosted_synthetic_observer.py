@@ -211,7 +211,7 @@ class ExternalObserver:
         value=object.__new__(cls);value._owner=value;value.account=account;value.binding=binding
         value.unit=unit;value.slice_unit=slice_unit;value.path=path;value.root=None;value.controls={}
         value.service=None;value.generation_dir=None;value.actors={};value.generation=None
-        value.closed=False;value.failed=False;value.creation_acknowledged=False;value.work_acknowledged=False
+        value.closed=False;value.failed=False;value.descriptors_closed_successfully=False;value.creation_acknowledged=False;value.work_acknowledged=False
         value.service_invocation=None;value.aggregate=None;value.proof=None
         # Attribution must already be durable before the first native mutation.
         account.journal.record('accounting_create_attempt')
@@ -351,6 +351,7 @@ class ExternalObserver:
                 try:descriptor.close()
                 except BaseException as error:errors.append(error)
         self.closed=True
+        self.descriptors_closed_successfully=not errors
         if errors:
             self.failed=True
             raise boot.BootstrapCleanupError('external_observer_descriptor_cleanup_failed') from errors[0]
@@ -384,6 +385,7 @@ def require_drain_proof(proof, account):
     boot._require(type(proof) is DrainProof and proof._token is _TOKEN and type(proof._owner) is ExternalObserver
                   and proof._owner._owner is proof._owner and proof._owner.account is account
                   and proof._owner.proof is proof and proof._owner.closed and not proof._owner.failed
+                  and proof._owner.descriptors_closed_successfully is True
                   and (proof.uid,proof.gid,proof.unit)==(account.identity.uid,account.identity.gid,account.identity.unit),
                   'external_drain_proof_required')
 

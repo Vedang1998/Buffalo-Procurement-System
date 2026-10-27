@@ -1005,6 +1005,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
     errors = []
     reason = "NAMESPACE_PROOF_REFUSED"
     refusal_location = None
+    external_observer_failure = None
     deadline = time.monotonic() + _TIMEOUT
     try:
         try:
@@ -1058,8 +1059,14 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
             if external_unit is not None:
                 from hosted_synthetic_observer import await_external_observer
                 _require(cgroup is not None and runtime is not None)
-                await_external_observer(unit=external_unit,generation=generation,binding=source_binding,lease=cgroup,
-                    guardian=process,guardian_start=process_start,outer=retained['outer'],deadline=deadline)
+                try:
+                    await_external_observer(unit=external_unit,generation=generation,binding=source_binding,lease=cgroup,
+                        guardian=process,guardian_start=process_start,outer=retained['outer'],deadline=deadline)
+                except Exception as error:
+                    from hosted_synthetic_launcher import LauncherRefusal
+                    if type(error) is LauncherRefusal and str(error) in ('external_observer_timeout','external_observer_ack_refused'):
+                        external_observer_failure=str(error)
+                    raise
             _send(gate_write, generation, "CLOSE", deadline)
             _receive(status_read, generation, "CLEAN", deadline)
             _wait(process, deadline)
@@ -1155,7 +1162,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
     if errors or (process > 1 and not reaped):
         reason = "CLEANUP_FAILED"
     return dict(reason=reason, cleanup_complete=not errors and (process < 0 or reaped),
-                refusal_location=refusal_location, cgroup_evidence=cgroup_evidence,
+                refusal_location=refusal_location, external_observer_failure=external_observer_failure, cgroup_evidence=cgroup_evidence,
                 resource_cleanup=resource_cleanup,
                 cgroup='COMPONENT_OBSERVATION_ONLY' if cgroup_evidence is not None else 'NOT_RUN',
                 runtime="HOST_RUNTIME_UNSEALED",
