@@ -466,6 +466,25 @@ class HostedCgroupLeaseTests(unittest.TestCase):
             self.assertEqual(lease.enroll_stopped_init(**args)['members'], [124])
         send.assert_not_called()
 
+    def test_shared_readback_observes_kernel_identity_without_migration(self):
+        lease,_,args=self.enrollment()
+        with patch.object(lease,'_write') as write,patch.object(signal,'pidfd_send_signal') as send:
+            evidence=cg.observe_stopped_init_identity(**args)
+        self.assertEqual(evidence['scope'],'STOPPED_NAMESPACE_READBACK_ONLY')
+        self.assertFalse(evidence['execution_authority'])
+        self.assertEqual(evidence['init']['state'],'T')
+        self.assertNotEqual(evidence['init_namespaces']['pid'],evidence['supervisor_namespaces']['pid'])
+        write.assert_not_called();send.assert_not_called()
+
+    def test_fresh_supervisor_identity_failure_precedes_readback_and_migration(self):
+        from hosted_synthetic_launcher import LauncherRefusal
+        lease,_,args=self.enrollment()
+        with patch('hosted_synthetic_launcher.inspect_host_identity',side_effect=LauncherRefusal('identity')), \
+             patch.object(ns,'_namespaces') as namespaces,patch.object(lease,'_write') as write, \
+             self.assertRaises(LauncherRefusal):
+            lease.enroll_stopped_init(**args)
+        namespaces.assert_not_called();write.assert_not_called()
+
     def test_namespace_nspid_and_reaping_refusals_precede_migration(self):
         for failure in ('subreaper','namespace','namespace_denied','nspid','guardian_threads'):
             lease,_,args=self.enrollment()

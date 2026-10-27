@@ -168,6 +168,51 @@ def _read_at(directory, name):
         fd.close()
 
 
+def observe_stopped_init_identity(*,pid,pidfd,start,guardian,guardian_pidfd,guardian_start,supervisor):
+    """Actual S-side proc/pidfd readback, shared with the explicit regression.
+
+    No cgroup write, ACK, resume or execution authority. Parent-user-namespace
+    ownership can permit these reads despite zero capabilities in S's own
+    namespace; do not substitute a guardian claim if kernel readback refuses.
+    """
+    _require(all(type(value) is int and value>1 for value in (pid,guardian,supervisor))
+        and len({pid,guardian,supervisor})==3 and supervisor==os.getpid()
+        and type(start) is int and start>0 and type(guardian_start) is int and guardian_start>0)
+    from hosted_synthetic_launcher import inspect_host_identity
+    supervisor_identity=inspect_host_identity()
+    _require_unreaped_lifecycle()
+    for selected, number in ((pidfd, pid), (guardian_pidfd, guardian)):
+        selected.verify()
+        _require(os.readlink(f'/proc/self/fd/{selected.number}') == 'anon_inode:[pidfd]'
+                 and re.findall(rb'(?m)^Pid:\s*([0-9]+)$', ns._read(f'/proc/self/fdinfo/{selected.number}', 4096))
+                 == [str(number).encode()] and not backend._browser_pidfd_is_terminal(selected.number))
+    outer = ns._process(guardian)
+    _require(outer['parent'] == supervisor and outer['group'] == outer['session'] == guardian
+             and outer['start'] == guardian_start and outer['state'] == 'T')
+    observed = ns._process(pid)
+    _require(observed['state'] == 'T' and observed['start'] == start
+             and observed['parent'] == guardian and observed['group'] == observed['session'] == guardian)
+    _require(sorted(os.listdir(f'/proc/{guardian}/task')) == [str(guardian)])
+    _require(ns.parse_status(ns._read(f'/proc/{guardian}/status', 16384))['nspid'] == [guardian]
+             and ns.parse_status(ns._read(f'/proc/{pid}/status', 16384))['nspid'] == [pid, 1])
+    # Refuse if the host cannot independently read these identities;
+    # do not replace them with the guardian's assertion.
+    namespaces = ns._namespaces(str(pid))
+    guardian_namespaces = ns._namespaces(str(guardian))
+    supervisor_namespaces = ns._namespaces('self')
+    _require(namespaces['user'] == guardian_namespaces['user'] != supervisor_namespaces['user']
+             and namespaces['net'] == guardian_namespaces['net'] != supervisor_namespaces['net']
+             and namespaces['mnt'] != guardian_namespaces['mnt']
+             and guardian_namespaces['pid'] == supervisor_namespaces['pid'] != namespaces['pid']
+             and list(ns._identity(os.stat(f'/proc/{guardian}/ns/pid_for_children'))) == namespaces['pid'])
+    _require(sorted(os.listdir(f'/proc/{pid}/task')) == [str(pid)]
+             and ns._read(f'/proc/{pid}/task/{pid}/children', 4096) == b'')
+    return {'init':observed,'guardian':outer,'init_namespaces':namespaces,
+        'guardian_namespaces':guardian_namespaces,'supervisor_namespaces':supervisor_namespaces,
+        'supervisor_identity':supervisor_identity,'scope':'STOPPED_NAMESPACE_READBACK_ONLY',
+        'execution_authority':False}
+
+
 class CgroupLease:
     """No public constructor: creation requires actual delegated kernel files."""
 
@@ -333,33 +378,8 @@ class CgroupLease:
         self.attest(())
 
         def stopped():
-            _require_unreaped_lifecycle()
-            for selected, number in ((pidfd, pid), (guardian_pidfd, guardian)):
-                selected.verify()
-                _require(os.readlink(f'/proc/self/fd/{selected.number}') == 'anon_inode:[pidfd]'
-                         and re.findall(rb'(?m)^Pid:\s*([0-9]+)$', ns._read(f'/proc/self/fdinfo/{selected.number}', 4096))
-                         == [str(number).encode()] and not backend._browser_pidfd_is_terminal(selected.number))
-            outer = ns._process(guardian)
-            _require(outer['parent'] == supervisor and outer['group'] == outer['session'] == guardian
-                     and outer['start'] == guardian_start and outer['state'] == 'T')
-            observed = ns._process(pid)
-            _require(observed['state'] == 'T' and observed['start'] == start
-                     and observed['parent'] == guardian and observed['group'] == observed['session'] == guardian)
-            _require(sorted(os.listdir(f'/proc/{guardian}/task')) == [str(guardian)])
-            _require(ns.parse_status(ns._read(f'/proc/{guardian}/status', 16384))['nspid'] == [guardian]
-                     and ns.parse_status(ns._read(f'/proc/{pid}/status', 16384))['nspid'] == [pid, 1])
-            # Refuse if the host cannot independently read these identities;
-            # do not replace them with the guardian's assertion.
-            namespaces = ns._namespaces(str(pid))
-            guardian_namespaces = ns._namespaces(str(guardian))
-            supervisor_namespaces = ns._namespaces('self')
-            _require(namespaces['user'] == guardian_namespaces['user'] != supervisor_namespaces['user']
-                     and namespaces['net'] == guardian_namespaces['net'] != supervisor_namespaces['net']
-                     and namespaces['mnt'] != guardian_namespaces['mnt']
-                     and guardian_namespaces['pid'] == supervisor_namespaces['pid'] != namespaces['pid']
-                     and list(ns._identity(os.stat(f'/proc/{guardian}/ns/pid_for_children'))) == namespaces['pid'])
-            _require(sorted(os.listdir(f'/proc/{pid}/task')) == [str(pid)]
-                     and ns._read(f'/proc/{pid}/task/{pid}/children', 4096) == b'')
+            observe_stopped_init_identity(pid=pid,pidfd=pidfd,start=start,guardian=guardian,
+                guardian_pidfd=guardian_pidfd,guardian_start=guardian_start,supervisor=supervisor)
             for outside in (guardian, supervisor):
                 path = backend.parse_browser_cgroup_path(ns._read(f'/proc/{outside}/cgroup', 4096))
                 _require(path != self.path and not path.startswith(self.path + '/'))

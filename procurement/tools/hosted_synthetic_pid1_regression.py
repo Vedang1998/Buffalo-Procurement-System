@@ -7,6 +7,7 @@ No privileged command, account provisioning, service or credential is involved.
 import ctypes
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -19,6 +20,7 @@ import hosted_synthetic_namespace as ns
 ENV = {'PATH':'/usr/bin:/bin','LC_ALL':'C.UTF-8'}
 CASES = ('success','missing_stop','missing_guardian_stop','missing_ack','wrong_ack','wrong_generation',
          'guardian_death','guardian_death_during_enroll','cancel','early_init_exit','init_exit_during_enroll')
+READBACK_CASES=('readback_reexec','readback_fork_only')
 GENERATION = '1'*64
 
 
@@ -28,16 +30,38 @@ def _guardian(args):
     gate=ns._Descriptor.capture(int(gate_number));status=ns._Descriptor.capture(int(status_number))
     marker=int(marker_number);deadline=float(deadline);supervisor=int(supervisor)
     os.dup2(marker,1);os.close(marker);marker=1
+    # Bind death/parentage before the deliberate no-exec namespace transition.
+    # Defer dumpable0 until after self-mapping: this deliberate U0-mm negative
+    # would otherwise lose access to its own map files before reaching readback.
+    ns.backend._browser_prctl(1,int(signal.SIGKILL))
+    assert os.getppid()==supervisor
+    if case=='readback_fork_only':
+        # Deliberate negative: preserve U0 mm ownership across U1 creation.
+        # No credential/runtime payload runs. The final nondumpable readback
+        # must refuse despite the same namespace-owner effective UID.
+        uid,gid=os.geteuid(),os.getegid()
+        assert uid>0 and gid>0 and os.getgroups()==[]
+        os.unshare(os.CLONE_NEWUSER|os.CLONE_NEWNS|os.CLONE_NEWPID|os.CLONE_NEWNET)
+        for name,raw in (('uid_map',f'0 {uid} 1\n'.encode()),('setgroups',b'deny\n'),('gid_map',f'0 {gid} 1\n'.encode())):
+            fd=os.open('/proc/self/'+name,os.O_WRONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
+            try:assert os.write(fd,raw)==len(raw)
+            finally:os.close(fd)
     # unshare(1) has exec'd this interpreter in its own mapped user namespace.
     # G remains in S's PID namespace; G's next fork is the real namespace PID 1.
     ns.backend._block_browser_projection_signals()
     ns._hardening(supervisor)
+    if case in READBACK_CASES:
+        assert ns.backend._browser_libc().prctl(3,0,0,0,0)==0
+        os.write(marker,b'D')
     os.setsid()
     parent=ns._pidfd(supervisor);own=ns._pidfd(os.getpid())
     inner_read,inner_write=ns._pipe();result_read,result_write=ns._pipe()
     original_init=ns._init
     def selected_init(*values):
         assert values[-1] is True and (os.getpid(),os.getppid())==(1,0)
+        if case in READBACK_CASES:
+            assert ns.backend._browser_libc().prctl(3,0,0,0,0)==0
+            os.write(marker,b'd')
         os.write(marker,b'I')
         # A marker after the actual PROBE boundary substitutes only downstream
         # private-proc/projection work, not namespace creation or stop/wait.
@@ -83,7 +107,10 @@ def _guardian(args):
 
 
 def _case(case):
-    assert case in CASES
+    assert case in (*CASES,*READBACK_CASES)
+    if case in READBACK_CASES:
+        from hosted_synthetic_launcher import inspect_host_identity
+        inspect_host_identity()
     def fds():
         result=set()
         for name in os.listdir('/proc/self/fd'):
@@ -92,6 +119,7 @@ def _case(case):
             result.add(int(name))
         return result
     original_fds=fds()
+    previous_mask=ns.backend._block_browser_projection_signals() if case in READBACK_CASES else None
     ns.backend._browser_prctl(36,1)  # S is the sole adopter/reaper.
     deadline=time.monotonic()+3.0
     gr,gw=ns._pipe();sr,sw=ns._pipe()
@@ -99,9 +127,8 @@ def _case(case):
     descriptors=[gr,gw,sr,sw];owners=[];process=None;guardian_fd=None
     reaped=False;writes=0;enrolled=None;refused=False;cleanup=False;markers=b''
     fault_complete=False;cancellation_observed=False
-    command=['/usr/bin/unshare','--user','--map-root-user','--mount','--pid','--',
-             sys.executable,'-I','-S','-B',__file__,'--guardian',case,str(gr.number),str(sw.number),
-             str(mw),str(deadline),str(os.getpid())]
+    readback=None;fork_only_refusal=False
+    command=_guardian_command(case,gr.number,sw.number,mw,deadline,os.getpid())
     try:
         process=subprocess.Popen(command,env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL,pass_fds=(gr.number,sw.number,mw))
@@ -111,7 +138,7 @@ def _case(case):
         class SimulatedLease:
             path='/regression/buffalo-'+GENERATION
             def enroll_stopped_init(self,**values):
-                nonlocal writes,enrolled,markers,fault_complete
+                nonlocal writes,enrolled,markers,fault_complete,readback,fork_only_refusal
                 enrolled=values['pid']
                 assert ns._process(guardian)['state']=='T'
                 assert ns._process(enrolled)['state']=='T'
@@ -119,7 +146,16 @@ def _case(case):
                 assert ns.parse_status(ns._read(f'/proc/{enrolled}/status',16384))['nspid']==[enrolled,1]
                 try:markers+=os.read(mr,16)
                 except BlockingIOError:pass
-                assert markers==b'I'
+                assert markers==(b'DdI' if case in READBACK_CASES else b'I')
+                if case in READBACK_CASES:
+                    from hosted_synthetic_cgroup import observe_stopped_init_identity
+                    try:readback=observe_stopped_init_identity(**values)
+                    except ns.NamespaceProofError as error:
+                        if case=='readback_fork_only' and re.fullmatch(r'_namespace_outer_(user|mnt|pid|net):(1|13)',str(error)):
+                            fork_only_refusal=True
+                        else:raise AssertionError('unexpected namespace readback failure') from error
+                        raise
+                    assert case=='readback_reexec', 'fork-only mm unexpectedly readable'
                 if case=='init_exit_during_enroll':
                     signal.pidfd_send_signal(values['pidfd'].number,signal.SIGKILL)
                     until=time.monotonic()+1
@@ -166,8 +202,10 @@ def _case(case):
         except (ns.NamespaceProofError,ns.backend.LocalStagingAcceptanceError,BrokenPipeError):
             refused=True
         finally:ns._send=original_send
-        if case=='success':assert not refused and writes==1
+        if case in ('success','readback_reexec'):assert not refused and writes==1
         else:assert refused
+        if case=='readback_reexec':assert readback is not None and readback['execution_authority'] is False
+        if case=='readback_fork_only':assert fork_only_refusal and writes==0 and readback is None
         if case in ('missing_ack','wrong_ack','wrong_generation','guardian_death_during_enroll','init_exit_during_enroll'):
             assert fault_complete
         if case in ('missing_ack','wrong_ack','wrong_generation'):
@@ -200,7 +238,7 @@ def _case(case):
         for item in [*owners,*descriptors,*([guardian_fd] if guardian_fd is not None else [])]:item.close()
         if mw>=0:os.close(mw)
         markers+=os.read(mr,16);os.close(mr)
-        expected=(b'IP' if case=='success' else
+        expected=(b'DdIP' if case=='readback_reexec' else b'DdI' if case=='readback_fork_only' else b'IP' if case=='success' else
                   b'IF' if case in ('missing_stop','missing_guardian_stop','early_init_exit','guardian_death') else b'I')
         assert markers==expected
         # Some supported procfs configurations omit task/<tid>/children.
@@ -214,37 +252,134 @@ def _case(case):
         assert fds()==original_fds
         # Every owned process has exited and all our descriptors are closed.
         cleanup=True
+        if previous_mask is not None:ns.backend._restore_browser_projection_signals(previous_mask)
     return dict(case=case,result='PASS',real_clone_newpid=True,cgroup_required=True,init_pid1_observed=True,
                 simulated_cgroup_writes=writes,cleanup_complete=cleanup,
-                private_proc_executed=False,provider_calls=0,execution_authority=False)
+                private_proc_executed=False,provider_calls=0,execution_authority=False,
+                **({'namespace_readback':readback,'fork_only_refusal':fork_only_refusal,
+                    'guardian_and_init_dumpable_zero':True} if case in READBACK_CASES else {}))
+
+
+def _guardian_command(case,gate,status,marker,deadline,supervisor):
+    assert case in (*CASES,*READBACK_CASES)
+    child=[sys.executable,'-I','-S','-B',__file__,'--guardian',case,
+           str(gate),str(status),str(marker),str(deadline),str(supervisor)]
+    if case=='readback_fork_only':return child
+    return ['/usr/bin/unshare','--user','--map-root-user','--mount','--pid',
+            *(['--net'] if case=='readback_reexec' else []),'--',*child]
+
+
+def _readback_source():
+    from hosted_synthetic_source import bind_hosted_source,_git,_oid,REPOSITORY,REF
+    root=Path(__file__).resolve().parents[2]
+    return bind_hosted_source(root,repository=REPOSITORY,event='push',ref=REF,
+        sha=_oid(_git(root,'rev-parse','HEAD')))
+
+
+def _case_result(case,result):
+    assert type(result) is dict and result.get('case')==case and result.get('result')=='PASS'
+    assert all(result.get(key) is True for key in ('real_clone_newpid','cgroup_required','init_pid1_observed','cleanup_complete'))
+    assert result.get('private_proc_executed') is False and result.get('execution_authority') is False
+    assert type(result.get('provider_calls')) is int and result['provider_calls']==0
+    if case in READBACK_CASES:
+        assert result.get('guardian_and_init_dumpable_zero') is True
+        assert type(result.get('simulated_cgroup_writes')) is int
+        if case=='readback_reexec':
+            proof=result.get('namespace_readback')
+            assert type(proof) is dict and proof.get('execution_authority') is False
+            assert proof.get('scope')=='STOPPED_NAMESPACE_READBACK_ONLY'
+            assert set(proof)=={'init','guardian','init_namespaces','guardian_namespaces',
+                'supervisor_namespaces','supervisor_identity','scope','execution_authority'}
+            for name in ('init','guardian'):
+                record=proof[name]
+                assert type(record) is dict and set(record)=={'pid','state','parent','group','session','start'}
+                assert record['state']=='T' and all(type(record[key]) is int and record[key]>1
+                    for key in ('pid','parent','group','session'))
+                assert type(record['start']) is int and record['start']>0
+            init,guardian=proof['init'],proof['guardian']
+            assert init['parent']==guardian['pid'] and len({init['pid'],guardian['pid'],guardian['parent']})==3
+            assert init['group']==init['session']==guardian['group']==guardian['session']==guardian['pid']
+            for name in ('init_namespaces','guardian_namespaces','supervisor_namespaces'):
+                record=proof[name]
+                assert type(record) is dict and set(record)=={'user','mnt','pid','net'}
+                assert all(type(value) is list and len(value)==2 and all(type(x) is int and x>0 for x in value)
+                    for value in record.values())
+            i,g,s=(proof[name] for name in ('init_namespaces','guardian_namespaces','supervisor_namespaces'))
+            assert i['user']==g['user']!=s['user'] and i['net']==g['net']!=s['net']
+            assert i['mnt']!=g['mnt'] and i['pid']!=g['pid']==s['pid']
+            host=proof['supervisor_identity']
+            assert type(host) is dict and set(host)=={'uids','gids','groups','capabilities','no_new_privs'}
+            for name in ('uids','gids'):
+                assert type(host[name]) is list and len(host[name])==4
+                assert all(type(x) is int and x>0 for x in host[name]) and len(set(host[name]))==1
+            assert host['groups']==[] and type(host['no_new_privs']) is int and host['no_new_privs']==1
+            assert type(host['capabilities']) is dict and set(host['capabilities'])=={'CapInh','CapPrm','CapEff','CapBnd','CapAmb'}
+            assert all(type(x) is int and x==0 for x in host['capabilities'].values())
+            assert result.get('fork_only_refusal') is False and result['simulated_cgroup_writes']==1
+        else:
+            assert result.get('namespace_readback') is None and result.get('fork_only_refusal') is True
+            assert result['simulated_cgroup_writes']==0
 
 
 def main(args=None):
     args=sys.argv[1:] if args is None else args
     if len(args)==7 and args[0]=='--guardian':return _guardian(args[1:])
-    if args!=['--run-pid1-regressions'] or os.geteuid()==0:return 78
+    readback=args==['--run-nondumpable-readback']
+    if (args!=['--run-pid1-regressions'] and not readback) or os.geteuid()==0:return 78
+    source=None
+    if readback:
+        from hosted_synthetic_launcher import inspect_host_identity,LauncherRefusal
+        from hosted_synthetic_source import HostedSourceError
+        try:inspect_host_identity();source=_readback_source()
+        except (LauncherRefusal,HostedSourceError,OSError):
+            print(json.dumps({'real_pid1_regression':'NOT_RUN','scope':'NON_DUMPABLE_READBACK_ONLY',
+                'reason':'ZERO_CAPABILITY_OR_BOUND_SOURCE_PREREQUISITE_UNAVAILABLE','execution_authority':False}))
+            return 78
     # Single bounded, unprivileged capability check; no retry or workaround.
-    probe=subprocess.run(['/usr/bin/unshare','--user','--map-root-user','--mount','--pid','--fork',
-                          '/usr/bin/true'],env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL,timeout=5)
+    try:
+        probe=subprocess.run(['/usr/bin/unshare','--user','--map-root-user','--mount','--pid',*(['--net'] if readback else []),'--fork',
+                              '/usr/bin/true'],env=ENV,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,timeout=5)
+    except (OSError,subprocess.TimeoutExpired):
+        print(json.dumps({'real_pid1_regression':'FAIL','reason':'CAPABILITY_PROBE_INCOMPLETE',
+            'cleanup':'NOT_PROVEN','execution_authority':False}))
+        return 1
     if probe.returncode:
         print(json.dumps({'real_pid1_regression':'NOT_RUN','reason':'UNPRIVILEGED_NAMESPACE_CAPABILITY_UNAVAILABLE',
                           'probe_returncode':probe.returncode,'execution_authority':False}))
         return 78
     results=[]
-    for case in CASES:
+    for case in (READBACK_CASES if readback else CASES):
         # Fresh S per case isolates subreaper/signal/process state.
         command=[sys.executable,'-I','-S','-B','-c',
                  'import sys,json;sys.path.insert(0,sys.argv[1]);import hosted_synthetic_pid1_regression as r;print(json.dumps(r._case(sys.argv[2]),sort_keys=True))',
                  str(Path(__file__).resolve().parent),case]
-        run=subprocess.run(command,env=ENV,capture_output=True,timeout=10)
+        try:run=subprocess.run(command,env=ENV,capture_output=True,timeout=10)
+        except (OSError,subprocess.TimeoutExpired):
+            print(json.dumps({'real_pid1_regression':'FAIL','case':case,'reason':'CASE_INCOMPLETE',
+                'completed_cases':results,'cleanup':'NOT_PROVEN','execution_authority':False,
+                **({'source_commit':source.commit,'source_tree':source.tree} if readback else {})}))
+            return 1
         if run.returncode:
             print(json.dumps({'real_pid1_regression':'FAIL','case':case,'returncode':run.returncode,
                               'completed_cases':results,'execution_authority':False}))
             return 1
-        result=json.loads(run.stdout);results.append(result)
-    print(json.dumps({'real_pid1_regression':'PASS','scope':'REAL_PID_NAMESPACE_SIMULATED_CGROUP_ONLY',
-                      'cases':results,'execution_authority':False},sort_keys=True))
+        try:result=json.loads(run.stdout);_case_result(case,result)
+        except (ValueError,AssertionError):
+            print(json.dumps({'real_pid1_regression':'FAIL','case':case,'reason':'INVALID_CASE_RESULT',
+                'completed_cases':results,'execution_authority':False}))
+            return 1
+        results.append(result)
+    if readback:
+        try:assert _readback_source()==source
+        except (HostedSourceError,OSError,AssertionError):
+            print(json.dumps({'real_pid1_regression':'FAIL','reason':'SOURCE_CHANGED',
+                'completed_cases':results,'execution_authority':False}))
+            return 1
+    print(json.dumps({'real_pid1_regression':'PASS','scope':('ZERO_HOST_CAPABILITY_READBACK_COMPONENT' if readback else 'REAL_PID_NAMESPACE_SIMULATED_CGROUP_ONLY'),
+                      'cases':results,'execution_authority':False,
+                      **({'source_commit':source.commit,'source_tree':source.tree,'cgroup_migration':'NOT_RUN',
+                          'runtime_closure':'NOT_PROVEN'} if readback else {})},sort_keys=True))
     return 0
 
 

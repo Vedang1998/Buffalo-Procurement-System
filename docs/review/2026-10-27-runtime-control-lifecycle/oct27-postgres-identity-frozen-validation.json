@@ -1,0 +1,97 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "c928fa3a1c3710ad8957e5e499c44e7d42d71879",
+  "tree": "926523ed008142bebb7e88dc22d95a5bede2b977",
+  "base": "5c88122508352c7e31232af2f9ffba40e064bc29",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "84b4de0f28c21a070a1a75ab80b39504bf2d7bd90ed73273a49faeca5fef30db",
+    "docs/CODEX_HANDOFF.md": "9f8031e7d32411659bd478586bc40bb7d6f4b900aaaf3bb70a207ed6d294869c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "838e65da72d32a3a2e0c850dd898a69c2d4bc9ada078cb9759e3cbb1e66a09f4",
+    "docs/review/2026-10-27-runtime-control-lifecycle/cloud-setup-status.json": "2edb287877ce9358dd2aabb5e58c273a7c723d411e10b49d1b4afa4476eefe26",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "e80b38f83575cbf1b08df4af2b88c43cf6df1f5d378bf765fc8adb5e7a096489",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "e6fa83b018e1306412cb244b160e366a4779a60778cbf8655d7e6184ccaa22a2",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-native-core-host-observation.json": "ac9b510a165de2fc2d7208d91f1e07386b69a59d2f45c5f1cf88a56c628751b0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-boundaries.txt": "543762f1819ea9e79c53e443f1ed8c86c74fd453fe8c01949a83e03c81f354a5",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-core-close.txt": "12f3ece46aad3b1592b6bbbc41062257dcae00ca5f518f301537d97351d432c2",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-core-final.txt": "1ad93024fd4d04de1e292fc93b4fae09223f8868a12cf01b2ea8d68a7958848d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-core-registered.txt": "bfd811f49c67bb7d99b603045324f506c7b623dacdcd6f2230ef2571ce4805aa",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-core-signal-repair.txt": "9f7637f8fc73115c7d94b322b6b423ce0ff5b57f034d944e848fa91af65baf43",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-core.txt": "4e758be75c66f05b5b6ffb998c2dd7753c1defb64304116a8c7369a912697516",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-discovery.json": "3e9c0043194822db9baf46880fefdebf744ea15b8d4f4e8b48be389f6c532082",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-final-focused.txt": "daa3e40ee28df69b5525276f3682fd14f57ff6b0fa78b1f5f56b5eb5c965e672",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-first.txt": "2b09c0bc73109d1153158e941074e4dd0a626ad0fb98034e4e7ab12dbb17cae1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-reexec-repair.txt": "f8ce0b95413291ae788845b2773f13f4927456b4f1cf41cb0255c52c90b38bf1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-registered.txt": "9ff55925404fa6d3a747446f98db2a2f1a8b9475a0d83f9c13841eec844080fb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-stdio.txt": "2713a24bd791acf9c318d9475e2e1f774fc50a6a8a5e315d85ea28c774f334f1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-publication.json": "425e9fcd875f487c235ae2981b312cd51d60f9d80a880f311c07d3de7c177964",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-app-price-components.txt": "060d8f093b190e92ecab978998276d08d2fb965c2fd79f6479d2550e31563dec",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-app-recovery-components.txt": "a6d85dc4a3de0a13ddcbf59569cfbc9cad45d98a07a20aa2b89c83313a78dda5",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-hosted.txt": "690cb69f9f84ab7ee8d4bd81ffe6ad8fb11a9a8de83d426f24215d888a5a8b18",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-isolated.txt": "7da451a1cc27da98b9842056e0753e051682c91b341ee0a71927378a54777827",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-related.txt": "58f4e5304f81a0f9411169e979c7aaf80888070da20e808dac0613b012a5b29f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-startup.txt": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-repaired-frozen-validation.json": "c8e279e97e05faa5ad6c9a47a5e9ff7ff14882fca5597d2e779eae1a2ad97f4c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "be427f55977ca4b458c0fdd4c8ebbf7e13202137e06b67b3e0435623e0b3883d",
+    "procurement/tests/test_hosted_synthetic_native_core.py": "3540394ba76fe96f1412f93503fbbba7e1f9aabde87e3b8553884bf80c6b6ad4",
+    "procurement/tests/test_hosted_synthetic_postgres_identity.py": "64f60eacb41bd72594afca7034a550077b57c182f1a6764fc80426cd96681a7c",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "de5baee2e4ec0363f7d212f0cb50ff84c96762ec92d127a51a55e49f911a5004",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "8e3ca5bee0fd48ae0e0485e9e41f3ff262d82ecf068551576bf815a808f52899",
+    "procurement/tests/test_supplier_format_conformance.py": "367114d8a204ce5820ba4d3db71055caac282f311e3b7934bdff6ae46922724e",
+    "procurement/tools/hosted_synthetic_native_core.py": "de2f4ff2ebd4f194f91c81623de03d0f3e6f39c974a48ae6cdd2fde87afe1390",
+    "procurement/tools/hosted_synthetic_postgres_identity.py": "fd971ff43cdd485626f7342d8b2d0f18ff19a782d74e6f676f103a226437032a",
+    "procurement/tools/hosted_synthetic_source.py": "3f7675a0cfa38584021d68b8f95e2993b654f8089c9c3ee9deb7e58a38e8e03a",
+    "procurement/tools/hosted_synthetic_worker.py": "5a87e70e386f52c54f68e9cda7a6594a69ab3e82a82179ee820937a74be38137",
+    "procurement/tools/run_tests.py": "2cbe5597ccd4a9f3d259770859c09a29574c43e267a0def0e2220a361e882d6e"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 37.559,
+      "sha256": "c2fb9c506484b0cca635d1f4b0ae12bdc6046eb4ac9c686aa1b0faa1767f7cfc"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 32.645,
+      "sha256": "859b867ee837a67fe0f5bb50f594464bb87e8621cec5cc3c0f8e124781423ffa"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 16.007,
+      "sha256": "3ae100e66b32710303df55f1d8ec02df3e94ab227727408922285883e3567d87"
+    },
+    "app-recovery-components": {
+      "returncode": 0,
+      "seconds": 0.265,
+      "sha256": "1ae50aad3c2a83272b2bc48babb7160cf468bfdcb911a1fb45f78250934128db"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.73,
+      "sha256": "1f58d38eac354c38a18aac036efad44eb166213ae0485a8f198efc929f507986"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.565,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

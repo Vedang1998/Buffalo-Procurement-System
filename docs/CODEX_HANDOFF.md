@@ -10,6 +10,49 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+
+### 2026-10-27 actual stopped-namespace readback regression — continuing
+
+Published `c928fa3a1c3710ad8957e5e499c44e7d42d71879`, tree
+`926523ed008142bebb7e88dc22d95a5bede2b977`, passed818 diagnostic tests normally
+and separately under scrubbed -I -S,17 price,20 snapshot,88 related,10 startup,
+18 imports and inert activation78. Ordinary branch-only publication scanned46
+objects without private-metadata/high-confidence secret hits, freshly verified
+commit/tree and unchanged protected refs. Exact frozen evidence is in the review packet.
+
+The next descendant shares the actual S-side stopped-init pidfd/process/namespace
+readback between CgroupLease enrollment and two explicit real CLONE_NEWPID driver
+cases. The positive reexecs G in U1 before forking nondumpable I; the causal
+fork-only negative retains its U0 memory namespace and must fail specifically at
+namespace inspection before simulated migration. S must read back zero host
+capabilities, empty groups and NNP; the driver binds a clean detached source before
+and after cases. Neither case writes a cgroup, executes private-proc payload,
+releases credentials or proves runtime closure. Unsupported prerequisites are
+NOT_RUN, unrelated child errors and incomplete/malformed results are FAIL.
+
+Zero host CapEff alone does not demonstrate that S cannot inspect its child U1:
+Linux grants its parent-namespace owner authority in U1, and the existing reexec
+repair changes G/I memory-namespace ownership. Preserve actual kernel readback;
+no guardian-dictionary or FD-transfer substitute was added. Internal review caught
+premature dumpability hardening before the negative's self-map writes. The early
+step now binds only parent/death; nondumpability follows mapping, before I exists.
+A causal order test covers this repair.116 driver/cgroup/enrollment/workflow/runner
+tests pass; these simulations do not execute the two new namespace cases.
+Discovery2403/127, floor2403, diagnostic839; no test removed or floor lowered.
+Current Cloud's unchanged capability limitations were not reprobed.
+
+The exact next supported credential-free component command is
+`python3.13 -I -S -B procurement/tools/hosted_synthetic_pid1_regression.py --run-nondumpable-readback`
+inside the reviewed dedicated zero-capability/empty-groups/NNP supervisor and clean
+source-bound detached checkout. It is not wired to privileged activation. That
+activation and credential release remain disabled pending applicable actual
+Claude review. Six findings remain REPAIRED_PENDING_REVIEW, three OPEN, zero
+VERIFIED_CLOSED; no Claude re-review was invoked or received. Full supported-host
+suite and integrated browser/BackupV2/APPLY/DRAFT/restart/restore remain NOT_RUN.
+Continue independent native phase projection, stopped-child binding, fixed PG
+configuration and external lifetime/cleanup implementation. Accepted browser
+artifacts remain unavailable; no repin or resource expansion is authorized.
+
 ### 2026-10-27 nonzero PostgreSQL worker identity — continuing
 
 Published `5c88122508352c7e31232af2f9ffba40e064bc29`, tree

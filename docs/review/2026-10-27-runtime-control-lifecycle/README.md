@@ -1,5 +1,12 @@
 # October 27 implementation delta — combined read-only re-review
 
+Latest frozen c928fa3 passed818 diagnostics in each interpreter,17 price,20 snapshot,
+88 related,10 startup,18 imports and inert78. Its exact frozen/publication records
+are included. The current descendant adds actual shared stopped-namespace readback
+and explicit reexec/fork-only real-kernel cases;116 focused simulations pass,
+discovery2403/127. The two new real cases are NOT_RUN, not a containment result.
+Privileged activation is still disabled; see the handoff for the exact gated command.
+
 This packet includes frozen5c881225 and predecessors:766 diagnostic tests passed
 normally and separately under -I -S,17 price,20 snapshot,88 related,10 startup,
 18 imports and inert activation78. Discovery2330/125 is not execution. Publication
@@ -31,8 +38,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `5c88122508352c7e31232af2f9ffba40e064bc29`.
-- Implementation tree: `90e4dbde43e03044e0ec88aeaaaaccc3c7d24a4d`.
+- Latest tested/published implementation: `c928fa3a1c3710ad8957e5e499c44e7d42d71879`.
+- Implementation tree: `926523ed008142bebb7e88dc22d95a5bede2b977`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -56,9 +63,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t 5c88122508352c7e31232af2f9ffba40e064bc29
-git rev-parse 5c88122508352c7e31232af2f9ffba40e064bc29^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 5c88122508352c7e31232af2f9ffba40e064bc29 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t c928fa3a1c3710ad8957e5e499c44e7d42d71879
+git rev-parse c928fa3a1c3710ad8957e5e499c44e7d42d71879^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 c928fa3a1c3710ad8957e5e499c44e7d42d71879 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.
