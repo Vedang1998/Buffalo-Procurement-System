@@ -1,0 +1,14 @@
+test_actual_api_attachment_headers_match_collector_contract (test_hosted_synthetic_download.HostedDownloadTests.test_actual_api_attachment_headers_match_collector_contract) ... ERROR
+
+======================================================================
+ERROR: test_actual_api_attachment_headers_match_collector_contract (test_hosted_synthetic_download.HostedDownloadTests.test_actual_api_attachment_headers_match_collector_contract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_download.py", line 44, in test_actual_api_attachment_headers_match_collector_contract
+    from fastapi import HTTPException, Response
+ModuleNotFoundError: No module named 'fastapi'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)

@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 15341,
-    "sha256": "912f9bbcb58fdfa3bae3c71514295fa0af9a1512d6bf907af2e455b6b1263868"
+    "bytes": 15415,
+    "sha256": "4373005ed7be3a0885342e1f30c42fb71aa46bbdc43fcc9cfb8e8e741d5c43b9"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8849,
-    "sha256": "fbdbee8e00d7ad25ba8b781d28f3d740f034efd55320ebc1647d8a38ef37272e"
+    "bytes": 8844,
+    "sha256": "8592260eec9ffccd2810ed5a2eaf7d24200d83f43480b6c588814e2698cde52e"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -86,6 +86,66 @@
   "oct27-apply-step-reviewed.txt": {
     "bytes": 2826,
     "sha256": "baca89518e4a6624dfa5ba5bdd89bbd10c87546c428330684c8ebb2aecbfc610"
+  },
+  "oct27-download-discovery.json": {
+    "bytes": 146,
+    "sha256": "ec7c7af4c2b98d39afdfe1b75d042e5500499bc5271eb7773b76d7ca532ce108"
+  },
+  "oct27-download-first.txt": {
+    "bytes": 7867,
+    "sha256": "7b3a45b942703fc6c4e66986adbaba16970b6b17f871f40347b8ab99d141d4df"
+  },
+  "oct27-download-frozen-hosted.txt": {
+    "bytes": 98178,
+    "sha256": "4db7b2be6fe2dbd6fed6539a1efbd6cb2e5017be24a9218b9b0b88828fc224b9"
+  },
+  "oct27-download-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-download-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-download-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "96c6a94ffa45fc6e33c65f932ed0c17969ff3314ff5d22d8ca4e71619f0df2b4"
+  },
+  "oct27-download-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-download-frozen-validation.json": {
+    "bytes": 5985,
+    "sha256": "d6ebe9227e97d48ce6a1897d59be41324f34ee77c5990942014d02216e56768e"
+  },
+  "oct27-download-generation.txt": {
+    "bytes": 8047,
+    "sha256": "f90230958fc84cf048fd95e88e86f38fe571d882fe29ef29f21ca9bba6e7d816"
+  },
+  "oct27-download-isolated-explicit-node.txt": {
+    "bytes": 5377,
+    "sha256": "1bf29d8ccd5929b15e161f68faa58c4fc9b86ad5a11ce74d171955d64c4e2241"
+  },
+  "oct27-download-isolated-first.txt": {
+    "bytes": 920,
+    "sha256": "ad855bbf739db2316a11ff327cc47b0c3ebdd2aeddbe316d77eee9a4d985a50d"
+  },
+  "oct27-download-isolated-repaired.txt": {
+    "bytes": 44006,
+    "sha256": "b8e42ba20df895326f1c5568df3dfbf9c8199fb46936d6f911d9745098b40c91"
+  },
+  "oct27-download-publication.json": {
+    "bytes": 976,
+    "sha256": "1d31e2a9e26e755fd0fe30fda7706b9d142323349aafa655884df02974ad2bc1"
+  },
+  "oct27-download-reviewed.txt": {
+    "bytes": 8047,
+    "sha256": "b475ecd3d9bc4d4818ff663930d1115eb5ca33e479bd231c9858c356b442f101"
+  },
+  "oct27-download-source-contract.txt": {
+    "bytes": 14227,
+    "sha256": "2c537476bfb05b1a480af19c9575504e06d09fe3fe12b4b50502109d413e489e"
   },
   "oct27-external-wiring-channel.txt": {
     "bytes": 22430,
@@ -182,6 +242,10 @@
   "oct27-lifecycle-publication.json": {
     "bytes": 976,
     "sha256": "4df00a97d22f89ccb9e0cacc0f4f7de407d30d26b860f5f4111f42910fbd69ba"
+  },
+  "oct27-locked-asgi-attachment.txt": {
+    "bytes": 856,
+    "sha256": "98b6023b465c84d0b3831e5b94729c9d9d9e354ca110827574cb936f967acc1a"
   },
   "oct27-mapping-first.txt": {
     "bytes": 6028,
@@ -440,7 +504,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 3340,
-    "sha256": "1c057555077cbde9308db7719cd265c37a55f47a1c27d8edb066e8d5345f2156"
+    "bytes": 3497,
+    "sha256": "a10d510025a28e548006ffd093dca36aeee13200755b94400843d9e3ac567201"
   }
 }

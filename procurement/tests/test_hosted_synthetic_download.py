@@ -4,8 +4,9 @@ from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
-import shutil
+from hosted_test_node import node_executable
 import subprocess
+from types import SimpleNamespace
 import unittest
 from uuid import UUID
 
@@ -16,7 +17,7 @@ class HostedDownloadTests(unittest.TestCase):
     def cases(self,*names):
         for name in names:
             with self.subTest(case=name):
-                node=shutil.which('node');self.assertIsNotNone(node)
+                node=node_executable();self.assertIsNotNone(node)
                 result=subprocess.run([node,str(ROOT/'procurement/tests/hosted_download_fixture.mjs'),name],cwd=ROOT,
                     env={'PATH':os.defpath,'LC_ALL':'C.UTF-8'},capture_output=True,text=True,timeout=5)
                 self.assertEqual(result.returncode,0,result.stderr)
@@ -40,18 +41,21 @@ class HostedDownloadTests(unittest.TestCase):
     def test_timeout_missing_begin_abort_and_socket_close_are_bounded(self):self.cases('timeout','no_begin','abort','abort_context','socket_close')
     def test_concurrent_collect_fails_both_and_cancels_only_owned_guid(self):self.cases('concurrent')
 
-    def test_actual_api_attachment_headers_match_collector_contract(self):
-        from fastapi import HTTPException, Response
+    def test_actual_api_attachment_arguments_match_collector_contract(self):
+        # The hosted protocol gate intentionally runs Python -I -S. Execute the
+        # actual route's explicit headers/media_type arguments without importing
+        # FastAPI; ASGI charset rendering is separately checked with locked deps.
+        def Response(data,*,media_type,headers):
+            return SimpleNamespace(data=data,media_type=media_type,headers=headers)
         module=ast.parse((ROOT/'procurement/src/procurement_os/api.py').read_text())
         function=next(n for n in module.body if isinstance(n,ast.FunctionDef) and n.name=='monday_run_artifact')
         function.decorator_list=[]
         run='00000000-0000-4000-8000-000000000001'
         for suffix,mime in [('internal.csv','text/csv'),('review.zip','application/zip')]:
             artifact={'data':b'synthetic','filename':f'monday-{run}-42.{suffix}','content_type':mime}
-            ns={'UUID':UUID,'Response':Response,'HTTPException':HTTPException,'EmergencyPacketError':ValueError,
+            ns={'UUID':UUID,'Response':Response,'HTTPException':RuntimeError,'EmergencyPacketError':ValueError,
                 '_db_conn':lambda:nullcontext(object()),'get_storage':lambda:object(),'read_monday_artifact':lambda *a,**k:artifact}
             exec(compile(ast.Module(body=[function],type_ignores=[]),'actual-artifact-endpoint','exec'),ns)
             response=ns['monday_run_artifact'](UUID(run),42)
-            self.assertEqual(response.headers['content-disposition'],'attachment; filename='+artifact['filename'])
-            self.assertEqual(response.headers['cache-control'],'no-store')
-            self.assertEqual(response.headers['content-type'],'text/csv; charset=utf-8' if suffix=='internal.csv' else mime)
+            self.assertEqual(response.headers,{'Content-Disposition':'attachment; filename='+artifact['filename'],'Cache-Control':'no-store'})
+            self.assertEqual(response.media_type,mime)

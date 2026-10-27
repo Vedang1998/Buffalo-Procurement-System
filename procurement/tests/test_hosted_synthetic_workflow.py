@@ -10,6 +10,7 @@ import sys
 import tempfile
 import shlex
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -49,15 +50,31 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
     def test_repository_python_has_no_site_or_ambient_environment(self):
         launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
         self.assertEqual(len(launches), 4)
-        self.assertTrue(launches[0].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertTrue(launches[0].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B '))
         self.assertTrue(launches[3].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
         self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[3])
         self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[3])
         self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[1])
+        self.assertNotIn('BUFFALO_DIAGNOSTIC_NODE', ''.join(launches[1:]))
+        self.assertIn('diagnostic_node=$(command -v node)', self.text)
+        self.assertIn('sha256sum "$diagnostic_node"', self.text)
+
+    def test_diagnostic_node_override_is_explicit_and_fail_closed(self):
+        from hosted_test_node import node_executable
+        for value in ('', 'node', './node', '/definitely-missing-buffalo-node', '/tmp'):
+            with self.subTest(value=value),patch.dict(os.environ,{'BUFFALO_DIAGNOSTIC_NODE':value}):
+                self.assertIsNone(node_executable())
+        with tempfile.TemporaryDirectory() as directory:
+            executable=Path(directory)/'diagnostic-node'
+            executable.write_text('not executed by this locator check')
+            executable.chmod(0o600)
+            with patch.dict(os.environ,{'BUFFALO_DIAGNOSTIC_NODE':str(executable)}):
+                self.assertIsNone(node_executable());executable.chmod(0o700)
+                self.assertEqual(node_executable(),str(executable))
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,12,66,22,35,20,11,17,30,15,4,20,14,23,10,23,14,22,15,20,23,21,28,18]', 'result.wasSuccessful()', 'result.testsRun == 552', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,13,66,22,35,20,11,17,30,15,4,20,14,23,10,23,14,22,15,20,23,21,28,18,23]', 'result.wasSuccessful()', 'result.testsRun == 576', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)

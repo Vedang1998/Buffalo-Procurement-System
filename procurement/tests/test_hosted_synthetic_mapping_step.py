@@ -3,7 +3,7 @@ import ast
 import json
 import os
 from pathlib import Path
-import shutil
+from hosted_test_node import node_executable
 import subprocess
 import unittest
 from html.parser import HTMLParser
@@ -16,7 +16,7 @@ class HostedMappingStepTests(unittest.TestCase):
     def cases(self,*names):
         for name in names:
             with self.subTest(case=name):
-                node=shutil.which('node');self.assertIsNotNone(node)
+                node=node_executable();self.assertIsNotNone(node)
                 result=subprocess.run([node,str(ROOT/'procurement/tests/hosted_mapping_step_fixture.mjs'),name],
                     cwd=ROOT,env={'PATH':os.defpath,'LC_ALL':'C.UTF-8'},capture_output=True,text=True,timeout=5)
                 self.assertEqual(result.returncode,0,result.stderr)
@@ -45,7 +45,7 @@ class HostedMappingStepTests(unittest.TestCase):
     def test_decision_identity_matches_existing_python_uuid5_contract(self):
         key='aaaaaaaa-bbbb-4ccc-8ddd-000000000201'
         script="import {mappingDecisionId} from './procurement/tools/hosted_synthetic_mapping_step.mjs';console.log(mappingDecisionId(process.argv[1]));"
-        result=subprocess.run([shutil.which('node'),'--input-type=module','-e',script,key],cwd=ROOT,
+        result=subprocess.run([node_executable(),'--input-type=module','-e',script,key],cwd=ROOT,
             env={'PATH':os.defpath,'LC_ALL':'C.UTF-8'},capture_output=True,text=True,timeout=5,check=True)
         self.assertEqual(result.stdout.strip(),str(uuid5(NAMESPACE_URL,'buffalo-mapping-decision:'+key)))
         source=(ROOT/'procurement/src/procurement_os/persistent_mapping.py').read_text()

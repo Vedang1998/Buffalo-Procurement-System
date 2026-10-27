@@ -4,7 +4,7 @@ import html
 import json
 import os
 from pathlib import Path
-import shutil
+from hosted_test_node import node_executable
 import subprocess
 import unittest
 from decimal import Decimal
@@ -19,7 +19,7 @@ class HostedReviewStepTests(unittest.TestCase):
     def cases(self,*names):
         for name in names:
             with self.subTest(case=name):
-                node=shutil.which('node');self.assertIsNotNone(node)
+                node=node_executable();self.assertIsNotNone(node)
                 result=subprocess.run([node,str(ROOT/'procurement/tests/hosted_review_step_fixture.mjs'),name],cwd=ROOT,
                     env={'PATH':os.defpath,'LC_ALL':'C.UTF-8'},capture_output=True,text=True,timeout=5)
                 self.assertEqual(result.returncode,0,result.stderr)

@@ -10,6 +10,46 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 bounded artifact ingress and isolated diagnostics — continuing
+
+Published `81a89374f30f2ad980f2ed08538b522a583035ac`, tree
+`b16bb7823ecf327be42aa26e5d133b9e8a3adf2b`, passed 552 hosted, 88 related,
+10 startup and 18 import checks. Its ordinary branch-only push scanned 41 objects
+with no private-metadata/high-confidence secret hits, then fresh fetch matched.
+Discovery was 2,079 / 114 modules, separate from execution. Protected refs stayed
+unchanged; no privileged bootstrap, credential, browser or production action ran.
+
+The new artifact reader reuses held ancestor/directory descriptors, requiring a
+private owned download root and exact GUID basename. It rejects links, special
+files, owner/mode/size/hash drift and path replacement, reads bounded bytes once,
+and retains immutable bytes tied to independent registry expectations. It never
+reopens a returned path or removes resources. Internal review found an acquisition
+cancellation gap; the existing resource-operation envelope and real SIGINT tests
+at ancestor/leaf acquisition now prove local FD closure. Fixed diagnostics reject
+malformed roots and unsupported ZIP versions without exposing payloads.
+
+ZIP framing checks exact source-generated layout, 14 unique flat members, bounded
+raw DEFLATE, CRC/length/EOF, 13 manifest entries and original-byte hashes. A 1MiB
+artifact / 4MiB expanded parser cap does not raise host budgets. Tests deliberately
+use framing fixtures, not workflow-produced purchase outcomes. Procurement,
+forecast, registry authenticity, restore and containment are not certified here.
+The new module has 23 tests; 66 affected tests passed including contract floors.
+Registration is 2,103 / 115 modules; hosted focused count becomes 576.
+
+A separate portability probe exposed FastAPI in a -I -S route-argument test and
+Node outside this Cloud host's scrubbed PATH. The test now executes the actual
+route arguments using stdlib only; exact header inventory prevents overrides.
+Locked FastAPI/Starlette rendering was separately executed successfully for CSV
+and ZIP, with source/lock/Response-file hashes. Focused diagnostic tests receive
+one explicit Node path and log its version/hash; native capability, PID1 and
+bootstrap environments remain unchanged. This is diagnostic tooling, never an
+accepted browser-runtime identity. All failed probes are retained. A clean frozen
+run will include the whole focused population under the repaired isolated env.
+
+Continue observed vendor/draft binding, semantic packet reconciliation and the
+restart/restore composition. Six external findings remain pending review, three
+OPEN, zero independently closed; the live and release gates remain disabled.
+
 ### 2026-10-27 guarded download collection — continuing
 
 Published and freshly fetched `97b462f272e296bd00d806cc026df400c4edf2c3`, tree

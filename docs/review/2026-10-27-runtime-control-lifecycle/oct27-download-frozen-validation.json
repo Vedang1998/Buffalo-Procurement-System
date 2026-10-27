@@ -1,0 +1,70 @@
+{
+  "commit": "81a89374f30f2ad980f2ed08538b522a583035ac",
+  "tree": "b16bb7823ecf327be42aa26e5d133b9e8a3adf2b",
+  "base": "97b462f272e296bd00d806cc026df400c4edf2c3",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "e4a035424648d6c4e765b7fbb613b1211175504904913a791d61f8de66c64ae0",
+    "docs/CODEX_HANDOFF.md": "70da887dbea7bf150134ebe490bc61b72becadacf4ba744470266a20425a617a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "912f9bbcb58fdfa3bae3c71514295fa0af9a1512d6bf907af2e455b6b1263868",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "fbdbee8e00d7ad25ba8b781d28f3d740f034efd55320ebc1647d8a38ef37272e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "bb77689d1121eab618c2dbed5af39d5d8d8835efbbd7c1816f04eea659075a78",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-causal.txt": "c9bc6fcb8acd5322d29df1ed9ad2ffdf16ed81259d09f5ce7b08888b7fa55922",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-combined.txt": "9571f3be1132779f5ca21595566c74f99226c8ef1d76ee7e5350b60b2ab71b27",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-discovery.json": "3665695fd1dd4a14f42738baa0a1610d5964a95087b6fbe020f2a4ad6a0ea3ed",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-first.txt": "63716dfb7e1984762cafe3a2bcc0fd7053a4e5a4c017b48da1508b811032eb44",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-ordering.txt": "5e16156e5ccbaf4fb5b0e3425b3afbd73edbadc868aecf1e6799a90fdd6ecbd7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-repaired.txt": "592efa118ff1d5954bed3049cd683ce049d82b69372654c00f0595a35b0ec26a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-adapter-reviewed.txt": "4ef882a25956a5633b97bd29203610ab804fa2cc6de6a8577f9df895168c91c0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-first-frozen-result.json": "07616122662bb41dc49afb192d572e1f1c8927c242bff50a33e612ff16d26c23",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-frozen-hosted.txt": "a8ca609f56c723f372e7d41dfa4ee3d16797797e178bdfdfec4e87d215a1679d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-frozen-related.txt": "bba8c5f0fbfbf88c6074a649940303e76f98f3554eb4dfd863ec4a20025c40e1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-publication.json": "247437c87873ec6f166c80ed57219a600882030c30e1cc6e74d06a2b3c6d6cc6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-registration-correct-path.txt": "0a8797dabf55c9771a9e87925e6917e34567394acc31dda1932c02c3abc14527",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-registration-repair.txt": "345099b1f65d1eeded9bd5ba4880485275165d31e052c6f0342d738e234937ce",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-repaired-frozen-hosted.txt": "6e50b99c58cefec0f5d051e49e0a79f9aeb8a99f61242406480571cda43337d8",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-repaired-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-repaired-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-repaired-frozen-related.txt": "fb78dfcf2da478494d3778c9ac9a6b4d2af8577cf46fd4b2cc0f1e76701e45c1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-repaired-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-page-repaired-frozen-validation.json": "bd28b4cfe10c055102308f990be325c0dc0c11a072a6dcba154a6dff9a49a7a0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "1c057555077cbde9308db7719cd265c37a55f47a1c27d8edb066e8d5345f2156",
+    "procurement/tests/hosted_download_fixture.mjs": "e92f7f35488d181995dc26632ece33830e55add53d993de3c53260125df570d8",
+    "procurement/tests/test_hosted_synthetic_download.py": "e399d568d6940601967dbc009ae13366e2e95286d146219a20aed3e0aa7adfe2",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "71ad14e3e7fe62d17109ae16640b62957accd0c852da1b186212ee5a4b23e078",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "2b8c5cb0eb254b7021f606e897645b9c7347c258083610b7025d8059b7e2733c",
+    "procurement/tests/test_supplier_format_conformance.py": "9cd583474313dab2daa35245b497683f8be11236d651153eb1ed958478c9a592",
+    "procurement/tools/hosted_synthetic_download.mjs": "96fce45d29a59f42847af75473727574fbf59a5d36f44c7be16c86721829d528",
+    "procurement/tools/hosted_synthetic_page_adapter.mjs": "be65d1a4a1b76cea5013f62a8604cb6b8891142411381e1daffe19f18bd7f698",
+    "procurement/tools/hosted_synthetic_source.py": "15cd7dc6d868771223eab7fedb98fc98c94834ecb316065a7283600d1b421628",
+    "procurement/tools/run_tests.py": "25c1aca35ac8d748b5071e2001043a0daac575a892507d1d56be86c589af55ed"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 24.681,
+      "sha256": "4db7b2be6fe2dbd6fed6539a1efbd6cb2e5017be24a9218b9b0b88828fc224b9"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.832,
+      "sha256": "96c6a94ffa45fc6e33c65f932ed0c17969ff3314ff5d22d8ca4e71619f0df2b4"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.617,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

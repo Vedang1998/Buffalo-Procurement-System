@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
+from hosted_test_node import node_executable
 import subprocess
 import unittest
 
@@ -16,7 +16,7 @@ FIXTURE=ROOT/'procurement/tests/hosted_apply_step_fixture.mjs'
 
 class HostedApplyStepTests(unittest.TestCase):
     def run_case(self,name):
-        node=shutil.which('node')
+        node=node_executable()
         self.assertIsNotNone(node,'Node is required for the scripted JS component tests')
         result=subprocess.run([node,str(FIXTURE),name],cwd=ROOT,
             env={'PATH':os.defpath,'LC_ALL':'C.UTF-8'},capture_output=True,text=True,timeout=5)
