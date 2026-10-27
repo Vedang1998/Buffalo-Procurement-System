@@ -1,5 +1,10 @@
 # October 27 implementation delta — combined read-only re-review
 
+Current descendant adds fixed postdrop native image ownership (35 new/263 focused
+passes, discovery2467/128). It does not fork, stop, ACK, exec or release credentials.
+The next dependency is the actual fixed --version stopped-child protocol. Exact
+ad3297b frozen868-per-interpreter validation and ordinary publication are included.
+
 Current descendant adds the distinct combined PG/Python phase closure and dedicated
 projection/maps proof APIs.176 focused tests pass; discovery2432/127, diagnostics868.
 Actual native capture/size fit/phase execution remain NOT_RUN. Exact prior cf63f9d
@@ -43,8 +48,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `cf63f9d2fad660aa9cda1d16217dad3040e35231`.
-- Implementation tree: `a4d31e0c01dc67b54ac172bfa2fa8798d0034ef1`.
+- Latest tested/published implementation: `ad3297ba9c81aefcc80306cdc910322bba98d439`.
+- Implementation tree: `93abdcb1167ea4af2d55bc21352167de33b9fa7e`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -68,9 +73,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t cf63f9d2fad660aa9cda1d16217dad3040e35231
-git rev-parse cf63f9d2fad660aa9cda1d16217dad3040e35231^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 cf63f9d2fad660aa9cda1d16217dad3040e35231 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t ad3297ba9c81aefcc80306cdc910322bba98d439
+git rev-parse ad3297ba9c81aefcc80306cdc910322bba98d439^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 ad3297ba9c81aefcc80306cdc910322bba98d439 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.

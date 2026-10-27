@@ -1,0 +1,78 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "ad3297ba9c81aefcc80306cdc910322bba98d439",
+  "tree": "93abdcb1167ea4af2d55bc21352167de33b9fa7e",
+  "base": "cf63f9d2fad660aa9cda1d16217dad3040e35231",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "3159d68c2787d5c8df64a6f79bc918a7cd00c015445453e7b8e936b3827606e6",
+    "docs/CODEX_HANDOFF.md": "e6959f1a39a713c3ab6a98bc184a83af931e39d47c02864e7a2cabffb6037270",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "911add5e53dc3c59cf2d6de86ee620bc9224c6512c07b5e6e83f08e2ae2fbff6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "7fa110b3c9908e9e254317255112ff9775332323322dd5676844146f5fc20de4",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-frozen-validation.json": "a8c716056d0a808769a924906eabc216920c517a7d5a83d983f457a0ba807cf3",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-publication.json": "d397ec55073d735675a4484f07a991e331393fb5f64681874ae8580605a11bdd",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-discovery.json": "c9780dcb2795d54e6befd409385632c097313d84aa733467313238e0a105a37d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-final.txt": "6e89cab5bb04e57005a5bef3cd0aae9109e7524d61309baf553aaadcee1ca95f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-initial.txt": "6a64d2761ca302fa8606385551a596803387e37ca4bd2bdb0f007cdc45452a94",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-locale-repaired.txt": "7f59d91036964a16181a1681040d476ed43fc4fde347afc078acbf526434ad41",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-maps-repaired.txt": "3b89f56f861da2c059a3522788766e583b974e469ab0651566b6f5a3d3537580",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-ownership-repaired.txt": "edb626206dfc13790e1049d94be0a2cf235a7910a042864c27700d3828cd5c90",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-phase-repaired.txt": "cfdc5f3f8f62cb7aba41adece6bbd7afb4f5b80dfb8228bdeb5a9b815f636ec4",
+    "procurement/tests/test_hosted_synthetic_postgres_runtime.py": "23ce93992af7e78bdf2b62609c972daf791ec6879e15f9f0e629766494c6b84a",
+    "procurement/tests/test_hosted_synthetic_runtime.py": "2d935f75136dbe864bfc2774bb77e6403feedb03a526c551a8c43eba0fb980fc",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "3b679d3ac6bac4e79187b82fd7b0e6dd4e1d66ee169664f2801f0e6133b75bf9",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "b91b313077e860f3988c8f65cc4dde8cd65634fb35aa0249fa63015d9130a20a",
+    "procurement/tests/test_supplier_format_conformance.py": "e0a3be5551afebbd3d5acb8311abed3806db69f6ba0642648326d2336be7fa74",
+    "procurement/tools/hosted_synthetic_postgres_runtime.py": "1c0847a1a76aa7c35eee5b3bbdbe07786284c625f067d14e7c7049d19c6c4b6a",
+    "procurement/tools/hosted_synthetic_runtime.py": "3157944e5297e89ebb24b6ca40222f0d579eab5dce6284b33297f1ae2bad9e85",
+    "procurement/tools/run_tests.py": "bdafb7888372db0b1198571f67854c3faa4aed944e4954644ce826157b0c2311"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 34.518,
+      "sha256": "0ecc811f9d34839c5b31a57051c8df30c54851f9d21449cb53e0d3592a906449"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 34.617,
+      "sha256": "647a985a3e079760876f437426f67da95edef6e987a504226d80884ca70839b0"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 15.565,
+      "sha256": "1bf97aec254185cc904537e6719ce6f2179e6f7c1ec0af648737c0529d32e0bf"
+    },
+    "app-recovery-components": {
+      "returncode": 0,
+      "seconds": 0.265,
+      "sha256": "a6d85dc4a3de0a13ddcbf59569cfbc9cad45d98a07a20aa2b89c83313a78dda5"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.846,
+      "sha256": "fc6d26e8c4314c862552ce9dbeb358ccf8ae195b9481ee0889ce50395838d580"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.616,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

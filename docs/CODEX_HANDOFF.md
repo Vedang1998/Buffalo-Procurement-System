@@ -11,6 +11,58 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-27 fixed native version-image ownership — continuing
+
+Published `ad3297ba9c81aefcc80306cdc910322bba98d439`, tree
+`93abdcb1167ea4af2d55bc21352167de33b9fa7e`, passed868 diagnostics normally and
+separately under scrubbed -I -S,17 price,20 snapshot,88 related,10 startup,
+18 imports and inert78. Ordinary acceptance-branch-only publication scanned31
+objects without private-metadata/high-confidence secret hits; fresh fetch verified
+commit/tree and protected refs unchanged. That exact evidence is in the review packet.
+
+The next descendant adds a non-authorizing fixed PostgreSQL image lease. Actual
+projected private PID1 mints a fixed-role source/generation/root/image/loader spec;
+the reduced U2 worker checks exact type/ownership, current credentials/filter,
+parent start/death binding and its own namespace tuple before opening any image.
+It accepts no caller-selected executable, argv or environment. Source registration
+includes the new module so the sealed supervisor carries its exact current bytes.
+
+The image/loader require regular555 single-link files, exact ownership, hash,
+metadata, root device/mount, noninheritable readonly handles and unchanged named
+identity. Exact FIFO/stdio/image descriptors are read back. The executable FD is
+retained; the loader is reopened, checked and closed on each verification. Root,
+body and loader failures close owned handles while preserving the original cause;
+foreign replacements remain untouched, cleanup failure stays terminal, and pending
+cancellation closes an unreturned image. No fork, signal, ACK, exec or credentials
+are provided by this component.
+
+Internal review identified the reduced worker's invalid upward namespace read:
+U2 cannot ptrace nondumpable I in ancestor U1. The child now compares its own
+namespaces to the immutable tuple actually minted by I; fresh I/G observations
+remain obligations of the trusted stopped-child protocol. It still checks parent
+start and PDEATHSIG. A separate no-op-verifier bypass is rejected by exact type.
+These are writer repairs pending external review, not closed containment findings.
+
+35 new image tests and228 related tests passed263/263. They use simulated namespace,
+identity/root gates and real disposable file/descriptor checks; no native PG or
+namespace was executed. Initial test import failed on two continuation syntax
+errors; the raw failed and repaired logs remain. Discovery2467/128, diagnostics903;
+no floor lowered. Application source, schema/rules and dependency lockfiles remain
+unchanged from8842a9b7. Full supported-host validation remains NOT_RUN.
+
+Next implementation: connect this owned image to the fixed --version worker and
+trusted PID1 parent, retained pidfd/start identity, ARMED/block → parent SIGSTOP →
+real stopped readback → exact generation/role/start/image EXEC ACK → resume and
+fixed FD-based exec, with bounded output and ownership-bound cleanup. The current
+lease intentionally grants none of those transitions. I+W must preserve pids2,
+child256MiB and aggregate512MiB/64. Actual phase size, PG runtime execution, worker
+control exclusion and complete external cleanup remain unproven. Do not infer
+core safety from RLIMIT alone; host core_pattern visibility/lifetime is separate.
+Privileged activation and credential release remain disabled. Claude re-review
+has not been invoked/received; six findings pending, three OPEN, zero closed.
+Canonical browser/BackupV2/APPLY/DRAFT/packet/restart/restore remains NOT_RUN.
+
+
 ### 2026-10-27 combined PostgreSQL phase closure — continuing
 
 Published `cf63f9d2fad660aa9cda1d16217dad3040e35231`, tree

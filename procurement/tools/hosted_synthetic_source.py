@@ -43,6 +43,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_runtime.py",
     "procurement/tools/hosted_synthetic_postgres_runtime.py",
     "procurement/tools/hosted_synthetic_postgres_identity.py",
+    "procurement/tools/hosted_synthetic_postgres_image.py",
     "procurement/tools/hosted_synthetic_native_core.py",
     "procurement/tools/hosted_synthetic_wheels.py",
     "procurement/tools/hosted_synthetic_application_runtime.py",

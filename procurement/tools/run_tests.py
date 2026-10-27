@@ -40,6 +40,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_runtime.py": 21,
     "test_hosted_synthetic_postgres_runtime.py": 66,
     "test_hosted_synthetic_postgres_identity.py": 36,
+    "test_hosted_synthetic_postgres_image.py": 35,
     "test_hosted_synthetic_native_core.py": 16,
     "test_hosted_synthetic_wheels.py": 23,
     "test_hosted_synthetic_application_runtime.py": 14,
