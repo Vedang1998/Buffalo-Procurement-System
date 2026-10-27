@@ -59,6 +59,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_recovery_toc.py": 24,
     "test_hosted_synthetic_recovery_inputs.py": 26,
     "test_hosted_synthetic_recovery_storage.py": 17,
+    "test_hosted_synthetic_recovery_snapshot.py": 20,
     "test_hosted_synthetic_capability.py": 33,
     "test_hosted_synthetic_cgroup.py": 35,
     "test_hosted_synthetic_enrollment.py": 17,

@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 16217,
-    "sha256": "f0fbe5195d553a5a690bd8ecab07798623e5e141d8665a0761355c96fdaebee4"
+    "bytes": 16181,
+    "sha256": "3aecb808c6c54c5eddf2d483bed7ac2291f2842ec1c9a84ee8435fddd2d3a90d"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8848,
-    "sha256": "39a9d65da710b9e28a1f7aba599b3035897d7651c798afa0953d1ded513ceb77"
+    "bytes": 8851,
+    "sha256": "9a3118cd770915f1a795f890a5f25fbd19820604df75fdc158522162d8b41426"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -735,6 +735,42 @@
     "bytes": 8920,
     "sha256": "76352139081b2ca481185ee5442fcdaa9d5e292160cc9e30fe5a15b550f9d126"
   },
+  "oct27-recovery-inputs-frozen-app-price-components.txt": {
+    "bytes": 3713,
+    "sha256": "8c4439e70dfee64692b0593c168a52b8b1f4b4f9568fc661d3976bd938726a29"
+  },
+  "oct27-recovery-inputs-frozen-hosted.txt": {
+    "bytes": 132485,
+    "sha256": "51e2a40f2bc4a9035d96613a09edc37d9cdd4b032197ee30f42aa2595a273163"
+  },
+  "oct27-recovery-inputs-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-recovery-inputs-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-recovery-inputs-frozen-isolated.txt": {
+    "bytes": 132485,
+    "sha256": "74e12b67dd44933e794e94ad5d24a1bd6f7aa9018a38e5e7049f994f95a7d41f"
+  },
+  "oct27-recovery-inputs-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "5979c368e6a372bacf375552b4b28c3aec77d0456131bd62a8f9ea4ac4188b70"
+  },
+  "oct27-recovery-inputs-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-recovery-inputs-frozen-validation.json": {
+    "bytes": 6202,
+    "sha256": "bc5b83bb570ce3baf8a82366619c65f9db9ca30db4c72e3ea77001bb0b9c8c5f"
+  },
+  "oct27-recovery-inputs-publication.json": {
+    "bytes": 976,
+    "sha256": "9c3145f5c6282d0f3592eff0e9278a24c62c1a8cc178d3d05b4e16538b9140c9"
+  },
   "oct27-recovery-inputs-registered.txt": {
     "bytes": 23672,
     "sha256": "b15666cfddc0b8388868d58b07cac485c48115fcfe8cc5af36d5b5367c2f68dc"
@@ -750,6 +786,30 @@
   "oct27-recovery-inputs-storage-first.txt": {
     "bytes": 8044,
     "sha256": "43c6dc53793da9a36316efbf21bb9835cfd988d551d0a50516024fab53bb6ece"
+  },
+  "oct27-recovery-snapshot-discovery.json": {
+    "bytes": 111,
+    "sha256": "014f726ca816ffc61847f7a15a5b57dd285fcd757bd22d7086c58384d119ad0c"
+  },
+  "oct27-recovery-snapshot-endpoint.txt": {
+    "bytes": 4141,
+    "sha256": "ac5b217ea08b6646257b957f38bf1f5092278857c509f6ce6f1352f5ec0ee35b"
+  },
+  "oct27-recovery-snapshot-first.txt": {
+    "bytes": 17465,
+    "sha256": "3f699c544221e7d5166cdeae75cd405f91b766f5c3591dafaf1fff91f0de6194"
+  },
+  "oct27-recovery-snapshot-hostaddr.txt": {
+    "bytes": 3937,
+    "sha256": "631ad9f62c090bec93de358a72576acff916b4346fc5f60e893b2ec71fd01508"
+  },
+  "oct27-recovery-snapshot-registered.txt": {
+    "bytes": 25323,
+    "sha256": "2c0e61daebe2e477a8e20befe39802dfcb56477063ef01203807d51e977a985f"
+  },
+  "oct27-recovery-snapshot-repaired.txt": {
+    "bytes": 3743,
+    "sha256": "5a300c7656a48cd06fe8efd4c3365237e49aa6813ac9c224605a24e9c828ed7e"
   },
   "oct27-recovery-toc-discovery.json": {
     "bytes": 111,
@@ -924,7 +984,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 4861,
-    "sha256": "d15f52902264c591da29f6ceed2dc2028f0e9d3037c08f3420e9678b04a5367e"
+    "bytes": 5182,
+    "sha256": "a7c26b92d7b6fc927cb240e029c1d5ee760d5b0a956614b3208030ffc4cc18b4"
   }
 }

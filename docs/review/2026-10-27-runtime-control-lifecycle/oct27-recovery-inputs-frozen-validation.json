@@ -1,0 +1,83 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "3ce642690bd9433b1924752bb6044ca1fb22d5ff",
+  "tree": "6b1004838bce08385c4389118c4c791172a08e7a",
+  "base": "427dd1b28e287a3e9183c9db736407dcf5dabfb5",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "6749068af68dc2a33b40be35f3b388952c16b5ccbdddd5df90cf798800dd3e66",
+    "docs/CODEX_HANDOFF.md": "b559a5511f3e9a01b0ad57517b32ff2474d941ab676aea532527f36725f45f88",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "f0fbe5195d553a5a690bd8ecab07798623e5e141d8665a0761355c96fdaebee4",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "39a9d65da710b9e28a1f7aba599b3035897d7651c798afa0953d1ded513ceb77",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "51bea29585fcabea8bc4e844710f20e60f82d53634fd7139b2c13164d2088d88",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-discovery.json": "c5a74a420d7d0f28e3cf19528c4b1bfc68f234b4d8a4ba332aad25332c966b94",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-first.txt": "76352139081b2ca481185ee5442fcdaa9d5e292160cc9e30fe5a15b550f9d126",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-registered.txt": "b15666cfddc0b8388868d58b07cac485c48115fcfe8cc5af36d5b5367c2f68dc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-repaired.txt": "2b10a53317ebd9bb77d6508201e030c49ed28ac398a03ac2e4f519ccf73d46e0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-storage-boundary.txt": "14f63ac27643fe9b0abc10319cee6c0218c6aac628fa8d625af4a97d9bce2f97",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-storage-first.txt": "43c6dc53793da9a36316efbf21bb9835cfd988d551d0a50516024fab53bb6ece",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-final.txt": "c3d8b269082c8f0868ec968e368fa05e5b3f638764f5d92fd58923aa9e59139c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-app-price-components.txt": "020a2fd833b39cb83ec52fad25f35dce3c55082c5ac01f299cb299c962c7696e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-hosted.txt": "4ac6a16dac40ed9e992ab411e3e5c5d7d6ef95520d7955a81597d6686918acc8",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-isolated.txt": "a7bbc3b655ac7be5e827edb484a03560cbebbd856e7ea616ed7f5a263ed5f862",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-related.txt": "e4b3897ed31e3f290031d2e3c3c04b6efc0784732f54328c2eb10f483c46b5c6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-frozen-validation.json": "be298b7d279861bb5f939bd59a06be6cc7ad83c88390b53a0e87bfb76b220c85",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-toc-publication.json": "63acaab54c5810635a40d93bdb328e3c989c13d4baef16cfe38584f1d46f1868",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "d15f52902264c591da29f6ceed2dc2028f0e9d3037c08f3420e9678b04a5367e",
+    "procurement/tests/test_hosted_synthetic_recovery_inputs.py": "6e864bdd50e38a28e2355296ad20b2c9c7956abb9885e87fc418d8006d9e51bd",
+    "procurement/tests/test_hosted_synthetic_recovery_storage.py": "eb453b3236290c25d556789d376d75bba3fafc666b6f2e7c36906cbaec789ce9",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "e2324beda24c26170f9cf6edf8a812773112bf9c73f7e80f7d3d5c136ea5e0b5",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "e06c6615ddde2fa6e202c49ff1208439e339a646b8345b233f625501d7b63f8e",
+    "procurement/tests/test_supplier_format_conformance.py": "ac04570bc759129597c765139c5a689bc53098c8ab9c4a1c44ec5c0aa9a0971c",
+    "procurement/tools/hosted_synthetic_recovery_inputs.py": "295ec80b05f2ec63b1e7caa02841adc3f124ed484e4067452c3af698aae5919c",
+    "procurement/tools/hosted_synthetic_recovery_storage.py": "c6f79465c6a63423d99f161a4f59c89c707520aa17a727b81f1376dc9bae7e00",
+    "procurement/tools/hosted_synthetic_source.py": "680280d1228efbc3fed69c933a1b8791d5a8b0b5fca090d2c37d2d122482972a",
+    "procurement/tools/run_tests.py": "49f08bdc9ab8f9aeb82762c6e43a3a7650e8bc6319fd06222e509b914fdd5225"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 33.708,
+      "sha256": "51e2a40f2bc4a9035d96613a09edc37d9cdd4b032197ee30f42aa2595a273163"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 32.533,
+      "sha256": "74e12b67dd44933e794e94ad5d24a1bd6f7aa9018a38e5e7049f994f95a7d41f"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 15.256,
+      "sha256": "8c4439e70dfee64692b0593c168a52b8b1f4b4f9568fc661d3976bd938726a29"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.632,
+      "sha256": "5979c368e6a372bacf375552b4b28c3aec77d0456131bd62a8f9ea4ac4188b70"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.565,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

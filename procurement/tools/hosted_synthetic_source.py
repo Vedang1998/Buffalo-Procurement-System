@@ -63,6 +63,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_recovery_toc.py",
     "procurement/tools/hosted_synthetic_recovery_inputs.py",
     "procurement/tools/hosted_synthetic_recovery_storage.py",
+    "procurement/tools/hosted_synthetic_recovery_snapshot.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

@@ -1,22 +1,20 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet includes frozen427dd1b and predecessors. Its685 diagnostic tests passed
+This packet includes frozen3ce6426 and predecessors. Its728 diagnostic tests passed
 normally and separately under scrubbed -I -S;17 application price tests,88 related,
-10 startup and18 imports passed. Activation remained exit78. Discovery2229/121 is
-not execution. Ordinary branch-only publication scanned41 objects with no private
-metadata/high-confidence-secret hits; fresh fetch verified exact commit/tree.
+10 startup and18 imports passed. Activation exit78. Discovery2272/123 is not execution.
+Ordinary branch-only publication scanned38 objects with no private-metadata or
+high-confidence secret hits, and fresh fetch verified exact commit/tree.
 
-The next descendant adds context-owned sealed database/schema/storage input handles,
-actual-writer-compatible bounded PAX storage validation, and held-FD materialization.
-Forty-three component tests and75 TOC/registration/workflow regressions pass. They
-cover real kernel seals, SIGINT/partial failure, descriptor registration failure,
-strict UUID keys, parent replacement before/between writes, foreign-resource
-preservation and complete owned-file cleanup. The first input run's two subtest
-errors and one noncausal negative failure remain retained. Review found/repaired
-UUID-policy, owner-registration and pre-effect chain-check gaps. These are internal
-reviews, not Claude approval or native PostgreSQL/whole-service execution.
-New discovery2272/123 and diagnostic728 are registered populations, not full-suite
-execution. Populated snapshot/capture/restore composition remains authorized work.
+The next descendant implements a dormant runtime snapshot adapter using the existing
+application types/validators. It requires idle/autocommit and libpq hostaddr loopback
+before SQL, imports the provisioner snapshot before reads, attests runtime once,
+binds distinct release/runtime identities, complete tables/sequences/counts/storage
+hashes, then rolls back and verifies idle. Twenty new fake-connection tests passed,
+along with105 related tests. First18 fixture-setup errors are retained. Internal
+review found/repaired PQhostaddr and inet-text/netmask compatibility gaps. No SQL,
+server, capture or restore was executed. Discovery2292/124 is not a full passing
+suite; diagnostic728 and application price17/snapshot20 remain separate populations.
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -30,8 +28,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `427dd1b28e287a3e9183c9db736407dcf5dabfb5`.
-- Implementation tree: `32ac24c47a1c78131b6240c622221c176fde991c`.
+- Latest tested/published implementation: `3ce642690bd9433b1924752bb6044ca1fb22d5ff`.
+- Implementation tree: `6b1004838bce08385c4389118c4c791172a08e7a`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -55,9 +53,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t 427dd1b28e287a3e9183c9db736407dcf5dabfb5
-git rev-parse 427dd1b28e287a3e9183c9db736407dcf5dabfb5^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 427dd1b28e287a3e9183c9db736407dcf5dabfb5 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t 3ce642690bd9433b1924752bb6044ca1fb22d5ff
+git rev-parse 3ce642690bd9433b1924752bb6044ca1fb22d5ff^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 3ce642690bd9433b1924752bb6044ca1fb22d5ff -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.
@@ -204,7 +202,9 @@ Browser execution also has a demonstrated composition contradiction:
 composition and its phase-specific resource limits. The diagnostic two-task child
 and512MiB service do not prohibit implementing that composition. Earlier wording
 requiring another owner design decision before any such coding was too broad.
-Continue the authorized phase implementation and retain its existing5GiB-minus-one-
+The larger historical acceptance ceiling does not authorize raising the current
+diagnostic512MiB/64-task envelope. Continue the authorized phase implementation
+and retain its existing5GiB-minus-one-
 page service limit, per-process peak below5GiB, service peak below6GiB and zero-OOM
 criteria. No additional budget, privilege, accepted-input repin, host-proc exposure
 or disabled browser sandbox is authorized. Review and machine-validation gates

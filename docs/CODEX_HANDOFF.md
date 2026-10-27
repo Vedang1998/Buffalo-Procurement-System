@@ -10,6 +10,49 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 populated runtime snapshot binding — continuing
+
+Published `3ce642690bd9433b1924752bb6044ca1fb22d5ff`, tree
+`6b1004838bce08385c4389118c4c791172a08e7a`, passed728 diagnostic tests normally
+and separately under scrubbed -I -S,17 price tests,88 related,10 startup and18 imports.
+Activation exit78. Discovery2272/123 is not execution. Ordinary branch-only push
+scanned38 new objects without private-metadata/high-confidence secret hits; fresh
+fetch verified commit/tree and protected refs unchanged.
+
+The new adapter requires a caller-owned fresh local runtime connection, checks
+actual libpq hostaddr before SQL, starts read-only repeatable-read and imports the
+retained provisioner snapshot before any SELECT. It uses existing runtime
+attestation once, binds the distinct runtime/backup-release identities, reads the
+actual V2 state-facts API and storage bindings, proves complete captured table and
+sequence coverage and exact summary/hash correspondence, then ROLLBACK plus idle
+readback before returning immutable evidence. Failed/ambiguous rollback withholds
+results and preserves the original failure. It opens no connection or process.
+Twenty focused tests and105 related tests passed; first18 setup errors and repairs
+are retained. Internal review found/repaired host-versus-hostaddr and inet-text
+netmask producer mismatches. No actual SQL/DB/server execution occurred. Snapshot
+labels cannot prove stopped writers, physical cluster ownership or non-MVCC sequence
+quiescence. Discovery2292/124;728 diagnostics,17 price and20 snapshot tests remain
+separate registered populations; supported-host full suite remains NOT_RUN.
+
+Continue native PG16 closure and foreground process leases, fixed full/schema
+capture, and fenced final-role/catalog reconstruction. Native initdb invokes a
+shell and PostgreSQL children; runtime includes those ELFs, explicit modules and
+initdb/timezone data, not only pg_dump. PG refuses namespace-visible UID0; compose
+a separate nonzero phase identity while preserving the diagnostic worker/profile.
+Cloud lacks trusted /usr/lib/postgresql/16; agent-owned extracted binaries are not
+positive trust evidence. Do not repeat the known native full-suite refusal.
+The larger historical acceptance ceiling does not authorize raising the current
+diagnostic512MiB/64-task envelope. Task4/7 composition remains authorized coding;
+review, applicable resource contracts and same-generation live gates still hold.
+
+Accepted Node/Chromium artifacts remain unavailable locally. Read-only public
+research found a Node24.13.0 recipe candidate, but no original derivation/signed-NAR
+link to accepted9cyx output or f360 executable digest. Cache CONNECT403 is a proxy
+failure, not evidence the origin lacks artifacts. Chromium's original recursive
+content provenance remains unresolved. No repin, workaround route, install, remote
+private-data access or privileged activation occurred. No Claude re-review received.
+
+
 ### 2026-10-27 immutable recovery inputs and owned storage — continuing
 
 Published `427dd1b28e287a3e9183c9db736407dcf5dabfb5`, tree

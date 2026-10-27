@@ -1,6 +1,6 @@
 {
-  "material_commit": "427dd1b28e287a3e9183c9db736407dcf5dabfb5",
-  "material_tree": "32ac24c47a1c78131b6240c622221c176fde991c",
+  "material_commit": "3ce642690bd9433b1924752bb6044ca1fb22d5ff",
+  "material_tree": "6b1004838bce08385c4389118c4c791172a08e7a",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -81,6 +81,10 @@
     {
       "commit": "427dd1b28e287a3e9183c9db736407dcf5dabfb5",
       "tree": "32ac24c47a1c78131b6240c622221c176fde991c"
+    },
+    {
+      "commit": "3ce642690bd9433b1924752bb6044ca1fb22d5ff",
+      "tree": "6b1004838bce08385c4389118c4c791172a08e7a"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -124,9 +128,9 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "populated runtime snapshot adapter, native capture and target reconstruction/fencing",
-    "approved phase-specific browser/PostgreSQL runtime, process, network and lifecycle composition",
-    "complete same-generation harness wiring after its implementation and review gates"
+    "native PG16 executable/interpreter/data closure and owned foreground process lease",
+    "populated native capture and fenced target reconstruction using existing fixed SQL",
+    "approved phase-specific browser/runtime/network/lifecycle composition and final harness wiring"
   ],
-  "authority_correction": "Approved Oct10 design6 and plan4/7/8 already authorize separate browser/PG composition within their phase limits. Diagnostic pids2/512MiB are not a plan-wide prohibition on coding. Review/live gates remain closed; no runtime repinning or resource expansion beyond approved phase contracts."
+  "authority_correction": "Approved Oct10 design6 and plan4/7/8 already authorize separate browser/PG composition within their phase limits. Diagnostic pids2/512MiB are not a plan-wide prohibition on coding. Review/live gates remain closed; no runtime repinning or resource expansion beyond approved phase contracts. The historical acceptance ceiling does not authorize raising the current diagnostic envelope; preserve each profile and resolve any demonstrated need to exceed an applicable limit explicitly."
 }

@@ -1,0 +1,185 @@
+test_ambiguous_rollback_withholds_result_and_preserves_first_failure (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_ambiguous_rollback_withholds_result_and_preserves_first_failure) ... ERROR
+test_begin_or_state_failure_still_rolls_back_and_preserves_original (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_begin_or_state_failure_still_rolls_back_and_preserves_original) ... ERROR
+test_changed_content_addressed_artifact_cannot_keep_old_state_hash (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_changed_content_addressed_artifact_cannot_keep_old_state_hash) ... ERROR
+test_duplicate_storage_keys_or_unbound_credentials_refuse (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_duplicate_storage_keys_or_unbound_credentials_refuse) ... ERROR
+test_import_precedes_all_reads_and_distinct_fixed_identities_are_bound (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_import_precedes_all_reads_and_distinct_fixed_identities_are_bound) ... ERROR
+test_keyboard_interrupt_during_capture_rolls_back_without_false_result (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_keyboard_interrupt_during_capture_rolls_back_without_false_result) ... ERROR
+test_malformed_source_and_snapshot_labels_refuse_without_sql (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_malformed_source_and_snapshot_labels_refuse_without_sql) ... ERROR
+test_missing_or_additional_state_relation_cannot_hide_behind_summary_counts (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_missing_or_additional_state_relation_cannot_hide_behind_summary_counts) ... ERROR
+test_nonidle_or_implicit_transaction_connection_refuses_without_rollback (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_nonidle_or_implicit_transaction_connection_refuses_without_rollback) ... ERROR
+test_observed_server_endpoint_mismatch_refuses_before_attestation (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_observed_server_endpoint_mismatch_refuses_before_attestation) ... ERROR
+test_provisioner_role_or_other_client_endpoint_refuses_before_sql (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_provisioner_role_or_other_client_endpoint_refuses_before_sql) ... ERROR
+test_remote_or_unowned_target_refuses_before_sql (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_remote_or_unowned_target_refuses_before_sql) ... ERROR
+test_rollback_success_command_without_idle_readback_is_not_cleanup_pass (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_rollback_success_command_without_idle_readback_is_not_cleanup_pass) ... ERROR
+test_sequence_catalog_coverage_is_exact (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_sequence_catalog_coverage_is_exact) ... ERROR
+test_snapshot_import_failure_cannot_reach_attestation_or_state (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_snapshot_import_failure_cannot_reach_attestation_or_state) ... ERROR
+test_storage_artifact_hashes_and_counts_bind_state_hash_list (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_storage_artifact_hashes_and_counts_bind_state_hash_list) ... ERROR
+test_summary_count_must_match_complete_relation_inventory (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_summary_count_must_match_complete_relation_inventory) ... ERROR
+test_wrong_backup_release_refuses_before_sql_and_wrong_runtime_identity_before_state (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_wrong_backup_release_refuses_before_sql_and_wrong_runtime_identity_before_state) ... ERROR
+
+======================================================================
+ERROR: test_ambiguous_rollback_withholds_result_and_preserves_first_failure (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_ambiguous_rollback_withholds_result_and_preserves_first_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_begin_or_state_failure_still_rolls_back_and_preserves_original (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_begin_or_state_failure_still_rolls_back_and_preserves_original)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_changed_content_addressed_artifact_cannot_keep_old_state_hash (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_changed_content_addressed_artifact_cannot_keep_old_state_hash)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_duplicate_storage_keys_or_unbound_credentials_refuse (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_duplicate_storage_keys_or_unbound_credentials_refuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_import_precedes_all_reads_and_distinct_fixed_identities_are_bound (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_import_precedes_all_reads_and_distinct_fixed_identities_are_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_keyboard_interrupt_during_capture_rolls_back_without_false_result (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_keyboard_interrupt_during_capture_rolls_back_without_false_result)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_malformed_source_and_snapshot_labels_refuse_without_sql (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_malformed_source_and_snapshot_labels_refuse_without_sql)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_missing_or_additional_state_relation_cannot_hide_behind_summary_counts (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_missing_or_additional_state_relation_cannot_hide_behind_summary_counts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_nonidle_or_implicit_transaction_connection_refuses_without_rollback (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_nonidle_or_implicit_transaction_connection_refuses_without_rollback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_observed_server_endpoint_mismatch_refuses_before_attestation (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_observed_server_endpoint_mismatch_refuses_before_attestation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_provisioner_role_or_other_client_endpoint_refuses_before_sql (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_provisioner_role_or_other_client_endpoint_refuses_before_sql)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_remote_or_unowned_target_refuses_before_sql (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_remote_or_unowned_target_refuses_before_sql)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_rollback_success_command_without_idle_readback_is_not_cleanup_pass (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_rollback_success_command_without_idle_readback_is_not_cleanup_pass)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_sequence_catalog_coverage_is_exact (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_sequence_catalog_coverage_is_exact)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_snapshot_import_failure_cannot_reach_attestation_or_state (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_snapshot_import_failure_cannot_reach_attestation_or_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_storage_artifact_hashes_and_counts_bind_state_hash_list (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_storage_artifact_hashes_and_counts_bind_state_hash_list)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_summary_count_must_match_complete_relation_inventory (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_summary_count_must_match_complete_relation_inventory)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+======================================================================
+ERROR: test_wrong_backup_release_refuses_before_sql_and_wrong_runtime_identity_before_state (test_hosted_synthetic_recovery_snapshot.PopulatedSnapshotTests.test_wrong_backup_release_refuses_before_sql_and_wrong_runtime_identity_before_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_recovery_snapshot.py", line 44, in setUp
+    expected_private_host='127.0.0.1',project_id=db.EXPECTED_PROJECT_ID,
+                                                 ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'procurement_os.synthetic_staging_database' has no attribute 'EXPECTED_PROJECT_ID'
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.004s
+
+FAILED (errors=18)
