@@ -10,6 +10,45 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 staging APPLY component — independent implementation
+
+Published lifecycle material: `4dd50dea0eb719776b166f0708e8177239780975`, tree
+`3890ff1e138ff343e9c855fc4577bebf9bfd4a45`, freshly fetched after ordinary
+branch-only publication. Frozen424 hosted,88 related,10 startup and18 imports
+passed; discovery1951/108 is separate from execution. Both explicit kernel
+component drivers passed three cases each at this source. The application
+projection contained81,844,207 bytes and verified51 mapped ELF files. These
+same-source component runs are distinct launches, not combined containment PASS.
+
+The new inert staging APPLY step validates the full trusted expected intent and
+public verified-BackupV2 bindings, confirmed batch, canonical preview hash, exact
+five-field final form, unchanged CSRF, one-shot actual request,303 redirect and
+APPLIED_CURRENT status. It takes no login/DB credentials or backup path, grants no
+execution authority, and is not connected to the fixed confirmation-only worker.
+The page adapter must intercept all mutations before forwarding and return to
+its existing deny policy when each allowance closes. No boolean claims that the
+real browser adapter exists or has passed. Source/confirmation/backup expectations
+must come from the independently verified launcher evidence, never this DOM.
+
+Fifteen tests execute the actual JavaScript transition/form programs in a scripted
+DOM/request adapter. They prove fault reach, exact intermediate POST counts,
+byte-preserving form submission, complete backup/prestate checks, duplicate/wrong
+route/replayed POST rejection before forwarding and post-effect redirect/status
+refusal. An internal reread caught and repaired stateless repeated-POST allowance,
+mutable binding serialization and falsely permissive negative tests. This is
+internal review and scripted component evidence, not authenticated browser APPLY.
+Registered population becomes1966/109; the final frozen focused gate requires439.
+
+Existing local multivendor DOM actions and V2 output validators already cover
+selection, owner review/edit/reject, separate DRAFTs and14-member/$289 reconciliation;
+reuse them after live composition is resolved. Current worker pids.max=2/exact I/W
+threads, private proc, isolated NET, root-inside-U1/locked syscall policy and accepted
+Nix/Node/Chromium contracts cannot directly run the existing Python→Node→external
+Chromium flow. No extra tasks, host-proc exposure, --no-sandbox, pin substitution or
+new privilege is authorized implicitly. Remaining composition needs its precise
+security-preserving contract decision and review; privileged activation and release
+remain blocked. Preparing source-bound combined re-review/evidence is next.
+
 ### 2026-10-27 dormant lifecycle fault driver — NON-GREEN
 
 Latest verified published material: `d1c416d1afe4192f56f1369b158ea4b4533d8d65`,
