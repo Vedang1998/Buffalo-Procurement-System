@@ -197,6 +197,7 @@ class HostedSyntheticEnrollmentTests(unittest.TestCase):
                  patch.object(ns, '_namespaces', return_value={}), \
                  patch.object(ns.backend, '_browser_libc', return_value=Mock(prctl=Mock(return_value=0))), \
                  patch.object(ns.backend, '_browser_prctl'), \
+                 patch('hosted_synthetic_runtime.capture_runtime', return_value=Mock()), \
                  patch.object(cg.CgroupLease, 'create', return_value=lease), \
                  patch.object(ns, '_pipe', side_effect=[(Mock(),Mock()),(Mock(),Mock())]), \
                  patch.object(ns.os, 'fork', return_value=101), \
@@ -222,6 +223,7 @@ class HostedSyntheticEnrollmentTests(unittest.TestCase):
              patch.object(ns, '_namespaces', return_value={}), \
              patch.object(ns.backend, '_browser_libc', return_value=Mock(prctl=Mock(return_value=0))), \
              patch.object(ns.backend, '_browser_prctl'), \
+             patch('hosted_synthetic_runtime.capture_runtime', return_value=Mock()), \
              patch.object(cg.CgroupLease, 'create', side_effect=cg.CgroupProofError('synthetic')) as create, \
              patch.object(ns.os, 'fork') as fork:
             result = ns.observe_private_proc('a'*64, delegation=Path('/sys/fs/cgroup/unit'))

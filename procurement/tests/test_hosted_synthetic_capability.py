@@ -329,7 +329,7 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
                 self.assertIn(capability.main(['repo', 'push', 'ref', 'a'*40,
                                               '--user-service-unit', 'test-unit']), (1, 130))
             result = json.loads(output.getvalue().splitlines()[0])
-            self.assertEqual(observe.call_args.kwargs, {'delegation': Path('/sys/fs/cgroup/unit')})
+            self.assertEqual(observe.call_args.kwargs, {'delegation': Path('/sys/fs/cgroup/unit'), 'source_binding': binding})
             self.assertEqual(result['host_prerequisites'], host)
             self.assertEqual(result['delegation_bootstrap'], delegation)
             self.assertEqual(result['credential_release'], 'WITHHELD')
@@ -371,7 +371,7 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
             self.assertEqual(capability.main(args),1)
         self.assertEqual(order,['postdrop','source','access','delegation','host','namespace'])
         prepare.assert_called_once_with('unit',manager='system')
-        self.assertEqual(namespace.call_args.kwargs,{'delegation':Path('/sys/fs/cgroup/system.slice/unit')})
+        self.assertEqual(namespace.call_args.kwargs,{'delegation':Path('/sys/fs/cgroup/system.slice/unit'), 'source_binding': binding})
         report=json.loads(output.getvalue().splitlines()[0])
         self.assertEqual(report['postdrop_identity'],{'groups':[]})
         self.assertEqual(report['postdrop_access'],{'controller_writes':0})

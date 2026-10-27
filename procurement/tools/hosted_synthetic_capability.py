@@ -262,7 +262,8 @@ def main(arguments=None) -> int:
             # Do not repeat namespace/projection mutations when a required
             # same-launcher prerequisite is already known to be unavailable.
             phase = 'NAMESPACE'
-            options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path'])} if delegation is not None else {}
+            options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path']),
+                       'source_binding': binding} if delegation is not None else {}
             observation = observe_private_proc(generation, **options) if host['prerequisites_available'] else None
         except (CgroupCleanupError, NamespaceCleanupError, BootstrapCleanupError):
             result = _report(binding, reason='CLEANUP_FAILED', host=host, delegation=delegation)

@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-26 (UTC)
+**Updated:** 2026-10-27 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,54 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-27 runtime/worker implementation — NON-GREEN, review gates unchanged
+
+Continuation base: `8842a9b7ec77619134af9881a814dd88f4ca004d`, tree
+`04dd9127eb81a911e1b9a0aeb36f9f6b50926b9d`. The frozen Claude target remains
+`5e62c8e3a7030e60f77108517f5f9e06c7fc06a3`; this descendant delta does not
+extend that target or the original review's coverage.
+
+The owner supplied original review attribution: Claude Code CLI 2.1.310,
+session `session_01JyrJEUAi36GJ6AfNcmBBxV`, configured/last-served model
+`claude-opus-5-5`, REQUEST CHANGES on `3c1ae555b82aa650011254a9b1f8e8c4367601bb`.
+This is owner-supplied attribution, not account inspection. Verbatim text and
+execution limitations remain unavailable; the 238-test count is not a GitHub
+reproduction. The earlier entry's missing-attribution statement is historical.
+
+Implemented root-owned actual CPython/stdlib/recursive ELF capture, source-bound
+sealed memfd inventory, immutable read-only tmpfs root/pivot, projected exec and
+consumer mapping verification. The delegated guardian now requires this closure;
+S retains and compares its exact bundle identity. Existing Nix/image pins remain
+unchanged. This proves only the diagnostic runtime when executed, not the
+application/Node/Chromium closure, which remains UNSEALED.
+
+The projected worker drops all five capability sets, locks securebits and uses a
+fixed x86-64 seccomp policy that denies namespace/mount/cross-process-handle
+recovery. Its actual static sentinel exec is followed by I/G readback of root,
+capabilities, NNP, filter count, descriptors and executable. Nonempty groups still
+refuse before effects. Kernel filter count is not exported BPF bytecode.
+No conforming live worker-entry or delegated containment PASS is claimed.
+
+Development focused tests: 334 passed; registered floor grows from 1828 to1861
+in103 modules. Credential-free component projection/exec passed on Cloud with
+18 mapped ELF files; host identity/groups/cgroup gates explicitly NOT_TESTED.
+Frozen evidence follows separately. New explicit regression driver also checks
+missing projected interpreter/libc refuse despite existing host copies.
+Full native suite was not repeated; supported final-candidate full suite remains
+required. No privileged activation, account/service provisioning, credential,
+application, database or browser was started. Independent re-review is pending;
+internal read-only Codex investigations do not satisfy it.
+
+Next implementation: external lifecycle observer/quarantine and final aggregate
+resource accounting. Service cgroups can disappear before final counters can be
+read; retained FDs alone do not preserve readable terminal counters. A new owned
+accounting envelope would require explicit review of its bounded native wiring
+and scope; existing ancestor controllers/limits must remain unchanged. Six repaired
+findings remain pending review; runtime, control exclusion and external cleanup
+remain OPEN until their complete contracts and required evidence are satisfied.
+Railway/commercial readiness and all production/business authorization boundaries
+remain unchanged. A checkpoint is not completion; continue independent work.
 
 ### 2026-10-26 consolidated Claude remediation — REQUEST CHANGES, NON-GREEN
 

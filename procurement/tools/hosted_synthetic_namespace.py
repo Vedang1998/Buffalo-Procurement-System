@@ -2,8 +2,8 @@
 
 The outer guardian remains in the supervisor's PID view. Its child is PID 1
 in a fresh namespace and retains private procfs while a stopped PID 2 sentinel
-is independently observed. Only the diagnostic's host Python is re-executed;
-its runtime is explicitly unsealed. No payload, credential or database starts.
+is independently observed. The delegated path re-executes its bound diagnostic
+runtime inside a sealed root. No application, credential or database starts.
 Legacy EPERM observers are deliberately not changed by this component.
 """
 from __future__ import annotations
@@ -452,10 +452,22 @@ def _resume_namespaces(original, expected):
 
 
 def _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
-                    outside_uid, outside_gid, original_namespaces, cgroup_required=False):
+                    outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime=None):
     # fork preserves mm->user_ns. Exec after mapping creates the new mm under
     # U1, permitting independent nondumpable child inspection in that namespace.
-    executable, images = _runtime_images()
+    _require(not cgroup_required or runtime is not None)
+    runtime_root = None
+    script = str(Path(__file__).resolve())
+    executable_path = sys.executable
+    if runtime is None:
+        executable, images = _runtime_images()
+    else:
+        from hosted_synthetic_runtime import enter_runtime, projected_images, PROJECTED_TOOLS
+        _require(runtime.generation == generation)
+        runtime_root = enter_runtime(runtime)
+        executable, images = projected_images(runtime)
+        executable_path = runtime.executable
+        script = PROJECTED_TOOLS + '/hosted_synthetic_namespace.py'
     bootstrap = _acquire(lambda: os.memfd_create('buffalo-diagnostic', os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING))
     descriptors = (gate, status, parent)
     packet = dict(generation=generation, supervisor=supervisor, deadline=deadline,
@@ -466,6 +478,8 @@ def _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
                   descriptors=[[item.number, *item.identity, fcntl.fcntl(item.number, fcntl.F_GETFL)]
                                for item in descriptors],
                   mask=sorted(int(item) for item in signal.pthread_sigmask(signal.SIG_BLOCK, [])))
+    if runtime is not None:
+        packet.update(runtime=runtime.packet(), runtime_root=runtime_root)
     encoded = json.dumps(packet, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
     _require(len(encoded) <= 8192 and os.write(bootstrap.number, encoded) == len(encoded))
     seals = fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE
@@ -473,11 +487,13 @@ def _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
     for item in (*descriptors, bootstrap):
         item.verify()
         os.set_inheritable(item.number, True)
+    if runtime is not None:
+        os.set_inheritable(runtime.bundle.descriptor, True)
     for number in (0, 1, 2):
         _require(os.readlink(f'/proc/self/fd/{number}') == '/dev/null')
         os.set_inheritable(number, True)
     os.execve(executable.number,
-              [sys.executable, '-I', '-S', '-B', str(Path(__file__).resolve()),
+              [executable_path, '-I', '-S', '-B', script,
                '--resume-diagnostic', str(bootstrap.number)],
               {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'})
     raise NamespaceProofError('exec_returned')
@@ -498,15 +514,18 @@ def _resume_guardian(arguments):
     encoded = os.pread(number, 8193, 0)
     _require(0 < len(encoded) <= 8192)
     packet = json.loads(encoded)
-    _require(json.dumps(packet, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() == encoded
-             and type(packet) is dict and set(packet) == {
+    required = {
                  'generation', 'supervisor', 'deadline', 'outside_uid', 'outside_gid',
-                 'original_namespaces', 'namespaces', 'process', 'images', 'descriptors', 'mask', 'cgroup_required'})
+                 'original_namespaces', 'namespaces', 'process', 'images', 'descriptors', 'mask', 'cgroup_required'}
+    _require(json.dumps(packet, sort_keys=True, separators=(',', ':'), allow_nan=False).encode() == encoded
+             and type(packet) is dict and set(packet) in (required, required | {'runtime', 'runtime_root'}))
     _require(type(packet['cgroup_required']) is bool)
+    _require(not packet['cgroup_required'] or 'runtime' in packet)
     _require(type(packet['descriptors']) is list and len(packet['descriptors']) == 3)
     gate, status, parent = [_resume_descriptor(value) for value in packet['descriptors']]
     _require(len({number, gate.number, status.number, parent.number}) == 4)
     bootstrap.close()
+    runtime = None
     try:
         supervisor = packet['supervisor']
         _resume_supervisor(parent, supervisor)
@@ -518,6 +537,11 @@ def _resume_guardian(arguments):
                  == {f'{key}={value}'.encode() for key, value in _ENVIRONMENT.items()}
                  and len(os.listdir('/proc/self/task')) == 1)
         expected = {0, 1, 2, gate.number, status.number, parent.number}
+        if 'runtime' in packet:
+            from hosted_synthetic_runtime import receive_runtime, verify_consumer
+            runtime = receive_runtime(packet['runtime'])
+            _require(runtime.generation == packet['generation'] and runtime.bundle.descriptor not in expected)
+            expected.add(runtime.bundle.descriptor)
         for name in os.listdir('/proc/self/fd'):
             try:
                 os.fstat(int(name))
@@ -535,14 +559,22 @@ def _resume_guardian(arguments):
         parse_id_map(_read('/proc/self/gid_map', 128), packet['outside_gid'])
         _require(list(_identity(os.stat('/proc/self/exe'))) == packet['images']['executable'])
         _require(_image_is_mapped(packet['images']['loader']))
+        runtime_proof = None
+        if runtime is not None:
+            runtime_proof = verify_consumer(runtime, packet['runtime_root'])
+            runtime.close()
+            runtime = None
         _resume_supervisor(parent, supervisor)
         _mapped_guardian(gate, status, parent, packet['generation'], supervisor, packet['deadline'],
                          packet['outside_uid'], packet['outside_gid'], packet['original_namespaces'],
-                         packet['cgroup_required'])
+                         packet['cgroup_required'], **({'runtime_proof': runtime_proof} if runtime_proof else {}))
         return 0
     except BaseException as exc:
         _child_failure(status, packet['generation'], packet['deadline'], exc)
         return 1
+    finally:
+        if runtime is not None:
+            runtime.close()
 
 
 def _mount_proc():
@@ -600,7 +632,7 @@ def _kill_unreaped_child(pid, descriptor):
         raise NamespaceCleanupError("child_cleanup_refused") from errors[0]
 
 
-def _private_evidence(outside_uid, outside_gid, original_namespaces, root):
+def _private_evidence(outside_uid, outside_gid, original_namespaces, root, *, runtime_proof=None, filter_count=None):
     root.verify()
     _require(root.identity == _identity(os.stat("/proc")))
     members = sorted(int(path.name) for path in Path("/proc").iterdir() if path.name.isdecimal())
@@ -618,14 +650,19 @@ def _private_evidence(outside_uid, outside_gid, original_namespaces, root):
              and all(namespaces[name] != original_namespaces[name] for name in _NAMESPACES))
     _require(sorted(os.listdir("/proc/2/fd")) == ["0", "1", "2"])
     _require(all(os.readlink(f"/proc/2/fd/{number}") == "/dev/null" for number in (0, 1, 2)))
-    return dict(members=members, records=records,
+    evidence = dict(members=members, records=records,
                 uid_map=parse_id_map(_read("/proc/self/uid_map", 128), outside_uid),
                 gid_map=parse_id_map(_read("/proc/self/gid_map", 128), outside_gid),
                 mount=parse_private_proc_mount(_read("/proc/self/mountinfo"), _mount_id(root)),
                 proc_identity=list(_identity(os.stat("/proc"))))
+    if runtime_proof is not None:
+        from hosted_synthetic_worker import attest_worker
+        evidence.update(runtime=runtime_proof,
+                        worker_authority=attest_worker(2, runtime_proof['root_identity'], filter_count))
+    return evidence
 
 
-def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False):
+def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None):
     # PID1 death tears down all nested children; guardian death is bound by pidfd.
     backend._browser_prctl(1, int(signal.SIGKILL))
     _require((os.getpid(), os.getppid()) == (1, 0)
@@ -644,26 +681,44 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
     method = _mount_proc()
     root = _acquire(lambda: os.open("/proc", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW))
     _require(root.identity != before and backend._browser_fstatfs_magic(root.number) == 0x9FA0)
-    from hosted_synthetic_projection import observe_projection
-    projection = observe_projection(generation)
+    if runtime_proof is None:
+        from hosted_synthetic_projection import observe_projection
+        projection = observe_projection(generation)
+        worker_options = {}
+    else:
+        from hosted_synthetic_worker import _status, restrict_worker
+        from hosted_synthetic_runtime import SENTINEL
+        _require(runtime_proof['consumer_exec_verified'] is True and runtime_proof['generation'] == generation)
+        selected = _acquire(lambda: os.open('/', os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW))
+        try:
+            _require(list(selected.identity) == runtime_proof['root_identity'])
+            worker_root, worker_mount = selected.identity, _mount_id(selected)
+        finally: selected.close()
+        worker_options = {'runtime_proof': runtime_proof, 'filter_count': _status()['Seccomp_filters'] + 1}
+        projection = {'scope': 'HOSTED_DIAGNOSTIC_RUNTIME', 'sealed_root': True,
+                      'generation': generation, 'execution_authority': False}
     child = os.fork()
     if child == 0:
         try:
             _hardening(1)
             backend._close_browser_guardian_descriptors(frozenset((0, 1, 2)))
-            os.kill(os.getpid(), signal.SIGSTOP)
+            if runtime_proof is None:
+                os.kill(os.getpid(), signal.SIGSTOP)
+            else:
+                restrict_worker(worker_root, worker_mount)
+                os.execve(SENTINEL, [SENTINEL], {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'})
         finally:
             os._exit(127)
     _require(child == 2)
     _wait(child, deadline, stopped=True)
     child_fd = _pidfd(child)
-    evidence = _private_evidence(outside_uid, outside_gid, original_namespaces, root)
+    evidence = _private_evidence(outside_uid, outside_gid, original_namespaces, root, **worker_options)
     evidence["method"] = method
     evidence["projection"] = projection
     _send(status, generation, "PRIVATE_PROC", deadline, evidence=evidence)
     # This bounded wait retains the namespace and its mount during outer proof.
     _receive(gate, generation, "CLOSE", deadline)
-    repeated = _private_evidence(outside_uid, outside_gid, original_namespaces, root)
+    repeated = _private_evidence(outside_uid, outside_gid, original_namespaces, root, **worker_options)
     _require(repeated == {key: value for key, value in evidence.items() if key not in {"method", "projection"}})
     try:
         child_fd.verify()
@@ -683,7 +738,7 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
 
 
 def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
-                generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False):
+                generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None):
     child = -1
     init_fd = None
     try:
@@ -692,7 +747,8 @@ def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
         child = os.fork()
         if child == 0:
             try:
-                _init(inner_read, result_write, own, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required)
+                _init(inner_read, result_write, own, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required,
+                      **({'runtime_proof': runtime_proof} if runtime_proof is not None else {}))
                 os._exit(0)
             except BaseException as exc:
                 _child_failure(result_write, generation, deadline, exc)
@@ -728,13 +784,14 @@ def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
     return child, init_fd
 
 
-def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False):
+def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime=None):
     backend._block_browser_projection_signals()
     _hardening(supervisor)
     os.setsid()
     os.environ.clear()
     backend._normalize_browser_guardian_stdio()
-    backend._close_browser_guardian_descriptors(frozenset((0, 1, 2, gate.number, status.number)))
+    backend._close_browser_guardian_descriptors(frozenset((0, 1, 2, gate.number, status.number,
+                                                         *((runtime.bundle.descriptor,) if runtime else ()))))
     _send(status, generation, "STOPPED", deadline)
     os.kill(os.getpid(), signal.SIGSTOP)
     _receive(gate, generation, "START", deadline)
@@ -746,7 +803,8 @@ def _guardian(gate, status, generation, supervisor, deadline, outside_uid, outsi
     backend._browser_prctl(4, 0)
     parent = _pidfd(supervisor)
     _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
-                     outside_uid, outside_gid, original_namespaces, cgroup_required)
+                     outside_uid, outside_gid, original_namespaces, cgroup_required,
+                     **({'runtime': runtime} if runtime is not None else {}))
 
 
 def _guardian_enrollment(gate, status, child, init_fd, generation, deadline):
@@ -826,20 +884,24 @@ def _attest_cgroup_pair(lease, outer, enrolled, guardian_fd, guardian, guardian_
 
 
 def _mapped_guardian(gate, status, parent, generation, supervisor, deadline,
-                     outside_uid, outside_gid, original_namespaces, cgroup_required=False):
+                     outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None):
     backend._browser_mount(None, b"/", None, (1 << 18) | 16384, None)
     own = _pidfd(os.getpid())
     inner_read, inner_write = _pipe()
     result_read, result_write = _pipe()
     child, init_fd = _start_init(own, parent, inner_read, inner_write, result_read, result_write,
-                                 generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required)
+                                 generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required,
+                                 **({'runtime_proof': runtime_proof} if runtime_proof is not None else {}))
     if cgroup_required:
         _guardian_enrollment(gate, status, child, init_fd, generation, deadline)
     parent.close()
     own.close()
     _send(inner_write, generation, "PROBE", deadline)
     evidence = _receive(result_read, generation, "PRIVATE_PROC", deadline, fields=("evidence",))["evidence"]
-    _require(type(evidence) is dict and set(evidence) == {"members", "records", "uid_map", "gid_map", "mount", "proc_identity", "method", "projection"})
+    _require(type(evidence) is dict and set(evidence) == {"members", "records", "uid_map", "gid_map", "mount", "proc_identity", "method", "projection"}
+             | ({'runtime', 'worker_authority'} if runtime_proof is not None else set()))
+    if runtime_proof is not None:
+        _require(evidence['runtime'] == runtime_proof)
     process = _process(child)
     init_start = process["start"]
     _require(process["parent"] == os.getpid() and process["group"] == os.getpid())
@@ -876,6 +938,10 @@ def _mapped_guardian(gate, status, parent, generation, supervisor, deadline,
     _require(parse_status(_read(f"/proc/{worker['pid']}/status", 16384))["nspid"] == [worker["pid"], 2]
              and _namespaces(str(worker["pid"])) == init_namespaces
              and _process(worker["pid"]) == worker)
+    if runtime_proof is not None:
+        from hosted_synthetic_worker import attest_worker, _status
+        _require(evidence['worker_authority'] == attest_worker(worker['pid'], runtime_proof['root_identity'],
+                                                              _status()['Seccomp_filters'] + 1))
     outer = dict(init_pid=child, init_start=init_start, worker_pid=worker['pid'], worker_start=worker['start'])
     _send(status, generation, "RETAINED", deadline, evidence=evidence,
           **({'outer': outer} if cgroup_required else {}))
@@ -904,7 +970,7 @@ def _finish_private_probe(inner_write, result_read, worker_fd, init_fd, child, g
         raise NamespaceCleanupError('guardian_cleanup_refused') from errors[0]
 
 
-def observe_private_proc(generation: str, *, delegation: Path | None = None) -> dict:
+def observe_private_proc(generation: str, *, delegation: Path | None = None, source_binding=None) -> dict:
     """Run in a fresh scrubbed single-thread supervisor; return no authority."""
     from hosted_synthetic_capability import _require_clean_supervisor
     _require_clean_supervisor()
@@ -931,6 +997,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
     cgroup_evidence = None
     resource_cleanup = None
     enrolled = None
+    runtime = None
     process_descriptors = []
     errors = []
     reason = "NAMESPACE_PROOF_REFUSED"
@@ -940,6 +1007,8 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
         try:
             backend._browser_prctl(36, 1)
             if delegation is not None:
+                from hosted_synthetic_runtime import capture_runtime
+                runtime = capture_runtime(generation, Path(__file__).resolve().parents[2], source_binding)
                 cgroup = CgroupLease.create(delegation, generation=generation, memory_max=256 * 1024**2)
             for _ in range(2):
                 descriptors.extend(_pipe())
@@ -951,7 +1020,8 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
                 try:
                     backend._restore_browser_projection_signals(previous_mask)
                     _guardian(gate_read, status_write, generation, parent, deadline,
-                              outside_uid, outside_gid, original_namespaces, cgroup is not None)
+                              outside_uid, outside_gid, original_namespaces, cgroup is not None,
+                              **({'runtime': runtime} if runtime is not None else {}))
                     os._exit(0)
                 except BaseException as exc:
                     _child_failure(status_write, generation, deadline, exc)
@@ -976,6 +1046,9 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
             retained = _receive(status_read, generation, "RETAINED", deadline,
                                 fields=("evidence", "outer") if cgroup is not None else ("evidence",))
             evidence = retained['evidence']
+            if runtime is not None:
+                from hosted_synthetic_runtime import verify_report_binding
+                verify_report_binding(runtime, evidence.get('runtime'))
             if cgroup is not None:
                 cgroup_evidence = _attest_cgroup_pair(cgroup, retained['outer'], enrolled,
                                                      child_fd, process, process_start, process_descriptors)
@@ -1051,6 +1124,11 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None) -> 
                     descriptor.close()
                 except BaseException as exc:
                     errors.append(exc)
+        if runtime is not None:
+            try:
+                runtime.close()
+            except BaseException as exc:
+                errors.append(exc)
         try:
             backend._browser_prctl(36, previous_subreaper.value)
         except BaseException as exc:

@@ -5,9 +5,9 @@
     "transformation": "none or authored evidence record; see README scope"
   },
   "external-review.json": {
-    "bytes": 870,
-    "sha256": "1b80f2cd8a3e8657e2330ecf013762b172462fb55bb78dc137ae4470ce747b3a",
-    "transformation": "none or authored evidence record; see README scope"
+    "bytes": 1512,
+    "sha256": "8885c49259b5e8bbd949152a14d9b93d02c3300434b9b13668eb2274e4f392f9",
+    "transformation": "owner-supplied attribution added 2026-10-27; original review coverage unchanged"
   },
   "findings.json": {
     "bytes": 7517,
