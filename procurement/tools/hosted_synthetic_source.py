@@ -52,6 +52,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_mapping_step.mjs",
     "procurement/tools/hosted_synthetic_review_step.mjs",
     "procurement/tools/hosted_synthetic_prepare_step.mjs",
+    "procurement/tools/hosted_synthetic_page_adapter.mjs",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

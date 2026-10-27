@@ -1,0 +1,65 @@
+{
+  "commit": "d6d40ebee90881378ed222f0c9286c4f70987514",
+  "tree": "745d0a7cefc6e7683add9213f4959a5ba60ed976",
+  "base": "2bfd85fed1ec43adc68807a503bbc175a9190b0d",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "4f4fb044e8d91d5791524f8c63a67ff50760fcb7aa8b92aab0c8f04fb0700757",
+    "docs/CODEX_HANDOFF.md": "d19675dde3881846e965e7e5b2b46320073ccf95b39fefe3b2122ae9f5d83910",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "0773e9d4c681a7150fec261d458a30464d5813e6d39616a070bb1038bf8fbccc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "76f3225ba18bb3306bd309a4120e8da3a49c8afbebe5cb335eff8683cb36e0e8",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "2860ee96c4f2e29a03fd36cc26d6f39fef00e9bdbec7e06eb371ca34c8f3abca",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-final-observer-sample.txt": "3e494a6c2714381b2924cf85d813527bd4386581845a2b619af82aac124b6e8a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-first.txt": "6cb9146f0f59ab131becbaa5d8c9b32a551201cf01167f2a2d23287da382bbe7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-causal.txt": "62abcb8768e2ec7dad0e4dd41f7799c7c9eb2335dde805c8b007645512e5ed18",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-discovery.json": "cef2f9d6572dcd8a5ef5d89a37812945992f462c1b1285047973b8b5cd256bfc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-frozen-hosted.txt": "75a6d76372f85c614a936e41957a61d6820c5a4d976e124322ebc2c075a8688c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-frozen-related.txt": "c97715f1fc19082280271763bb7bb911432404d4ee0d4c82fbdd54eb21182f41",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-frozen-validation.json": "a70b1175febed68636991ecce082af04329090dcc6d76cfaa7c011234a4d8dae",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-review-publication.json": "87d76525574521eb25a66fef7deb0f443df4c06e4e903ae34cc3b4587196f303",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-mapping-reviewed.txt": "10d8eff49c2c727a976de3c0607289196764515671c1c38104a62576d2dc9862",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-review-step-api-contract.txt": "7e55b39c5c9b2c95f8b5383786b34ba85d8f0ff1b28a0eab96d2cb40f69020f7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-review-step-final.txt": "4189ad60e54b3336bcbd7bbc627ed341bacaa0da814ca49c0a1e5b3b39d45fb8",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-review-step-first.txt": "a281b275a71722e7f5cb1fdd330c5fa65b18e63425a612fbf0c94385b3aece2f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "03d0b3c83b44672b08164f5428407369e0db7d8a4386e43c7930dfc226d9c92a",
+    "procurement/tests/hosted_prepare_step_fixture.mjs": "6b628225aca8a90824f8ec76cca128e0fd62401733d105b9b283be54b2d632fa",
+    "procurement/tests/test_hosted_synthetic_prepare_step.py": "56cd0720ecb23883ad550b24acc0b4d8ed107cd73642f8a2e792f4c3d5997a23",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "f961cc51387f72fee1501c8208d7884dd44ade04dd5458a221be815f81587bea",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "0450037d1c852888c1c5460b197ed7fde7d4aefccc765740178b85ff32b74637",
+    "procurement/tests/test_supplier_format_conformance.py": "f707cfa4ed1fdd0f3b26398d37c1b4427b8f32001a2aa447b99062eac12e6df6",
+    "procurement/tools/hosted_synthetic_prepare_step.mjs": "4a922db5482320b17ef213d17e3a470d60eed418a36c40764ce009cb1c8c9a54",
+    "procurement/tools/hosted_synthetic_source.py": "f7c49b1e386989396476b5f533b4bd62ea5e9a712bceee49a58feed3713d415f",
+    "procurement/tools/run_tests.py": "df00213f12502d7c33aa917ff8952a0917afe995da242f1eb2f61e69c6d495fe"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 19.215,
+      "sha256": "e64fd173d91dc7dae10e58695da9a86fe2d5ad9fecc4ba115232b2cb8bd4bad6"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.581,
+      "sha256": "5b28c9ab0f5128b70b04d30783010d50da76a494216c3baf2434bf8604eb51bc"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.565,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

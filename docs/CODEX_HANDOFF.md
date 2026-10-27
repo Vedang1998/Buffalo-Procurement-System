@@ -10,6 +10,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 preventive browser protocol adapter — continuing
+
+Verified published predecessor: `d6d40ebee90881378ed222f0c9286c4f70987514`, tree
+`745d0a7cefc6e7683add9213f4959a5ba60ed976`. Its frozen checks passed 506 hosted,
+88 related, 10 startup and 18 imports. Bootstrap refused with exit78. Discovery
+2,033 / 112 modules is separate, with zero executed by discovery. Ordinary push
+and fresh remote fetch matched; protected refs were unchanged.
+
+The new inert CDP adapter supplies the existing browser components' guarded page
+interface. It does not connect, launch, login or release credentials. One socket
+owns one command dispatcher; the session must identify its own target and frame.
+Mutation requests are intercepted before forwarding, with one exact synchronous
+allowance. Denial latches before its acknowledgment; throwing/async callbacks,
+colliding IDs and ambiguous continuation fail closed. Responses and redirects
+bind fresh requests, session/frame/loader and operation generation. Navigation has
+bounded deadlines and causal load evidence; only the exact destroyed-context
+error can be reconciled with an actually observed POST/navigation. Status reads
+execute a bounded UTF8 stream in the existing page and require a fresh GET/200.
+Cancellation closes pending commands/timers, while terminal denial observation
+remains until target absence is proved.
+
+Internal read-only investigation found and the writer repaired denial races,
+missing command-session/target binding, stale ledgers and fabricated JSON-read
+acceptance. The 28 causal tests use scripted CDP events, not Chromium. An earlier
+27-test run exposed three positive-fixture CSRF-format failures; a combined run
+also caught the workflow's stale expected count. Both are retained as failed
+evidence. Registration now adds28 to the existing floor:2,061 /113 modules; hosted
+focused floor534. Frozen execution results follow at the exact clean checkpoint.
+
+The eventual driver must have ONE Fetch resolution owner combining egress and
+mutation policy. Attaching the old permissive Fetch handler alongside this one
+is forbidden. Accepted browser/runtime/process composition remains unresolved;
+this adapter cannot establish containment. Continue the dormant download collector
+and bounded packet/restart components. Six findings remain pending independent
+review and three OPEN; no Claude re-review or live activation occurred.
+
 ### 2026-10-27 upstream preparation component — continuing
 
 Verified published implementation: `2bfd85fed1ec43adc68807a503bbc175a9190b0d`, tree
