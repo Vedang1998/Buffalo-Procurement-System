@@ -67,7 +67,7 @@ class HostedSyntheticUserServiceTests(unittest.TestCase):
         self.write.assert_not_called()
 
     def test_system_manager_path_requires_explicit_mode_and_same_owned_controls(self):
-        self.current = '/system.slice/' + UNIT + '/supervisor'
+        self.current = '/system.slice/system-buffaloaaaaaaaabbbbccccddddeeeeeeeeeeee.slice/' + UNIT + '/supervisor'
         with self.assertRaises(cg.CgroupProofError):
             self.prepare()
         self.write.assert_not_called()
@@ -76,7 +76,7 @@ class HostedSyntheticUserServiceTests(unittest.TestCase):
         self.write.assert_not_called()
         result = service.prepare_user_service.__wrapped__(UNIT, manager='system')
         self.assertEqual(result['lifecycle_owner'], 'SYSTEMD_SYSTEM_MANAGER')
-        self.assertEqual(result['root_path'], '/system.slice/' + UNIT)
+        self.assertEqual(result['root_path'], '/system.slice/system-buffaloaaaaaaaabbbbccccddddeeeeeeeeeeee.slice/' + UNIT)
         self.assertEqual(result['controller_write_attempts'], 1)
         self.current = ROOT + '/supervisor'
         with self.assertRaises(cg.CgroupProofError):
@@ -86,7 +86,7 @@ class HostedSyntheticUserServiceTests(unittest.TestCase):
         for unit in ('main.service', '../' + UNIT, '', None, UNIT.replace('a', 'A')):
             with self.subTest(unit=unit), self.assertRaises(cg.CgroupProofError):
                 self.prepare(unit)
-        for current in ('/system.slice/' + UNIT + '/supervisor', ROOT,
+        for current in ('/system.slice/system-buffaloaaaaaaaabbbbccccddddeeeeeeeeeeee.slice/' + UNIT + '/supervisor', ROOT,
                         ROOT.replace('user-1001', 'user-1002') + '/supervisor',
                         ROOT.replace('app.slice/', 'app.slice/unrelated.service/') + '/supervisor',
                         ROOT.replace('app.slice', 'nested.slice') + '/supervisor'):

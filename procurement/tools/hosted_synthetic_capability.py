@@ -264,6 +264,7 @@ def main(arguments=None) -> int:
             phase = 'NAMESPACE'
             options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path']),
                        'source_binding': binding} if delegation is not None else {}
+            if len(args)==10:options['external_unit']=args[5]
             observation = observe_private_proc(generation, **options) if host['prerequisites_available'] else None
         except (CgroupCleanupError, NamespaceCleanupError, BootstrapCleanupError):
             result = _report(binding, reason='CLEANUP_FAILED', host=host, delegation=delegation)

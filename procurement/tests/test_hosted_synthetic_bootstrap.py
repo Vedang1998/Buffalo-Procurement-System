@@ -177,7 +177,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
                 boot.parse_postdrop_status(raw,uid=UID,gid=GID)
 
     def test_same_process_namespace_and_exact_system_service_scope(self):
-        current=f'/system.slice/{UNIT}/supervisor'
+        current=f'/system.slice/system-buffaloaaaaaaaabbbbccccddddeeeeeeeeeeee.slice/{UNIT}/supervisor'
         with patch.object(boot.os,'getresuid',return_value=(UID,)*3), \
              patch.object(boot.os,'getresgid',return_value=(GID,)*3), \
              patch.object(boot.os,'getgroups',return_value=[]), \
@@ -191,7 +191,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
                 current=changed
                 with self.subTest(current=current), self.assertRaises(boot.BootstrapRefusal):
                     boot.verify_postdrop_identity.__wrapped__(uid=UID,gid=GID,unit=UNIT,initial_user_namespace=(5,123))
-            current=f'/system.slice/{UNIT}/supervisor'
+            current=f'/system.slice/system-buffaloaaaaaaaabbbbccccddddeeeeeeeeeeee.slice/{UNIT}/supervisor'
             with self.assertRaises(boot.BootstrapRefusal):
                 boot.verify_postdrop_identity.__wrapped__(uid=UID,gid=GID,unit=UNIT,initial_user_namespace=(5,999))
 
@@ -204,11 +204,13 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
         args=['repo','push','ref','a'*40,'--native-bootstrap',UNIT,'1001','1001','5','123']
         with patch.object(launcher.os,'getuid',return_value=UID),patch.object(launcher.os,'geteuid',return_value=UID), \
              patch.object(launcher,'inspect_postdrop_identity',return_value={}), \
+             patch.object(launcher.os,'fstat',return_value=Mock(st_mode=0o010600)), \
              patch.object(launcher.subprocess,'run',return_value=Mock(returncode=1)) as run:
             self.assertEqual(launcher.main(args),1)
             self.assertTrue(run.call_args.kwargs['close_fds'])
             self.assertEqual(run.call_args.kwargs['env'],boot._ENVIRONMENT)
             self.assertEqual(run.call_args.kwargs['timeout'],110)
+            self.assertEqual(run.call_args.kwargs['stdin'],0)
             run.side_effect=subprocess.TimeoutExpired('synthetic',110)
             self.assertEqual(launcher.main(args),124)
 
@@ -327,9 +329,10 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
             boot.verify_postdrop_access.__wrapped__(Path('/work/repo'),UNIT)
 
     def _owned_run(self, failure):
+        from types import SimpleNamespace
         import hosted_synthetic_identity as identity
         account=object.__new__(identity.AccountLease);account._owner=account
-        account.service_attempted=False;account.service_acknowledged=False
+        account.service_attempted=False;account.service_acknowledged=False;account.journal=Mock();account.uncertain=False
         account.identity=identity.DedicatedIdentity(UNIT.removeprefix('buffalo-hosted-').removesuffix('.service'),950,951,UID,GID)
         selected=plan(uid=950,gid=951,root=account.identity.root+'/repo');events=[]
         binding=Mock(tree='b'*40,files=())
@@ -337,7 +340,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
                 'execution_authority':False,'provider_calls':0,'payload_processes':0,'credential_release':'WITHHELD',
                 'contract':'BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1','HOST_CAPABILITY':'FAIL','sentinel_exec':'NOT_RUN',
                 'runtime':'HOST_RUNTIME_UNSEALED','railway_compatibility':'NOT_PROVEN'}
-        report.update(reason='HOST_PREREQUISITES_REFUSED',namespace_attempt=None)
+        report.update(reason='INCOMPLETE_PREFLIGHT',namespace_attempt={'cleanup_complete':True,'reason':'INCOMPLETE_PREFLIGHT','resource_cleanup':{'generation_child_removed':True}})
         if failure=='resource_cleanup':report.update(reason='CLEANUP_FAILED',namespace_attempt={'cleanup_complete':False})
         first=json.dumps(report,sort_keys=True,separators=(',',':')).encode()
         raw=first+b'\nevidence_sha256='+hashlib.sha256(first).hexdigest().encode()+b'\n'
@@ -348,10 +351,18 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
             if failure=='deferred_cancel':os.kill(os.getpid(),signal.SIGINT)
             if failure=='timeout':return 124,raw
             return 1,raw
-        def absence(unit):
-            self.assertEqual(unit,UNIT);events.append('absence')
-            if failure=='cleanup':raise boot.BootstrapRefusal('unit not collected')
-            return 'NOT_FOUND_OBSERVED'
+        observed=Mock(proof=None,work_acknowledged=True,failed=False,closed=False)
+        def finish(**kwargs):
+            events.append('drain')
+            observed.proof=SimpleNamespace(generation='c'*64,source_commit='a'*40,source_tree='b'*40,
+                aggregate={},operation_succeeded=kwargs['operation_succeeded'])
+        observed.finish_service.side_effect=finish
+        def close():
+            events.append('external_close');observed.closed=True
+            if failure=='cleanup':
+                observed.failed=True
+                raise boot.BootstrapCleanupError('unit not collected')
+        observed.close.side_effect=close
         def inspect():
             events.append('inspect')
             return {'ancestors':failure=='drift' and events.count('inspect')==2}
@@ -362,12 +373,12 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
              patch.object(boot.os,'stat',return_value=Mock(st_dev=5,st_ino=123)), \
              patch.object(boot,'inspect_native_prerequisites',side_effect=inspect), \
              patch.object(boot,'_collect_native_client',side_effect=client), \
-             patch.object(boot,'_observe_unit_absence',side_effect=absence):
+             patch('hosted_synthetic_observer.ExternalObserver.create',return_value=observed):
             try:
                 invoke=boot.run_native_plan if failure=='deferred_cancel' else boot.run_native_plan.__wrapped__
                 return invoke(selected,source_root='/work/source',account=account)
             finally:
-                self.assertEqual(events,['inspect','client','absence','inspect'])
+                self.assertEqual(events,['inspect','client','drain','external_close','inspect'])
 
     def test_partial_client_failure_or_timeout_keeps_cleanup_obligations(self):
         for failure in ('client','timeout'):
@@ -390,7 +401,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
         result=self._owned_run(None)
         self.assertFalse(result['execution_authority'])
         self.assertEqual(result['runtime_closure'],'UNSEALED')
-        self.assertEqual(result['service_absence'],'NOT_FOUND_OBSERVED')
+        self.assertEqual(result['service_absence'],'EXACT_OWNED_SUBTREE_REMOVAL_OBSERVED')
         self.assertEqual(result['client_returncode'],1)
 
 

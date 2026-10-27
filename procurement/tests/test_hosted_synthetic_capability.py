@@ -371,7 +371,7 @@ class HostedSyntheticCapabilityTests(unittest.TestCase):
             self.assertEqual(capability.main(args),1)
         self.assertEqual(order,['postdrop','source','access','delegation','host','namespace'])
         prepare.assert_called_once_with('unit',manager='system')
-        self.assertEqual(namespace.call_args.kwargs,{'delegation':Path('/sys/fs/cgroup/system.slice/unit'), 'source_binding': binding})
+        self.assertEqual(namespace.call_args.kwargs,{'delegation':Path('/sys/fs/cgroup/system.slice/unit'), 'source_binding': binding, 'external_unit':'unit'})
         report=json.loads(output.getvalue().splitlines()[0])
         self.assertEqual(report['postdrop_identity'],{'groups':[]})
         self.assertEqual(report['postdrop_access'],{'controller_writes':0})

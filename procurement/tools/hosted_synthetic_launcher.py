@@ -1,6 +1,7 @@
 """Post-native-drop launcher; repository code is never a root bootstrap."""
 import os
 import re
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -21,6 +22,15 @@ def _positive(value):
 
 _CAPABILITIES = ('CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb')
 _UNIT = re.compile(r'buffalo-hosted-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.service\Z')
+
+
+def accounting_slice(unit):
+    _require(type(unit) is str and _UNIT.fullmatch(unit),'bootstrap_unit_refused')
+    return 'system-buffalo'+unit[len('buffalo-hosted-'):-len('.service')].replace('-','')+'.slice'
+
+
+def service_cgroup_path(unit):
+    return '/system.slice/'+accounting_slice(unit)+'/'+unit
 
 
 def parse_postdrop_status(raw, *, uid, gid):
@@ -75,7 +85,7 @@ def inspect_postdrop_identity(*, uid, gid, unit, initial_user_namespace):
              and (info.st_dev, info.st_ino) == initial_user_namespace, 'bootstrap_initial_namespace_refused')
     with open('/proc/self/cgroup', 'rb') as stream:
         raw = stream.read(4097)
-    expected = f'/system.slice/{unit}/supervisor'
+    expected = service_cgroup_path(unit)+'/supervisor'
     _require(raw == ('0::' + expected + '\n').encode(), 'bootstrap_scope_refused')
     result.update(contract='BUFFALO_POSTDROP_IDENTITY_V1', initial_user_namespace=list(initial_user_namespace),
                   cgroup=expected, execution_authority=False)
@@ -94,13 +104,14 @@ def main(arguments=None):
             return 78
         inspect_postdrop_identity(uid=int(args[6]), gid=int(args[7]), unit=args[5],
                                  initial_user_namespace=(int(args[8]), int(args[9])))
+        _require(stat.S_ISFIFO(os.fstat(0).st_mode),'bootstrap_observer_channel_refused')
     except (LauncherRefusal, OSError, ValueError):
         return 78
     try:
         return subprocess.run([sys.executable, '-I', '-S', '-B',
                                str(Path(__file__).with_name('hosted_synthetic_capability.py')), *args],
                               close_fds=True, env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'},
-                              stdin=subprocess.DEVNULL, timeout=110).returncode
+                              stdin=0, timeout=110).returncode
     except subprocess.TimeoutExpired:
         # systemd's exact owned control group and stop bound cover descendants.
         # Timeout is never a successful cleanup or capability result.

@@ -40,7 +40,10 @@ class HostedSyntheticSourceTests(unittest.TestCase):
 
     def git(self, *arguments):
         return subprocess.run(
-            ["git", "-c", "core.hooksPath=/dev/null", "-C", str(self.root), *arguments],
+            # Git maintenance --auto --detach daemonizes before deciding that
+            # tiny fixtures need no work. Non-reaping container PID1 would
+            # retain that grandchild; keep fixture commits fully synchronous.
+            ["git", "-c", "maintenance.auto=false", "-c", "core.hooksPath=/dev/null", "-C", str(self.root), *arguments],
             env={"PATH": os.defpath, "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1",
                  "GIT_CONFIG_GLOBAL": os.devnull},
             check=True, capture_output=True, text=True,

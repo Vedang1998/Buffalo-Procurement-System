@@ -592,6 +592,8 @@ print("owned pre-ARMED child reaped")
         program = r'''import os,sys,signal,time,selectors
 from unittest.mock import patch
 sys.path.insert(0,ROOT)
+sys.path.insert(0,TESTS)
+from browser_runtime_test_support import _cleanup_isolated_fixture_children
 import hosted_synthetic_namespace as n
 import hosted_synthetic_launcher as launcher
 launcher.inspect_host_identity=lambda: dict()  # This is a simulated cleanup-boundary test.
@@ -643,17 +645,22 @@ try:
  assert all(n.backend._browser_pidfd_is_terminal(fd) for fd in descriptors)
  print("supervisor death cleaned")
 finally:
- for pid in [supervisor,*pids]:
-  if pid in reaped: continue
-  try: os.kill(pid,signal.SIGKILL)
-  except ProcessLookupError: pass
- for fd in descriptors: os.close(fd)
- os.close(r)
-'''.replace('ROOT', repr(root)).replace('ARMED', repr(armed), 1).replace('AFTER_ARMED', repr(armed))
+ try:
+  if supervisor not in reaped:
+   try: os.kill(supervisor,signal.SIGKILL)
+   except ProcessLookupError: pass
+  try:
+   for fd in descriptors:
+    if not n.backend._browser_pidfd_is_terminal(fd):signal.pidfd_send_signal(fd,signal.SIGKILL)
+  finally:_cleanup_isolated_fixture_children()
+ finally:
+  for fd in descriptors:os.close(fd)
+  os.close(r)
+'''.replace('ROOT', repr(root)).replace('TESTS', repr(str(Path(__file__).resolve().parent))).replace('ARMED', repr(armed), 1).replace('AFTER_ARMED', repr(armed))
         # Replace only the conditional token, preserving the protocol stage.
         run = subprocess.run([sys.executable, '-I', '-S', '-B', '-c', program],
                              env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'},
-                             capture_output=True, text=True, timeout=9)
+                             capture_output=True, text=True, timeout=20)
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertEqual(run.stdout.strip(), 'supervisor death cleaned')
 

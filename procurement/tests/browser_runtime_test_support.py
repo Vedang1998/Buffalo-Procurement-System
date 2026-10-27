@@ -9,6 +9,7 @@ import signal
 import stat
 import subprocess
 import sys
+import time
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -61,6 +62,66 @@ def _has_direct_children():
     return False
 
 
+def _cleanup_isolated_fixture_children():
+    """Rescue only children of an initially childless isolated fixture.
+
+    Bind direct-child pidfds before signaling. Signal every verified child
+    before waiting for any, so one refusal cannot strand other owned children.
+    Ordinary cancellation is deferred through all descriptor cleanup.
+    """
+    previous=signal.pthread_sigmask(signal.SIG_BLOCK,{signal.SIGINT,signal.SIGTERM,signal.SIGHUP,signal.SIGQUIT})
+    deadline=time.monotonic()+5
+    errors=[];refused=set()
+    try:
+        while _has_direct_children() and time.monotonic()<deadline:
+            records=[]
+            for entry in Path('/proc').iterdir():
+                if not entry.name.isdecimal() or int(entry.name) in refused:continue
+                pid=int(entry.name)
+                try:before=acceptance._read_browser_worker_proc_stat(pid)
+                except acceptance.LocalStagingAcceptanceError:continue
+                if before.parent_pid!=os.getpid():continue
+                descriptor=-1
+                try:
+                    descriptor=os.pidfd_open(pid,0)
+                    after=acceptance._read_browser_worker_proc_stat(pid)
+                    if after.parent_pid!=os.getpid() or after.start_ticks!=before.start_ticks:
+                        raise RuntimeError('owned fixture process identity changed')
+                    records.append((pid,descriptor));descriptor=-1
+                except BaseException as error:
+                    errors.append(error);refused.add(pid)
+                finally:
+                    if descriptor>=0:
+                        try:os.close(descriptor)
+                        except BaseException as error:errors.append(error)
+            try:
+                for pid,descriptor in records:
+                    try:
+                        if not acceptance._browser_pidfd_is_terminal(descriptor):
+                            signal.pidfd_send_signal(descriptor,signal.SIGKILL)
+                    except BaseException as error:errors.append(error)
+                for pid,descriptor in records:
+                    try:
+                        if not acceptance._browser_pidfd_is_terminal(descriptor):
+                            with selectors.DefaultSelector() as ready:
+                                ready.register(descriptor,selectors.EVENT_READ)
+                                if not ready.select(max(0,deadline-time.monotonic())):
+                                    raise RuntimeError('owned fixture child did not exit')
+                        waited,_=os.waitpid(pid,os.WNOHANG)
+                        if waited!=pid:raise RuntimeError('owned fixture wait identity changed')
+                    except BaseException as error:errors.append(error);refused.add(pid)
+            finally:
+                for pid,descriptor in records:
+                    try:os.close(descriptor)
+                    except BaseException as error:errors.append(error)
+            if not records:break
+        if _has_direct_children():errors.append(RuntimeError('owned fixture cleanup incomplete'))
+    finally:
+        try:signal.pthread_sigmask(signal.SIG_SETMASK,previous)
+        except BaseException as error:errors.append(error)
+    if errors:raise RuntimeError('owned fixture cleanup failed') from errors[0]
+
+
 @contextmanager
 def owned_subreaper():
     """Let this test supervisor reap its own killed namespace descendants."""
@@ -78,6 +139,10 @@ def owned_subreaper():
     finally:
         try:
             if _has_direct_children():
+                # Rescue even a failed PID handshake without letting fixture
+                # children escape to the platform's non-reaping PID1. The
+                # missing primary cleanup remains a test failure after rescue.
+                _cleanup_isolated_fixture_children()
                 raise RuntimeError("owned subreaper fixture children remain")
         finally:
             restored = ctypes.c_int()

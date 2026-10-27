@@ -7143,6 +7143,25 @@ print('ISOLATED_LIFECYCLE_PASS')
         self.assertNotIn("_release_browser_fabricated_sentinel", names)
 
     def test_browser_private_proc_guardian_dies_with_supervisor_without_residue(self):
+        program = """
+import resource,sys
+resource.setrlimit(resource.RLIMIT_FSIZE,(65536,65536))
+sys.path[:0]=sys.argv[1:]
+from test_run_local_staging_acceptance import RunLocalStagingAcceptanceTests
+RunLocalStagingAcceptanceTests()._private_proc_supervisor_death_assertions()
+print('ISOLATED_SUPERVISOR_DEATH_PASS')
+"""
+        with TemporaryFile() as output:
+            code=run_owned_test_process([sys.executable,'-I','-S','-B','-c',program,
+                str(Path(acceptance.__file__).resolve().parent),str(Path(__file__).resolve().parent)],
+                environment={'PATH':'/usr/bin:/bin','LC_ALL':'C.UTF-8'},output=output,timeout=30)
+            output.seek(0);diagnostic=output.read(65537)
+        self.assertLessEqual(len(diagnostic),65536)
+        self.assertEqual(code,0,diagnostic.decode(errors='replace'))
+        self.assertEqual(diagnostic,b'ISOLATED_SUPERVISOR_DEATH_PASS\n')
+
+    @owned_subreaper()
+    def _private_proc_supervisor_death_assertions(self):
         before_roots = tuple(sorted(Path("/tmp").glob("buffalo-browser-projection-*")))
         cgroup_parent = Path("/sys/fs/cgroup/system.slice")
         before_cgroups = tuple(sorted(cgroup_parent.glob("buffalo-browser-*")))
@@ -7198,6 +7217,7 @@ print('ISOLATED_LIFECYCLE_PASS')
         os.close(write_descriptor)
         guardian_pid = guardian_start = inner_pid = inner_start = 0
         guardian_pidfd = inner_pidfd = -1
+        supervisor_reaped = False
         try:
             with selectors.DefaultSelector() as selector:
                 selector.register(read_descriptor, selectors.EVENT_READ)
@@ -7249,6 +7269,7 @@ print('ISOLATED_LIFECYCLE_PASS')
             )
             os.kill(supervisor, acceptance.signal.SIGKILL)
             waited, status = os.waitpid(supervisor, 0)
+            supervisor_reaped = True
             self.assertEqual(waited, supervisor)
             self.assertTrue(os.WIFSIGNALED(status))
             deadline = time.monotonic() + 5.0
@@ -7263,12 +7284,14 @@ print('ISOLATED_LIFECYCLE_PASS')
                 self.fail(
                     "guardian or namespace init survived supervisor SIGKILL"
                 )
-            self.assertLessEqual(
-                acceptance._reap_browser_process_group_children(
-                    guardian_pid
-                ),
-                2,
-            )
+            reaped=set()
+            while time.monotonic()<deadline:
+                try:pid,_=os.waitpid(-guardian_pid,os.WNOHANG)
+                except ChildProcessError:break
+                if pid:reaped.add(pid)
+                else:time.sleep(0.005)
+            self.assertIn(guardian_pid,reaped)
+            self.assertTrue(reaped.issubset({guardian_pid,inner_pid}))
             for process_id, start_ticks in (
                 (guardian_pid, guardian_start),
                 (inner_pid, inner_start),
@@ -7279,11 +7302,8 @@ print('ISOLATED_LIFECYCLE_PASS')
                     )
                 except acceptance.LocalStagingAcceptanceError:
                     continue
-                if current.start_ticks == start_ticks:
-                    self.assertIn(
-                        current.state,
-                        acceptance._BROWSER_TERMINAL_PROCESS_STATES,
-                    )
+                self.assertNotEqual(current.start_ticks,start_ticks,
+                                    'original owned identity remains, including zombie')
         finally:
             os.close(read_descriptor)
             for descriptor in (guardian_pidfd, inner_pidfd):
@@ -7301,14 +7321,10 @@ print('ISOLATED_LIFECYCLE_PASS')
                     os.close(descriptor)
                 except OSError:
                     pass
-            try:
-                os.kill(supervisor, acceptance.signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            try:
-                os.waitpid(supervisor, 0)
-            except ChildProcessError:
-                pass
+            if not supervisor_reaped:
+                try:os.kill(supervisor,acceptance.signal.SIGKILL)
+                except ProcessLookupError:pass
+                os.waitpid(supervisor,0)
         self.assertEqual(
             before_roots,
             tuple(sorted(Path("/tmp").glob("buffalo-browser-projection-*"))),

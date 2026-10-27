@@ -970,7 +970,7 @@ def _finish_private_probe(inner_write, result_read, worker_fd, init_fd, child, g
         raise NamespaceCleanupError('guardian_cleanup_refused') from errors[0]
 
 
-def observe_private_proc(generation: str, *, delegation: Path | None = None, source_binding=None) -> dict:
+def observe_private_proc(generation: str, *, delegation: Path | None = None, source_binding=None, external_unit=None) -> dict:
     """Run in a fresh scrubbed single-thread supervisor; return no authority."""
     from hosted_synthetic_capability import _require_clean_supervisor
     _require_clean_supervisor()
@@ -983,6 +983,9 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
         current = backend.parse_browser_cgroup_path(_read('/proc/self/cgroup', 4096))
         _require(type(delegation) is Path or isinstance(delegation, Path))
         _require(current.endswith('/supervisor') and delegation == Path('/sys/fs/cgroup' + current).parent)
+    if external_unit is not None:
+        from hosted_synthetic_launcher import service_cgroup_path
+        _require(delegation==Path('/sys/fs/cgroup'+service_cgroup_path(external_unit)))
     original_namespaces = _namespaces("self")
     previous_subreaper = ctypes.c_int()
     _require(backend._browser_libc().prctl(37, ctypes.byref(previous_subreaper), 0, 0, 0) == 0)
@@ -1052,6 +1055,11 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
             if cgroup is not None:
                 cgroup_evidence = _attest_cgroup_pair(cgroup, retained['outer'], enrolled,
                                                      child_fd, process, process_start, process_descriptors)
+            if external_unit is not None:
+                from hosted_synthetic_observer import await_external_observer
+                _require(cgroup is not None and runtime is not None)
+                await_external_observer(unit=external_unit,generation=generation,binding=source_binding,lease=cgroup,
+                    guardian=process,guardian_start=process_start,outer=retained['outer'],deadline=deadline)
             _send(gate_write, generation, "CLOSE", deadline)
             _receive(status_read, generation, "CLEAN", deadline)
             _wait(process, deadline)

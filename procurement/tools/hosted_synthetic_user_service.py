@@ -32,7 +32,7 @@ def _controllers(raw):
 
 @_resource_operation
 def prepare_user_service(unit: str, *, manager: str = 'user') -> dict:
-    from hosted_synthetic_launcher import inspect_host_identity
+    from hosted_synthetic_launcher import inspect_host_identity, service_cgroup_path
     inspect_host_identity()
     _require(type(unit) is str and re.fullmatch(
         r'buffalo-hosted-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.service', unit),
@@ -41,7 +41,7 @@ def prepare_user_service(unit: str, *, manager: str = 'user') -> dict:
     uid = os.geteuid()
     _require(manager in ('user', 'system'), 'delegation_scope_mismatch')
     expected_path = (f'/user.slice/user-{uid}.slice/user@{uid}.service/app.slice/{unit}/supervisor'
-                     if manager == 'user' else f'/system.slice/{unit}/supervisor')
+                     if manager == 'user' else service_cgroup_path(unit)+'/supervisor')
     _require(uid == os.getuid() and uid > 0 and current == expected_path,
         'delegation_scope_mismatch')
     parent_path = Path('/sys/fs/cgroup' + current).parent

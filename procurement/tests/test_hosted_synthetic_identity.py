@@ -15,6 +15,10 @@ ID=identity.DedicatedIdentity('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',950,951,100
 
 
 class HostedDedicatedIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.journal=Mock()
+        self.enterContext(patch('hosted_synthetic_quarantine.Quarantine.create',return_value=self.journal))
+
     def test_complete_owned_native_sequence_and_final_identity_removal(self):
         state={'root':None};commands=[]
         def collect(command,**kwargs):
@@ -91,7 +95,7 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);source=root/'source';source.mkdir();stage=root/'stage'
             env=dict(boot._ENVIRONMENT,GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL='/dev/null',GIT_TERMINAL_PROMPT='0')
-            def git(*args):return subprocess.check_output(['/usr/bin/git','-c','core.hooksPath=/dev/null',*args],cwd=source,env=env,stderr=subprocess.DEVNULL,text=True).strip()
+            def git(*args):return subprocess.check_output(['/usr/bin/git','-c','maintenance.auto=false','-c','core.hooksPath=/dev/null',*args],cwd=source,env=env,stderr=subprocess.DEVNULL,text=True).strip()
             git('init','--initial-branch=fixture')
             (source/'synthetic.txt').write_text('synthetic source only\n');git('add','synthetic.txt')
             git('-c','user.name=Synthetic Fixture','-c','user.email=278831488+Vedang1998@users.noreply.github.com',
@@ -118,6 +122,7 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         lease.identity=ID;lease._owner=lease;lease.created=True;lease.closed=False
         lease.uncertain=False;lease.root_identity=(5,6);lease.platform={}
         lease.service_attempted=False;lease.service_acknowledged=False
+        lease.service_creation_acknowledged=False;lease.drain_proof=None;lease.source_commit='a'*40;lease.journal=Mock()
         return lease
 
     def test_plan_uses_only_explicit_native_commands_and_dropped_git(self):

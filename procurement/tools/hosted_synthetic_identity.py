@@ -65,7 +65,7 @@ def provisioning_commands(identity, source, commit):
     validate(identity);boot._path(source)
     boot._require(re.fullmatch('[0-9a-f]{40}',commit) is not None)
     git=('/usr/bin/env','GIT_CONFIG_NOSYSTEM=1','GIT_CONFIG_GLOBAL=/dev/null','GIT_TERMINAL_PROMPT=0',
-         '/usr/bin/git','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
+         '/usr/bin/git','-c','maintenance.auto=false','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
          '-c','protocol.allow=never','-c','protocol.file.allow=always','-c','safe.directory='+source)
     # Separate names stop userdel from auto-removing a matching private group.
     return (
@@ -222,13 +222,20 @@ class AccountLease:
         boot._require(os.getresuid()==(identity.operator_uid,)*3 and os.getresgid()==(identity.operator_gid,)*3)
         platform=inspect_account_platform();inspect_account(identity,present=False)
         boot._require(not identity_processes(identity) and not os.path.lexists(identity.root)
-                      and not os.path.lexists('/sys/fs/cgroup/system.slice/'+identity.unit))
+                      and not os.path.lexists('/sys/fs/cgroup/system.slice/'+identity.unit)
+                      and not os.path.lexists('/sys/fs/cgroup'+boot.launcher.service_cgroup_path(identity.unit)))
+        from hosted_synthetic_quarantine import Quarantine
         lease=object.__new__(cls);lease.identity=identity;lease._owner=lease
         lease.created=False;lease.root_identity=None;lease.closed=False;lease.uncertain=False
         lease.platform=platform
         lease.service_attempted=False;lease.service_acknowledged=False
+        lease.service_creation_acknowledged=False
+        lease.source_commit=commit
+        lease.drain_proof=None
+        lease.journal=Quarantine.create(identity,commit)
         try:
             for index,command in enumerate(provisioning_commands(identity,source,commit)):
+                lease.journal.record(f'provision_attempt_{index}')
                 code,output=boot._collect_native_client(command,cwd=source)
                 boot._require(code in (0,1) if index==3 else code==0,'dedicated_setup_refused')
                 if index==1:
@@ -246,15 +253,19 @@ class AccountLease:
                     boot._require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700)
                     lease.root_identity=(info.st_dev,info.st_ino)
                 if index>=5:lease.verify_root()
+                lease.journal.record(f'provision_ack_{index}',
+                    {'staging_identity':list(lease.root_identity)} if index>=4 else None)
             return lease
         except BaseException as error:
             # A timed-out account tool may have committed a database mutation.
             # No inferred rollback, force deletion, retry or UID recycling.
             lease.uncertain=True
+            lease.journal.close()
             raise boot.BootstrapCleanupError('dedicated_partial_setup_unverified_identity_retained') from error
 
     def verify_root(self):
         boot._require(self._owner is self and not self.closed and not self.uncertain and self.created)
+        self.journal.verify()
         inspect_account(self.identity,present=True)
         info=os.lstat(self.identity.root)
         boot._require((info.st_dev,info.st_ino)==self.root_identity and stat.S_ISDIR(info.st_mode)
@@ -265,13 +276,17 @@ class AccountLease:
         boot._require(self._owner is self and not self.closed and not self.uncertain)
         if self.service_attempted and not self.service_acknowledged:
             self.uncertain=True
+            self.journal.close()
             raise boot.BootstrapCleanupError('native_acknowledgment_uncertain_identity_retained')
         identity=self.identity
         try:
+            if self.service_attempted:
+                from hosted_synthetic_observer import require_drain_proof
+                require_drain_proof(self.drain_proof,self)
             self.verify_root()
             boot._require(inspect_account_platform()==self.platform,'account_native_platform_drift')
             boot._require(boot._observe_unit_absence(identity.unit)=='NOT_FOUND_OBSERVED'
-                          and not os.path.lexists('/sys/fs/cgroup/system.slice/'+identity.unit)
+                          and not os.path.lexists('/sys/fs/cgroup'+boot.launcher.service_cgroup_path(identity.unit))
                           and not identity_processes(identity),'dedicated_resources_not_drained')
             # Deletion is unprivileged, non-following and confined to this
             # exact owned filesystem. Root removes only the empty bound root.
@@ -289,13 +304,17 @@ class AccountLease:
                                   and _lookup(pwd.getpwnam,identity.user) is None
                                   and _lookup(pwd.getpwuid,identity.uid) is None)
                 boot._require(not identity_processes(identity),'dedicated_process_absence_uncertain')
+                self.journal.record(f'remove_attempt_{index}')
                 code,_=boot._collect_native_client(command,cwd='/')
                 boot._require(code==0,'dedicated_cleanup_command_refused')
                 if index==1:boot._require(not os.path.lexists(identity.root))
+                self.journal.record(f'remove_ack_{index}')
             inspect_account(identity,present=False)
+            self.journal.resolve()
             self.closed=True
         except BaseException as error:
             self.uncertain=True
+            self.journal.close()
             raise boot.BootstrapCleanupError('dedicated_cleanup_unverified_identity_retained') from error
 
 
@@ -326,7 +345,8 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             raise
         if body_error is not None:raise body_error
         result.update(dedicated_identity_removed=lease.closed,worker_control_exclusion='UNPROVEN',
-                      full_service_lifetime_cleanup='UNPROVEN',account_native_programs=lease.platform)
+                      full_service_lifetime_cleanup='OBSERVED' if lease.drain_proof is not None else 'UNPROVEN',
+                      account_native_programs=lease.platform)
         return result
     return execute()
 
@@ -347,7 +367,10 @@ def activation_entry(arguments):
     bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit)
     inspect_account_platform()
     nonce=str(uuid.uuid4())
+    from hosted_synthetic_quarantine import reserved_ids
+    reserved=reserved_ids()
     for number in range(900,1000):
+        if any(number in pair for pair in reserved):continue
         candidate=DedicatedIdentity(nonce,number,number,os.geteuid(),os.getegid())
         try:
             inspect_account(candidate,present=False)

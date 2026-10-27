@@ -10,6 +10,62 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 external observer and fixture cleanup — implementation, NON-GREEN
+
+Latest verified published material: `aa5fe65b30c9b6ac8aabd71d7d216d04f45aa733`,
+tree `a81d357ac9084ed80c9c5d6b82000a361e812462`. Ordinary branch-only publication
+and fresh fetch matched; main/PR24/recovery refs were unchanged. Its frozen
+hosted335, related88, startup10 and imports18 passed. Three explicit real kernel
+projection/exec cases passed from a clean detached clone: projected execution,
+missing projected interpreter, and missing projected libc despite host copies.
+These are credential-free component results, not conforming host/worker entry,
+application runtime sealing or browser acceptance. An earlier related run at
+ac12215 had86/88 passes and two obsolete global-count assertions; those were
+repaired. A worktree source-layout refusal and a concurrent source-path-change
+refusal were retained; the serial complete-clone check passed without weakening
+source validation.
+
+This continuation implements an outside observer and durable private quarantine.
+Its fixed native plan adds one nonce-owned accounting slice at the same aggregate
+512MiB/64-task limits, with the exact existing service inside it. Existing ancestor
+controllers/permissions/limits remain unchanged. This new parent, busctl invocation,
+service path and pipe ACK wiring require the combined independent review; all live
+activation remains unconditionally disabled. A service-internal observer cannot
+cover manager kill; retained counters alone can become unreadable after removal.
+The outside observer holds read-only controls and exact process/object identities,
+acknowledges the live generation before CLOSE, samples final aggregate resources
+while its parent still exists, and only then removes that bound empty envelope.
+Unknown descendants, lost acknowledgment or ambiguous setup/cleanup reserve the
+identity and leave private attribution. No numeric journal record grants deletion
+authority. Child and aggregate accounting remain separate. Actual installed slice
+persistence, deleted-dentry semantics and cancellation/kill proof remain NOT_RUN.
+
+Internal review caught and repaired copied-observer FD closure, original-error
+preservation and an invalid kernfs nlink assumption. This is not Claude review.
+Thirty observer/quarantine tests include actual pipe transport and fail-closed
+ownership/counter/acknowledgment cases; the affected119-test group passed.
+Registered discovery floor becomes1892 across105 modules, preserving the1828
+baseline. Frozen evidence follows separately; discovery is not passing execution.
+
+A separate causal run passed167 tests with1393 pre-existing zombies before and
+after, zero new zombies. Two demonstrated fixture leaks were repaired: Git auto
+maintenance now stays disabled in disposable commits; supervisor-death tests use
+an isolated clean subreaper and require exact owned-process reaping/absence.
+Failure cleanup signals all verified children before waiting and preserves errors.
+Existing orphaned processes under the platform's non-reaping PID1 were not touched;
+not all historical individual-process provenance is established. No reusable clean
+snapshot or fresh-task restoration is claimed.
+
+Six original findings remain REPAIRED_PENDING_REVIEW, three remain OPEN. Claude's
+frozen5e62c8e3 target and original3c1ae555 coverage are unchanged. New component
+deltas need their own combined review. No privileged account/service, application,
+credential release, browser, backup, APPLY, DRAFT, packet, restart or restore ran.
+Full supported-candidate authoritative/startup validation remains required.
+Next: freeze and publish this tested delta, then continue independent application
+runtime closure work. Browser sandbox/identity/accepted-input compatibility remains
+an explicit unresolved contract; do not use --no-sandbox or substitute runtime pins.
+Railway and real purchasing remain unproved and separately unauthorized.
+
 ### 2026-10-27 runtime/worker implementation — NON-GREEN, review gates unchanged
 
 Continuation base: `8842a9b7ec77619134af9881a814dd88f4ca004d`, tree

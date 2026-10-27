@@ -29,7 +29,7 @@ import hosted_synthetic_namespace as ns
 _ENVIRONMENT = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'}
 _UNIT = re.compile(r'buffalo-hosted-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.service\Z')
 _CAPABILITIES = ('CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb')
-_NATIVE = ('sudo', 'timeout', 'systemd-run', 'systemctl', 'setpriv', 'env', 'true')
+_NATIVE = ('sudo', 'timeout', 'systemd-run', 'systemctl', 'busctl', 'setpriv', 'env', 'true')
 
 
 BootstrapRefusal = launcher.LauncherRefusal
@@ -110,7 +110,7 @@ def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
     argv = ('/usr/bin/sudo', '-n', '--', '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin', 'LC_ALL=C.UTF-8',
             '/usr/bin/timeout', '--signal=TERM', '--kill-after=5s', '150s',
             '/usr/bin/systemd-run', '--system', '--no-ask-password', '--quiet', '--wait', '--pipe', '--collect',
-            '--service-type=oneshot', '--expand-environment=no', '--slice=system.slice',
+            '--service-type=oneshot', '--expand-environment=no', '--slice='+launcher.accounting_slice(unit),
             '--unit=' + unit, '--working-directory=' + root,
             *(('--property=' + value) for value in properties), '--', '/usr/bin/true')
     return NativeBootstrapPlan(tuple(argv), unit, uid, gid, initial_user_namespace, root, python,
@@ -189,7 +189,7 @@ def verify_postdrop_access(root, unit):
         info = os.fstat(workspace.number)
         _require(info.st_uid == os.geteuid() and not info.st_mode & 0o022
                  and os.access(root, os.R_OK | os.W_OK | os.X_OK), 'bootstrap_source_access_refused')
-        directory = cg._open_directory(Path('/sys/fs/cgroup/system.slice') / unit)
+        directory = cg._open_directory(Path('/sys/fs/cgroup'+launcher.service_cgroup_path(unit)))
         for name in ('cgroup.procs', 'cgroup.subtree_control'):
             control = ns._acquire(lambda: os.open(name, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
                                                    dir_fd=directory.number))
@@ -218,16 +218,17 @@ def verify_postdrop_access(root, unit):
             raise BootstrapCleanupError('bootstrap_access_cleanup_failed') from errors[0]
 
 
-def _collect_native_client(argv, *, cwd):
+def _collect_native_client(argv, *, cwd, observer=None):
     """Bounded direct-child ownership; stderr is never included in reports."""
     process = None
     try:
         process = subprocess.Popen(argv, cwd=cwd, env=_ENVIRONMENT, close_fds=True,
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stdin=subprocess.PIPE if observer is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, bufsize=0)
         deadline = time.monotonic() + 165  # native timeout150 + kill5 + reap grace
         output = {process.stdout: bytearray(), process.stderr: bytearray()}
         limits = {process.stdout: 65536, process.stderr: 4096}
+        observer_acknowledged=False
         with selectors.DefaultSelector() as selector:
             for stream in output:
                 selector.register(stream, selectors.EVENT_READ)
@@ -244,6 +245,20 @@ def _collect_native_client(argv, *, cwd):
                         continue
                     output[stream].extend(chunk)
                     _require(len(output[stream]) <= limits[stream], 'bootstrap_client_output_refused')
+                    if observer is not None and stream is process.stdout and not observer_acknowledged and b'\n' in output[stream]:
+                        from hosted_synthetic_observer import _PREFIX
+                        line,_,tail=output[stream].partition(b'\n')
+                        if line.startswith(_PREFIX):
+                            _require(len(line)<=4096,'observer_frame_limit')
+                            frame=json.loads(line[len(_PREFIX):])
+                            _require(_PREFIX+json.dumps(frame,sort_keys=True,separators=(',',':')).encode()==line,
+                                     'observer_frame_schema_refused')
+                            acknowledgment=observer.bind_ready(frame)
+                            _require(len(acknowledgment)<=256 and os.write(process.stdin.fileno(),acknowledgment)==len(acknowledgment),
+                                     'observer_acknowledgment_failed')
+                            process.stdin.close()
+                            observer.acknowledge_sent();observer_acknowledged=True
+                            output[stream]=bytearray(tail)
         remaining = deadline - time.monotonic()
         _require(remaining > 0, 'bootstrap_client_timeout')
         code = process.wait(timeout=remaining)
@@ -261,7 +276,8 @@ def _collect_native_client(argv, *, cwd):
                 process.wait(timeout=5)
             except BaseException as error:
                 errors.append(error)
-            for stream in (process.stdout, process.stderr):
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is None:continue
                 try:
                     stream.close()
                 except BaseException as error:
@@ -335,50 +351,56 @@ def run_native_plan(plan, *, source_root=None, account=None):
              and type(source_root) is str and source_root!=plan.root)
     binding = bind_hosted_source(Path(source_root), repository=repository, event=event, ref=ref, sha=commit)
     before = inspect_native_prerequisites()
-    error = None
-    cleanup_errors = []
-    code = raw = absence = None
+    from hosted_synthetic_observer import ExternalObserver
+    observer=None;error=None;cleanup_errors=[];code=raw=report=None
     try:
         _require(account.service_attempted is False and account.service_acknowledged is False,
                  'native_attempt_cannot_be_retried')
+        observer=ExternalObserver.create(account,binding)
+        account.journal.record('service_start_attempt')
         account.service_attempted=True
-        code, raw = _collect_native_client(plan.argv, cwd=source_root)
-        _require(code in (0, 1), 'bootstrap_client_refused')
-    except BaseException as selected:
-        error = selected
-    # No later-creation safety is inferred on failed/lost client acknowledgment.
-    # Native timeout and manager start/stop bounds still apply; absence alone
-    # never turns a timeout or cancellation into a passing execution.
+        code,raw=_collect_native_client(plan.argv,cwd=source_root,observer=observer)
+        _require(code in (0,1),'bootstrap_client_refused')
+        report=_decode_report(raw,plan)
+        _require(report.get('tree')==binding.tree and report.get('source_files')==dict(binding.files),
+                 'bootstrap_report_source_refused')
+        observation=report.get('namespace_attempt')
+        namespace_clean=(report.get('reason')=='INCOMPLETE_PREFLIGHT' and type(observation) is dict
+                         and observation.get('cleanup_complete') is True and observation.get('reason')=='INCOMPLETE_PREFLIGHT'
+                         and type(observation.get('resource_cleanup')) is dict
+                         and observation['resource_cleanup'].get('generation_child_removed') is True)
+        # This proof comes from the outside observer, not the child's report.
+        # A failed operation can have verified cleanup; it still cannot pass.
+        observer.finish_service(operation_succeeded=namespace_clean)
+        if report.get('reason')=='CLEANUP_FAILED':
+            raise BootstrapCleanupError('native_diagnostic_cleanup_failed')
+        _require(namespace_clean,'native_diagnostic_incomplete')
+    except BaseException as selected:error=selected
+    if observer is not None:
+        if observer.proof is None and observer.work_acknowledged and not observer.failed:
+            try:observer.finish_service(operation_succeeded=False)
+            except BaseException as selected:cleanup_errors.append(selected)
+        try:observer.close()
+        except BaseException as selected:cleanup_errors.append(selected)
+        if observer.proof is not None and observer.closed and not observer.failed:
+            account.drain_proof=observer.proof
+            account.service_acknowledged=True
     try:
-        absence = _observe_unit_absence(plan.unit)
-    except BaseException as selected:
-        cleanup_errors.append(selected)
-    try:
-        _require(inspect_native_prerequisites() == before, 'bootstrap_native_or_ancestor_drift')
-    except BaseException as selected:
-        cleanup_errors.append(selected)
+        _require(inspect_native_prerequisites()==before,'bootstrap_native_or_ancestor_drift')
+    except BaseException as selected:cleanup_errors.append(selected)
     if cleanup_errors:
-        raise BootstrapCleanupError('bootstrap_cleanup_unverified') from cleanup_errors[0]
-    if error is not None:
-        raise error
-    report = _decode_report(raw, plan)
-    _require(report.get('tree') == binding.tree and report.get('source_files') == dict(binding.files),
-             'bootstrap_report_source_refused')
-    observation=report.get('namespace_attempt')
-    no_namespace=(report.get('reason')=='HOST_PREREQUISITES_REFUSED'
-                  and 'namespace_attempt' in report and observation is None)
-    namespace_clean=(report.get('reason')=='INCOMPLETE_PREFLIGHT' and type(observation) is dict
-                     and observation.get('cleanup_complete') is True
-                     and observation.get('reason')=='INCOMPLETE_PREFLIGHT'
-                     and type(observation.get('resource_cleanup')) is dict
-                     and observation['resource_cleanup'].get('generation_child_removed') is True)
-    if not (no_namespace or namespace_clean):
-        raise BootstrapCleanupError('native_resource_cleanup_uncertain_identity_retained')
-    account.service_acknowledged=True
-    return {'contract': 'BUFFALO_NATIVE_BOOTSTRAP_OBSERVATION_V1', 'report': report,
-            'native_prerequisites': before, 'client_returncode': code,
-            'service_absence': absence, 'ancestors_unchanged': True,
-            'execution_authority': False, 'runtime_closure': 'UNSEALED'}
+        account.uncertain=True
+        raise BootstrapCleanupError('bootstrap_cleanup_unverified') from (error or cleanup_errors[0])
+    if error is not None:raise error
+    _require(observer is not None and account.drain_proof is not None)
+    proof=account.drain_proof
+    return {'contract':'BUFFALO_NATIVE_BOOTSTRAP_OBSERVATION_V1','report':report,
+            'native_prerequisites':before,'client_returncode':code,
+            'service_absence':'EXACT_OWNED_SUBTREE_REMOVAL_OBSERVED','ancestors_unchanged':True,
+            'external_cleanup':{'generation':proof.generation,'commit':proof.source_commit,'tree':proof.source_tree,
+                'aggregate':proof.aggregate,'whole_service_lifetime_observed':True,
+                'operation_succeeded':proof.operation_succeeded,'observer_descriptors_closed':True},
+            'execution_authority':False,'runtime_closure':'UNSEALED'}
 
 
 def main(arguments=None):
