@@ -1,10 +1,12 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet includes frozen d6d40ebe and its predecessors. Its 506 hosted, 88 related,
-10 startup and 18 import checks passed; activation remains refused with exit78.
-Discovery2033/112 is not execution. A guarded CDP adapter is being tested on a
-descendant; download/restart composition remains implementation work. This packet does not claim all executable
-work is exhausted or change the reviewer's original frozen target.
+This packet includes frozen97b462f2 and its predecessors. Its534 hosted,88 related,
+10 startup and18 import checks passed; activation refused with exit78. Discovery
+2061/113 is not execution. The preceding9f90 candidate passed534 hosted but failed
+2 stale registration expectations among88 related tests; its raw failure remains.
+The download collector is being tested on a descendant. Bounded packet ingress
+and restart composition remain independent work; no work-exhaustion claim is made.
+
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -18,8 +20,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `d6d40ebee90881378ed222f0c9286c4f70987514`.
-- Implementation tree: `745d0a7cefc6e7683add9213f4959a5ba60ed976`.
+- Latest tested/published implementation: `97b462f272e296bd00d806cc026df400c4edf2c3`.
+- Implementation tree: `382d87cb196499d964af6b0ffb0155615da66abd`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -43,9 +45,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t d6d40ebee90881378ed222f0c9286c4f70987514
-git rev-parse d6d40ebee90881378ed222f0c9286c4f70987514^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 d6d40ebee90881378ed222f0c9286c4f70987514 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t 97b462f272e296bd00d806cc026df400c4edf2c3
+git rev-parse 97b462f272e296bd00d806cc026df400c4edf2c3^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 97b462f272e296bd00d806cc026df400c4edf2c3 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.

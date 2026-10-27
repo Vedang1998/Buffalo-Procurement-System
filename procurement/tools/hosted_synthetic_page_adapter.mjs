@@ -11,6 +11,7 @@ const ID=/^[A-Za-z0-9_.:-]{1,128}$/;
 const UUID='[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const READ=new RegExp('^/(?:health|favicon\\.ico|supplier-mapping(?:/status|/'+UUID+')?|price-books(?:/'+UUID+'(?:/apply-preview)?)?|monday-runs(?:/'+UUID+')?)$');
 const WRITE=new RegExp('^/(?:price-books/'+UUID+'/(?:apply-preview|apply)|supplier-mapping/intake|supplier-mapping/'+UUID+'/(?:decision|selection)|monday-runs/prepare|monday-runs/'+UUID+'/(?:retire-stale-forecast|build|blockers/[1-9][0-9]*/exclude|recommendations/[1-9][0-9]*/review))$');
+const ARTIFACT=new RegExp('^/monday-runs/'+UUID+'/artifacts/[1-9][0-9]{0,17}$');
 const urlValue=raw=>{try{const u=new URL(raw);return u.origin===ORIGIN && !u.username && !u.password && !u.search && !u.hash && raw===u.href?u:null;}catch{return null;}};
 
 // Connected-socket ownership and kernel/browser/TLS identity are outer gates.
@@ -59,7 +60,7 @@ export class HostedPageAdapter {
      [sessionId,frameId,targetId].every(v=>typeof v==='string' && ID.test(v)) && Number.isInteger(timeoutMs) && timeoutMs>=1 && timeoutMs<=10000 &&
      (signal===null || typeof signal.addEventListener==='function' && !signal.aborted));
    this.transport=transport;this.sessionId=sessionId;this.frameId=frameId;this.targetId=targetId;this.timeout=timeoutMs;
-   this.failed=false;this.closed=false;this.started=false;this.active=false;this.guard=null;this.sequence=0;
+   this.failed=false;this.closed=false;this.started=false;this.active=false;this.guard=null;this.downloadGuard=null;this.sequence=0;
    this.requests=new Map();this.allowed=new Map();this.continuations=[];this.responses=[];this.redirects=[];this.frames=new Map();this.loads=new Map();
    this.tasks=new Set();this.commands=new Set();this.waiters=new Set();this.marks=new WeakMap();this.signal=signal;
    this.unsubscribe=transport.onEvent(m=>this.event(m));this.unfail=transport.onFailure(()=>this.fail());
@@ -67,7 +68,7 @@ export class HostedPageAdapter {
  }
  healthy(){requireValue(!this.failed && !this.closed);}
  fail(){
-   if(this.failed)return;this.failed=true;this.guard=null;
+   if(this.failed)return;this.failed=true;this.guard=null;this.downloadGuard=null;
    for(const cancel of this.commands)cancel();
    for(const wake of this.waiters)wake();
  }
@@ -91,6 +92,8 @@ export class HostedPageAdapter {
      // browser-level lookup of the supplied ID would not bind S to T.
      const target=await this.command('Target.getTargetInfo',{},this.sessionId,deadline);
      requireValue(target?.targetInfo?.targetId===this.targetId && target.targetInfo.type==='page' && target.targetInfo.attached===true);
+     const context=target.targetInfo.browserContextId;
+     requireValue(context===undefined || typeof context==='string' && ID.test(context));this.browserContextId=context??null;
      const tree=await this.command('Page.getFrameTree',{},this.sessionId,deadline);
      requireValue(tree?.frameTree?.frame?.id===this.frameId && !tree.frameTree.frame.parentId);
      for(const [method,params] of [['Page.enable',{}],['Network.enable',{}],['Network.setCacheDisabled',{cacheDisabled:true}],
@@ -133,7 +136,12 @@ export class HostedPageAdapter {
    const r=p.request||{},url=urlValue(r.url),main=sessionId===this.sessionId && p.frameId===this.frameId;
    let permit=false;
    if(!this.failed && !this.closed && main && url && typeof p.networkId==='string' && ID.test(p.networkId)){
-     if(r.method==='GET')permit=READ.test(url.pathname);
+     if(r.method==='GET'){
+       if(ARTIFACT.test(url.pathname) && this.downloadGuard){
+         receipt=this.downloadGuard;permit=!receipt.attempted && receipt.url===r.url;receipt.attempted=true;
+         receipt.receipts.push(permit);if(!permit)receipt.refused=true;
+       }else permit=READ.test(url.pathname);
+     }
      else if(r.method==='POST' && WRITE.test(url.pathname) && this.guard){
        receipt=this.guard;
        if(!receipt.attempted){receipt.attempted=true;permit=receipt.check({method:r.method,url:r.url,postData:r.postData})===true;}
@@ -145,12 +153,12 @@ export class HostedPageAdapter {
    requireValue(!this.allowed.has(p.networkId) || r.method==='GET' && this.allowed.get(p.networkId).method==='POST' &&
      !this.continuations.some(c=>c.id===p.networkId && c.method==='GET') &&
      this.redirects.some(x=>x.id===p.networkId && new URL(x.location,x.url).href===r.url));
-   const record={id:p.networkId,method:r.method,url:r.url,frame:this.frameId,sequence:this.sequence,continued:false,receipt};
+   const record={id:p.networkId,method:r.method,url:r.url,frame:this.frameId,sequence:this.sequence,continued:false,continueIssued:false,receipt};
    if(r.method==='POST')this.allowed.set(p.networkId,record);
    else if(!this.allowed.has(p.networkId))this.allowed.set(p.networkId,record);
    this.continuations.push(record);
    if(receipt)receipt.pending++;
-   try{await this.command('Fetch.continueRequest',{requestId:p.requestId},sessionId);record.continued=true;continued=true;}
+   try{record.continueIssued=true;await this.command('Fetch.continueRequest',{requestId:p.requestId},sessionId);record.continued=true;continued=true;}
    finally{if(receipt)receipt.pending--;}
    }catch{
      // Refusal is latched synchronously before any denial ACK. A thrown guard,
@@ -176,7 +184,15 @@ export class HostedPageAdapter {
  responseEvent(p){
    if(p.frameId!==this.frameId)return;
    const request=this.requests.get(p.requestId);requireValue(request && p.loaderId===request.loader && p.response?.url===request.url && Number.isInteger(p.response.status));
-   this.responses.push({...request,status:p.response.status,sequence:this.sequence});
+   let headers;
+   if(ARTIFACT.test(new URL(request.url).pathname)){
+     headers={};
+     for(const name of ['content-type','content-disposition','cache-control']){
+       const pairs=Object.entries(p.response.headers||{}).filter(([k])=>k.toLowerCase()===name);
+       requireValue(pairs.length===1 && typeof pairs[0][1]==='string' && pairs[0][1].length<=256);headers[name]=pairs[0][1];
+     }
+   }
+   this.responses.push({...request,status:p.response.status,sequence:this.sequence,...(headers?{headers}:{})});
  }
  wake(){for(const resolve of this.waiters)resolve();}
  async wait(predicate,deadline){
@@ -186,10 +202,30 @@ export class HostedPageAdapter {
  }
  async flush(deadline){await this.wait(()=>this.tasks.size===0,deadline);}
  armRequestGuard(check){
-   this.healthy();requireValue(this.started && !this.active && this.guard===null && typeof check==='function');
+   this.healthy();requireValue(this.started && !this.active && this.guard===null && this.downloadGuard===null && typeof check==='function');
    const receipt={check,attempted:false,refused:false,receipts:[],pending:0,closed:false};this.guard=receipt;
    return {matches:()=>{this.healthy();requireValue(!receipt.closed && this.guard===receipt && receipt.pending===0 && !receipt.refused);return [...receipt.receipts];},
      close:()=>{if(receipt.closed)return;receipt.closed=true;if(this.guard===receipt)this.guard=null;if(receipt.pending)this.fail();}};
+ }
+ armArtifactGet(url){
+   this.healthy();const parsed=urlValue(url);
+   requireValue(this.started && !this.active && this.guard===null && this.downloadGuard===null && parsed && ARTIFACT.test(parsed.pathname));
+   const receipt={url,attempted:false,refused:false,receipts:[],pending:0,closed:false,before:this.sequence};this.downloadGuard=receipt;
+   const request=(issuedOnly=false)=>{
+     const records=this.continuations.filter(r=>r.receipt===receipt && r.sequence>receipt.before && (issuedOnly?r.continueIssued:r.continued));
+     requireValue(records.length===1);const r=records[0],n=this.requests.get(r.id);
+     requireValue(n && n.requestSequence>receipt.before && n.url===url && n.method==='GET' && r.method==='GET' && r.url===url);
+     return {requestId:r.id,frameId:this.frameId,url};
+   };
+   return {request:()=>request(),issued:()=>{this.healthy();return request(true);},ready:()=>{
+     this.healthy();const r=request();return this.responses.some(x=>x.id===r.requestId);
+   },observe:()=>{
+     this.healthy();requireValue(!receipt.closed && this.downloadGuard===receipt && receipt.pending===0 && !receipt.refused &&
+       receipt.attempted && receipt.receipts.length===1 && receipt.receipts[0]===true);
+     const r=request(),matches=this.responses.filter(x=>x.id===r.requestId && x.requestSequence>receipt.before && x.sequence>receipt.before && x.url===url && x.method==='GET');
+     requireValue(matches.length===1 && matches[0].status===200 && !this.redirects.some(x=>x.id===r.requestId));
+     return {...r,status:200,headers:{...matches[0].headers}};
+   },close:()=>{if(receipt.closed)return;receipt.closed=true;if(this.downloadGuard===receipt)this.downloadGuard=null;if(receipt.pending)this.fail();}};
  }
  mark(){this.healthy();requireValue(this.started && !this.active);const mark=Object.freeze({});this.marks.set(mark,this.sequence);return mark;}
  lookup(records,pathname,method,mark){
@@ -208,7 +244,7 @@ export class HostedPageAdapter {
  }
  evaluate(expression){return this.operation(deadline=>this.rawEvaluate(expression,deadline));}
  navigate(url){return this.operation(async deadline=>{
-   const u=urlValue(url);requireValue(u && READ.test(u.pathname) && this.guard===null);const before=this.sequence;
+   const u=urlValue(url);requireValue(u && READ.test(u.pathname) && this.guard===null && this.downloadGuard===null);const before=this.sequence;
    const r=await this.command('Page.navigate',{url},this.sessionId,deadline);requireValue(r?.frameId===this.frameId && typeof r.loaderId==='string' && ID.test(r.loaderId) && !r.errorText);
    await this.wait(()=>this.frames.get(r.loaderId)?.sequence>before && this.frames.get(r.loaderId).url===url && this.loads.get(r.loaderId)>before &&
      this.responses.some(x=>x.sequence>before && x.requestSequence>before && x.loader===r.loaderId && x.url===url && x.method==='GET' && x.status===200 && this.allowed.get(x.id)?.sequence>before && this.allowed.get(x.id)?.continued),deadline);
@@ -230,7 +266,7 @@ export class HostedPageAdapter {
    if(destroyed)requireValue([...this.redirects,...this.responses].some(r=>r.sequence>before && this.allowed.get(r.id)?.receipt===receipt));
  });}
  readJson(path){return this.operation(async deadline=>{
-   requireValue(path==='/supplier-mapping/status' && this.guard===null);const before=this.sequence;
+   requireValue(path==='/supplier-mapping/status' && this.guard===null && this.downloadGuard===null);const before=this.sequence;
    const result=await this.rawEvaluate(`(async()=>{if(location.origin!==${JSON.stringify(ORIGIN)})throw new Error('status origin refused');
      const before=location.href,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),${Math.max(1,deadline-Date.now()-10)});
      try{const r=await fetch(${JSON.stringify(ORIGIN+path)},{method:'GET',credentials:'same-origin',redirect:'error',cache:'no-store',signal:controller.signal});

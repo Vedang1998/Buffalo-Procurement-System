@@ -1,0 +1,58 @@
+{
+  "commit": "97b462f272e296bd00d806cc026df400c4edf2c3",
+  "tree": "382d87cb196499d964af6b0ffb0155615da66abd",
+  "base": "d6d40ebee90881378ed222f0c9286c4f70987514",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "9ca92e8965cc8fb9e31e24e83afd456d12bdc30a9f9b9eb7e3e5fadee5d08ad5",
+    "docs/CODEX_HANDOFF.md": "d7396da0fe5061ff0e36142205955c00d1c2b1be7d4b9abdb6b3e904c42f388a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "fad72ed44a8eb84bfe46a5029bb188e4bb54fc0f54129249f30a075963f09e4a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "b723db49878159a7906f6f0c71eb0b96406add0445568b3a3edd21bbf0e5a07d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "922fae36c78adf68bcb6e2c56cff9c575920fb9b69411216f1a789c2ccd6d085",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-discovery.json": "d976a23730712cb7b276e1e053b35641136451fee10c937e5015ee64dbb772a5",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-frozen-hosted.txt": "e64fd173d91dc7dae10e58695da9a86fe2d5ad9fecc4ba115232b2cb8bd4bad6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-frozen-related.txt": "5b28c9ab0f5128b70b04d30783010d50da76a494216c3baf2434bf8604eb51bc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-frozen-validation.json": "9a7e795e369e3a595639a9feb18c7c22274033a6c55bf6097eda96e3e7909beb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-preparation-publication.json": "a3b6e73c2e78c06025680b58e6460a81dce4f985e12a5ba0c935e6627b72b68c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "d54f7430b4ad27875730f737f3424544679a73f88d5261bc9490894e5a01a7ff",
+    "procurement/tests/hosted_page_adapter_fixture.mjs": "46e85e04799556aa8aa7a4df235dfef0e2d14202c9b628ddceda3e9ce19df6fb",
+    "procurement/tests/test_hosted_synthetic_page_adapter.py": "ca3e20afc7b4e25194a5ef6b4fe9321289bfbd49531f7692c96265837e35bb7d",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "7338e23737b4e80a8eb320a14f35ed3dc406e76aea0babac12826777296eafdb",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "cf977071360a4d2a4068b2aa34ac9ed274459a1082c1ed1aa4f79222cf3c0c19",
+    "procurement/tests/test_supplier_format_conformance.py": "085f95c9387e88d9c8f4cb526969d075077ef12f34f1a4a20d5aa7ca0d0c7657",
+    "procurement/tools/hosted_synthetic_page_adapter.mjs": "eee051bac566b6e94edff15a5691254e4e1cd0c560506ec967afc60509ef79ad",
+    "procurement/tools/hosted_synthetic_source.py": "ca65e84e71152ade886238246da2d90d85b5dc0e22e6307b3fb5a1b13b38c175",
+    "procurement/tools/run_tests.py": "9d23419afeb7d6b39cac8d0a76eb3008447de6adc0d6f9008490def16d5994eb"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 21.784,
+      "sha256": "6e50b99c58cefec0f5d051e49e0a79f9aeb8a99f61242406480571cda43337d8"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.734,
+      "sha256": "fb78dfcf2da478494d3778c9ac9a6b4d2af8577cf46fd4b2cc0f1e76701e45c1"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.566,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.115,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

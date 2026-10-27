@@ -1,0 +1,52 @@
+test_mapping_authority_and_disabled_flags_match_approved_contract (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_mapping_authority_and_disabled_flags_match_approved_contract) ... ok
+test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator) ... ERROR
+test_persistent_mapping_modules_are_registered_at_exact_discovery_floors (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_persistent_mapping_modules_are_registered_at_exact_discovery_floors) ... /workspace/Buffalo-Procurement-System/procurement/src/procurement_os/private_research_app.py:630: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+/workspace/Buffalo-Procurement-System/.venv/lib/python3.13/site-packages/fastapi/applications.py:4681: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  return self.router.on_event(event_type)  # ty: ignore[deprecated]
+/workspace/Buffalo-Procurement-System/procurement/src/procurement_os/private_research_app.py:653: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+/workspace/Buffalo-Procurement-System/.venv/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+ok
+test_supplier_format_conformance (unittest.loader._FailedTest.test_supplier_format_conformance) ... ERROR
+
+======================================================================
+ERROR: test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_persistent_mapping_foundation_contract.py", line 413, in test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator
+    import procurement_os.persistent_mapping as mapping_service
+ModuleNotFoundError: No module named 'procurement_os'
+
+======================================================================
+ERROR: test_supplier_format_conformance (unittest.loader._FailedTest.test_supplier_format_conformance)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_supplier_format_conformance
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/unittest/loader.py", line 137, in loadTestsFromName
+    module = __import__(module_name)
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_supplier_format_conformance.py", line 18, in <module>
+    from procurement_os.price_book import PRICE_BOOK_HEADERS, parse_price_book_csv
+ModuleNotFoundError: No module named 'procurement_os'
+
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.652s
+
+FAILED (errors=2)

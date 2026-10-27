@@ -1,0 +1,8 @@
+{
+  "discovered": 2061,
+  "executed": 0,
+  "registered_modules": 113,
+  "floor": 2061,
+  "registration_errors": [],
+  "scope": "DISCOVERY_ONLY_WORKTREE_NOT_EXECUTION"
+}

@@ -10,6 +10,37 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 guarded download collection — continuing
+
+Published and freshly fetched `97b462f272e296bd00d806cc026df400c4edf2c3`, tree
+`382d87cb196499d964af6b0ffb0155615da66abd`, passed534 hosted,88 related,10 startup
+and18 import checks at its clean source. Bootstrap exited78. Two preceding stale
+registration failures and a wrongly configured ad-hoc import path are retained
+separately; corrected frozen evidence is source-bound. Discovery2061/113 is not a
+full execution. Ordinary branch-only publication scanned35 objects with zero
+private-metadata/high-confidence secret hits; protected references were unchanged.
+
+The next dormant component intercepts one exact artifact GET and collects browser
+transfer events subscribed before clicking a revalidated anchor. It binds GUID
+begin to an already-issued fresh request, including legitimate completion before
+continuation/click ACK. HTTP response evidence can arrive later within the same
+deadline. Exact session-reported browser context scopes cancellation. Actual API
+attachment headers are executed in a source-derived regression. Bad headers,
+extra/replayed transfers, wrong frame/URL/name, decreasing/invalid counts,
+missing HTTP, abort, timeout and concurrent collection refuse. Unrelated GUIDs
+are never cancellation targets. Unknown disk paths are never opened.
+
+Transfer observations remain PROVISIONAL and explicitly NOT_READ/NOT_VALIDATED.
+Closing JS subscriptions is not browser/process/resource cleanup. The reviewed
+outer driver must own download storage, configure this same browser context and
+retain the all-target/egress and lifecycle controls. The parser limit is1MiB per
+artifact, not an increase in approved host budgets. Internal read-only reviews
+identified source-header, temporal-generation and context gaps; writer repairs
+have46 adapter/download tests passing. New module18 tests raises registered floor
+to2079/114 and hosted focused552. Frozen results follow with the exact source.
+Continue bounded file/packet verification and restart composition; live release
+remains disabled and independent Claude re-review has not been received.
+
 ### 2026-10-27 preventive browser protocol adapter — continuing
 
 Verified published predecessor: `d6d40ebee90881378ed222f0c9286c4f70987514`, tree

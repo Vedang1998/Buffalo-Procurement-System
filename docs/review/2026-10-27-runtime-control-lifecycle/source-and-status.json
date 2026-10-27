@@ -1,6 +1,6 @@
 {
-  "material_commit": "d6d40ebee90881378ed222f0c9286c4f70987514",
-  "material_tree": "745d0a7cefc6e7683add9213f4959a5ba60ed976",
+  "material_commit": "97b462f272e296bd00d806cc026df400c4edf2c3",
+  "material_tree": "382d87cb196499d964af6b0ffb0155615da66abd",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -41,6 +41,14 @@
     {
       "commit": "d6d40ebee90881378ed222f0c9286c4f70987514",
       "tree": "745d0a7cefc6e7683add9213f4959a5ba60ed976"
+    },
+    {
+      "commit": "9f90eb1c1c5a0f39c273bc954cca0cadc9fd8121",
+      "tree": "eaa801e64829f5f7ce11eff6772cfebfb8fb5d14"
+    },
+    {
+      "commit": "97b462f272e296bd00d806cc026df400c4edf2c3",
+      "tree": "382d87cb196499d964af6b0ffb0155615da66abd"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -84,7 +92,8 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "guarded CDP adapter tested on descendant",
-    "download/restart/restore composition"
+    "download collector tested on descendant",
+    "bounded bytes/packet validation",
+    "restart/restore composition"
   ]
 }

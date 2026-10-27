@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 15273,
-    "sha256": "fad72ed44a8eb84bfe46a5029bb188e4bb54fc0f54129249f30a075963f09e4a"
+    "bytes": 15341,
+    "sha256": "912f9bbcb58fdfa3bae3c71514295fa0af9a1512d6bf907af2e455b6b1263868"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8847,
-    "sha256": "b723db49878159a7906f6f0c71eb0b96406add0445568b3a3edd21bbf0e5a07d"
+    "bytes": 8849,
+    "sha256": "fbdbee8e00d7ad25ba8b781d28f3d740f034efd55320ebc1647d8a38ef37272e"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -255,6 +255,82 @@
     "bytes": 976,
     "sha256": "833d79d132d2987cdce7dda0f783262c52b289c2b3569720a762be7d833e4f97"
   },
+  "oct27-page-adapter-causal.txt": {
+    "bytes": 4778,
+    "sha256": "c9bc6fcb8acd5322d29df1ed9ad2ffdf16ed81259d09f5ce7b08888b7fa55922"
+  },
+  "oct27-page-adapter-combined.txt": {
+    "bytes": 30748,
+    "sha256": "9571f3be1132779f5ca21595566c74f99226c8ef1d76ee7e5350b60b2ab71b27"
+  },
+  "oct27-page-adapter-discovery.json": {
+    "bytes": 169,
+    "sha256": "3665695fd1dd4a14f42738baa0a1610d5964a95087b6fbe020f2a4ad6a0ea3ed"
+  },
+  "oct27-page-adapter-first.txt": {
+    "bytes": 9129,
+    "sha256": "63716dfb7e1984762cafe3a2bcc0fd7053a4e5a4c017b48da1508b811032eb44"
+  },
+  "oct27-page-adapter-ordering.txt": {
+    "bytes": 4975,
+    "sha256": "5e16156e5ccbaf4fb5b0e3425b3afbd73edbadc868aecf1e6799a90fdd6ecbd7"
+  },
+  "oct27-page-adapter-repaired.txt": {
+    "bytes": 6984,
+    "sha256": "592efa118ff1d5954bed3049cd683ce049d82b69372654c00f0595a35b0ec26a"
+  },
+  "oct27-page-adapter-reviewed.txt": {
+    "bytes": 7181,
+    "sha256": "4ef882a25956a5633b97bd29203610ab804fa2cc6de6a8577f9df895168c91c0"
+  },
+  "oct27-page-first-frozen-result.json": {
+    "bytes": 739,
+    "sha256": "07616122662bb41dc49afb192d572e1f1c8927c242bff50a33e612ff16d26c23"
+  },
+  "oct27-page-frozen-hosted.txt": {
+    "bytes": 95106,
+    "sha256": "a8ca609f56c723f372e7d41dfa4ee3d16797797e178bdfdfec4e87d215a1679d"
+  },
+  "oct27-page-frozen-related.txt": {
+    "bytes": 19100,
+    "sha256": "bba8c5f0fbfbf88c6074a649940303e76f98f3554eb4dfd863ec4a20025c40e1"
+  },
+  "oct27-page-publication.json": {
+    "bytes": 976,
+    "sha256": "247437c87873ec6f166c80ed57219a600882030c30e1cc6e74d06a2b3c6d6cc6"
+  },
+  "oct27-page-registration-correct-path.txt": {
+    "bytes": 4073,
+    "sha256": "0a8797dabf55c9771a9e87925e6917e34567394acc31dda1932c02c3abc14527"
+  },
+  "oct27-page-registration-repair.txt": {
+    "bytes": 3808,
+    "sha256": "345099b1f65d1eeded9bd5ba4880485275165d31e052c6f0342d738e234937ce"
+  },
+  "oct27-page-repaired-frozen-hosted.txt": {
+    "bytes": 95106,
+    "sha256": "6e50b99c58cefec0f5d051e49e0a79f9aeb8a99f61242406480571cda43337d8"
+  },
+  "oct27-page-repaired-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-page-repaired-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-page-repaired-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "fb78dfcf2da478494d3778c9ac9a6b4d2af8577cf46fd4b2cc0f1e76701e45c1"
+  },
+  "oct27-page-repaired-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-page-repaired-frozen-validation.json": {
+    "bytes": 4142,
+    "sha256": "bd28b4cfe10c055102308f990be325c0dc0c11a072a6dcba154a6dff9a49a7a0"
+  },
   "oct27-preparation-discovery.json": {
     "bytes": 4974,
     "sha256": "d976a23730712cb7b276e1e053b35641136451fee10c937e5015ee64dbb772a5"
@@ -364,7 +440,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 3051,
-    "sha256": "d54f7430b4ad27875730f737f3424544679a73f88d5261bc9490894e5a01a7ff"
+    "bytes": 3340,
+    "sha256": "1c057555077cbde9308db7719cd265c37a55f47a1c27d8edb066e8d5345f2156"
   }
 }

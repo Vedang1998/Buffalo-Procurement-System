@@ -1,0 +1,40 @@
+test_mapping_authority_and_disabled_flags_match_approved_contract (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_mapping_authority_and_disabled_flags_match_approved_contract) ... ok
+test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_mapping_foundation_has_no_shopify_price_order_supplier_or_artifact_mutator) ... ok
+test_persistent_mapping_modules_are_registered_at_exact_discovery_floors (test_persistent_mapping_foundation_contract.PersistentMappingFoundationContractTests.test_persistent_mapping_modules_are_registered_at_exact_discovery_floors) ... /workspace/Buffalo-Procurement-System/procurement/src/procurement_os/private_research_app.py:630: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+/workspace/Buffalo-Procurement-System/.venv/lib/python3.13/site-packages/fastapi/applications.py:4681: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  return self.router.on_event(event_type)  # ty: ignore[deprecated]
+/workspace/Buffalo-Procurement-System/procurement/src/procurement_os/private_research_app.py:653: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+/workspace/Buffalo-Procurement-System/.venv/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+ok
+test_codes_suffixes_reuse_and_distributor_scope_preserve_identity_evidence (test_supplier_format_conformance.SupplierFormatConformanceTests.test_codes_suffixes_reuse_and_distributor_scope_preserve_identity_evidence) ... ok
+test_corpus_is_strict_fabricated_eight_case_review_only_evidence (test_supplier_format_conformance.SupplierFormatConformanceTests.test_corpus_is_strict_fabricated_eight_case_review_only_evidence) ... ok
+test_identical_bytes_under_another_filename_are_alias_only (test_supplier_format_conformance.SupplierFormatConformanceTests.test_identical_bytes_under_another_filename_are_alias_only) ... ok
+test_occurrences_tiers_units_and_continuation_boundaries_remain_distinct (test_supplier_format_conformance.SupplierFormatConformanceTests.test_occurrences_tiers_units_and_continuation_boundaries_remain_distinct) ... ok
+test_presence_comparison_and_new_module_floor_fail_closed (test_supplier_format_conformance.SupplierFormatConformanceTests.test_presence_comparison_and_new_module_floor_fail_closed) ... ok
+test_price_threshold_and_labeled_periods_use_existing_27_field_contract (test_supplier_format_conformance.SupplierFormatConformanceTests.test_price_threshold_and_labeled_periods_use_existing_27_field_contract) ... ok
+test_regular_gift_special_combo_components_and_scopes_remain_separate (test_supplier_format_conformance.SupplierFormatConformanceTests.test_regular_gift_special_combo_components_and_scopes_remain_separate) ... ok
+test_seasonal_deal_rejection_and_clarification_memory_have_no_effects (test_supplier_format_conformance.SupplierFormatConformanceTests.test_seasonal_deal_rejection_and_clarification_memory_have_no_effects) ... ok
+test_unknown_null_absent_zero_arithmetic_and_split_fee_are_preserved (test_supplier_format_conformance.SupplierFormatConformanceTests.test_unknown_null_absent_zero_arithmetic_and_split_fee_are_preserved) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.683s
+
+OK

@@ -1,0 +1,23 @@
+{
+  "commit": "9f90eb1c1c5a0f39c273bc954cca0cadc9fd8121",
+  "tree": "eaa801e64829f5f7ce11eff6772cfebfb8fb5d14",
+  "hosted": {
+    "discovered": 534,
+    "executed": 534,
+    "passed": 534
+  },
+  "related": {
+    "discovered": 88,
+    "executed": 88,
+    "passed": 86,
+    "failed": 2,
+    "reason": "Two contract test population constants remained2033; actual registered2061"
+  },
+  "startup": "NOT_RUN_VALIDATION_ABORTED",
+  "imports": "NOT_RUN_VALIDATION_ABORTED",
+  "inert_gate": "NOT_RUN_VALIDATION_ABORTED",
+  "logs": {
+    "oct27-page-frozen-hosted.log": "a8ca609f56c723f372e7d41dfa4ee3d16797797e178bdfdfec4e87d215a1679d",
+    "oct27-page-frozen-related.log": "bba8c5f0fbfbf88c6074a649940303e76f98f3554eb4dfd863ec4a20025c40e1"
+  }
+}
