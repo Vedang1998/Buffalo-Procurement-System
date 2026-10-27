@@ -76,7 +76,7 @@ class EvidenceFixture(Fixture):
         docs['blocked-item-exclusions.json']['items']=exclusions;docs['packet-summary.json']['exceptions']=copy.deepcopy(exclusions)
         docs['material-edit-confirmations.json']['items']=[]
         readiness=[]
-        for i,vendor in enumerate((SOUTH,WEST)):
+        for i,vendor in enumerate(self.vendor_ids):
             readiness.append({'vendor_id':vendor,'draft_po_id':uuid(10+i),'readiness_by_variant':[
                 {'variant_id':v,'vendor_id':vendor,'run_id':RUN,'applicable_gate_names':sorted(evidence.GATES),'blockers':[],
                  'gates':[self.gate(n) for n in sorted(evidence.GATES)]} for v in (['1001'] if i==0 else ['4001','4002'])]})

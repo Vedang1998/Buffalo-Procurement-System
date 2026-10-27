@@ -10,6 +10,35 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 packet forecast and net need — continuing
+
+Published `40c6b3111121c3238b81c82b0de66f47cd654199`, tree
+`744f3f06837357a84394bc91a2d0d1781927c263`, passed620 hosted tests in both the
+normal and separately scrubbed diagnostic environment,88 related,10 startup and
+18 imports. Activation remained exit78. Discovery2147/117 is not execution.
+Ordinary branch-only publication scanned33 objects with no private-metadata or
+high-confidence secret hits, fresh-fetch verified, protected refs unchanged.
+
+The next component calls the actual registered V2 forecast/need validators over
+five frozen contexts, including the fee-blocked loose item and ALLOCATED item.
+The missing selected head remains NOT_REACHED with no invented calculation.
+It binds all six forecast-member projections, four observed browser forecast
+hashes, canonical138 UNKNOWN daily observations, exact Buffalo evaluation instant
+and vendor calendars, packs, inventory/open POs, baseline quantities and model
+metrics. The Western baseline remains one case/four units, separately from the
+owner's two-case/eight-unit edit. Canonical need is36/4/4/loose4/0 for the five
+calculated contexts; this is recomputation evidence, not executed purchasing.
+
+Internal read-only review found and the writer repaired NUMERIC serialization,
+manifest/calendar timestamp and duplicated-model-field gaps. Twenty-two new tests
+include a structurally valid rehashed divergence that the connected forecast
+validator rejects. One earlier metric negative reused the actual classification
+and failed; its repaired differing-class case and raw failure remain attributed.
+Registration becomes2169/118; hosted642. Exact frozen tests must retain their
+own material identity. Continue selected-price authority, state/artifact parity
+and the populated recovery path. No live browser, restore, privilege or credential
+execution occurred. Six findings remain pending external review, three OPEN.
+
 ### 2026-10-27 packet owner decisions, exclusions and readiness — continuing
 
 Published `614071f6f4da1976201622b5b310ef13052f0444`, tree
