@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 14408,
-    "sha256": "36ddb90224b9ba40915a1f1c3761a0d27fb6c7bcfa7110a4705dc259bfe7b1ea"
+    "bytes": 15239,
+    "sha256": "0773e9d4c681a7150fec261d458a30464d5813e6d39616a070bb1038bf8fbccc"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8747,
-    "sha256": "b35cd749d3983e89b9f3e967f30c2cff4508383d29ae313ae50c2c1adebf4445"
+    "bytes": 8850,
+    "sha256": "76f3225ba18bb3306bd309a4120e8da3a49c8afbebe5cb335eff8683cb36e0e8"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -127,6 +127,10 @@
     "bytes": 976,
     "sha256": "02e84f05d21e962aa5f086b6e962d44bab36c6e4f0cab6bbc02e59ebf35dacef"
   },
+  "oct27-final-observer-sample.txt": {
+    "bytes": 8021,
+    "sha256": "3e494a6c2714381b2924cf85d813527bd4386581845a2b619af82aac124b6e8a"
+  },
   "oct27-final-residual-inventory.json": {
     "bytes": 180,
     "sha256": "0e56b2a62a5a7c1e6eda2c8a8f7579ef8206925a008c172a5d3c0143ae4e6a24"
@@ -179,6 +183,50 @@
     "bytes": 976,
     "sha256": "4df00a97d22f89ccb9e0cacc0f4f7de407d30d26b860f5f4111f42910fbd69ba"
   },
+  "oct27-mapping-first.txt": {
+    "bytes": 6028,
+    "sha256": "6cb9146f0f59ab131becbaa5d8c9b32a551201cf01167f2a2d23287da382bbe7"
+  },
+  "oct27-mapping-review-causal.txt": {
+    "bytes": 20923,
+    "sha256": "62abcb8768e2ec7dad0e4dd41f7799c7c9eb2335dde805c8b007645512e5ed18"
+  },
+  "oct27-mapping-review-discovery.json": {
+    "bytes": 4925,
+    "sha256": "cef2f9d6572dcd8a5ef5d89a37812945992f462c1b1285047973b8b5cd256bfc"
+  },
+  "oct27-mapping-review-frozen-hosted.txt": {
+    "bytes": 86273,
+    "sha256": "75a6d76372f85c614a936e41957a61d6820c5a4d976e124322ebc2c075a8688c"
+  },
+  "oct27-mapping-review-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-mapping-review-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-mapping-review-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "c97715f1fc19082280271763bb7bb911432404d4ee0d4c82fbdd54eb21182f41"
+  },
+  "oct27-mapping-review-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-mapping-review-frozen-validation.json": {
+    "bytes": 14544,
+    "sha256": "a70b1175febed68636991ecce082af04329090dcc6d76cfaa7c011234a4d8dae"
+  },
+  "oct27-mapping-review-publication.json": {
+    "bytes": 976,
+    "sha256": "87d76525574521eb25a66fef7deb0f443df4c06e4e903ae34cc3b4587196f303"
+  },
+  "oct27-mapping-reviewed.txt": {
+    "bytes": 3492,
+    "sha256": "10d8eff49c2c727a976de3c0607289196764515671c1c38104a62576d2dc9862"
+  },
   "oct27-observer-frozen-hosted.txt": {
     "bytes": 65123,
     "sha256": "123af689bf095042275d051e223c865fd00d074f35a12d65c587e8658846cc12"
@@ -214,6 +262,18 @@
   "oct27-process-residue-focused.txt": {
     "bytes": 1201,
     "sha256": "f5e9388a6df7357a3fb0db4c16ea3c605d93b310c38889072557182acdc120e0"
+  },
+  "oct27-review-step-api-contract.txt": {
+    "bytes": 3911,
+    "sha256": "7e55b39c5c9b2c95f8b5383786b34ba85d8f0ff1b28a0eab96d2cb40f69020f7"
+  },
+  "oct27-review-step-final.txt": {
+    "bytes": 4472,
+    "sha256": "4189ad60e54b3336bcbd7bbc627ed341bacaa0da814ca49c0a1e5b3b39d45fb8"
+  },
+  "oct27-review-step-first.txt": {
+    "bytes": 6542,
+    "sha256": "a281b275a71722e7f5cb1fdd330c5fa65b18e63425a612fbf0c94385b3aece2f"
   },
   "oct27-runtime-frozen-kernel-clone.txt": {
     "bytes": 1484,
@@ -272,7 +332,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 2651,
-    "sha256": "2a096897a5b009dcf8e909b34203051561471ca0cefd393357b992f01df48532"
+    "bytes": 2961,
+    "sha256": "03d0b3c83b44672b08164f5428407369e0db7d8a4386e43c7930dfc226d9c92a"
   }
 }

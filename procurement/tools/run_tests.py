@@ -47,6 +47,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_apply_step.py": 15,
     "test_hosted_synthetic_mapping_step.py": 20,
     "test_hosted_synthetic_review_step.py": 23,
+    "test_hosted_synthetic_prepare_step.py": 21,
     "test_hosted_synthetic_capability.py": 33,
     "test_hosted_synthetic_cgroup.py": 35,
     "test_hosted_synthetic_enrollment.py": 17,

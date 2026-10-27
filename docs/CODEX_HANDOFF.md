@@ -10,6 +10,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 upstream preparation component — continuing
+
+Verified published implementation: `2bfd85fed1ec43adc68807a503bbc175a9190b0d`, tree
+`a164f0b25603204e68148d84c3503912aee6cfa5`. Its clean frozen checks passed 485 hosted,
+88 related, 10 startup and 18 imports; activation exited 78. Discovery was 2,012
+across 111 registered modules, execution count zero. The ordinary branch-only push
+was secret/private-metadata scanned, freshly fetched and matched; protected refs
+were unchanged. Raw evidence is added to the existing October 27 review packet.
+
+The new inert preparation step ports the exact unbuilt V1 retirement and canonical
+V2 preparation, with three individually guarded POSTs. It checks every displayed
+retirement fact, unchanged retired fingerprint and zero DRAFT/artifact prestate.
+The resulting new run/recommendation/blocker IDs are observed, not preseeded, and
+become the review component's binding. That proof digest includes the principal,
+price batch and vendor identities passed downstream. Exactly four unique forecast
+sections must retain visible synthetic-authority/limited-availability warnings,
+V2 policy/schedule identities, actual vendor/calendar fields, Buffalo timezone,
+138-day history, original quantities, H17/H3 windows and target arithmetic.
+Conflicting aliases, missing warnings, duplicate/orphan forecasts, stale methods,
+changed form fields and unexpected mutations refuse. This is observed server UI
+evidence, not an independent recomputation of forecasting or live browser proof.
+
+Twenty preparation causal tests passed before the final actual-API renderer test;
+the registered module now has 21. Discovery floor becomes 2,033 / 112 modules and
+the hosted focused gate 506. The next frozen record must report actual counts.
+Internal static review found no remaining concrete issue in this component after
+the writer repaired proof coverage, forecast inventory and calendar conflicts;
+this does not substitute for Claude review. Continue the real guarded CDP adapter
+and download/restart composition where independent implementation is authorized.
+
+Reusable cloud Install/Start draft revision 14 was saved and exact contents read
+back. It adds the tested local Git maintenance settings, preserves the verified
+public noreply identity and lightweight startup, and records current boundaries.
+Saving is not publishing a snapshot or proving a fresh-task restoration. Existing
+unattributed resources remain untouched. No production or phase status changed.
+
 ### 2026-10-27 mapping, owner review and final resource evidence — continuing
 
 Published source before this delta is `d4ca8caaa94ecef76aa0faee094e4a7a44cccd55`,

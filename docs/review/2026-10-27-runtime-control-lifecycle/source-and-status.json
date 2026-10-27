@@ -1,6 +1,6 @@
 {
-  "material_commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
-  "material_tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced",
+  "material_commit": "2bfd85fed1ec43adc68807a503bbc175a9190b0d",
+  "material_tree": "a164f0b25603204e68148d84c3503912aee6cfa5",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -33,6 +33,10 @@
     {
       "commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
       "tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced"
+    },
+    {
+      "commit": "2bfd85fed1ec43adc68807a503bbc175a9190b0d",
+      "tree": "a164f0b25603204e68148d84c3503912aee6cfa5"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -74,5 +78,10 @@
     "class_setup_errors": 3,
     "unexecuted": 31,
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
-  }
+  },
+  "independent_implementation_remaining": [
+    "preparation component being tested on descendant",
+    "real guarded CDP adapter",
+    "download/restart/restore composition"
+  ]
 }

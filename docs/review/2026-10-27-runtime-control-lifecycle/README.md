@@ -1,11 +1,10 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet initially freezes d4ca8caa and its predecessors. A subsequent writer
-delta adds the mapping and owner-review/DRAFT components and final pre-stop memory
-sample repair described at the top of CODEX_HANDOFF.md. Its frozen evidence will
-be appended with its own commit/tree. Preparation and download/restart adapter
-implementation remain authorized; this packet does not claim all executable work
-is exhausted or change the reviewer's existing frozen target.
+This packet now includes frozen 2bfd85fe and its predecessors. An additional
+preparation component is being tested on descendants; its results will be recorded
+with their own source identity. The real guarded CDP adapter and download/restart
+composition remain implementation work. This packet does not claim all executable
+work is exhausted or change the reviewer's original frozen target.
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -19,11 +18,11 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `d4ca8caaa94ecef76aa0faee094e4a7a44cccd55`.
-- Implementation tree: `4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced`.
+- Latest tested/published implementation: `2bfd85fed1ec43adc68807a503bbc175a9190b0d`.
+- Implementation tree: `a164f0b25603204e68148d84c3503912aee6cfa5`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
-  d4ca; its delta adds the inert APPLY component and its registration/source binding.
+  2bfd; descendants add inert browser stages and the final aggregate-sample repair.
 - Original actual external review: `3c1ae555b82aa650011254a9b1f8e8c4367601bb`,
   REQUEST CHANGES. Owner-reported Claude Code CLI 2.1.310, session
   `session_01JyrJEUAi36GJ6AfNcmBBxV`, configured/last-served `claude-opus-5-5`.
@@ -44,9 +43,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t d4ca8caaa94ecef76aa0faee094e4a7a44cccd55
-git rev-parse d4ca8caaa94ecef76aa0faee094e4a7a44cccd55^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 d4ca8caaa94ecef76aa0faee094e4a7a44cccd55 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t 2bfd85fed1ec43adc68807a503bbc175a9190b0d
+git rev-parse 2bfd85fed1ec43adc68807a503bbc175a9190b0d^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 2bfd85fed1ec43adc68807a503bbc175a9190b0d -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.
@@ -104,6 +103,15 @@ Internal read-only Codex investigators `app_runtime_inputs`, `cleanup_audit` and
 replayed-request and test-causality defects that the sole writer repaired. They did
 not run the writer's tests or supply independent external approval.
 
+The same descendant adds guarded mapping and owner-review/DRAFT components.
+Mapping binds exact Variant/offer identity and deterministic decision UUIDv5;
+review verifies actual SKU/pack conversions, CS2/BT18/BASE tiers, minima20/120,
+shortfall0/18, distinct vendor PO UUIDs, persisted tiers, fees and captured stock.
+Its eleven POSTs are scripted component execution, not actual DRAFT persistence.
+The external observer now replaces its provisional drain aggregate with its last
+validated pre-stop sample; stale or mismatched proof cannot release the identity.
+These repairs are covered by the frozen 485 tests and remain pending external review.
+
 ## Source-bound results and retained failures
 
 `manifest.json` records exact artifact sizes and SHA-256 hashes. Raw logs are copied
@@ -116,15 +124,17 @@ not presented as another execution of the material tests.
 
 | Evidence | Source | Actual result / scope |
 | --- | --- | --- |
-| Hosted focused suite | d4ca8caa | 439 executed, 439 passed; no failures/errors/skips/expected failures |
-| Related regressions | d4ca8caa | 88 executed, 88 passed; no failures/errors/skips/expected failures |
-| Startup tests | d4ca8caa | 10 executed, 10 passed |
-| Dependency/application/tool imports | d4ca8caa | 18 imports passed; no server/DB/browser started |
-| Inert activation gate | d4ca8caa | exit 78 as required, before native privilege |
-| Authoritative discovery | d4ca8caa | 1,966 tests / 109 modules; floor 1,966, zero registration errors; execution count 0 |
+| Hosted focused suite | 2bfd85fe | 485 executed, 485 passed; no failures/errors/skips/expected failures |
+| Related regressions | 2bfd85fe | 88 executed, 88 passed; no failures/errors/skips/expected failures |
+| Startup tests | 2bfd85fe | 10 executed, 10 passed |
+| Dependency/application/tool imports | 2bfd85fe | 18 imports passed; no server/DB/browser started |
+| Inert activation gate | 2bfd85fe | exit 78 as required, before native privilege |
+| Authoritative discovery | 2bfd85fe | 2,012 tests / 111 modules; floor 2,012, zero registration errors; execution count 0 |
 | Diagnostic kernel component | 4dd50dea | 3 cases passed in an unprivileged namespace component |
 | Application kernel component | 4dd50dea | 3 cases passed; 81,844,207 regular bytes under 80 MiB, 51 mapped ELFs verified |
-| New APPLY tests | d4ca8caa | 15 scripted DOM/request tests, included in 439; not browser acceptance |
+| New APPLY tests | 2bfd85fe | 15 scripted DOM/request tests, included in 485; not browser acceptance |
+| Mapping / selection | 2bfd85fe | 20 scripted tests, included in 485; 25 guarded POSTs, exact seven decisions/five selections |
+| Owner review / DRAFT | 2bfd85fe | 23 scripted tests, included in 485; actual API/gateway form contracts, exact vendor economics |
 | Complete authoritative suite | final supported candidate | NOT_RUN; required after review/composition |
 | Dedicated GitHub native lifecycle | current generation | NOT_RUN; review/activation gate closed |
 

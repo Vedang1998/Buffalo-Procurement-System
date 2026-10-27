@@ -90,10 +90,10 @@
         "procurement/tools/hosted_synthetic_identity.py:AccountLease"
       ],
       "tests": [
-        "20 observer / 10 quarantine / 22 lifecycle registered tests; actual unprivileged pipe and deferred-SIGINT components",
+        "23 observer / 10 quarantine / 22 lifecycle registered tests; actual unprivileged pipe and deferred-SIGINT components",
         "exact invocation/start/membership refusal before native signals; descriptor-failure proof refusal"
       ],
-      "remaining": "Dormant external observer, separate accounting envelope, persistent private identity quarantine and executable six-case lifecycle driver implemented. Native same-generation normal/cancel/kill/ACK-timeout/partial-setup proof NOT_RUN. Timeout means20s namespace deadline, not120s systemd startup timeout. Terminal state is distinct from successful descriptor closure. Quarantine is never drained cleanup."
+      "remaining": "Dormant external observer, separate accounting envelope, persistent private identity quarantine and executable six-case lifecycle driver implemented. Native same-generation normal/cancel/kill/ACK-timeout/partial-setup proof NOT_RUN. Timeout means20s namespace deadline, not120s systemd startup timeout. Terminal state is distinct from successful descriptor closure. Quarantine is never drained cleanup. Final pre-stop aggregate sample replaces the earlier provisional proof; stale/mismatched proof refuses."
     },
     {
       "topic_id": "OWNER-P2-MEMORY",
@@ -162,9 +162,9 @@
       "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
     }
   ],
-  "material_commit": "d4ca8caaa94ecef76aa0faee094e4a7a44cccd55",
-  "material_tree": "4b73bd1c7adaa6f62814b2e30e97e49ff7a88ced",
-  "frozen_evidence": "oct27-final-component-frozen-validation.json",
+  "material_commit": "2bfd85fed1ec43adc68807a503bbc175a9190b0d",
+  "material_tree": "a164f0b25603204e68148d84c3503912aee6cfa5",
+  "frozen_evidence": "oct27-mapping-review-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "NOT_RECEIVED_NOT_AUTOMATICALLY_INVOKED"
