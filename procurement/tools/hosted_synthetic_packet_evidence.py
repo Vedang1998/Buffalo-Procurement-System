@@ -11,6 +11,7 @@ import io
 import json
 import re
 
+from hosted_synthetic_artifacts import packet_json
 from hosted_synthetic_artifacts import HostedArtifactError, SAFETY_LABEL, _require, bounded_json, packet_members
 from hosted_synthetic_packet_controls import validate_packet_controls, _by, _equal, _money, _captured_utc
 
@@ -57,7 +58,7 @@ def _validate(preparation_json,review_json,artifacts,*,commit,tree):
     prep,review=bounded_json(preparation_json),bounded_json(review_json)
     packet=next(x for x in artifacts if x.registry.kind=='EMERGENCY_REVIEW_PACKET')
     entries=dict(packet_members(packet,(prep['vendors']['southern'],prep['vendors']['western'])))
-    docs={n:bounded_json(b) for n,b in entries.items() if n.endswith('.json')}
+    docs={n:packet_json(n,b) for n,b in entries.items() if n.endswith('.json')}
     contexts=_by(docs['frozen-input-manifest.json']['input_manifest']['contexts'],'variant_id',('1001','4001','4002','4003','4004','4005'))
     expected_recommendations=_by(prep['recommendations'],'variant_id',_DECISIONS)
     _require(len({v['recommendation_id'] for v in expected_recommendations.values()})==4)

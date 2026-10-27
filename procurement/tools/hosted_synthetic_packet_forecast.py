@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
+from hosted_synthetic_artifacts import packet_json
 from hosted_synthetic_artifacts import HostedArtifactError, _require, bounded_json, packet_members
 from hosted_synthetic_packet_controls import _by, _equal, _money, _captured_utc
 from hosted_synthetic_packet_evidence import validate_packet_decision_evidence, _same_json
@@ -32,7 +33,7 @@ def _validate(preparation_json,review_json,artifacts,*,commit,tree):
     prep=bounded_json(preparation_json)
     _require(_same_json(prep['vendors'],{'southern':SOUTH,'western':WEST}))
     packet=next(x for x in artifacts if x.registry.kind=='EMERGENCY_REVIEW_PACKET')
-    docs={n:bounded_json(b) for n,b in packet_members(packet,(SOUTH,WEST)) if n.endswith('.json')}
+    docs={n:packet_json(n,b) for n,b in packet_members(packet,(SOUTH,WEST)) if n.endswith('.json')}
     frozen=docs['frozen-input-manifest.json']['input_manifest']
     evaluation=_captured_utc(frozen['evaluation_at']);_require(evaluation=='2026-10-05T14:00:00+00:00')
     contexts=_by(frozen['contexts'],'variant_id',VARIANTS)

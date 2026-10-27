@@ -1,6 +1,6 @@
 {
-  "material_commit": "7ec3901e2ce6cfed957068f45a136d5057c6f7bb",
-  "material_tree": "a6e48b02ac05ab426a557864a3a2349a293995de",
+  "material_commit": "4d54fb5ce222df8dd200843b4b5450ac396cc37d",
+  "material_tree": "5e380524faabb6f1de6962e78907e34f3d612c76",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -69,6 +69,10 @@
     {
       "commit": "7ec3901e2ce6cfed957068f45a136d5057c6f7bb",
       "tree": "a6e48b02ac05ab426a557864a3a2349a293995de"
+    },
+    {
+      "commit": "4d54fb5ce222df8dd200843b4b5450ac396cc37d",
+      "tree": "5e380524faabb6f1de6962e78907e34f3d612c76"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -112,8 +116,7 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "restart/state/artifact parity tested on descendant",
-    "selected-price authority reconciliation",
-    "populated staging recovery validation and execution path"
+    "selected-price packet reconciliation and JSONB numeric metadata repair tested on descendant",
+    "populated recovery TOC/catalog and restore path"
   ]
 }

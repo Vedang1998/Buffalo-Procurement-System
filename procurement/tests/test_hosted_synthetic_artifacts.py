@@ -242,3 +242,29 @@ class HostedArtifactTests(unittest.TestCase):
         for raw in [b'{"x":1,"x":2}',b'\xff',b'{"x":NaN}',b'{"x":1.5}',b'['*34+b'0'+b']'*34]:
             with self.subTest(raw=raw[:30]),self.assertRaises(a.HostedArtifactError):a.bounded_json(raw)
         self.assertEqual(a.bounded_json(b'{"x":"289.00","safe":true}'),{'x':'289.00','safe':True})
+
+    def test_jsonb_numeric_mapping_fields_have_narrow_source_path_policy(self):
+        for record,tail in [('mapping_candidate',['shopify_units_value']),('mapping_candidate',['canonical_payload','physical_units_value']),
+                            ('mapping_decision',['qualifying_units_value']),('mapping_decision',['reviewed_facts','physical_units_value']),
+                            ('mapping_decision',['canonical_payload','reviewed_facts','retail_pack_units_value'])]:
+            data=4.0
+            for key in reversed(tail):data={key:data}
+            selected={'selected_offer_input_evidence':{record:data}}
+            payloads={'frozen-input-manifest.json':{'input_manifest':{'contexts':[selected]}},
+                      'recommendations-and-reasons.json':{'items':[{'metrics':selected}]},'supplier-mapping-evidence.json':{'items':[selected]}}
+            for member,payload in payloads.items():
+                raw=json.dumps(payload).encode();self.assertEqual(a.packet_json(member,raw),payload)
+                with self.assertRaises(a.HostedArtifactError):a.bounded_json(raw)
+
+    def test_mapping_float_admission_does_not_extend_to_money_ids_or_other_members(self):
+        for key in ('price_id','offer_id','case_price','unit_price','head_version'):
+            payload={'items':[{'selected_offer_input_evidence':{'mapping_candidate':{key:4.0}}}]}
+            with self.assertRaises(a.HostedArtifactError):a.packet_json('supplier-mapping-evidence.json',json.dumps(payload).encode())
+        raw=b'{"items":[{"selected_offer_input_evidence":{"mapping_candidate":{"shopify_units_value":4.0}}}]}'
+        with self.assertRaises(a.HostedArtifactError):a.packet_json('frozen-price-economics.json',raw)
+        with self.assertRaises(a.HostedArtifactError):a.packet_json('supplier-mapping-evidence.json',b'{"shopify_units_value":4.0}')
+
+    def test_mapping_numeric_metadata_is_finite_positive_numeric12_4_and_bounded(self):
+        for value in (0.0,-1.0,100000000.0,4.00001,float('inf'),float('nan')):
+            raw=json.dumps({'items':[{'selected_offer_input_evidence':{'mapping_candidate':{'shopify_units_value':value}}}]}).encode()
+            with self.subTest(value=value),self.assertRaises(a.HostedArtifactError):a.packet_json('supplier-mapping-evidence.json',raw)

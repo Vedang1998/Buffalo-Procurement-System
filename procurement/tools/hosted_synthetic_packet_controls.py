@@ -14,6 +14,7 @@ import io
 import json
 import re
 
+from hosted_synthetic_artifacts import packet_json
 from hosted_synthetic_artifacts import (
     CapturedArtifact, HostedArtifactError, SAFETY_LABEL, _UUID, _HASH,
     _require, bounded_json, packet_members,
@@ -130,7 +131,7 @@ def _validate(preparation_json, review_json, artifacts, *, commit, tree):
         _require(type(observed["cells"]) is list and len(observed["cells"]) == 4
                  and observed["cells"][:3] == [artifact.registry.kind, artifact.registry.vendor_id or "—", str(artifact.registry.size_bytes)])
     entries = dict(packet_members(packets[0], (vendors["southern"], vendors["western"])))
-    documents = {name:bounded_json(data) for name, data in entries.items() if name.endswith(".json")}
+    documents = {name:packet_json(name,data) for name, data in entries.items() if name.endswith(".json")}
     for document in documents.values():
         _equal(document, {"safety_label":SAFETY_LABEL})
     frozen = documents["frozen-input-manifest.json"]["input_manifest"]

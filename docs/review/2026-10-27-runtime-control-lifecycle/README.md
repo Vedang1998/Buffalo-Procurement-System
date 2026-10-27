@@ -1,12 +1,12 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet includes frozen7ec3901e and its predecessors. Its642 hosted tests
-passed normally and separately under scrubbed -I -S with explicit diagnostic Node.
-These are two executions of one population. Related88, startup10 and imports18
-passed; activation refused with exit78. Discovery2169/118 is not execution.
-Five contexts now undergo actual forecast/need recomputation and six packet
-forecast projections reconcile. Restart state/artifact parity is on the next
-descendant; selected-price authority and populated recovery remain independent work.
+This packet includes frozen4d54fb5c and its predecessors. Its658 hosted diagnostic
+tests passed normally and separately under scrubbed -I -S with explicit diagnostic
+Node. These are two executions of one population. Related88, startup10 and
+imports18 passed; activation refused with exit78. Discovery2185/119 is not execution.
+State/artifact parity passed without claiming restart. The next descendant adds
+locked-application-dependent selected-price checks and a narrowly scoped repair for
+actual PostgreSQL JSONB numeric mapping metadata. Populated recovery remains work.
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -20,8 +20,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `7ec3901e2ce6cfed957068f45a136d5057c6f7bb`.
-- Implementation tree: `a6e48b02ac05ab426a557864a3a2349a293995de`.
+- Latest tested/published implementation: `4d54fb5ce222df8dd200843b4b5450ac396cc37d`.
+- Implementation tree: `5e380524faabb6f1de6962e78907e34f3d612c76`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -45,9 +45,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t 7ec3901e2ce6cfed957068f45a136d5057c6f7bb
-git rev-parse 7ec3901e2ce6cfed957068f45a136d5057c6f7bb^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 7ec3901e2ce6cfed957068f45a136d5057c6f7bb -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t 4d54fb5ce222df8dd200843b4b5450ac396cc37d
+git rev-parse 4d54fb5ce222df8dd200843b4b5450ac396cc37d^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 4d54fb5ce222df8dd200843b4b5450ac396cc37d -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.

@@ -1,7 +1,7 @@
 {
   "README.md": {
-    "bytes": 15402,
-    "sha256": "295c42175d33386989eece9f5435ee8316ad03f08f9a666f90ca9198b814ac1a"
+    "bytes": 15422,
+    "sha256": "d1495e5806c8f1f8b1b840832fa70028db455c8568650e2d5ae557636a4a19e7"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
@@ -663,6 +663,50 @@
     "bytes": 1201,
     "sha256": "f5e9388a6df7357a3fb0db4c16ea3c605d93b310c38889072557182acdc120e0"
   },
+  "oct27-restart-parity-discovery.json": {
+    "bytes": 106,
+    "sha256": "22cb5cc83f9605915aeb9f4a0ee223f2b4d4efc6c80103ad72ebfe49c547f0a0"
+  },
+  "oct27-restart-parity-first.txt": {
+    "bytes": 3245,
+    "sha256": "57a55dd41eb9a447d1df15ee308aa3852ff33f05b4f63167f524c62af41b0638"
+  },
+  "oct27-restart-parity-frozen-hosted.txt": {
+    "bytes": 118739,
+    "sha256": "9fa9230b4aeaefb28a07f3d9bbdf8ae12cf0209b612a03c74bc122c660dbcc1e"
+  },
+  "oct27-restart-parity-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-restart-parity-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-restart-parity-frozen-isolated.txt": {
+    "bytes": 118739,
+    "sha256": "f26a75d0bad07a2c5e6fc507784e560b73a60f947fd8f5c2b9ce4f3ac28561b6"
+  },
+  "oct27-restart-parity-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "1752515a6f367f187b44f89b44f62e4b36abf515c3f692c95600d8c604a5f0c6"
+  },
+  "oct27-restart-parity-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-restart-parity-frozen-validation.json": {
+    "bytes": 5466,
+    "sha256": "83110faa9e12af84aef90a7d48e4e3532584224a24b0205d3fbdef7ed9cafd3b"
+  },
+  "oct27-restart-parity-publication.json": {
+    "bytes": 976,
+    "sha256": "7409f36b34be79367af9dba979e5040bd09c8d5d08fd3ace255881a45b09b06e"
+  },
+  "oct27-restart-parity-registered.txt": {
+    "bytes": 9610,
+    "sha256": "71cb21238901f3a1dda8b9cde552a0a37b1973d526e89a62d26f1f5785b87ae0"
+  },
   "oct27-review-step-api-contract.txt": {
     "bytes": 3911,
     "sha256": "7e55b39c5c9b2c95f8b5383786b34ba85d8f0ff1b28a0eab96d2cb40f69020f7"
@@ -732,7 +776,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 4038,
-    "sha256": "d15d991f9234aa2cd0ee5a02391c58e2be08b9fd5cf463ce029db5861f8edbb2"
+    "bytes": 4153,
+    "sha256": "ad3e8f789d438b3d4f0cd14eefaeb6b008253e2fb4cff030eafca032e8565ff0"
   }
 }

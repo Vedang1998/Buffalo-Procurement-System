@@ -10,6 +10,46 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 selected-offer and price packet evidence — continuing
+
+Published `4d54fb5ce222df8dd200843b4b5450ac396cc37d`, tree
+`5e380524faabb6f1de6962e78907e34f3d612c76`, passed658 diagnostic tests normally
+and separately under scrubbed -I -S,88 related,10 startup and18 imports; activation
+exit78. Discovery2185/119 is not execution. Ordinary branch-only publication
+scanned34 new objects with no private-metadata/high-confidence secret hits and
+fresh-fetch verified. Protected references were unchanged.
+
+The next component uses the actual selected-manifest classifier and final-tier
+predicates, binds retained intent/APPLY/mapping/preparation bytes and five observed
+selections, and validates all seven mapping outcomes. It pins the registered
+Southern policy/CSV/source rows, compares six consumed frozen-price rows, initial
+tiers and recommendation costs, and uses the actual strategic evaluator. Western
+legacy tiers require exact ladder matches. Full-vendor scope, random apply-event
+UUID and database snapshot authenticity still require connected observations.
+
+Internal review exposed real producer mismatches: mapping offer IDs are strings;
+PostgreSQL NUMERIC mapping metadata becomes JSON floats; initial-cost projections
+and proof/outcome linkage were incomplete. Repairs keep finite positive bounded
+NUMERIC(12,4) support only at explicit mapping pack paths in three packet members.
+Default JSON, money, IDs, forecasts and other fields continue refusing floats.
+Actual parser/classifier fixtures preserve source shapes without claiming database
+lineage authenticity. The first fixture run had12 serialization errors; repaired
+43 tests passed. Internal static re-review found no further scoped P0/P1/P2.
+
+Registration becomes2205/120. The existing no-site-package diagnostic population
+becomes661 with three parser regressions. Seventeen new application-dependent
+price tests run separately with the unchanged locked environment; they are not
+silently added to or skipped by the isolated gate. Complete authoritative execution
+still requires the supported reviewed host. Continue populated recovery validation
+and execution components; no live privilege, credential, browser or restore action
+has run. Six original findings remain pending independent review, three OPEN.
+
+Reusable setup draft revision15 was saved and read back, including the exact4d54fb5c
+checkout and updated Start instructions. Install bytes and empty secret requirements
+were unchanged. Full workspace discovery distinguished the uv Git barrier and pnpm
+cache alias from actual projects. Saving is not publication, a clean snapshot or
+a successful fresh-task restoration; those remain unverified.
+
 ### 2026-10-27 restart state and artifact parity — continuing
 
 Published `7ec3901e2ce6cfed957068f45a136d5057c6f7bb`, tree

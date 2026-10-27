@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 import hashlib
 import io
 import json
+import math
+from decimal import Decimal
 import os
 from pathlib import Path
 import re
@@ -139,7 +141,38 @@ def read_owned_download(root: str, guid: str, registry: RegisteredArtifact,
         raise HostedArtifactError("hosted_artifact_read_refused") from None
 
 
-def bounded_json(data: bytes):
+def _mapping_number_path(path, member):
+    roots={"frozen-input-manifest.json":("input_manifest","contexts"),
+           "recommendations-and-reasons.json":("items",),"supplier-mapping-evidence.json":("items",)}
+    root=roots.get(member)
+    if root is None or path[:len(root)]!=root or len(path)<=len(root) or type(path[len(root)]) is not int:return False
+    tail=path[len(root)+1:]
+    if member=="recommendations-and-reasons.json":
+        if not tail or tail[0]!="metrics":return False
+        tail=tail[1:]
+    if len(tail)<3 or tail[0]!="selected_offer_input_evidence":return False
+    record,tail=tail[1],tail[2:]
+    if record not in ("mapping_candidate","mapping_decision"):return False
+    if tail and tail[0]=="canonical_payload":tail=tail[1:]
+    reviewed=bool(tail and tail[0]=="reviewed_facts")
+    if reviewed:
+        if record!="mapping_decision":return False
+        tail=tail[1:]
+    fields={"shopify_units_value","qualifying_units_value"}
+    if record=="mapping_candidate" or reviewed:fields|={"physical_units_value","retail_pack_units_value"}
+    return len(tail)==1 and tail[0] in fields
+
+
+def packet_json(member: str, data: bytes):
+    """Allow bounded JSONB NUMERIC pack metadata only at actual source paths.
+
+    Economics, IDs, forecasts and all other fields retain the no-float policy.
+    SQL NUMERIC lexical scale/authenticity cannot be recovered from JSONB floats.
+    """
+    return bounded_json(data,_mapping_member=member)
+
+
+def bounded_json(data: bytes, *, _mapping_member=None):
     _require(type(data) is bytes and 0 < len(data) <= MAX_ARTIFACT_BYTES)
 
     def pairs(items):
@@ -154,18 +187,19 @@ def bounded_json(data: bytes):
 
     try:
         value = json.loads(data.decode("utf-8"), object_pairs_hook=pairs, parse_constant=constant)
-        pending, nodes = [(value, 0)], 0
+        pending, nodes = [(value, 0, ())], 0
         while pending:
-            item, depth = pending.pop()
+            item, depth, path = pending.pop()
             nodes += 1
             _require(depth <= 32 and nodes <= 100000)
             if type(item) is dict:
-                pending.extend((v, depth + 1) for v in item.values())
+                pending.extend((v, depth + 1, (*path,k)) for k,v in item.items())
             elif type(item) is list:
-                pending.extend((v, depth + 1) for v in item)
+                pending.extend((v, depth + 1, (*path,i)) for i,v in enumerate(item))
             elif type(item) is float:
-                # Existing packet economics are Decimal strings, never floats.
-                raise HostedArtifactError("hosted_artifact_json_float_refused")
+                if not (_mapping_number_path(path,_mapping_member) and math.isfinite(item) and item>0
+                        and Decimal(str(item))<=Decimal("99999999.9999") and Decimal(str(item)).as_tuple().exponent>=-4):
+                    raise HostedArtifactError("hosted_artifact_json_float_refused")
         return value
     except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
         if isinstance(exc, HostedArtifactError):
