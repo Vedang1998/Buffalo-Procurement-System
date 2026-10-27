@@ -31,6 +31,11 @@ binding and sealed identity bind the current source and actual captured bytes.
 The new policy is rejected by diagnostic dispatch and CPython consumer-proof paths.
 It grants no native execution or credential authority.
 
+Initial frozen d90b553 passed766 diagnostics in each interpreter and17 price/20
+snapshot tests, but the broader88 group had86 passes/two failures: stale explicit
+global assertions still expected2292. Both assertions now increase to2330; failed
+raw evidence remains retained. No floor is lowered.
+
 Thirty-eight new tests plus109 runtime/source/workflow/registration regressions
 passed147/147. The first27-test run had two failing timezone-offset subtests;
 malformed offsets had been accepted as zone names. That defect, missing locale

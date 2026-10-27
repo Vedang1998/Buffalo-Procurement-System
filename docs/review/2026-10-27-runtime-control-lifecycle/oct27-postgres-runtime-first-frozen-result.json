@@ -1,0 +1,33 @@
+{
+  "commit": "d90b553295ec73545c0c12aba7058eba85f4cdcc",
+  "tree": "e985b5a32c8600d30fe6403a201a57d8ea28bcf1",
+  "diagnostic": {
+    "normal": {
+      "discovered": 766,
+      "executed": 766,
+      "passed": 766
+    },
+    "isolated": {
+      "discovered": 766,
+      "executed": 766,
+      "passed": 766
+    }
+  },
+  "app_price": {
+    "executed": 17,
+    "passed": 17
+  },
+  "app_snapshot": {
+    "executed": 20,
+    "passed": 20
+  },
+  "related": {
+    "executed": 88,
+    "passed": 86,
+    "failures": 2,
+    "cause": "Two explicit global assertions remained2292 after new population2330"
+  },
+  "startup": "NOT_RUN_IN_ABORTED_VALIDATOR",
+  "full_authoritative": "NOT_RUN",
+  "result": "FAIL"
+}

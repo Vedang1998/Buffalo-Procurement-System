@@ -695,6 +695,10 @@
     "bytes": 25501,
     "sha256": "d3e5cd4958dacad06f9aa567f3f615d9fdd18dc92ab3024df94188e05c60beae"
   },
+  "oct27-postgres-runtime-first-frozen-result.json": {
+    "bytes": 701,
+    "sha256": "efd5f9e3e3680fe797543c1cd8da2d736eb1652349a64e02baee53b3de2dc763"
+  },
   "oct27-postgres-runtime-first.txt": {
     "bytes": 7143,
     "sha256": "59ae00c1183b527e01ba334afd7e932e29019b9101cec3bad470a534c2bfd3b6"
@@ -702,6 +706,26 @@
   "oct27-postgres-runtime-focused.txt": {
     "bytes": 11785,
     "sha256": "e793d3d66d65073e6ad425ba7de9b4957ee733d5cad19ba4a11b006d21218634"
+  },
+  "oct27-postgres-runtime-frozen-app-price-components.txt": {
+    "bytes": 3713,
+    "sha256": "52e70324d3d03857146685e1fd32a80b414f4a465480578f4e80c3aa3449d7c0"
+  },
+  "oct27-postgres-runtime-frozen-app-recovery-components.txt": {
+    "bytes": 4283,
+    "sha256": "a6d85dc4a3de0a13ddcbf59569cfbc9cad45d98a07a20aa2b89c83313a78dda5"
+  },
+  "oct27-postgres-runtime-frozen-hosted.txt": {
+    "bytes": 139435,
+    "sha256": "b340097fa7788dbea18c8ce5eaf492b19f3c0d3affac1ce332fff57b225361e5"
+  },
+  "oct27-postgres-runtime-frozen-isolated.txt": {
+    "bytes": 139435,
+    "sha256": "ff6bac17d775b341bd7c4ada30c918177d1176ac1a1305ed9bf0c9d9a3e60099"
+  },
+  "oct27-postgres-runtime-frozen-related.txt": {
+    "bytes": 19100,
+    "sha256": "53bd2659ccfbdac324e0eeb8c89962110a04ec450271f224dae302712bc3eb45"
   },
   "oct27-postgres-runtime-registered.txt": {
     "bytes": 25131,
