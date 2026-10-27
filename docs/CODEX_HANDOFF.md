@@ -37,7 +37,9 @@ acceptance. The 28 causal tests use scripted CDP events, not Chromium. An earlie
 27-test run exposed three positive-fixture CSRF-format failures; a combined run
 also caught the workflow's stale expected count. Both are retained as failed
 evidence. Registration now adds28 to the existing floor:2,061 /113 modules; hosted
-focused floor534. Frozen execution results follow at the exact clean checkpoint.
+focused floor534. Initial frozen9f90eb1 ran534 hosted PASS; related88 had86 passes and two stale
+population-constant failures. Those expectations are raised to2061 without changing
+test floors; the failed raw evidence remains. Repaired frozen results follow.
 
 The eventual driver must have ONE Fetch resolution owner combining egress and
 mutation policy. Attaching the old permissive Fetch handler alongside this one
