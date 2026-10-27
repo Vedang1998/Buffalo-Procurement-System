@@ -1,0 +1,75 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "7ec3901e2ce6cfed957068f45a136d5057c6f7bb",
+  "tree": "a6e48b02ac05ab426a557864a3a2349a293995de",
+  "base": "40c6b3111121c3238b81c82b0de66f47cd654199",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "58e4e8298c8437e517e0489c38319631ee4ef43e057f5d8b6464fe20f1286f9e",
+    "docs/CODEX_HANDOFF.md": "c9850c35df587dbfe54dc1081da97596be5e770fe23f7b4fd6861207f441bdf4",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "d8105bfb7a0b86c7d24866eae532300d870a757266ebef39f70694976be799b9",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "b5a98dfaff9ea3bee0bec553c6e5add2dd5835ef51ccbd5a7bf5634d698f744c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-causal.txt": "2535ef52792b41a325614f2815153c8abc5fbca1568e985e706ae976c338ddbb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-discovery.json": "d09d913d1de844c58cfb5fdd4e40660c50c658a75bc7c74af0a4b331219b59d6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-final.txt": "ba97c014a66edc63e99750edab57250bb8fff1ab504775c30ba499e6ff6a94e8",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-first.txt": "66e6e7414a94b7a9ff5d562fe27520821d4e5f5f0910d3774afb80e404dd65ea",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-hosted.txt": "920b7dad2c04fa1c638372a9294598801e2bdb267017bf6fee4c6a67fef7dfbc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-isolated.txt": "414797ea0ef237ccd57f9cd5c2734b8428f93336557d7fe819cd106b973343cc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-related.txt": "85e31ea5ed71fbd1486d5d8071191ee8a0fb810532d8ad80943c20eba6d93472",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-frozen-validation.json": "e8a561073bbd484b3947e208c1c0e079084e01808537756e9ec7d0a4042a3f4d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-publication.json": "e8c982121030847c9358222c18af9416fce078721c795ab2ff3e269bf93e9ba9",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-registration.txt": "29f6421119b08f060cdb3a376b4673700fd21114d14dc81e861ccc0147ba7227",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-reviewed.txt": "fc70d20c753649f048a860eb529945b92659c9e997b7d8105c1005dc19df891f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-packet-evidence-typed.txt": "04fb8a7f54e7e13ac2d4319cb7c465987907831bf8bcf90cc72751e75f4f836f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "8df2f4c0fa3ca618a51c31035d66b30717165fef626bf5500f279224ddf17829",
+    "procurement/tests/test_hosted_synthetic_packet_evidence.py": "84207d5f5b10e898f4cbebe7f15e52d1478115bae94a9d8fa32f879849b5399b",
+    "procurement/tests/test_hosted_synthetic_packet_forecast.py": "d77a7af168ef97a83f13ba9c88d64873533baee6000437213777aff950986690",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "3b575342d3f1b49ec094c22c6cad1bba1f9309fe0513dc5c16de74c9c022ad52",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "a173c991cdb2c23651e60335ed95472597cfb2bd5b5ba692e7249434e366d53b",
+    "procurement/tests/test_supplier_format_conformance.py": "2a76b027205b010719d06f9ee2f9ef6d58f5338fc5a0d2f2e2993c96c37f4055",
+    "procurement/tools/hosted_synthetic_packet_forecast.py": "8bc0fb6e7f93a0df0d3e3a74c8c1a0a8705d1f0c49ccea4261611b71488990f2",
+    "procurement/tools/hosted_synthetic_source.py": "1955e79b866ed6aa24781a3ca20314c36fdd83cad0df8007bb4dc85067a103b9",
+    "procurement/tools/run_tests.py": "06fb7311be271650ea07e5a9b42e896c55d88624187f80801064161e5ef889c1"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 32.36,
+      "sha256": "80cfe4683af9e899d2a3ec4283967c6d9c45f8b8dc90dfc5636db1b056bd0ca8"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 33.079,
+      "sha256": "cff70688dea57bb7b65faa35e21c68d6726dba65726d5583704d2dc1bec1534a"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.733,
+      "sha256": "e7b013d04569ec078a586ccb4f9f115240b9e37479a7cb1865ccdd8f84e173ba"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.165,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.868,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

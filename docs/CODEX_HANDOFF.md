@@ -10,6 +10,34 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 restart state and artifact parity — continuing
+
+Published `7ec3901e2ce6cfed957068f45a136d5057c6f7bb`, tree
+`a6e48b02ac05ab426a557864a3a2349a293995de`, passed642 hosted tests normally and
+separately under scrubbed -I -S,88 related,10 startup and18 imports. Activation
+remained exit78. Discovery2169/118 is not execution. Ordinary branch-only push
+scanned35 new objects without private-metadata/high-confidence secret hits and
+fresh-fetch verified; protected references were unchanged.
+
+The next dormant parity component consumes the existing Backup V2 state-facts
+shape, bounds and strictly types its inventories, rejects duplicate relation or
+sequence names, and compares every supplied hash/count/sequence value/called bit.
+It checks exact canonical summary counts, source SQL aggregation ordering and
+three registry-bound artifacts with identical bytes across distinct transfer GUIDs.
+Its source-schema compatibility test executes only the actual dependency-free
+parser; it does not simulate a database, attestation or lifecycle operation.
+
+Sixteen tests passed; internal read-only review found no concrete defect. The
+result explicitly leaves source-observation authenticity, complete catalog coverage,
+restart, restore and cleanup unproven. Fresh GUIDs are not evidence a restart took
+place. Registration becomes2185/119; hosted658. Existing pre-APPLY V2 remains
+pre-APPLY recovery evidence and cannot restore later DRAFTs. A separate populated
+staging recovery executor is authorized work, but legacy V1 and initial-transfer
+restorers cannot be used unchanged. Preserve final ownership/catalog/roles and
+original transfer provenance; uncertain target mutation must remain quarantined.
+Continue selected-price and populated-recovery components. No live operations or
+independent Claude re-review occurred; all existing activation/release gates hold.
+
 ### 2026-10-27 packet forecast and net need — continuing
 
 Published `40c6b3111121c3238b81c82b0de66f47cd654199`, tree
