@@ -1,0 +1,94 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "5c88122508352c7e31232af2f9ffba40e064bc29",
+  "tree": "90e4dbde43e03044e0ec88aeaaaaccc3c7d24a4d",
+  "base": "e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "50cd8a3cca00b57662d58c32aa01867488667cb68b64d13d98d85cce90b3d4a7",
+    "docs/CODEX_HANDOFF.md": "76b6e8539990534206947fb6df2c40d0c52e14511eb74b001da5cd9c50f40507",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "45767c6c0f98e2794bf8ac828756aa9e611c94911c37b821fac9b2735076ace9",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "c7a548e48ef2bad1b4c6016a2671add60c58eef5d5d7dcda3740b229678bd33c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "c4c47936a0d8c61715c3582b962c95274df478eedc63fb8a3190dcba82aa1cb1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-discovery.json": "0db73eef1a02a57497f347b809bd51f6d93a1ffd73f94420fe22e092198dd7f1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-final-focused.txt": "d3e5cd4958dacad06f9aa567f3f615d9fdd18dc92ab3024df94188e05c60beae",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-first-frozen-result.json": "efd5f9e3e3680fe797543c1cd8da2d736eb1652349a64e02baee53b3de2dc763",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-first.txt": "59ae00c1183b527e01ba334afd7e932e29019b9101cec3bad470a534c2bfd3b6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-focused.txt": "e793d3d66d65073e6ad425ba7de9b4957ee733d5cad19ba4a11b006d21218634",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-frozen-app-price-components.txt": "52e70324d3d03857146685e1fd32a80b414f4a465480578f4e80c3aa3449d7c0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-frozen-app-recovery-components.txt": "a6d85dc4a3de0a13ddcbf59569cfbc9cad45d98a07a20aa2b89c83313a78dda5",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-frozen-hosted.txt": "b340097fa7788dbea18c8ce5eaf492b19f3c0d3affac1ce332fff57b225361e5",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-frozen-isolated.txt": "ff6bac17d775b341bd7c4ada30c918177d1176ac1a1305ed9bf0c9d9a3e60099",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-frozen-related.txt": "53bd2659ccfbdac324e0eeb8c89962110a04ec450271f224dae302712bc3eb45",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-registered.txt": "801838ac9db977a4c1b4e8f463883d68b71ea02a54142aedc603119883293cc8",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-review-repair.txt": "ee7dc5cf18fa7f3608e85c387775db70ae6318639e24c043740b5d31adc6220a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-runtime-second-review-repair.txt": "ad3da5d5bdd2a3a6a44be1086c0aa3531095b3d86b8a44ac75bab447c1524694",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-app-price-components.txt": "1b1ec85e61c62356d02fa69643e20091cc7e218571d8092f1236cb073d603791",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-app-recovery-components.txt": "bef5b90581775131b74e1cae19c79d53505b1c14730be8bbf1567312c2a4ad06",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-hosted.txt": "81a67ef1f43a549ef134462e21d797ebef09571e32865301b6649b20046c9f7f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-isolated.txt": "4a8f606354d75887a176bbd7e12e753e8a055c28cd0c78e14a35fb10f5ed60b2",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-related.txt": "152bb59922c10289854c8f26502e0b962bfa23050f8145500923b9a75894c3cb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-frozen-validation.json": "167202635544b335b74ae61dab3ea97fc1a543cd393758d7df67d94102455583",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-publication.json": "2f6cb6e060d529ef817baee0e02dcb0bf1bbaeea2084b3d9e116f875ba6f837b",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "c09611bba2a0f7564cbda4b1a523a33e80cfa39bb50a69511a1b00081c2d5253",
+    "procurement/tests/test_hosted_synthetic_postgres_runtime.py": "f8c095af9f2acafe44e80c3e75806aafb9865df5632c217839de5cd6d4879476",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "98c323a3d998def3be1fee999b650a486ae523f2de439ca37ed2f0dbef559f6b",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "d9a5d1d208e9396dd780ee569e2203b56f7192c98c1ecdcd32ee0b1743f7be8d",
+    "procurement/tests/test_supplier_format_conformance.py": "a5105f18efa6259b739add69091e349ce72035c3970cd88e846c372f6457fc72",
+    "procurement/tools/hosted_synthetic_postgres_runtime.py": "41ac7189820b959210b7a62e94d427524f976ff3a2979bffcd7b41df1887a697",
+    "procurement/tools/hosted_synthetic_runtime.py": "ea67bfb81519e7084066ca5a9723f0d36720dad9c2a44787f7e2570d8f63f46f",
+    "procurement/tools/hosted_synthetic_source.py": "1c7fb06015258ba3505bb5e186214095555ec85b5e1fcb6161e01624fad61368",
+    "procurement/tools/run_tests.py": "044295d10ec01ad412c0fc6e7bd9779a623d6e709a4116a03519b49f16f60254"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 34.076,
+      "sha256": "690cb69f9f84ab7ee8d4bd81ffe6ad8fb11a9a8de83d426f24215d888a5a8b18"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 32.575,
+      "sha256": "7da451a1cc27da98b9842056e0753e051682c91b341ee0a71927378a54777827"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 16.36,
+      "sha256": "060d8f093b190e92ecab978998276d08d2fb965c2fd79f6479d2550e31563dec"
+    },
+    "app-recovery-components": {
+      "returncode": 0,
+      "seconds": 0.265,
+      "sha256": "a6d85dc4a3de0a13ddcbf59569cfbc9cad45d98a07a20aa2b89c83313a78dda5"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.68,
+      "sha256": "58f4e5304f81a0f9411169e979c7aaf80888070da20e808dac0613b012a5b29f"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.615,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

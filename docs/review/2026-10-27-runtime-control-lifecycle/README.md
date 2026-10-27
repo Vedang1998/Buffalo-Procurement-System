@@ -1,19 +1,23 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet includes frozen e0d4e34 and predecessors. Its728 diagnostic tests passed
-normally and separately under scrubbed -I -S;17 price,20 runtime-snapshot,88 related,
-10 startup and18 imports passed. Activation exit78. Discovery2292/124 is not execution.
-Ordinary branch-only publication scanned31 objects with no private-metadata or
-high-confidence secret hits; fresh fetch verified exact commit/tree.
+This packet includes frozen5c881225 and predecessors:766 diagnostic tests passed
+normally and separately under -I -S,17 price,20 snapshot,88 related,10 startup,
+18 imports and inert activation78. Discovery2330/125 is not execution. Publication
+scanned52 new objects without private metadata/high-confidence secret hits and
+fresh-fetch verified the exact commit/tree. Prior failed d90b553 evidence remains.
 
-The next descendant adds a separate fixed native PostgreSQL sealed-capture policy,
-including initdb's shell/locale children, ELFs, modules and initialization/locale/
-timezone data. It uses existing sealed bundles and unchanged bounds. Thirty-eight
-new tests and109 related regressions passed147/147; two original timezone subtest
-failures and subsequent review repairs are retained. Diagnostic dispatch and CPython
-proof cannot accept this policy. No native execution, containment, credential or
-browser proof follows from capture. Discovery2330/125; diagnostic population766.
-See the current handoff for exact remaining phase integration and environment gates.
+The next descendant adds the dormant fixed U1→U2 nonzero1000 identity transition,
+reusing capability erasure and the unchanged seccomp policy. Thirty-six simulated
+identity,16 native core-policy and219 related tests pass271/271. Reexec uses nondumpable regular uid_map
+ownership, not the exempt proc directory. Stdio cannot hide controls/protocol aliases.
+No host account, privilege, namespace, PG or credential action was executed.
+One disposable child verified only RLIMIT_CORE0 and inability to raise it; no
+crash/handler ran. Cloud core_pattern was unavailable on one bounded read (ENOENT).
+The new native gate refuses unknown/piped policy and still needs external lifetime
+observation; two reads do not freeze a host sysctl.
+Actual nested mapping, postdrop access and native execution remain NOT_RUN. Same
+kernel UID and post-exec dumpability require their distinct containment proofs.
+Discovery2382/127; diagnostic818; no floor lowered. See current handoff for next work.
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -27,8 +31,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f`.
-- Implementation tree: `fbe45f7a7ab38ce4e881a912d5e0092068a3ed73`.
+- Latest tested/published implementation: `5c88122508352c7e31232af2f9ffba40e064bc29`.
+- Implementation tree: `90e4dbde43e03044e0ec88aeaaaaccc3c7d24a4d`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -52,9 +56,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f
-git rev-parse e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t 5c88122508352c7e31232af2f9ffba40e064bc29
+git rev-parse 5c88122508352c7e31232af2f9ffba40e064bc29^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 5c88122508352c7e31232af2f9ffba40e064bc29 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.

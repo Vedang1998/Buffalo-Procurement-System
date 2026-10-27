@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 16092,
-    "sha256": "45767c6c0f98e2794bf8ac828756aa9e611c94911c37b821fac9b2735076ace9"
+    "bytes": 16409,
+    "sha256": "838e65da72d32a3a2e0c850dd898a69c2d4bc9ada078cb9759e3cbb1e66a09f4"
   },
   "cloud-setup-status.json": {
-    "bytes": 1005,
-    "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
+    "bytes": 1226,
+    "sha256": "2edb287877ce9358dd2aabb5e58c273a7c723d411e10b49d1b4afa4476eefe26"
   },
   "findings.json": {
-    "bytes": 9001,
-    "sha256": "c7a548e48ef2bad1b4c6016a2671add60c58eef5d5d7dcda3740b229678bd33c"
+    "bytes": 9349,
+    "sha256": "e80b38f83575cbf1b08df4af2b88c43cf6df1f5d378bf765fc8adb5e7a096489"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -342,6 +342,10 @@
   "oct27-mapping-reviewed.txt": {
     "bytes": 3492,
     "sha256": "10d8eff49c2c727a976de3c0607289196764515671c1c38104a62576d2dc9862"
+  },
+  "oct27-native-core-host-observation.json": {
+    "bytes": 319,
+    "sha256": "ac9b510a165de2fc2d7208d91f1e07386b69a59d2f45c5f1cf88a56c628751b0"
   },
   "oct27-observer-frozen-hosted.txt": {
     "bytes": 65123,
@@ -687,6 +691,54 @@
     "bytes": 4142,
     "sha256": "bd28b4cfe10c055102308f990be325c0dc0c11a072a6dcba154a6dff9a49a7a0"
   },
+  "oct27-postgres-identity-boundaries.txt": {
+    "bytes": 14275,
+    "sha256": "543762f1819ea9e79c53e443f1ed8c86c74fd453fe8c01949a83e03c81f354a5"
+  },
+  "oct27-postgres-identity-core-close.txt": {
+    "bytes": 11591,
+    "sha256": "12f3ece46aad3b1592b6bbbc41062257dcae00ca5f518f301537d97351d432c2"
+  },
+  "oct27-postgres-identity-core-final.txt": {
+    "bytes": 48753,
+    "sha256": "1ad93024fd4d04de1e292fc93b4fae09223f8868a12cf01b2ea8d68a7958848d"
+  },
+  "oct27-postgres-identity-core-registered.txt": {
+    "bytes": 48363,
+    "sha256": "bfd811f49c67bb7d99b603045324f506c7b623dacdcd6f2230ef2571ce4805aa"
+  },
+  "oct27-postgres-identity-core-signal-repair.txt": {
+    "bytes": 11981,
+    "sha256": "9f7637f8fc73115c7d94b322b6b423ce0ff5b57f034d944e848fa91af65baf43"
+  },
+  "oct27-postgres-identity-core.txt": {
+    "bytes": 11591,
+    "sha256": "4e758be75c66f05b5b6ffb998c2dd7753c1defb64304116a8c7369a912697516"
+  },
+  "oct27-postgres-identity-discovery.json": {
+    "bytes": 135,
+    "sha256": "3e9c0043194822db9baf46880fefdebf744ea15b8d4f4e8b48be389f6c532082"
+  },
+  "oct27-postgres-identity-final-focused.txt": {
+    "bytes": 45808,
+    "sha256": "daa3e40ee28df69b5525276f3682fd14f57ff6b0fa78b1f5f56b5eb5c965e672"
+  },
+  "oct27-postgres-identity-first.txt": {
+    "bytes": 6776,
+    "sha256": "2b09c0bc73109d1153158e941074e4dd0a626ad0fb98034e4e7ab12dbb17cae1"
+  },
+  "oct27-postgres-identity-reexec-repair.txt": {
+    "bytes": 9036,
+    "sha256": "f8ce0b95413291ae788845b2773f13f4927456b4f1cf41cb0255c52c90b38bf1"
+  },
+  "oct27-postgres-identity-registered.txt": {
+    "bytes": 44473,
+    "sha256": "9ff55925404fa6d3a747446f98db2a2f1a8b9475a0d83f9c13841eec844080fb"
+  },
+  "oct27-postgres-identity-stdio.txt": {
+    "bytes": 8638,
+    "sha256": "2713a24bd791acf9c318d9475e2e1f774fc50a6a8a5e315d85ea28c774f334f1"
+  },
   "oct27-postgres-runtime-discovery.json": {
     "bytes": 135,
     "sha256": "0db73eef1a02a57497f347b809bd51f6d93a1ffd73f94420fe22e092198dd7f1"
@@ -727,9 +779,49 @@
     "bytes": 19100,
     "sha256": "53bd2659ccfbdac324e0eeb8c89962110a04ec450271f224dae302712bc3eb45"
   },
+  "oct27-postgres-runtime-publication.json": {
+    "bytes": 976,
+    "sha256": "425e9fcd875f487c235ae2981b312cd51d60f9d80a880f311c07d3de7c177964"
+  },
   "oct27-postgres-runtime-registered.txt": {
     "bytes": 25131,
     "sha256": "801838ac9db977a4c1b4e8f463883d68b71ea02a54142aedc603119883293cc8"
+  },
+  "oct27-postgres-runtime-repaired-frozen-app-price-components.txt": {
+    "bytes": 3713,
+    "sha256": "060d8f093b190e92ecab978998276d08d2fb965c2fd79f6479d2550e31563dec"
+  },
+  "oct27-postgres-runtime-repaired-frozen-app-recovery-components.txt": {
+    "bytes": 4283,
+    "sha256": "a6d85dc4a3de0a13ddcbf59569cfbc9cad45d98a07a20aa2b89c83313a78dda5"
+  },
+  "oct27-postgres-runtime-repaired-frozen-hosted.txt": {
+    "bytes": 139435,
+    "sha256": "690cb69f9f84ab7ee8d4bd81ffe6ad8fb11a9a8de83d426f24215d888a5a8b18"
+  },
+  "oct27-postgres-runtime-repaired-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-postgres-runtime-repaired-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-postgres-runtime-repaired-frozen-isolated.txt": {
+    "bytes": 139435,
+    "sha256": "7da451a1cc27da98b9842056e0753e051682c91b341ee0a71927378a54777827"
+  },
+  "oct27-postgres-runtime-repaired-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "58f4e5304f81a0f9411169e979c7aaf80888070da20e808dac0613b012a5b29f"
+  },
+  "oct27-postgres-runtime-repaired-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+  },
+  "oct27-postgres-runtime-repaired-frozen-validation.json": {
+    "bytes": 7508,
+    "sha256": "c8e279e97e05faa5ad6c9a47a5e9ff7ff14882fca5597d2e779eae1a2ad97f4c"
   },
   "oct27-postgres-runtime-review-repair.txt": {
     "bytes": 12352,
@@ -1076,7 +1168,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 5383,
-    "sha256": "c09611bba2a0f7564cbda4b1a523a33e80cfa39bb50a69511a1b00081c2d5253"
+    "bytes": 5674,
+    "sha256": "be427f55977ca4b458c0fdd4c8ebbf7e13202137e06b67b3e0435623e0b3883d"
   }
 }

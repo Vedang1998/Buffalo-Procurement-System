@@ -79,6 +79,11 @@ def drop_capabilities():
         mapping = ns._read('/proc/self/' + kind + '_map', 128).split()
         ns._require(len(mapping) == 3 and mapping[0] == b'0' and mapping[2] == b'1'
                     and ns._integer(mapping[1]) > 0)
+    return _erase_capabilities(before)
+
+
+def _erase_capabilities(before):
+    """Shared irreversible erasure; callers first prove their fixed identity."""
     last = ns._integer(ns._read('/proc/sys/kernel/cap_last_cap', 32).strip())
     ns._require(last < 64 and before['CapEff'] & (1 << 8))  # CAP_SETPCAP
     ns.backend._browser_prctl(38, 1)

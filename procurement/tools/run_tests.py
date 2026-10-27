@@ -39,6 +39,8 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_pid1_regression.py": 4,
     "test_hosted_synthetic_runtime.py": 20,
     "test_hosted_synthetic_postgres_runtime.py": 38,
+    "test_hosted_synthetic_postgres_identity.py": 36,
+    "test_hosted_synthetic_native_core.py": 16,
     "test_hosted_synthetic_wheels.py": 23,
     "test_hosted_synthetic_application_runtime.py": 14,
     "test_hosted_synthetic_worker.py": 14,

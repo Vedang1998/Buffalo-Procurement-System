@@ -38,11 +38,15 @@
         "procurement/tools/hosted_synthetic_capability.py:main",
         "procurement/tools/hosted_synthetic_namespace.py:observe_private_proc/_require_mapped_identity",
         "procurement/tools/hosted_synthetic_user_service.py:prepare_user_service",
-        "procurement/tools/hosted_synthetic_host.py:observe_host_prerequisites"
+        "procurement/tools/hosted_synthetic_host.py:observe_host_prerequisites",
+        "procurement/tools/hosted_synthetic_postgres_identity.py",
+        "procurement/tools/hosted_synthetic_native_core.py"
       ],
       "tests": [
         "test_every_supervisor_entry_rejects_retained_authority_before_effects",
-        "test_mapped_coordinator_requires_four_ids_nnp_and_scoped_capabilities"
+        "test_mapped_coordinator_requires_four_ids_nnp_and_scoped_capabilities",
+        "36 simulated nonzero PG identity/stdio/proc ownership/cleanup tests; actual execution NOT_RUN",
+        "16 native core-policy tests including one RLIMIT-only real child; host policy/lifetime proof NOT_PROVEN"
       ],
       "remaining": "Final native post-drop live readback NOT_RUN; mapped U1 phase authority is explicitly distinct"
     },

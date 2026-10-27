@@ -1,0 +1,11 @@
+{
+  "scope": "CURRENT_CLOUD_READ_ONLY_NOT_GITHUB_ACCEPTANCE",
+  "result": "NOT_PROVEN_REQUIRED_SYSCTL_UNAVAILABLE",
+  "path": "/proc/sys/kernel/core_pattern",
+  "error": "ENOENT",
+  "attempts": 1,
+  "sysctl_changed": false,
+  "limits_changed": false,
+  "native_process_executed": false,
+  "containment": "NOT_PROVEN"
+}

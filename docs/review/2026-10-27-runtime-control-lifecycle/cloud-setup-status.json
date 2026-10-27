@@ -15,5 +15,11 @@
   "install_script_sha256": "efcf77d9f74d541449d2c8f5cadd7ac4437c95f0bfc548885d0fc6fc6331c283",
   "install_validation": "Prior installer previously tested; new repository-local maintenance.auto=false and gc.autoDetach=false commands executed/read back, complete updated script bash -n passed; full updated installer not rerun",
   "configuration": "Draft only; snapshot publication and fresh-task restoration NOT_VERIFIED",
-  "production_or_acceptance_startup": false
+  "production_or_acceptance_startup": false,
+  "revision": 16,
+  "repository_commit": "5c88122508352c7e31232af2f9ffba40e064bc29",
+  "start_draft_readback": true,
+  "install_unchanged": true,
+  "snapshot_published": false,
+  "fresh_task_restoration_verified": false
 }

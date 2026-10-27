@@ -10,6 +10,63 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 nonzero PostgreSQL worker identity — continuing
+
+Published `5c88122508352c7e31232af2f9ffba40e064bc29`, tree
+`90e4dbde43e03044e0ec88aeaaaaccc3c7d24a4d`, passed766 diagnostic tests normally
+and separately under scrubbed -I -S,17 price,20 snapshot,88 related,10 startup and
+18 imports. Activation exit78. Discovery2330/125 is not execution. Ordinary
+branch-only publication scanned52 objects with zero private-metadata/high-confidence
+secret hits; fresh fetch verified exact identities and protected refs unchanged.
+The prior d90b55386/88 failed global-floor checks remain attributed to that commit.
+
+The new dormant identity primitive maps only the same dedicated kernel UID/GID into
+a nested user namespace as1000, permitting future native PostgreSQL server entry
+without changing the UID0 diagnostic contract or provisioning another host account.
+It requires full scoped U1 capabilities (including SETFCAP), a nondumpable U1 reexec,
+private PID1 parent, empty groups, sealed root and exact protocol/stdio handles
+before unshare. Exact self maps, four-field IDs, parent pidfd/death signal and
+unchanged pid/net/mount/cgroup namespaces/root are read back. The existing complete
+capability erasure and fixed seccomp policy are reused; current/ambient/bounding
+capabilities are zero, NNP1 and securebits locked. Temporary descriptors close on
+failure; partial namespace transitions require owned child termination, not rollback.
+
+Thirty-six simulated identity tests and16 core-policy tests plus219 related tests
+passed271/271. The core group includes one real disposable-child RLIMIT-only
+check; it does not execute a crashing payload, handler or native PostgreSQL.
+Internal review caught the /proc/<pid> directory ownership exemption; the reexec
+prerequisite now checks regular uid_map ownership while nondumpable. Directional
+pipe/null stdio excludes regular control files and protocol-channel aliases, and
+identities are rechecked after dropping authority. These are component tests, not
+actual nested-userns execution or containment. Discovery2382/127; diagnostic818;
+all test floors increased, none lowered. No new namespace/server/DB or privileged
+execution was performed by this continuation. Same kernel UID is deliberately
+unchanged: same-UID/control exclusion and writable PG resource access remain OPEN.
+Native exec recomputes dumpability; the pre-exec zero value must not be presented
+as post-exec native evidence. Diagnostic sentinel checks remain unchanged.
+
+Native exec can reset dumpability. A new phase prerequisite pairs actual
+non-piped core_pattern observation with inherited hard/soft RLIMIT_CORE0, repeated
+readback and zero-capability/NNP/seccomp entry. Piped/unknown policy refuses; no
+sysctl is changed. The descriptor reader uses the existing cancellation envelope.
+One bounded read-only Cloud check found /proc/sys/kernel/core_pattern unavailable
+(ENOENT). This host prerequisite is NOT_PROVEN, not inferred from the limit-only
+test. No repeated probe or kernel workaround was attempted. Two pattern reads do
+not freeze host policy; external lifetime observation and sibling-memory exclusion
+remain separate live requirements. Original diagnostic dumpable0 stays enforced.
+
+Continue owned phase/runtime/native-exec and stopped-child bindings, exact PG
+profile/configuration enforcement, distinct worker/private-proc isolation and
+external descendant/resource cleanup. Accepted browser closure artifacts remain
+unavailable; do not repin. Full supported-host suite, credential release and actual
+browser/BackupV2/APPLY/DRAFT/restart/restore remain NOT_RUN/NON-GREEN. Original
+Claude REQUEST CHANGES applies only to3c1ae555; six findings remain pending review,
+three OPEN. No independent Claude re-review has been received or invoked here.
+Saved cloud draft revision16 was read back at5c881225 with unchanged Install,
+network and empty secrets. Review/Save and Publish are required to activate it;
+this is not a published snapshot or tested fresh-task restoration.
+
+
 ### 2026-10-27 separate native PostgreSQL closure — continuing
 
 Published `e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f`, tree

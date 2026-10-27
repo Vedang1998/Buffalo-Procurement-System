@@ -1,6 +1,6 @@
 {
-  "material_commit": "e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f",
-  "material_tree": "fbe45f7a7ab38ce4e881a912d5e0092068a3ed73",
+  "material_commit": "5c88122508352c7e31232af2f9ffba40e064bc29",
+  "material_tree": "90e4dbde43e03044e0ec88aeaaaaccc3c7d24a4d",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -89,6 +89,14 @@
     {
       "commit": "e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f",
       "tree": "fbe45f7a7ab38ce4e881a912d5e0092068a3ed73"
+    },
+    {
+      "commit": "d90b553295ec73545c0c12aba7058eba85f4cdcc",
+      "tree": "e985b5a32c8600d30fe6403a201a57d8ea28bcf1"
+    },
+    {
+      "commit": "5c88122508352c7e31232af2f9ffba40e064bc29",
+      "tree": "90e4dbde43e03044e0ec88aeaaaaccc3c7d24a4d"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -133,7 +141,7 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "native PG sealed capture implemented; owned native process/phase exec, actual version/map and effective-profile proof remain",
+    "native sealed capture and nonzero identity implemented; owned native process/phase execution, version/map/profile and post-exec/control-access proof remain",
     "populated native capture and fenced target reconstruction using existing fixed SQL",
     "approved phase-specific browser/runtime/network/lifecycle composition and final harness wiring"
   ],
