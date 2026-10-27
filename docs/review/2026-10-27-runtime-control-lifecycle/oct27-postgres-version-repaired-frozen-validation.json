@@ -1,0 +1,81 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+  "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+  "base": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "1e4bbb133f792002f9ba5f7dfe81463f4be2aa64d698190e95cb961837f0ae5a",
+    "docs/CODEX_HANDOFF.md": "04d32d617f97e0ea89f33fd9cf525d28e2fad6290c549beaee73c66c221659e1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "2265f4682804e7ec9661c6024a34d6a97a712401a9999cfafc50f2ae32863a11",
+    "docs/review/2026-10-27-runtime-control-lifecycle/external-review-update.json": "cda11b6ea4601e159d44f79126a08fa003ab90a5d8353359c6fe5b0a4eb893aa",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "083e2960052db587119b4940e9be8c357f621a69e58ee8e15118d9397d5a8cf0",
+    "procurement/tests/test_hosted_synthetic_account_preflight.py": "40bf5c797c17fe4f7a853cedee6f1ee3775b9389e37da1928c69f8394969e796",
+    "procurement/tests/test_hosted_synthetic_identity.py": "d289489a0a016e8bdfff1807903d1aaafeba51590eafd43bc9f69dd6c56122e9",
+    "procurement/tests/test_hosted_synthetic_lifecycle.py": "4e57a1baa9ea6892a317fb6fa082548faf27a6539b02f91da7fb9cc67c2d7431",
+    "procurement/tests/test_hosted_synthetic_namespace_prerequisite.py": "cc28c86381aec6468133d387a065fb71927fb0f949c1f19d3a4046b40b9ba1e2",
+    "procurement/tests/test_hosted_synthetic_postgres_version.py": "3bfec8d18fce179d228a984a37169b1b89e5700156934da2d1b9eea55ac7d44e",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "4cf170f101334bfbbd846acca04fe6ee878ed85592f0d12e4b49d14489a234de",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "3d294acd6ca2dddf62d6f7daa987551b6e4a7e880f429aa1f62f5b1e24c94cf4",
+    "procurement/tests/test_supplier_format_conformance.py": "c53b96629f5e46379d895d9c1bc55aca9c01db896ac088567efd25330df36fd5",
+    "procurement/tools/hosted_synthetic_account_preflight.py": "0255f1d8f43771ecc419c2c50f31956e275cf3e6a11327b3ace89fa4a7895c19",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "78414e5c25ba8c94eaed032faa0a2540831186353382300edde7a687ad15a160",
+    "procurement/tools/hosted_synthetic_capability.py": "4cc829efd18ad7445588d1a8e049a609f814bba04b0c3566cfbb9f494d1dab06",
+    "procurement/tools/hosted_synthetic_identity.py": "ff191012347df25ffd385763c0f9c8321e14fe28db297c0c6080616e9ca76ae2",
+    "procurement/tools/hosted_synthetic_launcher.py": "bc36d94f4526b44efe7a2eee2f361ae598bc26d8145a22d961a6d82c56d3c270",
+    "procurement/tools/hosted_synthetic_lifecycle.py": "ce0be3bbf44e97f7f375986cc52643e44f7ec3ba2cf1d3c8bfd733f21e12b039",
+    "procurement/tools/hosted_synthetic_namespace.py": "88f4d807426720140cac3cbc014a4a535232a8864c55b6d7e163a2dae17adfe2",
+    "procurement/tools/hosted_synthetic_namespace_prerequisite.py": "2dca4cbdc69f5ab39913e8ca06a34051ca1363979b0ac846e9537c8ca714c4b9",
+    "procurement/tools/hosted_synthetic_postgres_version.py": "392b57a13bcae1bd5b9688cf10390dcc249b82d60f928484d3adf5dbcaa9f87a",
+    "procurement/tools/hosted_synthetic_source.py": "9b58b4c88aff83d718877cf9d28cb498fa345be7d37b1274392571089557a73a",
+    "procurement/tools/run_tests.py": "bca39f7f8e0da89bd4a7f4e50334eafcd6d0897a7722126789695957a92f8eef"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 40.469,
+      "sha256": "49bdb5dfa4f3575a8dde42f3bd3c9a960d6724c8f59e78b1ccb649ec09610f0a"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 37.074,
+      "sha256": "f8e77259f09ea34536d10b17b1a2513a869f0853a565d51586d3158cba85c0c8"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 16.462,
+      "sha256": "9d614af57ad4476ff5b47f8ac2ae5b8b29d43af18016aa51b27323d9fb22e74e"
+    },
+    "app-recovery-components": {
+      "returncode": 0,
+      "seconds": 0.215,
+      "sha256": "47077c00fdad7d0583ba4547242528325e6cbe2f11a58990eebd5303031f8c97"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.781,
+      "sha256": "121088c6fce2a3753d7e1b77a8b18e043cc642d2839caedba0fd29170631b82b"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.666,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

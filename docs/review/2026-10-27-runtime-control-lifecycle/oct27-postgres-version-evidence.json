@@ -1,0 +1,141 @@
+{
+  "material_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+  "material_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+  "base": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+  "current": {
+    "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+    "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+    "evidence": "oct27-postgres-version-repaired-frozen-validation.json",
+    "files": {
+      "hosted": {
+        "path": "oct27-postgres-version-repaired-frozen-hosted.txt",
+        "sha256": "49bdb5dfa4f3575a8dde42f3bd3c9a960d6724c8f59e78b1ccb649ec09610f0a",
+        "returncode": 0
+      },
+      "isolated": {
+        "path": "oct27-postgres-version-repaired-frozen-isolated.txt",
+        "sha256": "f8e77259f09ea34536d10b17b1a2513a869f0853a565d51586d3158cba85c0c8",
+        "returncode": 0
+      },
+      "app-price-components": {
+        "path": "oct27-postgres-version-repaired-frozen-app-price-components.txt",
+        "sha256": "9d614af57ad4476ff5b47f8ac2ae5b8b29d43af18016aa51b27323d9fb22e74e",
+        "returncode": 0
+      },
+      "app-recovery-components": {
+        "path": "oct27-postgres-version-repaired-frozen-app-recovery-components.txt",
+        "sha256": "47077c00fdad7d0583ba4547242528325e6cbe2f11a58990eebd5303031f8c97",
+        "returncode": 0
+      },
+      "related": {
+        "path": "oct27-postgres-version-repaired-frozen-related.txt",
+        "sha256": "121088c6fce2a3753d7e1b77a8b18e043cc642d2839caedba0fd29170631b82b",
+        "returncode": 0
+      },
+      "startup": {
+        "path": "oct27-postgres-version-repaired-frozen-startup.txt",
+        "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+        "returncode": 0
+      },
+      "imports": {
+        "path": "oct27-postgres-version-repaired-frozen-imports.txt",
+        "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+        "returncode": 0
+      },
+      "inert-gate": {
+        "path": "oct27-postgres-version-repaired-frozen-inert-gate.txt",
+        "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+        "returncode": 78
+      }
+    }
+  },
+  "earlier_candidate": {
+    "commit": "306b5eedab2d6385fb9f82f6d377ebb362d7e6ca",
+    "tree": "941f6e21e9ed351b1044da87e28b0f8a7541c985",
+    "evidence": "oct27-postgres-version-frozen-validation.json",
+    "files": {
+      "hosted": {
+        "path": "oct27-postgres-version-frozen-hosted.txt",
+        "sha256": "eb7f157b6b209ec2424832f8cb931ab9217a42489ee681cd3aa0dd77f052f7da",
+        "returncode": 0
+      },
+      "isolated": {
+        "path": "oct27-postgres-version-frozen-isolated.txt",
+        "sha256": "d2f46d63f5183298b7745d1b7a6bad15ccc9665ca038ac9f4644924cee34f1ab",
+        "returncode": 0
+      },
+      "app-price-components": {
+        "path": "oct27-postgres-version-frozen-app-price-components.txt",
+        "sha256": "a2441b3214d5427f1cf29979ef0e25c6140b960effdb2c6bb029317d79771f48",
+        "returncode": 0
+      },
+      "app-recovery-components": {
+        "path": "oct27-postgres-version-frozen-app-recovery-components.txt",
+        "sha256": "464d54fea269aeab2830b1c2a344e4886224584b2279a25bd766ec178910f0c0",
+        "returncode": 0
+      },
+      "related": {
+        "path": "oct27-postgres-version-frozen-related.txt",
+        "sha256": "cd73d03963b8f2b2822efa9dd7be4262692bcdb0916faf8bc4a44cdb5ef25887",
+        "returncode": 0
+      },
+      "startup": {
+        "path": "oct27-postgres-version-frozen-startup.txt",
+        "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+        "returncode": 0
+      },
+      "imports": {
+        "path": "oct27-postgres-version-frozen-imports.txt",
+        "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+        "returncode": 0
+      },
+      "inert-gate": {
+        "path": "oct27-postgres-version-frozen-inert-gate.txt",
+        "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+        "returncode": 78
+      }
+    }
+  },
+  "diagnostics": {
+    "discovered": 977,
+    "executed": 977,
+    "passed": 977,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "separate_scrubbed_execution_of_same_population": 977
+  },
+  "separate_groups": {
+    "price": 17,
+    "recovery_snapshot": 20,
+    "related": 88,
+    "startup": 10,
+    "basic_imports": 18,
+    "inert_activation_exit": 78
+  },
+  "discovery": {
+    "discovered": 2541,
+    "modules": 131,
+    "executed": 0,
+    "passing_suite": false
+  },
+  "full_authoritative_suite": "NOT_RUN_ON_SUPPORTED_FINAL_HOST; unchanged native-Cloud pg_dump refusal not repeated",
+  "actual_native_postgres_execution": "NOT_RUN_PENDING_INDEPENDENT_REVIEW",
+  "target_namespace_policy_and_errno": "NOT_OBSERVED_ON_ACTUAL_TARGET; historical generic rc1 not an errno",
+  "same_generation_cgroup_service_resource_cleanup": "NOT_RUN",
+  "credential_release": "WITHHELD",
+  "integrated_acceptance": "NON_GREEN",
+  "historical_failed_accounting": {
+    "discovered": 1668,
+    "executed": 1637,
+    "passed": 1632,
+    "failed_methods": 1,
+    "method_errors": 4,
+    "class_setup_error_events": 3,
+    "unexecuted": 31,
+    "note": "class setup events are additional events, not disjoint executed methods"
+  },
+  "internal_review": "Codex read-only subagents; repairs only, not Claude closure. Final source-scan materialization bound repair added in d863bc7 and causally tested.",
+  "publication": "oct27-postgres-version-publication.json",
+  "raw_failure_policy": "Earlier source-fixture permission and lifecycle preflight-stub failures preserved; no failed run relabeled passing."
+}

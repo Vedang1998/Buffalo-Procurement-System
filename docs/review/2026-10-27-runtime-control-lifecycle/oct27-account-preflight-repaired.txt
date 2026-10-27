@@ -1,0 +1,102 @@
+test_acl_dependent_access_refuses (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_acl_dependent_access_refuses) ... ok
+test_copy_byte_bound_refuses_before_git_copy (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_copy_byte_bound_refuses_before_git_copy) ... ok
+test_copy_failure_refuses_without_source_permissions_change (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_copy_failure_refuses_without_source_permissions_change) ... FAIL
+test_copy_rehearsal_refusal_precedes_quarantine_and_account_commands (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_copy_rehearsal_refusal_precedes_quarantine_and_account_commands) ... ok
+test_current_and_creator_ipc_ownership_all_refuse (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_current_and_creator_ipc_ownership_all_refuse) ... ok
+test_empty_full_scan_records_coverage_without_reservation (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_empty_full_scan_records_coverage_without_reservation) ... ok
+test_ipc_permission_error_refuses (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_ipc_permission_error_refuses) ... ok
+test_malformed_or_missing_ipc_columns_refuse (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_malformed_or_missing_ipc_columns_refuse) ... ok
+test_mount_change_refuses (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_mount_change_refuses) ... ok
+test_non_host_namespace_refuses_before_scan (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_non_host_namespace_refuses_before_scan) ... ok
+test_non_kernel_mount_below_exclusion_refuses_before_scan (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_non_kernel_mount_below_exclusion_refuses_before_scan) ... ok
+test_ownership_refusal_precedes_quarantine_and_account_commands (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_ownership_refusal_precedes_quarantine_and_account_commands) ... ok
+test_permission_or_timeout_or_unknown_output_is_not_absence (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_permission_or_timeout_or_unknown_output_is_not_absence) ... ok
+test_real_group_owned_object_collision (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_real_group_owned_object_collision) ... ok
+test_real_local_git_rehearsal_matches_exact_commit_tree (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_real_local_git_rehearsal_matches_exact_commit_tree) ... ERROR
+test_real_orphan_file_uid_collision (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_real_orphan_file_uid_collision) ... ok
+test_source_symlink_refuses (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_source_symlink_refuses) ... ok
+test_unreadable_regular_source_refuses (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_unreadable_regular_source_refuses) ... ok
+test_untraversable_ancestor_refuses (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_untraversable_ancestor_refuses) ... ok
+test_cleanup_failure_retains_account_and_does_not_force_release (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_cleanup_failure_retains_account_and_does_not_force_release) ... ok
+test_collision_by_any_name_or_number_refuses_before_commands (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_collision_by_any_name_or_number_refuses_before_commands) ... ok
+test_complete_owned_native_sequence_and_final_identity_removal (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_complete_owned_native_sequence_and_final_identity_removal) ... ok
+test_created_account_readback_rejects_memberships_aliases_and_login_shell (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_created_account_readback_rejects_memberships_aliases_and_login_shell) ... ok
+test_dormant_orchestration_binds_source_and_always_cleans_account (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_dormant_orchestration_binds_source_and_always_cleans_account) ... ok
+test_dormant_primary_group_or_duplicate_local_account_refuses (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_dormant_primary_group_or_duplicate_local_account_refuses) ... ok
+test_live_resources_or_ambiguous_ownership_prevent_identity_release (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_live_resources_or_ambiguous_ownership_prevent_identity_release) ... ok
+test_lost_native_ack_cannot_release_identity_on_temporary_absence (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_lost_native_ack_cannot_release_identity_on_temporary_absence) ... ok
+test_partial_account_creation_never_blindly_deletes_or_retries (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_partial_account_creation_never_blindly_deletes_or_retries) ... ok
+test_plan_uses_only_explicit_native_commands_and_dropped_git (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_plan_uses_only_explicit_native_commands_and_dropped_git) ... ok
+test_shared_existing_or_injected_identity_plan_never_executes (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_shared_existing_or_injected_identity_plan_never_executes) ... ok
+test_shared_operator_route_cannot_reach_native_execution (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_shared_operator_route_cannot_reach_native_execution) ... ok
+test_source_refusal_precedes_any_account_provisioning (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_source_refusal_precedes_any_account_provisioning) ... ok
+test_stage_exact_detached_source_without_any_local_branch (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_stage_exact_detached_source_without_any_local_branch) ... ok
+test_untrusted_native_prefix_refuses_before_first_account_command (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_untrusted_native_prefix_refuses_before_first_account_command) ... ok
+test_actual_isolated_entry_from_other_directory_is_review_required (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_actual_isolated_entry_from_other_directory_is_review_required) ... ok
+test_actual_sigint_is_deferred_until_owned_cleanup_observations (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_actual_sigint_is_deferred_until_owned_cleanup_observations) ... ok
+test_any_wrong_real_effective_saved_or_filesystem_id_refuses (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_any_wrong_real_effective_saved_or_filesystem_id_refuses) ... ok
+test_cancellation_preserves_cleanup_and_cannot_be_a_pass (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_cancellation_preserves_cleanup_and_cannot_be_a_pass) ... ok
+test_cli_never_opens_review_gate_from_args_or_environment (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_cli_never_opens_review_gate_from_args_or_environment) ... ok
+test_client_bounds_real_unprivileged_output_and_reaps (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_client_bounds_real_unprivileged_output_and_reaps) ... ok
+test_client_creation_failure_starts_no_cleanup_command (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_client_creation_failure_starts_no_cleanup_command) ... ok
+test_drift_or_unknown_service_lifecycle_is_cleanup_failure (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_drift_or_unknown_service_lifecycle_is_cleanup_failure) ... ok
+test_every_retained_capability_and_nnp_zero_refuses (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_every_retained_capability_and_nnp_zero_refuses) ... ok
+test_every_supervisor_entry_rejects_retained_authority_before_effects (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_every_supervisor_entry_rejects_retained_authority_before_effects) ... ok
+test_exact_zero_capabilities_nnp_and_four_identity_fields (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_exact_zero_capabilities_nnp_and_four_identity_fields) ... ok
+test_host_readback_success_requires_libc_ids_and_empty_groups_too (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_host_readback_success_requires_libc_ids_and_empty_groups_too) ... ok
+test_launcher_bad_postdrop_status_never_dispatches_repository_child (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_launcher_bad_postdrop_status_never_dispatches_repository_child) ... ok
+test_launcher_controls_environment_descriptors_and_timeout (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_launcher_controls_environment_descriptors_and_timeout) ... ok
+test_malformed_or_duplicate_kernel_fields_refuse (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_malformed_or_duplicate_kernel_fields_refuse) ... ok
+test_missing_ancestor_controller_refuses_without_repair (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_missing_ancestor_controller_refuses_without_repair) ... ok
+test_modified_plan_cannot_reach_native_client (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_modified_plan_cannot_reach_native_client) ... ok
+test_native_program_file_capability_or_writable_tool_refuses (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_native_program_file_capability_or_writable_tool_refuses) ... ok
+test_native_tools_and_existing_ancestor_controllers_are_read_only (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_native_tools_and_existing_ancestor_controllers_are_read_only) ... ok
+test_oneshot_bounds_and_minimal_preface_capabilities (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_oneshot_bounds_and_minimal_preface_capabilities) ... ok
+test_only_native_commands_run_before_drop_without_root_shell (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_only_native_commands_run_before_drop_without_root_shell) ... ok
+test_partial_client_failure_or_timeout_keeps_cleanup_obligations (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_partial_client_failure_or_timeout_keeps_cleanup_obligations) ... ok
+test_postdrop_access_cleanup_failure_overrides_access_failure (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_postdrop_access_cleanup_failure_overrides_access_failure) ... ok
+test_postdrop_access_closes_handles_and_never_writes (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_postdrop_access_closes_handles_and_never_writes) ... ok
+test_postdrop_launcher_never_dispatches_as_root (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_postdrop_launcher_never_dispatches_as_root) ... ok
+test_readonly_lifecycle_never_stops_unbound_service (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_readonly_lifecycle_never_stops_unbound_service) ... ok
+test_report_requires_exact_source_digest_and_no_release_authority (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_report_requires_exact_source_digest_and_no_release_authority) ... ok
+test_same_process_namespace_and_exact_system_service_scope (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_same_process_namespace_and_exact_system_service_scope) ... ok
+test_source_scope_unit_and_argument_injection_refuse (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_source_scope_unit_and_argument_injection_refuse) ... ok
+test_successful_transport_is_only_component_evidence (test_hosted_synthetic_bootstrap.HostedSyntheticBootstrapTests.test_successful_transport_is_only_component_evidence) ... ok
+
+======================================================================
+ERROR: test_real_local_git_rehearsal_matches_exact_commit_tree (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_real_local_git_rehearsal_matches_exact_commit_tree)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_account_preflight.py", line 105, in test_real_local_git_rehearsal_matches_exact_commit_tree
+    source,commit=self.setup_git();result=self.run_source(source,commit)
+                                          ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_account_preflight.py", line 102, in run_source
+    return pre.inspect_source(ID,str(source),commit)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_account_preflight.py", line 105, in inspect_source
+    for parent in (root,*root.parents):_access(parent,identity,directory=True)
+                                       ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_account_preflight.py", line 91, in _access
+    boot._require((info.st_mode>>shift)&required==required,'source_candidate_access_refused')
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_bootstrap.py", line 44, in _require
+    raise BootstrapRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: source_candidate_access_refused
+
+======================================================================
+FAIL: test_copy_failure_refuses_without_source_permissions_change (test_hosted_synthetic_account_preflight.AccountPreflightTests.test_copy_failure_refuses_without_source_permissions_change)
+----------------------------------------------------------------------
+hosted_synthetic_launcher.LauncherRefusal: source_candidate_access_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_account_preflight.py", line 111, in test_copy_failure_refuses_without_source_permissions_change
+    with patch.object(boot,'_collect_native_client',return_value=(124,b'')),self.assertRaisesRegex(boot.BootstrapRefusal,'copy_rehearsal'):self.run_source(source,commit)
+                                                                            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "copy_rehearsal" does not match "source_candidate_access_refused"
+
+----------------------------------------------------------------------
+Ran 64 tests in 0.294s
+
+FAILED (failures=1, errors=1)

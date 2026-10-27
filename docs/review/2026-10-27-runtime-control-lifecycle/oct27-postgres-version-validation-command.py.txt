@@ -1,0 +1,52 @@
+"""Freeze and execute focused, startup and real PID1 checks; no live services."""
+import hashlib,json,subprocess,pathlib,os,sys,time,shutil
+root=pathlib.Path('/workspace/Buffalo-Procurement-System')
+logs=pathlib.Path('/workspace/.cloud-setup/buffalo/logs')
+expected,prefix=sys.argv[1:]
+base='a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3'
+def git(*args):return subprocess.check_output(['git',*args],cwd=root,text=True).strip()
+assert sys.version_info[:2]==(3,13)
+head,tree=git('rev-parse','HEAD','HEAD^{tree}').splitlines()
+assert head==expected and not git('status','--porcelain=v1')
+paths=git('diff','--name-only',base,head).splitlines()
+hashes={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths}
+env=dict(os.environ,PYTHONPATH='procurement/tools:procurement/tests:procurement/src')
+hosted=['source','capability','workflow','namespace','projection','cgroup','host','user_service','enrollment','bootstrap','identity','pid1_regression','runtime','worker','observer','quarantine','wheels','application_runtime','lifecycle','apply_step','mapping_step','review_step','prepare_step','page_adapter','download','artifacts','packet_controls','packet_evidence','packet_forecast','restart_evidence','recovery_toc','recovery_inputs','recovery_storage','postgres_runtime','postgres_identity','native_core','postgres_image','account_preflight','postgres_version','namespace_prerequisite']
+runner='''import json,sys,unittest; import run_tests as r
+suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(n) for n in sys.argv[2:])
+discovered=suite.countTestCases()
+result=unittest.TextTestRunner(verbosity=2,resultclass=r.CountingTextTestResult).run(suite)
+record=dict(discovered=discovered,executed=result.testsRun,passed=result.successes,failures=len(result.failures),errors=len(result.errors),skipped=len(result.skipped),expected_failures=len(result.expectedFailures),unexpected_successes=len(result.unexpectedSuccesses))
+print(json.dumps(record,sort_keys=True))
+assert record['discovered']==record['executed']==record['passed']==int(sys.argv[1]) and result.wasSuccessful() and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses
+'''
+commands={
+ 'hosted':[sys.executable,'-B','-c',runner,'977',*['test_hosted_synthetic_'+n for n in hosted]],
+ 'isolated':[sys.executable,'-I','-S','-B','-c',"import sys;sys.path[:0]=['procurement/tools','procurement/tests'];"+runner,'977',*['test_hosted_synthetic_'+n for n in hosted]],
+ 'app-price-components':[sys.executable,'-B','-c',runner,'17','test_hosted_synthetic_packet_authority'],
+ 'app-recovery-components':[sys.executable,'-B','-c',runner,'20','test_hosted_synthetic_recovery_snapshot'],
+ 'related':[sys.executable,'-B','-c',runner,'88','test_run_local_staging_acceptance','test_test_runner','test_persistent_mapping_foundation_contract','test_supplier_format_conformance'],
+ 'startup':[sys.executable,'-B','-m','unittest','discover','-v','-s','scripts/tests','-p','test_replit_production_start.py'],
+ 'imports':[sys.executable,'-B','/workspace/.cloud-setup/buffalo/check-setup.py'],
+ 'inert-gate':[sys.executable,'-I','-S','-B','procurement/tools/hosted_synthetic_bootstrap.py'],
+}
+results={}
+for name,command in commands.items():
+ start=time.monotonic();path=logs/(prefix+'-'+name+'.log')
+ with path.open('w') as out:
+  chosen_env={'PATH':'/usr/bin:/bin','LC_ALL':'C.UTF-8','BUFFALO_DIAGNOSTIC_NODE':shutil.which('node')} if name=='isolated' else env
+  result=subprocess.run(command,cwd=root,env=chosen_env,stdout=out,stderr=subprocess.STDOUT,timeout=180)
+ results[name]={'returncode':result.returncode,'seconds':round(time.monotonic()-start,3),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+ if name=='inert-gate':assert result.returncode==78
+ elif name=='pid1':
+  assert result.returncode in (0,78)
+  report=json.loads(path.read_text())
+  if result.returncode==0:assert report['real_pid1_regression']=='PASS' and len(report['cases'])==11 and all(x['result']=='PASS' for x in report['cases'])
+  else:assert report['real_pid1_regression']=='NOT_RUN'
+ else:assert result.returncode==0,(name,result.returncode)
+ print(json.dumps({name:results[name]}),flush=True)
+assert hashes=={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths}
+assert head==git('rev-parse','HEAD') and not git('status','--porcelain=v1')
+record={'diagnostic_node':{'path':shutil.which('node'),'sha256':hashlib.sha256(pathlib.Path(shutil.which('node')).read_bytes()).hexdigest(),'version':subprocess.check_output([shutil.which('node'),'--version'],text=True).strip(),'scope':'DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY'},'commit':head,'tree':tree,'base':base,'files':hashes,'results':results,'source_unchanged':True,'full_native_suite':'NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL'}
+(logs/(prefix+'-validation.json')).write_text(json.dumps(record,indent=2)+'\n')
+print(json.dumps({'commit':head,'tree':tree,'results':results,'source_unchanged':True}))

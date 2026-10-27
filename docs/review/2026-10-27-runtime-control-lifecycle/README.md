@@ -1,9 +1,21 @@
 # October 27 fixed PostgreSQL execution delta — read-only review
 
-Candidate: this descendant of published `a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3`,
-tree `6202c915e7a5a696699a0ac9f48046e8536ab376`. The following source-bound evidence
-follow-up records its exact frozen commit/tree and executed validation. Do not
-attribute the earlier d1b8124 results to this changed implementation.
+Published tested material: `d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea`, tree
+`31336c2aa583e6f68b3589c4dfe54578b3b956f3`. `oct27-postgres-version-evidence.json` indexes
+source-bound raw logs, validation command, prior failed runs and verified ordinary
+publication.977/977 diagnostics pass normally and separately under scrubbed -I -S;
+separate price17, snapshot20, related88, startup10 and18 imports pass. The inert
+bootstrap exits78. Discovery2541/131 executes zero tests. Full supported-host
+suite and actual PG execution remain NOT_RUN. This follow-up changes only docs
+and evidence; its tree is distinct and tests were not rerun merely for docs.
+
+Read-only review commands (also inspect the following docs-only evidence delta):
+
+```bash
+git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
+git rev-parse d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+```
 
 **Activation DISABLED. Credentials WITHHELD. Integrated acceptance NON-GREEN.**
 The bootstrap CLI still returns78 unconditionally. No sudo/account/systemd,
@@ -103,8 +115,8 @@ source-bound findings and an explicit disposition on readiness for one bounded
 credential-free live proof. No approval of credentials or browser acceptance is
 requested. Record reviewer/tool/model/session, commands, results and limitations.
 
-The next evidence follow-up supplies exact `git diff 5e62c8e3 <candidate>` identities,
-raw results and publication verification. No Claude invocation has been fabricated.
+The commands above and source-bound evidence supply the exact delta and publication.
+No Claude invocation has been fabricated. New candidate review remains NOT_RECEIVED.
 
 ## Earlier component history (scope and historical evidence retained)
 

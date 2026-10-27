@@ -33,8 +33,8 @@
         "scope": "finding at exact reviewed commit"
       },
       "descendant_change_impact": {
-        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
-        "status": "RE_REVIEW_REQUIRED",
+        "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
         "historical_closure_preserved": true
       }
     },
@@ -67,8 +67,8 @@
         "scope": "finding at exact reviewed commit"
       },
       "descendant_change_impact": {
-        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
-        "status": "RE_REVIEW_REQUIRED",
+        "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
         "historical_closure_preserved": true
       }
     },
@@ -94,8 +94,8 @@
         "scope": "numeric PID reuse window, not atomic migration"
       },
       "descendant_change_impact": {
-        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
-        "status": "RE_REVIEW_REQUIRED",
+        "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
         "historical_closure_preserved": true
       }
     },
@@ -120,8 +120,8 @@
         "scope": "finding at exact reviewed commit"
       },
       "descendant_change_impact": {
-        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
-        "status": "UNCHANGED_FINDING_REPAIR; integration delta requires review",
+        "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
         "historical_closure_preserved": true
       }
     },
@@ -164,8 +164,8 @@
         "scope": "disclosure and separate accounting, not live lifetime proof"
       },
       "descendant_change_impact": {
-        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
-        "status": "RE_REVIEW_REQUIRED",
+        "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
         "historical_closure_preserved": true
       }
     },
@@ -214,8 +214,8 @@
         "scope": "finding at exact reviewed commit"
       },
       "descendant_change_impact": {
-        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
-        "status": "UNCHANGED_FINDING_REPAIR; integration delta requires review",
+        "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
         "historical_closure_preserved": true
       }
     },
@@ -240,13 +240,13 @@
       "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
     }
   ],
-  "material_commit": "CANDIDATE_TO_BE_FROZEN",
-  "material_tree": "CANDIDATE_TO_BE_FROZEN",
-  "frozen_evidence": "PENDING_FROZEN_VALIDATION",
+  "material_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+  "material_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+  "frozen_evidence": "oct27-postgres-version-repaired-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "OWNER_RECEIVED_SIX_CLOSURES_AT_5e62c8e3; NEW_DELTA_REVIEW_NOT_RECEIVED",
-  "current_delta": "N1/N2 pre-account ownership/source preflight; N3 trust decision; N4 comment; fixed PG FD-exec protocol through existing stopped enrollment and outer observer; precise one-shot namespace prerequisite. All new privileged/live paths NOT_RUN pending new Claude review.",
+  "current_delta": "Fixed native PG version execution and stopped/enrollment/outer-observer wiring, exact prerequisite errno/policy collector, N1/N2 pre-account repair and N3/N4 dispositions.977 diagnostics PASS twice separately;17/20/88/10 groups,18 imports PASS;inert78. Actual privileged/native/full acceptance NOT_RUN.",
   "new_findings": [
     {
       "id": "N1",
@@ -256,7 +256,7 @@
         "hosted_synthetic_account_preflight.py:inspect_ownership",
         "hosted_synthetic_identity.py:AccountLease.create"
       ],
-      "tests": "24 account-preflight tests include real disposable UID/GID collision find, SysV current/creator collision, permission/timeout/mount/filesystem refusals; live host scan NOT_RUN",
+      "tests": "25 account-preflight tests include real disposable UID/GID collision find, SysV current/creator collision, permission/timeout/mount/filesystem refusals; live host scan NOT_RUN",
       "limitations": "Visible ownership scope only. Hidden/unmounted objects and named ACL/keyring authority not claimed; workers deny add_key/request_key/keyctl independently. No object deletion/chown."
     },
     {

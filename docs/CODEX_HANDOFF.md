@@ -11,6 +11,48 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-27 published fixed PostgreSQL candidate — independent review gate
+
+Latest tested material and remotely verified publication:
+`d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea`, tree
+`31336c2aa583e6f68b3589c4dfe54578b3b956f3`. Ordinary acceptance-only publication scanned48
+new objects with zero private-metadata/high-confidence secret hits. Fresh fetch
+matched commit/tree and main/PR24/Mac-recovery refs stayed unchanged. Worktree was
+clean throughout the source-bound validation. Earlier306b5eed tests remain
+attributed to that source; the final source-enumeration bound repair is d863bc7.
+
+977/977 diagnostics passed normally and977/977 separately under scrubbed -I -S
+(two executions of one population). Separate17 price,20 snapshot,88 related and
+10 startup passed;18 imports passed; inert activation78. Discovery2541/131 is not
+execution. Full supported authoritative suite and actual native PG/namespace/
+cgroup/systemd/browser/recovery gates remain NOT_RUN. No unchanged native-Cloud
+pg_dump or GitHub generic namespace refusal was repeated.
+
+`docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-version-evidence.json`
+contains exact logs, hashes, failed-run attribution and publication. This follow-up
+is documentation/evidence only and has a different tree; tests are not claimed
+executed again. The executable fixed diagnostic and N1/N2 repairs are implemented;
+N3 is an owner trust decision and N4 a corrected comment. The ledger preserves
+six Claude VERIFIED_CLOSED dispositions at5e62c8e3 only, three OPEN original
+findings, and new-delta review pending. CLI2.1.310/session_01JyrJEUAi36GJ6AfNcmBBxV/
+claude-opus-5-5/medium attribution is owner supplied. No callable Claude channel
+exists here and no new external review has been received.
+
+Exact next gate: read-only Claude re-review of this published implementation plus
+evidence follow-up, its delta since5e62c8e3 and exact dormant
+`postgres_version_activation_entry`/native flag/lifecycle wiring. Upon approval,
+use the already-authorized ephemeral GitHub host for one bounded credential-free
+prerequisite and fixed-version proof. No second routine owner approval is needed.
+If the exact namespace syscall refuses, retain actual errno and policy context;
+AppArmor cause remains unconfirmed without attributable evidence, and no identical
+retry/fallback is authorized. Privileged activation and credentials stay disabled
+until the applicable review/machine gates pass. Actual current-generation actor,
+child/aggregate resource and cleanup proof cannot be supplied by local unit tests.
+Accepted browser artifacts, real PG closure fit/core policy, worker exclusion and
+external cleanup remain separate blockers. This is not integrated acceptance or
+commercial/Railway readiness. No automatic future-task resumption is promised.
+
+
 ### 2026-10-27 fixed native execution and provisioning remediation — candidate
 
 Resumed clean publisheda05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3/tree

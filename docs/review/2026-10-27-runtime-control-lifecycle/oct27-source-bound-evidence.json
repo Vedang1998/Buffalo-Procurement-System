@@ -97,5 +97,6 @@
   "integrated_acceptance": "NON_GREEN",
   "independent_review": "NOT_INVOKED_NOT_RECEIVED",
   "unchanged_prior_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
-  "next_action": "Implement fixed --version I-to-W ARMED/parent pidfd SIGSTOP/stopped readback/exact EXEC ACK/FD exec and owned output/exit cleanup using the existing phase and image primitives. Do not activate before applicable independent review."
+  "next_action": "Implement fixed --version I-to-W ARMED/parent pidfd SIGSTOP/stopped readback/exact EXEC ACK/FD exec and owned output/exit cleanup using the existing phase and image primitives. Do not activate before applicable independent review.",
+  "fixed_postgres_version_update": "oct27-postgres-version-evidence.json"
 }
