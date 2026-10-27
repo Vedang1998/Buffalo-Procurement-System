@@ -41,6 +41,8 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_identity.py",
     "procurement/tools/hosted_synthetic_pid1_regression.py",
     "procurement/tools/hosted_synthetic_runtime.py",
+    "procurement/tools/hosted_synthetic_wheels.py",
+    "procurement/tools/hosted_synthetic_application_runtime.py",
     "procurement/tools/hosted_synthetic_runtime_regression.py",
     "procurement/tools/hosted_synthetic_worker.py",
     "procurement/tools/hosted_synthetic_observer.py",
@@ -260,9 +262,11 @@ def _file_bytes(root: Path, relative: str, expected_mode: bytes) -> bytes:
     return raw
 
 
-def _tree_records(root: Path) -> tuple[tuple[str, bytes, bytes], ...]:
+def _tree_records(root: Path, tree: str = "HEAD") -> tuple[tuple[str, bytes, bytes], ...]:
+    if tree != "HEAD" and (type(tree) is not str or _OID.fullmatch(tree) is None):
+        raise HostedSourceError("source_tree_invalid")
     records = []
-    for entry in _git(root, "ls-tree", "-r", "-z", "--full-tree", "HEAD").split(b"\0")[:-1]:
+    for entry in _git(root, "ls-tree", "-r", "-z", "--full-tree", tree).split(b"\0")[:-1]:
         try:
             header, name = entry.split(b"\t", 1)
             mode, kind, blob = header.split(b" ")

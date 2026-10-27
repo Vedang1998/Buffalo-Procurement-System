@@ -10,6 +10,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 original-wheel application closure — implementation, NON-GREEN
+
+Verified published observer material: `b78e3ee69fcd1a841926fba5a377d7ef116d2af7`,
+tree `144b97a0a7f1097fb31241f15da90f180da41f59`. Ordinary branch-only push and
+fresh fetch matched; protected refs remained unchanged. Its frozen results were
+365 hosted, 88 related, 10 startup and 18 imports passing; the inert gate exited78.
+
+This delta connects the unchanged23 uv.lock wheel artifacts and current Git-bound
+application inputs to the existing sealed projection/exec component. Original
+archive size/SHA256 is checked before bounded ZIP parsing; complete RECORD,
+METADATA, WHEEL tags, ownership, safe paths and absence of installer/startup hooks
+are required. No installer, code execution or relocation authenticates an archive.
+The exact wheels contain680 files/31,722,056 regular bytes. The narrow ELF resolver
+preserves original bytes and transitive private DT_RPATH; RUNPATH, missing private
+libraries and foreign ownership refuse. Root-trusted Buffalo/UTC timezone bytes
+are included separately. Frozen OCI/Nix pins and application/lockfiles are unchanged.
+
+401 hosted tests passed before freeze, including36 new causal tests. An earlier
+167-test run had166 passes and one stale workflow count assertion; the explicit
+count was updated without lowering floors. Registered population is1928 across107
+modules, preserving1828. Internal read-only review found and writer repaired an
+application mutable-HEAD race, completed-bundle cleanup leak and private-library
+parent mismatch. These are internal checks, not independent Claude closure.
+The explicit application kernel component remains pending at this freeze: private
+network, projected imports/native calls/timezones and missing-dependency negatives;
+no lifespan, service, database, browser or credential execution. Next run the frozen
+component, repair demonstrated failures, then publish source-bound evidence.
+
+Application import closure is not application/browser acceptance. Privileged
+activation and release remain disabled; the fixed worker identity/seccomp contract
+and accepted Chromium sandbox/runtime requirements still need reconciliation.
+No browser --no-sandbox fallback, new runtime pin or resource-limit increase is
+permitted. Six original findings remain pending review, three OPEN. Claude's frozen
+5e62c8e3 target remains unchanged; the remaining descendant delta requires review.
+
+
 ### 2026-10-27 external observer and fixture cleanup — implementation, NON-GREEN
 
 Latest verified published material: `aa5fe65b30c9b6ac8aabd71d7d216d04f45aa733`,

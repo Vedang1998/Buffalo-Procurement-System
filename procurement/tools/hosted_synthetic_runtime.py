@@ -25,6 +25,7 @@ import hosted_synthetic_namespace as ns
 
 
 POLICY = 'BUFFALO_HOSTED_STDLIB_RUNTIME_V1'
+APPLICATION_POLICY = 'BUFFALO_HOSTED_APPLICATION_RUNTIME_V1'
 PROJECTED_ROOT = '/opt/buffalo-hosted'
 PROJECTED_TOOLS = PROJECTED_ROOT + '/procurement/tools'
 SENTINEL = '/buffalo-runtime/sentinel'
@@ -43,7 +44,7 @@ def _path(value):
     return value
 
 
-def parse_elf(data):
+def parse_elf(data, *, expected_rpath=None):
     """Strict ELF64 little-endian x86-64 loader metadata, never ldd/exec."""
     ns._require(type(data) is bytes and 64 <= len(data) <= MAX_BYTES
                 and data[:7] == b'\x7fELF\x02\x01\x01'
@@ -76,9 +77,9 @@ def parse_elf(data):
             if tag==1:needed.append(value)
             elif tag in (5,10,14,15,29):
                 ns._require(tag not in tags);tags[tag]=value
-        ns._require(terminated and 15 not in tags and 29 not in tags)  # never ignore loader search overrides
+        ns._require(terminated and 29 not in tags and ((15 in tags)==(expected_rpath is not None)))
         ns._require((5 in tags)==(10 in tags))
-        if needed or 14 in tags:ns._require(5 in tags)
+        if needed or 14 in tags or 15 in tags:ns._require(5 in tags)
         if 5 in tags:
             address,length=tags[5],tags[10]
             matches=[off+address-virtual for virtual,off,size in loads
@@ -92,6 +93,10 @@ def parse_elf(data):
                 raw=strings[index:end]
                 ns._require(re.fullmatch(rb'[A-Za-z0-9_+.-]+',raw) is not None and raw not in (b'.',b'..'))
                 return raw.decode('ascii')
+            if 15 in tags:
+                index=tags[15];ns._require(index < len(strings))
+                end=strings.find(b'\0',index)
+                ns._require(end>index and strings[index:end]==expected_rpath.encode('ascii'))
             needed=[name(index) for index in needed]
             ns._require(len(needed)==len(set(needed)))
             soname=name(tags[14]) if 14 in tags else None
@@ -186,10 +191,14 @@ class RuntimeBundle:
     source_commit: str
     source_tree: str
     policy: str = POLICY
+    application: dict | None = None
 
     def verify(self):
         ns._require(getattr(self,'_owner',None) is self and getattr(self,'_token',None) is _TOKEN
-                    and self.policy==POLICY and re.fullmatch('[0-9a-f]{64}',self.generation)
+                    and self.policy in (POLICY,APPLICATION_POLICY)
+                    and ((self.policy==POLICY and self.application is None)
+                         or (self.policy==APPLICATION_POLICY and type(self.application) is dict))
+                    and re.fullmatch('[0-9a-f]{64}',self.generation)
                     and re.fullmatch('[0-9a-f]{40}',self.source_commit)
                     and re.fullmatch('[0-9a-f]{40}',self.source_tree))
         ns.backend._validate_pinned_browser_runtime_bundle(self.bundle)
@@ -214,7 +223,7 @@ class RuntimeBundle:
 def receive_runtime(packet):
     """Only from the exact sealed resume channel, never an ambient CLI JSON."""
     ns._require(type(packet) is dict and set(packet)=={'generation','policy','bundle','source_commit','source_tree'}
-                and packet['policy']==POLICY and type(packet['bundle']) is dict
+                and packet['policy'] in (POLICY,APPLICATION_POLICY) and type(packet['bundle']) is dict
                 and set(packet['bundle'])=={'descriptor','target','device','inode','size','sha256','manifest_sha256',
                                           'entries','regular_bytes','execution_authority'})
     bundle=ns.backend._PinnedBrowserRuntimeBundle(**packet['bundle'])
@@ -240,20 +249,24 @@ def receive_runtime(packet):
     identities=[entry.content for entry in entries if entry.path==_IDENTITY_PATH and entry.kind=='F']
     ns._require(len(identities)==1 and len(identities[0])<=512*1024)
     identity=json.loads(identities[0])
-    ns._require(type(identity) is dict and set(identity)=={'policy','generation','executable','source_files','native_files','source_commit','source_tree'}
+    ns._require(type(identity) is dict and set(identity)==({'policy','generation','executable','source_files','native_files','source_commit','source_tree'}
+                    | ({'application'} if packet['policy']==APPLICATION_POLICY else set()))
                 and all(identity[key]==packet[key] for key in ('policy','generation','source_commit','source_tree'))
                 and json.dumps(identity,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')==identities[0])
     result=RuntimeBundle(bundle,packet['generation'],identity['executable'],identity['source_files'],identity['native_files'],
-                         packet['source_commit'],packet['source_tree'],packet['policy'])
+                         packet['source_commit'],packet['source_tree'],packet['policy'],identity.get('application'))
     result._owner=result;result._token=_TOKEN
     _entries(result)
     return result
 
 
-def _identity_bytes(generation,executable,source,native,commit,tree):
-    return json.dumps({'policy':POLICY,'generation':generation,'executable':executable,
-        'source_files':source,'native_files':native,'source_commit':commit,'source_tree':tree},
-        sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
+def _identity_bytes(generation,executable,source,native,commit,tree, *, policy=POLICY,application=None):
+    value={'policy':policy,'generation':generation,'executable':executable,
+        'source_files':source,'native_files':native,'source_commit':commit,'source_tree':tree}
+    if policy==APPLICATION_POLICY:
+        ns._require(type(application) is dict);value['application']=application
+    else:ns._require(policy==POLICY and application is None)
+    return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
 
 
 def capture_runtime(generation, source_root, binding):
@@ -325,7 +338,7 @@ def _entries(runtime):
     ns._require((manifest,digest,size)==(runtime.bundle.manifest_sha256,runtime.bundle.sha256,runtime.bundle.regular_bytes))
     regular={entry.path:hashlib.sha256(entry.content).hexdigest() for entry in entries if entry.kind=='F'}
     identity=_identity_bytes(runtime.generation,runtime.executable,runtime.source_files,runtime.native_files,
-                             runtime.source_commit,runtime.source_tree)
+                             runtime.source_commit,runtime.source_tree,policy=runtime.policy,application=runtime.application)
     expected=dict(runtime.native_files,**runtime.source_files)
     from hosted_synthetic_projection import sentinel_bytes
     ns._require(_IDENTITY_PATH not in expected and SENTINEL not in expected)
@@ -338,7 +351,7 @@ def _entries(runtime):
                 and runtime.executable in runtime.native_files)
     paths={entry.path for entry in entries}
     ns._require('/proc' not in paths and '/tmp' not in paths and '/sys' not in paths)
-    policy_hash=hashlib.sha256(POLICY.encode()).hexdigest()
+    policy_hash=hashlib.sha256(runtime.policy.encode()).hexdigest()
     return (*entries,*(ns.backend._BrowserRuntimeBundleEntry(path=path,kind='D',mode=0o555,
         user_id=0,group_id=0,provenance='bundle-parent:'+policy_hash,content=b'') for path in ('/proc','/tmp')))
 
@@ -433,7 +446,7 @@ def _enter_projection(runtime):
         ns._require(ns._identity(os.stat('/'))==ns._identity(os.stat('.'))==root.identity)
         from hosted_synthetic_projection import _mount_rows
         ns._require(old_mount not in {number for number,parent in _mount_rows()})
-        result={'policy':POLICY,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
+        result={'policy':runtime.policy,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
                 'manifest_sha256':runtime.bundle.manifest_sha256,'root_identity':list(root.identity),
                 'root_mount_id':ns._mount_id(root),'old_root_detached':True,'regular_bytes':runtime.bundle.regular_bytes,
                 'consumer_exec_verified':False,'execution_authority':False}
@@ -478,7 +491,7 @@ def verify_consumer(runtime, root_observation):
     ns._require(type(root_observation) is dict and set(root_observation)=={
                     'policy','generation','bundle_sha256','manifest_sha256','root_identity','root_mount_id',
                     'old_root_detached','regular_bytes','consumer_exec_verified','execution_authority'}
-                and root_observation['policy']==POLICY
+                and root_observation['policy']==runtime.policy
                 and root_observation['old_root_detached'] is True
                 and root_observation['consumer_exec_verified'] is False
                 and root_observation['execution_authority'] is False
@@ -520,12 +533,12 @@ def verify_consumer(runtime, root_observation):
     ns._require(runtime.executable in mapped)
     for path,digest in runtime.source_files.items():
         ns._require(hashlib.sha256(ns._read(path,2*1024**2)).hexdigest()==digest)
-    return {'policy':POLICY,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
+    return {'policy':runtime.policy,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
             'manifest_sha256':runtime.bundle.manifest_sha256,'source_commit':runtime.source_commit,'source_tree':runtime.source_tree,
             'root_identity':root_observation['root_identity'],'root_mount_id':root_observation['root_mount_id'],
             'regular_bytes':runtime.bundle.regular_bytes,'old_root_detached':True,
             'consumer_exec_verified':True,'mapped_elf_files':len(mapped),'execution_authority':False,
-            'scope':'HOSTED_DIAGNOSTIC_RUNTIME','application_browser_closure':'NOT_PROVEN'}
+            'scope':('HOSTED_DIAGNOSTIC_RUNTIME' if runtime.policy==POLICY else 'HOSTED_APPLICATION_IMPORT_COMPONENT'),'application_browser_closure':'NOT_PROVEN'}
 
 
 def verify_report_binding(runtime, proof):
@@ -535,9 +548,9 @@ def verify_report_binding(runtime, proof):
         'policy','generation','bundle_sha256','manifest_sha256','source_commit','source_tree',
         'root_identity','root_mount_id','regular_bytes','old_root_detached','consumer_exec_verified',
         'mapped_elf_files','execution_authority','scope','application_browser_closure'})
-    expected={'policy':POLICY,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
+    expected={'policy':runtime.policy,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
         'manifest_sha256':runtime.bundle.manifest_sha256,'source_commit':runtime.source_commit,'source_tree':runtime.source_tree,
-        'regular_bytes':runtime.bundle.regular_bytes,'scope':'HOSTED_DIAGNOSTIC_RUNTIME','application_browser_closure':'NOT_PROVEN'}
+        'regular_bytes':runtime.bundle.regular_bytes,'scope':('HOSTED_DIAGNOSTIC_RUNTIME' if runtime.policy==POLICY else 'HOSTED_APPLICATION_IMPORT_COMPONENT'),'application_browser_closure':'NOT_PROVEN'}
     ns._require(all(proof[key]==value and type(proof[key]) is type(value) for key,value in expected.items())
                 and proof['execution_authority'] is False and proof['old_root_detached'] is True
                 and proof['consumer_exec_verified'] is True
