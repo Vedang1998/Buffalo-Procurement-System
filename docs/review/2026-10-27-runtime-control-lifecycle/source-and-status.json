@@ -1,6 +1,6 @@
 {
-  "material_commit": "4d54fb5ce222df8dd200843b4b5450ac396cc37d",
-  "material_tree": "5e380524faabb6f1de6962e78907e34f3d612c76",
+  "material_commit": "79cdda40042bfece3fbb4204c97fefce4c1c5384",
+  "material_tree": "dbe42b5b5ca0a0787daa4932860eed83a443f8ee",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -73,6 +73,10 @@
     {
       "commit": "4d54fb5ce222df8dd200843b4b5450ac396cc37d",
       "tree": "5e380524faabb6f1de6962e78907e34f3d612c76"
+    },
+    {
+      "commit": "79cdda40042bfece3fbb4204c97fefce4c1c5384",
+      "tree": "dbe42b5b5ca0a0787daa4932860eed83a443f8ee"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -116,7 +120,7 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "selected-price packet reconciliation and JSONB numeric metadata repair tested on descendant",
-    "populated recovery TOC/catalog and restore path"
+    "populated recovery held archive inputs and capture/restore composition; TOC catalog component implemented on descendant",
+    "actual composition depends on reviewed owned PostgreSQL/browser process and access boundary"
   ]
 }

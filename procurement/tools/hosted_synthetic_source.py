@@ -60,6 +60,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_packet_forecast.py",
     "procurement/tools/hosted_synthetic_packet_authority.py",
     "procurement/tools/hosted_synthetic_restart_evidence.py",
+    "procurement/tools/hosted_synthetic_recovery_toc.py",
     "procurement/tools/run_local_staging_acceptance.py",
     "procurement/tools/run_local_staging_browser_worker.py",
     "procurement/pyproject.toml",

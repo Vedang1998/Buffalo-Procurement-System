@@ -56,6 +56,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_packet_forecast.py": 22,
     "test_hosted_synthetic_packet_authority.py": 17,
     "test_hosted_synthetic_restart_evidence.py": 16,
+    "test_hosted_synthetic_recovery_toc.py": 24,
     "test_hosted_synthetic_capability.py": 33,
     "test_hosted_synthetic_cgroup.py": 35,
     "test_hosted_synthetic_enrollment.py": 17,

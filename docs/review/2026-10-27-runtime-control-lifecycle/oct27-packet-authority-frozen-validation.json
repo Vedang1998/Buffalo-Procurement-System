@@ -1,0 +1,81 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "79cdda40042bfece3fbb4204c97fefce4c1c5384",
+  "tree": "dbe42b5b5ca0a0787daa4932860eed83a443f8ee",
+  "base": "4d54fb5ce222df8dd200843b4b5450ac396cc37d",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "f03c2faa59d032732ae4f63782335e3fda01b822c46536bf52fa8e54027aac2e",
+    "docs/CODEX_HANDOFF.md": "a6f7a2f875589409b758688ca096a66b90b007fddf4bf46b1b6ee0998e08a1ce",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "d1495e5806c8f1f8b1b840832fa70028db455c8568650e2d5ae557636a4a19e7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "454c8231e87c1a352fe098c93679899de6e0db3297075109182de5e191ab2339",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-discovery.json": "22cb5cc83f9605915aeb9f4a0ee223f2b4d4efc6c80103ad72ebfe49c547f0a0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-first.txt": "57a55dd41eb9a447d1df15ee308aa3852ff33f05b4f63167f524c62af41b0638",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-hosted.txt": "9fa9230b4aeaefb28a07f3d9bbdf8ae12cf0209b612a03c74bc122c660dbcc1e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-isolated.txt": "f26a75d0bad07a2c5e6fc507784e560b73a60f947fd8f5c2b9ce4f3ac28561b6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-related.txt": "1752515a6f367f187b44f89b44f62e4b36abf515c3f692c95600d8c604a5f0c6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-frozen-validation.json": "83110faa9e12af84aef90a7d48e4e3532584224a24b0205d3fbdef7ed9cafd3b",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-publication.json": "7409f36b34be79367af9dba979e5040bd09c8d5d08fd3ace255881a45b09b06e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-restart-parity-registered.txt": "71cb21238901f3a1dda8b9cde552a0a37b1973d526e89a62d26f1f5785b87ae0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "ad3e8f789d438b3d4f0cd14eefaeb6b008253e2fb4cff030eafca032e8565ff0",
+    "procurement/tests/hosted_selected_fixture.py": "c7aed1c2e4ffd345b33c409d77a50a961de6556fb7ec48c21c9b5163459d1105",
+    "procurement/tests/test_hosted_synthetic_artifacts.py": "8e1a1ab15e1f9c515588849635c1904e5838df33b849407a84d6da828afb802d",
+    "procurement/tests/test_hosted_synthetic_packet_authority.py": "6b3bc6b12833b11986fc77a84facf43bcf0d06f683cef68070fcb4e1510ccf8c",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "54b51fe35abaf707cca454b42557c610e2b6fe1f99395f203bf014d18a824963",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "30bb25debbd651ff68bacd9057b07323ca1ce44987463bb048d505ea96d68dfe",
+    "procurement/tests/test_supplier_format_conformance.py": "0d60e8644fd50c0f1840131cd7ffecfa27cf2fed9bfddfc06718beefb9b38b34",
+    "procurement/tools/hosted_synthetic_artifacts.py": "73413e90babb5af4510888d0f7b9350e10a80208f3e67fcbe0979029f712bf87",
+    "procurement/tools/hosted_synthetic_packet_authority.py": "88bfe4897c5aa18533b0f3e676f56d0fc987e073fd95a7ee88ee39a10ccb8b39",
+    "procurement/tools/hosted_synthetic_packet_controls.py": "09f1cfe4496cd708c3842df152cc768756abe6d7262aa3de0a29412bcc1a0ba5",
+    "procurement/tools/hosted_synthetic_packet_evidence.py": "c13a9eadd0b36232d782aa0b7a7abc854c4bd866bbd425c25745ebaeda774e89",
+    "procurement/tools/hosted_synthetic_packet_forecast.py": "772231a23f12eb1d5449f2b5d98d980de8c1b40c35f8b279f9a8797e2ef0c384",
+    "procurement/tools/hosted_synthetic_source.py": "e1fb0cfb0472687344a1b79cf3a16ad5390d4acdea3da87aa4980f319c8a9633",
+    "procurement/tools/run_tests.py": "8347833dd9fdc223ad8d50461a4a7068377e596629d1955c84f8bd6c68cbe22b"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 37.903,
+      "sha256": "c41906cbba1ff58e566cb0de9376bd11194649b47fc2af2421ef61a2a5033df3"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 36.652,
+      "sha256": "6388e1be0f6a99389d88d807f48a7e99ad68b985a9741ed64527d5eba1be90e6"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 16.187,
+      "sha256": "b5be52121fdc1403e2c38a0499f6199e2e9ba88f2df14478b33aa164273646a6"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.885,
+      "sha256": "aa7081dcc2fcbde34338d1cef25ecd7903814cb2c185f93244f05d958c347d18"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.616,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.115,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

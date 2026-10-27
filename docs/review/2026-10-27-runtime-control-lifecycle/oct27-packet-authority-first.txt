@@ -1,0 +1,386 @@
+test_actual_classifier_and_tier_predicates_reconcile_selected_packet (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_actual_classifier_and_tier_predicates_reconcile_selected_packet) ... ERROR
+test_actual_classifier_rejects_rehashed_selection_ancestry_change (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_actual_classifier_rejects_rehashed_selection_ancestry_change) ... ERROR
+test_bool_ids_and_duplicate_snapshots_refuse (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_bool_ids_and_duplicate_snapshots_refuse) ... ERROR
+test_intent_digest_source_status_backup_and_batch_are_bound (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_intent_digest_source_status_backup_and_batch_are_bound) ... ERROR
+test_observed_mapping_decision_and_selection_previews_are_exact (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_observed_mapping_decision_and_selection_previews_are_exact) ... ERROR
+test_original_apply_mapping_preparation_bytes_form_an_unbroken_chain (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_original_apply_mapping_preparation_bytes_form_an_unbroken_chain) ... ERROR
+test_packet_selected_evidence_and_metric_hash_copies_cannot_diverge (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_packet_selected_evidence_and_metric_hash_copies_cannot_diverge) ... ERROR
+test_price_packet_cannot_include_blocked_rows_or_drop_consumed_rows (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_price_packet_cannot_include_blocked_rows_or_drop_consumed_rows) ... ERROR
+test_price_packet_state_source_page_and_economics_are_exact (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_price_packet_state_source_page_and_economics_are_exact) ... ERROR
+test_registered_policy_book_and_source_row_pins_come_from_actual_parsers (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_registered_policy_book_and_source_row_pins_come_from_actual_parsers) ... ok
+test_southern_final_tier_must_match_uploaded_break_row (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_southern_final_tier_must_match_uploaded_break_row) ... ERROR
+test_western_legacy_tier_cannot_gain_authority_or_choose_base_after_edit (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_western_legacy_tier_cannot_gain_authority_or_choose_base_after_edit) ... ERROR
+test_wrong_policy_or_book_refuses_even_with_new_intent_hash (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_wrong_policy_or_book_refuses_even_with_new_intent_hash) ... ERROR
+
+======================================================================
+ERROR: test_actual_classifier_and_tier_predicates_reconcile_selected_packet (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_actual_classifier_and_tier_predicates_reconcile_selected_packet)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 104, in test_actual_classifier_and_tier_predicates_reconcile_selected_packet
+    r=self.run_fixture();self.assertEqual((r['classified_contexts'],r['observed_selection_bindings'],r['price_snapshot_rows'],r['reviewed_final_tiers']),(6,5,6,3))
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_actual_classifier_rejects_rehashed_selection_ancestry_change (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_actual_classifier_rejects_rehashed_selection_ancestry_change)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 127, in test_actual_classifier_rejects_rehashed_selection_ancestry_change
+    c['selected_offer_input_evidence_sha256']=selected._compact_sha256(e);self.refuses()
+                                                                          ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_bool_ids_and_duplicate_snapshots_refuse (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_bool_ids_and_duplicate_snapshots_refuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 157, in test_bool_ids_and_duplicate_snapshots_refuse
+    self.f.review['decisions'][1]['calculation']['tier']['run_price_snapshot_id']=True;self.refuses()
+                                                                                       ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_intent_digest_source_status_backup_and_batch_are_bound (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_intent_digest_source_status_backup_and_batch_are_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 119, in test_intent_digest_source_status_backup_and_batch_are_bound
+    self.f=PriceFixture();self.f.applied[key]=value;self.f.mapping['apply_proof_sha256']=sha(raw(self.f.applied));self.f.preparation['mapping_proof_sha256']=sha(raw(self.f.mapping));self.refuses()
+                                                                                                                                                                                      ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_observed_mapping_decision_and_selection_previews_are_exact (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_observed_mapping_decision_and_selection_previews_are_exact)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 132, in test_observed_mapping_decision_and_selection_previews_are_exact
+    self.f.preparation['mapping_proof_sha256']=sha(raw(self.f.mapping));self.refuses()
+                                                                        ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_original_apply_mapping_preparation_bytes_form_an_unbroken_chain (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_original_apply_mapping_preparation_bytes_form_an_unbroken_chain)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 112, in test_original_apply_mapping_preparation_bytes_form_an_unbroken_chain
+    self.f.mapping['apply_proof_sha256']='f'*64;self.refuses()
+                                                ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_packet_selected_evidence_and_metric_hash_copies_cannot_diverge (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_packet_selected_evidence_and_metric_hash_copies_cannot_diverge)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 137, in test_packet_selected_evidence_and_metric_hash_copies_cannot_diverge
+    self.f=PriceFixture();self.f.change_price_docs=lambda d,m=member,k=key,v=value:d[m]['items'][0].__setitem__(k,v);self.refuses()
+                                                                                                                     ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_price_packet_cannot_include_blocked_rows_or_drop_consumed_rows (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_price_packet_cannot_include_blocked_rows_or_drop_consumed_rows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 141, in test_price_packet_cannot_include_blocked_rows_or_drop_consumed_rows
+    self.f.change_price_docs=lambda d:d['frozen-price-economics.json']['items'].pop();self.refuses()
+                                                                                      ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_price_packet_state_source_page_and_economics_are_exact (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_price_packet_state_source_page_and_economics_are_exact)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 146, in test_price_packet_state_source_page_and_economics_are_exact
+    self.f=PriceFixture();self.f.change_price_docs=lambda d,k=key,v=value:d['frozen-price-economics.json']['items'][0].__setitem__(k,v);self.refuses()
+                                                                                                                                        ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_southern_final_tier_must_match_uploaded_break_row (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_southern_final_tier_must_match_uploaded_break_row)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 149, in test_southern_final_tier_must_match_uploaded_break_row
+    self.f.review['decisions'][0]['calculation']['tier']['source_price_book_row_number']=2;self.refuses()
+                                                                                           ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_western_legacy_tier_cannot_gain_authority_or_choose_base_after_edit (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_western_legacy_tier_cannot_gain_authority_or_choose_base_after_edit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 153, in test_western_legacy_tier_cannot_gain_authority_or_choose_base_after_edit
+    self.f.review['decisions'][1]['calculation']['tier']['source_price_book_batch_id']=uuid(81);self.refuses()
+                                                                                                ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+======================================================================
+ERROR: test_wrong_policy_or_book_refuses_even_with_new_intent_hash (test_hosted_synthetic_packet_authority.HostedPacketAuthorityTests.test_wrong_policy_or_book_refuses_even_with_new_intent_hash)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 123, in test_wrong_policy_or_book_refuses_even_with_new_intent_hash
+    self.f=PriceFixture();self.f.intent[key]=value;self.f.applied['preview_sha256']=sha(authority._compact(self.f.intent));self.f.mapping['apply_proof_sha256']=sha(raw(self.f.applied));self.f.preparation['mapping_proof_sha256']=sha(raw(self.f.mapping));self.refuses()
+                                                                                                                                                                                                                                                             ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 101, in refuses
+    with self.assertRaises(HostedArtifactError):self.run_fixture()
+                                                ~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 99, in run_fixture
+    def run_fixture(self):return authority.validate_packet_price_evidence(*self.f.price_arguments(),commit=COMMIT,tree=TREE)
+                                                                           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_authority.py", line 94, in price_arguments
+    return raw(self.intent),raw(self.applied),raw(self.mapping),*self.arguments()
+                                                                 ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_packet_controls.py", line 67, in arguments
+    fingerprint=sha(json.dumps(self.frozen,sort_keys=True,separators=(',',':')).encode())
+                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ~~~~~~^^^^^
+  File "/usr/lib/python3.13/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+  File "/usr/lib/python3.13/json/encoder.py", line 261, in iterencode
+    return _iterencode(o, 0)
+  File "/usr/lib/python3.13/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+                    f'is not JSON serializable')
+TypeError: Object of type date is not JSON serializable
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.426s
+
+FAILED (errors=12)

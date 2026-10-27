@@ -10,6 +10,40 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 populated recovery catalog/TOC — continuing
+
+Published `79cdda40042bfece3fbb4204c97fefce4c1c5384`, tree
+`dbe42b5b5ca0a0787daa4932860eed83a443f8ee`, passed661 diagnostic tests normally
+and separately under scrubbed -I -S,17 application-dependent price tests,88 related,
+10 startup and18 imports. Activation exit78. Discovery2205/120 is not execution.
+The ordinary branch-only push scanned36 objects with no private-metadata or
+high-confidence secret hits; fresh-fetch verified; protected refs unchanged.
+
+The new dormant recovery component reads supplemental identities only after the
+existing final-catalog attestation in a retained repeatable-read/read-only snapshot.
+It requires exact pgcrypto function membership/definitions/final owners, rejects
+unsupported inheritance/extension/ownership shapes, and checks bounded full/schema
+PG16 TOCs against actual OIDs. Required table data and every sequence SET remain.
+Optional inline defaults/CHECKs use actual paired serialization, not guessed counts.
+Both dumps must use the explicit no-ACL/comment profile; final fixed permissions
+and mixed extension/function ownership must later be reconstructed and attested.
+
+Twenty-four pure tests and51 related registration/workflow tests passed. Internal
+read-only review found a CTE system-column omission and an extension-membership
+completeness gap; repaired causal tests remain component evidence. Native SQL,
+dump provenance, populated capture and restore have not run. Discovery2229/121,
+diagnostic population685; no floors lowered. A discovery helper initially passed
+an incorrect argument shape and was corrected; no suite was executed by discovery.
+
+Existing pre-APPLY Backup V2 and pre017 transfer are not populated recovery APIs.
+Do not replay017, replace transfer provenance, use legacy ACL normalization or
+assume PUBLIC-only CONNECT revocation fences successor logins. Continue held-byte
+recovery inputs and explicit capture/restore composition while preserving reviewed
+host identity/network/process prerequisites. No privileged/credential/browser/DB
+execution or independent Claude re-review occurred; six findings remain pending,
+three OPEN. Application source, schema, rules, manifests and lockfiles are unchanged.
+
+
 ### 2026-10-27 selected-offer and price packet evidence — continuing
 
 Published `4d54fb5ce222df8dd200843b4b5450ac396cc37d`, tree
