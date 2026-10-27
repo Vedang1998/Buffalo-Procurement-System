@@ -10,6 +10,43 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 immutable recovery inputs and owned storage — continuing
+
+Published `427dd1b28e287a3e9183c9db736407dcf5dabfb5`, tree
+`32ac24c47a1c78131b6240c622221c176fde991c`, passed685 diagnostic tests normally
+and separately under scrubbed -I -S,17 application price tests,88 related,10 startup
+and18 imports. Activation exit78. Discovery2229/121 is not execution. Ordinary
+branch-only publication scanned41 objects without private-metadata/high-confidence
+secret hits; fresh-fetch identities verified and protected refs unchanged.
+
+The next component seals exact private dump/schema/storage bytes into owned memfds,
+binds a sealed use-list without asserting native TOC emission, validates the actual
+writer's bounded PAX storage archive against exact content-addressed database
+bindings, and materializes one fresh nonce tree through retained directory handles.
+Every creation, short write and removal checks the retained ancestor/private-parent
+boundary. Unknown/replaced/ambiguous resources prevent path cleanup; identity-safe
+FDs still close and original failure remains. No recursive removal or chown occurs.
+Forty-three component tests and75 TOC/registration/workflow regressions passed.
+Initial errors/noncausal fixture failure are retained, with repairs. Read-only
+internal review found/repaired UUID-policy, FD-registration and pre-effect chain
+gaps. Same-UID races, external handles and fatal-signal/manager-kill cleanup remain
+external live obligations; catchable SIGINT evidence does not prove those paths.
+Discovery2272/123, diagnostic population728; full supported-host suite NOT_RUN.
+
+Authority correction: October10 approved design6/plan4/7/8 already authorize the
+separate browser/PG runtime, process and isolated network composition, populated
+recovery and phase-specific resource limits. Earlier wording that diagnostic
+pids.max2/512MiB required a new owner decision before all such coding was too broad.
+Continue that approved implementation without repinning inputs, increasing approved
+phase limits or weakening containment. Privileged/live/credential gates remain
+closed pending applicable independent review and machine proof. Next: populated
+runtime snapshot adapter, native capture/target reconstruction/fencing and phase
+composition. The state-facts helper requires the runtime connection, separately
+importing the provisioner-exported snapshot; its runtime and backup-release hashes
+are distinct. Source-stop/sequence quiescence and physical cluster identities must
+remain explicit gates. No DB/service/browser or privileged action ran here.
+
+
 ### 2026-10-27 populated recovery catalog/TOC — continuing
 
 Published `79cdda40042bfece3fbb4204c97fefce4c1c5384`, tree

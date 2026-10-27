@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 15985,
-    "sha256": "ad3dd9c72b6a198958e1512889cec4fdbdea239bf1d55e7aba809b9089cba6c5"
+    "bytes": 16217,
+    "sha256": "f0fbe5195d553a5a690bd8ecab07798623e5e141d8665a0761355c96fdaebee4"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8852,
-    "sha256": "ed8f0a4dc053d7c3b4afdfdfac9e6517f834389a1258269ea31cbdb5005a96e2"
+    "bytes": 8848,
+    "sha256": "39a9d65da710b9e28a1f7aba599b3035897d7651c798afa0953d1ded513ceb77"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -727,17 +727,81 @@
     "bytes": 1201,
     "sha256": "f5e9388a6df7357a3fb0db4c16ea3c605d93b310c38889072557182acdc120e0"
   },
+  "oct27-recovery-inputs-discovery.json": {
+    "bytes": 111,
+    "sha256": "c5a74a420d7d0f28e3cf19528c4b1bfc68f234b4d8a4ba332aad25332c966b94"
+  },
+  "oct27-recovery-inputs-first.txt": {
+    "bytes": 8920,
+    "sha256": "76352139081b2ca481185ee5442fcdaa9d5e292160cc9e30fe5a15b550f9d126"
+  },
+  "oct27-recovery-inputs-registered.txt": {
+    "bytes": 23672,
+    "sha256": "b15666cfddc0b8388868d58b07cac485c48115fcfe8cc5af36d5b5367c2f68dc"
+  },
+  "oct27-recovery-inputs-repaired.txt": {
+    "bytes": 4424,
+    "sha256": "2b10a53317ebd9bb77d6508201e030c49ed28ac398a03ac2e4f519ccf73d46e0"
+  },
+  "oct27-recovery-inputs-storage-boundary.txt": {
+    "bytes": 8494,
+    "sha256": "14f63ac27643fe9b0abc10319cee6c0218c6aac628fa8d625af4a97d9bce2f97"
+  },
+  "oct27-recovery-inputs-storage-first.txt": {
+    "bytes": 8044,
+    "sha256": "43c6dc53793da9a36316efbf21bb9835cfd988d551d0a50516024fab53bb6ece"
+  },
   "oct27-recovery-toc-discovery.json": {
     "bytes": 111,
     "sha256": "1f39596769475eae5c83f4d04432412c95a76955c5da42c16db58ecc198d7985"
+  },
+  "oct27-recovery-toc-final.txt": {
+    "bytes": 4841,
+    "sha256": "c3d8b269082c8f0868ec968e368fa05e5b3f638764f5d92fd58923aa9e59139c"
   },
   "oct27-recovery-toc-first.txt": {
     "bytes": 4197,
     "sha256": "a97936e1906c1d4c18f6b77294e844713c7cb3ccec67359858a4e5210562a9b2"
   },
+  "oct27-recovery-toc-frozen-app-price-components.txt": {
+    "bytes": 3713,
+    "sha256": "020a2fd833b39cb83ec52fad25f35dce3c55082c5ac01f299cb299c962c7696e"
+  },
+  "oct27-recovery-toc-frozen-hosted.txt": {
+    "bytes": 124090,
+    "sha256": "4ac6a16dac40ed9e992ab411e3e5c5d7d6ef95520d7955a81597d6686918acc8"
+  },
+  "oct27-recovery-toc-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-recovery-toc-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-recovery-toc-frozen-isolated.txt": {
+    "bytes": 124090,
+    "sha256": "a7bbc3b655ac7be5e827edb484a03560cbebbd856e7ea616ed7f5a263ed5f862"
+  },
+  "oct27-recovery-toc-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "e4b3897ed31e3f290031d2e3c3c04b6efc0784732f54328c2eb10f483c46b5c6"
+  },
+  "oct27-recovery-toc-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-recovery-toc-frozen-validation.json": {
+    "bytes": 6753,
+    "sha256": "be298b7d279861bb5f939bd59a06be6cc7ad83c88390b53a0e87bfb76b220c85"
+  },
   "oct27-recovery-toc-membership.txt": {
     "bytes": 4841,
     "sha256": "3eb93c089c3c0fb72392a5aed134c7954b3e6a7175024b70c80297516c4724ae"
+  },
+  "oct27-recovery-toc-publication.json": {
+    "bytes": 976,
+    "sha256": "63acaab54c5810635a40d93bdb328e3c989c13d4baef16cfe38584f1d46f1868"
   },
   "oct27-recovery-toc-registered.txt": {
     "bytes": 15276,
@@ -860,7 +924,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 4355,
-    "sha256": "821c7ed538b14a28e150e76ba50726ccd15a94655ec412bc5ce698a3d7e13962"
+    "bytes": 4861,
+    "sha256": "d15f52902264c591da29f6ceed2dc2028f0e9d3037c08f3420e9678b04a5367e"
   }
 }

@@ -1,6 +1,6 @@
 {
-  "material_commit": "79cdda40042bfece3fbb4204c97fefce4c1c5384",
-  "material_tree": "dbe42b5b5ca0a0787daa4932860eed83a443f8ee",
+  "material_commit": "427dd1b28e287a3e9183c9db736407dcf5dabfb5",
+  "material_tree": "32ac24c47a1c78131b6240c622221c176fde991c",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -77,6 +77,10 @@
     {
       "commit": "79cdda40042bfece3fbb4204c97fefce4c1c5384",
       "tree": "dbe42b5b5ca0a0787daa4932860eed83a443f8ee"
+    },
+    {
+      "commit": "427dd1b28e287a3e9183c9db736407dcf5dabfb5",
+      "tree": "32ac24c47a1c78131b6240c622221c176fde991c"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -120,7 +124,9 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "populated recovery held archive inputs and capture/restore composition; TOC catalog component implemented on descendant",
-    "actual composition depends on reviewed owned PostgreSQL/browser process and access boundary"
-  ]
+    "populated runtime snapshot adapter, native capture and target reconstruction/fencing",
+    "approved phase-specific browser/PostgreSQL runtime, process, network and lifecycle composition",
+    "complete same-generation harness wiring after its implementation and review gates"
+  ],
+  "authority_correction": "Approved Oct10 design6 and plan4/7/8 already authorize separate browser/PG composition within their phase limits. Diagnostic pids2/512MiB are not a plan-wide prohibition on coding. Review/live gates remain closed; no runtime repinning or resource expansion beyond approved phase contracts."
 }
