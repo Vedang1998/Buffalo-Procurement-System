@@ -120,11 +120,13 @@
         "procurement/tools/hosted_synthetic_runtime.py",
         "procurement/tools/hosted_synthetic_application_runtime.py",
         "procurement/tools/hosted_synthetic_wheels.py",
-        "procurement/tools/hosted_synthetic_runtime_regression.py"
+        "procurement/tools/hosted_synthetic_runtime_regression.py",
+        "procurement/tools/hosted_synthetic_postgres_runtime.py"
       ],
       "tests": [
         "20 runtime / 23 wheel / 14 application registered tests",
-        "4dd50de kernel diagnostic3/3 and application3/3; sealed exec, 51 mapped ELF identities, original wheels, required missing-dependency refusals"
+        "4dd50de kernel diagnostic3/3 and application3/3; sealed exec, 51 mapped ELF identities, original wheels, required missing-dependency refusals",
+        "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN"
       ],
       "remaining": "Diagnostic and current application import closure use actual sealed projection/exec.4dd50de application regular bytes81844207 under80MiB. Frozen Nix/OCI inputs unchanged. Full application/browser/PG lifecycle closure remains UNSEALED; supported GitHub runtime ownership/ELF compatibility not proven; no accepted browser input substitution."
     },

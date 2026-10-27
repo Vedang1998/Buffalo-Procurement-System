@@ -1,0 +1,83 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f",
+  "tree": "fbe45f7a7ab38ce4e881a912d5e0092068a3ed73",
+  "base": "3ce642690bd9433b1924752bb6044ca1fb22d5ff",
+  "files": {
+    "docs/CODEX_HANDOFF.md": "a491d81ca1d5c97947f7bf8e08012415fb1ea49fb1cfe56f2b9763ed5da4a9cd",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "3aecb808c6c54c5eddf2d483bed7ac2291f2842ec1c9a84ee8435fddd2d3a90d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "9a3118cd770915f1a795f890a5f25fbd19820604df75fdc158522162d8b41426",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "51199626c0d2b53e23b4dc59267265498be287076ad7e0c93331d01f99c4b4ab",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-app-price-components.txt": "8c4439e70dfee64692b0593c168a52b8b1f4b4f9568fc661d3976bd938726a29",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-hosted.txt": "51e2a40f2bc4a9035d96613a09edc37d9cdd4b032197ee30f42aa2595a273163",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-isolated.txt": "74e12b67dd44933e794e94ad5d24a1bd6f7aa9018a38e5e7049f994f95a7d41f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-related.txt": "5979c368e6a372bacf375552b4b28c3aec77d0456131bd62a8f9ea4ac4188b70",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-frozen-validation.json": "bc5b83bb570ce3baf8a82366619c65f9db9ca30db4c72e3ea77001bb0b9c8c5f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-inputs-publication.json": "9c3145f5c6282d0f3592eff0e9278a24c62c1a8cc178d3d05b4e16538b9140c9",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-discovery.json": "014f726ca816ffc61847f7a15a5b57dd285fcd757bd22d7086c58384d119ad0c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-endpoint.txt": "ac5b217ea08b6646257b957f38bf1f5092278857c509f6ce6f1352f5ec0ee35b",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-first.txt": "3f699c544221e7d5166cdeae75cd405f91b766f5c3591dafaf1fff91f0de6194",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-hostaddr.txt": "631ad9f62c090bec93de358a72576acff916b4346fc5f60e893b2ec71fd01508",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-registered.txt": "2c0e61daebe2e477a8e20befe39802dfcb56477063ef01203807d51e977a985f",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-recovery-snapshot-repaired.txt": "5a300c7656a48cd06fe8efd4c3365237e49aa6813ac9c224605a24e9c828ed7e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "a7c26b92d7b6fc927cb240e029c1d5ee760d5b0a956614b3208030ffc4cc18b4",
+    "procurement/tests/test_hosted_synthetic_recovery_snapshot.py": "288186effdbc6f349e2bfc9bb9b452c0ce5f1e3f436e7a6cc6c74d6c1f195dcd",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "880a4e65a1844f8881ec6c147789976ac93d28ae63dbad3cec44c51ec617277a",
+    "procurement/tests/test_supplier_format_conformance.py": "c8d3a1a69bd7f9c43954001b5017c58db7123abaebd27412f0ef2c2c8daac449",
+    "procurement/tools/hosted_synthetic_recovery_snapshot.py": "e48246bb8cabb3056686e7576efdca89f808748fc65ceff87107004873c8055e",
+    "procurement/tools/hosted_synthetic_source.py": "68dda729ccc7bfb85b8d10ff82e33d752619702f4ecb6cafc5edbdef0bcb908b",
+    "procurement/tools/run_tests.py": "bfce9202cc0ae305b9b77db276da41d483e0aec7b2b605deb070a60f9fe0f821"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 34.055,
+      "sha256": "81a67ef1f43a549ef134462e21d797ebef09571e32865301b6649b20046c9f7f"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 33.055,
+      "sha256": "4a8f606354d75887a176bbd7e12e753e8a055c28cd0c78e14a35fb10f5ed60b2"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 15.26,
+      "sha256": "1b1ec85e61c62356d02fa69643e20091cc7e218571d8092f1236cb073d603791"
+    },
+    "app-recovery-components": {
+      "returncode": 0,
+      "seconds": 0.265,
+      "sha256": "bef5b90581775131b74e1cae19c79d53505b1c14730be8bbf1567312c2a4ad06"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.735,
+      "sha256": "152bb59922c10289854c8f26502e0b962bfa23050f8145500923b9a75894c3cb"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.115,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.616,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.115,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

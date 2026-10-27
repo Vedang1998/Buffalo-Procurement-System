@@ -26,6 +26,7 @@ import hosted_synthetic_namespace as ns
 
 POLICY = 'BUFFALO_HOSTED_STDLIB_RUNTIME_V1'
 APPLICATION_POLICY = 'BUFFALO_HOSTED_APPLICATION_RUNTIME_V1'
+POSTGRES_POLICY = 'BUFFALO_HOSTED_POSTGRES_RUNTIME_V1'
 PROJECTED_ROOT = '/opt/buffalo-hosted'
 PROJECTED_TOOLS = PROJECTED_ROOT + '/procurement/tools'
 SENTINEL = '/buffalo-runtime/sentinel'
@@ -192,12 +193,16 @@ class RuntimeBundle:
     source_tree: str
     policy: str = POLICY
     application: dict | None = None
+    postgres: dict | None = None
 
     def verify(self):
         ns._require(getattr(self,'_owner',None) is self and getattr(self,'_token',None) is _TOKEN
-                    and self.policy in (POLICY,APPLICATION_POLICY)
+                    and self.policy in (POLICY,APPLICATION_POLICY,POSTGRES_POLICY)
                     and ((self.policy==POLICY and self.application is None)
-                         or (self.policy==APPLICATION_POLICY and type(self.application) is dict))
+                         or (self.policy==APPLICATION_POLICY and type(self.application) is dict)
+                         or (self.policy==POSTGRES_POLICY and self.application is None))
+                    and ((self.policy==POSTGRES_POLICY and type(self.postgres) is dict)
+                         or (self.policy!=POSTGRES_POLICY and self.postgres is None))
                     and re.fullmatch('[0-9a-f]{64}',self.generation)
                     and re.fullmatch('[0-9a-f]{40}',self.source_commit)
                     and re.fullmatch('[0-9a-f]{40}',self.source_tree))
@@ -222,8 +227,12 @@ class RuntimeBundle:
 
 def receive_runtime(packet):
     """Only from the exact sealed resume channel, never an ambient CLI JSON."""
+    return _receive_runtime(packet,(POLICY,APPLICATION_POLICY))
+
+
+def _receive_runtime(packet, policies):
     ns._require(type(packet) is dict and set(packet)=={'generation','policy','bundle','source_commit','source_tree'}
-                and packet['policy'] in (POLICY,APPLICATION_POLICY) and type(packet['bundle']) is dict
+                and packet['policy'] in policies and type(packet['bundle']) is dict
                 and set(packet['bundle'])=={'descriptor','target','device','inode','size','sha256','manifest_sha256',
                                           'entries','regular_bytes','execution_authority'})
     bundle=ns.backend._PinnedBrowserRuntimeBundle(**packet['bundle'])
@@ -239,6 +248,20 @@ def receive_runtime(packet):
                 and ns.backend._BROWSER_RUNTIME_BUNDLE_MEMFD_TARGET.fullmatch(bundle.target)
                 and fcntl.fcntl(bundle.descriptor,fcntl.F_GETFL)&(os.O_ACCMODE|os.O_NONBLOCK)==os.O_RDONLY
                 and fcntl.fcntl(bundle.descriptor,fcntl.F_GET_SEALS)==ns.backend._BROWSER_RUNTIME_BUNDLE_SEALS)
+    # Ownership transfers only after the complete kernel descriptor identity
+    # above matches. Foreign/mismatched descriptors remain untouched.
+    try:
+        return _adopt_runtime(packet,bundle)
+    except BaseException as error:
+        try:
+            ns._require(ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,
+                (bundle.device,bundle.inode)))
+        except BaseException:
+            raise ns.NamespaceCleanupError('runtime_resume_cleanup_refused') from error
+        raise
+
+
+def _adopt_runtime(packet,bundle):
     os.set_inheritable(bundle.descriptor,False)
     bundle._owner_token=ns.backend._BROWSER_HANDLE_TOKEN
     ns.backend._validate_pinned_browser_runtime_bundle(bundle)
@@ -250,22 +273,25 @@ def receive_runtime(packet):
     ns._require(len(identities)==1 and len(identities[0])<=512*1024)
     identity=json.loads(identities[0])
     ns._require(type(identity) is dict and set(identity)==({'policy','generation','executable','source_files','native_files','source_commit','source_tree'}
-                    | ({'application'} if packet['policy']==APPLICATION_POLICY else set()))
+                    | ({'application'} if packet['policy']==APPLICATION_POLICY else
+                       {'postgres'} if packet['policy']==POSTGRES_POLICY else set()))
                 and all(identity[key]==packet[key] for key in ('policy','generation','source_commit','source_tree'))
                 and json.dumps(identity,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')==identities[0])
     result=RuntimeBundle(bundle,packet['generation'],identity['executable'],identity['source_files'],identity['native_files'],
-                         packet['source_commit'],packet['source_tree'],packet['policy'],identity.get('application'))
+                         packet['source_commit'],packet['source_tree'],packet['policy'],identity.get('application'),identity.get('postgres'))
     result._owner=result;result._token=_TOKEN
     _entries(result)
     return result
 
 
-def _identity_bytes(generation,executable,source,native,commit,tree, *, policy=POLICY,application=None):
+def _identity_bytes(generation,executable,source,native,commit,tree, *, policy=POLICY,application=None,postgres=None):
     value={'policy':policy,'generation':generation,'executable':executable,
         'source_files':source,'native_files':native,'source_commit':commit,'source_tree':tree}
     if policy==APPLICATION_POLICY:
-        ns._require(type(application) is dict);value['application']=application
-    else:ns._require(policy==POLICY and application is None)
+        ns._require(type(application) is dict and postgres is None);value['application']=application
+    elif policy==POSTGRES_POLICY:
+        ns._require(type(postgres) is dict and application is None);value['postgres']=postgres
+    else:ns._require(policy==POLICY and application is None and postgres is None)
     return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
 
 
@@ -338,7 +364,7 @@ def _entries(runtime):
     ns._require((manifest,digest,size)==(runtime.bundle.manifest_sha256,runtime.bundle.sha256,runtime.bundle.regular_bytes))
     regular={entry.path:hashlib.sha256(entry.content).hexdigest() for entry in entries if entry.kind=='F'}
     identity=_identity_bytes(runtime.generation,runtime.executable,runtime.source_files,runtime.native_files,
-                             runtime.source_commit,runtime.source_tree,policy=runtime.policy,application=runtime.application)
+                             runtime.source_commit,runtime.source_tree,policy=runtime.policy,application=runtime.application,postgres=runtime.postgres)
     expected=dict(runtime.native_files,**runtime.source_files)
     from hosted_synthetic_projection import sentinel_bytes
     ns._require(_IDENTITY_PATH not in expected and SENTINEL not in expected)
@@ -387,7 +413,7 @@ def enter_runtime(runtime):
     this private mount namespace. Any post-pivot failure requires this owned
     process to exit; its parent retains process/namespace cleanup ownership.
     """
-    runtime.verify();ns._require_mapped_identity()
+    runtime.verify();ns._require(runtime.policy in (POLICY,APPLICATION_POLICY));ns._require_mapped_identity()
     return _enter_projection(runtime)
 
 
@@ -487,6 +513,7 @@ def projected_images(runtime):
 
 def verify_consumer(runtime, root_observation):
     """Must run after projected exec; old mapped host ELF inodes refuse."""
+    ns._require(runtime.policy in (POLICY,APPLICATION_POLICY))
     _entries(runtime)
     ns._require(type(root_observation) is dict and set(root_observation)=={
                     'policy','generation','bundle_sha256','manifest_sha256','root_identity','root_mount_id',
@@ -544,6 +571,7 @@ def verify_consumer(runtime, root_observation):
 def verify_report_binding(runtime, proof):
     """S retains its exact sealed bundle while comparing G's consumer proof."""
     runtime.verify()
+    ns._require(runtime.policy in (POLICY,APPLICATION_POLICY))
     ns._require(type(proof) is dict and set(proof)=={
         'policy','generation','bundle_sha256','manifest_sha256','source_commit','source_tree',
         'root_identity','root_mount_id','regular_bytes','old_root_detached','consumer_exec_verified',

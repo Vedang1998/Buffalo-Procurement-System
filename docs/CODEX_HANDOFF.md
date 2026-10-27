@@ -10,6 +10,49 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 separate native PostgreSQL closure — continuing
+
+Published `e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f`, tree
+`fbe45f7a7ab38ce4e881a912d5e0092068a3ed73`, passed728 diagnostic tests normally
+and separately under scrubbed -I -S,17 price,20 runtime-snapshot,88 related,
+10 startup and18 imports. Activation exit78. Discovery2292/124 is not execution.
+Ordinary branch-only publication scanned31 objects without private-metadata or
+high-confidence secret hits; fresh fetch verified exact identities and protected
+refs unchanged. Prior executed evidence remains attached to that exact commit.
+
+A separate native PostgreSQL bundle now captures the fixed root-trusted PG16
+programs, initdb shell and locale program, recursive ELF loaders/libraries, native
+modules, initdb SQL/config samples, exact extension controls/scripts, stopwords,
+Default-referenced timezone files, bounded C.utf8 categories and synthetic NSS/
+OpenSSL policy bytes. The existing80MiB/3000-entry limits remain unchanged. Native
+and generated policy provenance are distinct. Lazy dependency reads enforce the
+regular-byte bound before reading queued inputs. Before/after complete source
+binding and sealed identity bind the current source and actual captured bytes.
+The new policy is rejected by diagnostic dispatch and CPython consumer-proof paths.
+It grants no native execution or credential authority.
+
+Thirty-eight new tests plus109 runtime/source/workflow/registration regressions
+passed147/147. The first27-test run had two failing timezone-offset subtests;
+malformed offsets had been accepted as zone names. That defect, missing locale
+program, eager loading, constructor/receive descriptor ownership and cancellation
+cleanup precedence are repaired with causal tests. Internal Codex read-only reviews
+are not Claude approval. Discovery2330/125, floors2330, diagnostics766; no tests
+removed. Actual trusted native capture/projected execution remains NOT_RUN.
+
+Next executable implementation: bind this bundle to the owned stopped native
+process/phase, enforce the exact environment and effective PostgreSQL configuration,
+provide nonzero namespace identity and bounded writable resources, and verify actual
+projected versions/maps. Do not infer this from BKI/path names or sealed capture.
+Current Backup V2/transfer child environment reconstruction drops new supervisor
+PG/OpenSSL overrides; the real child-exec adapter must enforce them. initdb needs
+real controlled /dev/null; no regular-file substitute is provided. Writable auto
+config, JIT/SSL/GSS/preload controls, dynamic shared memory, complete descendant
+cleanup and whole-service accounting remain phase obligations. No PG process,
+service/account, privilege, credential or browser action occurred. Full supported
+suite and integrated acceptance remain NOT_RUN/NON-GREEN; six findings pending
+review, three OPEN. Existing source/schema/rules/lockfiles remain unchanged.
+
+
 ### 2026-10-27 populated runtime snapshot binding — continuing
 
 Published `3ce642690bd9433b1924752bb6044ca1fb22d5ff`, tree

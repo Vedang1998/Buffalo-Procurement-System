@@ -41,6 +41,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_identity.py",
     "procurement/tools/hosted_synthetic_pid1_regression.py",
     "procurement/tools/hosted_synthetic_runtime.py",
+    "procurement/tools/hosted_synthetic_postgres_runtime.py",
     "procurement/tools/hosted_synthetic_wheels.py",
     "procurement/tools/hosted_synthetic_application_runtime.py",
     "procurement/tools/hosted_synthetic_runtime_regression.py",

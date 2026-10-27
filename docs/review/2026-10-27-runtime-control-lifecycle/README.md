@@ -1,20 +1,19 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet includes frozen3ce6426 and predecessors. Its728 diagnostic tests passed
-normally and separately under scrubbed -I -S;17 application price tests,88 related,
-10 startup and18 imports passed. Activation exit78. Discovery2272/123 is not execution.
-Ordinary branch-only publication scanned38 objects with no private-metadata or
-high-confidence secret hits, and fresh fetch verified exact commit/tree.
+This packet includes frozen e0d4e34 and predecessors. Its728 diagnostic tests passed
+normally and separately under scrubbed -I -S;17 price,20 runtime-snapshot,88 related,
+10 startup and18 imports passed. Activation exit78. Discovery2292/124 is not execution.
+Ordinary branch-only publication scanned31 objects with no private-metadata or
+high-confidence secret hits; fresh fetch verified exact commit/tree.
 
-The next descendant implements a dormant runtime snapshot adapter using the existing
-application types/validators. It requires idle/autocommit and libpq hostaddr loopback
-before SQL, imports the provisioner snapshot before reads, attests runtime once,
-binds distinct release/runtime identities, complete tables/sequences/counts/storage
-hashes, then rolls back and verifies idle. Twenty new fake-connection tests passed,
-along with105 related tests. First18 fixture-setup errors are retained. Internal
-review found/repaired PQhostaddr and inet-text/netmask compatibility gaps. No SQL,
-server, capture or restore was executed. Discovery2292/124 is not a full passing
-suite; diagnostic728 and application price17/snapshot20 remain separate populations.
+The next descendant adds a separate fixed native PostgreSQL sealed-capture policy,
+including initdb's shell/locale children, ELFs, modules and initialization/locale/
+timezone data. It uses existing sealed bundles and unchanged bounds. Thirty-eight
+new tests and109 related regressions passed147/147; two original timezone subtest
+failures and subsequent review repairs are retained. Diagnostic dispatch and CPython
+proof cannot accept this policy. No native execution, containment, credential or
+browser proof follows from capture. Discovery2330/125; diagnostic population766.
+See the current handoff for exact remaining phase integration and environment gates.
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -28,8 +27,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `3ce642690bd9433b1924752bb6044ca1fb22d5ff`.
-- Implementation tree: `6b1004838bce08385c4389118c4c791172a08e7a`.
+- Latest tested/published implementation: `e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f`.
+- Implementation tree: `fbe45f7a7ab38ce4e881a912d5e0092068a3ed73`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -53,9 +52,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t 3ce642690bd9433b1924752bb6044ca1fb22d5ff
-git rev-parse 3ce642690bd9433b1924752bb6044ca1fb22d5ff^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 3ce642690bd9433b1924752bb6044ca1fb22d5ff -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f
+git rev-parse e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.

@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 16181,
-    "sha256": "3aecb808c6c54c5eddf2d483bed7ac2291f2842ec1c9a84ee8435fddd2d3a90d"
+    "bytes": 16092,
+    "sha256": "45767c6c0f98e2794bf8ac828756aa9e611c94911c37b821fac9b2735076ace9"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8851,
-    "sha256": "9a3118cd770915f1a795f890a5f25fbd19820604df75fdc158522162d8b41426"
+    "bytes": 9001,
+    "sha256": "c7a548e48ef2bad1b4c6016a2671add60c58eef5d5d7dcda3740b229678bd33c"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -687,6 +687,34 @@
     "bytes": 4142,
     "sha256": "bd28b4cfe10c055102308f990be325c0dc0c11a072a6dcba154a6dff9a49a7a0"
   },
+  "oct27-postgres-runtime-discovery.json": {
+    "bytes": 135,
+    "sha256": "0db73eef1a02a57497f347b809bd51f6d93a1ffd73f94420fe22e092198dd7f1"
+  },
+  "oct27-postgres-runtime-final-focused.txt": {
+    "bytes": 25501,
+    "sha256": "d3e5cd4958dacad06f9aa567f3f615d9fdd18dc92ab3024df94188e05c60beae"
+  },
+  "oct27-postgres-runtime-first.txt": {
+    "bytes": 7143,
+    "sha256": "59ae00c1183b527e01ba334afd7e932e29019b9101cec3bad470a534c2bfd3b6"
+  },
+  "oct27-postgres-runtime-focused.txt": {
+    "bytes": 11785,
+    "sha256": "e793d3d66d65073e6ad425ba7de9b4957ee733d5cad19ba4a11b006d21218634"
+  },
+  "oct27-postgres-runtime-registered.txt": {
+    "bytes": 25131,
+    "sha256": "801838ac9db977a4c1b4e8f463883d68b71ea02a54142aedc603119883293cc8"
+  },
+  "oct27-postgres-runtime-review-repair.txt": {
+    "bytes": 12352,
+    "sha256": "ee7dc5cf18fa7f3608e85c387775db70ae6318639e24c043740b5d31adc6220a"
+  },
+  "oct27-postgres-runtime-second-review-repair.txt": {
+    "bytes": 12921,
+    "sha256": "ad3da5d5bdd2a3a6a44be1086c0aa3531095b3d86b8a44ac75bab447c1524694"
+  },
   "oct27-preparation-discovery.json": {
     "bytes": 4974,
     "sha256": "d976a23730712cb7b276e1e053b35641136451fee10c937e5015ee64dbb772a5"
@@ -799,9 +827,49 @@
     "bytes": 17465,
     "sha256": "3f699c544221e7d5166cdeae75cd405f91b766f5c3591dafaf1fff91f0de6194"
   },
+  "oct27-recovery-snapshot-frozen-app-price-components.txt": {
+    "bytes": 3713,
+    "sha256": "1b1ec85e61c62356d02fa69643e20091cc7e218571d8092f1236cb073d603791"
+  },
+  "oct27-recovery-snapshot-frozen-app-recovery-components.txt": {
+    "bytes": 4283,
+    "sha256": "bef5b90581775131b74e1cae19c79d53505b1c14730be8bbf1567312c2a4ad06"
+  },
+  "oct27-recovery-snapshot-frozen-hosted.txt": {
+    "bytes": 132485,
+    "sha256": "81a67ef1f43a549ef134462e21d797ebef09571e32865301b6649b20046c9f7f"
+  },
+  "oct27-recovery-snapshot-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-recovery-snapshot-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-recovery-snapshot-frozen-isolated.txt": {
+    "bytes": 132485,
+    "sha256": "4a8f606354d75887a176bbd7e12e753e8a055c28cd0c78e14a35fb10f5ed60b2"
+  },
+  "oct27-recovery-snapshot-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "152bb59922c10289854c8f26502e0b962bfa23050f8145500923b9a75894c3cb"
+  },
+  "oct27-recovery-snapshot-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct27-recovery-snapshot-frozen-validation.json": {
+    "bytes": 5731,
+    "sha256": "167202635544b335b74ae61dab3ea97fc1a543cd393758d7df67d94102455583"
+  },
   "oct27-recovery-snapshot-hostaddr.txt": {
     "bytes": 3937,
     "sha256": "631ad9f62c090bec93de358a72576acff916b4346fc5f60e893b2ec71fd01508"
+  },
+  "oct27-recovery-snapshot-publication.json": {
+    "bytes": 976,
+    "sha256": "2f6cb6e060d529ef817baee0e02dcb0bf1bbaeea2084b3d9e116f875ba6f837b"
   },
   "oct27-recovery-snapshot-registered.txt": {
     "bytes": 25323,
@@ -984,7 +1052,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 5182,
-    "sha256": "a7c26b92d7b6fc927cb240e029c1d5ee760d5b0a956614b3208030ffc4cc18b4"
+    "bytes": 5383,
+    "sha256": "c09611bba2a0f7564cbda4b1a523a33e80cfa39bb50a69511a1b00081c2d5253"
   }
 }

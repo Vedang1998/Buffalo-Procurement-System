@@ -1,6 +1,6 @@
 {
-  "material_commit": "3ce642690bd9433b1924752bb6044ca1fb22d5ff",
-  "material_tree": "6b1004838bce08385c4389118c4c791172a08e7a",
+  "material_commit": "e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f",
+  "material_tree": "fbe45f7a7ab38ce4e881a912d5e0092068a3ed73",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -85,6 +85,10 @@
     {
       "commit": "3ce642690bd9433b1924752bb6044ca1fb22d5ff",
       "tree": "6b1004838bce08385c4389118c4c791172a08e7a"
+    },
+    {
+      "commit": "e0d4e34cb14ad6b32396bb4a167fa76459c1fb5f",
+      "tree": "fbe45f7a7ab38ce4e881a912d5e0092068a3ed73"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -111,7 +115,8 @@
     "reviewers": [
       "app_runtime_inputs",
       "cleanup_audit",
-      "harness_audit"
+      "harness_audit",
+      "phase_process_audit"
     ],
     "tests_run_by_reviewers": false,
     "writer_ran_tests": true,
@@ -128,7 +133,7 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "native PG16 executable/interpreter/data closure and owned foreground process lease",
+    "native PG sealed capture implemented; owned native process/phase exec, actual version/map and effective-profile proof remain",
     "populated native capture and fenced target reconstruction using existing fixed SQL",
     "approved phase-specific browser/runtime/network/lifecycle composition and final harness wiring"
   ],
