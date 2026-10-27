@@ -163,6 +163,22 @@ class HostedRuntimeTests(unittest.TestCase):
             ns._reexec_guardian(None,None,None,'a'*64,123,0.0,900,900,{},True)
         images.assert_not_called();project.assert_not_called()
 
+    def test_supervisor_binds_report_to_its_own_generation_source_and_bundle(self):
+        value=fixture_bundle()
+        proof={'policy':runtime.POLICY,'generation':value.generation,'bundle_sha256':value.bundle.sha256,
+               'manifest_sha256':value.bundle.manifest_sha256,'source_commit':value.source_commit,'source_tree':value.source_tree,
+               'root_identity':[1,2],'root_mount_id':3,'regular_bytes':value.bundle.regular_bytes,
+               'old_root_detached':True,'consumer_exec_verified':True,'mapped_elf_files':1,'execution_authority':False,
+               'scope':'HOSTED_DIAGNOSTIC_RUNTIME','application_browser_closure':'NOT_PROVEN'}
+        try:
+            runtime.verify_report_binding(value,proof)
+            for key,changed in (('generation','b'*64),('source_commit','e'*40),('source_tree','f'*40),
+                    ('bundle_sha256','0'*64),('manifest_sha256','0'*64),('execution_authority',True),
+                    ('mapped_elf_files',True),('unknown',False),('application_browser_closure','PASS')):
+                with self.subTest(key=key),self.assertRaises(ns.NamespaceProofError):
+                    runtime.verify_report_binding(value,dict(proof,**{key:changed}))
+        finally:value.close()
+
     def test_identity_gate_precedes_every_projection_effect(self):
         value=fixture_bundle()
         try:

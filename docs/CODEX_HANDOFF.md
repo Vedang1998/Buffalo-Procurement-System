@@ -38,7 +38,7 @@ capabilities, NNP, filter count, descriptors and executable. Nonempty groups sti
 refuse before effects. Kernel filter count is not exported BPF bytecode.
 No conforming live worker-entry or delegated containment PASS is claimed.
 
-Development focused tests: 334 passed; registered floor grows from 1828 to1861
+Development focused tests: 334 passed; registered floor grows from 1828 to1862
 in103 modules. Credential-free component projection/exec passed on Cloud with
 18 mapped ELF files; host identity/groups/cgroup gates explicitly NOT_TESTED.
 Frozen evidence follows separately. New explicit regression driver also checks

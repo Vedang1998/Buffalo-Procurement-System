@@ -37,7 +37,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_bootstrap.py": 30,
     "test_hosted_synthetic_identity.py": 15,
     "test_hosted_synthetic_pid1_regression.py": 4,
-    "test_hosted_synthetic_runtime.py": 19,
+    "test_hosted_synthetic_runtime.py": 20,
     "test_hosted_synthetic_worker.py": 14,
     "test_hosted_synthetic_capability.py": 33,
     "test_hosted_synthetic_cgroup.py": 35,

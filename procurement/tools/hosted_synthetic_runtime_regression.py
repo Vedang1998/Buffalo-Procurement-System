@@ -5,6 +5,7 @@ deliberately does not claim the host identity, groups, cgroup or worker-entry
 gates. It creates no service/account/database, and never accepts credentials.
 """
 from dataclasses import replace
+import errno
 import fcntl
 import hashlib
 import json
@@ -55,8 +56,22 @@ def _omit_dependency(value, path):
     return result
 
 
+def _descriptor_inventory():
+    result={}
+    for name in os.listdir('/proc/self/fd'):
+        number=int(name)
+        try:info=os.fstat(number)
+        except OSError as error:
+            ns._require(error.errno==errno.EBADF)
+            continue
+        result[number]=(info.st_dev,info.st_ino,fcntl.fcntl(number,fcntl.F_GETFL),os.get_inheritable(number))
+    return result
+
+
 def _execute(value):
     value.verify()
+    before=ns._namespaces('self'),[(path,ns._identity(os.stat(path))) for path in ('/','/tmp','/proc')]
+    descriptors=_descriptor_inventory()
     fd=os.memfd_create('buffalo-component-input',os.MFD_CLOEXEC|os.MFD_ALLOW_SEALING)
     try:
         raw=json.dumps({'runtime':value.packet()},sort_keys=True,separators=(',',':')).encode()
@@ -65,11 +80,15 @@ def _execute(value):
         # No --fork/--pid or subprocess in the stages: the retained direct
         # subprocess owns this mount namespace until exec/exit. run() kills
         # and waits for that exact child on its bounded timeout.
-        return subprocess.run(['/usr/bin/unshare','--user','--map-root-user','--mount','--',
+        result=subprocess.run(['/usr/bin/unshare','--user','--map-root-user','--mount','--',
             sys.executable,'-I','-S','-B','-c',_PROJECTOR,str(Path(__file__).parent),str(fd),_CONSUMER],
             pass_fds=(fd,value.bundle.descriptor),env={'PATH':'/usr/bin:/bin','LC_ALL':'C.UTF-8'},
             capture_output=True,timeout=30)
-    finally:os.close(fd)
+    finally:
+        os.close(fd)
+        ns._require(before==(ns._namespaces('self'),[(path,ns._identity(os.stat(path))) for path in ('/','/tmp','/proc')]))
+        ns._require(_descriptor_inventory()==descriptors)
+    return result
 
 
 def run(binding, root):
