@@ -11,6 +11,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-27 frozen source-bound validation and continuation
+
+Latest tested material and verified publication:
+`d1b8124b309bd1a436a8da3f6044faa40383c80f`, tree
+`6f6a2367dea73d9bbc731876448e4b0e3a9258b2`.
+903/903 diagnostics passed normally and903/903 separately under scrubbed -I -S;
+these are two executions of the same population. Separate17/17 price,20/20 snapshot,
+88/88 related and10/10 startup passed;18 basic imports passed, inert activation78.
+Discovery2467/128 is not execution. The complete supported authoritative suite,
+privileged bootstrap, new real readback cases and native PG/browser/recovery runs
+remain NOT_RUN. No unchanged native-Cloud pg_dump or host namespace refusal was
+repeated. Ordinary acceptance-only publication scanned28 new objects without
+private-metadata/high-confidence secret hits, freshly fetched exact commit/tree
+and preserved main/recovery/PR24. All code, schema/rules and lockfile exclusions
+remain as stated below; worktree was clean for validation and publication.
+
+`docs/review/2026-10-27-runtime-control-lifecycle/oct27-source-bound-evidence.json`
+indexes exact raw output, counts and executed validation command source. This
+follow-up changes documentation/evidence only; its Git tree must be reported
+separately from the tested material. Tests were not rerun merely to change docs.
+The unchanged earlier Claude target remains5e62c8e3; the combined material delta
+is nowd1b8124. Original actual REQUEST CHANGES review remains attributed only to
+3c1ae555/owner-reported CLI2.1.310/session_01JyrJEUAi36GJ6AfNcmBBxV/modelclaude-opus-5-5.
+No Claude channel was invoked or findings received. Six dispositions pending,
+three OPEN, none VERIFIED_CLOSED. Native activation and credentials stay disabled.
+
+Authorized implementation remains. Exact next code action: connect the new fixed
+image lease to the private PID1/worker --version path, with retained pidfd/start,
+ARMED/block, parent SIGSTOP and actual stopped readback, exact source/generation/
+role/image EXEC ACK before resume, fixed FD-based exec and bounded output/exit/FD
+cleanup. Reuse the current phase/source/identity/image primitives and unchanged
+I+W pids2/256MiB and enclosing512MiB/64 budgets. Then continue reviewed supported-host
+live containment and external resource proof; do not infer it from component tests.
+Actual native closure fit, core_pattern visibility/lifetime and accepted original
+browser artifacts remain unproved. No accepted runtime is repinned or limit raised.
+Railway and commercial readiness remain separate NOT_PROVEN/NOT_READY; the existing
+business-readiness evidence list is unchanged. This is neither definition A nor a
+claim that all independent authorized work is finished. No automatic resumption
+is promised; resume from subsequently verified descendants, never reset here.
+
+
 ### 2026-10-27 fixed native version-image ownership — continuing
 
 Published `ad3297ba9c81aefcc80306cdc910322bba98d439`, tree

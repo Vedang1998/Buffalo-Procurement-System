@@ -1,40 +1,16 @@
 # October 27 implementation delta — combined read-only re-review
 
-Current descendant adds fixed postdrop native image ownership (35 new/263 focused
-passes, discovery2467/128). It does not fork, stop, ACK, exec or release credentials.
-The next dependency is the actual fixed --version stopped-child protocol. Exact
-ad3297b frozen868-per-interpreter validation and ordinary publication are included.
+Frozen material: `d1b8124b309bd1a436a8da3f6044faa40383c80f`, tree
+`6f6a2367dea73d9bbc731876448e4b0e3a9258b2`. Exact raw logs, validation commands,
+file hashes and ordinary publication evidence are retained here. Start with
+`oct27-source-bound-evidence.json` and `findings.json`.
 
-Current descendant adds the distinct combined PG/Python phase closure and dedicated
-projection/maps proof APIs.176 focused tests pass; discovery2432/127, diagnostics868.
-Actual native capture/size fit/phase execution remain NOT_RUN. Exact prior cf63f9d
-frozen839-per-interpreter validation and verified publication are included.
-
-Latest frozen c928fa3 passed818 diagnostics in each interpreter,17 price,20 snapshot,
-88 related,10 startup,18 imports and inert78. Its exact frozen/publication records
-are included. The current descendant adds actual shared stopped-namespace readback
-and explicit reexec/fork-only real-kernel cases;116 focused simulations pass,
-discovery2403/127. The two new real cases are NOT_RUN, not a containment result.
-Privileged activation is still disabled; see the handoff for the exact gated command.
-
-This packet includes frozen5c881225 and predecessors:766 diagnostic tests passed
-normally and separately under -I -S,17 price,20 snapshot,88 related,10 startup,
-18 imports and inert activation78. Discovery2330/125 is not execution. Publication
-scanned52 new objects without private metadata/high-confidence secret hits and
-fresh-fetch verified the exact commit/tree. Prior failed d90b553 evidence remains.
-
-The next descendant adds the dormant fixed U1→U2 nonzero1000 identity transition,
-reusing capability erasure and the unchanged seccomp policy. Thirty-six simulated
-identity,16 native core-policy and219 related tests pass271/271. Reexec uses nondumpable regular uid_map
-ownership, not the exempt proc directory. Stdio cannot hide controls/protocol aliases.
-No host account, privilege, namespace, PG or credential action was executed.
-One disposable child verified only RLIMIT_CORE0 and inability to raise it; no
-crash/handler ran. Cloud core_pattern was unavailable on one bounded read (ENOENT).
-The new native gate refuses unknown/piped policy and still needs external lifetime
-observation; two reads do not freeze a host sysctl.
-Actual nested mapping, postdrop access and native execution remain NOT_RUN. Same
-kernel UID and post-exec dumpability require their distinct containment proofs.
-Discovery2382/127; diagnostic818; no floor lowered. See current handoff for next work.
+903 diagnostics passed normally and separately under scrubbed -I -S. Separate
+price17, snapshot20, related88, startup10 and18 imports passed; activation exits78.
+Discovery2467/128 executed zero tests. This is not full-suite or integrated
+acceptance. New material includes the real readback driver (actual cases NOT_RUN),
+combined PG/Python phase closure and fixed postdrop PG image ownership. Native
+capture/size fit, PG execution, stop/ACK integration and live gates remain unproved.
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
 release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
@@ -48,8 +24,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `ad3297ba9c81aefcc80306cdc910322bba98d439`.
-- Implementation tree: `93abdcb1167ea4af2d55bc21352167de33b9fa7e`.
+- Latest tested/published implementation: `d1b8124b309bd1a436a8da3f6044faa40383c80f`.
+- Implementation tree: `6f6a2367dea73d9bbc731876448e4b0e3a9258b2`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -73,9 +49,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t ad3297ba9c81aefcc80306cdc910322bba98d439
-git rev-parse ad3297ba9c81aefcc80306cdc910322bba98d439^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 ad3297ba9c81aefcc80306cdc910322bba98d439 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t d1b8124b309bd1a436a8da3f6044faa40383c80f
+git rev-parse d1b8124b309bd1a436a8da3f6044faa40383c80f^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 d1b8124b309bd1a436a8da3f6044faa40383c80f -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.

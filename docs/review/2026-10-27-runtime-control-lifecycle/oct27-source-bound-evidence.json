@@ -1,0 +1,101 @@
+{
+  "material_commit": "d1b8124b309bd1a436a8da3f6044faa40383c80f",
+  "material_tree": "6f6a2367dea73d9bbc731876448e4b0e3a9258b2",
+  "results": {
+    "hosted": {
+      "file": "oct27-postgres-image-frozen-hosted.txt",
+      "returncode": 0,
+      "seconds": 33.413,
+      "sha256": "7003fff1483f99ee499f12469bb40789a1d2aff4beb0b21c2b8c5f733d9a3ffe"
+    },
+    "isolated": {
+      "file": "oct27-postgres-image-frozen-isolated.txt",
+      "returncode": 0,
+      "seconds": 33.554,
+      "sha256": "31f4db866b12b4ae93c8fdf0de346c4e6fe3f4b010abd28117e5908b0322e3ae"
+    },
+    "app-price-components": {
+      "file": "oct27-postgres-image-frozen-app-price-components.txt",
+      "returncode": 0,
+      "seconds": 15.255,
+      "sha256": "2ac915b8624fe4f5de7741e7bac02aee6230f663bd1130652ec0c5d3fcdb3f56"
+    },
+    "app-recovery-components": {
+      "file": "oct27-postgres-image-frozen-app-recovery-components.txt",
+      "returncode": 0,
+      "seconds": 0.265,
+      "sha256": "1ae50aad3c2a83272b2bc48babb7160cf468bfdcb911a1fb45f78250934128db"
+    },
+    "related": {
+      "file": "oct27-postgres-image-frozen-related.txt",
+      "returncode": 0,
+      "seconds": 5.734,
+      "sha256": "4b2302c4705152169106d581c7225b902b14276c3869cc2f6952f34ce5dd842c"
+    },
+    "startup": {
+      "file": "oct27-postgres-image-frozen-startup.txt",
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "imports": {
+      "file": "oct27-postgres-image-frozen-imports.txt",
+      "returncode": 0,
+      "seconds": 0.565,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "file": "oct27-postgres-image-frozen-inert-gate.txt",
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "command_source": "oct27-postgres-image-validation-command.py.txt",
+  "command_source_sha256": "70bd19b8abf68fa442df70092c740dbcfe382c66f9de2d0e3beae56b174d4e54",
+  "actual_counts": {
+    "diagnostic_normal": {
+      "executed": 903,
+      "passed": 903
+    },
+    "diagnostic_isolated": {
+      "executed": 903,
+      "passed": 903
+    },
+    "app_price": {
+      "executed": 17,
+      "passed": 17
+    },
+    "app_recovery_snapshot": {
+      "executed": 20,
+      "passed": 20
+    },
+    "related": {
+      "executed": 88,
+      "passed": 88
+    },
+    "startup": {
+      "executed": 10,
+      "passed": 10
+    },
+    "basic_imports": 18,
+    "inert_activation_exit": 78,
+    "discovery_only": {
+      "discovered": 2467,
+      "modules": 128,
+      "executed": 0
+    }
+  },
+  "count_policy": "Separate test populations/executions; do not sum into a full-suite result.",
+  "full_supported_authoritative_suite": "NOT_RUN",
+  "hosted_bootstrap": "NOT_RUN_REVIEW_REQUIRED",
+  "runtime_native_exec": "NOT_RUN",
+  "worker_control_exclusion": "NOT_PROVEN",
+  "external_whole_service_cleanup": "NOT_PROVEN",
+  "sentinel_release": "WITHHELD",
+  "browser_backup_apply_draft_packet_restart_restore": "NOT_RUN",
+  "integrated_acceptance": "NON_GREEN",
+  "independent_review": "NOT_INVOKED_NOT_RECEIVED",
+  "unchanged_prior_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "next_action": "Implement fixed --version I-to-W ARMED/parent pidfd SIGSTOP/stopped readback/exact EXEC ACK/FD exec and owned output/exit cleanup using the existing phase and image primitives. Do not activate before applicable independent review."
+}

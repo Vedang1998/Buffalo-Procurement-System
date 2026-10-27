@@ -125,12 +125,15 @@
         "procurement/tools/hosted_synthetic_application_runtime.py",
         "procurement/tools/hosted_synthetic_wheels.py",
         "procurement/tools/hosted_synthetic_runtime_regression.py",
-        "procurement/tools/hosted_synthetic_postgres_runtime.py"
+        "procurement/tools/hosted_synthetic_postgres_runtime.py",
+        "procurement/tools/hosted_synthetic_postgres_identity.py",
+        "procurement/tools/hosted_synthetic_postgres_image.py"
       ],
       "tests": [
         "20 runtime / 23 wheel / 14 application registered tests",
         "4dd50de kernel diagnostic3/3 and application3/3; sealed exec, 51 mapped ELF identities, original wheels, required missing-dependency refusals",
-        "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN"
+        "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN",
+        "d1b8124:66 PG runtime,35 image,21 shared runtime component tests; phase-only locale proof and actual disposable descriptor failure paths; native exec NOT_RUN"
       ],
       "remaining": "Diagnostic and current application import closure use actual sealed projection/exec.4dd50de application regular bytes81844207 under80MiB. Frozen Nix/OCI inputs unchanged. Full application/browser/PG lifecycle closure remains UNSEALED; supported GitHub runtime ownership/ELF compatibility not proven; no accepted browser input substitution."
     },
@@ -159,7 +162,9 @@
         "procurement/tools/hosted_synthetic_worker.py",
         "procurement/tools/hosted_synthetic_runtime.py:_enter_projection",
         "procurement/tools/hosted_synthetic_namespace.py",
-        "procurement/tools/hosted_synthetic_identity.py"
+        "procurement/tools/hosted_synthetic_identity.py",
+        "procurement/tools/hosted_synthetic_postgres_identity.py",
+        "procurement/tools/hosted_synthetic_postgres_image.py"
       ],
       "tests": [
         "14 worker registered tests: capability/securebits/NNP/filter, inherited descriptors and control-path refusal",
@@ -168,11 +173,11 @@
       "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
     }
   ],
-  "material_commit": "ad3297ba9c81aefcc80306cdc910322bba98d439",
-  "material_tree": "93abdcb1167ea4af2d55bc21352167de33b9fa7e",
-  "frozen_evidence": "oct27-postgres-phase-frozen-validation.json",
+  "material_commit": "d1b8124b309bd1a436a8da3f6044faa40383c80f",
+  "material_tree": "6f6a2367dea73d9bbc731876448e4b0e3a9258b2",
+  "frozen_evidence": "oct27-postgres-image-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "NOT_RECEIVED_NOT_AUTOMATICALLY_INVOKED",
-  "current_delta": "Fixed postdrop PostgreSQL image ownership, exact role/source/root/loader binding and descriptor cleanup;35 new/263 focused PASS, discovery2467/128. No native execution or stop/ACK wiring."
+  "current_delta": "Nondumpable actual readback driver, sealed PG/Python phase union, fixed reduced-worker native image ownership.903 diagnostics PASS in each interpreter;17/20/88/10 separate groups PASS;18 imports;activation78. Full supported-host suite and live execution NOT_RUN."
 }
