@@ -6,6 +6,9 @@ from dataclasses import replace
 import fcntl
 import hashlib
 import os
+import copy
+from types import SimpleNamespace
+import stat
 from pathlib import Path
 import unittest
 from unittest.mock import patch, Mock
@@ -17,6 +20,20 @@ import hosted_synthetic_source as source
 from test_hosted_synthetic_runtime import elf, fixture_bundle
 
 BINDING=source.HostedSourceBinding('b'*40,'c'*40,(('uv.lock','d'*64),))
+
+
+def repack(value,entries,**changes):
+    """Owned synthetic replacement, never a trusted native input."""
+    fields={name:getattr(value,name) for name in ('generation','executable','source_files','native_files',
+        'source_commit','source_tree','policy','application','postgres')}
+    fields.update(changes)
+    raw=runtime._identity_bytes(fields['generation'],fields['executable'],fields['source_files'],fields['native_files'],
+        fields['source_commit'],fields['source_tree'],policy=fields['policy'],application=fields['application'],postgres=fields['postgres'])
+    regular=[replace(e,content=raw,provenance='audit-source:'+hashlib.sha256(raw).hexdigest())
+             if e.path==runtime._IDENTITY_PATH else e for e in entries if e.kind=='F']
+    bundle=ns.backend._seal_browser_runtime_bundle(ns.backend._complete_browser_runtime_bundle_parents(tuple(regular)))
+    result=runtime.RuntimeBundle(bundle,**fields);result._owner=result;result._token=runtime._TOKEN
+    return result
 
 
 def package():
@@ -291,3 +308,268 @@ class PostgresRuntimeTests(unittest.TestCase):
         with patch.object(pg,'_capture',return_value=result),patch.object(source.signal,'pthread_sigmask',side_effect=[set(),KeyboardInterrupt()]),self.assertRaises(KeyboardInterrupt):
             pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
         result.close.assert_called_once()
+
+
+class PostgresPhaseRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        value=fixture_bundle()
+        try:
+            entries=[replace(e,provenance='audit-source:'+hashlib.sha256(e.content).hexdigest())
+                     if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+            self.diagnostic=repack(value,entries)
+        finally:value.close()
+        self.addCleanup(self.close_owned,self.diagnostic)
+        self.postgres=PostgresRuntimeTests.capture(self)
+        self.addCleanup(self.close_owned,self.postgres)
+
+    @staticmethod
+    def close_owned(value):
+        if getattr(value,'_token',None) is runtime._TOKEN:value.close()
+
+    def compose(self):
+        value=pg._compose_phase(self.diagnostic,self.postgres)
+        self.addCleanup(self.close_owned,value)
+        return value
+
+    def test_sealed_union_keeps_both_exact_inputs_and_one_identity(self):
+        value=self.compose();entries=pg._phase_inventory(value)
+        self.assertEqual(value.policy,runtime.POSTGRES_PHASE_POLICY)
+        self.assertEqual(value.executable,self.diagnostic.executable)
+        self.assertEqual(value.postgres['diagnostic_bundle_sha256'],self.diagnostic.bundle.sha256)
+        self.assertEqual(value.postgres['postgres_bundle_sha256'],self.postgres.bundle.sha256)
+        self.assertEqual(value.postgres['execution'],'NOT_PROVEN')
+        self.assertEqual(value.postgres['credential_release'],'WITHHELD')
+        self.assertEqual({p:e.content for p,e in entries.items() if p in self.postgres.native_files},
+            {e.path:e.content for e in runtime._entries(self.postgres) if e.path in self.postgres.native_files})
+        self.assertEqual(sum(e.path==runtime._IDENTITY_PATH for e in runtime._entries(value)),1)
+        self.assertEqual(sum(e.path=='/proc' for e in runtime._entries(value)),1)
+        self.assertFalse(value.bundle.execution_authority)
+        with self.assertRaises(OSError):os.pwrite(value.bundle.descriptor,b'x',0)
+
+    def test_shared_native_library_requires_complete_entry_equality(self):
+        entry=next(e for e in runtime._entries(self.postgres) if e.path=='/lib64/ld-linux-x86-64.so.2')
+        native=dict(self.diagnostic.native_files,**{entry.path:hashlib.sha256(entry.content).hexdigest()})
+        combined=repack(self.diagnostic,[*runtime._entries(self.diagnostic),entry],native_files=native)
+        try:
+            result=pg._compose_phase(combined,self.postgres)
+            result.close()
+        finally:combined.close()
+
+    def test_conflicting_bytes_mode_or_provenance_refuse_without_seal(self):
+        for changes in ({'content':b'foreign'},{'mode':0o444},{'provenance':'native-runtime:'+'f'*64}):
+            entries=[replace(e,**changes) if e.path==runtime.SENTINEL else e for e in runtime._entries(self.diagnostic)]
+            with self.subTest(changes=changes),patch.object(runtime,'_entries',side_effect=[entries,runtime._entries(self.postgres)]), \
+                 patch.object(ns.backend,'_seal_browser_runtime_bundle') as seal,self.assertRaises(ns.NamespaceProofError):
+                pg._compose_phase(self.diagnostic,self.postgres)
+            seal.assert_not_called()
+
+    def test_source_native_category_collision_refuses(self):
+        entry=next(e for e in runtime._entries(self.postgres) if e.path=='/lib64/ld-linux-x86-64.so.2')
+        changed=repack(self.diagnostic,[*runtime._entries(self.diagnostic),entry],
+            source_files={entry.path:hashlib.sha256(entry.content).hexdigest()})
+        try:
+            with self.assertRaises(ns.NamespaceProofError):pg._compose_phase(changed,self.postgres)
+        finally:changed.close()
+
+    def test_generation_commit_and_tree_mismatch_refuse_before_merge(self):
+        for name,changed in (('generation','d'*64),('source_commit','d'*40),('source_tree','d'*40)):
+            original=getattr(self.postgres,name);setattr(self.postgres,name,changed)
+            try:
+                with patch.object(runtime,'_entries') as entries,self.assertRaises(ns.NamespaceProofError):
+                    pg._compose_phase(self.diagnostic,self.postgres)
+                entries.assert_not_called()
+            finally:setattr(self.postgres,name,original)
+
+    def test_wrong_capture_policy_refuses(self):
+        with self.assertRaises(ns.NamespaceProofError):pg._compose_phase(self.postgres,self.postgres)
+        with self.assertRaises(ns.NamespaceProofError):pg._compose_phase(self.diagnostic,self.diagnostic)
+
+    def test_combined_regular_byte_limit_is_not_sum_of_independent_limits(self):
+        limit=max(self.diagnostic.bundle.regular_bytes,self.postgres.bundle.regular_bytes)
+        with patch.object(runtime,'MAX_BYTES',limit),self.assertRaises(ns.NamespaceProofError):self.compose()
+
+    def test_regenerated_parent_count_is_bounded(self):
+        limit=max(self.diagnostic.bundle.entries,self.postgres.bundle.entries)
+        with patch.object(runtime,'MAX_ENTRIES',limit),self.assertRaises(ns.NamespaceProofError):self.compose()
+
+    def test_phase_resume_preserves_identity_and_closes_owned_fd(self):
+        value=self.compose();packet=value.packet();fd=os.dup(value.bundle.descriptor);packet['bundle']['descriptor']=fd
+        received=pg.receive_postgres_phase(packet)
+        self.assertEqual(received.postgres,value.postgres)
+        self.assertEqual(received.native_files,value.native_files)
+        received.close()
+        with self.assertRaises(OSError):os.fstat(fd)
+
+    def test_phase_policy_is_rejected_by_diagnostic_and_pg_only_entrypoints(self):
+        value=self.compose()
+        for operation in (lambda:runtime.receive_runtime(value.packet()),lambda:pg.receive_postgres(value.packet()),
+                          lambda:runtime.enter_runtime(value),lambda:runtime.verify_consumer(value,{}),
+                          lambda:runtime.verify_report_binding(value,{})):
+            with self.assertRaises(ns.NamespaceProofError):operation()
+        value.verify()
+
+    def test_pg_only_bundle_cannot_claim_phase_runtime(self):
+        with self.assertRaises(ns.NamespaceProofError):pg.receive_postgres_phase(self.postgres.packet())
+        with patch.object(runtime,'_enter_projection') as enter,self.assertRaises(ns.NamespaceProofError):
+            pg.enter_postgres_phase(self.postgres)
+        enter.assert_not_called()
+
+    def test_phase_source_inventory_must_match_pg_capture_source_binding(self):
+        changed=copy.deepcopy(self.postgres.postgres)
+        changed['source_files']['procurement/tools/new.py']='a'*64
+        value=repack(self.postgres,runtime._entries(self.postgres),postgres=changed)
+        try:
+            with self.assertRaises(ns.NamespaceProofError):pg._compose_phase(self.diagnostic,value)
+        finally:value.close()
+
+    def test_phase_projection_requires_actual_mapped_identity_before_effects(self):
+        value=self.compose()
+        with patch.object(ns,'_require_mapped_identity',side_effect=ns.NamespaceProofError('identity')), \
+             patch.object(runtime,'_enter_projection') as enter,self.assertRaises(ns.NamespaceProofError):
+            pg.enter_postgres_phase(value)
+        enter.assert_not_called()
+
+    def test_phase_projection_refuses_existing_children_before_shared_mount_change(self):
+        value=self.compose()
+        with patch.object(ns,'_require_mapped_identity'),patch('hosted_synthetic_cgroup._signal_boundary'), \
+             patch.object(ns,'_read',return_value=b'123 '),patch.object(runtime,'_enter_projection') as enter, \
+             self.assertRaises(ns.NamespaceProofError):pg.enter_postgres_phase(value)
+        enter.assert_not_called()
+
+    def test_phase_report_cannot_be_promoted_to_native_execution_or_diagnostic_scope(self):
+        value=self.compose()
+        proof=dict(policy=value.policy,generation=value.generation,bundle_sha256=value.bundle.sha256,
+            manifest_sha256=value.bundle.manifest_sha256,source_commit=value.source_commit,source_tree=value.source_tree,
+            root_identity=[1,2],root_mount_id=3,regular_bytes=value.bundle.regular_bytes,old_root_detached=True,
+            consumer_exec_verified=True,mapped_elf_files=2,execution_authority=False,
+            scope='HOSTED_POSTGRES_SUPERVISOR_COMPONENT',application_browser_closure='NOT_PROVEN',
+            native_postgres_execution='NOT_PROVEN',mapped_postgres_locale_files=1)
+        pg.verify_postgres_phase_report(value,proof)
+        for changes in ({'native_postgres_execution':'PASS'},{'scope':'HOSTED_DIAGNOSTIC_RUNTIME'},
+                        {'consumer_exec_verified':False},{'source_tree':'e'*40},{'root_mount_id':True},
+                        {'mapped_postgres_locale_files':True},{'mapped_postgres_locale_files':13}):
+            with self.subTest(changes=changes),self.assertRaises(ns.NamespaceProofError):
+                pg.verify_postgres_phase_report(value,dict(proof,**changes))
+
+    def test_captured_libc_locale_maps_are_data_not_elf(self):
+        raw=b'synthetic captured locale';digest=hashlib.sha256(raw).hexdigest()
+        for name in pg._LOCALE:
+            self.assertEqual(runtime._mapped_file_kind(runtime.POSTGRES_PHASE_POLICY,
+                '/usr/lib/locale/C.utf8/'+name,raw,digest,b'r--p',0o444),'LOCALE')
+
+    def test_locale_exception_never_applies_to_other_policies_paths_or_permissions(self):
+        raw=b'locale';digest=hashlib.sha256(raw).hexdigest();path='/usr/lib/locale/C.utf8/LC_CTYPE'
+        for policy,p,perms,mode,d in ((runtime.POLICY,path,b'r--p',0o444,digest),
+                (runtime.APPLICATION_POLICY,path,b'r--p',0o444,digest),
+                (runtime.POSTGRES_PHASE_POLICY,'/etc/passwd',b'r--p',0o444,digest),
+                (runtime.POSTGRES_PHASE_POLICY,path,b'r-xp',0o444,digest),
+                (runtime.POSTGRES_PHASE_POLICY,path,b'rw-p',0o444,digest),
+                (runtime.POSTGRES_PHASE_POLICY,path,b'r--s',0o444,digest),
+                (runtime.POSTGRES_PHASE_POLICY,path,b'r--p',0o644,digest),
+                (runtime.POSTGRES_PHASE_POLICY,path,b'r--p',0o444,'0'*64)):
+            with self.subTest(policy=policy,path=p,perms=perms),self.assertRaises(ns.NamespaceProofError):
+                runtime._mapped_file_kind(policy,p,raw,d,perms,mode)
+
+    def test_phase_locale_metadata_cannot_expand_the_fixed_data_allowlist(self):
+        value=self.compose();metadata=copy.deepcopy(value.postgres)
+        metadata['native_capture']['locale_files'].append('../../etc/passwd')
+        changed=repack(value,runtime._entries(value),postgres=metadata)
+        try:
+            with self.assertRaises(ns.NamespaceProofError):pg._phase_inventory(changed)
+        finally:changed.close()
+
+    def mapped_consumer(self,*,second_locale_permission=b'r--p'):
+        value=self.compose();entries=pg._phase_inventory(value)
+        path='/usr/lib/locale/C.utf8/LC_CTYPE'
+        maps=(b'1000-2000 r-xp 0000 00:01 3 /fixture/python\n'
+              b'2000-3000 r--p 0000 00:01 4 '+path.encode()+b'\n'
+              b'3000-4000 '+second_locale_permission+b' 0000 00:01 4 '+path.encode()+b'\n')
+        observation=dict(policy=value.policy,generation=value.generation,bundle_sha256=value.bundle.sha256,
+            manifest_sha256=value.bundle.manifest_sha256,root_identity=[1,2],root_mount_id=88,
+            regular_bytes=value.bundle.regular_bytes,old_root_detached=True,consumer_exec_verified=False,execution_authority=False)
+        def info(name,**kwargs):
+            return SimpleNamespace(st_dev=1,st_ino=2 if name in ('/','.') else 4 if name==path else 3,
+                st_mode=stat.S_IFREG|(0o444 if name==path else 0o555))
+        with patch.object(runtime,'_entries'),patch.object(runtime.Path,'resolve',return_value=Path(value.executable)), \
+             patch.object(runtime.os,'stat',side_effect=info),patch.object(ns,'_acquire',return_value=Mock(number=777)), \
+             patch.object(ns,'_mount_id',return_value=88), \
+             patch.object(runtime.os,'fstatvfs',return_value=SimpleNamespace(f_flag=os.ST_RDONLY|os.ST_NOSUID|os.ST_NODEV)), \
+             patch.object(ns,'_read',side_effect=lambda p,*_:maps if p=='/proc/self/maps' else entries[p].content):
+            return runtime._verify_consumer(value,observation,(runtime.POSTGRES_PHASE_POLICY,))
+
+    def test_consumer_separates_duplicate_locale_data_from_elf_count(self):
+        proof=self.mapped_consumer()
+        self.assertEqual(proof['mapped_elf_files'],1)
+        self.assertEqual(proof['mapped_postgres_locale_files'],1)
+        self.assertEqual(proof['native_postgres_execution'],'NOT_PROVEN')
+
+    def test_later_mapping_of_same_locale_cannot_add_execute_permission(self):
+        with self.assertRaises(ns.NamespaceProofError):self.mapped_consumer(second_locale_permission=b'r-xp')
+
+    def test_phase_consumer_uses_same_actual_map_checks_with_separate_scope(self):
+        value=self.compose()
+        with patch.object(runtime,'_verify_consumer',return_value={'proof':'component'}) as verify:
+            self.assertEqual(pg.verify_postgres_phase_consumer(value,{'root':'input'}),{'proof':'component'})
+        verify.assert_called_once_with(value,{'root':'input'},(runtime.POSTGRES_PHASE_POLICY,))
+        self.assertEqual(runtime._consumer_scope(value.policy),'HOSTED_POSTGRES_SUPERVISOR_COMPONENT')
+
+    def test_capture_rebinds_source_and_closes_inputs_before_return(self):
+        with patch.object(pg,'_source_identity') as source_read, \
+             patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
+             patch.object(pg,'capture_postgres',return_value=self.postgres):
+            value=pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
+        self.addCleanup(self.close_owned,value)
+        self.assertEqual(source_read.call_count,2)
+        self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
+        value.verify()
+
+    def test_native_capture_failure_closes_diagnostic_input(self):
+        failure=OSError('native')
+        with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
+             patch.object(pg,'capture_postgres',side_effect=failure),self.assertRaises(OSError) as caught:
+            pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
+        self.assertIs(caught.exception,failure);self.assertIsNone(self.diagnostic._token)
+
+    def test_final_source_drift_closes_both_inputs_and_unreturned_output(self):
+        result=Mock();failure=source.HostedSourceError('changed')
+        with patch.object(pg,'_source_identity',side_effect=[None,failure]), \
+             patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
+             patch.object(pg,'capture_postgres',return_value=self.postgres), \
+             patch.object(pg,'_compose_phase',return_value=result),self.assertRaises(source.HostedSourceError) as caught:
+            pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
+        self.assertIs(caught.exception,failure);result.close.assert_called_once()
+        self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
+
+    def test_input_close_failure_still_closes_other_input_and_result(self):
+        result=Mock();close=self.postgres.close;failure=OSError('close')
+        def closed_then_failed():close();raise failure
+        with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
+             patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_compose_phase',return_value=result), \
+             patch.object(self.postgres,'close',side_effect=closed_then_failed),self.assertRaises(ns.NamespaceCleanupError) as caught:
+            pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
+        self.assertIs(caught.exception.__cause__,failure);result.close.assert_called_once()
+        self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
+
+    def test_postseal_constructor_failure_closes_only_new_descriptor(self):
+        allocated=[]
+        def constructor(bundle,*args):allocated.append(bundle.descriptor);raise MemoryError('constructor')
+        with patch.object(runtime,'RuntimeBundle',side_effect=constructor),self.assertRaises(MemoryError):
+            pg._compose_phase(self.diagnostic,self.postgres)
+        self.assertEqual(len(allocated),1)
+        with self.assertRaises(OSError):os.fstat(allocated[0])
+        self.diagnostic.verify();self.postgres.verify()
+
+    def test_pending_cancellation_closes_complete_untransferred_phase(self):
+        result=Mock()
+        with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
+             patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_compose_phase',return_value=result), \
+             patch.object(source.signal,'pthread_sigmask',side_effect=[set(),KeyboardInterrupt()]),self.assertRaises(KeyboardInterrupt):
+            pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
+        result.close.assert_called_once()
+
+    def test_invalid_phase_resume_closes_adopted_descriptor(self):
+        value=self.compose();packet=value.packet();fd=os.dup(value.bundle.descriptor);packet['bundle']['descriptor']=fd
+        with patch.object(pg,'_phase_inventory',side_effect=ns.NamespaceProofError('phase')),self.assertRaises(ns.NamespaceProofError):
+            pg.receive_postgres_phase(packet)
+        with self.assertRaises(OSError):os.fstat(fd)
+        value.verify()

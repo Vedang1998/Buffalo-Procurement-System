@@ -1,0 +1,76 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "cf63f9d2fad660aa9cda1d16217dad3040e35231",
+  "tree": "a4d31e0c01dc67b54ac172bfa2fa8798d0034ef1",
+  "base": "c928fa3a1c3710ad8957e5e499c44e7d42d71879",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "3f18919b9092ba4e2cc722d9d190a9c642854a33f5e10c29ebae3b85e771349e",
+    "docs/CODEX_HANDOFF.md": "8cce4af4cecb9e9ad34ae04539ef122169d2eed5828e6ff7dac888c8db3a6837",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "7c55cf2a20c9d7cccf82f827a2de80cf65ec9e1f818afcff7d22d21b1c360cda",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "ecf4b95a54e85279428a2189e8067230ff9329ee6adebbfd914b4fae28884549",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-discovery.json": "cff203c368eb58af1e93906ceed723992e2a000e0f0a5dfa845992237fdc4875",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-final.txt": "b4429b5c189f0905ca5d9283161a67bbeed235557b4db91396ff73f3317a6efc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-initial.txt": "63bf3fd0eebe99dd7ceb1875e21bbe3b3c155949a757f6ee02cc32f42c0e35d2",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-registered.txt": "d0a80fb35a485c2020620412711f4dda81da11953b802fc271775aad8721f5f2",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-nondumpable-reviewed.txt": "18baf21af69634038d758313b6381699aa7da7baa0936331dd0027db71bccc99",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-frozen-validation.json": "8d461f9a5444f68d7d2059f8a879cf68509e255df67f1b1b2a21b7098eeb08cc",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-postgres-identity-publication.json": "4d282854b08edb3ab8f314bcccdbdc11757e36174bdc644236354c2c930ed427",
+    "procurement/tests/test_hosted_synthetic_cgroup.py": "e4283531f8827ce0429257b52ab43bc5241d35277dbfc12e177ca071f2cf077a",
+    "procurement/tests/test_hosted_synthetic_pid1_regression.py": "fdbad7483d4cf22e793e0fbc0f44f3d682a5cd54df19109594d26e8504121784",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "237bdb61ddac511ec3b616c5e6c31e3575e9efeda6191e1c0229810976582d22",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "69594d1f1f43df019a5a4c9d844db8233782dae3e83fd005375ccd067a08bf1e",
+    "procurement/tests/test_supplier_format_conformance.py": "1c87b7346c3a71fc45ed36e7d78ec2c98b604ec80f2d51f7040a999e2e884aa9",
+    "procurement/tools/hosted_synthetic_cgroup.py": "e873a1db9d50d6c2e87dfbcfe3b3b16207dcc18e107f9c6a12a724ff4ea7adc5",
+    "procurement/tools/hosted_synthetic_pid1_regression.py": "f4a9fdf257d2a18e1961933a04654ffbd9d124cccbb218816b8cbcb76e72c596",
+    "procurement/tools/run_tests.py": "f29dbffe1eb0b9fbc98b5467e692b0f4e9f85716e7e7be50c1da3b4287ce5d37"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 34.258,
+      "sha256": "3bdd5e17977c5fed6554af44d377fe7cf5e894cd3424ba7da17687744e1882f8"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 35.968,
+      "sha256": "26ff1b4cd5b5f492a97a7b52bd666b9db3374e62012127adc400bbab497c4c7a"
+    },
+    "app-price-components": {
+      "returncode": 0,
+      "seconds": 15.661,
+      "sha256": "ccb4304ac781e4fee312c19cdb38774965b49f107e318d28f2dd53135d961c07"
+    },
+    "app-recovery-components": {
+      "returncode": 0,
+      "seconds": 0.265,
+      "sha256": "1ae50aad3c2a83272b2bc48babb7160cf468bfdcb911a1fb45f78250934128db"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.682,
+      "sha256": "9be0ab4c20a552a0cb45cbf3f62e464c5892eb2a89956dbf348262bbb513c384"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.115,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.565,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

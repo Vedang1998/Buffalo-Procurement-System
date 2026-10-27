@@ -194,5 +194,18 @@ class HostedRuntimeTests(unittest.TestCase):
             with self.assertRaises(ns.NamespaceProofError):runtime.verify_consumer(value,proof)
         finally:value.close()
 
+    def test_diagnostic_postseal_constructor_failure_closes_new_descriptor(self):
+        import hosted_synthetic_source as source
+        allocated=[]
+        def constructor(bundle,*args):allocated.append(bundle.descriptor);raise MemoryError('constructor')
+        with tempfile.TemporaryDirectory() as root,patch.object(source,'SOURCE_PATHS',()), \
+             patch.object(runtime,'read_native',return_value=(elf(),0o555)), \
+             patch.object(runtime,'_selected_stdlib',return_value=[]), \
+             patch.object(runtime,'_resolve_library',return_value=('/lib/libc.so.6',elf(),0o555)), \
+             patch.object(runtime,'RuntimeBundle',side_effect=constructor),self.assertRaises(MemoryError):
+            runtime.capture_runtime('a'*64,root,source.HostedSourceBinding('b'*40,'c'*40,()))
+        self.assertEqual(len(allocated),1)
+        with self.assertRaises(OSError):os.fstat(allocated[0])
+
 
 if __name__=='__main__':unittest.main()

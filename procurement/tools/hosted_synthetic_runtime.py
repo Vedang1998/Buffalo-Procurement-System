@@ -27,6 +27,7 @@ import hosted_synthetic_namespace as ns
 POLICY = 'BUFFALO_HOSTED_STDLIB_RUNTIME_V1'
 APPLICATION_POLICY = 'BUFFALO_HOSTED_APPLICATION_RUNTIME_V1'
 POSTGRES_POLICY = 'BUFFALO_HOSTED_POSTGRES_RUNTIME_V1'
+POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V1'
 PROJECTED_ROOT = '/opt/buffalo-hosted'
 PROJECTED_TOOLS = PROJECTED_ROOT + '/procurement/tools'
 SENTINEL = '/buffalo-runtime/sentinel'
@@ -197,12 +198,12 @@ class RuntimeBundle:
 
     def verify(self):
         ns._require(getattr(self,'_owner',None) is self and getattr(self,'_token',None) is _TOKEN
-                    and self.policy in (POLICY,APPLICATION_POLICY,POSTGRES_POLICY)
+                    and self.policy in (POLICY,APPLICATION_POLICY,POSTGRES_POLICY,POSTGRES_PHASE_POLICY)
                     and ((self.policy==POLICY and self.application is None)
                          or (self.policy==APPLICATION_POLICY and type(self.application) is dict)
-                         or (self.policy==POSTGRES_POLICY and self.application is None))
-                    and ((self.policy==POSTGRES_POLICY and type(self.postgres) is dict)
-                         or (self.policy!=POSTGRES_POLICY and self.postgres is None))
+                         or (self.policy in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY) and self.application is None))
+                    and ((self.policy in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY) and type(self.postgres) is dict)
+                         or (self.policy not in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY) and self.postgres is None))
                     and re.fullmatch('[0-9a-f]{64}',self.generation)
                     and re.fullmatch('[0-9a-f]{40}',self.source_commit)
                     and re.fullmatch('[0-9a-f]{40}',self.source_tree))
@@ -274,7 +275,7 @@ def _adopt_runtime(packet,bundle):
     identity=json.loads(identities[0])
     ns._require(type(identity) is dict and set(identity)==({'policy','generation','executable','source_files','native_files','source_commit','source_tree'}
                     | ({'application'} if packet['policy']==APPLICATION_POLICY else
-                       {'postgres'} if packet['policy']==POSTGRES_POLICY else set()))
+                       {'postgres'} if packet['policy'] in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY) else set()))
                 and all(identity[key]==packet[key] for key in ('policy','generation','source_commit','source_tree'))
                 and json.dumps(identity,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')==identities[0])
     result=RuntimeBundle(bundle,packet['generation'],identity['executable'],identity['source_files'],identity['native_files'],
@@ -289,7 +290,7 @@ def _identity_bytes(generation,executable,source,native,commit,tree, *, policy=P
         'source_files':source,'native_files':native,'source_commit':commit,'source_tree':tree}
     if policy==APPLICATION_POLICY:
         ns._require(type(application) is dict and postgres is None);value['application']=application
-    elif policy==POSTGRES_POLICY:
+    elif policy in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY):
         ns._require(type(postgres) is dict and application is None);value['postgres']=postgres
     else:ns._require(policy==POLICY and application is None and postgres is None)
     return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
@@ -349,11 +350,13 @@ def capture_runtime(generation, source_root, binding):
     entries=ns.backend._complete_browser_runtime_bundle_parents(tuple(entries))
     ns._require(len(entries)<=MAX_ENTRIES and sum(len(e.content) for e in entries)<=MAX_BYTES)
     bundle=ns.backend._seal_browser_runtime_bundle(entries)
-    result=RuntimeBundle(bundle,generation,executable,source,native,binding.commit,binding.tree)
-    result._owner=result;result._token=_TOKEN
-    try:result.verify();return result
-    except BaseException:
-        ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode))
+    try:
+        result=RuntimeBundle(bundle,generation,executable,source,native,binding.commit,binding.tree)
+        result._owner=result;result._token=_TOKEN
+        result.verify();return result
+    except BaseException as error:
+        try:ns._require(ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode)))
+        except BaseException:raise ns.NamespaceCleanupError('runtime_capture_cleanup_refused') from error
         raise
 
 
@@ -513,7 +516,28 @@ def projected_images(runtime):
 
 def verify_consumer(runtime, root_observation):
     """Must run after projected exec; old mapped host ELF inodes refuse."""
-    ns._require(runtime.policy in (POLICY,APPLICATION_POLICY))
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+
+
+def _consumer_scope(policy):
+    return {POLICY:'HOSTED_DIAGNOSTIC_RUNTIME',APPLICATION_POLICY:'HOSTED_APPLICATION_IMPORT_COMPONENT',
+            POSTGRES_PHASE_POLICY:'HOSTED_POSTGRES_SUPERVISOR_COMPONENT'}[policy]
+
+
+def _mapped_file_kind(policy,path,data,digest,permissions,mode):
+    ns._require(hashlib.sha256(data).hexdigest()==digest)
+    if data.startswith(b'\x7fELF'):return 'ELF'
+    # PG adds exact libc locale files absent from the diagnostic capture.
+    # glibc may map them during supervisor startup; they are data, not ELF.
+    from hosted_synthetic_postgres_runtime import _LOCALE
+    ns._require(policy==POSTGRES_PHASE_POLICY
+        and path in {'/usr/lib/locale/C.utf8/'+name for name in _LOCALE}
+        and permissions==b'r--p' and mode==0o444)
+    return 'LOCALE'
+
+
+def _verify_consumer(runtime,root_observation,policies):
+    ns._require(runtime.policy in policies)
     _entries(runtime)
     ns._require(type(root_observation) is dict and set(root_observation)=={
                     'policy','generation','bundle_sha256','manifest_sha256','root_identity','root_mount_id',
@@ -541,7 +565,7 @@ def verify_consumer(runtime, root_observation):
                     and flags & os.ST_RDONLY and flags & os.ST_NOSUID and flags & os.ST_NODEV
                     and not flags & os.ST_NOEXEC)
     finally:root.close()
-    allowed=dict(runtime.native_files);mapped=set()
+    allowed=dict(runtime.native_files);mapped=set();locale_mapped=set()
     for line in ns._read('/proc/self/maps').splitlines():
         fields=line.split(maxsplit=5)
         ns._require(len(fields) in (5,6))
@@ -554,9 +578,12 @@ def verify_consumer(runtime, root_observation):
         ns._require(stat.S_ISREG(info.st_mode) and info.st_dev==root_observation['root_identity'][0]
                     and fields[4]==str(info.st_ino).encode()
                     and fields[3]==f'{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}'.encode())
-        if path not in mapped:
+        if path in locale_mapped:
+            ns._require(fields[1]==b'r--p' and stat.S_IMODE(info.st_mode)==0o444)
+        elif path not in mapped:
             data=ns._read(path,MAX_BYTES)
-            ns._require(data.startswith(b'\x7fELF') and hashlib.sha256(data).hexdigest()==allowed[path]);mapped.add(path)
+            kind=_mapped_file_kind(runtime.policy,path,data,allowed[path],fields[1],stat.S_IMODE(info.st_mode))
+            (mapped if kind=='ELF' else locale_mapped).add(path)
     ns._require(runtime.executable in mapped)
     for path,digest in runtime.source_files.items():
         ns._require(hashlib.sha256(ns._read(path,2*1024**2)).hexdigest()==digest)
@@ -565,20 +592,28 @@ def verify_consumer(runtime, root_observation):
             'root_identity':root_observation['root_identity'],'root_mount_id':root_observation['root_mount_id'],
             'regular_bytes':runtime.bundle.regular_bytes,'old_root_detached':True,
             'consumer_exec_verified':True,'mapped_elf_files':len(mapped),'execution_authority':False,
-            'scope':('HOSTED_DIAGNOSTIC_RUNTIME' if runtime.policy==POLICY else 'HOSTED_APPLICATION_IMPORT_COMPONENT'),'application_browser_closure':'NOT_PROVEN'}
+            'scope':_consumer_scope(runtime.policy),'application_browser_closure':'NOT_PROVEN',
+            **({'native_postgres_execution':'NOT_PROVEN','mapped_postgres_locale_files':len(locale_mapped)}
+                if runtime.policy==POSTGRES_PHASE_POLICY else {})}
 
 
 def verify_report_binding(runtime, proof):
     """S retains its exact sealed bundle while comparing G's consumer proof."""
+    return _verify_report_binding(runtime,proof,(POLICY,APPLICATION_POLICY))
+
+
+def _verify_report_binding(runtime,proof,policies):
     runtime.verify()
-    ns._require(runtime.policy in (POLICY,APPLICATION_POLICY))
+    ns._require(runtime.policy in policies)
     ns._require(type(proof) is dict and set(proof)=={
         'policy','generation','bundle_sha256','manifest_sha256','source_commit','source_tree',
         'root_identity','root_mount_id','regular_bytes','old_root_detached','consumer_exec_verified',
-        'mapped_elf_files','execution_authority','scope','application_browser_closure'})
+        'mapped_elf_files','execution_authority','scope','application_browser_closure'}
+        | ({'native_postgres_execution','mapped_postgres_locale_files'} if runtime.policy==POSTGRES_PHASE_POLICY else set()))
     expected={'policy':runtime.policy,'generation':runtime.generation,'bundle_sha256':runtime.bundle.sha256,
         'manifest_sha256':runtime.bundle.manifest_sha256,'source_commit':runtime.source_commit,'source_tree':runtime.source_tree,
-        'regular_bytes':runtime.bundle.regular_bytes,'scope':('HOSTED_DIAGNOSTIC_RUNTIME' if runtime.policy==POLICY else 'HOSTED_APPLICATION_IMPORT_COMPONENT'),'application_browser_closure':'NOT_PROVEN'}
+        'regular_bytes':runtime.bundle.regular_bytes,'scope':_consumer_scope(runtime.policy),'application_browser_closure':'NOT_PROVEN',
+        **({'native_postgres_execution':'NOT_PROVEN'} if runtime.policy==POSTGRES_PHASE_POLICY else {})}
     ns._require(all(proof[key]==value and type(proof[key]) is type(value) for key,value in expected.items())
                 and proof['execution_authority'] is False and proof['old_root_detached'] is True
                 and proof['consumer_exec_verified'] is True
@@ -586,3 +621,7 @@ def verify_report_binding(runtime, proof):
                 and type(proof['root_identity']) is list and len(proof['root_identity'])==2
                 and all(type(value) is int and value>0 for value in proof['root_identity'])
                 and type(proof['root_mount_id']) is int and proof['root_mount_id']>0)
+    if runtime.policy==POSTGRES_PHASE_POLICY:
+        from hosted_synthetic_postgres_runtime import _LOCALE
+        ns._require(type(proof['mapped_postgres_locale_files']) is int
+            and 0<=proof['mapped_postgres_locale_files']<=len(_LOCALE))

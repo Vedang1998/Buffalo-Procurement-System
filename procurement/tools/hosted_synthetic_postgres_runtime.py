@@ -8,6 +8,7 @@ is no CLI, subprocess, credential provider or privileged activation here.
 from __future__ import annotations
 
 import hashlib
+import copy
 import os
 from pathlib import Path
 import re
@@ -229,3 +230,149 @@ def _capture(generation,root,binding):
 def receive_postgres(packet):
     """Reserved phase resume path; never accepted by the diagnostic dispatcher."""
     return runtime._receive_runtime(packet,(runtime.POSTGRES_POLICY,))
+
+
+def capture_postgres_phase(generation,root,binding):
+    """Fixed CPython supervisor + native PG closure, never a payload grant.
+
+    A PG-only root cannot reexec its Python guardian. Compose the two existing
+    authenticated captures without changing inputs or increasing either bound.
+    Keep this policy separate from diagnostic/application dispatch.
+    """
+    result=None
+    @source._resource_operation
+    def guarded():
+        nonlocal result
+        _source_identity(root,binding)
+        diagnostic=None;postgres=None;failure=None;combined=None
+        try:
+            diagnostic=runtime.capture_runtime(generation,root,binding)
+            postgres=capture_postgres(generation,root,binding)
+            combined=_compose_phase(diagnostic,postgres)
+            _source_identity(root,binding)
+        except BaseException as error:failure=error
+        errors=[]
+        for value in (postgres,diagnostic):
+            if value is None:continue
+            try:value.close()
+            except BaseException as error:errors.append(error)
+        if failure is not None or errors:
+            if combined is not None:
+                try:combined.close()
+                except BaseException as error:errors.append(error)
+            if errors:raise ns.NamespaceCleanupError('postgres_phase_capture_cleanup_refused') from (failure or errors[0])
+            raise failure
+        ns._require(combined is not None)
+        result=combined
+        return result
+    try:return guarded()
+    except BaseException as error:
+        if result is not None:
+            try:result.close()
+            except BaseException:raise ns.NamespaceCleanupError('postgres_phase_cancel_cleanup_refused') from error
+        raise
+
+
+def _compose_phase(diagnostic,postgres):
+    """Inputs are borrowed here; capture_postgres_phase owns their cleanup."""
+    diagnostic.verify();postgres.verify()
+    ns._require(diagnostic.policy==runtime.POLICY and postgres.policy==runtime.POSTGRES_POLICY
+        and (diagnostic.generation,diagnostic.source_commit,diagnostic.source_tree)==
+            (postgres.generation,postgres.source_commit,postgres.source_tree)
+        and not postgres.source_files and postgres.executable==BIN+'postgres'
+        and postgres.postgres['executables']==list(EXECUTABLES))
+    entries={};total=0
+    for value in (diagnostic,postgres):
+        for entry in runtime._entries(value):
+            if entry.kind!='F' or entry.path==runtime._IDENTITY_PATH:continue
+            if entry.path in entries:
+                ns._require(entries[entry.path]==entry)
+                continue
+            total+=len(entry.content)
+            ns._require(total<=runtime.MAX_BYTES and len(entries)<runtime.MAX_ENTRIES)
+            entries[entry.path]=entry
+    native=dict(diagnostic.native_files)
+    for path,digest in postgres.native_files.items():
+        ns._require(path not in diagnostic.source_files and (path not in native or native[path]==digest))
+        native[path]=digest
+    metadata={'scope':'POSTGRES_SUPERVISOR_CAPTURE_ONLY','execution':'NOT_PROVEN','credential_release':'WITHHELD',
+        'supervisor_executable':diagnostic.executable,'postgres_executables':list(EXECUTABLES),
+        'diagnostic_bundle_sha256':diagnostic.bundle.sha256,'postgres_bundle_sha256':postgres.bundle.sha256,
+        'native_capture':copy.deepcopy(postgres.postgres)}
+    identity=runtime._identity_bytes(diagnostic.generation,diagnostic.executable,diagnostic.source_files,native,
+        diagnostic.source_commit,diagnostic.source_tree,policy=runtime.POSTGRES_PHASE_POLICY,postgres=metadata)
+    entries[runtime._IDENTITY_PATH]=ns.backend._BrowserRuntimeBundleEntry(path=runtime._IDENTITY_PATH,kind='F',
+        mode=0o444,user_id=0,group_id=0,provenance='audit-source:'+hashlib.sha256(identity).hexdigest(),content=identity)
+    complete=ns.backend._complete_browser_runtime_bundle_parents(tuple(entries.values()))
+    ns._require(len(complete)<=runtime.MAX_ENTRIES and sum(len(e.content) for e in complete)<=runtime.MAX_BYTES)
+    bundle=ns.backend._seal_browser_runtime_bundle(complete)
+    try:
+        result=runtime.RuntimeBundle(bundle,diagnostic.generation,diagnostic.executable,dict(diagnostic.source_files),
+            native,diagnostic.source_commit,diagnostic.source_tree,runtime.POSTGRES_PHASE_POLICY,None,metadata)
+        result._owner=result;result._token=runtime._TOKEN
+        _phase_inventory(result)
+        return result
+    except BaseException as error:
+        try:ns._require(ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode)))
+        except BaseException:raise ns.NamespaceCleanupError('postgres_phase_seal_cleanup_refused') from error
+        raise
+
+
+def _phase_inventory(value):
+    value.verify()
+    ns._require(value.policy==runtime.POSTGRES_PHASE_POLICY)
+    metadata=value.postgres
+    ns._require(set(metadata)=={'scope','execution','credential_release','supervisor_executable','postgres_executables',
+        'diagnostic_bundle_sha256','postgres_bundle_sha256','native_capture'}
+        and metadata['scope']=='POSTGRES_SUPERVISOR_CAPTURE_ONLY' and metadata['execution']=='NOT_PROVEN'
+        and metadata['credential_release']=='WITHHELD' and metadata['supervisor_executable']==value.executable
+        and metadata['postgres_executables']==list(EXECUTABLES)
+        and type(metadata['native_capture']) is dict and metadata['native_capture']['executables']==list(EXECUTABLES)
+        and metadata['native_capture']['locale_files']==list(_LOCALE)
+        and all(type(metadata[name]) is str and re.fullmatch('[0-9a-f]{64}',metadata[name])
+            for name in ('diagnostic_bundle_sha256','postgres_bundle_sha256')))
+    entries={e.path:e for e in runtime._entries(value)}
+    ns._require(all('/usr/lib/locale/C.utf8/'+name in value.native_files
+        and entries['/usr/lib/locale/C.utf8/'+name].mode==0o444 for name in _LOCALE))
+    ns._require(value.executable not in EXECUTABLES)
+    expected_source={runtime.PROJECTED_ROOT+'/'+p:digest for p,digest in metadata['native_capture']['source_files'].items()
+                     if p.endswith('.py')}
+    ns._require(expected_source==value.source_files)
+    for path in (value.executable,*EXECUTABLES):
+        ns._require(path in value.native_files and entries[path].mode==0o555
+            and runtime.parse_elf(entries[path].content)['interpreter'] in value.native_files)
+    return entries
+
+
+def receive_postgres_phase(packet):
+    value=runtime._receive_runtime(packet,(runtime.POSTGRES_PHASE_POLICY,))
+    try:_phase_inventory(value);return value
+    except BaseException as error:
+        try:value.close()
+        except BaseException:raise ns.NamespaceCleanupError('postgres_phase_resume_cleanup_refused') from error
+        raise
+
+
+def enter_postgres_phase(value):
+    """For the already bound private-mount U1 guardian before I/W exist.
+
+    Caller must retain the parent handshake and original/current namespace
+    proof. These local entry checks alone do not prove exclusive mount use.
+    No activation or standalone launcher authority is supplied here.
+    """
+    _phase_inventory(value);ns._require_mapped_identity()
+    from hosted_synthetic_cgroup import _signal_boundary
+    _signal_boundary()
+    ns._require(os.getpid()>1 and ns._read(f'/proc/self/task/{os.getpid()}/children',4096)==b'')
+    return runtime._enter_projection(value)
+
+
+def verify_postgres_phase_consumer(value,root_observation):
+    """Actual projected CPython/maps proof, not PostgreSQL execution proof."""
+    _phase_inventory(value)
+    return runtime._verify_consumer(value,root_observation,(runtime.POSTGRES_PHASE_POLICY,))
+
+
+def verify_postgres_phase_report(value,proof):
+    _phase_inventory(value)
+    return runtime._verify_report_binding(value,proof,(runtime.POSTGRES_PHASE_POLICY,))

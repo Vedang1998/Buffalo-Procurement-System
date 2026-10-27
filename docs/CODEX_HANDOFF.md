@@ -11,6 +11,56 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-27 combined PostgreSQL phase closure — continuing
+
+Published `cf63f9d2fad660aa9cda1d16217dad3040e35231`, tree
+`a4d31e0c01dc67b54ac172bfa2fa8798d0034ef1`, passed839 diagnostic tests normally
+and separately under scrubbed -I -S,17 price,20 snapshot,88 related,10 startup,
+18 imports and inert78. Ordinary branch-only publication scanned29 new objects
+without private-metadata/high-confidence secret hits; fresh fetch verified exact
+commit/tree and protected refs unchanged. Both new real nondumpable readback cases
+remain NOT_RUN; the116 focused simulations did not execute them.
+
+The next descendant composes the existing sealed Python/stdlib/TCB capture and
+fixed native PostgreSQL capture into a distinct POSTGRES_PHASE_POLICY. It preserves
+the same generation/source/tree, rejects conflicting bytes/mode/provenance and
+source/native overlaps, regenerates one identity/parent tree and preserves both
+input bundle hashes. Python remains the coordinator executable; PG roles remain
+separate metadata. The existing80MiB/3000-entry bounds are unchanged. Both inputs
+and any unreturned output close on body, cleanup or pending-cancellation failure.
+Internal review found/repaired allocation-dependent ownership registration and a
+reused diagnostic post-seal constructor leak; a real memfd failure test covers it.
+
+Dedicated phase receive/projection/consumer/report APIs reuse the existing sealed
+root and actual inode/hash/maps checks. Existing diagnostic, application and PG-only
+entrypoints reject the new policy. The actual guardian must still supply private
+mount/parent/generation bindings before projection; local no-child checks alone
+are not ownership or activation authority. The coordinator proof explicitly keeps
+native PostgreSQL execution NOT_PROVEN. Internal review also identified libc locale
+mappings introduced by PG's captured locale data. Only the exact fixed C.utf8 list
+may be non-ELF, with captured inode/device/hash and444/r--p checks on every mapping;
+ELF and locale counts stay separate. Existing diagnostic/app map rules are unchanged.
+
+176 focused tests passed. The initial59 run had one failing test's overly broad
+close-call count (it counted the sealer's internal descriptor too); repaired evidence
+checks the exact allocated result FD is closed and both borrowed inputs survive.
+Raw failed and repaired results are retained. Discovery2432/127, diagnostic868;
+all floors increase. No actual PG capture, phase projection, native binary, host
+privilege, account/service, database or credentials were used. Actual target fit
+under80MiB and whole-service peak remain NOT_PROVEN; do not trim dependencies or
+increase limits if the combined native target refuses.
+
+Next executable implementation: the owned, fixed PG --version child path beneath
+this projected phase init, with sealed role/image identity after U2 drop, retained
+pidfd/start and parent-death binding, ARMED → actual parent stop → exact EXEC ACK
+before resume, fixed env/argv, bounded output and owned exit/FD cleanup. Keep I+W
+inside existing pids2 and256MiB, enclosing512MiB/64; a postmaster is a later phase.
+Actual delegated worker exclusion, external lifecycle and accepted browser closure
+remain OPEN. Six other findings remain pending actual Claude review; none closed
+by Codex. Privileged activation and credential release stay disabled. Full supported
+suite and browser/BackupV2/APPLY/DRAFT/restart/restore remain NOT_RUN/NON-GREEN.
+
+
 ### 2026-10-27 actual stopped-namespace readback regression — continuing
 
 Published `c928fa3a1c3710ad8957e5e499c44e7d42d71879`, tree

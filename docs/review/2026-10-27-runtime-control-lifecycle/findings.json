@@ -168,11 +168,11 @@
       "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
     }
   ],
-  "material_commit": "c928fa3a1c3710ad8957e5e499c44e7d42d71879",
-  "material_tree": "926523ed008142bebb7e88dc22d95a5bede2b977",
-  "frozen_evidence": "oct27-postgres-identity-frozen-validation.json",
+  "material_commit": "cf63f9d2fad660aa9cda1d16217dad3040e35231",
+  "material_tree": "a4d31e0c01dc67b54ac172bfa2fa8798d0034ef1",
+  "frozen_evidence": "oct27-nondumpable-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "NOT_RECEIVED_NOT_AUTOMATICALLY_INVOKED",
-  "current_delta": "Shared actual S-side stopped-init identity readback; real reexec/fork-only driver cases NOT_RUN;116 focused driver/kernel-boundary simulations PASS; discovery2403/127."
+  "current_delta": "Combined fixed PG/Python phase closure with separate policy, exact-source sealed union, dedicated projection/consumer APIs, phase-only immutable locale mapping validation, ownership failure repairs.176 focused PASS; discovery2432/127. Actual native capture/phase execution NOT_RUN."
 }
