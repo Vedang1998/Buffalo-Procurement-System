@@ -55,8 +55,25 @@ def _finish_capture(base,result,error):
     return result
 
 
-@source._resource_operation
 def capture_application(generation,root,binding,cache):
+    # Restoring the caller's signal mask may deliver cancellation after the
+    # operation returned an owned bundle. Until this wrapper returns, ownership
+    # remains here and must be disposed even on that restoration failure.
+    result=None
+    @source._resource_operation
+    def guarded():
+        nonlocal result
+        result=_capture_application(generation,root,binding,cache)
+        return result
+    try:return guarded()
+    except BaseException as error:
+        if result is not None:
+            try:result.close()
+            except BaseException:error.add_note('application_cancelled_bundle_cleanup_failed')
+        raise
+
+
+def _capture_application(generation,root,binding,cache):
     ns._require(sys.version_info[:2]==(3,13) and not sysconfig.get_config_var('Py_GIL_DISABLED'))
     root=Path(root).resolve(strict=True)
     lock=source._file_bytes(root,'uv.lock',b'100644')

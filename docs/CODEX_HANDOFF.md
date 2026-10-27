@@ -10,6 +10,24 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 application kernel component and cancellation repair
+
+Frozen `afd6ecad4c54490d99804c23f16b53913772fdc9`, tree
+`39b631e1adfe6374a87ac4f2ae79f0e7c4f8c2e2`, passed401 hosted,88 related,
+10 startup and18 imports. Its explicit application kernel component passed all
+three cases: sealed current-application imports/native calls and two required
+refusals (missing New York timezone and private wheel libpq). The projected root
+contained81,828,848 bytes under the unchanged80MiB limit;51 mapped ELF files were
+verified after imports. No server/lifespan/DB/browser ran. The host identity,
+groups, cgroup and actual worker-entry gates were deliberately NOT_TESTED.
+
+A further internal review found pending cancellation during signal-mask restoration
+could strand the completed bundle. The ownership-aware wrapper now closes it and
+the new deterministic failure test passes. Discovery floor becomes1929/107 modules;
+402 hosted tests are registered. This repair and subsequent evidence need review.
+The executable external lifecycle fault driver is still missing; continuing its
+implementation is authorized while actual privileged activation remains disabled.
+
 ### 2026-10-27 original-wheel application closure — implementation, NON-GREEN
 
 Verified published observer material: `b78e3ee69fcd1a841926fba5a377d7ef116d2af7`,

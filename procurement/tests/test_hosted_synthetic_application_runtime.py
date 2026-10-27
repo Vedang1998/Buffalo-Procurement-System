@@ -124,3 +124,10 @@ class ApplicationRuntimeTests(unittest.TestCase):
         base=Mock();result=Mock()
         self.assertIs(app._finish_capture(base,result,None),result)
         base.close.assert_called_once();result.close.assert_not_called()
+
+    def test_pending_cancellation_on_signal_restore_closes_untransferred_bundle(self):
+        from unittest.mock import Mock
+        result=Mock()
+        with patch.object(app,'_capture_application',return_value=result),patch.object(source.signal,'pthread_sigmask',side_effect=[set(),KeyboardInterrupt()]),self.assertRaises(KeyboardInterrupt):
+            app.capture_application('a'*64,Path('/fixture'),None,None)
+        result.close.assert_called_once()
