@@ -10,6 +10,37 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 packet owner decisions, exclusions and readiness — continuing
+
+Published `614071f6f4da1976201622b5b310ef13052f0444`, tree
+`563820a8810efb735550933f86997eb692b31643`, passed599 hosted tests both normally
+and independently under scrubbed -I -S. These are repeated executions of one
+population. Related88, startup10 and imports18 passed; activation exited78.
+Discovery2126/116 is not execution. Ordinary branch-only publication scanned35
+objects without private-metadata/high-confidence secret hits, and fresh fetch
+verified source identities; protected refs were unchanged.
+
+The next dormant packet validator binds four owner decisions to observed
+recommendation/offer identities and actual exported CSV economics, calculated
+inventory/days supply, two preserved OPEN exceptions with exact RUN_ONLY owner
+acknowledgements, and vendor/DRAFT/Variant readiness. It runs the actual scoped
+readiness predicate over strictly typed frozen gates; WARN and unrelated scoped
+FAIL retain the application's semantics. Unexpected material confirmations,
+missing gates, wrong actors/scopes, changed global rules or missing final tiers
+refuse. These are evidence checks, not current database readiness or PO authority.
+
+Internal read-only review found and the writer repaired a flat-versus-nested
+forecast field mismatch, unchecked rejected-item stock/incoming and Python
+boolean/integer equality in nested evidence. Twenty-one tests use the actual
+review CSV renderer and readiness predicate.
+The result remains PACKET_REVIEW_READINESS_COMPONENT_ONLY. Forecast/need and
+source-offer authority still require separate reconciliation, and registry
+expectations still require an authenticated same-generation source. Continue
+those components and restart/restore; no integrated or external-review PASS.
+Registration becomes2147/117; focused hosted620. Frozen test results retain their
+own source identities. Six findings remain pending independent review, three
+OPEN. Privileged activation and credential release remain disabled.
+
 ### 2026-10-27 packet identity and economics — continuing
 
 Published `08edc886020dcb23379df46e9ecd32cce3bbfa73`, tree

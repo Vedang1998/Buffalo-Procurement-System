@@ -52,6 +52,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_download.py": 18,
     "test_hosted_synthetic_artifacts.py": 23,
     "test_hosted_synthetic_packet_controls.py": 23,
+    "test_hosted_synthetic_packet_evidence.py": 21,
     "test_hosted_synthetic_capability.py": 33,
     "test_hosted_synthetic_cgroup.py": 35,
     "test_hosted_synthetic_enrollment.py": 17,

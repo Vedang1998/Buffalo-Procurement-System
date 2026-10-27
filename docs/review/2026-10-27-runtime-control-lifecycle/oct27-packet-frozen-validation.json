@@ -1,0 +1,75 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "614071f6f4da1976201622b5b310ef13052f0444",
+  "tree": "563820a8810efb735550933f86997eb692b31643",
+  "base": "08edc886020dcb23379df46e9ecd32cce3bbfa73",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "7b5e4337bcad044047b497f1cb37a0162402eb24032d539865cf58bc40b3fe07",
+    "docs/CODEX_HANDOFF.md": "59fe0ed616ec227ea2cc3c0296676fcbbd993fbf5f8561fc678c95d6402ad1af",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "5a47b1c3dbd366dbb480404d718032958af1965021a85ee6d8b12a72d8b664bd",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "68079f9ab2fb607ea8757fa36771d500cf755c8e87b5647a5d5854898cd61350",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "a511e85cb058c963b018ada01e192a335841dd54b68cd415db6aadb843ee8c31",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-causal.txt": "05dc87b6d12fb0a2fdde8624d7c846002d4ca24114c3bc505107a6e1ddc69f03",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-discovery.json": "820193eb07e8f2b99e5a4fe7fbb817de3b6178530c7223fed97aad4e0247a149",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-first.txt": "25d1cf4c289eec6adfb536a32f6aa43ba041f9ccda387660f7f999522562e4ac",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-focused.txt": "ed56ba8d79a99c2e9a8813725cc609b0e3cb0c4efda1bf6e85036f48c3b57c7c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-hosted.txt": "09b6e7f6c00f6e466730985c3809e134185b90159173ae11687262ab7f3e98e0",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-isolated.txt": "66b37c9d4136cc2c722f24f27f8876145a5d7d397895426def35ec779372f251",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-related.txt": "9be9b30baaf5ab21503f7f8c4e018d4e28bb0311b0d34635df4a086edac3893e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-startup.txt": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-frozen-validation.json": "10d6f323c7a44b791768a42b5612497a10888244c86473dfdef7bda11ea54fdd",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-publication.json": "992b561e62e74e258d492b13f40d65edda16fa6329e2bad46493f6b79bbcaa28",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-artifacts-signal-repair.txt": "3fb8be6de6b7c5a2be55e6f65fa64aa368dc9ece6b6597f10664c67dc0dd361c",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "f45e13bce2c9105919a8eea90cc2370343927278ad941d6b17d6f0307161ecb5",
+    "procurement/tests/hosted_review_step_fixture.mjs": "6f7e1d7960b450c3f847b573b5d63aeff58c04d81a0d2d97542b6a1505addc1a",
+    "procurement/tests/test_hosted_synthetic_packet_controls.py": "94de5a3f28740c8861361c81206043fc42aeb52c335e9035a2945615046091de",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "af6219b043c5e089656fdbb158181994c829e57a655b3a695a99a749b4744e81",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "a36685f1990a2336dcc1da7a0e64845f82c91f1b2ee80a395fe4be8f002d047a",
+    "procurement/tests/test_supplier_format_conformance.py": "5b24050f60ffe792cb8aa59d49003d0e90b8cafd8e8095f49c7a53c18dcd667a",
+    "procurement/tools/hosted_synthetic_packet_controls.py": "d45a5b97ea63812c907d065930015143e0c8e4d45c30896902538aa6a387413b",
+    "procurement/tools/hosted_synthetic_review_step.mjs": "69eb327fdfd093ae40c97087b78d64fb1b1ebf1e74a6a43080fe686abd9ce56a",
+    "procurement/tools/hosted_synthetic_source.py": "c40e690c40b76801c975945fd34124573878e9caea9d54c6b04446db1ea76f58",
+    "procurement/tools/run_tests.py": "ab4be657b52e61bc85279175704c065db53c3d4760047a2ea631046fad7c4ba9"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 25.879,
+      "sha256": "58d97edf77ba6d9be8da0b3f41c075d0bdca3f69de30beac2a788d6ccfa83680"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 24.068,
+      "sha256": "e4bcff66ad03784a304c899430ab48c862c71c596282cf23c45518350bc5a4a3"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.482,
+      "sha256": "5c65a045e118a7a4eaa0c5eaa829d29145b5e44b1e7759cf37270b5f1c622313"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.115,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.567,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.114,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}
