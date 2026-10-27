@@ -123,7 +123,7 @@ export async function runStagingReviewDraftStep(page,supplied) {
  requireValue(built.drafts.length===2 && built.reviews.length===0 && built.blockers.length===0 && built.artifacts.length===3);
  const titles=built.drafts.map(x=>x.title).sort();
  requireValue(same(titles,['Synthetic Southern — DRAFT','Synthetic Western Acceptance — DRAFT']));
- const draftIds=new Set();
+ const draftIds=new Set(),draftBindings=[];
  for(const draft of built.drafts){
    const southern=draft.title==='Synthetic Southern — DRAFT';
    requireValue(same(draft.rows.map(r=>r[0]).sort(),southern?['1001']:['4001','4002']));
@@ -134,6 +134,7 @@ export async function runStagingReviewDraftStep(page,supplied) {
    requireValue(summary && UUID.test(summary[1]) && !draftIds.has(summary[1]) && same(summary.slice(2,7).map(x=>dollar('$'+x)),southern?[18000,0,0,0,18000]:[10200,0,700,700,10900]) &&
      decimalCents(summary[7])===(southern?0:1800) && summary[8]===(southern?'NOT_APPLICABLE':'PAY_FEE') && summary[9]===b.principal_ref);
    draftIds.add(summary[1]);
+   draftBindings.push({vendor_id:southern?b.vendors.southern:b.vendors.western,draft_po_id:summary[1]});
  }
  const lines=built.drafts.flatMap(d=>d.rows);requireValue(lines.length===3);
  const seen=new Set();
@@ -153,6 +154,6 @@ export async function runStagingReviewDraftStep(page,supplied) {
  requireValue(artifactKinds.size===0);
  return {contract:'BUFFALO_STAGING_REVIEW_DRAFT_STEP_OBSERVATION_V1',commit:b.commit,tree:b.tree,run_id:b.run_id,
    preparation_proof_sha256:b.preparation_proof_sha256,decisions,draft_preview_fingerprint:buildForm.fields.draft_preview_fingerprint,
-   artifacts:built.artifacts,draft_ids:[...draftIds].sort(),observed_controls:{drafts:2,lines:3,merchandise_cents:28200,fee_cents:700,total_cents:28900},
+   artifacts:built.artifacts,draft_ids:[...draftIds].sort(),draft_bindings:draftBindings.sort((a,b)=>a.vendor_id.localeCompare(b.vendor_id)),observed_controls:{drafts:2,lines:3,merchandise_cents:28200,fee_cents:700,total_cents:28900},
    packet_members:'NOT_DOWNLOADED_OR_VALIDATED',restart_restore:'NOT_RUN',scope:'REVIEW_DRAFT_DOM_COMPONENT_ONLY',commercial_authority:false,execution_authority:false};
 }

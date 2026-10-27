@@ -162,9 +162,9 @@
       "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
     }
   ],
-  "material_commit": "81a89374f30f2ad980f2ed08538b522a583035ac",
-  "material_tree": "b16bb7823ecf327be42aa26e5d133b9e8a3adf2b",
-  "frozen_evidence": "oct27-download-frozen-validation.json",
+  "material_commit": "08edc886020dcb23379df46e9ecd32cce3bbfa73",
+  "material_tree": "d2952d65d99b32fac1830e610bbff66af4b98d4a",
+  "frozen_evidence": "oct27-artifacts-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "NOT_RECEIVED_NOT_AUTOMATICALLY_INVOKED"

@@ -1,15 +1,15 @@
 {
   "README.md": {
-    "bytes": 15415,
-    "sha256": "4373005ed7be3a0885342e1f30c42fb71aa46bbdc43fcc9cfb8e8e741d5c43b9"
+    "bytes": 15410,
+    "sha256": "5a47b1c3dbd366dbb480404d718032958af1965021a85ee6d8b12a72d8b664bd"
   },
   "cloud-setup-status.json": {
     "bytes": 1005,
     "sha256": "3a88eea49106e3fbeb8f63d467bf22be3180268429c44e8611edec9860018d06"
   },
   "findings.json": {
-    "bytes": 8844,
-    "sha256": "8592260eec9ffccd2810ed5a2eaf7d24200d83f43480b6c588814e2698cde52e"
+    "bytes": 8845,
+    "sha256": "68079f9ab2fb607ea8757fa36771d500cf755c8e87b5647a5d5854898cd61350"
   },
   "oct27-application-cancellation.txt": {
     "bytes": 2767,
@@ -86,6 +86,58 @@
   "oct27-apply-step-reviewed.txt": {
     "bytes": 2826,
     "sha256": "baca89518e4a6624dfa5ba5bdd89bbd10c87546c428330684c8ebb2aecbfc610"
+  },
+  "oct27-artifacts-causal.txt": {
+    "bytes": 3637,
+    "sha256": "05dc87b6d12fb0a2fdde8624d7c846002d4ca24114c3bc505107a6e1ddc69f03"
+  },
+  "oct27-artifacts-discovery.json": {
+    "bytes": 146,
+    "sha256": "820193eb07e8f2b99e5a4fe7fbb817de3b6178530c7223fed97aad4e0247a149"
+  },
+  "oct27-artifacts-first.txt": {
+    "bytes": 1539,
+    "sha256": "25d1cf4c289eec6adfb536a32f6aa43ba041f9ccda387660f7f999522562e4ac"
+  },
+  "oct27-artifacts-focused.txt": {
+    "bytes": 13631,
+    "sha256": "ed56ba8d79a99c2e9a8813725cc609b0e3cb0c4efda1bf6e85036f48c3b57c7c"
+  },
+  "oct27-artifacts-frozen-hosted.txt": {
+    "bytes": 102458,
+    "sha256": "09b6e7f6c00f6e466730985c3809e134185b90159173ae11687262ab7f3e98e0"
+  },
+  "oct27-artifacts-frozen-imports.txt": {
+    "bytes": 189,
+    "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+  },
+  "oct27-artifacts-frozen-inert-gate.txt": {
+    "bytes": 95,
+    "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+  },
+  "oct27-artifacts-frozen-isolated.txt": {
+    "bytes": 102458,
+    "sha256": "66b37c9d4136cc2c722f24f27f8876145a5d7d397895426def35ec779372f251"
+  },
+  "oct27-artifacts-frozen-related.txt": {
+    "bytes": 17284,
+    "sha256": "9be9b30baaf5ab21503f7f8c4e018d4e28bb0311b0d34635df4a086edac3893e"
+  },
+  "oct27-artifacts-frozen-startup.txt": {
+    "bytes": 2041,
+    "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+  },
+  "oct27-artifacts-frozen-validation.json": {
+    "bytes": 6572,
+    "sha256": "10d6f323c7a44b791768a42b5612497a10888244c86473dfdef7bda11ea54fdd"
+  },
+  "oct27-artifacts-publication.json": {
+    "bytes": 976,
+    "sha256": "992b561e62e74e258d492b13f40d65edda16fa6329e2bad46493f6b79bbcaa28"
+  },
+  "oct27-artifacts-signal-repair.txt": {
+    "bytes": 4190,
+    "sha256": "3fb8be6de6b7c5a2be55e6f65fa64aa368dc9ece6b6597f10664c67dc0dd361c"
   },
   "oct27-download-discovery.json": {
     "bytes": 146,
@@ -504,7 +556,7 @@
     "sha256": "6be834cdcda7e9c99aee62c3a1a6209fd9eef8c8d7842e302ac2352a67ecc4cc"
   },
   "source-and-status.json": {
-    "bytes": 3497,
-    "sha256": "a10d510025a28e548006ffd093dca36aeee13200755b94400843d9e3ac567201"
+    "bytes": 3648,
+    "sha256": "f45e13bce2c9105919a8eea90cc2370343927278ad941d6b17d6f0307161ecb5"
   }
 }

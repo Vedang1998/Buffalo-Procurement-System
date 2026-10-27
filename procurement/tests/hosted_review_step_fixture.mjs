@@ -157,6 +157,8 @@ try{result=await runStagingReviewDraftStep(page,b);}catch(e){if(e.name==='Assert
 assert.equal(guard,null);assert.equal(armed,closed);
 if(scenario==='success'){
  assert.equal(error,undefined);assert.equal(posts.length,11);assert.equal(result.observed_controls.total_cents,28900);
+ assert.deepEqual(result.draft_bindings.map(x=>x.vendor_id).sort(),Object.values(b.vendors).sort());
+ assert.deepEqual(result.draft_bindings.map(x=>x.draft_po_id).sort(),result.draft_ids);
  assert.equal(result.packet_members,'NOT_DOWNLOADED_OR_VALIDATED');assert.equal(result.execution_authority,false);assert(!JSON.stringify(result).includes(token));
 }else{
  assert(error,scenario+' did not refuse');assert(faultReached,scenario+' fault not reached');

@@ -1,6 +1,6 @@
 {
-  "material_commit": "81a89374f30f2ad980f2ed08538b522a583035ac",
-  "material_tree": "b16bb7823ecf327be42aa26e5d133b9e8a3adf2b",
+  "material_commit": "08edc886020dcb23379df46e9ecd32cce3bbfa73",
+  "material_tree": "d2952d65d99b32fac1830e610bbff66af4b98d4a",
   "source_history": [
     {
       "commit": "8842a9b7ec77619134af9881a814dd88f4ca004d",
@@ -53,6 +53,10 @@
     {
       "commit": "81a89374f30f2ad980f2ed08538b522a583035ac",
       "tree": "b16bb7823ecf327be42aa26e5d133b9e8a3adf2b"
+    },
+    {
+      "commit": "08edc886020dcb23379df46e9ecd32cce3bbfa73",
+      "tree": "d2952d65d99b32fac1830e610bbff66af4b98d4a"
     }
   ],
   "original_published_lineage_preserved": true,
@@ -96,8 +100,8 @@
     "accounting": "Class setup error events are additional to executed-method accounting; not a disjoint seven-error method total."
   },
   "independent_implementation_remaining": [
-    "bounded byte ingress/framing tested on descendant",
-    "packet semantic/observed-identity reconciliation",
+    "packet identity/economics tested on descendant",
+    "full packet forecast/need/readiness and decision-evidence reconciliation",
     "restart/restore composition"
   ]
 }

@@ -10,6 +10,40 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-27 packet identity and economics — continuing
+
+Published `08edc886020dcb23379df46e9ecd32cce3bbfa73`, tree
+`d2952d65d99b32fac1830e610bbff66af4b98d4a`, passed all 576 hosted tests in both
+normal and independently scrubbed -I -S environments. These are two executions of
+the same population. Related88, startup10 and imports18 passed; activation exited78.
+Discovery was 2,103 / 115 modules, not execution. Ordinary branch-only publication
+scanned43 objects with zero private-metadata/high-confidence secret hits, fresh
+fetch matched, and protected refs remained unchanged.
+
+The browser review observation now retains its actual vendor-to-DRAFT UUID pairing.
+The next dormant validator binds original preparation JSON bytes to the digest
+consumed by review, exact source/run/principal, registered artifact identities and
+observed links/sizes. Each vendor CSV must equal its own embedded packet member;
+unique Variant rows, SKU, physical/qualifying packs, reviewed DRAFT identity,
+fees/minimum disposition, actor, preview, capture source/date/UTC instant/location
+and quantities reconcile. Its cash totals and counts derive from validated rows
+and vendor economics, checked against two DRAFTs / three lines /14 members and
+$282+$7=$289. Whole-manifest hashing binds the frozen context to preparation.
+
+Internal read-only review found and the writer repaired missing frozen vendor/pack
+and capture-date continuity, a noncausal duplicate-key negative and UTC-normalization
+compatibility. Actual API CSV/ZIP renderers produce component fixtures; these are
+not executed workflow outputs. The new module has23 tests;46 packet/review tests
+passed after final repairs. Registration becomes2,126 /116; focused hosted599.
+Frozen results must retain their own source identity.
+
+The result explicitly remains PACKET_IDENTITY_ECONOMICS_COMPONENT_ONLY. It does
+not establish database-registry authenticity, full forecast/need/readiness,
+review-decision/exclusion evidence, restart or restore. Continue those independent
+components and composition; do not mark integrated acceptance complete. Six
+external findings remain pending review and three OPEN. No independent Claude
+re-review or live privilege/credential/browser execution has occurred.
+
 ### 2026-10-27 bounded artifact ingress and isolated diagnostics — continuing
 
 Published `81a89374f30f2ad980f2ed08538b522a583035ac`, tree

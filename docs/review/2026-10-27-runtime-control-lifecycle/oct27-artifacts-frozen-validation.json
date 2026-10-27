@@ -1,0 +1,83 @@
+{
+  "diagnostic_node": {
+    "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "version": "v24.19.0",
+    "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+  },
+  "commit": "08edc886020dcb23379df46e9ecd32cce3bbfa73",
+  "tree": "d2952d65d99b32fac1830e610bbff66af4b98d4a",
+  "base": "81a89374f30f2ad980f2ed08538b522a583035ac",
+  "files": {
+    ".github/workflows/hosted-synthetic-acceptance.yml": "3edfe054252dfd849afc9839666dabcba8e97b1c0623a504fb31fc0708b10e7a",
+    "docs/CODEX_HANDOFF.md": "f3cc24fecdbc253c7772442ad2622cffa7fce66849c446d6cec614bc8dfdc9d6",
+    "docs/review/2026-10-27-runtime-control-lifecycle/README.md": "4373005ed7be3a0885342e1f30c42fb71aa46bbdc43fcc9cfb8e8e741d5c43b9",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "8592260eec9ffccd2810ed5a2eaf7d24200d83f43480b6c588814e2698cde52e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/manifest.json": "3c68427e6780a9b8b08600e3c85995d042136ac619385f063e2a0a414bef65cf",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-discovery.json": "ec7c7af4c2b98d39afdfe1b75d042e5500499bc5271eb7773b76d7ca532ce108",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-first.txt": "7b3a45b942703fc6c4e66986adbaba16970b6b17f871f40347b8ab99d141d4df",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-frozen-hosted.txt": "4db7b2be6fe2dbd6fed6539a1efbd6cb2e5017be24a9218b9b0b88828fc224b9",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-frozen-imports.txt": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-frozen-inert-gate.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-frozen-related.txt": "96c6a94ffa45fc6e33c65f932ed0c17969ff3314ff5d22d8ca4e71619f0df2b4",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-frozen-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-frozen-validation.json": "d6ebe9227e97d48ce6a1897d59be41324f34ee77c5990942014d02216e56768e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-generation.txt": "f90230958fc84cf048fd95e88e86f38fe571d882fe29ef29f21ca9bba6e7d816",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-isolated-explicit-node.txt": "1bf29d8ccd5929b15e161f68faa58c4fc9b86ad5a11ce74d171955d64c4e2241",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-isolated-first.txt": "ad855bbf739db2316a11ff327cc47b0c3ebdd2aeddbe316d77eee9a4d985a50d",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-isolated-repaired.txt": "b8e42ba20df895326f1c5568df3dfbf9c8199fb46936d6f911d9745098b40c91",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-publication.json": "1d31e2a9e26e755fd0fe30fda7706b9d142323349aafa655884df02974ad2bc1",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-reviewed.txt": "b475ecd3d9bc4d4818ff663930d1115eb5ca33e479bd231c9858c356b442f101",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-download-source-contract.txt": "2c537476bfb05b1a480af19c9575504e06d09fe3fe12b4b50502109d413e489e",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct27-locked-asgi-attachment.txt": "98b6023b465c84d0b3831e5b94729c9d9d9e354ca110827574cb936f967acc1a",
+    "docs/review/2026-10-27-runtime-control-lifecycle/source-and-status.json": "a10d510025a28e548006ffd093dca36aeee13200755b94400843d9e3ac567201",
+    "procurement/tests/hosted_test_node.py": "7cf80da3008585595fc8ebbce1c44c976a93234e72c816c670081e33fe341e89",
+    "procurement/tests/test_hosted_synthetic_apply_step.py": "c20f75d8a7feab8f15693e273f021c9fad7b7901a7657764ea98caf6336961c6",
+    "procurement/tests/test_hosted_synthetic_artifacts.py": "9bbb2d5dca46d6eb8a0c694aa30a36def1153c29da716151dc86895c07de4f75",
+    "procurement/tests/test_hosted_synthetic_download.py": "fd6ab26dedec79f96cb1824f539b4f007e05ddb2d698f0edd3844d70b7dbeaa4",
+    "procurement/tests/test_hosted_synthetic_mapping_step.py": "f822250922ddc74e089576c50eb0f202c567363fc188b703fdfbd1b2c530216e",
+    "procurement/tests/test_hosted_synthetic_page_adapter.py": "303b9f8144d094bd8b2ad043640a5c3afd767abdb08b30b2011e4b00b1809c2b",
+    "procurement/tests/test_hosted_synthetic_prepare_step.py": "155c3981523a5b0330ee4f284a67855cca73fafd4d39562140b0594f707a30e5",
+    "procurement/tests/test_hosted_synthetic_review_step.py": "a6bfba4733ed280827830da1290ac0c680671b45a3e24d9b7c06c3ce621c7d5e",
+    "procurement/tests/test_hosted_synthetic_workflow.py": "a1a865df9dff74dcf7ac978dbb0d9e08a4d36533858cad045076d5e916fd03d4",
+    "procurement/tests/test_persistent_mapping_foundation_contract.py": "391df6e170d6f746c5f3912d3f5fd7043306cb0283c0632bc286127059525f27",
+    "procurement/tests/test_supplier_format_conformance.py": "6c064baf1e64f9dd354940cb1a84a616818b6e77a5b92027f56a48a4509ebd65",
+    "procurement/tools/hosted_synthetic_artifacts.py": "6a46ce6d34bc8d81b5c07a6a72b717d224400922778e37d09698afaf25cd68b8",
+    "procurement/tools/hosted_synthetic_source.py": "51c33ce0761a78819808b15d48991ef1f1092afc562d27fad3c4d158bb309518",
+    "procurement/tools/run_tests.py": "9d1769b03fc6078d76b491232130d6535d28f5ec82ffb656e495f0bdf2dd8ef9"
+  },
+  "results": {
+    "hosted": {
+      "returncode": 0,
+      "seconds": 23.668,
+      "sha256": "09b6e7f6c00f6e466730985c3809e134185b90159173ae11687262ab7f3e98e0"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 23.969,
+      "sha256": "66b37c9d4136cc2c722f24f27f8876145a5d7d397895426def35ec779372f251"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 5.633,
+      "sha256": "9be9b30baaf5ab21503f7f8c4e018d4e28bb0311b0d34635df4a086edac3893e"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.114,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "imports": {
+      "returncode": 0,
+      "seconds": 0.616,
+      "sha256": "80c03bd033b50b3930929d57d0fead565fb21c1db2c28f9dbcf4a83e703a7ed7"
+    },
+    "inert-gate": {
+      "returncode": 78,
+      "seconds": 0.115,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    }
+  },
+  "source_unchanged": true,
+  "full_native_suite": "NOT_RERUN_KNOWN_UNCHANGED_HOST_REFUSAL"
+}

@@ -1,12 +1,12 @@
 # October 27 implementation delta — combined read-only re-review
 
-This packet includes frozen 81a89374 and its predecessors. Its 552 hosted,
-88 related, 10 startup and 18 import checks passed; activation refused with exit78.
-Discovery 2079/114 is not execution. A later isolated-environment probe exposed a
-FastAPI import in the new route test and absent Node on scrubbed PATH; those failed
-logs remain. Descendant repairs preserve the isolated stage and make diagnostic
-Node explicit, without repinning accepted browser inputs. Bounded byte ingress is
-being tested; semantic packet and restart composition remain independent work.
+This packet includes frozen 08edc886 and its predecessors. Its 576 hosted tests
+passed in the normal environment and separately under scrubbed -I -S with explicit
+diagnostic Node. These are repeated checks, not a 1,152-test population. Related88,
+startup10 and imports18 passed; activation refused with exit78. Discovery2103/115
+is not execution. Failed earlier import/PATH/registration probes remain attributed
+separately. Packet identity/economics is being tested on a descendant; full evidence
+reconciliation and restart composition remain independent work.
 
 
 **REQUEST CHANGES remains in force. Privileged activation is disabled; credential
@@ -21,8 +21,8 @@ identified separately and do not close an external finding.
 
 - Repository: `Vedang1998/Buffalo-Procurement-System`.
 - Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `81a89374f30f2ad980f2ed08538b522a583035ac`.
-- Implementation tree: `b16bb7823ecf327be42aa26e5d133b9e8a3adf2b`.
+- Latest tested/published implementation: `08edc886020dcb23379df46e9ecd32cce3bbfa73`.
+- Implementation tree: `d2952d65d99b32fac1830e610bbff66af4b98d4a`.
 - Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
   `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
   2bfd; descendants add inert browser stages and the final aggregate-sample repair.
@@ -46,9 +46,9 @@ browser or workflow execution is requested by these review commands:
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t 81a89374f30f2ad980f2ed08538b522a583035ac
-git rev-parse 81a89374f30f2ad980f2ed08538b522a583035ac^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 81a89374f30f2ad980f2ed08538b522a583035ac -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git cat-file -t 08edc886020dcb23379df46e9ecd32cce3bbfa73
+git rev-parse 08edc886020dcb23379df46e9ecd32cce3bbfa73^{tree}
+git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 08edc886020dcb23379df46e9ecd32cce3bbfa73 -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
 Read the existing governance, handoff, hosted plan and prior review packet first.
