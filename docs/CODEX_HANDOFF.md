@@ -11,6 +11,44 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-27 fixed native execution and provisioning remediation — candidate
+
+Resumed clean publisheda05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3/tree
+6202c915e7a5a696699a0ac9f48046e8536ab376. The new material implements N1/N2
+pre-account filesystem/IPC/source staging checks, records the narrow N3 trust
+decision and repairs N4's comment without changing the two-stage chain. Fixed
+sealed PostgreSQL --version now has G/I projection/enrollment and I/W stop/ACK/
+FD-exec/output/cleanup wiring, linked to existing same-generation cgroup and
+external observers. Actual native execution remains NOT_RUN pending new review.
+
+Owner-supplied Claude re-review closes six original topics at5e62c8e3/tree6271745
+only. `external-review-update.json` records CLI2.1.310/session_01JyrJEUAi36GJ6AfNcmBBxV/
+claude-opus-5-5/medium and execution limitations. Three original findings remain
+OPEN; descendant changes and N1–N4 remain pending new independent review. No
+callable Claude tool or new review result is claimed. Privileged CLI stays78;
+credentials stay WITHHELD. Root administration is trusted only within the owner's
+explicit ephemeral diagnostic boundary; worker/runtime guarantees stay separate.
+
+Internal causal checks caught and repaired cgroup-scan omission, wrong staging
+capacity filesystem, external Git alternates, read-only/inode-exhausted /run,
+private PID1 mount-ID rebinding, early failure-code loss and exception cleanup.
+Raw first failures are retained, including an outdated lifecycle test fixture
+that needed to supply the newly required successful pre-account checks. Tests
+use synthetic files/pipes and ordinary children; no namespace/account/service/PG
+live proof is inferred. Exact frozen validation/publication follows this candidate.
+
+Review focus and dormant exact activation are in
+`docs/review/2026-10-27-runtime-control-lifecycle/README.md`; the existing ledger
+retains historical closure and new change-impact. Next gate is Claude review of
+the new published material/activation delta, then one supported-host credential-free
+prerequisite and same-generation fixed-version proof. If the precise syscall fails,
+retain its actual errno/context and do not repeat that unchanged host restriction.
+Runtime fit/core policy, worker exclusion and external cleanup remain independent
+NOT_PROVEN gates; browser/BackupV2/APPLY/DRAFT/restart/restore and full supported
+suite remain NOT_RUN. No phase milestone or commercial/Railway readiness changed.
+Application source/schema/rules/manifests/lockfiles and protected refs are untouched.
+
+
 ### 2026-10-27 frozen source-bound validation and continuation
 
 Latest tested material and verified publication:

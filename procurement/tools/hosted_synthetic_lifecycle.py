@@ -191,17 +191,18 @@ def require_case(value,selected,commit):
     value.verify()
 
 
-def run_lifecycle_case(case,selected,*,root,python,repository,event,ref,commit):
+def run_lifecycle_case(case,selected,*,root,python,repository,event,ref,commit,diagnostic="retained"):
     """Reviewed wiring only; not reachable from bootstrap.main or workflow."""
     from hosted_synthetic_capability import _require_clean_supervisor
     _require_clean_supervisor()
-    boot._require(type(case) is str and case in CASES)
+    boot._require(type(case) is str and case in CASES and diagnostic in ("retained","postgres-version"))
     binding=source.bind_hosted_source(Path(root),repository=repository,event=event,ref=ref,sha=commit)
     fault=LifecycleCase(case,binding,selected)
     result=None;error=None
     try:
         result=identity.run_provisioned_candidate(selected,source=root,python=python,
-            repository=repository,event=event,ref=ref,commit=commit,lifecycle=fault)
+            repository=repository,event=event,ref=ref,commit=commit,lifecycle=fault,
+            **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
     except BaseException as failure:error=failure
     try:report=fault.finish(result,error)
     except BaseException as evidence_error:
@@ -210,4 +211,5 @@ def run_lifecycle_case(case,selected,*,root,python,repository,event,ref,commit):
             raise evidence_error from error
         raise
     if isinstance(error,(KeyboardInterrupt,SystemExit)) and not (case=='cancellation' and fault.cancel_sent):raise error
+    if diagnostic=="postgres-version":report["diagnostic"]="FIXED_POSTGRES_VERSION"
     return report

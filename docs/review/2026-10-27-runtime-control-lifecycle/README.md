@@ -1,65 +1,112 @@
-# October 27 implementation delta — combined read-only re-review
+# October 27 fixed PostgreSQL execution delta — read-only review
 
-Frozen material: `d1b8124b309bd1a436a8da3f6044faa40383c80f`, tree
-`6f6a2367dea73d9bbc731876448e4b0e3a9258b2`. Exact raw logs, validation commands,
-file hashes and ordinary publication evidence are retained here. Start with
-`oct27-source-bound-evidence.json` and `findings.json`.
+Candidate: this descendant of published `a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3`,
+tree `6202c915e7a5a696699a0ac9f48046e8536ab376`. The following source-bound evidence
+follow-up records its exact frozen commit/tree and executed validation. Do not
+attribute the earlier d1b8124 results to this changed implementation.
 
-903 diagnostics passed normally and separately under scrubbed -I -S. Separate
-price17, snapshot20, related88, startup10 and18 imports passed; activation exits78.
-Discovery2467/128 executed zero tests. This is not full-suite or integrated
-acceptance. New material includes the real readback driver (actual cases NOT_RUN),
-combined PG/Python phase closure and fixed postdrop PG image ownership. Native
-capture/size fit, PG execution, stop/ACK integration and live gates remain unproved.
+**Activation DISABLED. Credentials WITHHELD. Integrated acceptance NON-GREEN.**
+The bootstrap CLI still returns78 unconditionally. No sudo/account/systemd,
+namespace prerequisite, sealed PostgreSQL, database, browser or credential-bearing
+execution has run for this candidate. The fixed execution path is now implemented;
+passing causal/component tests are not evidence that native execution occurred.
 
-**REQUEST CHANGES remains in force. Privileged activation is disabled; credential
-release is withheld. Integrated acceptance is NON-GREEN.** This packet adds the
-tested descendant implementation to the existing review, without changing the
-frozen `5e62c8e3a7030e60f77108517f5f9e06c7fc06a3` target or starting another design.
-Codex remains the sole writer. Claude has not been invoked from this environment;
-no callable Claude review channel is available. Internal Codex path reviews are
-identified separately and do not close an external finding.
+## Reconciled external review
 
-## Exact source and review request
+The owner supplied the Claude re-review of
+`5e62c8e3a7030e60f77108517f5f9e06c7fc06a3`, tree
+`6271745239da49a24e3664ed2623977a7d21de07`: six findings VERIFIED_CLOSED **there**.
+See `external-review-update.json` and `findings.json`. Numeric-PID closure covers
+its reuse window, not atomic migration; memory closure covers disclosure and
+separate accounting, not live lifetime proof. Runtime, worker-control exclusion
+and external cleanup remain OPEN. Later change impact is independently tracked;
+historical closure is retained and does not approve this descendant.
 
-- Repository: `Vedang1998/Buffalo-Procurement-System`.
-- Branch: `codex/hosted-synthetic-acceptance`.
-- Latest tested/published implementation: `d1b8124b309bd1a436a8da3f6044faa40383c80f`.
-- Implementation tree: `6f6a2367dea73d9bbc731876448e4b0e3a9258b2`.
-- Kernel component evidence: `4dd50dea0eb719776b166f0708e8177239780975`, tree
-  `3890ff1e138ff343e9c855fc4577bebf9bfd4a45`. These executions were not repeated at
-  2bfd; descendants add inert browser stages and the final aggregate-sample repair.
-- Original actual external review: `3c1ae555b82aa650011254a9b1f8e8c4367601bb`,
-  REQUEST CHANGES. Owner-reported Claude Code CLI 2.1.310, session
-  `session_01JyrJEUAi36GJ6AfNcmBBxV`, configured/last-served `claude-opus-5-5`.
-  This attribution is not a fresh account inspection. The reported 238 tests do
-  not reproduce GitHub. Verbatim prose and detailed execution limitations remain
-  unavailable; reconcile them when that same session returns its re-review.
+Owner attribution: Claude Code CLI2.1.310, session
+`session_01JyrJEUAi36GJ6AfNcmBBxV`, reported claude-opus-5-5, effort medium.
+Original REQUEST CHANGES remains attributed to3c1ae555. Claude's environment had
+no real cgroup v2/systemd/GitHub-host execution or complete-suite reproduction.
+Verbatim prose is not invented. No callable Claude tool exists in this task;
+Codex read-only subagent inspections are internal, not external review.
 
-`findings.json` maps the P1 and eight P2 topics to code, tests and remaining gates:
-**six REPAIRED_PENDING_REVIEW, three OPEN, zero VERIFIED_CLOSED**. The OPEN findings
-remain runtime closure, worker/control exclusion and external cleanup. Their new
-components below are implemented and tested; complete supported-host/browser
-composition and actual adversarial execution remain unproven. Writer assertions
-and component tests do not close them.
+## New material to review
 
-In the existing read-only Claude session, inspect both the unchanged earlier
-review target and this material delta. No provisioning, service, credential,
-browser or workflow execution is requested by these review commands:
+- N1: before reservation/account mutation, verified native `find -P /` scans
+  visible local mounts (including cgroup2, /dev/shm and /dev/mqueue), excluding
+  proc process metadata covered separately. Nonzero exit, timeout, collision,
+  mount drift, unsupported filesystem or unreadable SysV owner/creator rows
+  refuses. No object is deleted or chowned. Visible ownership is the scope;
+  hidden/unmounted objects, named ACL grants outside source and general keyring
+  authority are not claimed absent. Worker keyring syscalls remain denied.
+- N2: candidate UID/GID mode/ACL/ancestor/source checks, external Git object-layout
+  refusal, real disposable unprivileged clone/detached-checkout rehearsal, and
+  actual /run byte/inode/writable-mount/traversal checks precede reservation.
+  Existing checkout permissions are unchanged. Native account commands retain15s;
+  copy commands have60s bounds. Later drift remains a quarantine failure.
+- N3: the owner trusts GitHub platform administration, verified installed native
+  tools, and exact reviewed orchestration **only for this ephemeral credential-free
+  diagnostic**. Arbitrary repository/dependency/application/browser code is not
+  thereby trusted. No malicious-platform-admin isolation, production model change,
+  sudoers/AppArmor/kernel-policy change or privileged broker is introduced.
+- N4: unsupported comment about internal setpriv ordering removed. The existing
+  two-stage clear-groups then IDs/capabilities chain remains unchanged.
+- Fixed native path: sealed PG/Python phase projection/reexec → existing G/I
+  stopped enrollment → I private-proc/root mount-ID rebinding → reduced U2 W →
+  fixed image lease → ARMED/block → I pidfd SIGSTOP and real T readback → same
+  generation S cgroup/whole-service observer ACK → exact role/start/image/source
+  EXEC ACK → SIGCONT → `os.execve(held_fd,[fixed_postgres,"--version"],fixed_env)`.
+  There is no database startup, arbitrary argv/path, provider or browser call.
+- The exact native failure code survives I/G/S protocol hops. Missing/wrong ACK,
+  drift, early exit, cancellation, excessive output and descriptor/cleanup failures
+  refuse. I keeps child ownership until descendant checks and reap. G independently
+  observes I/W mount/root/namespace/process identities. Both child and enclosing
+  service counters retain their separate existing budgets.
+- The namespace prerequisite performs one combined USER/MNT/PID/NET syscall in
+  a bounded dedicated unprivileged child and preserves actual numeric errno.
+  Parent and post-exec child policy context must match. Generic exit, malformed
+  output, timeout and syscall refusal are different results; AppArmor attribution
+  remains UNCONFIRMED without attributable denial evidence. No retry/fallback.
 
-```bash
-git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git cat-file -t d1b8124b309bd1a436a8da3f6044faa40383c80f
-git rev-parse d1b8124b309bd1a436a8da3f6044faa40383c80f^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 d1b8124b309bd1a436a8da3f6044faa40383c80f -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
-```
+## Exact dormant activation wiring and expected effects
 
-Read the existing governance, handoff, hosted plan and prior review packet first.
-Return dispositions for every ledger entry and the new identity/bootstrap,
-runtime, worker, observer and lifecycle wiring. Assess readiness for a bounded
-credential-free live proof separately from credential release. Original approval
-does not extend to these new commits. Exact reviewer, model/session attribution,
-source, commands, results and limitations must accompany the actual re-review.
+After actual review approves the exact published candidate, the existing
+unprivileged operator may call
+`hosted_synthetic_identity.postgres_version_activation_entry([repository,"push",ref,commit])`
+on the ephemeral GitHub Ubuntu24.04 host. It selects the dedicated identity,
+performs pre-account checks, provisions only the reviewed native account/staging
+resources, and selects `--native-bootstrap-postgres-version`. The system-manager
+chain drops privileges before any repository Python. The launcher verifies the
+actual four-field IDs, empty groups, zero capability sets and NNP, then dispatches
+the source-bound prerequisite and retained PG path. The current CLI/workflow does
+not invoke this function. This exact activation delta needs review, not assumed
+approval inherited from5e62c8e3.
+
+`run_lifecycle_case(...,diagnostic="postgres-version")` forwards the existing six
+fixed normal/cancel/manager-kill/timeout/lost-ACK/partial-setup cases to this path.
+Those live cases have NOT_RUN. Quarantine is never reported as drained cleanup;
+an ambiguous identity is not recycled. No unrelated objects/volumes are removed.
+
+Budgets unchanged: child I+W pids2/256MiB; enclosing service/slice512MiB/64tasks;
+namespace proof20s; service start120s/stop5s; native client150s. Sealed closure
+80MiB/3000entries unchanged. No accepted Nix/browser input is repinned. Actual PG
+closure fit, trusted native PG availability and non-piped core policy remain
+unmeasured on the target. `--version` may finish before library maps can be sampled;
+its FD-bound execution result must not be relabeled native-library lifetime,
+full runtime closure, worker adversarial isolation or purchasing acceptance.
+
+## Independent review request
+
+Review the actual material delta since reviewed5e62c8e3, focusing on later
+change-impact, N1–N4 and the complete fixed activation/execution/cleanup wiring.
+Do not redo unchanged architecture or erase the six historical closures. Return
+source-bound findings and an explicit disposition on readiness for one bounded
+credential-free live proof. No approval of credentials or browser acceptance is
+requested. Record reviewer/tool/model/session, commands, results and limitations.
+
+The next evidence follow-up supplies exact `git diff 5e62c8e3 <candidate>` identities,
+raw results and publication verification. No Claude invocation has been fabricated.
+
+## Earlier component history (scope and historical evidence retained)
 
 ## Implemented components
 

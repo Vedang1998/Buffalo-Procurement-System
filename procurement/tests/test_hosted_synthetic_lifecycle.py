@@ -197,7 +197,7 @@ print('PASS: actual deferred SIGINT; no native/service execution')
             if '/usr/bin/passwd' in command:return 0,(ID.user+' L 2026-10-27 0 99999 7 -1\n').encode()
             if '-l' in command:return 1,('User '+ID.user+' is not allowed to run sudo on ephemeral-host.\n').encode()
             return 0,b''
-        with patch.object(identity,'inspect_account_platform',return_value={}),patch.object(identity,'inspect_account'),patch.object(identity,'identity_processes',return_value=[]),patch.object(identity.os.path,'lexists',return_value=False),patch('hosted_synthetic_quarantine.Quarantine.create',return_value=journal),patch.object(boot,'_collect_native_client',side_effect=collect),self.assertRaises(boot.BootstrapCleanupError):
+        with patch('hosted_synthetic_account_preflight.inspect_source',return_value={}),patch('hosted_synthetic_account_preflight.inspect_ownership',return_value={}),patch.object(identity,'inspect_account_platform',return_value={}),patch.object(identity,'inspect_account'),patch.object(identity,'identity_processes',return_value=[]),patch.object(identity.os.path,'lexists',return_value=False),patch('hosted_synthetic_quarantine.Quarantine.create',return_value=journal),patch.object(boot,'_collect_native_client',side_effect=collect),self.assertRaises(boot.BootstrapCleanupError):
             identity.AccountLease.create(ID,'/fixture',BINDING.commit,lifecycle=value)
         self.assertEqual(len(commands),4);self.assertTrue(value.partial and value.lease.uncertain)
         self.assertFalse(value.lease.service_attempted);journal.close.assert_called_once()

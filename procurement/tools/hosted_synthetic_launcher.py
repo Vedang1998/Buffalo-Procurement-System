@@ -97,7 +97,7 @@ def main(arguments=None):
     if os.getuid() == 0 or os.geteuid() == 0:
         return 78
     args = list(sys.argv[1:] if arguments is None else arguments)
-    if len(args) != 10 or args[4] != '--native-bootstrap':
+    if len(args) != 10 or args[4] not in ('--native-bootstrap','--native-bootstrap-postgres-version'):
         return 78
     try:
         if any(not value.isascii() or not value.isdecimal() or value.startswith('0') or len(value)>20 for value in args[6:]):

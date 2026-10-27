@@ -16,7 +16,7 @@
       "external_finding_number": null,
       "severity": "P1",
       "title": "Namespace PID1 self-stop",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "procurement/tools/hosted_synthetic_namespace.py:_init/_guardian_enrollment",
         "procurement/tools/hosted_synthetic_pid1_regression.py"
@@ -25,14 +25,25 @@
         "real CLONE_NEWPID eleven-case driver; actual PID1 and production cgroup_required=True helpers",
         "hosted enrollment causal tests"
       ],
-      "remaining": "Real cgroup writes remain simulated in this lifecycle test; actual containment NOT_RUN"
+      "remaining": "Real cgroup writes remain simulated in this lifecycle test; actual containment NOT_RUN",
+      "closure": {
+        "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+        "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+        "source": "owner-supplied Claude re-review; external-review-update.json",
+        "scope": "finding at exact reviewed commit"
+      },
+      "descendant_change_impact": {
+        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+        "status": "RE_REVIEW_REQUIRED",
+        "historical_closure_preserved": true
+      }
     },
     {
       "topic_id": "OWNER-P2-CREDENTIALS",
       "external_finding_number": null,
       "severity": "P2",
       "title": "Full entry credentials before effects",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "procurement/tools/hosted_synthetic_launcher.py:inspect_host_identity",
         "procurement/tools/hosted_synthetic_capability.py:main",
@@ -48,14 +59,25 @@
         "36 simulated nonzero PG identity/stdio/proc ownership/cleanup tests; actual execution NOT_RUN",
         "16 native core-policy tests including one RLIMIT-only real child; host policy/lifetime proof NOT_PROVEN"
       ],
-      "remaining": "Final native post-drop live readback NOT_RUN; mapped U1 phase authority is explicitly distinct"
+      "remaining": "Final native post-drop live readback NOT_RUN; mapped U1 phase authority is explicitly distinct",
+      "closure": {
+        "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+        "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+        "source": "owner-supplied Claude re-review; external-review-update.json",
+        "scope": "finding at exact reviewed commit"
+      },
+      "descendant_change_impact": {
+        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+        "status": "RE_REVIEW_REQUIRED",
+        "historical_closure_preserved": true
+      }
     },
     {
       "topic_id": "OWNER-P2-NUMERIC-PID",
       "external_finding_number": null,
       "severity": "P2",
       "title": "Numeric migration and lifecycle ownership",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "procurement/tools/hosted_synthetic_cgroup.py:_require_unreaped_lifecycle/enroll_stopped_init"
       ],
@@ -64,14 +86,25 @@
         "test_namespace_nspid_and_reaping_refusals_precede_migration",
         "real PID1 death/adoption cases with simulated migration"
       ],
-      "remaining": "Not an atomic pidfd write. S namespace readback may refuse nondumpable children; real delegated migration gate OPEN pending independent/liveness proof"
+      "remaining": "Not an atomic pidfd write. S namespace readback may refuse nondumpable children; real delegated migration gate OPEN pending independent/liveness proof",
+      "closure": {
+        "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+        "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+        "source": "owner-supplied Claude re-review; external-review-update.json",
+        "scope": "numeric PID reuse window, not atomic migration"
+      },
+      "descendant_change_impact": {
+        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+        "status": "RE_REVIEW_REQUIRED",
+        "historical_closure_preserved": true
+      }
     },
     {
       "topic_id": "OWNER-P2-CLOSE-BOUNDARY",
       "external_finding_number": null,
       "severity": "P2",
       "title": "Descriptor closure after failed signal precondition",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "procurement/tools/hosted_synthetic_cgroup.py:CgroupLease.close"
       ],
@@ -79,7 +112,18 @@
         "test_unmasked_boundary_refuses_before_owned_mutation",
         "test_failed_boundary_and_close_preserve_first_error_and_close_other_fds"
       ],
-      "remaining": "No path mutation after failed precondition; original cause and sticky failure retained"
+      "remaining": "No path mutation after failed precondition; original cause and sticky failure retained",
+      "closure": {
+        "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+        "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+        "source": "owner-supplied Claude re-review; external-review-update.json",
+        "scope": "finding at exact reviewed commit"
+      },
+      "descendant_change_impact": {
+        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+        "status": "UNCHANGED_FINDING_REPAIR; integration delta requires review",
+        "historical_closure_preserved": true
+      }
     },
     {
       "topic_id": "OWNER-P2-EXTERNAL-CLEANUP",
@@ -104,7 +148,7 @@
       "external_finding_number": null,
       "severity": "P2",
       "title": "Child versus aggregate memory accounting",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "procurement/tools/hosted_synthetic_cgroup.py",
         "procurement/tools/hosted_synthetic_observer.py:sample/finish_service"
@@ -112,7 +156,18 @@
       "tests": [
         "separate child/enclosing counters and OOM/peak/limit drift tests; external observer aggregate lifetime tests"
       ],
-      "remaining": "Child accounting excludes some pre-migration charges. New owned external accounting slice retains the same512MiB/64-task aggregate ceiling while service exits; final kernel counters and exact subtree removal required. Actual live whole-service measurement NOT_RUN. Different launches are not one resource PASS."
+      "remaining": "Child accounting excludes some pre-migration charges. New owned external accounting slice retains the same512MiB/64-task aggregate ceiling while service exits; final kernel counters and exact subtree removal required. Actual live whole-service measurement NOT_RUN. Different launches are not one resource PASS.",
+      "closure": {
+        "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+        "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+        "source": "owner-supplied Claude re-review; external-review-update.json",
+        "scope": "disclosure and separate accounting, not live lifetime proof"
+      },
+      "descendant_change_impact": {
+        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+        "status": "RE_REVIEW_REQUIRED",
+        "historical_closure_preserved": true
+      }
     },
     {
       "topic_id": "OWNER-P2-RUNTIME",
@@ -127,7 +182,8 @@
         "procurement/tools/hosted_synthetic_runtime_regression.py",
         "procurement/tools/hosted_synthetic_postgres_runtime.py",
         "procurement/tools/hosted_synthetic_postgres_identity.py",
-        "procurement/tools/hosted_synthetic_postgres_image.py"
+        "procurement/tools/hosted_synthetic_postgres_image.py",
+        "procurement/tools/hosted_synthetic_postgres_version.py"
       ],
       "tests": [
         "20 runtime / 23 wheel / 14 application registered tests",
@@ -135,14 +191,14 @@
         "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN",
         "d1b8124:66 PG runtime,35 image,21 shared runtime component tests; phase-only locale proof and actual disposable descriptor failure paths; native exec NOT_RUN"
       ],
-      "remaining": "Diagnostic and current application import closure use actual sealed projection/exec.4dd50de application regular bytes81844207 under80MiB. Frozen Nix/OCI inputs unchanged. Full application/browser/PG lifecycle closure remains UNSEALED; supported GitHub runtime ownership/ELF compatibility not proven; no accepted browser input substitution."
+      "remaining": "Fixed postgres --version path now wired through PG phase projection, parent pidfd stop, actual stopped attestation, exact outer/worker ACK and FD exec; native execution/size fit/required core policy and native mapped-library lifetime NOT_RUN/NOT_PROVEN. Full application/browser closure remains OPEN."
     },
     {
       "topic_id": "OWNER-P2-EVENT-SCHEMA",
       "external_finding_number": null,
       "severity": "P2",
       "title": "memory.events compatibility policy",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "procurement/tools/hosted_synthetic_cgroup.py:MEMORY_EVENTS_SCHEMA/parse_memory_events"
       ],
@@ -150,7 +206,18 @@
         "test_malformed_counters_refuse",
         "test_oom_increment_or_any_decrease_refuses"
       ],
-      "remaining": "Exact six-key versioned schema retained. Unknown keys fail compatibility; no alleged observed future-kernel failure or ignored safety event"
+      "remaining": "Exact six-key versioned schema retained. Unknown keys fail compatibility; no alleged observed future-kernel failure or ignored safety event",
+      "closure": {
+        "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+        "tree": "6271745239da49a24e3664ed2623977a7d21de07",
+        "source": "owner-supplied Claude re-review; external-review-update.json",
+        "scope": "finding at exact reviewed commit"
+      },
+      "descendant_change_impact": {
+        "candidate": "a05c0671f7a4e4a86a62550c4e91e8dd3cc56ff3",
+        "status": "UNCHANGED_FINDING_REPAIR; integration delta requires review",
+        "historical_closure_preserved": true
+      }
     },
     {
       "topic_id": "OWNER-P2-CONTROL-EXCLUSION",
@@ -173,11 +240,50 @@
       "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
     }
   ],
-  "material_commit": "d1b8124b309bd1a436a8da3f6044faa40383c80f",
-  "material_tree": "6f6a2367dea73d9bbc731876448e4b0e3a9258b2",
-  "frozen_evidence": "oct27-postgres-image-frozen-validation.json",
+  "material_commit": "CANDIDATE_TO_BE_FROZEN",
+  "material_tree": "CANDIDATE_TO_BE_FROZEN",
+  "frozen_evidence": "PENDING_FROZEN_VALIDATION",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
-  "independent_re_review": "NOT_RECEIVED_NOT_AUTOMATICALLY_INVOKED",
-  "current_delta": "Nondumpable actual readback driver, sealed PG/Python phase union, fixed reduced-worker native image ownership.903 diagnostics PASS in each interpreter;17/20/88/10 separate groups PASS;18 imports;activation78. Full supported-host suite and live execution NOT_RUN."
+  "independent_re_review": "OWNER_RECEIVED_SIX_CLOSURES_AT_5e62c8e3; NEW_DELTA_REVIEW_NOT_RECEIVED",
+  "current_delta": "N1/N2 pre-account ownership/source preflight; N3 trust decision; N4 comment; fixed PG FD-exec protocol through existing stopped enrollment and outer observer; precise one-shot namespace prerequisite. All new privileged/live paths NOT_RUN pending new Claude review.",
+  "new_findings": [
+    {
+      "id": "N1",
+      "title": "Numeric identity filesystem and IPC ownership reuse",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "hosted_synthetic_account_preflight.py:inspect_ownership",
+        "hosted_synthetic_identity.py:AccountLease.create"
+      ],
+      "tests": "24 account-preflight tests include real disposable UID/GID collision find, SysV current/creator collision, permission/timeout/mount/filesystem refusals; live host scan NOT_RUN",
+      "limitations": "Visible ownership scope only. Hidden/unmounted objects and named ACL/keyring authority not claimed; workers deny add_key/request_key/keyctl independently. No object deletion/chown."
+    },
+    {
+      "id": "N2",
+      "title": "Source access/staging preflight before account mutation",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "hosted_synthetic_account_preflight.py:inspect_source",
+        "hosted_synthetic_identity.py:provisioning_commands"
+      ],
+      "tests": "Candidate mode/ACL/ancestor checks; actual disposable local clone/detached checkout; missing access, external objects, readonly/full/inode-exhausted destination, copy failure before reservation",
+      "limitations": "Live target coverage/staging NOT_RUN. Later drift still quarantines; no permission broadening. Account commands15s, copy60s separately bounded."
+    },
+    {
+      "id": "N3",
+      "title": "Ephemeral diagnostic trusted administrative boundary",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "disposition": "Owner trust decision RECORDED in external-review-update.json; implementation of narrow boundary pending new review. No malicious platform-administrator isolation claim; no production change; runtime and worker-control independent."
+    },
+    {
+      "id": "N4",
+      "title": "Unsupported setpriv ordering comment",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "code": [
+        "hosted_synthetic_bootstrap.py:plan_native_bootstrap"
+      ],
+      "disposition": "Unsupported setpriv-internal ordering comment removed; existing two-stage chain unchanged."
+    }
+  ]
 }

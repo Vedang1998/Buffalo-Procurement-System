@@ -16,6 +16,8 @@ ID=identity.DedicatedIdentity('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',950,951,100
 
 class HostedDedicatedIdentityTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch("hosted_synthetic_account_preflight.inspect_source",return_value={}))
+        self.enterContext(patch("hosted_synthetic_account_preflight.inspect_ownership",return_value={}))
         self.journal=Mock()
         self.enterContext(patch('hosted_synthetic_quarantine.Quarantine.create',return_value=self.journal))
 
@@ -134,7 +136,7 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         self.assertNotEqual(ID.user,ID.group)
         for command in commands:
             self.assertEqual(command[:4],('/usr/bin/sudo','-n','--','/usr/bin/env'))
-            self.assertIn('15s',command)
+            self.assertIn('60s' if command in commands[-2:] else '15s',command)
         user=commands[1]
         for flag in ('--no-create-home','--no-user-group','--no-log-init','SUB_UID_COUNT=0','SUB_GID_COUNT=0'):
             self.assertIn(flag,user)

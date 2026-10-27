@@ -275,6 +275,9 @@ def _receive(descriptor, generation, stage, deadline, *, fields=()):
 
 
 def _failure_location(error):
+    selected=getattr(error,"location",None)
+    if isinstance(error,NamespaceProofError) and type(selected) is str and re.fullmatch(r"_pg_[a-z_]{1,43}:[1-9][0-9]{0,3}",selected):
+        return selected
     if isinstance(error, NamespaceProofError) and re.fullmatch(r"_[a-z_]{1,48}:[1-9][0-9]{0,3}", str(error)):
         return str(error)
     location = "_unknown:1"
@@ -464,7 +467,11 @@ def _reexec_guardian(gate, status, parent, generation, supervisor, deadline,
     else:
         from hosted_synthetic_runtime import enter_runtime, projected_images, PROJECTED_TOOLS
         _require(runtime.generation == generation)
-        runtime_root = enter_runtime(runtime)
+        from hosted_synthetic_runtime import POSTGRES_PHASE_POLICY
+        if runtime.policy==POSTGRES_PHASE_POLICY:
+            from hosted_synthetic_postgres_runtime import enter_postgres_phase
+            runtime_root=enter_postgres_phase(runtime)
+        else:runtime_root = enter_runtime(runtime)
         executable, images = projected_images(runtime)
         executable_path = runtime.executable
         script = PROJECTED_TOOLS + '/hosted_synthetic_namespace.py'
@@ -539,7 +546,11 @@ def _resume_guardian(arguments):
         expected = {0, 1, 2, gate.number, status.number, parent.number}
         if 'runtime' in packet:
             from hosted_synthetic_runtime import receive_runtime, verify_consumer
-            runtime = receive_runtime(packet['runtime'])
+            from hosted_synthetic_runtime import POSTGRES_PHASE_POLICY
+            if packet['runtime'].get('policy')==POSTGRES_PHASE_POLICY:
+                from hosted_synthetic_postgres_runtime import receive_postgres_phase
+                runtime=receive_postgres_phase(packet['runtime'])
+            else:runtime = receive_runtime(packet['runtime'])
             _require(runtime.generation == packet['generation'] and runtime.bundle.descriptor not in expected)
             expected.add(runtime.bundle.descriptor)
         for name in os.listdir('/proc/self/fd'):
@@ -560,14 +571,21 @@ def _resume_guardian(arguments):
         _require(list(_identity(os.stat('/proc/self/exe'))) == packet['images']['executable'])
         _require(_image_is_mapped(packet['images']['loader']))
         runtime_proof = None
+        postgres_phase=None
         if runtime is not None:
-            runtime_proof = verify_consumer(runtime, packet['runtime_root'])
-            runtime.close()
-            runtime = None
+            if runtime.policy==POSTGRES_PHASE_POLICY:
+                from hosted_synthetic_postgres_runtime import verify_postgres_phase_consumer
+                runtime_proof=verify_postgres_phase_consumer(runtime,packet['runtime_root'])
+                postgres_phase=(runtime,packet['runtime_root'])
+            else:
+                runtime_proof = verify_consumer(runtime, packet['runtime_root'])
+                runtime.close()
+                runtime = None
         _resume_supervisor(parent, supervisor)
         _mapped_guardian(gate, status, parent, packet['generation'], supervisor, packet['deadline'],
                          packet['outside_uid'], packet['outside_gid'], packet['original_namespaces'],
-                         packet['cgroup_required'], **({'runtime_proof': runtime_proof} if runtime_proof else {}))
+                         packet['cgroup_required'], **({'runtime_proof': runtime_proof} if runtime_proof else {}),
+                         **({'postgres_phase':postgres_phase} if postgres_phase is not None else {}))
         return 0
     except BaseException as exc:
         _child_failure(status, packet['generation'], packet['deadline'], exc)
@@ -662,14 +680,15 @@ def _private_evidence(outside_uid, outside_gid, original_namespaces, root, *, ru
     return evidence
 
 
-def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None):
+def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None, postgres_phase=None):
     # PID1 death tears down all nested children; guardian death is bound by pidfd.
     backend._browser_prctl(1, int(signal.SIGKILL))
     _require((os.getpid(), os.getppid()) == (1, 0)
              and not backend._browser_pidfd_is_terminal(guardian_pidfd.number))
     os.unshare(os.CLONE_NEWNS)
     backend._browser_mount(None, b"/", None, (1 << 18) | 16384, None)
-    backend._close_browser_guardian_descriptors(frozenset((0, 1, 2, gate.number, status.number, guardian_pidfd.number)))
+    backend._close_browser_guardian_descriptors(frozenset((0, 1, 2, gate.number, status.number, guardian_pidfd.number,
+        *((postgres_phase[0].bundle.descriptor,) if postgres_phase is not None else ()))))
     _send(status, generation, "ARMED", deadline)
     # PID-namespace init does not honor a self-generated SIGSTOP. Stay blocked
     # on this generation-bound pipe while the ancestor guardian stops us via
@@ -681,6 +700,10 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
     method = _mount_proc()
     root = _acquire(lambda: os.open("/proc", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW))
     _require(root.identity != before and backend._browser_fstatfs_magic(root.number) == 0x9FA0)
+    if postgres_phase is not None:
+        _require(cgroup_required and runtime_proof is not None)
+        from hosted_synthetic_postgres_version import run_init
+        return run_init(*postgres_phase,gate,status,generation,deadline,root,before)
     if runtime_proof is None:
         from hosted_synthetic_projection import observe_projection
         projection = observe_projection(generation)
@@ -738,7 +761,7 @@ def _init(gate, status, guardian_pidfd, generation, deadline, outside_uid, outsi
 
 
 def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
-                generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None):
+                generation, supervisor, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None, postgres_phase=None):
     child = -1
     init_fd = None
     try:
@@ -748,7 +771,8 @@ def _start_init(own, parent, inner_read, inner_write, result_read, result_write,
         if child == 0:
             try:
                 _init(inner_read, result_write, own, generation, deadline, outside_uid, outside_gid, original_namespaces, cgroup_required,
-                      **({'runtime_proof': runtime_proof} if runtime_proof is not None else {}))
+                      **({'runtime_proof': runtime_proof} if runtime_proof is not None else {}),
+                      **({'postgres_phase':postgres_phase} if postgres_phase is not None else {}))
                 os._exit(0)
             except BaseException as exc:
                 _child_failure(result_write, generation, deadline, exc)
@@ -884,7 +908,12 @@ def _attest_cgroup_pair(lease, outer, enrolled, guardian_fd, guardian, guardian_
 
 
 def _mapped_guardian(gate, status, parent, generation, supervisor, deadline,
-                     outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None):
+                     outside_uid, outside_gid, original_namespaces, cgroup_required=False, *, runtime_proof=None, postgres_phase=None):
+    if postgres_phase is not None:
+        _require(cgroup_required and runtime_proof is not None)
+        from hosted_synthetic_postgres_version import mapped_guardian
+        return mapped_guardian(gate,status,parent,generation,supervisor,deadline,outside_uid,outside_gid,
+            original_namespaces,runtime_proof,postgres_phase)
     backend._browser_mount(None, b"/", None, (1 << 18) | 16384, None)
     own = _pidfd(os.getpid())
     inner_read, inner_write = _pipe()
@@ -970,7 +999,7 @@ def _finish_private_probe(inner_write, result_read, worker_fd, init_fd, child, g
         raise NamespaceCleanupError('guardian_cleanup_refused') from errors[0]
 
 
-def observe_private_proc(generation: str, *, delegation: Path | None = None, source_binding=None, external_unit=None) -> dict:
+def observe_private_proc(generation: str, *, delegation: Path | None = None, source_binding=None, external_unit=None, postgres_version=False) -> dict:
     """Run in a fresh scrubbed single-thread supervisor; return no authority."""
     from hosted_synthetic_capability import _require_clean_supervisor
     _require_clean_supervisor()
@@ -986,6 +1015,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
     if external_unit is not None:
         from hosted_synthetic_launcher import service_cgroup_path
         _require(delegation==Path('/sys/fs/cgroup'+service_cgroup_path(external_unit)))
+    _require(type(postgres_version) is bool and (not postgres_version or (delegation is not None and external_unit is not None and source_binding is not None)))
     original_namespaces = _namespaces("self")
     previous_subreaper = ctypes.c_int()
     _require(backend._browser_libc().prctl(37, ctypes.byref(previous_subreaper), 0, 0, 0) == 0)
@@ -1006,13 +1036,17 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
     reason = "NAMESPACE_PROOF_REFUSED"
     refusal_location = None
     external_observer_failure = None
+    native_result=None
     deadline = time.monotonic() + _TIMEOUT
     try:
         try:
             backend._browser_prctl(36, 1)
             if delegation is not None:
                 from hosted_synthetic_runtime import capture_runtime
-                runtime = capture_runtime(generation, Path(__file__).resolve().parents[2], source_binding)
+                if postgres_version:
+                    from hosted_synthetic_postgres_runtime import capture_postgres_phase
+                    runtime=capture_postgres_phase(generation,Path(__file__).resolve().parents[2],source_binding)
+                else:runtime = capture_runtime(generation, Path(__file__).resolve().parents[2], source_binding)
                 cgroup = CgroupLease.create(delegation, generation=generation, memory_max=256 * 1024**2)
             for _ in range(2):
                 descriptors.extend(_pipe())
@@ -1052,7 +1086,10 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
             evidence = retained['evidence']
             if runtime is not None:
                 from hosted_synthetic_runtime import verify_report_binding
-                verify_report_binding(runtime, evidence.get('runtime'))
+                if postgres_version:
+                    from hosted_synthetic_postgres_runtime import verify_postgres_phase_report
+                    verify_postgres_phase_report(runtime,evidence.get('runtime'))
+                else:verify_report_binding(runtime, evidence.get('runtime'))
             if cgroup is not None:
                 cgroup_evidence = _attest_cgroup_pair(cgroup, retained['outer'], enrolled,
                                                      child_fd, process, process_start, process_descriptors)
@@ -1067,7 +1104,13 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
                     if type(error) is LauncherRefusal and str(error) in ('external_observer_timeout','external_observer_ack_refused'):
                         external_observer_failure=str(error)
                     raise
-            _send(gate_write, generation, "CLOSE", deadline)
+            if postgres_version:
+                request=evidence['worker']['request']
+                _send(gate_write,generation,'PG_EXEC',deadline,request=request)
+                native_result=_receive(status_read,generation,'PG_RESULT',deadline,fields=('result',))['result']
+                _require(type(native_result) is dict and native_result.get('generation')==generation
+                    and native_result.get('request')==request and native_result.get('native_execution')=='FD_BOUND_VERSION_COMPLETED')
+            else:_send(gate_write, generation, "CLOSE", deadline)
             _receive(status_read, generation, "CLEAN", deadline)
             _wait(process, deadline)
             reaped = True
@@ -1167,6 +1210,7 @@ def observe_private_proc(generation: str, *, delegation: Path | None = None, sou
                 cgroup='COMPONENT_OBSERVATION_ONLY' if cgroup_evidence is not None else 'NOT_RUN',
                 runtime="HOST_RUNTIME_UNSEALED",
                 private_proc=evidence, HOST_CAPABILITY="FAIL", provider_calls=0,
+                **({"postgres_version":native_result} if postgres_version else {}),
                 payload_processes=0, credential_release="WITHHELD", execution_authority=False)
 
 

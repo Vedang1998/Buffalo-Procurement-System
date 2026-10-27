@@ -72,12 +72,14 @@ class NativeBootstrapPlan:
     root: str
     python: str
     source: tuple[str, str, str, str]
+    diagnostic: str = "retained"
 
 
 def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
-                          uid, gid, unit, initial_user_namespace):
+                          uid, gid, unit, initial_user_namespace, diagnostic="retained"):
     """Pure argv construction. Never creates a unit or calls sudo."""
     from hosted_synthetic_source import REPOSITORY, REF
+    _require(diagnostic in ("retained","postgres-version"))
     _path(root); _path(python)
     _positive(uid); _positive(gid)
     _require(repository == REPOSITORY and event == 'push' and ref == REF
@@ -85,14 +87,14 @@ def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
              and type(unit) is str and _UNIT.fullmatch(unit))
     _require(type(initial_user_namespace) is tuple and len(initial_user_namespace) == 2
              and all(type(x) is int and 0 < x < 2**64 for x in initial_user_namespace))
-    # setpriv changes IDs before processing groups. Two exec stages enforce the
-    # requested order: first clear groups while root, then drop IDs/capabilities.
+    # Two native exec stages make the required order explicit: clear groups
+    # in the first stage, then change IDs and drop capabilities in the second.
     chain = ('/usr/bin/setpriv', '--clear-groups', '--no-new-privs', '--',
              '/usr/bin/setpriv', f'--reuid={uid}', f'--regid={gid}', '--keep-groups',
              '--inh-caps=-all', '--ambient-caps=-all', '--bounding-set=-all', '--no-new-privs', '--',
              '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin', 'LC_ALL=C.UTF-8',
              python, '-I', '-S', '-B', root + '/procurement/tools/hosted_synthetic_launcher.py',
-             repository, event, ref, commit, '--native-bootstrap', unit, str(uid), str(gid),
+             repository, event, ref, commit, '--native-bootstrap-postgres-version' if diagnostic=='postgres-version' else '--native-bootstrap', unit, str(uid), str(gid),
              str(initial_user_namespace[0]), str(initial_user_namespace[1]))
     properties = (f'User={uid}', f'Group={gid}', 'Delegate=memory pids',
                   'DelegateSubgroup=supervisor', 'NoNewPrivileges=yes',
@@ -114,7 +116,7 @@ def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
             '--unit=' + unit, '--working-directory=' + root,
             *(('--property=' + value) for value in properties), '--', '/usr/bin/true')
     return NativeBootstrapPlan(tuple(argv), unit, uid, gid, initial_user_namespace, root, python,
-                               (repository, event, ref, commit))
+                               (repository, event, ref, commit), diagnostic)
 
 
 @_resource_operation
@@ -342,7 +344,7 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
     repository, event, ref, commit = plan.source
     rebuilt = plan_native_bootstrap(root=plan.root, python=plan.python, repository=repository,
                                     event=event, ref=ref, commit=commit, uid=plan.uid, gid=plan.gid,
-                                    unit=plan.unit, initial_user_namespace=plan.initial_user_namespace)
+                                    unit=plan.unit, initial_user_namespace=plan.initial_user_namespace,diagnostic=plan.diagnostic)
     _require(plan == rebuilt and ns._identity(os.stat('/proc/self/ns/user')) == plan.initial_user_namespace)
     # The historical shared-runner identity route is no longer executable.
     from hosted_synthetic_identity import AccountLease
@@ -381,6 +383,9 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
                          and observation.get('cleanup_complete') is True and observation.get('reason')=='INCOMPLETE_PREFLIGHT'
                          and type(observation.get('resource_cleanup')) is dict
                          and observation['resource_cleanup'].get('generation_child_removed') is True)
+        if plan.diagnostic=='postgres-version':
+            native=observation.get('postgres_version') if type(observation) is dict else None
+            namespace_clean=namespace_clean and type(native) is dict and native.get('native_execution')=='FD_BOUND_VERSION_COMPLETED'
         # This proof comes from the outside observer, not the child's report.
         # A failed operation can have verified cleanup; it still cannot pass.
         observer.finish_service(operation_succeeded=namespace_clean)

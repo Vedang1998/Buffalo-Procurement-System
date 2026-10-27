@@ -47,26 +47,32 @@ def validate(identity):
         and identity.uid != identity.operator_uid and identity.gid != identity.operator_gid)
 
 
-def native(argv):
+def native(argv, *, purpose="account"):
+    boot._require(purpose in ("account","scan","copy"))
     return ('/usr/bin/sudo','-n','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','LC_ALL=C.UTF-8',
-            '/usr/bin/timeout','--signal=TERM','--kill-after=2s','15s',*argv)
+            '/usr/bin/timeout','--signal=TERM','--kill-after=2s','15s' if purpose=='account' else '60s',*argv)
 
 
-def dropped(identity, argv):
+def dropped(identity, argv, *, purpose="account"):
     validate(identity)
     return native(('/usr/bin/setpriv','--clear-groups','--no-new-privs','--',
                    '/usr/bin/setpriv',f'--reuid={identity.uid}',f'--regid={identity.gid}','--keep-groups',
                    '--inh-caps=-all','--ambient-caps=-all','--bounding-set=-all','--no-new-privs','--',
-                   '/usr/bin/env','-i','PATH=/usr/bin:/bin','LC_ALL=C.UTF-8',*argv))
+                   '/usr/bin/env','-i','PATH=/usr/bin:/bin','LC_ALL=C.UTF-8',*argv),purpose=purpose)
+
+
+def git_arguments(source):
+    boot._path(source)
+    return ('/usr/bin/env','GIT_CONFIG_NOSYSTEM=1','GIT_CONFIG_GLOBAL=/dev/null','GIT_TERMINAL_PROMPT=0',
+         '/usr/bin/git','-c','maintenance.auto=false','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
+         '-c','protocol.allow=never','-c','protocol.file.allow=always','-c','safe.directory='+source)
 
 
 def provisioning_commands(identity, source, commit):
     """Pure reviewable wiring: root native account tools, then dropped Git."""
     validate(identity);boot._path(source)
     boot._require(re.fullmatch('[0-9a-f]{40}',commit) is not None)
-    git=('/usr/bin/env','GIT_CONFIG_NOSYSTEM=1','GIT_CONFIG_GLOBAL=/dev/null','GIT_TERMINAL_PROMPT=0',
-         '/usr/bin/git','-c','maintenance.auto=false','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
-         '-c','protocol.allow=never','-c','protocol.file.allow=always','-c','safe.directory='+source)
+    git=git_arguments(source)
     # Separate names stop userdel from auto-removing a matching private group.
     return (
         native(('/usr/sbin/groupadd','--system','--gid',str(identity.gid),'--',identity.group)),
@@ -78,8 +84,8 @@ def provisioning_commands(identity, source, commit):
         native(('/usr/bin/mkdir','--mode=0700','--',identity.root)),
         native(('/usr/bin/chown','--no-dereference','--from=0:0',f'{identity.uid}:{identity.gid}','--',identity.root)),
         dropped(identity,(*git,'clone','--no-local','--no-hardlinks','--no-checkout','--single-branch','--no-tags',
-                          '--',source,identity.root+'/repo')),
-        dropped(identity,(*git,'-C',identity.root+'/repo','checkout','--detach',commit)),
+                          '--',source,identity.root+'/repo'),purpose='copy'),
+        dropped(identity,(*git,'-C',identity.root+'/repo','checkout','--detach',commit),purpose='copy'),
     )
 
 
@@ -227,10 +233,16 @@ class AccountLease:
         boot._require(not identity_processes(identity) and not os.path.lexists(identity.root)
                       and not os.path.lexists('/sys/fs/cgroup/system.slice/'+identity.unit)
                       and not os.path.lexists('/sys/fs/cgroup'+boot.launcher.service_cgroup_path(identity.unit)))
+        from hosted_synthetic_account_preflight import inspect_source,inspect_ownership
+        source_preflight=inspect_source(identity,source,commit)
+        ownership_preflight=inspect_ownership(identity)
+        inspect_account(identity,present=False)
+        boot._require(not identity_processes(identity),"identity_appeared_before_reservation")
         from hosted_synthetic_quarantine import Quarantine
         lease=object.__new__(cls);lease.identity=identity;lease._owner=lease
         lease.created=False;lease.root_identity=None;lease.closed=False;lease.uncertain=False
         lease.platform=platform
+        lease.preflight={"source":source_preflight,"ownership":ownership_preflight}
         lease.service_attempted=False;lease.service_acknowledged=False
         lease.service_creation_acknowledged=False
         lease.source_commit=commit
@@ -323,12 +335,13 @@ class AccountLease:
             raise boot.BootstrapCleanupError('dedicated_cleanup_unverified_identity_retained') from error
 
 
-def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None):
+def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained"):
     """Complete dormant wiring; CLI/workflow review gate never calls this."""
     from hosted_synthetic_source import bind_hosted_source, _resource_operation
     from hosted_synthetic_capability import _require_clean_supervisor
     @_resource_operation
     def execute():
+        boot._require(diagnostic in ("retained","postgres-version"))
         _require_clean_supervisor()
         binding=bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit)
         if lifecycle is not None:
@@ -342,7 +355,8 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             initial=os.stat('/proc/self/ns/user')
             plan=boot.plan_native_bootstrap(root=identity.root+'/repo',python=python,repository=repository,
                 event=event,ref=ref,commit=commit,uid=identity.uid,gid=identity.gid,unit=identity.unit,
-                initial_user_namespace=(initial.st_dev,initial.st_ino))
+                initial_user_namespace=(initial.st_dev,initial.st_ino),
+                **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
             result=boot.run_native_plan(plan,source_root=source,account=lease,**options)
             boot._require(result['report']['tree']==binding.tree)
         except BaseException as error:
@@ -361,8 +375,8 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
     return execute()
 
 
-def activation_entry(arguments):
-    """Reviewed activation wiring, still unreachable behind bootstrap.main.
+def activation_entry(arguments, *, diagnostic="retained"):
+    """Review-target activation wiring, unreachable behind bootstrap.main.
 
     There is intentionally no command-line/environment switch to invoke it.
     Actual external review and its recorded disposition precede connecting the
@@ -371,7 +385,7 @@ def activation_entry(arguments):
     from hosted_synthetic_capability import _require_clean_supervisor
     from hosted_synthetic_source import bind_hosted_source
     _require_clean_supervisor()
-    boot._require(len(arguments)==4)
+    boot._require(len(arguments)==4 and diagnostic in ("retained","postgres-version"))
     repository,event,ref,commit=arguments
     source=str(Path(__file__).resolve().parents[2])
     bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit)
@@ -391,5 +405,11 @@ def activation_entry(arguments):
             raise
         if identity_processes(candidate):continue
         return run_provisioned_candidate(candidate,source=source,python=sys.executable,
-            repository=repository,event=event,ref=ref,commit=commit)
+            repository=repository,event=event,ref=ref,commit=commit,
+            **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
     raise boot.BootstrapRefusal('dedicated_identity_range_unavailable')
+
+
+def postgres_version_activation_entry(arguments):
+    """Exact candidate for review; never called by the inert CLI/workflow."""
+    return activation_entry(arguments,diagnostic="postgres-version")

@@ -203,11 +203,12 @@ def main(arguments=None) -> int:
     host = delegation = None
     identity = None
     postdrop = access = None
+    namespace_prerequisite=None
     phase = 'SUPERVISOR'
     try:
         _require_clean_supervisor()
         if (len(args) not in (4, 6, 10) or (len(args) == 6 and args[4] != '--user-service-unit')
-                or (len(args) == 10 and (args[4] != '--native-bootstrap'
+                or (len(args) == 10 and (args[4] not in ('--native-bootstrap','--native-bootstrap-postgres-version')
                     or any(not value.isascii() or not value.isdecimal() or value.startswith('0')
                            or len(value) > 20 for value in args[6:])))):
             raise HostedDiagnosticError("invocation_refused")
@@ -265,7 +266,14 @@ def main(arguments=None) -> int:
             options = {'delegation': Path('/sys/fs/cgroup' + delegation['root_path']),
                        'source_binding': binding} if delegation is not None else {}
             if len(args)==10:options['external_unit']=args[5]
-            observation = observe_private_proc(generation, **options) if host['prerequisites_available'] else None
+            if len(args)==10 and args[4]=='--native-bootstrap-postgres-version':
+                from hosted_synthetic_namespace_prerequisite import observe_prerequisite
+                namespace_prerequisite=observe_prerequisite(binding)
+                options['postgres_version']=True
+            eligible=namespace_prerequisite is None or (namespace_prerequisite['policy_stable']
+                and namespace_prerequisite.get('attempt_context_matches_supervisor') is True
+                and namespace_prerequisite['operation']['result']=='SYSCALL_SUCCEEDED_ONLY')
+            observation = observe_private_proc(generation, **options) if host['prerequisites_available'] and eligible else None
         except (CgroupCleanupError, NamespaceCleanupError, BootstrapCleanupError):
             result = _report(binding, reason='CLEANUP_FAILED', host=host, delegation=delegation)
         except CgroupProofError as error:
@@ -290,6 +298,7 @@ def main(arguments=None) -> int:
     result['supervisor_identity'] = identity
     result['postdrop_identity'] = postdrop
     result['postdrop_access'] = access
+    if namespace_prerequisite is not None:result['namespace_prerequisite']=namespace_prerequisite
     return _emit(result)
 
 
