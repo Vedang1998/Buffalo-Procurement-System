@@ -118,6 +118,20 @@ class AccountPreflightTests(unittest.TestCase):
         with patch.object(pre,'MAX_BYTES',1),patch.object(boot,'_collect_native_client') as execute,self.assertRaises(boot.BootstrapRefusal):self.run_source(source,commit)
         execute.assert_not_called()
 
+    def test_git_directory_enumeration_refuses_before_unbounded_materialization(self):
+        from types import SimpleNamespace
+        source,commit=self.setup_git();seen=[]
+        class Entries:
+            def __enter__(self):return self
+            def __exit__(self,*unused):return False
+            def __iter__(self):
+                for index in range(1000000):
+                    seen.append(index)
+                    yield SimpleNamespace(path=str(source/'.git'/str(index)),name=str(index),is_dir=lambda **k:False)
+        with patch.object(pre,'MAX_FILES',12),patch.object(os,'scandir',return_value=Entries()),patch.object(boot,'_collect_native_client') as execute,self.assertRaisesRegex(boot.BootstrapRefusal,'scan_file_bound'):
+            self.run_source(source,commit)
+        self.assertLessEqual(len(seen),12);execute.assert_not_called()
+
     def test_external_git_object_store_refuses_before_copy(self):
         source,commit=self.setup_git()
         (source/'.git/objects/info/alternates').write_text('/private/foreign/objects\n')

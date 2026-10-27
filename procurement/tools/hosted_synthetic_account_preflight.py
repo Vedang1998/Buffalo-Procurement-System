@@ -111,12 +111,20 @@ def inspect_source(identity,source,commit):
     gitdir=root/'.git';boot._require(gitdir.is_dir() and not gitdir.is_symlink(),'source_git_directory_refused')
     for relative in ('objects/info/alternates','objects/info/http-alternates','shallow','commondir'):
         boot._require(not os.path.lexists(gitdir/relative),'external_git_object_layout_refused')
-    boot._require(not list((gitdir/'objects/pack').glob('*.promisor')),'partial_git_object_layout_refused')
-    def walk_error(error):raise boot.BootstrapRefusal('source_traversal_incomplete') from error
-    for current,dirs,files in os.walk(gitdir,followlinks=False,onerror=walk_error):
-        boot._require(time.monotonic()<deadline,'source_scan_timeout')
-        paths.add(Path(current));paths.update(Path(current)/name for name in dirs+files)
-        boot._require(len(paths)<=MAX_FILES,'source_scan_file_bound')
+    pending=[gitdir]
+    while pending:
+        current=pending.pop();paths.add(current)
+        boot._require(time.monotonic()<deadline and len(paths)<=MAX_FILES,'source_scan_file_bound')
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    boot._require(time.monotonic()<deadline and len(paths)<MAX_FILES,'source_scan_file_bound')
+                    path=Path(entry.path)
+                    boot._require(not (current==gitdir/'objects/pack' and entry.name.endswith('.promisor')),
+                                  'partial_git_object_layout_refused')
+                    paths.add(path)
+                    if entry.is_dir(follow_symlinks=False):pending.append(path)
+        except OSError as error:raise boot.BootstrapRefusal('source_traversal_incomplete') from error
     for path in sorted(paths):
         boot._require(time.monotonic()<deadline,'source_scan_timeout')
         info=_access(path,identity,directory=stat.S_ISDIR(os.lstat(path).st_mode))
