@@ -220,6 +220,11 @@ class AccountPreflightTests(unittest.TestCase):
         with patch.object(pre,'_open_binfmt',return_value=held),self.assertRaises(boot.BootstrapCleanupError) as caught:
             with pre._scan_mount_lease(self.binfmt_mounts()):raise pre.OwnershipCollision('synthetic_collision')
         self.assertNotIsInstance(caught.exception,pre.OwnershipCollision)
+        held=Mock(identity=(1,2));named=Mock(identity=(1,2))
+        named.close.side_effect=pre.ns.NamespaceCleanupError('synthetic recheck close')
+        with patch.object(pre,'_open_binfmt',side_effect=[held,named]),self.assertRaisesRegex(boot.BootstrapCleanupError,'binfmt_descriptor_cleanup_refused'):
+            with pre._scan_mount_lease(self.binfmt_mounts()):pass
+        held.close.assert_called_once();named.close.assert_called_once()
 
     def test_cancellation_and_mount_open_failure_are_bounded_refusals(self):
         self.open_fixture();before=set(os.listdir('/proc/self/fd'))

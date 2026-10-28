@@ -105,7 +105,9 @@ def _scan_mount_lease(raw):
         if held is not None:
             held.verify();named=_open_binfmt(mount_id)
             try:boot._require(named.identity==held.identity,'binfmt_mount_changed')
-            finally:named.close()
+            finally:
+                try:named.close()
+                except BaseException as error:raise boot.BootstrapCleanupError('binfmt_descriptor_cleanup_refused') from error
     finally:
         if held is not None:
             try:held.close()
