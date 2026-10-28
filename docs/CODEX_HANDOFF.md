@@ -11,6 +11,36 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-28 target mount evidence and narrow N8 repair
+
+Material10af37d4b305b4f7763740affc306a1ade2e6c06/treeaf9d60c3ee3bc456d5e7be9e40324d069fd7c916
+was ordinarily published/fetched. GitHub run40696961199/job122846214400 proves
+runnerUID1001/rootPID1UID0 and direct IPC/mount namespace EACCES13, plus vfat at
+/boot/efi and stacked autofs/binfmt_misc at /proc/sys/fs/binfmt_misc. The old
+allowlist refused. Its focused step failed; detailed logs are unavailable here
+(API Forbidden/public logs require sign-in), so its actual test counts are UNKNOWN.
+The exact focused command passed1024/1024 locally at10af37d. Those runs are distinct.
+No privileged proof or later workflow step ran. No known host refusal was retried.
+
+N8 now permits vfat only at the observed fixed EFI path and explicitly scans the
+fixed active binfmt mount alongside the original root scan. O_PATH/O_DIRECTORY/
+O_NOFOLLOW/O_CLOEXEC, fdinfo mount ID and binfmt fstatfs magic bind its held handle;
+inactive autofs, other automounts, wrong identity/type and unknown /proc mounts
+refuse. Named/held identity and full mountinfo are rechecked; every exit closes
+owned handles, and cleanup ambiguity cannot authorize candidate retry. Hidden
+lower autofs is not claimed scanned. Existing trusted-administration/no-overmount
+assumption remains explicit; this is not atomic pathname binding. Native scan
+bounds and all resource/security limits remain unchanged. Only the read-only
+inventory can observe that active handle without sudo/find/account mutation.
+
+A bounded focused-test reporter exposes counts and failure test/type/source-line
+identities through public annotations, excluding exception messages, locals and
+subtest parameter values. This permits diagnosis of the GitHub-only focused failure
+without granting log credentials or activating privileged code.57 affected tests
+pass; frozen validation and one changed-candidate diagnostic follow. B2 still needs
+the recorded owner change-control decision; no byte limit changed. These repairs
+are REPAIRED_PENDING_REVIEW, not externally closed or live acceptance.
+
 ### 2026-10-28 Claude d863 review received; specific remediation candidate
 
 Actual owner-supplied Claude review ofd863bc7d/tree31336c2 is REQUEST CHANGES.

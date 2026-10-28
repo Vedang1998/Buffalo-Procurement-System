@@ -89,7 +89,50 @@ jobs:
           sha256sum "$diagnostic_node"
           # Locked-app packet-authority tests remain in the authoritative app suite;
           # this credential-free diagnostic step deliberately has no site packages.
-          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import pathlib,sys,unittest; root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]; modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow","test_hosted_synthetic_namespace","test_hosted_synthetic_projection","test_hosted_synthetic_cgroup","test_hosted_synthetic_host","test_hosted_synthetic_user_service","test_hosted_synthetic_enrollment","test_hosted_synthetic_bootstrap","test_hosted_synthetic_identity","test_hosted_synthetic_pid1_regression","test_hosted_synthetic_runtime","test_hosted_synthetic_worker","test_hosted_synthetic_observer","test_hosted_synthetic_quarantine","test_hosted_synthetic_wheels","test_hosted_synthetic_application_runtime","test_hosted_synthetic_lifecycle","test_hosted_synthetic_apply_step","test_hosted_synthetic_mapping_step","test_hosted_synthetic_review_step","test_hosted_synthetic_prepare_step","test_hosted_synthetic_page_adapter","test_hosted_synthetic_download","test_hosted_synthetic_artifacts","test_hosted_synthetic_packet_controls","test_hosted_synthetic_packet_evidence","test_hosted_synthetic_packet_forecast","test_hosted_synthetic_restart_evidence","test_hosted_synthetic_recovery_toc","test_hosted_synthetic_recovery_inputs","test_hosted_synthetic_recovery_storage","test_hosted_synthetic_postgres_runtime","test_hosted_synthetic_postgres_identity","test_hosted_synthetic_native_core","test_hosted_synthetic_postgres_image","test_hosted_synthetic_account_preflight","test_hosted_synthetic_postgres_version","test_hosted_synthetic_namespace_prerequisite"]]; assert [item.countTestCases() for item in modules] == [36,33,14,66,22,37,20,11,17,37,23,23,23,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,72,36,16,35,34,35,14]; suite=unittest.TestSuite(modules); result=unittest.TextTestRunner(verbosity=2).run(suite); raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 1024 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)'
+          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B - <<'PYTHON'
+          import pathlib,sys,unittest,json,base64,hashlib,re,traceback
+          root=pathlib.Path.cwd(); sys.path[:0]=[str(root/"procurement/tools"),str(root/"procurement/tests")]
+          # Begin bounded result observer.
+          class PublicResult(unittest.TextTestResult):
+              def __init__(self,*args,**kwargs):
+                  super().__init__(*args,**kwargs); self.successes=0; self.observations=[]; self.omitted=0
+              def addSuccess(self,test):
+                  super().addSuccess(test); self.successes+=1
+              def observe(self,test,error,kind):
+                  if len(self.observations)>=16: self.omitted+=1; return
+                  case=getattr(test,"_test_case",test)
+                  name=".".join((type(case).__module__,type(case).__name__,getattr(case,"_testMethodName","UNREGISTERED")))
+                  if not re.fullmatch(r"[A-Za-z0-9_.]{1,240}",name): name="UNREGISTERED"
+                  error_type=error[0].__name__
+                  if not re.fullmatch(r"[A-Za-z0-9_]{1,80}",error_type): error_type="UNREGISTERED"
+                  frames=[]
+                  for frame in traceback.extract_tb(error[2]):
+                      try: relative=pathlib.Path(frame.filename).resolve().relative_to(root).as_posix()
+                      except (ValueError,OSError): continue
+                      if relative.startswith(("procurement/tools/","procurement/tests/")) and re.fullmatch(r"[A-Za-z0-9_./-]{1,240}",relative):
+                          frames.append({"file":relative,"line":frame.lineno})
+                  self.observations.append({"test":name,"kind":kind,"exception":error_type,"frames":frames[-3:]})
+              def addError(self,test,error):
+                  super().addError(test,error); self.observe(test,error,"ERROR")
+              def addFailure(self,test,error):
+                  super().addFailure(test,error); self.observe(test,error,"FAILURE")
+              def addSubTest(self,test,subtest,error):
+                  super().addSubTest(test,subtest,error)
+                  if error is not None: self.observe(test,error,"SUBTEST_EVENT")
+          def public_summary(result,discovered):
+              return {"discovered":discovered,"executed":result.testsRun,"passed_methods":result.successes,
+                      "failure_events":len(result.failures),"error_events":len(result.errors),"skipped":len(result.skipped),
+                      "expected_failures":len(result.expectedFailures),"unexpected_successes":len(result.unexpectedSuccesses),
+                      "observations":result.observations,"omitted_observations":result.omitted,
+                      "scope":"DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF"}
+          # End bounded result observer.
+          modules=[unittest.defaultTestLoader.loadTestsFromName(name) for name in ["test_hosted_synthetic_source","test_hosted_synthetic_capability","test_hosted_synthetic_workflow","test_hosted_synthetic_namespace","test_hosted_synthetic_projection","test_hosted_synthetic_cgroup","test_hosted_synthetic_host","test_hosted_synthetic_user_service","test_hosted_synthetic_enrollment","test_hosted_synthetic_bootstrap","test_hosted_synthetic_identity","test_hosted_synthetic_pid1_regression","test_hosted_synthetic_runtime","test_hosted_synthetic_worker","test_hosted_synthetic_observer","test_hosted_synthetic_quarantine","test_hosted_synthetic_wheels","test_hosted_synthetic_application_runtime","test_hosted_synthetic_lifecycle","test_hosted_synthetic_apply_step","test_hosted_synthetic_mapping_step","test_hosted_synthetic_review_step","test_hosted_synthetic_prepare_step","test_hosted_synthetic_page_adapter","test_hosted_synthetic_download","test_hosted_synthetic_artifacts","test_hosted_synthetic_packet_controls","test_hosted_synthetic_packet_evidence","test_hosted_synthetic_packet_forecast","test_hosted_synthetic_restart_evidence","test_hosted_synthetic_recovery_toc","test_hosted_synthetic_recovery_inputs","test_hosted_synthetic_recovery_storage","test_hosted_synthetic_postgres_runtime","test_hosted_synthetic_postgres_identity","test_hosted_synthetic_native_core","test_hosted_synthetic_postgres_image","test_hosted_synthetic_account_preflight","test_hosted_synthetic_postgres_version","test_hosted_synthetic_namespace_prerequisite"]]; assert [item.countTestCases() for item in modules] == [36,33,15,66,22,37,20,11,17,37,23,23,23,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,72,36,16,35,42,35,14]; suite=unittest.TestSuite(modules)
+          discovered=suite.countTestCases(); result=unittest.TextTestRunner(verbosity=2,resultclass=PublicResult).run(suite)
+          raw=json.dumps(public_summary(result,discovered),sort_keys=True,separators=(",",":")).encode(); assert len(raw)<=32768
+          payload=base64.b64encode(raw).decode(); digest=hashlib.sha256(raw).hexdigest(); count=(len(payload)+2999)//3000
+          for index in range(count): print(f"::notice title=Focused diagnostic result::v1 index={index} count={count} sha256={digest} data={payload[index*3000:(index+1)*3000]}")
+          raise SystemExit(0 if result.wasSuccessful() and result.testsRun == 1033 and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses else 1)
+          PYTHON
 
       - name: Review gate before hosted execution
         shell: bash

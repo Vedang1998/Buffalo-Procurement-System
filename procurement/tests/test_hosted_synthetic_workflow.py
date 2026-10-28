@@ -59,6 +59,26 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertIn('diagnostic_node=$(command -v node)', self.text)
         self.assertIn('sha256sum "$diagnostic_node"', self.text)
 
+    def test_public_failure_report_excludes_messages_locals_and_subtest_parameters(self):
+        import io,textwrap,traceback
+        body=self.text.split('          # Begin bounded result observer.\n',1)[1].split('          # End bounded result observer.',1)[0]
+        namespace={'unittest':unittest,'pathlib':__import__('pathlib'),'re':re,'traceback':traceback,'root':ROOT}
+        exec(textwrap.dedent(body),namespace)
+        class Synthetic(unittest.TestCase):
+            def test_error(self):raise RuntimeError('PRIVATE_DETAIL_MUST_NOT_PUBLISH')
+            def test_subtest(self):
+                with self.subTest(secret='PRIVATE_PARAMETER_MUST_NOT_PUBLISH'):self.assertEqual(1,2)
+            def test_pass(self):pass
+        suite=unittest.defaultTestLoader.loadTestsFromTestCase(Synthetic)
+        result=unittest.TextTestRunner(stream=io.StringIO(),resultclass=namespace['PublicResult']).run(suite)
+        report=namespace['public_summary'](result,3);raw=json.dumps(report)
+        self.assertEqual((report['executed'],report['passed_methods'],report['error_events'],report['failure_events']),(3,1,1,1))
+        self.assertNotIn('PRIVATE_',raw);self.assertNotIn(str(ROOT),raw)
+        self.assertEqual({x['exception'] for x in report['observations']},{'RuntimeError','AssertionError'})
+        self.assertTrue(all(x['frames'] for x in report['observations']))
+        for _ in range(40):result.observe(Synthetic('test_error'),(RuntimeError,RuntimeError('PRIVATE'),None),'ERROR')
+        self.assertEqual(len(result.observations),16);self.assertEqual(result.omitted,26)
+
     def test_diagnostic_node_override_is_explicit_and_fail_closed(self):
         from hosted_test_node import node_executable
         for value in ('', 'node', './node', '/definitely-missing-buffalo-node', '/tmp'):
@@ -74,7 +94,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,14,66,22,37,20,11,17,37,23,23,23,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,72,36,16,35,34,35,14]', 'result.wasSuccessful()', 'result.testsRun == 1024', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,15,66,22,37,20,11,17,37,23,23,23,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,72,36,16,35,42,35,14]', 'result.wasSuccessful()', 'result.testsRun == 1033', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)

@@ -150,6 +150,84 @@ class AccountPreflightTests(unittest.TestCase):
         self.assertEqual(result['repaired_native_stat_regression'],'NOT_RUN_REVIEW_REQUIRED')
         self.assertNotIn('private-fixture',str(result))
         self.assertEqual(result['account_mutations'],0)
+        self.open_fixture()
+        with patch.object(pre.ns,'_read',return_value=self.binfmt_mounts()),patch.object(os,'stat',side_effect=selected),patch.object(os,'geteuid',return_value=1001),patch.object(boot,'_collect_native_client') as native:
+            observed=pre.observe_scan_host(HostedSourceBinding('a'*40,'b'*40,()))
+        native.assert_not_called()
+        self.assertEqual(observed['active_binfmt_observation'],'ACTIVE_BINFMT_FD_OBSERVED_AND_CLOSED')
+        self.assertEqual(observed['ownership_scan'],'NOT_RUN_REVIEW_REQUIRED')
+
+    def binfmt_mounts(self):
+        return MOUNTS+b'4 1 8:2 / /boot/efi rw - vfat /dev/fixture rw\n5 2 0:5 / /proc/sys/fs/binfmt_misc rw - autofs systemd rw\n6 5 0:6 / /proc/sys/fs/binfmt_misc rw - binfmt_misc binfmt_misc rw\n'
+
+    def test_only_observed_vfat_and_stacked_active_binfmt_schema_is_supported(self):
+        raw=self.binfmt_mounts();digest,number=pre._mount_plan(raw)
+        self.assertEqual(number,6);self.assertEqual(len(digest),64)
+        for changed in (raw.replace(b'/boot/efi',b'/unknown'),raw.replace(b'binfmt_misc binfmt_misc rw',b'tmpfs tmpfs rw')):
+            with self.subTest(raw=changed),self.assertRaises(boot.BootstrapRefusal):pre._mount_plan(changed)
+
+    def test_inactive_autofs_refuses_without_opening_or_native_scan(self):
+        raw=self.binfmt_mounts().rsplit(b'6 5 ',1)[0]
+        with patch.object(pre.os,'open') as opening,patch.object(boot,'_collect_native_client') as native,self.assertRaisesRegex(boot.BootstrapRefusal,'active_mount'):
+            with pre._scan_mount_lease(raw):self.fail('inactive automount accepted')
+        opening.assert_not_called();native.assert_not_called()
+
+    def open_fixture(self):
+        actual_open=os.open;flags=[]
+        def opening(path,mode):
+            self.assertEqual(path,pre._BINFMT);flags.append(mode)
+            return actual_open(self.tmp,mode)
+        self.enterContext(patch.object(pre.os,'open',side_effect=opening))
+        self.enterContext(patch.object(pre.ns,'_mount_id',return_value=6))
+        self.enterContext(patch.object(pre.ns.backend,'_browser_fstatfs_magic',return_value=pre._BINFMT_MAGIC))
+        return flags
+
+    def test_actual_owned_path_descriptor_closes_and_checks_nontriggering_flags(self):
+        flags=self.open_fixture();before=set(os.listdir('/proc/self/fd'))
+        with pre._scan_mount_lease(self.binfmt_mounts()) as (_,roots):
+            self.assertEqual(roots,(pre._BINFMT,));self.assertEqual(len(set(os.listdir('/proc/self/fd'))-before),1)
+        self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+        self.assertEqual(flags,[os.O_PATH|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC]*2)
+
+    def test_wrong_mount_or_autofs_type_closes_without_scanning(self):
+        self.open_fixture();before=set(os.listdir('/proc/self/fd'))
+        for which,value in (('_mount_id',5),('_browser_fstatfs_magic',0x187)):
+            target=pre.ns if which=='_mount_id' else pre.ns.backend
+            with self.subTest(which=which),patch.object(target,which,return_value=value),patch.object(boot,'_collect_native_client') as native,self.assertRaisesRegex(boot.BootstrapRefusal,'active_mount'):
+                with pre._scan_mount_lease(self.binfmt_mounts()):self.fail('wrong active filesystem')
+            native.assert_not_called();self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+
+    def test_binfmt_scan_includes_fixed_root_and_holds_fd_until_after_readback(self):
+        self.open_fixture();raw=self.binfmt_mounts();before=set(os.listdir('/proc/self/fd'));commands=[]
+        def collect(command,**kwargs):
+            commands.append(command);self.assertEqual(len(set(os.listdir('/proc/self/fd'))-before),1)
+            return 0,b''
+        with patch.object(pre.ns,'_read',side_effect=lambda path,maximum:raw if path.endswith('mountinfo') else IPC),patch.object(boot,'_collect_native_client',side_effect=collect):
+            result=pre.inspect_ownership(ID)
+        argv=commands[0];self.assertEqual(argv[argv.index('/usr/bin/find')+1:argv.index('-path')],('-P','/',pre._BINFMT))
+        self.assertEqual(result['additional_scan_roots'],[pre._BINFMT]);self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+
+    def test_named_mount_drift_closes_both_handles_and_refuses(self):
+        from unittest.mock import Mock
+        held=Mock(identity=(1,2));named=Mock(identity=(1,3))
+        with patch.object(pre,'_open_binfmt',side_effect=[held,named]),self.assertRaisesRegex(boot.BootstrapRefusal,'mount_changed'):
+            with pre._scan_mount_lease(self.binfmt_mounts()):pass
+        held.close.assert_called_once();named.close.assert_called_once()
+
+    def test_mount_cleanup_failure_cannot_authorize_collision_retry(self):
+        from unittest.mock import Mock
+        held=Mock();held.close.side_effect=pre.ns.NamespaceCleanupError('synthetic')
+        with patch.object(pre,'_open_binfmt',return_value=held),self.assertRaises(boot.BootstrapCleanupError) as caught:
+            with pre._scan_mount_lease(self.binfmt_mounts()):raise pre.OwnershipCollision('synthetic_collision')
+        self.assertNotIsInstance(caught.exception,pre.OwnershipCollision)
+
+    def test_cancellation_and_mount_open_failure_are_bounded_refusals(self):
+        self.open_fixture();before=set(os.listdir('/proc/self/fd'))
+        with self.assertRaises(KeyboardInterrupt):
+            with pre._scan_mount_lease(self.binfmt_mounts()):raise KeyboardInterrupt()
+        self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+        with patch.object(pre.os,'open',side_effect=PermissionError()),self.assertRaisesRegex(boot.BootstrapRefusal,'mount_unreadable'):
+            pre._open_binfmt(6)
 
     def test_readonly_inventory_does_not_turn_malformed_mounts_into_absence(self):
         from hosted_synthetic_source import HostedSourceBinding
