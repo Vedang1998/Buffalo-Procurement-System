@@ -184,7 +184,7 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         binding=HostedSourceBinding('a'*40,'b'*40,())
         failure=pg.PhaseCapacityRefusal({'capacity':'REFUSED','execution_authority':False})
         with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=binding),patch.object(pg,'require_phase_fit',side_effect=failure) as fit,patch.object(identity.AccountLease,'create') as create,patch.object(boot,'run_native_plan') as run,self.assertRaises(pg.PhaseCapacityRefusal) as caught:
-            identity.run_provisioned_candidate(ID,source='/fixture',python='/usr/bin/python3.13',repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
+            identity.run_provisioned_candidate(ID,source='/fixture',python=str(Path('/proc/self/exe').resolve(strict=True)),repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
         self.assertIs(caught.exception,failure);fit.assert_called_once_with('/fixture',binding)
         create.assert_not_called();run.assert_not_called()
 

@@ -11,6 +11,20 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-28 actual N8 readback; hosted test assumption repaired
+
+Publishededf8d12199c97ced404b6509f887ab9495abf8a7/treeb384fc232c0f8c825c0aba6bb9d719c31c2f7c06
+GitHub run40698861126/job122852876339 observed the active binfmt O_PATH handle,
+correct mount ID/type, post-readback and closure. Native ownership scan, fixed
+privileged stat, account/bootstrap, cgroup and PG execution remain NOT_RUN.
+The same job executed1033 diagnostic tests:1032 passed,0 failures,1 error,0 skips.
+The bounded public report isolates a test-only hardcoded /usr/bin/python3.13 path
+which is absent on Actions; production correctly refused the interpreter mismatch
+before account reservation. The causal capacity test now selects its actual
+/proc/self/exe interpreter. The production identity check and rejection regression
+are unchanged. No count from the failed run is relabeled passing. The next changed
+candidate must rerun focused validation; review and B2 remain blocking.
+
 ### 2026-10-28 target mount evidence and narrow N8 repair
 
 Material10af37d4b305b4f7763740affc306a1ade2e6c06/treeaf9d60c3ee3bc456d5e7be9e40324d069fd7c916
