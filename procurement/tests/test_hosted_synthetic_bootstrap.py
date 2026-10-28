@@ -38,6 +38,27 @@ def plan(**changes):
     return boot.plan_native_bootstrap(**values)
 
 
+def prerequisite_report(number=1, kind='SYSCALL_REFUSED'):
+    from hosted_synthetic_namespace_prerequisite import _POLICY
+    import errno
+    policy={path:{'state':'MISSING','errno':2} for path in _POLICY}
+    operation={'result':kind,'errno':None,'attempts':'NOT_CONFIRMED'}
+    if kind in ('SYSCALL_REFUSED','SYSCALL_SUCCEEDED_ONLY'):
+        operation.update(errno=number,errno_name=errno.errorcode.get(number),attempts=1,
+                         operation='unshare_USER_MNT_PID_NET',attempt_context_policy=policy)
+    elif kind=='HARNESS_FAILURE':operation['returncode']=125
+    return {'source_commit':'a'*40,'source_tree':'b'*40,'operation':operation,
+            'policy_before':policy,'policy_after':policy,'policy_stable':True,
+            'attempt_context_matches_supervisor':True,'credential_release':'WITHHELD',
+            'execution_authority':False}
+
+
+def evidence_report():
+    return dict(commit='a'*40,tree='b'*40,source_files={},provider_calls=0,payload_processes=0,
+                credential_release='WITHHELD',execution_authority=False,
+                namespace_prerequisite=prerequisite_report())
+
+
 class HostedSyntheticBootstrapTests(unittest.TestCase):
     def test_every_supervisor_entry_rejects_retained_authority_before_effects(self):
         import hosted_synthetic_capability as capability
@@ -328,20 +349,21 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
              patch.object(boot.os,'geteuid',return_value=UID),self.assertRaises(boot.BootstrapCleanupError):
             boot.verify_postdrop_access.__wrapped__(Path('/work/repo'),UNIT)
 
-    def _owned_run(self, failure):
+    def _owned_run(self, failure, report_change=None):
         from types import SimpleNamespace
         import hosted_synthetic_identity as identity
         account=object.__new__(identity.AccountLease);account._owner=account
         account.service_attempted=False;account.service_acknowledged=False;account.journal=Mock();account.uncertain=False
         account.identity=identity.DedicatedIdentity(UNIT.removeprefix('buffalo-hosted-').removesuffix('.service'),950,951,UID,GID)
         selected=plan(uid=950,gid=951,root=account.identity.root+'/repo');events=[]
-        binding=Mock(tree='b'*40,files=())
+        binding=Mock(commit='a'*40,tree='b'*40,files=())
         report={'commit':'a'*40,'tree':'b'*40,'source_files':{},'repository':selected.source[0],'ref':selected.source[2],
                 'execution_authority':False,'provider_calls':0,'payload_processes':0,'credential_release':'WITHHELD',
                 'contract':'BUFFALO_HOSTED_NAMESPACE_DIAGNOSTIC_V1','HOST_CAPABILITY':'FAIL','sentinel_exec':'NOT_RUN',
                 'runtime':'HOST_RUNTIME_UNSEALED','railway_compatibility':'NOT_PROVEN'}
         report.update(reason='INCOMPLETE_PREFLIGHT',namespace_attempt={'cleanup_complete':True,'reason':'INCOMPLETE_PREFLIGHT','resource_cleanup':{'generation_child_removed':True}})
-        if failure=='resource_cleanup':report.update(reason='CLEANUP_FAILED',namespace_attempt={'cleanup_complete':False})
+        if failure=='resource_cleanup':report.update(reason='CLEANUP_FAILED',namespace_attempt={'cleanup_complete':False,'reason':'CLEANUP_FAILED'})
+        if report_change is not None:report_change(report)
         first=json.dumps(report,sort_keys=True,separators=(',',':')).encode()
         raw=first+b'\nevidence_sha256='+hashlib.sha256(first).hexdigest().encode()+b'\n'
         def client(*args,**kwargs):
@@ -354,9 +376,12 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
         observed=Mock(proof=None,work_acknowledged=True,failed=False,closed=False)
         def finish(**kwargs):
             events.append('drain')
+            if failure=='pre_ack':raise boot.BootstrapRefusal('synthetic_missing_ready')
+            if failure=='post_report_cancel':raise KeyboardInterrupt()
             observed.proof=SimpleNamespace(generation='c'*64,source_commit='a'*40,source_tree='b'*40,
                 aggregate={},operation_succeeded=kwargs['operation_succeeded'])
         observed.finish_service.side_effect=finish
+        if failure=='pre_ack':observed.work_acknowledged=False
         def close():
             events.append('external_close');observed.closed=True
             if failure=='cleanup':
@@ -378,7 +403,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
                 invoke=boot.run_native_plan if failure=='deferred_cancel' else boot.run_native_plan.__wrapped__
                 return invoke(selected,source_root='/work/source',account=account)
             finally:
-                self.assertEqual(events,['inspect','client','drain','external_close','inspect'])
+                self.assertEqual(events,['inspect','client','drain',*(['drain'] if failure=='post_report_cancel' else []),'external_close','inspect'])
 
     def test_partial_client_failure_or_timeout_keeps_cleanup_obligations(self):
         for failure in ('client','timeout'):
@@ -403,6 +428,80 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
         self.assertEqual(result['runtime_closure'],'UNSEALED')
         self.assertEqual(result['service_absence'],'EXACT_OWNED_SUBTREE_REMOVAL_OBSERVED')
         self.assertEqual(result['client_returncode'],1)
+
+    def test_prerequisite_errno_survives_pre_ack_refusal_and_cleanup_wrapper(self):
+        for number in (1,13,28):
+            with self.subTest(errno=number),self.assertRaises(boot.BootstrapRefusal) as caught:
+                self._owned_run('pre_ack',lambda report:report.update(
+                    namespace_attempt=None,namespace_prerequisite=prerequisite_report(number)))
+            original=caught.exception
+            try:raise boot.BootstrapCleanupError('synthetic_identity_quarantined') from original
+            except boot.BootstrapCleanupError as wrapped:
+                observed=boot.diagnostic_failure_evidence(wrapped)
+            self.assertEqual(observed['namespace_prerequisite']['operation']['errno'],number)
+            self.assertNotIn('generation',observed)
+            self.assertNotIn('cleanup',observed)
+            self.assertFalse(observed['execution_authority'])
+
+    def test_harness_failures_are_not_relabelled_as_kernel_errno(self):
+        for kind in ('HARNESS_TIMEOUT','HARNESS_FAILURE','HARNESS_MALFORMED_OUTPUT'):
+            with self.subTest(kind=kind),self.assertRaises(boot.BootstrapRefusal) as caught:
+                self._owned_run('pre_ack',lambda report:report.update(
+                    namespace_attempt=None,namespace_prerequisite=prerequisite_report(kind=kind)))
+            observed=boot.diagnostic_failure_evidence(caught.exception)['namespace_prerequisite']['operation']
+            self.assertEqual(observed['result'],kind);self.assertIsNone(observed['errno'])
+            self.assertEqual(observed['attempts'],'NOT_CONFIRMED')
+
+    def test_snapshot_is_immutable_and_excludes_unknown_private_fields(self):
+        from types import SimpleNamespace
+        report=evidence_report();report['arbitrary']='PRIVATE_SENTINEL'
+        report['namespace_prerequisite']['operation']['stderr']='PRIVATE_SENTINEL'
+        report['namespace_prerequisite']['policy_before']['/proc/self/attr/current']['raw']='PRIVATE_SENTINEL'
+        retained=boot.snapshot_diagnostic(report,SimpleNamespace(commit='a'*40,tree='b'*40,files=()))
+        report['namespace_prerequisite']['operation']['errno']=28
+        self.assertNotIn(b'PRIVATE_SENTINEL',retained.encoded)
+        self.assertEqual(json.loads(retained.encoded)['namespace_prerequisite']['operation']['errno'],1)
+        with self.assertRaises(AttributeError):retained.encoded=b'{}'
+
+    def test_wrong_source_authority_and_oversize_report_never_retained(self):
+        from types import SimpleNamespace
+        binding=SimpleNamespace(commit='a'*40,tree='b'*40,files=())
+        for change in ({'commit':'c'*40},{'tree':'c'*40},{'source_files':{'x':'a'*64}},
+                       {'provider_calls':True},{'payload_processes':1},{'execution_authority':True},
+                       {'credential_release':'RELEASED'},{'arbitrary':'x'*16385}):
+            with self.subTest(change=list(change)),self.assertRaises(boot.BootstrapRefusal):
+                boot.snapshot_diagnostic(dict(evidence_report(),**change),binding)
+        with self.assertRaises(boot.BootstrapRefusal) as caught:
+            self._owned_run(None,lambda report:report.update(tree='c'*40))
+        self.assertIsNone(boot.diagnostic_failure_evidence(caught.exception))
+
+    def test_invalid_policy_and_operation_cannot_be_public_evidence(self):
+        from types import SimpleNamespace
+        binding=SimpleNamespace(commit='a'*40,tree='b'*40,files=())
+        changes=(lambda p:p.update(source_commit='c'*40),
+                 lambda p:p['operation'].update(errno=True),
+                 lambda p:p['operation'].update(errno_name='PRIVATE_SENTINEL'),
+                 lambda p:p['operation'].update(result='SYSCALL_SUCCEEDED_ONLY'),
+                 lambda p:p['policy_before'].pop('/proc/self/attr/current'),
+                 lambda p:p['policy_before']['/proc/self/attr/current'].update(state='OBSERVED',sha256='a'*64,profile='PRIVATE_SENTINEL'))
+        for change in changes:
+            report=evidence_report();change(report['namespace_prerequisite'])
+            with self.subTest(change=change),self.assertRaises(boot.BootstrapRefusal):boot.snapshot_diagnostic(report,binding)
+
+    def test_missing_report_or_cyclic_error_chain_never_infers_evidence(self):
+        error=boot.BootstrapRefusal('EPERM is only arbitrary exception text')
+        error.__cause__=error
+        self.assertIsNone(boot.diagnostic_failure_evidence(error))
+        with self.assertRaises(OSError) as caught:self._owned_run('client')
+        self.assertIsNone(boot.diagnostic_failure_evidence(caught.exception))
+
+    def test_post_report_cancellation_and_cleanup_failure_keep_evidence(self):
+        for failure in ('post_report_cancel','cleanup'):
+            with self.subTest(failure=failure),self.assertRaises(boot.BootstrapCleanupError) as caught:
+                self._owned_run(failure,lambda report:report.update(namespace_prerequisite=prerequisite_report(13)))
+            observed=boot.diagnostic_failure_evidence(caught.exception)
+            self.assertEqual(observed['namespace_prerequisite']['operation']['errno'],13)
+            if failure=='post_report_cancel':self.assertIsInstance(caught.exception.__cause__,KeyboardInterrupt)
 
 
 

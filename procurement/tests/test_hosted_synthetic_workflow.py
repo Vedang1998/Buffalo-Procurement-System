@@ -51,10 +51,10 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
         self.assertEqual(len(launches), 4)
         self.assertTrue(launches[0].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertTrue(launches[3].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[3])
-        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[3])
-        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[1])
+        self.assertTrue(launches[2].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[2])
+        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[2])
+        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[3])
         self.assertNotIn('BUFFALO_DIAGNOSTIC_NODE', ''.join(launches[1:]))
         self.assertIn('diagnostic_node=$(command -v node)', self.text)
         self.assertIn('sha256sum "$diagnostic_node"', self.text)
@@ -74,7 +74,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,13,66,22,37,20,11,17,30,15,23,21,14,23,10,23,14,22,15,20,23,21,28,18,26,23,21,22,16,24,26,17,66,36,16,35,25,35,14]', 'result.wasSuccessful()', 'result.testsRun == 977', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,14,66,22,37,20,11,17,37,16,23,21,14,23,10,23,14,26,15,20,23,21,28,18,26,23,21,22,16,24,26,17,66,36,16,35,25,35,14]', 'result.wasSuccessful()', 'result.testsRun == 990', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -104,8 +104,18 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)['privileged_processes_started'],0)
         self.assertNotIn('sudo ',self.text)
 
+    def test_review_gate_precedes_real_kernel_and_service_steps(self):
+        gate = self.text.index('- name: Review gate before hosted execution')
+        self.assertLess(gate, self.text.index('- name: Credential-free real PID1 lifecycle regression'))
+        before = self.text[:gate]
+        for command in ('--run-pid1-regressions', '/usr/bin/systemd-run', '/usr/bin/systemctl', 'unshare '):
+            self.assertNotIn(command, before)
+        # Execute the actual gate shell, followed by a harmless marker standing
+        # in for every later live step. No kernel/manager operation is run here.
+        self.test_review_gate_exits_before_any_live_service_command()
+
     def test_public_notice_chunks_reconstruct_exact_bytes_and_keep_failure(self):
-        block = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1]
+        block = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1].split('      - name:', 1)[0]
         commands = '\n'.join(line[10:] for line in block.splitlines())
         for raw in ('{"test":"100%\r\n::error::synthetic"}', 'a'*12000, 'b'*16384):
             with self.subTest(size=len(raw)):

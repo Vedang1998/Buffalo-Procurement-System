@@ -39,6 +39,131 @@ class BootstrapCleanupError(BootstrapRefusal):
     pass
 
 
+@dataclass(frozen=True)
+class _DiagnosticEvidence:
+    encoded: bytes
+
+
+def snapshot_diagnostic(report, binding):
+    """Bounded public observations only; never cleanup or execution authority.
+
+    Called after transport verification. Retain a digest of the original public
+    report, but project fixed fields rather than arbitrary nested child data.
+    The immutable bytes prevent later mutation of a received report.
+    """
+    raw = json.dumps(report, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+    _require(len(raw) <= 16384 and report.get('commit') == binding.commit
+             and report.get('tree') == binding.tree and report.get('source_files') == dict(binding.files)
+             and report.get('execution_authority') is False
+             and type(report.get('provider_calls')) is int and report['provider_calls'] == 0
+             and type(report.get('payload_processes')) is int and report['payload_processes'] == 0
+             and report.get('credential_release') == 'WITHHELD', 'diagnostic_evidence_refused')
+    result = {'commit': binding.commit, 'tree': binding.tree,
+              'report_sha256': hashlib.sha256(raw).hexdigest(),
+              'credential_release': 'WITHHELD', 'execution_authority': False,
+              'scope': 'OBSERVATION_ONLY_NOT_ACCEPTANCE'}
+    prerequisite = report.get('namespace_prerequisite')
+    if prerequisite is not None:
+        from hosted_synthetic_namespace_prerequisite import _POLICY
+        _require(type(prerequisite) is dict and prerequisite.get('source_commit') == binding.commit
+                 and prerequisite.get('source_tree') == binding.tree
+                 and prerequisite.get('credential_release') == 'WITHHELD'
+                 and prerequisite.get('execution_authority') is False)
+        operation = prerequisite['operation']
+        kind = operation['result']
+        _require(kind in ('SYSCALL_SUCCEEDED_ONLY', 'SYSCALL_REFUSED', 'HARNESS_TIMEOUT',
+                          'HARNESS_FAILURE', 'HARNESS_MALFORMED_OUTPUT'))
+        observed = {'result': kind, 'errno': None, 'attempts': 'NOT_CONFIRMED'}
+        if kind in ('SYSCALL_SUCCEEDED_ONLY', 'SYSCALL_REFUSED'):
+            number = operation['errno']
+            _require(type(number) is int and 0 <= number <= 4095
+                     and (number == 0) == (kind == 'SYSCALL_SUCCEEDED_ONLY')
+                     and type(operation.get('attempts')) is int and operation['attempts'] == 1
+                     and operation.get('operation') == 'unshare_USER_MNT_PID_NET'
+                     and operation.get('errno_name') == errno.errorcode.get(number))
+            observed.update(errno=number, errno_name=errno.errorcode.get(number), attempts=1,
+                            operation='unshare_USER_MNT_PID_NET')
+        elif kind == 'HARNESS_FAILURE':
+            code = operation['returncode']
+            _require(type(code) is int and -(2**31) <= code < 2**31)
+            observed['returncode'] = code
+        selected = {'operation': observed, 'policy_cause': 'UNCONFIRMED'}
+        for field in ('policy_stable', 'attempt_context_matches_supervisor'):
+            if field in prerequisite:
+                _require(type(prerequisite[field]) is bool)
+                selected[field] = prerequisite[field]
+        policies = [('policy_before', prerequisite.get('policy_before')),
+                    ('policy_after', prerequisite.get('policy_after'))]
+        if 'attempt_context_policy' in operation:
+            policies.append(('attempt_context_policy', operation['attempt_context_policy']))
+        for field, policy in policies:
+            _require(type(policy) is dict and set(policy) == set(_POLICY))
+            values = {}
+            for path, policy_kind in _POLICY.items():
+                item = policy[path]; state = item['state']
+                _require(state in ('OBSERVED', 'MISSING', 'DENIED', 'READ_ERROR', 'MALFORMED_OR_OVERSIZED'))
+                value = {'state': state}
+                if state == 'OBSERVED':
+                    _require(type(item.get('sha256')) is str and re.fullmatch('[0-9a-f]{64}', item['sha256']))
+                    value['sha256'] = item['sha256']
+                    if policy_kind == 'profile':
+                        _require(item.get('profile') in ('unconfined', 'REDACTED_PROFILE'))
+                        value['profile'] = item['profile']
+                    else:
+                        current = item.get('value')
+                        _require((type(current) is int and 0 <= current <= 9999999999)
+                                 if policy_kind == 'integer' else current in ('Y', 'N'))
+                        value['value'] = current
+                elif state != 'MALFORMED_OR_OVERSIZED':
+                    _require(type(item.get('errno')) is int and 0 < item['errno'] <= 4095)
+                    value['errno'] = item['errno']
+                values[path] = value
+            selected[field] = values
+        result['namespace_prerequisite'] = selected
+    namespace = report.get('namespace_attempt')
+    if type(namespace) is dict:
+        selected = {}
+        reason = namespace.get('reason')
+        _require(reason in ('INCOMPLETE_PREFLIGHT', 'NAMESPACE_PROOF_REFUSED', 'CLEANUP_FAILED', 'CANCELLED'))
+        selected['reason'] = reason
+        location = namespace.get('refusal_location')
+        if location is not None:
+            _require(type(location) is str and re.fullmatch(r'_[a-z_]{1,48}:[1-9][0-9]{0,3}', location))
+            selected['refusal_location'] = location
+        external = namespace.get('external_observer_failure')
+        if external is not None:
+            _require(external in ('external_observer_timeout', 'external_observer_ack_refused'))
+            selected['external_observer_failure'] = external
+        native = namespace.get('postgres_version')
+        if native is not None:
+            _require(type(native) is dict and native.get('native_execution') == 'FD_BOUND_VERSION_COMPLETED'
+                     and native.get('credential_release') == 'WITHHELD' and native.get('integrated_acceptance') is False
+                     and type(native.get('generation')) is str and re.fullmatch('[0-9a-f]{64}', native['generation'])
+                     and type(native.get('version')) is str
+                     and re.fullmatch(r'postgres \(PostgreSQL\) 16\.[0-9]{1,3}(?: \([A-Za-z0-9.+~:\-/ ]{1,160}\))?', native['version']))
+            selected['postgres_version'] = {key: native[key] for key in ('native_execution', 'generation', 'version')}
+        result['namespace_attempt'] = selected
+    return _DiagnosticEvidence(json.dumps(result, sort_keys=True, separators=(',', ':'), allow_nan=False).encode())
+
+
+def diagnostic_failure_evidence(error, *, binding=None):
+    """Read fixed observations through cleanup wrappers, without exception text."""
+    seen = set()
+    for _ in range(8):
+        if not isinstance(error, BaseException) or id(error) in seen:
+            break
+        seen.add(id(error))
+        evidence = getattr(error, '_buffalo_diagnostic_evidence', None)
+        if type(evidence) is _DiagnosticEvidence:
+            result = json.loads(evidence.encoded)
+            if binding is not None:
+                _require(result['commit'] == binding.commit and result['tree'] == binding.tree,
+                         'diagnostic_evidence_source_mismatch')
+            return result
+        error = error.__cause__
+    return None
+
+
 def _require(value, code='bootstrap_prerequisite_refused'):
     if not value:
         raise BootstrapRefusal(code)
@@ -364,7 +489,7 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
     before = inspect_native_prerequisites()
     if lifecycle is not None:lifecycle.native_observed(before)
     from hosted_synthetic_observer import ExternalObserver
-    observer=None;error=None;cleanup_errors=[];code=raw=report=None
+    observer=None;error=None;cleanup_errors=[];code=raw=report=None;evidence=None
     try:
         _require(account.service_attempted is False and account.service_acknowledged is False,
                  'native_attempt_cannot_be_retried')
@@ -377,6 +502,7 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
         report=_decode_report(raw,plan)
         _require(report.get('tree')==binding.tree and report.get('source_files')==dict(binding.files),
                  'bootstrap_report_source_refused')
+        evidence=snapshot_diagnostic(report,binding)
         if lifecycle is not None:lifecycle.report_received(report)
         observation=report.get('namespace_attempt')
         namespace_clean=(report.get('reason')=='INCOMPLETE_PREFLIGHT' and type(observation) is dict
@@ -407,8 +533,12 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
     except BaseException as selected:cleanup_errors.append(selected)
     if cleanup_errors:
         account.uncertain=True
-        raise BootstrapCleanupError('bootstrap_cleanup_unverified') from (error or cleanup_errors[0])
-    if error is not None:raise error
+        failure=BootstrapCleanupError('bootstrap_cleanup_unverified')
+        if evidence is not None:failure._buffalo_diagnostic_evidence=evidence
+        raise failure from (error or cleanup_errors[0])
+    if error is not None:
+        if evidence is not None:error._buffalo_diagnostic_evidence=evidence
+        raise error
     _require(observer is not None and account.drain_proof is not None)
     proof=account.drain_proof
     return {'contract':'BUFFALO_NATIVE_BOOTSTRAP_OBSERVATION_V1','report':report,

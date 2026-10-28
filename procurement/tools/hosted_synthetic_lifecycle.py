@@ -4,6 +4,7 @@ No CLI, environment activation, arbitrary callback or caller-supplied PASS.
 Each invocation owns one account/service/generation. Negative assertion success
 is separate from cleanup/resource acceptance; quarantine never means drained.
 """
+import json
 import os
 from pathlib import Path
 import signal
@@ -32,7 +33,7 @@ class LifecycleCase:
         self.case=case;self.binding=binding;self.identity=selected;self._owner=self;self._token=_TOKEN
         self.operator=ns._process(os.getpid());self.lease=None;self.observer=None
         self.events=[];self.actors={};self.cancel_sent=False;self.kill_sent=False
-        self.child_report=None;self.partial=False;self.finished=False;self.native=None
+        self.child_report=None;self.child_evidence=None;self.partial=False;self.finished=False;self.native=None
 
     def verify(self):
         boot._require(self._owner is self and self._token is _TOKEN and not self.finished
@@ -127,6 +128,7 @@ class LifecycleCase:
         boot._require(report['commit']==self.binding.commit and report['tree']==self.binding.tree
                       and report['provider_calls']==0 and report['credential_release']=='WITHHELD'
                       and report['execution_authority'] is False)
+        self.child_evidence=boot.snapshot_diagnostic(report,self.binding)
         self.child_report=report
 
     def _quarantined(self):
@@ -182,6 +184,8 @@ class LifecycleCase:
             'aggregate':lease.drain_proof.aggregate if drained else None,
             'observer_descriptors_closed':getattr(observer,'descriptors_closed_successfully',False) if observer else None,
             'failure_class':type(error).__name__ if error else None,
+            'diagnostic_evidence':(json.loads(self.child_evidence.encoded)
+                if self.child_evidence is not None else boot.diagnostic_failure_evidence(error,binding=self.binding)),
             'privileged_live_acceptance':'INCOMPLETE','credential_release':'WITHHELD','provider_calls':0,
             'application_browser_execution':'NOT_RUN','execution_authority':False}
 

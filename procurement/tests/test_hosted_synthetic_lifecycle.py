@@ -132,6 +132,50 @@ class LifecycleTests(unittest.TestCase):
         for key,changed in (('commit','c'*40),('tree','d'*40),('provider_calls',1),('credential_release','RELEASED'),('execution_authority',True)):
             with self.subTest(key=key),self.assertRaises(boot.BootstrapRefusal):value.report_received(dict(valid,**{key:changed}))
 
+    def test_precise_prerequisite_failure_survives_final_lifecycle_report(self):
+        from test_hosted_synthetic_bootstrap import evidence_report
+        value,_,observed=self.fixture('normal');observed.generation=None
+        child=evidence_report();value.report_received(child)
+        child['namespace_prerequisite']['operation']['errno']=28
+        result=value.finish(None,boot.BootstrapCleanupError('synthetic_pre_ack_cleanup_unverified'))
+        self.assertEqual(result['diagnostic_evidence']['namespace_prerequisite']['operation']['errno'],1)
+        self.assertEqual((result['assertion'],result['operation'],result['cleanup']),('FAIL','FAILED','UNVERIFIED'))
+        self.assertIsNone(result['generation']);self.assertIsNone(result['aggregate'])
+
+    def test_native_version_observation_does_not_claim_lifecycle_acceptance(self):
+        from test_hosted_synthetic_bootstrap import evidence_report
+        value,_,_=self.fixture('normal');child=evidence_report()
+        child['namespace_attempt']={'reason':'INCOMPLETE_PREFLIGHT','postgres_version':{
+            'generation':'c'*64,'native_execution':'FD_BOUND_VERSION_COMPLETED',
+            'version':'postgres (PostgreSQL) 16.14','credential_release':'WITHHELD',
+            'integrated_acceptance':False,'unrestricted_output':'PRIVATE_SENTINEL'}}
+        value.report_received(child);result=value.finish({},None)
+        native=result['diagnostic_evidence']['namespace_attempt']['postgres_version']
+        self.assertEqual(native['version'],'postgres (PostgreSQL) 16.14')
+        self.assertEqual(result['assertion'],'FAIL');self.assertEqual(result['resource_acceptance'],'UNVERIFIED')
+        self.assertNotIn('PRIVATE_SENTINEL',json.dumps(result))
+        self.assertEqual(result['credential_release'],'WITHHELD')
+
+    def test_no_received_child_report_uses_only_retained_error_evidence(self):
+        from test_hosted_synthetic_bootstrap import evidence_report
+        value,_,_=self.fixture('normal')
+        error=boot.BootstrapRefusal('arbitrary text never emitted')
+        error._buffalo_diagnostic_evidence=boot.snapshot_diagnostic(evidence_report(),BINDING)
+        result=value.finish(None,error)
+        self.assertEqual(result['diagnostic_evidence']['namespace_prerequisite']['operation']['errno'],1)
+        self.assertNotIn('arbitrary text',json.dumps(result))
+
+    def test_other_source_failure_evidence_cannot_enter_lifecycle_envelope(self):
+        from test_hosted_synthetic_bootstrap import evidence_report
+        value,_,_=self.fixture('normal');child=evidence_report()
+        child.update(commit='c'*40,tree='d'*40)
+        child['namespace_prerequisite'].update(source_commit='c'*40,source_tree='d'*40)
+        other=source.HostedSourceBinding('c'*40,'d'*40,())
+        error=boot.BootstrapRefusal('foreign source observation')
+        error._buffalo_diagnostic_evidence=boot.snapshot_diagnostic(child,other)
+        with self.assertRaisesRegex(boot.BootstrapRefusal,'diagnostic_evidence_source_mismatch'):
+            value.finish(None,error)
+
     def test_case_is_single_use_after_evidence_finalization(self):
         value,_,_=self.fixture('normal');value.finish(None,boot.BootstrapRefusal('failure'))
         with self.assertRaises(boot.BootstrapRefusal):value.finish(None,None)

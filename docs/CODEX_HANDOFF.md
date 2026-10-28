@@ -11,6 +11,49 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-28 frozen Claude target preserved; independent diagnostic repairs
+
+Owner explicitly froze Claude's tested implementation at
+`d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea` (tree
+`31336c2aa583e6f68b3589c4dfe54578b3b956f3`) and its review/evidence checkpoint at
+`03035fff71d63adab5b36e6f775db3932edae1e7` (tree
+`44177adcde660cc0b8d194df7b0934eb109a952a`). The supplied report covers5e62c8e3
+only; six historical closures remain there. Review of the frozen delta is
+REVIEW_PENDING. This descendant does not replace that target or inherit approval.
+
+A fresh Cloud checkout initially held main on a local work branch. Codex fetched
+and switched to the exact clean acceptance publication without resetting or
+rewriting history. The previous reusable environment was not restored here;
+locked Python dependencies were installed in a disposable task-local venv with
+`uv sync --frozen --python /usr/bin/python3.13`. No dependency identities changed.
+Repository future commits use the already-confirmed public noreply address;
+no author/committer email environment override is present. No renewed identity
+verification or metadata rewrite was performed.
+
+Two independent defects reproduced against03035fff without live privilege:
+precise namespace errno/context was discarded by outer failure/cleanup, and the
+workflow ran its generic real PID1 step before the inert review gate. This
+source descendant preserves bounded source-bound public observations through
+cleanup exception causes and lifecycle output, while excluding arbitrary nested
+fields/exception text. Missing evidence stays unavailable; no generation, drain
+or execution PASS is invented. Lifecycle fallback rejects other-source evidence.
+The unconditional78 gate now precedes the real PID1 step. The obsolete user-service
+body remains unreachable and is not the fixed PG activation path; actual workflow
+activation still requires exact implementation/wiring review and a reviewed delta.
+
+142 focused tests passed after both repairs. Two expected baseline regressions
+were retained as failed evidence; the source baseline's65 focused tests passed.
+Internal read-only Codex inspection is not Claude review. Frozen source-bound
+broader validation and publication will be recorded separately. Registered floors
+increase by13; no floor is lowered. No application/schema/rules/lockfile or canonical
+phase milestone changes. Privileged activation and credential release stay disabled.
+Native PG, same-generation resources/cleanup, sentinel, browser/BackupV2/APPLY/DRAFT/
+packet/restart/restore and full supported suite remain NOT_RUN. Railway/commercial
+readiness is unchanged. Next external gate remains Claude's frozen target; this
+new material requires separate delta review before any use in live activation.
+
+
+
 ### 2026-10-27 published fixed PostgreSQL candidate — independent review gate
 
 Latest tested material and remotely verified publication:

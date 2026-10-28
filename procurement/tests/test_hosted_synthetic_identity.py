@@ -113,6 +113,27 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
             actual=subprocess.check_output(['/usr/bin/git','-C',str(stage),'rev-parse','HEAD','HEAD^{tree}'],env=env,text=True).splitlines()
             self.assertEqual(actual,[commit,tree]);self.assertEqual((stage/'synthetic.txt').read_bytes(),(source/'synthetic.txt').read_bytes())
 
+    def test_account_cleanup_wrapper_preserves_validated_diagnostic_observation(self):
+        from test_hosted_synthetic_bootstrap import evidence_report
+        from hosted_synthetic_source import HostedSourceBinding
+        binding=HostedSourceBinding('a'*40,'b'*40,())
+        original=boot.BootstrapRefusal('synthetic_namespace_refusal')
+        original._buffalo_diagnostic_evidence=boot.snapshot_diagnostic(evidence_report(),binding)
+        lease=self.lease()
+        with patch('hosted_synthetic_capability._require_clean_supervisor'), \
+             patch('hosted_synthetic_source.bind_hosted_source',return_value=binding), \
+             patch.object(identity.AccountLease,'create',return_value=lease), \
+             patch.object(boot,'run_native_plan',side_effect=original), \
+             patch.object(lease,'close_after_service',side_effect=boot.BootstrapCleanupError('synthetic_quarantine')), \
+             self.assertRaises(boot.BootstrapCleanupError) as caught:
+            identity.run_provisioned_candidate(ID,source='/work/source',python='/usr/bin/python3.13',
+                repository='Vedang1998/Buffalo-Procurement-System',event='push',
+                ref='refs/heads/codex/hosted-synthetic-acceptance',commit='a'*40)
+        self.assertIs(caught.exception.__cause__,original)
+        observed=boot.diagnostic_failure_evidence(caught.exception)
+        self.assertEqual(observed['namespace_prerequisite']['operation']['errno'],1)
+        self.assertFalse(observed['execution_authority'])
+
     def account(self):
         return SimpleNamespace(pw_name=ID.user,pw_uid=ID.uid,pw_gid=ID.gid,
                                pw_dir='/nonexistent',pw_shell='/usr/sbin/nologin')
