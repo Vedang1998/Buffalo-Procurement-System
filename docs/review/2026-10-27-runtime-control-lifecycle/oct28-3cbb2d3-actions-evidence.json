@@ -1,0 +1,190 @@
+{
+  "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+  "run": "40699325717",
+  "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40699325717",
+  "jobs": [
+    {
+      "job": "122854530298",
+      "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40699325717/job/122854530298",
+      "steps": [
+        {
+          "name": "Set up job",
+          "number": "1",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:45:16Z",
+          "completed-at": "2026-10-28T13:45:17Z"
+        },
+        {
+          "name": "Check out exact event source",
+          "number": "2",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:45:17Z",
+          "completed-at": "2026-10-28T13:45:18Z"
+        },
+        {
+          "name": "Verify trusted source before repository code",
+          "number": "3",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:45:18Z",
+          "completed-at": "2026-10-28T13:45:18Z"
+        },
+        {
+          "name": "Prepare Python for the diagnostic",
+          "number": "4",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:45:18Z",
+          "completed-at": "2026-10-28T13:45:26Z"
+        },
+        {
+          "name": "Read-only target ownership-scan prerequisites",
+          "number": "5",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:45:26Z",
+          "completed-at": "2026-10-28T13:45:27Z"
+        },
+        {
+          "name": "Focused source and diagnostic validation",
+          "number": "6",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:45:27Z",
+          "completed-at": "2026-10-28T13:46:02Z"
+        },
+        {
+          "name": "Review gate before hosted execution",
+          "number": "7",
+          "conclusion": "failure",
+          "started-at": "2026-10-28T13:46:02Z",
+          "completed-at": "2026-10-28T13:46:02Z"
+        },
+        {
+          "name": "Credential-free real PID1 lifecycle regression",
+          "number": "8",
+          "conclusion": "skipped",
+          "started-at": "2026-10-28T13:46:02Z",
+          "completed-at": "2026-10-28T13:46:02Z"
+        },
+        {
+          "name": "Post Prepare Python for the diagnostic",
+          "number": "15",
+          "conclusion": "skipped",
+          "started-at": "2026-10-28T13:46:02Z",
+          "completed-at": "2026-10-28T13:46:02Z"
+        },
+        {
+          "name": "Post Check out exact event source",
+          "number": "16",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:46:02Z",
+          "completed-at": "2026-10-28T13:46:02Z"
+        },
+        {
+          "name": "Complete job",
+          "number": "17",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:46:02Z",
+          "completed-at": "2026-10-28T13:46:02Z"
+        }
+      ],
+      "reports": [
+        {
+          "sha256": "fb7e96bf133301f23f912bfd18c856bda952c7cfddf039ce91ed84e7e8cb8321",
+          "report": {
+            "discovered": 1033,
+            "error_events": 0,
+            "executed": 1033,
+            "expected_failures": 0,
+            "failure_events": 0,
+            "observations": [],
+            "omitted_observations": 0,
+            "passed_methods": 1033,
+            "scope": "DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF",
+            "skipped": 0,
+            "unexpected_successes": 0
+          }
+        },
+        {
+          "sha256": "fed2aede5121caf0110aeb2cdaa176979ab4008ecea74c304770310c831d3536",
+          "report": {
+            "account_mutations": 0,
+            "active_binfmt_observation": "ACTIVE_BINFMT_FD_OBSERVED_AND_CLOSED",
+            "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+            "credential_release": "WITHHELD",
+            "direct_pid1_namespace_read": {
+              "ipc": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              },
+              "mnt": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              }
+            },
+            "execution_authority": false,
+            "filesystem_counts": {
+              "autofs": 1,
+              "binfmt_misc": 1,
+              "bpf": 1,
+              "cgroup2": 1,
+              "configfs": 1,
+              "debugfs": 1,
+              "devpts": 1,
+              "devtmpfs": 1,
+              "efivarfs": 1,
+              "ext4": 2,
+              "fusectl": 1,
+              "hugetlbfs": 1,
+              "mqueue": 1,
+              "proc": 1,
+              "pstore": 1,
+              "securityfs": 1,
+              "sysfs": 1,
+              "tmpfs": 4,
+              "tracefs": 1,
+              "vfat": 1
+            },
+            "fixed_mount_points": {
+              "/": [
+                "ext4"
+              ],
+              "/boot/efi": [
+                "vfat"
+              ],
+              "/proc": [
+                "proc"
+              ],
+              "/proc/sys/fs/binfmt_misc": [
+                "autofs",
+                "binfmt_misc"
+              ],
+              "/sys": [
+                "sysfs"
+              ]
+            },
+            "mountinfo_sha256": "dcac2578a6c6f1874ad1674597762e20008830d4dcc6ba22cb2aa0f75a97b5f8",
+            "namespace_operations": 0,
+            "non_proc_mounts_beneath_proc": [
+              {
+                "filesystem": "autofs",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              },
+              {
+                "filesystem": "binfmt_misc",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              }
+            ],
+            "operator_uid": 1001,
+            "ownership_scan": "NOT_RUN_REVIEW_REQUIRED",
+            "ownership_scan_mount_policy": "SCHEMA_AND_FIXED_MOUNT_READBACK_OBSERVED",
+            "pid1_uid": 0,
+            "privileged_processes_started": 0,
+            "refusal": null,
+            "repaired_native_stat_regression": "NOT_RUN_REVIEW_REQUIRED",
+            "root_owned_pid1_condition": "MET",
+            "tree": "0cbeccf63ab37d32672a455867086358e2c7b134"
+          }
+        }
+      ],
+      "raw_page_sha256": "d3988e1603f06a46004e9a17e1fdbe2c39ab600b3aeaeffa1b07e4369810c75d"
+    }
+  ]
+}

@@ -11,6 +11,56 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 ## Verified current state
 
 
+### 2026-10-28 published remediation verified; B2 remains an authority blocker
+
+Latest tested/published implementation `3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c`, tree
+`0cbeccf63ab37d32672a455867086358e2c7b134`, was ordinarily pushed and freshly fetched. Main,
+PR24 and the recovery branch remain unchanged. This follow-up adds docs/evidence
+only; its tree is separate. No original metadata rewrite or private bundle upload.
+
+GitHub run40699325717/job122854530298 executed1033/1033 diagnostic tests with
+zero failures/errors/skips; the review gate then intentionally exited78 and live
+PID1 execution was SKIPPED. The exact workflow command separately passed1033/1033
+in Cloud; startup10/10 passed at this source. Discovery2597/131 executes zero tests.
+Preceding be2d197 passed1024 twice; de34685 passed1033 twice, plus17 price/20 snapshot/
+88 related/10 startup. Those remain attributed to their exact sources. GitHub's
+failed10af37d run (counts unknown) and edf8d12 run (1032 passed/1 error of1033) are
+retained, not overwritten. The latter was a test-only missing interpreter path;
+production's identity refusal remains unchanged.
+
+Actual target read-only evidence confirms rootPID1/direct EACCES13, fixed EFI vfat,
+stacked autofs/binfmt and an active binfmt FD whose mount identity/type, named
+readback and closure were verified. This is not privileged scan/bootstrap/cgroup/
+runtime execution. B1/N7/N8/N10 are REPAIRED_PENDING_REVIEW. N2/N3 acceptance, N4
+closure and six original no-regression closures remain scoped to Claude's d863
+review. N9's native60s full scan is unmeasured. The actual Claude attribution,
+finding mapping, necessary delta and exact source-bound evidence are in
+`docs/review/2026-10-27-runtime-control-lifecycle/README.md`, `findings.json` and
+`oct28-claude-remediation-evidence.json`. No callable Claude invocation is claimed.
+
+B2 remains OPEN:105,340,350 measured bytes versus the unchanged83,886,080 cap.
+The concrete PG_PHASE-only128MiB proposal is recorded but NOT_APPLIED; no owner
+answer has been received. Existing instructions forbid increasing limits without
+that decision. A separate PG-only root is the other reviewer's option and would
+require a materially different mount transition. Exact next action: resolve that
+specific choice, implement the selected correction, run supported real capture-fit
+and focused validation, then obtain the necessary combined Claude delta/activation
+review. After applicable review passes, the bounded proof is already authorized;
+no second routine owner approval is required. No old review is being re-requested.
+
+No independent executable repair identified in this review remains unfinished
+outside that decision/review/target-execution boundary. Privileged activation and
+credentials remain disabled. Fixed PG execution, same-generation cgroup/resource/
+cleanup, sentinel/release, browser/BackupV2/APPLY/DRAFT/packet/restart/restore and
+full supported authoritative suite remain NOT_RUN/NON-GREEN. No native Cloud
+pg_dump refusal was repeated. All owned local test checkouts were removed; no
+account/service/database/browser or credential was left running. A clean source
+checkpoint is not a verified reusable environment snapshot. Application source,
+schema/rules, locks, accepted runtime inputs and PHASE_STATUS are unchanged.
+Railway compatibility and commercial readiness remain unproven with the existing
+business-data, rollover/cutover and purchasing-authority blockers. No automatic
+resumption or production/deployment authority is claimed.
+
 ### 2026-10-28 actual N8 readback; hosted test assumption repaired
 
 Publishededf8d12199c97ced404b6509f887ab9495abf8a7/treeb384fc232c0f8c825c0aba6bb9d719c31c2f7c06

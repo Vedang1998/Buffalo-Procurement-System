@@ -42,6 +42,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -82,6 +87,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -115,6 +125,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -147,6 +162,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -171,6 +191,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "OPEN_KEPT"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -203,6 +228,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -227,12 +257,17 @@
         "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN",
         "d1b8124:66 PG runtime,35 image,21 shared runtime component tests; phase-only locale proof and actual disposable descriptor failure paths; native exec NOT_RUN"
       ],
-      "remaining": "Fixed postgres --version path now wired through PG phase projection, parent pidfd stop, actual stopped attestation, exact outer/worker ACK and FD exec; native execution/size fit/required core policy and native mapped-library lifetime NOT_RUN/NOT_PROVEN. Full application/browser closure remains OPEN.",
+      "remaining": "B2 reviewer-measured105340350 bytes exceeds83886080 cap; pre-account measurement implemented but limit unchanged/owner choice pending. Native PG execution and full application/browser closure NOT_RUN/OPEN.",
       "d863_external_review": {
         "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "OPEN_KEPT"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -265,6 +300,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     },
     {
@@ -291,6 +331,11 @@
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
         "source": "external-review-d863bc7d.json",
         "disposition": "OPEN_KEPT"
+      },
+      "current_descendant_review": {
+        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "status": "PENDING_DELTA_REVIEW",
+        "historical_disposition_preserved": true
       }
     }
   ],
@@ -299,8 +344,8 @@
   "frozen_evidence": "oct27-postgres-version-repaired-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
-  "independent_re_review": "REQUEST_CHANGES_AT_d863; B1/B2 blocking; current descendant delta review required",
-  "current_delta": "Fixed native PG version execution and stopped/enrollment/outer-observer wiring, exact prerequisite errno/policy collector, N1/N2 pre-account repair and N3/N4 dispositions.977 diagnostics PASS twice separately;17/20/88/10 groups,18 imports PASS;inert78. Actual privileged/native/full acceptance NOT_RUN.",
+  "independent_re_review": "REQUEST_CHANGES_AT_d863; current necessary delta prepared, B2 owner decision pending; no Claude call or approval claimed",
+  "current_delta": "B1 fixed native PID1 stat/refusal mapping; N7 pre-ACK drain; N8 fixed active mount coverage; N10 bounded definite-collision retry; B2 pre-account capacity measurement only, unchanged80MiB; sanitized failure evidence and test-only actual-interpreter correction. B2 decision remains OPEN.",
   "new_findings": [
     {
       "id": "N1",
@@ -316,7 +361,8 @@
         "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
         "disposition": "REPAIRED_IN_DESIGN_BLOCKED_BY_B1"
       },
-      "remaining": "B1 correction on current descendant pending tests/re-review; native fixed stat live regression NOT_RUN"
+      "remaining": "B1/N8/N10 repairs source-bound tested; native privileged stat/full ownership scan NOT_RUN and new delta review pending",
+      "current_validation": "42 preflight tests plus identity regressions; see oct28-claude-remediation-evidence.json"
     },
     {
       "id": "N2",
@@ -338,7 +384,7 @@
       "id": "N3",
       "title": "Ephemeral diagnostic trusted administrative boundary",
       "status": "VERIFIED_CLOSED",
-      "disposition": "Owner trust decision RECORDED in external-review-update.json; implementation of narrow boundary pending new review. No malicious platform-administrator isolation claim; no production change; runtime and worker-control independent.",
+      "disposition": "Accepted as documented by Claude atd863 for ephemeral credential-free diagnostic only; new native stat/find/cleanup delta still requires review. No production trust change or malicious-platform-admin isolation claim.",
       "d863_external_review": {
         "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
         "disposition": "ACCEPT_AS_DOCUMENTED_EPHEMERAL_DIAGNOSTIC_ONLY"
@@ -384,6 +430,23 @@
       "N1_N4_dispositions": "unchanged at frozen target; new exception/workflow delta requires review",
       "privileged_activation": "DISABLED",
       "credential_release": "WITHHELD"
+    },
+    {
+      "material_commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "material_tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+      "evidence": "oct28-claude-remediation-evidence.json",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "reviewed_base": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "scope": [
+        "B1/N1 native namespace reference and hermetic refusal tests",
+        "N7 pre-ACK drain and cleanup/account uncertainty separation",
+        "N8 observed fixed mount ownership coverage and nontriggering descriptor proof",
+        "N10 typed bounded pre-reservation retry",
+        "B2 exact pre-account capacity measurement, no budget change",
+        "bounded public test/inventory evidence and actual-interpreter causal test"
+      ],
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD"
     }
   ],
   "latest_received_external_review": "external-review-d863bc7d.json",
@@ -394,7 +457,14 @@
       "status": "REPAIRED_PENDING_REVIEW",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
-      "description": "Non-root dereference of root-owned PID1 namespace links gives EACCES before reservation; raw PermissionError; hermetic tests missing"
+      "description": "Non-root dereference of root-owned PID1 namespace links gives EACCES before reservation; raw PermissionError; hermetic tests missing",
+      "code": [
+        "hosted_synthetic_account_preflight.py:_self_namespaces/_initial_namespaces",
+        "hosted_synthetic_identity.py:inspect_account_platform"
+      ],
+      "current_validation": "42 preflight tests; target direct EACCES observed; native privileged stat NOT_RUN",
+      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "evidence": "oct28-claude-remediation-evidence.json"
     },
     {
       "id": "B2",
@@ -402,7 +472,15 @@
       "status": "OPEN",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
-      "description": "Composed PG phase exceeds unchanged80MiB bound before cgroup/enrollment; account already provisioned"
+      "description": "Composed PG phase exceeds unchanged80MiB bound before cgroup/enrollment; account already provisioned",
+      "code": [
+        "hosted_synthetic_postgres_runtime.py:measure_phase_fit/capture_phase_fit/require_phase_fit",
+        "hosted_synthetic_identity.py:run_provisioned_candidate",
+        "hosted_synthetic_runtime_regression.py:run_postgres_fit"
+      ],
+      "current_validation": "72 PG runtime/23 identity tests at preceding frozen material; source-bound test repair at3cbb2d3; real capture-fit NOT_RUN. Owner phase-only128MiB proposal NOT_APPLIED; b2-budget-change-control.json",
+      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "evidence": "oct28-claude-remediation-evidence.json"
     },
     {
       "id": "N7",
@@ -410,15 +488,29 @@
       "status": "REPAIRED_PENDING_REVIEW",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
-      "description": "Pre-ACK refusal cannot drain: finish skipped/failed, close requires proof and leaves slice; identity quarantined"
+      "description": "Pre-ACK refusal cannot drain: finish skipped/failed, close requires proof and leaves slice; identity quarantined",
+      "code": [
+        "hosted_synthetic_observer.py:finish_pre_ack_exit/close/require_drain_proof",
+        "hosted_synthetic_bootstrap.py:run_native_plan",
+        "hosted_synthetic_lifecycle.py:_quarantined"
+      ],
+      "current_validation": "31 observer/28 lifecycle/37 bootstrap regressions; actual lifetime cleanup NOT_RUN",
+      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "evidence": "oct28-claude-remediation-evidence.json"
     },
     {
       "id": "N8",
       "severity": "P2",
-      "status": "OPEN",
+      "status": "REPAIRED_PENDING_REVIEW",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
-      "description": "Target may contain vfat /boot/efi and autofs/binfmt_misc beneath /proc; current allowlist likely refuses"
+      "description": "Target may contain vfat /boot/efi and autofs/binfmt_misc beneath /proc; current allowlist likely refuses",
+      "code": [
+        "hosted_synthetic_account_preflight.py:_mount_plan/_open_binfmt/_scan_mount_lease/inspect_ownership/observe_scan_host"
+      ],
+      "current_validation": "42 preflight regressions; same-job fixed mount readback/closure at3cbb2d3; native ownership scan NOT_RUN",
+      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "evidence": "oct28-claude-remediation-evidence.json"
     },
     {
       "id": "N9",
@@ -426,7 +518,13 @@
       "status": "OPEN",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
-      "description": "60s full find may time out on large hosted tool caches"
+      "description": "60s full find may time out on large hosted tool caches",
+      "code": [
+        "hosted_synthetic_account_preflight.py:inspect_ownership"
+      ],
+      "current_validation": "60s full native scan remains unmeasured; risk rather than demonstrated timeout",
+      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "evidence": "oct28-claude-remediation-evidence.json"
     },
     {
       "id": "N10",
@@ -434,7 +532,22 @@
       "status": "REPAIRED_PENDING_REVIEW",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
-      "description": "First definite ownership collision aborts activation rather than trying next numeric candidate"
+      "description": "First definite ownership collision aborts activation rather than trying next numeric candidate",
+      "code": [
+        "hosted_synthetic_identity.py:CandidateOwnershipCollision/activation_entry",
+        "hosted_synthetic_account_preflight.py:OwnershipCollision"
+      ],
+      "current_validation": "23 identity/42 preflight regressions; at most3 definite collisions, shared scan/reservation deadline; no retry of uncertainty",
+      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "evidence": "oct28-claude-remediation-evidence.json"
     }
-  ]
+  ],
+  "current_candidate": {
+    "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+    "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+    "evidence": "oct28-claude-remediation-evidence.json",
+    "independent_review": "NOT_RECEIVED",
+    "privileged_activation": "DISABLED",
+    "credential_release": "WITHHELD"
+  }
 }

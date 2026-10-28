@@ -1,0 +1,464 @@
+{
+  "reviewed_base": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+  "current_candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+  "current_tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+  "source_bound_groups": [
+    {
+      "commit": "be2d197d342781adf3cd17793640e2a9a9f8e55e",
+      "tree": "19dcfa22eb1fb19296083237c0f169e98b804493",
+      "base": "03035fff71d63adab5b36e6f775db3932edae1e7",
+      "files": {
+        ".github/workflows/hosted-synthetic-acceptance.yml": "8505e892077043dd382938890d468a307e07381e096d553ca053a9ba22c19e34",
+        "docs/CODEX_HANDOFF.md": "d2f1c5c1cd347b15d4d18f586ce4ba7c3dbac4b700006e41089e0823a9cb266f",
+        "docs/review/2026-10-27-runtime-control-lifecycle/b2-budget-change-control.json": "3be686278a5e1945909c0b45e67bc0036c04f2991fbc19c36861b509d2bb51d5",
+        "docs/review/2026-10-27-runtime-control-lifecycle/external-review-d863bc7d.json": "a3bff73b66cc3945dee5284bf9aaee2e3d9b467feaa22ddc216659871135294b",
+        "docs/review/2026-10-27-runtime-control-lifecycle/external-review-update.json": "aecd51c9ed86e57bf31ebb8704028c8347545145c044596fb780fb0e0b3b79ed",
+        "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "2bd4dfa282ce91235b8f3dd44f42363d7eaa7e95038e01d95d09c4ce9b61ce35",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-baseline.txt": "8ff16990dce53febe44ed8a77e809d78aeb91718246b303b945a01a139f6c5b1",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-discovery.txt": "c7506dbe2b128ff4e16c1bf59da026449e1c3873c8783287f8320e7707aa30e4",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-evidence.json": "116ba3741042243de5ceb33efd854688208b3ba1b6705b66814a377eda25fe38",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-finish-validation.py.txt": "5398d612674a47b138c3f57516988069c109565a8d0fae2ad5bb032be5046eb1",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-focused-final.txt": "2d7f2a9946f745959113957faa7ed79584897d94f1cc77c15d5d491f32714e8b",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-focused-first.txt": "9966cb61921cedefd81c752ce4d50cdb3dced8adc706cdca8257882b0e249e95",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-hosted.txt": "34a263cd6814728dc2ac47b4032b45b4644df82bf695b304d437e5bd13ffcf22",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-inert.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-install.txt": "7554db278eba019d08f5777b6c6c9d2c51f69151c66ff837fff201f2adce4b32",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-isolated.txt": "23e3fa6c3bdac0849ce7e7f1be01d4fbf4be9712ff7ece3c0a90ff42269d9507",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-price-components.txt": "fc79151debddd72df0d0a1b4f5c7195a5feabb9f4207a3566994d65e12a7178d",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-publication-material.json": "1e3727afbd90967ddfc3b3e2ff5c063f986a5964c2d971b126a8af193626945a",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-publish.py.txt": "b1d10875cdb1cc004b35b7f7b2954f88518804431b169dad5042c6cc338f4ac2",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-related-disposable.txt": "21a522bd209d5a7f4010ff22bacd6bdb7d3c6a5cc6841494f025d8278e1e4cf8",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-related.txt": "9f9e86ccb701d2fe59b718dbd1f8405c8cb0da970dae551ad12e3fadca35e149",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-reproduce.py.txt": "2ffe113a797cf26ca1e3944870ba76ec8a00e773668092e2ec41206052bf48cc",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-reproduction.txt": "aa6ab39a68ae7918346b6d13392838d93dc4e48e48a4acf9305b2411933961d6",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-snapshot-components.txt": "3f3e9b18d53c286656f322c9a604d4366e0c32f4e58b6d2ef963dbe33cc7492a",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-validate.py.txt": "5717ddb5c9bf9390d550d53069a857c8c08f225905d21f7b0db7fb636577d48d",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-validation-completed.json": "fcacfa801f2cb4a63eed7aae538051fac05a9c476ee26a10cfaa22623ddc153b",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-validation.json": "4e7bcf630b7b51dc36b2bbf9fa91afae3e7c7fb1a246b7f051440a08e5a3a539",
+        "procurement/tests/test_hosted_synthetic_account_preflight.py": "2711c05164ba09e61458530ca777434df2ccc8e4f28ae3d106c1bb9967599a72",
+        "procurement/tests/test_hosted_synthetic_bootstrap.py": "0a4b51469f9ac4ef0bde61e7ca985704154e520824ce04b23fbc2332331c5cfb",
+        "procurement/tests/test_hosted_synthetic_identity.py": "7e4acbdf979e2b2ba9dbad72f4ac2e2d266e9438469f1e919bd1cea0b6b60ecf",
+        "procurement/tests/test_hosted_synthetic_lifecycle.py": "61b21d23e83f3450474b15047f79bd4d88366b4b795fc065eb551d2b7fe7f206",
+        "procurement/tests/test_hosted_synthetic_observer.py": "b8d60ff74df526fb908fd21bbc62313a73b2d22abc12155a9702bb3e48fc1c17",
+        "procurement/tests/test_hosted_synthetic_postgres_runtime.py": "888dac1868b77bb1507c2b9d9eb292d84114b9b87e674269ce911bec3f28d498",
+        "procurement/tests/test_hosted_synthetic_runtime.py": "328dd0b5c8e26bd3ade6eec41bbab78ab829fe44922560ee0f62034770897823",
+        "procurement/tests/test_hosted_synthetic_workflow.py": "7cf8f004015d4d21f055a9e8ddda03053efdee81255e24dc856fbc9d8a33a8ab",
+        "procurement/tests/test_persistent_mapping_foundation_contract.py": "fa858d49ccc80cbb372710af8fd71d7f3bd84ae3142a019115c5f16fa2a3321c",
+        "procurement/tests/test_supplier_format_conformance.py": "b5d7255263ce0c3d33bfaebbfd41757e80320f03c505ad2fbeebe3ba77453142",
+        "procurement/tools/hosted_synthetic_account_preflight.py": "a6cf467c994778ac9b12a50c0dca635275a091bf7027cfb763ef02247c0e3940",
+        "procurement/tools/hosted_synthetic_bootstrap.py": "f9c406d0df4ccd39e5d4612cd755d252a52692c3ab86f7d64770b421accaaefa",
+        "procurement/tools/hosted_synthetic_identity.py": "b8520bf7c59f797a50940a665e4ccd298b7206727768f08bb24b81d67be31844",
+        "procurement/tools/hosted_synthetic_lifecycle.py": "ea3c7ca75ab7f40e5f62358313ffd016fb1cee2da09092e055051b8cfcc5e289",
+        "procurement/tools/hosted_synthetic_observer.py": "df59a7a287424cdee58404cd19a1b12b493301e7de46677edd1709c3e6bf6bd0",
+        "procurement/tools/hosted_synthetic_postgres_runtime.py": "3aa31219baba5ce14adadf2372f3f44fbed3c9df04499479328c78b8ac779c32",
+        "procurement/tools/hosted_synthetic_runtime_regression.py": "72c6953b30f0de19533e3391641fbb4cd2efe2d4a88cee0417dbcbda227aa548",
+        "procurement/tools/run_tests.py": "45393b2bf495ba725231f1ca0361e9a41ad37a2de47b7c5cc263c7a1ea99ae22"
+      },
+      "results": {
+        "hosted": {
+          "returncode": 0,
+          "seconds": 40.62,
+          "sha256": "96655be6f98e7d871edd57055c2dbdc10b1e27dce98d666c9c70e10484af8baf",
+          "raw_log": "oct28-claude-repairs-hosted.txt"
+        },
+        "isolated": {
+          "returncode": 0,
+          "seconds": 36.801,
+          "sha256": "1c9ab3354073ed65edda702ef6348aeb88bd00b4025bb0081b714320129e3cef",
+          "raw_log": "oct28-claude-repairs-isolated.txt"
+        },
+        "price-components": {
+          "returncode": 0,
+          "seconds": 16.716,
+          "sha256": "5dd8d72a486a6e3d268fc459d1fd161987fb0bb3135de67a355190412dc68af6",
+          "raw_log": "oct28-claude-repairs-price-components.txt"
+        },
+        "snapshot-components": {
+          "returncode": 0,
+          "seconds": 0.365,
+          "sha256": "47077c00fdad7d0583ba4547242528325e6cbe2f11a58990eebd5303031f8c97",
+          "raw_log": "oct28-claude-repairs-snapshot-components.txt"
+        },
+        "startup": {
+          "returncode": 0,
+          "seconds": 0.114,
+          "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+          "raw_log": "oct28-claude-repairs-startup.txt"
+        },
+        "inert": {
+          "returncode": 78,
+          "seconds": 0.114,
+          "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+          "raw_log": "oct28-claude-repairs-inert.txt"
+        },
+        "discovery": {
+          "returncode": 0,
+          "seconds": 2.321,
+          "sha256": "92ddf3803a282b2ba421bd892ab34ccb34b2e18939e97c3c8747480fcc7250f1",
+          "raw_log": "oct28-claude-repairs-discovery.txt"
+        },
+        "related-disposable": {
+          "returncode": 0,
+          "seconds": 7.602,
+          "sha256": "dccf1edf91686973684c279140eef58d07e3495dc370d6f61263dfcaf20b07d1",
+          "raw_log": "oct28-claude-repairs-related-disposable.txt"
+        }
+      },
+      "diagnostic_node": {
+        "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+        "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+      },
+      "source_unchanged": true,
+      "full_supported_suite": "NOT_RUN",
+      "live_privilege": "NOT_RUN",
+      "related_checkout": {
+        "commit": "be2d197d342781adf3cd17793640e2a9a9f8e55e",
+        "tree": "19dcfa22eb1fb19296083237c0f169e98b804493",
+        "original_runner_mode": "0600",
+        "disposable_runner_mode": "0644",
+        "sha256": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+        "existing_checkout_permissions_unchanged": true,
+        "scope": "LOCAL_COMPONENT_TESTS_NOT_TARGET_HOST_OR_CONTAINMENT",
+        "owned_copy_removed": true
+      },
+      "previous_checkout_limitation": "Prior d9c2670 failure retained; no unchanged failure repeated at this candidate",
+      "counts_note": "normal/isolated repeat the same population; do not sum into a disjoint test total"
+    },
+    {
+      "commit": "de3468515e656e2f9a3feade0045349683e4b460",
+      "tree": "73273222feaca13365da2f10decdbe6989ca7934",
+      "base": "03035fff71d63adab5b36e6f775db3932edae1e7",
+      "files": {
+        ".github/workflows/hosted-synthetic-acceptance.yml": "dc17a08fe119267363f43649de2731d7e0280d1ab8230473fefeea1cdc8e6c80",
+        "docs/CODEX_HANDOFF.md": "d2abffadf9638944f4530fd052be8308fd39d4ad6efdfdc375726c3895bd3fe0",
+        "docs/review/2026-10-27-runtime-control-lifecycle/b2-budget-change-control.json": "3be686278a5e1945909c0b45e67bc0036c04f2991fbc19c36861b509d2bb51d5",
+        "docs/review/2026-10-27-runtime-control-lifecycle/external-review-d863bc7d.json": "a3bff73b66cc3945dee5284bf9aaee2e3d9b467feaa22ddc216659871135294b",
+        "docs/review/2026-10-27-runtime-control-lifecycle/external-review-update.json": "aecd51c9ed86e57bf31ebb8704028c8347545145c044596fb780fb0e0b3b79ed",
+        "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "2bd4dfa282ce91235b8f3dd44f42363d7eaa7e95038e01d95d09c4ce9b61ce35",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-baseline.txt": "8ff16990dce53febe44ed8a77e809d78aeb91718246b303b945a01a139f6c5b1",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-discovery.txt": "c7506dbe2b128ff4e16c1bf59da026449e1c3873c8783287f8320e7707aa30e4",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-evidence.json": "116ba3741042243de5ceb33efd854688208b3ba1b6705b66814a377eda25fe38",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-finish-validation.py.txt": "5398d612674a47b138c3f57516988069c109565a8d0fae2ad5bb032be5046eb1",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-focused-final.txt": "2d7f2a9946f745959113957faa7ed79584897d94f1cc77c15d5d491f32714e8b",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-focused-first.txt": "9966cb61921cedefd81c752ce4d50cdb3dced8adc706cdca8257882b0e249e95",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-hosted.txt": "34a263cd6814728dc2ac47b4032b45b4644df82bf695b304d437e5bd13ffcf22",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-inert.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-install.txt": "7554db278eba019d08f5777b6c6c9d2c51f69151c66ff837fff201f2adce4b32",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-isolated.txt": "23e3fa6c3bdac0849ce7e7f1be01d4fbf4be9712ff7ece3c0a90ff42269d9507",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-price-components.txt": "fc79151debddd72df0d0a1b4f5c7195a5feabb9f4207a3566994d65e12a7178d",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-publication-material.json": "1e3727afbd90967ddfc3b3e2ff5c063f986a5964c2d971b126a8af193626945a",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-publish.py.txt": "b1d10875cdb1cc004b35b7f7b2954f88518804431b169dad5042c6cc338f4ac2",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-related-disposable.txt": "21a522bd209d5a7f4010ff22bacd6bdb7d3c6a5cc6841494f025d8278e1e4cf8",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-related.txt": "9f9e86ccb701d2fe59b718dbd1f8405c8cb0da970dae551ad12e3fadca35e149",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-reproduce.py.txt": "2ffe113a797cf26ca1e3944870ba76ec8a00e773668092e2ec41206052bf48cc",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-reproduction.txt": "aa6ab39a68ae7918346b6d13392838d93dc4e48e48a4acf9305b2411933961d6",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-snapshot-components.txt": "3f3e9b18d53c286656f322c9a604d4366e0c32f4e58b6d2ef963dbe33cc7492a",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-startup.txt": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-validate.py.txt": "5717ddb5c9bf9390d550d53069a857c8c08f225905d21f7b0db7fb636577d48d",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-validation-completed.json": "fcacfa801f2cb4a63eed7aae538051fac05a9c476ee26a10cfaa22623ddc153b",
+        "docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-validation.json": "4e7bcf630b7b51dc36b2bbf9fa91afae3e7c7fb1a246b7f051440a08e5a3a539",
+        "procurement/tests/test_hosted_synthetic_account_preflight.py": "a1c865faaad2d023a6ea795be773a1d80920812bad4c95cb69af2f4287f5a060",
+        "procurement/tests/test_hosted_synthetic_bootstrap.py": "0a4b51469f9ac4ef0bde61e7ca985704154e520824ce04b23fbc2332331c5cfb",
+        "procurement/tests/test_hosted_synthetic_identity.py": "7e4acbdf979e2b2ba9dbad72f4ac2e2d266e9438469f1e919bd1cea0b6b60ecf",
+        "procurement/tests/test_hosted_synthetic_lifecycle.py": "61b21d23e83f3450474b15047f79bd4d88366b4b795fc065eb551d2b7fe7f206",
+        "procurement/tests/test_hosted_synthetic_observer.py": "b8d60ff74df526fb908fd21bbc62313a73b2d22abc12155a9702bb3e48fc1c17",
+        "procurement/tests/test_hosted_synthetic_postgres_runtime.py": "888dac1868b77bb1507c2b9d9eb292d84114b9b87e674269ce911bec3f28d498",
+        "procurement/tests/test_hosted_synthetic_runtime.py": "328dd0b5c8e26bd3ade6eec41bbab78ab829fe44922560ee0f62034770897823",
+        "procurement/tests/test_hosted_synthetic_workflow.py": "2e9151839be11436f2c21a14a321e8525ae89be713dc4a437059d83eeb807c74",
+        "procurement/tests/test_persistent_mapping_foundation_contract.py": "523131af2eab61864d86d85f0362ee2cb9de33d1abd8c608792c518d17228ee3",
+        "procurement/tests/test_supplier_format_conformance.py": "f7fab7d5ffb2e79e87377e053886024f20584a0f85ef2860e6f2218ca3eeb406",
+        "procurement/tools/hosted_synthetic_account_preflight.py": "a34ff95cc13d83d8dacef1f13dc2d56b7497b2dddbc6f6a7ef5271bb8438b3c2",
+        "procurement/tools/hosted_synthetic_bootstrap.py": "f9c406d0df4ccd39e5d4612cd755d252a52692c3ab86f7d64770b421accaaefa",
+        "procurement/tools/hosted_synthetic_identity.py": "b8520bf7c59f797a50940a665e4ccd298b7206727768f08bb24b81d67be31844",
+        "procurement/tools/hosted_synthetic_lifecycle.py": "ea3c7ca75ab7f40e5f62358313ffd016fb1cee2da09092e055051b8cfcc5e289",
+        "procurement/tools/hosted_synthetic_observer.py": "df59a7a287424cdee58404cd19a1b12b493301e7de46677edd1709c3e6bf6bd0",
+        "procurement/tools/hosted_synthetic_postgres_runtime.py": "3aa31219baba5ce14adadf2372f3f44fbed3c9df04499479328c78b8ac779c32",
+        "procurement/tools/hosted_synthetic_runtime_regression.py": "72c6953b30f0de19533e3391641fbb4cd2efe2d4a88cee0417dbcbda227aa548",
+        "procurement/tools/run_tests.py": "9293fa6834f3b34f96298a035b860dc5d1b2f04f9c1da5fd7f61132cbccbbcfe"
+      },
+      "results": {
+        "hosted": {
+          "returncode": 0,
+          "seconds": 39.047,
+          "sha256": "dd9d7bbc94899f1388b63a5472ed8ff8c7682caea5e2a6d72fde883941b4e187",
+          "raw_log": "oct28-n8-frozen-hosted.txt"
+        },
+        "isolated": {
+          "returncode": 0,
+          "seconds": 39.811,
+          "sha256": "c43803fc930d9390407fa8cff90ae70b3593930580f2bc07a6e33023c44e46de",
+          "raw_log": "oct28-n8-frozen-isolated.txt"
+        },
+        "price-components": {
+          "returncode": 0,
+          "seconds": 17.974,
+          "sha256": "f13d5dffa8bc60e82cf6abf2147c1bc5b230dee5e94aecb06e9e702c1589930b",
+          "raw_log": "oct28-n8-frozen-price-components.txt"
+        },
+        "snapshot-components": {
+          "returncode": 0,
+          "seconds": 0.416,
+          "sha256": "884178bb576b7d5452f8faf6b6b8a72526536f294eaa82e28bc37f6d01247257",
+          "raw_log": "oct28-n8-frozen-snapshot-components.txt"
+        },
+        "startup": {
+          "returncode": 0,
+          "seconds": 0.114,
+          "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+          "raw_log": "oct28-n8-frozen-startup.txt"
+        },
+        "inert": {
+          "returncode": 78,
+          "seconds": 0.114,
+          "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+          "raw_log": "oct28-n8-frozen-inert.txt"
+        },
+        "discovery": {
+          "returncode": 0,
+          "seconds": 2.677,
+          "sha256": "4429e5979e441d2a80a349bf4fe9518878659ca3c1406a3e667103e14d90aaef",
+          "raw_log": "oct28-n8-frozen-discovery.txt"
+        },
+        "related-disposable": {
+          "returncode": 0,
+          "seconds": 8.503,
+          "sha256": "ab99b18d47b22a7116a34e0b1c7a25ca8f1e68ccb4e87b51090386e7a23b44ad",
+          "raw_log": "oct28-n8-frozen-related-disposable.txt"
+        }
+      },
+      "diagnostic_node": {
+        "path": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+        "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+        "scope": "DIAGNOSTIC_ONLY_NOT_ACCEPTED_BROWSER_IDENTITY"
+      },
+      "source_unchanged": true,
+      "full_supported_suite": "NOT_RUN",
+      "live_privilege": "NOT_RUN",
+      "related_checkout": {
+        "commit": "de3468515e656e2f9a3feade0045349683e4b460",
+        "tree": "73273222feaca13365da2f10decdbe6989ca7934",
+        "original_runner_mode": "0600",
+        "disposable_runner_mode": "0644",
+        "sha256": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+        "existing_checkout_permissions_unchanged": true,
+        "scope": "LOCAL_COMPONENT_TESTS_NOT_TARGET_HOST_OR_CONTAINMENT",
+        "owned_copy_removed": true
+      },
+      "previous_checkout_limitation": "Prior d9c2670 failure retained; no unchanged failure repeated at this candidate",
+      "counts_note": "normal/isolated repeat the same population; do not sum into a disjoint test total"
+    }
+  ],
+  "later_focused_groups": [
+    {
+      "commit": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "tree": "af9d60c3ee3bc456d5e7be9e40324d069fd7c916",
+      "executed": 50,
+      "passed": 50,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "raw_log": "oct28-claude-repairs-inventory-frozen.txt",
+      "sha256": "021d9751b5e03baab657b565e6410d6f3fdbdc67becaba98d81bb0c67959f97e"
+    },
+    {
+      "commit": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "tree": "af9d60c3ee3bc456d5e7be9e40324d069fd7c916",
+      "executed": 1024,
+      "passed": 1024,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "raw_log": "oct28-claude-repairs-workflow-exact.txt",
+      "sha256": "ecd334b1c93df89d28ece7c48419a9eace7a61bcaebd1265d60978ee004060db"
+    },
+    {
+      "commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+      "tree": "b384fc232c0f8c825c0aba6bb9d719c31c2f7c06",
+      "executed": 57,
+      "passed": 57,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "raw_log": "oct28-n8-named-close-frozen.txt",
+      "sha256": "6233ba29d0811447fa91c116d1107574adc37888a717338cf44342a6a10e7d33"
+    },
+    {
+      "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+      "executed": 23,
+      "passed": 23,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "raw_log": "oct28-ci-identity-fix-frozen.txt",
+      "sha256": "93ff790135cb6b81ec1f6d8dbd4562cc1c44c953bf2e442a53fc0e9ec31bfb60"
+    },
+    {
+      "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+      "executed": 1033,
+      "passed": 1033,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "raw_log": "oct28-ci-final-workflow-exact.txt",
+      "sha256": "91d81b53225513e4c9c36ba70639020a6f7ad32e2bce7556d51d700fd43b1c87"
+    },
+    {
+      "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+      "executed": 10,
+      "passed": 10,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "raw_log": "oct28-ci-final-startup.txt",
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    }
+  ],
+  "publication": [
+    {
+      "base": "b454eea35abe55b92fd190c8bb0919f248982ac0",
+      "published_commit": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "tree": "af9d60c3ee3bc456d5e7be9e40324d069fd7c916",
+      "fetched_commit": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "fetched_tree": "af9d60c3ee3bc456d5e7be9e40324d069fd7c916",
+      "new_objects_scanned": 42,
+      "secret_pattern_hits": 0,
+      "private_commit_email_hits": 0,
+      "push": "ordinary single acceptance branch, no force",
+      "protected_refs_before": {
+        "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+        "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+        "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+      },
+      "protected_refs_after": {
+        "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+        "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+        "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+      }
+    },
+    {
+      "base": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "published_commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+      "tree": "b384fc232c0f8c825c0aba6bb9d719c31c2f7c06",
+      "fetched_commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+      "fetched_tree": "b384fc232c0f8c825c0aba6bb9d719c31c2f7c06",
+      "new_objects_scanned": 23,
+      "secret_pattern_hits": 0,
+      "private_commit_email_hits": 0,
+      "push": "ordinary single acceptance branch, no force",
+      "protected_refs_before": {
+        "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+        "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+        "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+      },
+      "protected_refs_after": {
+        "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+        "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+        "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+      }
+    },
+    {
+      "base": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+      "published_commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+      "fetched_commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "fetched_tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+      "new_objects_scanned": 7,
+      "secret_pattern_hits": 0,
+      "private_commit_email_hits": 0,
+      "push": "ordinary single acceptance branch, no force",
+      "protected_refs_before": {
+        "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+        "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+        "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+      },
+      "protected_refs_after": {
+        "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+        "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+        "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+      }
+    }
+  ],
+  "full_authoritative_suite": "NOT_RUN_SUPPORTED_FINAL_CANDIDATE_REQUIRED",
+  "fixed_postgres_execution": "NOT_RUN_REVIEW_AND_B2_BLOCKED",
+  "credential_release": "WITHHELD",
+  "internal_read_only_inspections": "B1/N7/N8; not independent Claude approval",
+  "independent_review": "REQUEST_CHANGES_AT_d863; current delta NOT_REVIEWED",
+  "B2": "OWNER_DECISION_REQUIRED; unchanged80MiB; proposal in b2-budget-change-control.json",
+  "N8": "Read-only actual mount identity/type/closure observed at edf8d12 and3cbb2d3; native ownership scan NOT_RUN; repair pending independent review",
+  "resources": "No native account/service/DB/browser/privileged namespace created in this task; local disposable checkout removed; ordinary tests and read-only GitHub inventory only",
+  "accepted_inputs": "No application/schema/rules/lock/pinned browser identity change",
+  "railway": "NOT_PROVEN",
+  "commercial": "NOT_READY; existing real-data, rollover, cutover and purchasing authority blockers unchanged",
+  "final_discovery": {
+    "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+    "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+    "discovered": 2597,
+    "modules": 131,
+    "executed": 0,
+    "floor_or_registration_errors": 0,
+    "raw_log": "oct28-ci-final-discovery.txt",
+    "sha256": "4429e5979e441d2a80a349bf4fe9518878659ca3c1406a3e667103e14d90aaef"
+  },
+  "github_runs": [
+    {
+      "commit": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "run": "40696961199",
+      "evidence": "oct28-10af37d-actions-evidence.json"
+    },
+    {
+      "commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+      "run": "40698861126",
+      "evidence": "oct28-edf8d12-actions-evidence.json"
+    },
+    {
+      "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+      "run": "40699325717",
+      "evidence": "oct28-3cbb2d3-actions-evidence.json"
+    }
+  ],
+  "github_final": {
+    "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+    "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
+    "run": "40699325717",
+    "job": "122854530298",
+    "diagnostics": {
+      "discovered": 1033,
+      "executed": 1033,
+      "passed": 1033,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "review_gate_exit": 78,
+    "real_pid1_step": "SKIPPED",
+    "privileged_execution": "NOT_RUN",
+    "active_binfmt_handle": "OBSERVED_AND_CLOSED_READ_ONLY",
+    "native_ownership_scan": "NOT_RUN_REVIEW_REQUIRED"
+  },
+  "failed_runs": [
+    {
+      "commit": "10af37d4b305b4f7763740affc306a1ade2e6c06",
+      "run": "40696961199",
+      "focused_step": "FAILED",
+      "actual_counts": "UNKNOWN_LOGS_UNAVAILABLE",
+      "local_same_command": "1024/1024 PASS; separate host, not reproduction of GitHub result"
+    },
+    {
+      "commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+      "run": "40698861126",
+      "executed": 1033,
+      "passed": 1032,
+      "failure_events": 0,
+      "error_events": 1,
+      "test": "test_postgres_capacity_refusal_occurs_before_any_account_reservation",
+      "cause": "test-only hardcoded /usr/bin/python3.13 absent on Actions; production interpreter mismatch refusal preserved",
+      "repair_commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c"
+    }
+  ],
+  "next_action": "Resolve B2 owner change-control choice (proposed fixed PG_PHASE-only128MiB), implement chosen correction without changing other bounds, run real supported capture-fit test and applicable focused tests, then one necessary Claude delta/activation re-review before privileged proof."
+}

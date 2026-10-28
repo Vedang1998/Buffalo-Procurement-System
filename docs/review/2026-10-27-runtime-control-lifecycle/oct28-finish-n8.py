@@ -1,0 +1,30 @@
+import hashlib,json,os,pathlib,subprocess,tempfile,time
+root=pathlib.Path.cwd();logs=pathlib.Path('/tmp/buffalo-review-descendant');record=json.loads((logs/'n8-frozen-validation.json').read_text())
+expected=record['commit'];py=str(logs/'venv/bin/python');node=record['diagnostic_node']['path']
+env={'PATH':'/usr/bin:/bin','LC_ALL':'C.UTF-8','BUFFALO_DIAGNOSTIC_NODE':node,'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null','GIT_TERMINAL_PROMPT':'0'}
+runner='''import sys,unittest,json;sys.path[:0]=['procurement/tools','procurement/tests','procurement/src'];import run_tests as r
+suite=unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(n) for n in sys.argv[2:]);discovered=suite.countTestCases();result=unittest.TextTestRunner(verbosity=2,resultclass=r.CountingTextTestResult).run(suite)
+record=dict(discovered=discovered,executed=result.testsRun,passed=result.successes,failures=len(result.failures),errors=len(result.errors),skipped=len(result.skipped),expected_failures=len(result.expectedFailures),unexpected_successes=len(result.unexpectedSuccesses));print(json.dumps(record,sort_keys=True));assert record['discovered']==record['executed']==record['passed']==int(sys.argv[1]) and result.wasSuccessful() and not result.skipped and not result.expectedFailures and not result.unexpectedSuccesses
+'''
+def execute(name,command,cwd,expected_return=0):
+ path=logs/('n8-frozen-'+name+'.txt');start=time.monotonic()
+ with path.open('w') as out:result=subprocess.run(command,cwd=cwd,env=env,stdout=out,stderr=subprocess.STDOUT,timeout=180)
+ record['results'][name]={'returncode':result.returncode,'seconds':round(time.monotonic()-start,3),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+ print(json.dumps({name:record['results'][name]}),flush=True)
+ assert result.returncode==expected_return,name
+with tempfile.TemporaryDirectory(prefix='buffalo-mode-check-') as temporary:
+ copy=pathlib.Path(temporary)/'repo'
+ subprocess.run(['/usr/bin/git','-c','core.hooksPath=/dev/null','-c','maintenance.auto=false','clone','--quiet','--no-local','--no-hardlinks','--single-branch','--no-tags','--no-checkout',str(root),str(copy)],env=env,check=True,timeout=60,umask=0o022)
+ subprocess.run(['/usr/bin/git','-c','core.hooksPath=/dev/null','-C',str(copy),'checkout','--quiet','--detach',expected],env=env,check=True,timeout=60,umask=0o022)
+ identities=subprocess.check_output(['/usr/bin/git','-C',str(copy),'rev-parse','HEAD','HEAD^{tree}'],text=True,env=env).splitlines()
+ assert identities==[expected,record['tree']]
+ source=root/'procurement/tools/run_local_staging_browser_worker.py';staged=copy/'procurement/tools/run_local_staging_browser_worker.py'
+ assert source.read_bytes()==staged.read_bytes() and source.stat().st_mode&0o777==0o600 and staged.stat().st_mode&0o777==0o644
+ record['related_checkout']={'commit':identities[0],'tree':identities[1],'original_runner_mode':'0600','disposable_runner_mode':'0644','sha256':hashlib.sha256(staged.read_bytes()).hexdigest(),'existing_checkout_permissions_unchanged':True,'scope':'LOCAL_COMPONENT_TESTS_NOT_TARGET_HOST_OR_CONTAINMENT'}
+ execute('related-disposable',[py,'-B','-c',runner,'88','test_run_local_staging_acceptance','test_test_runner','test_persistent_mapping_foundation_contract','test_supplier_format_conformance'],copy)
+record['related_checkout']['owned_copy_removed']=not copy.exists()
+assert not subprocess.check_output(['git','status','--porcelain=v1'],cwd=root)
+assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()==expected
+assert record['files']=={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in record['files']}
+record.update(source_unchanged=True,full_supported_suite='NOT_RUN',live_privilege='NOT_RUN',previous_checkout_limitation='Prior d9c2670 failure retained; no unchanged failure repeated at this candidate')
+(logs/'n8-frozen-validation-completed.json').write_text(json.dumps(record,indent=2)+'\n')

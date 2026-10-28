@@ -1,0 +1,210 @@
+{
+  "commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+  "run": "40698861126",
+  "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40698861126",
+  "jobs": [
+    {
+      "job": "122852876339",
+      "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40698861126/job/122852876339",
+      "steps": [
+        {
+          "name": "Set up job",
+          "number": "1",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:42:14Z",
+          "completed-at": "2026-10-28T13:42:14Z"
+        },
+        {
+          "name": "Check out exact event source",
+          "number": "2",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:42:14Z",
+          "completed-at": "2026-10-28T13:42:16Z"
+        },
+        {
+          "name": "Verify trusted source before repository code",
+          "number": "3",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:42:16Z",
+          "completed-at": "2026-10-28T13:42:16Z"
+        },
+        {
+          "name": "Prepare Python for the diagnostic",
+          "number": "4",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:42:16Z",
+          "completed-at": "2026-10-28T13:42:25Z"
+        },
+        {
+          "name": "Read-only target ownership-scan prerequisites",
+          "number": "5",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:42:25Z",
+          "completed-at": "2026-10-28T13:42:26Z"
+        },
+        {
+          "name": "Focused source and diagnostic validation",
+          "number": "6",
+          "conclusion": "failure",
+          "started-at": "2026-10-28T13:42:26Z",
+          "completed-at": "2026-10-28T13:43:11Z"
+        },
+        {
+          "name": "Review gate before hosted execution",
+          "number": "7",
+          "conclusion": "skipped",
+          "started-at": "2026-10-28T13:43:11Z",
+          "completed-at": "2026-10-28T13:43:11Z"
+        },
+        {
+          "name": "Credential-free real PID1 lifecycle regression",
+          "number": "8",
+          "conclusion": "skipped",
+          "started-at": "2026-10-28T13:43:11Z",
+          "completed-at": "2026-10-28T13:43:11Z"
+        },
+        {
+          "name": "Post Prepare Python for the diagnostic",
+          "number": "15",
+          "conclusion": "skipped",
+          "started-at": "2026-10-28T13:43:11Z",
+          "completed-at": "2026-10-28T13:43:11Z"
+        },
+        {
+          "name": "Post Check out exact event source",
+          "number": "16",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:43:11Z",
+          "completed-at": "2026-10-28T13:43:11Z"
+        },
+        {
+          "name": "Complete job",
+          "number": "17",
+          "conclusion": "success",
+          "started-at": "2026-10-28T13:43:11Z",
+          "completed-at": "2026-10-28T13:43:11Z"
+        }
+      ],
+      "reports": [
+        {
+          "sha256": "32b69cf4f3130b295f7c9ef20361272c59664484b6c9900da166947356ffd616",
+          "report": {
+            "discovered": 1033,
+            "error_events": 1,
+            "executed": 1033,
+            "expected_failures": 0,
+            "failure_events": 0,
+            "observations": [
+              {
+                "exception": "LauncherRefusal",
+                "frames": [
+                  {
+                    "file": "procurement/tools/hosted_synthetic_source.py",
+                    "line": 123
+                  },
+                  {
+                    "file": "procurement/tools/hosted_synthetic_source.py",
+                    "line": 114
+                  },
+                  {
+                    "file": "procurement/tools/hosted_synthetic_identity.py",
+                    "line": 362
+                  }
+                ],
+                "kind": "ERROR",
+                "test": "test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_postgres_capacity_refusal_occurs_before_any_account_reservation"
+              }
+            ],
+            "omitted_observations": 0,
+            "passed_methods": 1032,
+            "scope": "DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF",
+            "skipped": 0,
+            "unexpected_successes": 0
+          }
+        },
+        {
+          "sha256": "514dfa563a2aa725c43b23805f3444a1f1b9697814e24b7bd924293456bfe2bd",
+          "report": {
+            "account_mutations": 0,
+            "active_binfmt_observation": "ACTIVE_BINFMT_FD_OBSERVED_AND_CLOSED",
+            "commit": "edf8d12199c97ced404b6509f887ab9495abf8a7",
+            "credential_release": "WITHHELD",
+            "direct_pid1_namespace_read": {
+              "ipc": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              },
+              "mnt": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              }
+            },
+            "execution_authority": false,
+            "filesystem_counts": {
+              "autofs": 1,
+              "binfmt_misc": 1,
+              "bpf": 1,
+              "cgroup2": 1,
+              "configfs": 1,
+              "debugfs": 1,
+              "devpts": 1,
+              "devtmpfs": 1,
+              "efivarfs": 1,
+              "ext4": 2,
+              "fusectl": 1,
+              "hugetlbfs": 1,
+              "mqueue": 1,
+              "proc": 1,
+              "pstore": 1,
+              "securityfs": 1,
+              "sysfs": 1,
+              "tmpfs": 4,
+              "tracefs": 1,
+              "vfat": 1
+            },
+            "fixed_mount_points": {
+              "/": [
+                "ext4"
+              ],
+              "/boot/efi": [
+                "vfat"
+              ],
+              "/proc": [
+                "proc"
+              ],
+              "/proc/sys/fs/binfmt_misc": [
+                "autofs",
+                "binfmt_misc"
+              ],
+              "/sys": [
+                "sysfs"
+              ]
+            },
+            "mountinfo_sha256": "1319a777752fb9260675bc6f2a8cd38ffc55196a2e46edda101b5164c00caabb",
+            "namespace_operations": 0,
+            "non_proc_mounts_beneath_proc": [
+              {
+                "filesystem": "autofs",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              },
+              {
+                "filesystem": "binfmt_misc",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              }
+            ],
+            "operator_uid": 1001,
+            "ownership_scan": "NOT_RUN_REVIEW_REQUIRED",
+            "ownership_scan_mount_policy": "SCHEMA_AND_FIXED_MOUNT_READBACK_OBSERVED",
+            "pid1_uid": 0,
+            "privileged_processes_started": 0,
+            "refusal": null,
+            "repaired_native_stat_regression": "NOT_RUN_REVIEW_REQUIRED",
+            "root_owned_pid1_condition": "MET",
+            "tree": "b384fc232c0f8c825c0aba6bb9d719c31c2f7c06"
+          }
+        }
+      ],
+      "raw_page_sha256": "3c55351f9c1f8885f1b89f2d6aebedb4ceca3a3bfcbf7598dcda809c64fcd600"
+    }
+  ]
+}

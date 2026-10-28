@@ -1,122 +1,133 @@
-# October 27 fixed PostgreSQL execution delta — read-only review
+# October 28 Claude remediation — necessary delta only
 
-Published tested material: `d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea`, tree
-`31336c2aa583e6f68b3589c4dfe54578b3b956f3`. `oct27-postgres-version-evidence.json` indexes
-source-bound raw logs, validation command, prior failed runs and verified ordinary
-publication.977/977 diagnostics pass normally and separately under scrubbed -I -S;
-separate price17, snapshot20, related88, startup10 and18 imports pass. The inert
-bootstrap exits78. Discovery2541/131 executes zero tests. Full supported-host
-suite and actual PG execution remain NOT_RUN. This follow-up changes only docs
-and evidence; its tree is distinct and tests were not rerun merely for docs.
+Latest published implementation: `3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c`, tree
+`0cbeccf63ab37d32672a455867086358e2c7b134`. The evidence follow-up has a separate
+tree. `oct28-claude-remediation-evidence.json` indexes exact executed sources,
+raw logs, failed runs, target observations and ordinary publication verification.
 
-Read-only review commands (also inspect the following docs-only evidence delta):
+**REQUEST CHANGES remains in force. Privileged activation is DISABLED;
+credentials are WITHHELD; integrated acceptance is NON-GREEN.** B2's budget
+choice is pending. This package prepares the necessary delta for one re-review;
+no Claude call or new approval is claimed. Do not spend the privileged proof
+while the composed PostgreSQL phase still exceeds its unchanged 80 MiB bound.
+
+## Received external review and preserved scope
+
+`external-review-d863bc7d.json` records the actual owner-supplied review of
+`d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea`, tree
+`31336c2aa583e6f68b3589c4dfe54578b3b956f3`, with evidence checkpoint
+`03035fff71d63adab5b36e6f775db3932edae1e7` / tree
+`44177adcde660cc0b8d194df7b0934eb109a952a`.
+
+Reviewer attribution: Claude Code container 2.1.312, session
+`session_01JyrJEUAi36GJ6AfNcmBBxV`; reviewer-reported get_session configured and
+served model `claude-opus-5-5`, effort high. Codex did not inspect that account.
+Claude retained six historical closures with no regression at d863; N2 and N3
+were accepted and N4 closed there. Runtime, worker-control exclusion and external
+cleanup stayed OPEN. New blocking findings were B1 and B2; N7–N10 are separately
+tracked in `findings.json`. Later changes do not inherit those approvals.
+
+Claude reported 977 unprivileged tests: 966 passed and 11 B1 errors; real PID1
+11/11 and runtime component 3/3 passed in its separate environment. PG capture
+was read-only measurement, not execution. Claude did not reproduce systemd,
+sudo/account tools, real cgroup v2, GitHub execution, the full/startup/related
+suites or browser acceptance. Its Node 22.22.0 differed from the writer's runtime.
+The original review of 3c1ae555 and six closures at 5e62c8e3 remain historical.
+
+## Remediation and remaining decision
+
+- **B1 / N1 — REPAIRED_PENDING_REVIEW.** Fixed, inventory-verified native stat
+  reads PID1's IPC/mount identities before and after the scan. Failures become
+  fixed refusal codes; tests are hermetic. Actual GitHub runner UID1001/PID1 UID0
+  and direct EACCES13 were observed. The new privileged stat path has NOT_RUN.
+- **B2 — OPEN.** Claude measured 105,340,350 composed bytes against 83,886,080.
+  Exact capture-fit measurement now precedes account reservation, binds the
+  selected interpreter, closes both captures and refuses capacity without a
+  quarantined account. That does not make the bundle fit. The real Ubuntu24.04/
+  native PG16 capture-fit driver is implemented but has NOT_RUN in this task.
+  `b2-budget-change-control.json` proposes a PG_PHASE-only 128 MiB cap; it is
+  NOT_APPLIED. Other 80 MiB bounds, 3,000 entries, 256 MiB/2 child processes,
+  512 MiB/64 aggregate tasks and 20-second deadline stay unchanged. Neither
+  capacity fit nor process RSS proves aggregate memory fit. No ICU dependency
+  is omitted and no accepted runtime input is repinned.
+- **N7 — REPAIRED_PENDING_REVIEW.** A separate pre-ACK exit drain requires canonical
+  source-bound terminal transport, exact service/path/process absence, retained
+  actor termination where available, fresh zero-OOM aggregate counters and closed
+  descriptors. Missing generation remains missing; operation remains FAILED.
+  Unknown transport or partial binding stays quarantined. Later account cleanup
+  uncertainty cannot be hidden by an external drain proof. Live cases have NOT_RUN.
+- **N8 — REPAIRED_PENDING_REVIEW.** Actual target inventory confirmed vfat EFI and
+  stacked autofs/binfmt. The repair permits only the fixed EFI path and explicitly
+  scans the fixed active binfmt root. O_PATH, mount ID, filesystem magic, held/named
+  identity, unchanged mountinfo and cleanup checks guard that access. Inactive or
+  other automounts refuse. A GitHub read-only component observed and closed the
+  active binfmt handle; the privileged ownership scan has NOT_RUN. Hidden autofs
+  is not claimed scanned; trusted administration must not overmount/lazy-unmount
+  during the scan. This is not atomic pathname binding.
+- **N9 — OPEN measurement risk.** The full native scan retains its 60-second bound.
+  No target scan has run, so timeout is not a demonstrated kernel/platform failure.
+- **N10 — REPAIRED_PENDING_REVIEW.** Only typed, definite pre-reservation ownership
+  collisions retry, at most three candidates under one shared scan/reservation
+  deadline. Incomplete coverage, timeout or cleanup uncertainty cannot retry.
+
+The preceding d9c2670 delta preserves bounded source-bound failure evidence and
+rejects other-source fallback. The workflow now exports only bounded test counts,
+test/type/source-line failure identities and sanitized mount inventory. It excludes
+exception messages, locals and subtest parameter values. The hosted-only test error
+at edf8d12 was a hardcoded interpreter path; 3cbb2d3 fixes that test while retaining
+the actual production interpreter identity check and negative regression.
+
+## Source-bound validation
+
+At 3cbb2d3, GitHub run40699325717 executed1,033/1,033 diagnostics with zero
+failures/errors/skips. The exact workflow command separately passed1,033/1,033 in
+Cloud; startup10/10 passed there. Discovery2,597/131 modules is discovery only.
+The GitHub review gate intentionally exited78; real PID1 was skipped. This was
+not a privileged proof, full authoritative suite or browser acceptance.
+
+At preceding de34685, normal and scrubbed diagnostic runs each passed1,033; price17,
+snapshot20, related88 and startup10 also passed. These are separately attributed
+results, not tests rerun at the final candidate. The original checkout's pinned
+runner mode remains0600; related validation used a disposable exact-source0644
+clone and removed it without changing existing checkout permissions.
+
+The10af37d hosted focused step failed with unavailable detailed counts. Theedf8d12
+run executed1,033:1,032 passed/one test error. Both failures remain indexed in the
+packet. Full supported final-candidate validation is still required after the
+blocking implementation/review prerequisites are met.
+
+## Exact activation and review boundary
+
+Review only the material delta since the actual d863 review, including d9c2670
+and these repairs, plus the eventual owner-selected B2 change. Do not repeat the
+unchanged architecture review. Recheck impact on the six historical closures,
+pre-account ordering, native stat/find authority, collision retry, pre-ACK cleanup,
+N8 coverage, failure evidence and exact activation wiring.
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git rev-parse d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea^{tree}
-git diff 5e62c8e3a7030e60f77108517f5f9e06c7fc06a3 d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git rev-parse 3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c 3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c^{tree}
+git diff d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea 3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
-**Activation DISABLED. Credentials WITHHELD. Integrated acceptance NON-GREEN.**
-The bootstrap CLI still returns78 unconditionally. No sudo/account/systemd,
-namespace prerequisite, sealed PostgreSQL, database, browser or credential-bearing
-execution has run for this candidate. The fixed execution path is now implemented;
-passing causal/component tests are not evidence that native execution occurred.
-
-## Reconciled external review
-
-The owner supplied the Claude re-review of
-`5e62c8e3a7030e60f77108517f5f9e06c7fc06a3`, tree
-`6271745239da49a24e3664ed2623977a7d21de07`: six findings VERIFIED_CLOSED **there**.
-See `external-review-update.json` and `findings.json`. Numeric-PID closure covers
-its reuse window, not atomic migration; memory closure covers disclosure and
-separate accounting, not live lifetime proof. Runtime, worker-control exclusion
-and external cleanup remain OPEN. Later change impact is independently tracked;
-historical closure is retained and does not approve this descendant.
-
-Owner attribution: Claude Code CLI2.1.310, session
-`session_01JyrJEUAi36GJ6AfNcmBBxV`, reported claude-opus-5-5, effort medium.
-Original REQUEST CHANGES remains attributed to3c1ae555. Claude's environment had
-no real cgroup v2/systemd/GitHub-host execution or complete-suite reproduction.
-Verbatim prose is not invented. No callable Claude tool exists in this task;
-Codex read-only subagent inspections are internal, not external review.
-
-## New material to review
-
-- N1: before reservation/account mutation, verified native `find -P /` scans
-  visible local mounts (including cgroup2, /dev/shm and /dev/mqueue), excluding
-  proc process metadata covered separately. Nonzero exit, timeout, collision,
-  mount drift, unsupported filesystem or unreadable SysV owner/creator rows
-  refuses. No object is deleted or chowned. Visible ownership is the scope;
-  hidden/unmounted objects, named ACL grants outside source and general keyring
-  authority are not claimed absent. Worker keyring syscalls remain denied.
-- N2: candidate UID/GID mode/ACL/ancestor/source checks, external Git object-layout
-  refusal, real disposable unprivileged clone/detached-checkout rehearsal, and
-  actual /run byte/inode/writable-mount/traversal checks precede reservation.
-  Existing checkout permissions are unchanged. Native account commands retain15s;
-  copy commands have60s bounds. Later drift remains a quarantine failure.
-- N3: the owner trusts GitHub platform administration, verified installed native
-  tools, and exact reviewed orchestration **only for this ephemeral credential-free
-  diagnostic**. Arbitrary repository/dependency/application/browser code is not
-  thereby trusted. No malicious-platform-admin isolation, production model change,
-  sudoers/AppArmor/kernel-policy change or privileged broker is introduced.
-- N4: unsupported comment about internal setpriv ordering removed. The existing
-  two-stage clear-groups then IDs/capabilities chain remains unchanged.
-- Fixed native path: sealed PG/Python phase projection/reexec → existing G/I
-  stopped enrollment → I private-proc/root mount-ID rebinding → reduced U2 W →
-  fixed image lease → ARMED/block → I pidfd SIGSTOP and real T readback → same
-  generation S cgroup/whole-service observer ACK → exact role/start/image/source
-  EXEC ACK → SIGCONT → `os.execve(held_fd,[fixed_postgres,"--version"],fixed_env)`.
-  There is no database startup, arbitrary argv/path, provider or browser call.
-- The exact native failure code survives I/G/S protocol hops. Missing/wrong ACK,
-  drift, early exit, cancellation, excessive output and descriptor/cleanup failures
-  refuse. I keeps child ownership until descendant checks and reap. G independently
-  observes I/W mount/root/namespace/process identities. Both child and enclosing
-  service counters retain their separate existing budgets.
-- The namespace prerequisite performs one combined USER/MNT/PID/NET syscall in
-  a bounded dedicated unprivileged child and preserves actual numeric errno.
-  Parent and post-exec child policy context must match. Generic exit, malformed
-  output, timeout and syscall refusal are different results; AppArmor attribution
-  remains UNCONFIRMED without attributable denial evidence. No retry/fallback.
-
-## Exact dormant activation wiring and expected effects
-
-After actual review approves the exact published candidate, the existing
-unprivileged operator may call
+The bootstrap CLI still unconditionally exits78. The workflow cannot reach live
+service or PID1 execution. Its obsolete user-service body is unreachable and is
+not the proposed PG activation. Dormant
 `hosted_synthetic_identity.postgres_version_activation_entry([repository,"push",ref,commit])`
-on the ephemeral GitHub Ubuntu24.04 host. It selects the dedicated identity,
-performs pre-account checks, provisions only the reviewed native account/staging
-resources, and selects `--native-bootstrap-postgres-version`. The system-manager
-chain drops privileges before any repository Python. The launcher verifies the
-actual four-field IDs, empty groups, zero capability sets and NNP, then dispatches
-the source-bound prerequisite and retained PG path. The current CLI/workflow does
-not invoke this function. This exact activation delta needs review, not assumed
-approval inherited from5e62c8e3.
+selects the dedicated identity, preflights, and runs only
+`--native-bootstrap-postgres-version` through the reviewed native privilege-drop
+chain. `run_lifecycle_case(...,diagnostic="postgres-version")` retains the six fixed
+lifecycle cases. Exact published activation wiring needs independent review before
+use; no caller-supplied PASS flag or old conditional approval enables it.
 
-`run_lifecycle_case(...,diagnostic="postgres-version")` forwards the existing six
-fixed normal/cancel/manager-kill/timeout/lost-ACK/partial-setup cases to this path.
-Those live cases have NOT_RUN. Quarantine is never reported as drained cleanup;
-an ambiguous identity is not recycled. No unrelated objects/volumes are removed.
-
-Budgets unchanged: child I+W pids2/256MiB; enclosing service/slice512MiB/64tasks;
-namespace proof20s; service start120s/stop5s; native client150s. Sealed closure
-80MiB/3000entries unchanged. No accepted Nix/browser input is repinned. Actual PG
-closure fit, trusted native PG availability and non-piped core policy remain
-unmeasured on the target. `--version` may finish before library maps can be sampled;
-its FD-bound execution result must not be relabeled native-library lifetime,
-full runtime closure, worker adversarial isolation or purchasing acceptance.
-
-## Independent review request
-
-Review the actual material delta since reviewed5e62c8e3, focusing on later
-change-impact, N1–N4 and the complete fixed activation/execution/cleanup wiring.
-Do not redo unchanged architecture or erase the six historical closures. Return
-source-bound findings and an explicit disposition on readiness for one bounded
-credential-free live proof. No approval of credentials or browser acceptance is
-requested. Record reviewer/tool/model/session, commands, results and limitations.
-
-The commands above and source-bound evidence supply the exact delta and publication.
-No Claude invocation has been fabricated. New candidate review remains NOT_RECEIVED.
+After B2 and applicable review gates close, the bounded credential-free proof is
+already owner-authorized; no second routine approval is needed. It must bind the
+actual generation's identity, enrollment, fixed FD execution, resources and cleanup.
+This remains separate from worker adversarial proof, full runtime closure,
+sentinel/release and browser/Backup V2/APPLY/DRAFT/packet/restart/restore acceptance.
+The canonical two DRAFTs, three lines, 14 members and $282+$7=$289 have NOT_RUN here.
+Railway, current business data, price activation/cutover and purchasing authority
+remain separate and unproven. No deployment or production action is authorized.
 
 ## Earlier component history (scope and historical evidence retained)
 
