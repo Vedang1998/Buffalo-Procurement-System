@@ -1,0 +1,26 @@
+import hashlib,json,pathlib,re,subprocess,sys
+root=pathlib.Path.cwd();base,target,log=sys.argv[1:]
+branch='refs/heads/codex/hosted-synthetic-acceptance'
+protected=['refs/heads/main','refs/pull/24/head','refs/heads/recovery/mac-hosted-validation-20261017']
+def git(*args):return subprocess.check_output(['git',*args],text=True).strip()
+def refs():return dict(line.split()[::-1] for line in git('ls-remote','origin',branch,*protected).splitlines())
+assert git('branch','--show-current')=='codex/hosted-synthetic-acceptance'
+assert git('rev-parse','HEAD')==target and not git('status','--porcelain=v1')
+subprocess.run(['git','merge-base','--is-ancestor',base,target],check=True)
+initial=refs();assert initial[branch]==base
+objects=[line.split()[0] for line in git('rev-list','--objects',target,'^'+base).splitlines()]
+secrets=[rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',rb'gh[pousr]_[A-Za-z0-9]{30,}',rb'github_pat_[A-Za-z0-9_]{50,}',rb'AKIA[A-Z0-9]{16}']
+public=b'278831488+Vedang1998@users.noreply.github.com'
+for oid in objects:
+ kind=git('cat-file','-t',oid);data=subprocess.check_output(['git','cat-file',kind,oid])
+ assert not any(re.search(pattern,data) for pattern in secrets),('secret_pattern',oid)
+ if kind=='commit':
+  assert all(email==public for email in re.findall(rb'^(?:author|committer) .* <([^>]+)> ',data,re.M)),('metadata_refused',oid)
+assert not git('diff','--name-only',base,target,'--','procurement/src','procurement/db','procurement/config','pyproject.toml','procurement/pyproject.toml','uv.lock','package.json','pnpm-lock.yaml','procurement/docs/PHASE_STATUS.md')
+assert refs()==initial
+subprocess.run(['git','push','origin',target+':'+branch],check=True)
+subprocess.run(['git','fetch','--no-tags','origin',branch],check=True)
+assert git('rev-parse','FETCH_HEAD')==target
+actual=refs();assert actual[branch]==target and all(actual.get(p)==initial.get(p) for p in protected)
+record={'base':base,'published_commit':target,'tree':git('rev-parse',target+'^{tree}'),'fetched_commit':git('rev-parse','FETCH_HEAD'),'fetched_tree':git('rev-parse','FETCH_HEAD^{tree}'),'new_objects_scanned':len(objects),'secret_pattern_hits':0,'private_commit_email_hits':0,'push':'ordinary single acceptance branch, no force','protected_refs_before':{p:initial.get(p) for p in protected},'protected_refs_after':{p:actual.get(p) for p in protected}}
+pathlib.Path(log).write_text(json.dumps(record,indent=2)+'\n');print(json.dumps(record))

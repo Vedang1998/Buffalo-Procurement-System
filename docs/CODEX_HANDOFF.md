@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-27 (UTC)
+**Updated:** 2026-10-28 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,47 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-28 verified descendant publication; frozen review still pending
+
+Published and freshly fetched material:
+`d9c2670921d17f6b800d98ed935cb19e9d14e089`, tree
+`0d495f0c5ebbfea0ad05a7961b5a642ce0f1d555`. Ordinary acceptance-only publication
+scanned19 new objects with zero high-confidence secret/private-commit-email hits.
+Main, PR24 and Mac-recovery refs are unchanged. This follow-up adds docs/evidence
+only; its tree is separate and no tests are rerun merely for that metadata.
+
+At exact clean d9c2670,990/990 diagnostics passed normally and990/990 separately
+with scrubbed -I -S; same population, separate runs. Price17 and snapshot20 passed.
+Related tests initially executed88:86 passed,2 errors because this fresh checkout
+created the pinned browser runner0600, while the unchanged check requires0644.
+Its bytes/length/hash/UID/GID matched. A disposable non-hardlinked detached checkout
+of the exact same commit/tree with0644 passed88/88 and was removed. Existing checkout
+permissions were not broadened; the assertion and accepted hash were not changed.
+The failed run remains evidence, not overwritten. Startup10/10 passed; inert CLI78;
+discovery2554/131 with zero floor/registration errors is not execution. No full
+native suite or known unsupported host operation was repeated.
+
+`docs/review/2026-10-27-runtime-control-lifecycle/oct28-descendant-evidence.json`
+indexes raw results, both baseline defect reproductions, exact commands and
+publication. Internal read-only inspection caught a source-mismatch fallback and
+Codex fixed it with a causal regression; this is not independent Claude review.
+The temporary checkout and ordinary test resources were cleaned. No account,
+service, database, browser, native PG or privileged namespace resource was created.
+
+Claude remains frozen on tested d863bc7d/tree31336c2 plus evidence03035fff/tree44177adc.
+The new d9c2670 material is a separately recorded descendant pending delta review,
+not a replacement target. Six historical closures remain at5e62c8e3 only; three
+original gates and N1–N4 review dispositions are unchanged. Privileged activation
+and credentials remain disabled. The obsolete workflow user-service body remains
+unreachable after78; it cannot be activated as the fixed PG path. Exact replacement
+wiring must be reviewed before live use. After applicable implementation/wiring
+review passes, the bounded credential-free proof is already owner-authorized;
+there is no second routine approval stop. No callable Claude channel or automatic
+resumption is claimed. Full runtime/control/cleanup, sentinel/release and canonical
+browser/BackupV2/APPLY/DRAFT/restart/restore remain NOT_RUN/NON-GREEN. Railway and
+real purchasing readiness remain separate and unproven.
+
 
 
 ### 2026-10-28 frozen Claude target preserved; independent diagnostic repairs

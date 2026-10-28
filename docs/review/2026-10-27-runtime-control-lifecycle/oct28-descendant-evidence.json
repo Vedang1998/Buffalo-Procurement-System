@@ -1,0 +1,184 @@
+{
+  "material_commit": "d9c2670921d17f6b800d98ed935cb19e9d14e089",
+  "material_tree": "0d495f0c5ebbfea0ad05a7961b5a642ce0f1d555",
+  "base": "03035fff71d63adab5b36e6f775db3932edae1e7",
+  "frozen_claude_target": {
+    "implementation": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+    "implementation_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+    "evidence": "03035fff71d63adab5b36e6f775db3932edae1e7",
+    "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
+    "status": "REVIEW_PENDING",
+    "owner_explicit_freeze": true
+  },
+  "descendant_review": "REPAIRED_PENDING_REVIEW; does not replace frozen target or inherit approval",
+  "changes": [
+    "retain source-bound bounded diagnostic observations through failure and cleanup wrappers",
+    "reject other-source lifecycle fallback; exclude arbitrary fields/exception text",
+    "place unconditional review gate before real PID1 workflow step; no activation"
+  ],
+  "source_bound_results": {
+    "hosted": {
+      "executed": 990,
+      "passed": 990,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "scrubbed_hosted": {
+      "executed": 990,
+      "passed": 990,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "population": "same population, separate execution"
+    },
+    "price_components": 17,
+    "snapshot_components": 20,
+    "original_related": {
+      "executed": 88,
+      "passed": 86,
+      "errors": 2,
+      "cause": "fresh checkout pinned runner mode0600; exact bytes/ownership/hash otherwise match"
+    },
+    "disposable_related": {
+      "executed": 88,
+      "passed": 88,
+      "errors": 0,
+      "scope": "same commit/tree, task-owned detached clone with0644; original checkout permissions unchanged"
+    },
+    "startup": 10,
+    "activation_exit": 78,
+    "discovery": {
+      "count": 2554,
+      "modules": 131,
+      "executed": 0,
+      "floor_errors": 0
+    }
+  },
+  "causal_reproduction": {
+    "baseline": "03035fff71d63adab5b36e6f775db3932edae1e7",
+    "expected_regression_failures": 2,
+    "harness_errors": 0,
+    "scope": "simulated transport and workflow ordering; no kernel/account/service operation"
+  },
+  "focused_before_commit": {
+    "passed": 142,
+    "scope": "working implementation before metadata freeze; source-bound hosted execution above includes these cases"
+  },
+  "independent_review": {
+    "actual_new_claude_result": "NOT_RECEIVED",
+    "internal_codex_inspection_only": [
+      "failure_evidence_readonly",
+      "activation_wiring_readonly"
+    ],
+    "subagent_finding": "other-source fallback repaired;142 focused writer tests passed; no external-review substitution"
+  },
+  "live_gates": {
+    "privileged_activation": "DISABLED",
+    "credential_release": "WITHHELD",
+    "fixed_native_postgres_execution": "NOT_RUN",
+    "same_generation_resource_cleanup": "NOT_RUN",
+    "full_supported_authoritative_suite": "NOT_RUN",
+    "integrated_acceptance": "NON_GREEN",
+    "railway": "NOT_PROVEN",
+    "commercial_readiness": "NOT_READY"
+  },
+  "workflow_debt": "Old user-service body remains unreachable after78; actual fixed PG workflow replacement must be reviewed before activation. This descendant does not enable it.",
+  "environment": "Fresh task started on main/work; exact acceptance branch fetched without reset. Locked23 Python dependencies installed in disposable venv. Previous saved environment configuration not restored/verified; no reusable snapshot publication performed.",
+  "unchanged": [
+    "application source",
+    "schema/rules",
+    "dependency manifests and locks",
+    "PHASE_STATUS",
+    "main",
+    "PR24",
+    "Mac recovery ref"
+  ],
+  "next_gate": "Complete Claude review of frozen d863/03035 target; separately review this descendant and exact activation-wiring delta before any live use. Then the already-authorized bounded proof requires no second routine owner approval.",
+  "artifacts": {
+    "oct28-descendant-baseline.txt": {
+      "bytes": 11828,
+      "sha256": "8ff16990dce53febe44ed8a77e809d78aeb91718246b303b945a01a139f6c5b1"
+    },
+    "oct28-descendant-focused-first.txt": {
+      "bytes": 17088,
+      "sha256": "9966cb61921cedefd81c752ce4d50cdb3dced8adc706cdca8257882b0e249e95"
+    },
+    "oct28-descendant-focused-final.txt": {
+      "bytes": 25468,
+      "sha256": "2d7f2a9946f745959113957faa7ed79584897d94f1cc77c15d5d491f32714e8b"
+    },
+    "oct28-descendant-reproduction.txt": {
+      "bytes": 2053,
+      "sha256": "aa6ab39a68ae7918346b6d13392838d93dc4e48e48a4acf9305b2411933961d6"
+    },
+    "oct28-descendant-reproduce.py.txt": {
+      "bytes": 1916,
+      "sha256": "2ffe113a797cf26ca1e3944870ba76ec8a00e773668092e2ec41206052bf48cc"
+    },
+    "oct28-descendant-hosted.txt": {
+      "bytes": 179325,
+      "sha256": "34a263cd6814728dc2ac47b4032b45b4644df82bf695b304d437e5bd13ffcf22"
+    },
+    "oct28-descendant-isolated.txt": {
+      "bytes": 179325,
+      "sha256": "23e3fa6c3bdac0849ce7e7f1be01d4fbf4be9712ff7ece3c0a90ff42269d9507"
+    },
+    "oct28-descendant-price-components.txt": {
+      "bytes": 3713,
+      "sha256": "fc79151debddd72df0d0a1b4f5c7195a5feabb9f4207a3566994d65e12a7178d"
+    },
+    "oct28-descendant-snapshot-components.txt": {
+      "bytes": 4283,
+      "sha256": "3f3e9b18d53c286656f322c9a604d4366e0c32f4e58b6d2ef963dbe33cc7492a"
+    },
+    "oct28-descendant-related.txt": {
+      "bytes": 20231,
+      "sha256": "9f9e86ccb701d2fe59b718dbd1f8405c8cb0da970dae551ad12e3fadca35e149"
+    },
+    "oct28-descendant-related-disposable.txt": {
+      "bytes": 17276,
+      "sha256": "21a522bd209d5a7f4010ff22bacd6bdb7d3c6a5cc6841494f025d8278e1e4cf8"
+    },
+    "oct28-descendant-startup.txt": {
+      "bytes": 2041,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "oct28-descendant-inert.txt": {
+      "bytes": 95,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "oct28-descendant-discovery.txt": {
+      "bytes": 336,
+      "sha256": "c7506dbe2b128ff4e16c1bf59da026449e1c3873c8783287f8320e7707aa30e4"
+    },
+    "oct28-descendant-validation.json": {
+      "bytes": 2605,
+      "sha256": "4e7bcf630b7b51dc36b2bbf9fa91afae3e7c7fb1a246b7f051440a08e5a3a539"
+    },
+    "oct28-descendant-validation-completed.json": {
+      "bytes": 3885,
+      "sha256": "fcacfa801f2cb4a63eed7aae538051fac05a9c476ee26a10cfaa22623ddc153b"
+    },
+    "oct28-descendant-validate.py.txt": {
+      "bytes": 4114,
+      "sha256": "5717ddb5c9bf9390d550d53069a857c8c08f225905d21f7b0db7fb636577d48d"
+    },
+    "oct28-descendant-finish-validation.py.txt": {
+      "bytes": 4644,
+      "sha256": "5398d612674a47b138c3f57516988069c109565a8d0fae2ad5bb032be5046eb1"
+    },
+    "oct28-descendant-install.txt": {
+      "bytes": 1126,
+      "sha256": "7554db278eba019d08f5777b6c6c9d2c51f69151c66ff837fff201f2adce4b32"
+    },
+    "oct28-descendant-publication-material.json": {
+      "bytes": 992,
+      "sha256": "1e3727afbd90967ddfc3b3e2ff5c063f986a5964c2d971b126a8af193626945a"
+    },
+    "oct28-descendant-publish.py.txt": {
+      "bytes": 2447,
+      "sha256": "b1d10875cdb1cc004b35b7f7b2954f88518804431b169dad5042c6cc338f4ac2"
+    }
+  }
+}

@@ -285,5 +285,31 @@
       ],
       "disposition": "Unsupported setpriv-internal ordering comment removed; existing two-stage chain unchanged."
     }
+  ],
+  "frozen_current_claude_target": {
+    "implementation": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+    "implementation_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+    "evidence": "03035fff71d63adab5b36e6f775db3932edae1e7",
+    "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
+    "status": "REVIEW_PENDING",
+    "owner_explicit_freeze": true
+  },
+  "descendants_outside_frozen_review": [
+    {
+      "material_commit": "d9c2670921d17f6b800d98ed935cb19e9d14e089",
+      "material_tree": "0d495f0c5ebbfea0ad05a7961b5a642ce0f1d555",
+      "evidence": "oct28-descendant-evidence.json",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "review_target_unchanged": true,
+      "scope": [
+        "retain source-bound bounded diagnostic observations through failure and cleanup wrappers",
+        "reject other-source lifecycle fallback; exclude arbitrary fields/exception text",
+        "place unconditional review gate before real PID1 workflow step; no activation"
+      ],
+      "historical_closures": "six at5e62c8e3 unchanged; no new closure claimed",
+      "N1_N4_dispositions": "unchanged at frozen target; new exception/workflow delta requires review",
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD"
+    }
   ]
 }

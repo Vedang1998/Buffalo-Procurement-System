@@ -1,0 +1,22 @@
+import importlib.util,json,pathlib,subprocess,sys,tempfile,unittest
+root=pathlib.Path.cwd();base='03035fff71d63adab5b36e6f775db3932edae1e7'
+sys.path[:0]=[str(root/'procurement/tools'),str(root/'procurement/tests')]
+with tempfile.TemporaryDirectory(prefix='buffalo-old-evidence-') as temporary:
+ path=pathlib.Path(temporary)/'hosted_synthetic_bootstrap.py'
+ path.write_bytes(subprocess.check_output(['git','show',base+':procurement/tools/hosted_synthetic_bootstrap.py']))
+ spec=importlib.util.spec_from_file_location('hosted_synthetic_bootstrap',path)
+ boot=importlib.util.module_from_spec(spec);sys.modules[spec.name]=boot;spec.loader.exec_module(boot)
+ from test_hosted_synthetic_bootstrap import HostedSyntheticBootstrapTests,prerequisite_report
+ import test_hosted_synthetic_workflow as workflow
+ class Regression(unittest.TestCase):
+  def test_refused_prerequisite_remains_available_after_cleanup(self):
+   fixture=HostedSyntheticBootstrapTests()
+   with self.assertRaises(boot.BootstrapRefusal) as caught:
+    fixture._owned_run('pre_ack',lambda r:r.update(namespace_attempt=None,namespace_prerequisite=prerequisite_report(13)))
+   self.assertIsNotNone(getattr(caught.exception,'_buffalo_diagnostic_evidence',None),'precise EACCES report discarded')
+  def test_review_gate_precedes_real_kernel_step(self):
+   text=subprocess.check_output(['git','show',base+':.github/workflows/hosted-synthetic-acceptance.yml'],text=True)
+   self.assertLess(text.index('- name: Review gate before hosted execution'),text.index('- name: Credential-free real PID1 lifecycle regression'))
+ result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Regression))
+ assert result.testsRun==2 and len(result.failures)==2 and not result.errors
+ print(json.dumps({'source':base,'expected_regression_failures':2,'errors':0,'scope':'mocked native transport and static workflow; no live privileges'}))
