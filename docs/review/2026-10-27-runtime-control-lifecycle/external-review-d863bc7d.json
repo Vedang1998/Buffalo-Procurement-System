@@ -1,0 +1,150 @@
+{
+  "provenance": "Owner-supplied Claude review text and reported get_session attribution; not a fresh tool/account inspection by Codex",
+  "verdict": "REQUEST CHANGES",
+  "tool": "Claude Code container 2.1.312",
+  "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+  "configured_model": "claude-opus-5-5",
+  "served_model": "claude-opus-5-5",
+  "effort": "high",
+  "implementation_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+  "implementation_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+  "evidence_checkpoint": "03035fff71d63adab5b36e6f775db3932edae1e7",
+  "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
+  "delta_base": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
+  "reported_descendant_commits": 31,
+  "inspected": [
+    ".github/workflows/hosted-synthetic-acceptance.yml",
+    "procurement/tools",
+    "procurement/tests"
+  ],
+  "focus": [
+    "activation",
+    "pre-account",
+    "identity",
+    "bootstrap",
+    "launcher",
+    "observer",
+    "quarantine",
+    "cgroup",
+    "namespace",
+    "PG modules",
+    "namespace prerequisite"
+  ],
+  "not_reviewed_in_depth": [
+    "browser",
+    "packet",
+    "recovery"
+  ],
+  "blocking_findings": [
+    {
+      "id": "B1",
+      "severity": "P1",
+      "location": "hosted_synthetic_account_preflight.py:56,69 at reviewed commit",
+      "finding": "Non-root dereference of root-owned PID1 namespace links gives EACCES before reservation; raw PermissionError; hermetic tests missing",
+      "required": "Verified native privileged fixed stat or readable trusted reference; fixed refusal; hermetic tests and non-root/root-PID1 regression"
+    },
+    {
+      "id": "B2",
+      "severity": "P1",
+      "location": "hosted_synthetic_postgres_runtime.py:292 at reviewed commit",
+      "finding": "Composed PG phase exceeds unchanged80MiB bound before cgroup/enrollment; account already provisioned",
+      "measurement": {
+        "diagnostic_files": 632,
+        "diagnostic_bytes": 34768228,
+        "postgres_files": 164,
+        "postgres_bytes": 80497223,
+        "combined_files": 786,
+        "combined_bytes": 105340350,
+        "limit_bytes": 83886080,
+        "environment": "Ubuntu24.04 native PostgreSQL16.15 Ubuntu16.15-0ubuntu0.24.04.1"
+      },
+      "required": "Owner change-control decision: PG-phase-only budget or separate PG-only worker root; ICU cannot be dropped; real capture-fit regression"
+    }
+  ],
+  "additional_findings": [
+    {
+      "id": "N7",
+      "severity": "P2",
+      "finding": "Pre-ACK refusal cannot drain: finish skipped/failed, close requires proof and leaves slice; identity quarantined",
+      "required": "Independently prove unit/subtree/process absence, stop only owned empty slice; retain nonacceptance scope"
+    },
+    {
+      "id": "N8",
+      "severity": "P2",
+      "finding": "Target may contain vfat /boot/efi and autofs/binfmt_misc beneath /proc; current allowlist likely refuses",
+      "status": "TARGET_HYPOTHESIS_NOT_VERIFIED",
+      "required": "Read-only actual target mountinfo before proof; do not silently weaken coverage"
+    },
+    {
+      "id": "N9",
+      "severity": "P2",
+      "finding": "60s full find may time out on large hosted tool caches",
+      "status": "MEASUREMENT_RISK_NOT_OBSERVED_TIMEOUT",
+      "required": "Measure within unchanged bounded fail-closed scan"
+    },
+    {
+      "id": "N10",
+      "severity": "P2",
+      "finding": "First definite ownership collision aborts activation rather than trying next numeric candidate",
+      "required": "Bounded collision-only candidate retry; incomplete/ambiguous failures still stop"
+    }
+  ],
+  "new_topic_dispositions": {
+    "N1": "REPAIRED_IN_DESIGN_BLOCKED_BY_B1",
+    "N2": "ACCEPT",
+    "N3": "ACCEPT_AS_DOCUMENTED_EPHEMERAL_DIAGNOSTIC_ONLY",
+    "N4": "CLOSED_COMMENT_CORRECTED_CHAIN_UNCHANGED"
+  },
+  "reviewer_tests": {
+    "focused_root": {
+      "discovered": 977,
+      "result": "many environment errors; operatorUID0 invalid",
+      "exact_execution_counts": "NOT_SUPPLIED"
+    },
+    "focused_unprivileged": {
+      "uid": 65534,
+      "groups": [],
+      "executed": 977,
+      "passed": 966,
+      "errors": 11,
+      "cause": "all11 B1",
+      "reported_log": "/tmp/claude-0/-home-user-Buffalo-Procurement-System/0f1b2919-2af2-576d-8608-bd347e8aa4f0/scratchpad/d863-focused977-uid65534.txt",
+      "raw_log_received_by_codex": false
+    },
+    "real_pid1": {
+      "executed": 11,
+      "passed": 11,
+      "scope": "reviewer real PID1 driver; not real cgroup migration"
+    },
+    "runtime_component": {
+      "executed": 3,
+      "passed": 3,
+      "scope": "sealed projected exec and missing-interpreter/libc refusals"
+    },
+    "postgres_capture": "read-only memfd measurement, no native execution",
+    "node_version": "22.22.0; differs from writer evidence24.19.0",
+    "cleanup": "reviewer reports disposable clones/worktrees removed and writercheckout unchanged"
+  },
+  "not_run": [
+    "systemd",
+    "sudo",
+    "account tools",
+    "real cgroupv2 (reviewer hostv1)",
+    "GitHub runner",
+    "related/startup/full suites",
+    "nativePG inside namespace",
+    "browser components"
+  ],
+  "conditional_statement": "Reviewed protocol safe to run onceB1/B2 fixed; later material/activation needs its own review. This REQUEST_CHANGES is not approval to activate current descendants.",
+  "open_gates": [
+    "worker-control adversarial proof",
+    "external cleanup live proof",
+    "immutable fullruntime",
+    "sentinel/release",
+    "full authoritative suite",
+    "browser composition pids2 and acceptedNode/Chromeidentity conflict"
+  ],
+  "callable_claude_channel": false,
+  "privileged_activation": "DISABLED",
+  "credentials_browser_deployment_production": "NOT_AUTHORIZED_BY_THIS_REVIEW"
+}

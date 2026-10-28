@@ -181,7 +181,7 @@ def _actor(pid, start, uid, gid, path, role):
 
 @dataclass(frozen=True)
 class DrainProof:
-    generation: str
+    generation: str | None
     source_commit: str
     source_tree: str
     unit: str
@@ -191,6 +191,7 @@ class DrainProof:
     operation_succeeded: bool
     _owner: object
     _token: object
+    scope: str = 'ACKNOWLEDGED_GENERATION'
 
 
 class ExternalObserver:
@@ -342,6 +343,44 @@ class ExternalObserver:
         self.account.journal.record('external_service_drained')
         return self.proof
 
+    @_sticky_observation
+    def finish_pre_ack_exit(self, report, *, client_returncode):
+        """Drain a validated terminal refusal without inventing a generation.
+
+        Caller has completed/reaped native transport and validated its canonical
+        source-bound report. Unknown transport/binding remains quarantined. No
+        service signal is permitted: only observed absence can qualify here.
+        """
+        boot._require(type(client_returncode) is int and client_returncode in (0,1)
+                      and self.creation_acknowledged and not self.work_acknowledged
+                      and not self.failed and self.proof is None
+                      and self.account.service_attempted is True)
+        boot.snapshot_diagnostic(report,self.binding)
+        self.verify()
+        service='/sys/fs/cgroup'+service_path(self.unit)
+        if self.generation is None:
+            boot._require(self.service is None and self.generation_dir is None and not self.actors
+                          and self.service_invocation is None)
+            # No earlier service identity was retained. Do not wait through or
+            # stop an unbound loaded unit; absence must already be observed.
+            boot._require(_manager(self.unit,service=True)['LoadState']=='not-found'
+                          and not os.path.lexists(service),'pre_ack_service_absence_unverified')
+        else:
+            boot._require(len(self.actors)==5 and self.service is not None and self.generation_dir is not None
+                          and type(self.service_invocation) is str)
+            _await_absence(self.unit,service,self.service_invocation,self.actors.values())
+            _removed(self.service,service,self.mount)
+            _removed(self.generation_dir,service+'/buffalo-'+self.generation,self.mount)
+        boot._require(_children(self.root)==[] and self.read('cgroup.procs')==self.read('cgroup.threads')==b''
+                      and _events_empty(self.read('cgroup.events')))
+        from hosted_synthetic_identity import identity_processes
+        boot._require(not identity_processes(self.account.identity))
+        final=self.sample();identity=self.account.identity
+        self.proof=DrainProof(self.generation,self.binding.commit,self.binding.tree,self.unit,identity.uid,identity.gid,
+                             final,False,self,_TOKEN,'PRE_ACK_EXIT')
+        self.account.journal.record('external_service_drained')
+        return self.proof
+
     def _close_descriptors(self):
         boot._require(self._owner is self and not self.closed,'external_observer_owner_refused')
         errors=[]
@@ -371,6 +410,11 @@ class ExternalObserver:
             # still change before stopping the now-empty accounting envelope.
             # Publish the last validated kernel sample, never the earlier copy.
             self.proof=replace(self.proof,aggregate=final)
+            if self.proof.scope=='PRE_ACK_EXIT':
+                from hosted_synthetic_identity import identity_processes
+                boot._require(_manager(self.unit,service=True)['LoadState']=='not-found'
+                              and not os.path.lexists('/sys/fs/cgroup'+service_path(self.unit))
+                              and not identity_processes(self.account.identity),'pre_ack_absence_changed')
             code,_=boot._collect_native_client(_native(('/usr/bin/systemctl','--system','--no-ask-password','stop',self.slice_unit)),cwd='/')
             boot._require(code==0)
             _await_absence(self.slice_unit,self.path,self.invocation)
@@ -393,6 +437,14 @@ def require_drain_proof(proof, account):
                   and proof.aggregate is proof._owner.aggregate
                   and (proof.uid,proof.gid,proof.unit)==(account.identity.uid,account.identity.gid,account.identity.unit),
                   'external_drain_proof_required')
+    boot._require(proof.scope in ('ACKNOWLEDGED_GENERATION','PRE_ACK_EXIT')
+                  and proof.source_commit==account.source_commit
+                  and proof.source_tree==proof._owner.binding.tree
+                  and proof.generation==proof._owner.generation
+                  and ((proof.scope=='ACKNOWLEDGED_GENERATION' and proof._owner.work_acknowledged
+                        and type(proof.generation) is str)
+                       or (proof.scope=='PRE_ACK_EXIT' and not proof._owner.work_acknowledged
+                           and proof.operation_succeeded is False)), 'external_drain_scope_refused')
 
 
 def await_external_observer(*,unit,generation,binding,lease,guardian,guardian_start,outer,deadline):

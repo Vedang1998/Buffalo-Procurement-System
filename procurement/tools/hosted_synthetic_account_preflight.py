@@ -1,12 +1,15 @@
 """Bounded pre-account checks; no account reservation or permission repair.
 
-Only verified native find receives setup privilege. Python and Git remain
+Only verified native stat/find receive setup privilege. Python and Git remain
 unprivileged. Absence is limited to the visible host mounts and initial IPC
 namespace at observation time; trusted administration must not race allocation.
 """
 import errno
 import hashlib
+import collections
+import math
 import os
+import re
 from pathlib import Path
 import stat
 import tempfile
@@ -21,6 +24,10 @@ MAX_FILES=50000
 MAX_BYTES=256*1024**2
 
 
+class OwnershipCollision(boot.BootstrapRefusal):
+    """Definite pre-reservation ownership collision, never incomplete coverage."""
+
+
 def parse_ipc(raw,uid,gid):
     boot._require(type(raw) is bytes and raw.endswith(b'\n') and len(raw)<=1024**2,'ipc_coverage_incomplete')
     rows=raw.splitlines();boot._require(bool(rows),'ipc_schema_refused')
@@ -30,8 +37,8 @@ def parse_ipc(raw,uid,gid):
         values=row.split();boot._require(len(values)==len(columns),'ipc_schema_refused')
         selected=[values[columns.index(k)] for k in required]
         boot._require(all(x.isdigit() and int(x)<=2**32-1 for x in selected),'ipc_schema_refused')
-        boot._require(not (uid in (int(selected[0]),int(selected[2])) or gid in (int(selected[1]),int(selected[3]))),
-                      'dedicated_ipc_ownership_collision')
+        if uid in (int(selected[0]),int(selected[2])) or gid in (int(selected[1]),int(selected[3])):
+            raise OwnershipCollision('dedicated_ipc_ownership_collision')
     return len(rows)-1
 
 
@@ -49,31 +56,116 @@ def _mount_scope(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def inspect_ownership(identity):
+def observe_scan_host(binding):
+    """Read-only target inventory, before spending any privileged proof.
+
+    Fixed public mount points/types and hashes only. Do not traverse automounts,
+    change the allowlist, run sudo/find, create namespaces or reserve an identity.
+    Direct PID1 access is observed as a prerequisite condition, not a repaired
+    native-stat PASS. Actual native execution remains independently review-gated.
+    """
+    from hosted_synthetic_source import HostedSourceBinding
+    boot._require(type(binding) is HostedSourceBinding and os.geteuid()>0)
+    raw=ns._read('/proc/self/mountinfo',1024**2)
+    boot._require(raw.endswith(b'\n') and len(raw)<=1024**2,'mount_coverage_incomplete')
+    counts=collections.Counter();selected={};under_proc=[]
+    fixed={b'/',b'/proc',b'/sys',b'/boot/efi',b'/proc/sys/fs/binfmt_misc'}
+    for row in raw.splitlines():
+        left,sep,right=row.partition(b' - ');fields=left.split();tail=right.split()
+        boot._require(sep and len(fields)>=6 and len(tail)==3
+                      and re.fullmatch(rb'[a-zA-Z0-9_.-]{1,64}',tail[0]),'mount_schema_refused')
+        kind=tail[0].decode('ascii');counts[kind]+=1;target=fields[4]
+        if target in fixed:
+            selected.setdefault(target.decode(),[]).append(kind)
+        if target.startswith(b'/proc/') and kind!='proc':
+            under_proc.append({'filesystem':kind,'target_sha256':hashlib.sha256(target).hexdigest()})
+    try:_mount_scope(raw)
+    except boot.BootstrapRefusal as error:
+        reason=str(error)
+        boot._require(reason in ('filesystem_scope_requires_review','excluded_mount_requires_review'))
+        policy='REFUSED'
+    else:policy='SUPPORTED_BY_CURRENT_ALLOWLIST';reason=None
+    pid1=os.stat('/proc/1',follow_symlinks=False)
+    namespaces={}
+    for name in ('ipc','mnt'):
+        try:info=os.stat('/proc/1/ns/'+name)
+        except OSError as error:
+            boot._require(type(error.errno) is int and 0<error.errno<=4095)
+            namespaces[name]={'result':'DIRECT_READ_REFUSED','errno':error.errno}
+        else:namespaces[name]={'result':'DIRECT_READ_OBSERVED','device':info.st_dev,'inode':info.st_ino}
+    return {'commit':binding.commit,'tree':binding.tree,'operator_uid':os.geteuid(),'pid1_uid':pid1.st_uid,
+        'root_owned_pid1_condition':'MET' if pid1.st_uid==0 else 'NOT_MET',
+        'direct_pid1_namespace_read':namespaces,'repaired_native_stat_regression':'NOT_RUN_REVIEW_REQUIRED',
+        'mountinfo_sha256':hashlib.sha256(raw).hexdigest(),'filesystem_counts':dict(sorted(counts.items())),
+        'fixed_mount_points':selected,'non_proc_mounts_beneath_proc':under_proc,
+        'ownership_scan_mount_policy':policy,'refusal':reason,
+        'account_mutations':0,'namespace_operations':0,'privileged_processes_started':0,
+        'credential_release':'WITHHELD','execution_authority':False}
+
+
+def _self_namespaces():
+    try:return {name:ns._identity(os.stat('/proc/self/ns/'+name)) for name in ('ipc','mnt')}
+    except OSError as error:raise boot.BootstrapRefusal('host_self_namespace_unreadable') from error
+
+
+def _initial_namespaces():
+    """PID1's links are ptrace-gated; only fixed native stat receives privilege.
+
+    AccountLease verifies this executable and every privileged wrapper before
+    calling the preflight. No caller path, shell, repository code or mutation.
+    """
+    from hosted_synthetic_identity import native
+    command=native(('/usr/bin/stat','-L','--format=%d:%i','--',
+                    '/proc/1/ns/ipc','/proc/1/ns/mnt'))
+    try:code,raw=boot._collect_native_client(command,cwd='/')
+    except boot.BootstrapCleanupError:raise
+    except (OSError,boot.BootstrapRefusal) as error:
+        raise boot.BootstrapRefusal('host_initial_namespace_unreadable') from error
+    boot._require(code==0 and type(raw) is bytes and len(raw)<=96
+                  and re.fullmatch(rb'[0-9]{1,20}:[1-9][0-9]{0,19}\n[0-9]{1,20}:[1-9][0-9]{0,19}\n',raw),
+                  'host_initial_namespace_unreadable')
+    values=[tuple(int(part) for part in row.split(b':')) for row in raw.splitlines()]
+    boot._require(all(all(part<2**64 for part in value) for value in values),'host_initial_namespace_unreadable')
+    return dict(zip(('ipc','mnt'),values))
+
+
+def inspect_ownership(identity, *, scan_deadline=None):
     from hosted_synthetic_identity import validate,native
     validate(identity)
-    namespaces={name:ns._identity(os.stat('/proc/self/ns/'+name)) for name in ('ipc','mnt')}
-    boot._require(all(namespaces[name]==ns._identity(os.stat('/proc/1/ns/'+name)) for name in namespaces),'host_scan_namespace_refused')
-    mounts=ns._read('/proc/self/mountinfo',1024**2);digest=_mount_scope(mounts)
+    boot._require(scan_deadline is None or (type(scan_deadline) in (int,float) and math.isfinite(scan_deadline)),
+                  'identity_selection_deadline')
+    namespaces=_self_namespaces()
+    boot._require(namespaces==_initial_namespaces(),'host_scan_namespace_refused')
+    try:mounts=ns._read('/proc/self/mountinfo',1024**2)
+    except OSError as error:raise boot.BootstrapRefusal('mount_coverage_incomplete') from error
+    digest=_mount_scope(mounts)
     # No -xdev: scan every reachable mount, including /dev/shm and /dev/mqueue.
     # Never follow symbolic links or print paths/content. Any find error/timeout
     # or truncated collection refuses; no failed scan can authorize allocation.
+    remaining=60 if scan_deadline is None else min(60,int(scan_deadline-time.monotonic()))
+    boot._require(remaining>0,'identity_selection_deadline')
     command=native(('/usr/bin/find','-P','/','-path','/proc','-prune','-o',
-        '(','-uid',str(identity.uid),'-o','-gid',str(identity.gid),')','-printf','COLLISION\n','-quit'),purpose='scan')
+        '(','-uid',str(identity.uid),'-o','-gid',str(identity.gid),')','-printf','COLLISION\n','-quit'),purpose='scan',timeout_seconds=remaining)
     code,raw=boot._collect_native_client(command,cwd='/')
+    boot._require(scan_deadline is None or time.monotonic()<scan_deadline,'identity_selection_deadline')
+    if code==0 and raw==b'COLLISION\n':raise OwnershipCollision('dedicated_filesystem_ownership_collision')
     boot._require(code==0 and raw==b'','dedicated_filesystem_coverage_or_collision_refused')
     ipc={}
     for name in ('shm','sem','msg'):
-        ipc[name]=parse_ipc(ns._read('/proc/sysvipc/'+name,1024**2),identity.uid,identity.gid)
-    boot._require(ns._read('/proc/self/mountinfo',1024**2)==mounts,'mount_coverage_changed')
-    boot._require(all(ns._identity(os.stat('/proc/'+pid+'/ns/'+name))==value
-        for name,value in namespaces.items() for pid in ('self','1')),'host_scan_namespace_changed')
+        try:raw=ns._read('/proc/sysvipc/'+name,1024**2)
+        except OSError as error:raise boot.BootstrapRefusal('ipc_coverage_incomplete') from error
+        ipc[name]=parse_ipc(raw,identity.uid,identity.gid)
+    try:repeated=ns._read('/proc/self/mountinfo',1024**2)
+    except OSError as error:raise boot.BootstrapRefusal('mount_coverage_incomplete') from error
+    boot._require(repeated==mounts,'mount_coverage_changed')
+    boot._require(_self_namespaces()==namespaces==_initial_namespaces(),'host_scan_namespace_changed')
     return {'policy':POLICY,'scope':'VISIBLE_HOST_MOUNTS_AND_INITIAL_SYSV_IPC','root':'/',
         'exclusions':{'/proc':'kernel process metadata; separate full process and SysV IPC checks'},
         'kernel_ownership_files':'/sys including every visible cgroup2 subtree is scanned',
         'symlinks':'LSTAT_NOT_FOLLOWED; targets scanned through their actual visible paths',
         'hidden_unmounted_filesystems':'NOT_CLAIMED; trusted administration must not expose them during lease',
         'mountinfo_sha256':digest,'sysv_objects':ipc,'posix_ipc':'/dev/shm and /dev/mqueue included',
+        'namespace_reference':'VERIFIED_NATIVE_STAT_OF_PID1_BEFORE_AND_AFTER',
         'timeout_seconds':60,'collision':False,'named_acl_grants_outside_source':'NOT_ASSESSED_OWNERSHIP_SCOPE_ONLY','temporal_scope':'PRE_ACCOUNT_OBSERVATION_ONLY'}
 
 

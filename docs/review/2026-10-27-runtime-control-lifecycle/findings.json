@@ -1,6 +1,6 @@
 {
   "external_review": "../2026-10-26-consolidated-remediation/external-review.json",
-  "numbering_policy": "Owner-summary topic IDs, NOT invented Claude finding numbers; reconcile exact original P1/eight P2 IDs when raw review arrives",
+  "numbering_policy": "P1/P2-1..P2-8 mapping supplied in owner-received d863 Claude review; not inferred numbering",
   "allowed_statuses": [
     "OPEN",
     "REPAIRED_PENDING_REVIEW",
@@ -13,7 +13,7 @@
   "findings": [
     {
       "topic_id": "OWNER-P1-PID1",
-      "external_finding_number": null,
+      "external_finding_number": "P1",
       "severity": "P1",
       "title": "Namespace PID1 self-stop",
       "status": "VERIFIED_CLOSED",
@@ -34,13 +34,19 @@
       },
       "descendant_change_impact": {
         "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
+        "status": "CLAUDE_NO_REGRESSION_AT_d863; later descendants require delta review",
         "historical_closure_preserved": true
+      },
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       }
     },
     {
       "topic_id": "OWNER-P2-CREDENTIALS",
-      "external_finding_number": null,
+      "external_finding_number": "P2-1",
       "severity": "P2",
       "title": "Full entry credentials before effects",
       "status": "VERIFIED_CLOSED",
@@ -68,13 +74,19 @@
       },
       "descendant_change_impact": {
         "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
+        "status": "CLAUDE_NO_REGRESSION_AT_d863; later descendants require delta review",
         "historical_closure_preserved": true
+      },
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       }
     },
     {
       "topic_id": "OWNER-P2-NUMERIC-PID",
-      "external_finding_number": null,
+      "external_finding_number": "P2-2",
       "severity": "P2",
       "title": "Numeric migration and lifecycle ownership",
       "status": "VERIFIED_CLOSED",
@@ -95,13 +107,19 @@
       },
       "descendant_change_impact": {
         "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
+        "status": "CLAUDE_NO_REGRESSION_AT_d863; later descendants require delta review",
         "historical_closure_preserved": true
+      },
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       }
     },
     {
       "topic_id": "OWNER-P2-CLOSE-BOUNDARY",
-      "external_finding_number": null,
+      "external_finding_number": "P2-8",
       "severity": "P2",
       "title": "Descriptor closure after failed signal precondition",
       "status": "VERIFIED_CLOSED",
@@ -121,13 +139,19 @@
       },
       "descendant_change_impact": {
         "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
+        "status": "CLAUDE_NO_REGRESSION_AT_d863; later descendants require delta review",
         "historical_closure_preserved": true
+      },
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       }
     },
     {
       "topic_id": "OWNER-P2-EXTERNAL-CLEANUP",
-      "external_finding_number": null,
+      "external_finding_number": "P2-4",
       "severity": "P2",
       "title": "External full-service cleanup",
       "status": "OPEN",
@@ -141,11 +165,17 @@
         "23 observer / 10 quarantine / 22 lifecycle registered tests; actual unprivileged pipe and deferred-SIGINT components",
         "exact invocation/start/membership refusal before native signals; descriptor-failure proof refusal"
       ],
-      "remaining": "Dormant external observer, separate accounting envelope, persistent private identity quarantine and executable six-case lifecycle driver implemented. Native same-generation normal/cancel/kill/ACK-timeout/partial-setup proof NOT_RUN. Timeout means20s namespace deadline, not120s systemd startup timeout. Terminal state is distinct from successful descriptor closure. Quarantine is never drained cleanup. Final pre-stop aggregate sample replaces the earlier provisional proof; stale/mismatched proof refuses."
+      "remaining": "Dormant external observer, separate accounting envelope, persistent private identity quarantine and executable six-case lifecycle driver implemented. Native same-generation normal/cancel/kill/ACK-timeout/partial-setup proof NOT_RUN. Timeout means20s namespace deadline, not120s systemd startup timeout. Terminal state is distinct from successful descriptor closure. Quarantine is never drained cleanup. Final pre-stop aggregate sample replaces the earlier provisional proof; stale/mismatched proof refuses.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "OPEN_KEPT"
+      }
     },
     {
       "topic_id": "OWNER-P2-MEMORY",
-      "external_finding_number": null,
+      "external_finding_number": "P2-5",
       "severity": "P2",
       "title": "Child versus aggregate memory accounting",
       "status": "VERIFIED_CLOSED",
@@ -165,13 +195,19 @@
       },
       "descendant_change_impact": {
         "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
+        "status": "CLAUDE_NO_REGRESSION_AT_d863; later descendants require delta review",
         "historical_closure_preserved": true
+      },
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       }
     },
     {
       "topic_id": "OWNER-P2-RUNTIME",
-      "external_finding_number": null,
+      "external_finding_number": "P2-6",
       "severity": "P2",
       "title": "Executable/interpreter/library runtime closure",
       "status": "OPEN",
@@ -191,11 +227,17 @@
         "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN",
         "d1b8124:66 PG runtime,35 image,21 shared runtime component tests; phase-only locale proof and actual disposable descriptor failure paths; native exec NOT_RUN"
       ],
-      "remaining": "Fixed postgres --version path now wired through PG phase projection, parent pidfd stop, actual stopped attestation, exact outer/worker ACK and FD exec; native execution/size fit/required core policy and native mapped-library lifetime NOT_RUN/NOT_PROVEN. Full application/browser closure remains OPEN."
+      "remaining": "Fixed postgres --version path now wired through PG phase projection, parent pidfd stop, actual stopped attestation, exact outer/worker ACK and FD exec; native execution/size fit/required core policy and native mapped-library lifetime NOT_RUN/NOT_PROVEN. Full application/browser closure remains OPEN.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "OPEN_KEPT"
+      }
     },
     {
       "topic_id": "OWNER-P2-EVENT-SCHEMA",
-      "external_finding_number": null,
+      "external_finding_number": "P2-7",
       "severity": "P2",
       "title": "memory.events compatibility policy",
       "status": "VERIFIED_CLOSED",
@@ -215,13 +257,19 @@
       },
       "descendant_change_impact": {
         "candidate": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-        "status": "NEW_INTEGRATION_RE_REVIEW_REQUIRED; historical closure retained",
+        "status": "CLAUDE_NO_REGRESSION_AT_d863; later descendants require delta review",
         "historical_closure_preserved": true
+      },
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       }
     },
     {
       "topic_id": "OWNER-P2-CONTROL-EXCLUSION",
-      "external_finding_number": null,
+      "external_finding_number": "P2-3",
       "severity": "P2",
       "title": "Exclusive delegated-control authority",
       "status": "OPEN",
@@ -237,7 +285,13 @@
         "14 worker registered tests: capability/securebits/NNP/filter, inherited descriptors and control-path refusal",
         "actual private projection/old-root detachment component; actual mapped worker/control boundary NOT_RUN"
       ],
-      "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved."
+      "remaining": "Worker policy and same-generation integration implemented: sealed inaccessible old root, no host control handles, locked securebits, zero caps, NNP, namespace/control-access syscall refusal and external stopped-worker attestation. Dedicated identity alone is not proof. Same-host-UID exclusion remains unverified until reviewed dedicated-host live adversarial execution; browser sandbox composition unresolved.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+        "source": "external-review-d863bc7d.json",
+        "disposition": "OPEN_KEPT"
+      }
     }
   ],
   "material_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
@@ -245,7 +299,7 @@
   "frozen_evidence": "oct27-postgres-version-repaired-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
-  "independent_re_review": "OWNER_RECEIVED_SIX_CLOSURES_AT_5e62c8e3; NEW_DELTA_REVIEW_NOT_RECEIVED",
+  "independent_re_review": "REQUEST_CHANGES_AT_d863; B1/B2 blocking; current descendant delta review required",
   "current_delta": "Fixed native PG version execution and stopped/enrollment/outer-observer wiring, exact prerequisite errno/policy collector, N1/N2 pre-account repair and N3/N4 dispositions.977 diagnostics PASS twice separately;17/20/88/10 groups,18 imports PASS;inert78. Actual privileged/native/full acceptance NOT_RUN.",
   "new_findings": [
     {
@@ -257,33 +311,53 @@
         "hosted_synthetic_identity.py:AccountLease.create"
       ],
       "tests": "25 account-preflight tests include real disposable UID/GID collision find, SysV current/creator collision, permission/timeout/mount/filesystem refusals; live host scan NOT_RUN",
-      "limitations": "Visible ownership scope only. Hidden/unmounted objects and named ACL/keyring authority not claimed; workers deny add_key/request_key/keyctl independently. No object deletion/chown."
+      "limitations": "Visible ownership scope only. Hidden/unmounted objects and named ACL/keyring authority not claimed; workers deny add_key/request_key/keyctl independently. No object deletion/chown.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "disposition": "REPAIRED_IN_DESIGN_BLOCKED_BY_B1"
+      },
+      "remaining": "B1 correction on current descendant pending tests/re-review; native fixed stat live regression NOT_RUN"
     },
     {
       "id": "N2",
       "title": "Source access/staging preflight before account mutation",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "hosted_synthetic_account_preflight.py:inspect_source",
         "hosted_synthetic_identity.py:provisioning_commands"
       ],
       "tests": "Candidate mode/ACL/ancestor checks; actual disposable local clone/detached checkout; missing access, external objects, readonly/full/inode-exhausted destination, copy failure before reservation",
-      "limitations": "Live target coverage/staging NOT_RUN. Later drift still quarantines; no permission broadening. Account commands15s, copy60s separately bounded."
+      "limitations": "Live target coverage/staging NOT_RUN. Later drift still quarantines; no permission broadening. Account commands15s, copy60s separately bounded.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "disposition": "ACCEPT"
+      },
+      "closure_scope": "Exact d863 finding only; N3 trust decision does not close worker/runtime gates"
     },
     {
       "id": "N3",
       "title": "Ephemeral diagnostic trusted administrative boundary",
-      "status": "REPAIRED_PENDING_REVIEW",
-      "disposition": "Owner trust decision RECORDED in external-review-update.json; implementation of narrow boundary pending new review. No malicious platform-administrator isolation claim; no production change; runtime and worker-control independent."
+      "status": "VERIFIED_CLOSED",
+      "disposition": "Owner trust decision RECORDED in external-review-update.json; implementation of narrow boundary pending new review. No malicious platform-administrator isolation claim; no production change; runtime and worker-control independent.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "disposition": "ACCEPT_AS_DOCUMENTED_EPHEMERAL_DIAGNOSTIC_ONLY"
+      },
+      "closure_scope": "Exact d863 finding only; N3 trust decision does not close worker/runtime gates"
     },
     {
       "id": "N4",
       "title": "Unsupported setpriv ordering comment",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "code": [
         "hosted_synthetic_bootstrap.py:plan_native_bootstrap"
       ],
-      "disposition": "Unsupported setpriv-internal ordering comment removed; existing two-stage chain unchanged."
+      "disposition": "Unsupported setpriv-internal ordering comment removed; existing two-stage chain unchanged.",
+      "d863_external_review": {
+        "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+        "disposition": "CLOSED_COMMENT_CORRECTED_CHAIN_UNCHANGED"
+      },
+      "closure_scope": "Exact d863 finding only; N3 trust decision does not close worker/runtime gates"
     }
   ],
   "frozen_current_claude_target": {
@@ -291,7 +365,7 @@
     "implementation_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
     "evidence": "03035fff71d63adab5b36e6f775db3932edae1e7",
     "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
-    "status": "REVIEW_PENDING",
+    "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
     "owner_explicit_freeze": true
   },
   "descendants_outside_frozen_review": [
@@ -310,6 +384,57 @@
       "N1_N4_dispositions": "unchanged at frozen target; new exception/workflow delta requires review",
       "privileged_activation": "DISABLED",
       "credential_release": "WITHHELD"
+    }
+  ],
+  "latest_received_external_review": "external-review-d863bc7d.json",
+  "remediation_findings": [
+    {
+      "id": "B1",
+      "severity": "P1",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "review_source": "external-review-d863bc7d.json",
+      "description": "Non-root dereference of root-owned PID1 namespace links gives EACCES before reservation; raw PermissionError; hermetic tests missing"
+    },
+    {
+      "id": "B2",
+      "severity": "P1",
+      "status": "OPEN",
+      "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "review_source": "external-review-d863bc7d.json",
+      "description": "Composed PG phase exceeds unchanged80MiB bound before cgroup/enrollment; account already provisioned"
+    },
+    {
+      "id": "N7",
+      "severity": "P2",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "review_source": "external-review-d863bc7d.json",
+      "description": "Pre-ACK refusal cannot drain: finish skipped/failed, close requires proof and leaves slice; identity quarantined"
+    },
+    {
+      "id": "N8",
+      "severity": "P2",
+      "status": "OPEN",
+      "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "review_source": "external-review-d863bc7d.json",
+      "description": "Target may contain vfat /boot/efi and autofs/binfmt_misc beneath /proc; current allowlist likely refuses"
+    },
+    {
+      "id": "N9",
+      "severity": "P2",
+      "status": "OPEN",
+      "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "review_source": "external-review-d863bc7d.json",
+      "description": "60s full find may time out on large hosted tool caches"
+    },
+    {
+      "id": "N10",
+      "severity": "P2",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "review_source": "external-review-d863bc7d.json",
+      "description": "First definite ownership collision aborts activation rather than trying next numeric candidate"
     }
   ]
 }

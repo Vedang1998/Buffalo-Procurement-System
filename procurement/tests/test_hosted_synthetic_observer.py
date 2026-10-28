@@ -21,8 +21,8 @@ UNIT='buffalo-hosted-01234567-89ab-cdef-0123-456789abcdef.service'
 
 def fixture():
     value=object.__new__(observer.ExternalObserver);value._owner=value
-    value.account=SimpleNamespace(uncertain=False,journal=Mock(),identity=SimpleNamespace(uid=900,gid=900,unit=UNIT))
-    value.binding=SimpleNamespace(commit='a'*40,tree='b'*40)
+    value.account=SimpleNamespace(uncertain=False,journal=Mock(),identity=SimpleNamespace(uid=900,gid=900,unit=UNIT),source_commit='a'*40,service_attempted=True)
+    value.binding=SimpleNamespace(commit='a'*40,tree='b'*40,files=())
     value.unit=UNIT;value.slice_unit=observer.slice_name(UNIT)
     value.path='/sys/fs/cgroup/system.slice/'+value.slice_unit
     value.root=Mock(number=10,identity=(1,2));value.mount=3
@@ -42,6 +42,98 @@ def counters():
 
 
 class HostedObserverTests(unittest.TestCase):
+    def pre_ack_fixture(self,ready=False):
+        value=fixture();value.work_acknowledged=False
+        if not ready:
+            value.generation=None;value.service_invocation=None
+            value.service=None;value.generation_dir=None;value.actors={}
+        self.enterContext(patch.object(value,'verify'))
+        self.enterContext(patch.object(value,'read',side_effect=counters().__getitem__))
+        self.enterContext(patch.object(observer,'_manager',return_value={'LoadState':'not-found'}))
+        self.enterContext(patch.object(os.path,'lexists',return_value=False))
+        self.enterContext(patch.object(observer,'_children',return_value=[]))
+        self.enterContext(patch('hosted_synthetic_identity.identity_processes',return_value=[]))
+        return value
+
+    def pre_ack_report(self):
+        from test_hosted_synthetic_bootstrap import evidence_report
+        return evidence_report()
+
+    def test_valid_pre_ready_exit_drains_only_owned_empty_slice_without_generation(self):
+        value=self.pre_ack_fixture()
+        proof=value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        self.assertIsNone(proof.generation);self.assertFalse(proof.operation_succeeded)
+        self.assertEqual(proof.scope,'PRE_ACK_EXIT')
+        with patch.object(observer,'_await_absence') as absence,patch.object(observer,'_removed') as removed,patch.object(boot,'_collect_native_client',return_value=(0,b'')) as native:
+            value.close()
+        self.assertEqual(native.call_args.args[0][-2:],('stop',value.slice_unit))
+        absence.assert_called_once_with(value.slice_unit,value.path,value.invocation)
+        removed.assert_called_once_with(value.root,value.path,value.mount)
+        self.assertTrue(value.descriptors_closed_successfully)
+        observer.require_drain_proof(value.proof,value.account)
+
+    def test_ready_without_ack_requires_retained_terminal_actors_and_deleted_dentries(self):
+        value=self.pre_ack_fixture(ready=True)
+        with patch.object(observer,'_await_absence') as absence,patch.object(observer,'_removed') as removed:
+            proof=value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        self.assertEqual(tuple(absence.call_args.args[3]),tuple(value.actors.values()))
+        self.assertEqual(removed.call_count,2)
+        self.assertEqual(proof.scope,'PRE_ACK_EXIT');self.assertEqual(proof.generation,'c'*64)
+        self.assertFalse(value.work_acknowledged or proof.operation_succeeded)
+
+    def test_pre_ack_unknown_resources_never_stop_or_authorize_identity_release(self):
+        for fault in ('process','descendant','path','loaded','populated'):
+            value=self.pre_ack_fixture()
+            target={'process':'hosted_synthetic_identity.identity_processes','descendant':'hosted_synthetic_observer._children',
+                    'path':'hosted_synthetic_observer.os.path.lexists','loaded':'hosted_synthetic_observer._manager'}
+            replacement={'process':[777],'descendant':['foreign'],'path':True,'loaded':{'LoadState':'loaded'}}
+            context=patch(target[fault],return_value=replacement[fault]) if fault!='populated' else patch.object(value,'read',side_effect=lambda name:b'populated 1\nfrozen 0\n' if name=='cgroup.events' else counters()[name])
+            with self.subTest(fault=fault),context,patch.object(boot,'_collect_native_client') as native:
+                with self.assertRaises(boot.BootstrapRefusal):value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+                with self.assertRaises(boot.BootstrapCleanupError):value.close()
+            self.assertIsNone(value.proof);self.assertTrue(value.failed and value.account.uncertain)
+            native.assert_not_called()
+
+    def test_pre_ack_live_retained_actor_is_not_terminal_cleanup(self):
+        value=self.pre_ack_fixture(ready=True)
+        with patch.object(ns.backend,'_browser_pidfd_is_terminal',return_value=False),self.assertRaises(boot.BootstrapRefusal):
+            value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        self.assertIsNone(value.proof)
+
+    def test_pre_ack_wrong_report_or_unknown_transport_or_failed_binding_refuses(self):
+        for fault in ('source','authority','transport','binding','partial'):
+            value=self.pre_ack_fixture();report=self.pre_ack_report();code=1
+            if fault=='source':report['commit']='0'*40
+            if fault=='authority':report['provider_calls']=1
+            if fault=='transport':code=124
+            if fault=='binding':value.failed=True
+            if fault=='partial':value.service=Mock()
+            with self.subTest(fault=fault),self.assertRaises(boot.BootstrapRefusal):
+                value.finish_pre_ack_exit(report,client_returncode=code)
+            self.assertIsNone(value.proof)
+
+    def test_pre_ack_scope_cannot_claim_acknowledged_generation_or_success(self):
+        value=self.pre_ack_fixture();proof=value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        value.closed=True;value.descriptors_closed_successfully=True
+        for changes in ({'scope':'ACKNOWLEDGED_GENERATION'},{'operation_succeeded':True},{'scope':'UNKNOWN'}):
+            value.proof=replace(proof,**changes)
+            with self.subTest(changes=changes),self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(value.proof,value.account)
+
+    def test_pre_ack_late_identity_process_prevents_slice_stop(self):
+        value=self.pre_ack_fixture();value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        with patch('hosted_synthetic_identity.identity_processes',return_value=[999]),patch.object(boot,'_collect_native_client') as native,self.assertRaises(boot.BootstrapCleanupError):value.close()
+        native.assert_not_called();self.assertTrue(value.account.uncertain and value.closed)
+
+    def test_pre_ack_oom_or_final_descriptor_failure_cannot_release_identity(self):
+        for fault in ('oom','descriptor'):
+            value=self.pre_ack_fixture();value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+            if fault=='descriptor':value.controls['memory.current'].close.side_effect=OSError('synthetic')
+            data=counters()
+            if fault=='oom':data['memory.events']=b'low 0\nhigh 0\nmax 0\noom 1\noom_kill 0\noom_group_kill 0\n'
+            with self.subTest(fault=fault),patch.object(value,'read',side_effect=data.__getitem__),patch.object(observer,'_await_absence'),patch.object(observer,'_removed'),patch.object(boot,'_collect_native_client',return_value=(0,b'')) as native,self.assertRaises(boot.BootstrapCleanupError):value.close()
+            if fault=='oom':native.assert_not_called()
+            with self.assertRaises(boot.BootstrapRefusal):observer.require_drain_proof(value.proof,value.account)
+
     def test_owned_slice_plan_keeps_aggregate_limits_and_uses_native_tools_only(self):
         command=observer.plan_slice(UNIT)
         self.assertEqual(command[:4],('/usr/bin/sudo','-n','--','/usr/bin/env'))

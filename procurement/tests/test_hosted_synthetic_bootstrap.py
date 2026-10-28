@@ -381,6 +381,7 @@ class HostedSyntheticBootstrapTests(unittest.TestCase):
             observed.proof=SimpleNamespace(generation='c'*64,source_commit='a'*40,source_tree='b'*40,
                 aggregate={},operation_succeeded=kwargs['operation_succeeded'])
         observed.finish_service.side_effect=finish
+        observed.finish_pre_ack_exit.side_effect=lambda report,client_returncode:finish(operation_succeeded=False)
         if failure=='pre_ack':observed.work_acknowledged=False
         def close():
             events.append('external_close');observed.closed=True

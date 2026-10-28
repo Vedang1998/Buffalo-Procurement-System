@@ -1,5 +1,6 @@
 """Hosted closure parsing and sealed-byte tests, independent of live mounts."""
 from pathlib import Path
+from types import SimpleNamespace
 from dataclasses import replace
 import copy
 import errno
@@ -41,6 +42,24 @@ def fixture_bundle():
 
 
 class HostedRuntimeTests(unittest.TestCase):
+    def test_real_capture_fit_driver_has_no_namespace_or_native_execution(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        for capacity,expected in (('FIT','PASS'),('REFUSED','REFUSED')):
+            with self.subTest(capacity=capacity),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity}) as capture,patch.object(driver,'_execute') as execute:
+                result=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
+            capture.assert_called_once();execute.assert_not_called()
+            self.assertEqual(result['capture_fit'],expected);self.assertTrue(result['owned_descriptors_closed'])
+            self.assertEqual(result['native_execution'],'NOT_RUN');self.assertEqual(result['whole_service_memory'],'NOT_MEASURED')
+
+    def test_real_capture_fit_unavailable_target_is_not_a_passing_substitute(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        for release,present in ((b'ID=debian\nVERSION_ID="13"\n',True),(b'ID=ubuntu\nVERSION_ID="24.04"\n',False)):
+            with self.subTest(release=release,present=present),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(release,0o444)),patch.object(Path,'is_file',return_value=present),patch.object(pg,'capture_phase_fit') as capture:
+                result=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
+            capture.assert_not_called();self.assertEqual(result['capture_fit'],'NOT_RUN')
+
     def test_elf_interpreter_and_needed_are_extracted_without_execution(self):
         self.assertEqual(runtime.parse_elf(elf()),{'interpreter':'/lib64/ld-linux-x86-64.so.2','needed':('libc.so.6',),'soname':None})
 

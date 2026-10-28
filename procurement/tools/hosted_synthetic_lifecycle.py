@@ -133,7 +133,11 @@ class LifecycleCase:
 
     def _quarantined(self):
         lease=self.lease
-        boot._require(lease is not None and lease.uncertain and not lease.closed and lease.drain_proof is None)
+        boot._require(lease is not None and lease.uncertain and not lease.closed)
+        if lease.drain_proof is not None:
+            # External resource drainage can succeed before account deletion
+            # fails. It does not release an uncertain numeric identity.
+            observation.require_drain_proof(lease.drain_proof,lease)
         journal=lease.journal
         descriptor=ns._acquire(lambda:os.open(journal.path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW))
         try:journal._verify_descriptor(descriptor)
@@ -160,7 +164,7 @@ class LifecycleCase:
                 self._quarantined();quarantine=True
             namespace=(self.child_report or {}).get('namespace_attempt') or {}
             code='external_observer_timeout' if self.case=='timeout' else 'external_observer_ack_refused'
-            expected=(isinstance(error,boot.BootstrapCleanupError) and quarantine
+            expected=(isinstance(error,boot.BootstrapRefusal) and (drained or quarantine)
                       and observer is not None and observer.closed and not observer.work_acknowledged
                       and observer.descriptors_closed_successfully is True
                       and namespace.get('external_observer_failure')==code)
@@ -179,6 +183,8 @@ class LifecycleCase:
             'assertion':'PASS' if expected else 'FAIL','operation':'SUCCEEDED' if error is None else 'FAILED',
             'cleanup':'DRAINED_IDENTITY_REMOVED' if drained else ('QUARANTINED' if quarantine else 'UNVERIFIED'),
             'resource_acceptance':'AGGREGATE_OBSERVED' if drained else 'UNVERIFIED',
+            'cleanup_scope':lease.drain_proof.scope if drained else 'UNVERIFIED',
+            'acknowledged_generation_lifetime':drained and lease.drain_proof.scope=='ACKNOWLEDGED_GENERATION',
             'child_resources':((self.child_report or {}).get('namespace_attempt') or {}).get('resource_cleanup'),
             'native_prerequisites':self.native,'account_native_programs':lease.platform if lease else None,
             'aggregate':lease.drain_proof.aggregate if drained else None,

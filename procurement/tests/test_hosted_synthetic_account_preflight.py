@@ -2,6 +2,7 @@
 from dataclasses import replace
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import subprocess
 import tempfile
 import unittest
@@ -14,10 +15,20 @@ import hosted_synthetic_bootstrap as boot
 ID=identity.DedicatedIdentity('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',950,951,1001,1001)
 MOUNTS=b'1 0 8:1 / / rw - ext4 /dev/root rw\n2 1 0:2 / /proc rw - proc proc rw\n3 1 0:3 / /sys rw - sysfs sysfs rw\n'
 IPC=b'key shmid perms uid gid cuid cgid\n'
+INITIAL_NAMESPACES=pre._initial_namespaces
 
 class AccountPreflightTests(unittest.TestCase):
     def setUp(self):
         self.tmp=Path(self.enterContext(tempfile.TemporaryDirectory(dir="/tmp")));self.tmp.chmod(0o755)
+        actual_stat=os.stat
+        def self_stat(path,*args,**kwargs):
+            if str(path) in ('/proc/self/ns/ipc','/proc/self/ns/mnt'):
+                return SimpleNamespace(st_dev=1,st_ino=2)
+            if str(path) in ('/proc/1/ns/ipc','/proc/1/ns/mnt'):
+                raise PermissionError(13,'synthetic root-owned PID1')
+            return actual_stat(path,*args,**kwargs)
+        self.enterContext(patch.object(pre.os,'stat',side_effect=self_stat))
+        self.enterContext(patch.object(pre,'_initial_namespaces',return_value={'ipc':(1,2),'mnt':(1,2)}))
 
     def read(self,path,maximum):return MOUNTS if path.endswith('mountinfo') else IPC
 
@@ -50,6 +61,19 @@ class AccountPreflightTests(unittest.TestCase):
         for code,output in ((1,b''),(124,b''),(0,b'partial'),(0,b'COLLISION\n')):
             with self.subTest(code=code,output=output),patch.object(boot,'_collect_native_client',return_value=(code,output)),self.assertRaises(boot.BootstrapRefusal):self.inspect()
 
+    def test_only_complete_collision_output_can_authorize_candidate_retry(self):
+        for code,raw,kind in ((0,b'COLLISION\n',pre.OwnershipCollision),(1,b'COLLISION\n',boot.BootstrapRefusal),(124,b'',boot.BootstrapRefusal)):
+            with self.subTest(code=code),patch.object(boot,'_collect_native_client',return_value=(code,raw)),self.assertRaises(boot.BootstrapRefusal) as caught:self.inspect()
+            self.assertIs(type(caught.exception),kind)
+
+    def test_shared_selection_budget_bounds_scan_and_refuses_expiry(self):
+        with patch.object(pre.ns,'_read',side_effect=self.read),patch.object(pre.time,'monotonic',return_value=12),patch.object(boot,'_collect_native_client',return_value=(0,b'')) as native:
+            pre.inspect_ownership(ID,scan_deadline=20)
+        self.assertIn('8s',native.call_args.args[0])
+        with patch.object(pre.ns,'_read',side_effect=self.read),patch.object(pre.time,'monotonic',return_value=20),patch.object(boot,'_collect_native_client') as native,self.assertRaisesRegex(boot.BootstrapRefusal,'selection_deadline'):
+            pre.inspect_ownership(ID,scan_deadline=20)
+        native.assert_not_called()
+
     def test_current_and_creator_ipc_ownership_all_refuse(self):
         for index,value in ((0,950),(1,951),(2,950),(3,951)):
             values=[0]*4;values[index]=value
@@ -61,7 +85,7 @@ class AccountPreflightTests(unittest.TestCase):
             with self.subTest(raw=raw),self.assertRaises(boot.BootstrapRefusal):pre.parse_ipc(raw,950,951)
 
     def test_ipc_permission_error_refuses(self):
-        with patch.object(pre.ns,'_identity',return_value=(1,2)),patch.object(pre.ns,'_read',side_effect=[MOUNTS,PermissionError()]),patch.object(boot,'_collect_native_client',return_value=(0,b'')),self.assertRaises(PermissionError):pre.inspect_ownership(ID)
+        with patch.object(pre.ns,'_identity',return_value=(1,2)),patch.object(pre.ns,'_read',side_effect=[MOUNTS,PermissionError()]),patch.object(boot,'_collect_native_client',return_value=(0,b'')),self.assertRaisesRegex(boot.BootstrapRefusal,'ipc_coverage_incomplete'):pre.inspect_ownership(ID)
 
     def test_mount_change_refuses(self):
         with patch.object(pre.ns,'_identity',return_value=(1,2)),patch.object(pre.ns,'_read',side_effect=[MOUNTS,IPC,IPC,IPC,MOUNTS+b'4 1 8:2 / /mnt rw - ext4 x rw\n']),patch.object(boot,'_collect_native_client',return_value=(0,b'')),self.assertRaisesRegex(boot.BootstrapRefusal,'mount_coverage_changed'):pre.inspect_ownership(ID)
@@ -71,8 +95,67 @@ class AccountPreflightTests(unittest.TestCase):
         execute.assert_not_called()
 
     def test_non_host_namespace_refuses_before_scan(self):
-        with patch.object(pre.ns,'_identity',side_effect=[(1,2),(1,2),(1,3)]),patch.object(boot,'_collect_native_client') as execute,self.assertRaises(boot.BootstrapRefusal):pre.inspect_ownership(ID)
+        with patch.object(pre,'_initial_namespaces',return_value={'ipc':(1,3),'mnt':(1,2)}),patch.object(boot,'_collect_native_client') as execute,self.assertRaises(boot.BootstrapRefusal):pre.inspect_ownership(ID)
         execute.assert_not_called()
+
+    def test_ptrace_gated_pid1_uses_fixed_native_stat_without_root_python(self):
+        commands=[]
+        def collect(command,**kwargs):
+            commands.append(command)
+            return (0,b'1:2\n1:2\n') if '/usr/bin/stat' in command else (0,b'')
+        with patch.object(pre,'_initial_namespaces',INITIAL_NAMESPACES),patch.object(pre.ns,'_read',side_effect=self.read),patch.object(boot,'_collect_native_client',side_effect=collect):
+            result=pre.inspect_ownership(ID)
+        self.assertFalse(result['collision']);self.assertEqual(len(commands),3)
+        for command in (commands[0],commands[-1]):
+            self.assertEqual(command,identity.native(('/usr/bin/stat','-L','--format=%d:%i','--','/proc/1/ns/ipc','/proc/1/ns/mnt')))
+            self.assertNotIn('python',' '.join(command));self.assertNotIn('/bin/sh',command)
+
+    def test_initial_namespace_native_failures_are_fixed_refusals(self):
+        for code,raw in ((1,b''),(124,b''),(0,b'1:2\n'),(0,b'1:2\n1:2\nextra'),(0,b'1:0\n1:2\n'),(0,b'1:18446744073709551616\n1:2\n')):
+            with self.subTest(code=code,raw=raw),patch.object(boot,'_collect_native_client',return_value=(code,raw)),self.assertRaisesRegex(boot.BootstrapRefusal,'host_initial_namespace_unreadable'):
+                INITIAL_NAMESPACES()
+        with patch.object(boot,'_collect_native_client',side_effect=PermissionError(13,'private detail')),self.assertRaisesRegex(boot.BootstrapRefusal,'host_initial_namespace_unreadable'):
+            INITIAL_NAMESPACES()
+
+    def test_initial_namespace_cleanup_and_cancellation_are_not_hidden(self):
+        for error in (KeyboardInterrupt(),boot.BootstrapCleanupError('owned cleanup failed')):
+            with self.subTest(error=type(error)),patch.object(boot,'_collect_native_client',side_effect=error),self.assertRaises(type(error)) as caught:
+                INITIAL_NAMESPACES()
+            self.assertIs(caught.exception,error)
+
+    def test_namespace_drift_after_complete_scan_refuses(self):
+        with patch.object(pre,'_initial_namespaces',side_effect=[{'ipc':(1,2),'mnt':(1,2)},{'ipc':(1,3),'mnt':(1,2)}]),patch.object(pre.ns,'_read',side_effect=self.read),patch.object(boot,'_collect_native_client',return_value=(0,b'')),self.assertRaisesRegex(boot.BootstrapRefusal,'host_scan_namespace_changed'):
+            pre.inspect_ownership(ID)
+
+    def test_unreadable_self_namespace_refuses_before_native_or_reservation(self):
+        with patch.object(pre.os,'stat',side_effect=PermissionError(13,'synthetic')),patch.object(boot,'_collect_native_client') as native,self.assertRaisesRegex(boot.BootstrapRefusal,'host_self_namespace_unreadable'):
+            pre.inspect_ownership(ID)
+        native.assert_not_called()
+
+    def test_readonly_target_inventory_reports_mount_conflict_without_traversal(self):
+        from hosted_synthetic_source import HostedSourceBinding
+        raw=MOUNTS+b'4 1 8:2 / /boot/efi rw - vfat /dev/fixture rw\n5 2 0:5 / /proc/private-fixture rw - autofs systemd rw\n6 2 0:6 / /proc/sys/fs/binfmt_misc rw - autofs systemd rw\n7 6 0:7 / /proc/sys/fs/binfmt_misc rw - binfmt_misc binfmt_misc rw\n'
+        old_stat=os.stat
+        def selected(path,*args,**kwargs):
+            if str(path)=='/proc/1':return SimpleNamespace(st_uid=0)
+            return old_stat(path,*args,**kwargs)
+        with patch.object(pre.ns,'_read',return_value=raw),patch.object(os,'stat',side_effect=selected),patch.object(os,'geteuid',return_value=1001),patch.object(boot,'_collect_native_client') as native:
+            result=pre.observe_scan_host(HostedSourceBinding('a'*40,'b'*40,()))
+        native.assert_not_called()
+        self.assertEqual(result['ownership_scan_mount_policy'],'REFUSED')
+        self.assertEqual(result['fixed_mount_points']['/boot/efi'],['vfat'])
+        self.assertEqual(result['fixed_mount_points']['/proc/sys/fs/binfmt_misc'],['autofs','binfmt_misc'])
+        self.assertEqual(result['root_owned_pid1_condition'],'MET')
+        self.assertEqual(result['direct_pid1_namespace_read']['ipc']['errno'],13)
+        self.assertEqual(result['repaired_native_stat_regression'],'NOT_RUN_REVIEW_REQUIRED')
+        self.assertNotIn('private-fixture',str(result))
+        self.assertEqual(result['account_mutations'],0)
+
+    def test_readonly_inventory_does_not_turn_malformed_mounts_into_absence(self):
+        from hosted_synthetic_source import HostedSourceBinding
+        for raw in (b'incomplete',b'1 0 bad\n'):
+            with self.subTest(raw=raw),patch.object(pre.ns,'_read',return_value=raw),patch.object(os,'geteuid',return_value=1001),self.assertRaises(boot.BootstrapRefusal):
+                pre.observe_scan_host(HostedSourceBinding('a'*40,'b'*40,()))
 
     def test_unreadable_regular_source_refuses(self):
         p=self.tmp/'source';p.write_text('synthetic');p.chmod(0o600)

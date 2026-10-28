@@ -38,7 +38,7 @@
     "No complete-suite reproduction"
   ],
   "verbatim_text_available": false,
-  "new_candidate_review": "NOT_RECEIVED",
+  "new_candidate_review": "RECEIVED_REQUEST_CHANGES_AT_d863; see external-review-d863bc7d.json",
   "callable_claude_tool": false,
   "trust_decision": {
     "scope": "ephemeral GitHub credential-free diagnostic only",
@@ -59,5 +59,6 @@
     "credentials_or_private_data_authorized": false,
     "worker_control_and_immutable_runtime_requirements": "INDEPENDENT; remain OPEN"
   },
-  "activation": "DISABLED_PENDING_NEW_CANDIDATE_REVIEW"
+  "activation": "DISABLED_PENDING_NEW_CANDIDATE_REVIEW",
+  "subsequent_review": "external-review-d863bc7d.json"
 }

@@ -10,6 +10,9 @@ import fcntl
 import hashlib
 import json
 import os
+import resource
+import re
+import time
 from pathlib import Path
 import subprocess
 import sys
@@ -188,13 +191,40 @@ def run_application(binding,root,cache):
     finally:value.close()
 
 
+def run_postgres_fit(binding,root):
+    """Real native capture-fit test; invoke under the fixed60s outer timeout.
+
+    No namespace, native PG execution or account. Process RSS is reported
+    separately and excludes unmapped memfd charges; it is not service proof.
+    """
+    import hosted_synthetic_postgres_runtime as pg
+    ns._require(os.geteuid()>0 and os.getegid()>0)
+    result={'capture_fit':'NOT_RUN','commit':binding.commit,'tree':binding.tree,
+        'native_execution':'NOT_RUN','privileged_processes_started':0,'account_mutations':0,
+        'credential_release':'WITHHELD','execution_authority':False,'whole_service_memory':'NOT_MEASURED'}
+    release,_=runtime.read_native('/etc/os-release')
+    if not (re.search(rb'(?m)^ID=(?:ubuntu|"ubuntu")$',release)
+            and re.search(rb'(?m)^VERSION_ID=(?:24\.04|"24\.04")$',release)):
+        return dict(result,reason='TARGET_IS_NOT_UBUNTU_24_04')
+    if not Path(pg.BIN+'postgres').is_file():return dict(result,reason='FIXED_NATIVE_PG16_PATH_UNAVAILABLE')
+    before=_descriptor_inventory();started=time.monotonic()
+    try:measurement=pg.capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
+    finally:ns._require(_descriptor_inventory()==before)
+    result.update(capture_fit='PASS' if measurement['capacity']=='FIT' else 'REFUSED',measurement=measurement,
+        elapsed_seconds=round(time.monotonic()-started,6),process_peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        rss_scope='PROCESS_PEAK_ONLY_EXCLUDES_UNMAPPED_MEMFD_CHARGES',owned_descriptors_closed=True)
+    return result
+
+
 def main(arguments):
-    ns._require((len(arguments)==2 and arguments[0]=='--run-runtime-component')
+    ns._require((len(arguments)==2 and arguments[0] in ('--run-runtime-component','--measure-postgres-phase'))
                 or (len(arguments)==3 and arguments[0]=='--run-application-component'))
     from hosted_synthetic_source import bind_hosted_source,REPOSITORY,REF
     root=Path(__file__).resolve().parents[2]
     binding=bind_hosted_source(root,repository=REPOSITORY,event='push',ref=REF,sha=arguments[1])
-    if arguments[0]=='--run-application-component':
+    if arguments[0]=='--measure-postgres-phase':
+        result=run_postgres_fit(binding,root);key='capture_fit'
+    elif arguments[0]=='--run-application-component':
         result=run_application(binding,root,Path(arguments[2]));key='application_component'
     else:result=run(binding,root);key='runtime_component'
     print(json.dumps(result,sort_keys=True))

@@ -1,0 +1,46 @@
+{
+  "status": "OWNER_DECISION_REQUIRED_NOT_APPLIED",
+  "finding": "B2",
+  "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+  "reviewer_measurement": {
+    "regular_bytes": 105340350,
+    "entries": 786,
+    "diagnostic_bytes": 34768228,
+    "postgres_bytes": 80497223,
+    "environment": "reviewer Ubuntu24.04 native PostgreSQL16.15; not this task execution"
+  },
+  "recommended_change": {
+    "policy": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V1",
+    "regular_bytes_from": 83886080,
+    "regular_bytes_to": 134217728,
+    "entries": 3000,
+    "scope": "fixed credential-free PG phase only; no generic caller budget override"
+  },
+  "unchanged_limits": {
+    "diagnostic_application_pg_only_regular_bytes": 83886080,
+    "per_file_bytes": 83886080,
+    "child_memory_bytes": 268435456,
+    "child_pids": 2,
+    "service_slice_memory_bytes": 536870912,
+    "service_slice_tasks": 64,
+    "namespace_seconds": 20,
+    "generic_codec_bytes": 536870912
+  },
+  "enforcement_sites": [
+    "hosted_synthetic_postgres_runtime._compose_phase incremental/final checks",
+    "hosted_synthetic_postgres_runtime.measure_phase_fit",
+    "hosted_synthetic_runtime.RuntimeBundle.verify",
+    "hosted_synthetic_runtime._adopt_runtime"
+  ],
+  "pre_account_behavior": "Exact source/native capture-fit measurement closes both memfds and refuses before AccountLease.create; service recaptures/revalidates; no arbitrary FD transfer",
+  "required_validation": [
+    "Ubuntu24.04 trustedPG16 real capture fit and cleanup",
+    "policy-specific boundary/receiver/wrong-policy regressions",
+    "memory allocation analysis/measurement; unchanged512MiB aggregate and zeroOOM live gate",
+    "independent delta/activation review before privilege"
+  ],
+  "limitations": "128MiB capacity does not prove512MiB service peak fit. Current codec holds several full buffers; copy reduction may be required. No ICU/dependency omission or accepted input repinning.",
+  "alternative": "Separate PG-only worker root requires new mount/root transition and review; materially larger than existing composed-phase contract.",
+  "activation": "DISABLED",
+  "credential_release": "WITHHELD"
+}

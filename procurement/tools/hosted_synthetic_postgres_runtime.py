@@ -273,24 +273,13 @@ def capture_postgres_phase(generation,root,binding):
         raise
 
 
-def _compose_phase(diagnostic,postgres):
-    """Inputs are borrowed here; capture_postgres_phase owns their cleanup."""
+def _phase_identity(diagnostic,postgres):
     diagnostic.verify();postgres.verify()
     ns._require(diagnostic.policy==runtime.POLICY and postgres.policy==runtime.POSTGRES_POLICY
         and (diagnostic.generation,diagnostic.source_commit,diagnostic.source_tree)==
             (postgres.generation,postgres.source_commit,postgres.source_tree)
         and not postgres.source_files and postgres.executable==BIN+'postgres'
         and postgres.postgres['executables']==list(EXECUTABLES))
-    entries={};total=0
-    for value in (diagnostic,postgres):
-        for entry in runtime._entries(value):
-            if entry.kind!='F' or entry.path==runtime._IDENTITY_PATH:continue
-            if entry.path in entries:
-                ns._require(entries[entry.path]==entry)
-                continue
-            total+=len(entry.content)
-            ns._require(total<=runtime.MAX_BYTES and len(entries)<runtime.MAX_ENTRIES)
-            entries[entry.path]=entry
     native=dict(diagnostic.native_files)
     for path,digest in postgres.native_files.items():
         ns._require(path not in diagnostic.source_files and (path not in native or native[path]==digest))
@@ -301,6 +290,22 @@ def _compose_phase(diagnostic,postgres):
         'native_capture':copy.deepcopy(postgres.postgres)}
     identity=runtime._identity_bytes(diagnostic.generation,diagnostic.executable,diagnostic.source_files,native,
         diagnostic.source_commit,diagnostic.source_tree,policy=runtime.POSTGRES_PHASE_POLICY,postgres=metadata)
+    return native,metadata,identity
+
+
+def _compose_phase(diagnostic,postgres):
+    """Inputs are borrowed here; capture_postgres_phase owns their cleanup."""
+    native,metadata,identity=_phase_identity(diagnostic,postgres)
+    entries={};total=0
+    for value in (diagnostic,postgres):
+        for entry in runtime._entries(value):
+            if entry.kind!='F' or entry.path==runtime._IDENTITY_PATH:continue
+            if entry.path in entries:
+                ns._require(entries[entry.path]==entry)
+                continue
+            total+=len(entry.content)
+            ns._require(total<=runtime.MAX_BYTES and len(entries)<runtime.MAX_ENTRIES)
+            entries[entry.path]=entry
     entries[runtime._IDENTITY_PATH]=ns.backend._BrowserRuntimeBundleEntry(path=runtime._IDENTITY_PATH,kind='F',
         mode=0o444,user_id=0,group_id=0,provenance='audit-source:'+hashlib.sha256(identity).hexdigest(),content=identity)
     complete=ns.backend._complete_browser_runtime_bundle_parents(tuple(entries.values()))
@@ -316,6 +321,74 @@ def _compose_phase(diagnostic,postgres):
         try:ns._require(ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode)))
         except BaseException:raise ns.NamespaceCleanupError('postgres_phase_seal_cleanup_refused') from error
         raise
+
+
+def measure_phase_fit(diagnostic,postgres):
+    """Borrow existing captures and count the exact final union before sealing.
+
+    Retain only content identities/sizes, not another copy of file contents.
+    Include the regenerated identity and precisely the same parent directories
+    as composition. A capacity observation grants no execution authority.
+    """
+    _,_,identity=_phase_identity(diagnostic,postgres)
+    inventory={}
+    for value in (diagnostic,postgres):
+        for entry in runtime._entries(value):
+            if entry.kind!='F' or entry.path==runtime._IDENTITY_PATH:continue
+            signature=(entry.mode,entry.user_id,entry.group_id,entry.provenance,
+                       hashlib.sha256(entry.content).hexdigest(),len(entry.content))
+            if entry.path in inventory:ns._require(inventory[entry.path]==signature)
+            inventory[entry.path]=signature
+    paths=set(inventory);paths.add(runtime._IDENTITY_PATH)
+    for path in tuple(paths):
+        parts=path.split('/')[1:]
+        paths.update('/'+'/'.join(parts[:index]) for index in range(1,len(parts)))
+    total=sum(value[-1] for value in inventory.values())+len(identity)
+    return {'policy':runtime.POSTGRES_PHASE_POLICY,'commit':diagnostic.source_commit,'tree':diagnostic.source_tree,
+        'generation':diagnostic.generation,'diagnostic_regular_bytes':diagnostic.bundle.regular_bytes,
+        'postgres_regular_bytes':postgres.bundle.regular_bytes,'composed_regular_bytes':total,
+        'composed_entries':len(paths),'maximum_regular_bytes':runtime.MAX_BYTES,'maximum_entries':runtime.MAX_ENTRIES,
+        'diagnostic_bundle_sha256':diagnostic.bundle.sha256,'postgres_bundle_sha256':postgres.bundle.sha256,
+        'capacity':'FIT' if total<=runtime.MAX_BYTES and len(paths)<=runtime.MAX_ENTRIES else 'REFUSED',
+        'account_mutations':0,'native_execution':'NOT_RUN','service_memory_fit':'NOT_PROVEN',
+        'credential_release':'WITHHELD','execution_authority':False}
+
+
+class PhaseCapacityRefusal(ns.NamespaceProofError):
+    def __init__(self,evidence):
+        super().__init__('postgres_phase_capacity_refused_before_account')
+        self.evidence=evidence
+
+
+@source._resource_operation
+def capture_phase_fit(generation,root,binding):
+    """Read-only memfd capture; no account, namespace, PG exec or service.
+
+    Service execution must recapture/revalidate; these descriptors do not cross
+    systemd's native launch chain. Close every capture before returning/refusing.
+    """
+    _source_identity(root,binding)
+    diagnostic=postgres=None;failure=None;report=None;errors=[]
+    try:
+        diagnostic=runtime.capture_runtime(generation,root,binding)
+        postgres=capture_postgres(generation,root,binding)
+        report=measure_phase_fit(diagnostic,postgres)
+        _source_identity(root,binding)
+    except BaseException as error:failure=error
+    for value in (postgres,diagnostic):
+        if value is not None:
+            try:value.close()
+            except BaseException as error:errors.append(error)
+    if errors:raise ns.NamespaceCleanupError('postgres_fit_capture_cleanup_refused') from (failure or errors[0])
+    if failure is not None:raise failure
+    ns._require(report is not None)
+    return report
+
+
+def require_phase_fit(root,binding):
+    report=capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
+    if report['capacity']!='FIT':raise PhaseCapacityRefusal(report)
+    return report
 
 
 def _phase_inventory(value):

@@ -514,7 +514,11 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
             namespace_clean=namespace_clean and type(native) is dict and native.get('native_execution')=='FD_BOUND_VERSION_COMPLETED'
         # This proof comes from the outside observer, not the child's report.
         # A failed operation can have verified cleanup; it still cannot pass.
-        observer.finish_service(operation_succeeded=namespace_clean)
+        if observer.work_acknowledged:
+            observer.finish_service(operation_succeeded=namespace_clean)
+        else:
+            observer.finish_pre_ack_exit(report,client_returncode=code)
+            namespace_clean=False
         if report.get('reason')=='CLEANUP_FAILED':
             raise BootstrapCleanupError('native_diagnostic_cleanup_failed')
         _require(namespace_clean,'native_diagnostic_incomplete')

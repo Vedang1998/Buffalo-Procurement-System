@@ -523,6 +523,49 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
         self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
         value.verify()
 
+    def test_pre_account_measurement_matches_actual_composed_bytes_and_parents(self):
+        report=pg.measure_phase_fit(self.diagnostic,self.postgres);combined=self.compose()
+        self.assertEqual(report['composed_regular_bytes'],combined.bundle.regular_bytes)
+        self.assertEqual(report['composed_entries'],combined.bundle.entries)
+        self.assertEqual(report['capacity'],'FIT')
+        self.assertEqual(report['service_memory_fit'],'NOT_PROVEN')
+        self.assertFalse(report['execution_authority'])
+
+    def test_pre_account_measurement_refuses_capacity_without_sealing_or_mutating_inputs(self):
+        normal=pg.measure_phase_fit(self.diagnostic,self.postgres)
+        # Inputs remain individually valid, while their complete union exceeds
+        # this synthetic limit. No accepted production budget is changed.
+        limit=max(self.diagnostic.bundle.regular_bytes,self.postgres.bundle.regular_bytes)
+        self.assertLess(limit,normal['composed_regular_bytes'])
+        with patch.object(runtime,'MAX_BYTES',limit),patch.object(ns.backend,'_seal_browser_runtime_bundle') as seal:
+            report=pg.measure_phase_fit(self.diagnostic,self.postgres)
+        seal.assert_not_called();self.assertEqual(report['capacity'],'REFUSED')
+        self.diagnostic.verify();self.postgres.verify()
+
+    def test_capture_fit_closes_both_inputs_and_rebinds_source(self):
+        with patch.object(pg,'_source_identity') as source_read,patch.object(runtime,'capture_runtime',return_value=self.diagnostic),patch.object(pg,'capture_postgres',return_value=self.postgres):
+            report=pg.capture_phase_fit('a'*64,Path('/fixture'),BINDING)
+        self.assertEqual(source_read.call_count,2);self.assertEqual(report['capacity'],'FIT')
+        self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
+
+    def test_fit_capture_failure_or_source_drift_still_closes_owned_inputs(self):
+        with patch.object(pg,'_source_identity',side_effect=[None,source.HostedSourceError('changed')]),patch.object(runtime,'capture_runtime',return_value=self.diagnostic),patch.object(pg,'capture_postgres',return_value=self.postgres),self.assertRaises(source.HostedSourceError):
+            pg.capture_phase_fit('a'*64,Path('/fixture'),BINDING)
+        self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
+
+    def test_fit_cleanup_failure_prevents_capacity_report(self):
+        close=self.postgres.close
+        def failure():close();raise OSError('synthetic close failure')
+        with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic),patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(self.postgres,'close',side_effect=failure),self.assertRaises(ns.NamespaceCleanupError):
+            pg.capture_phase_fit('a'*64,Path('/fixture'),BINDING)
+        self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
+
+    def test_capacity_refusal_preserves_measurement_without_execution_authority(self):
+        report={'capacity':'REFUSED','composed_regular_bytes':105340350,'maximum_regular_bytes':83886080,'execution_authority':False}
+        with patch.object(pg,'capture_phase_fit',return_value=report),self.assertRaises(pg.PhaseCapacityRefusal) as caught:
+            pg.require_phase_fit('/fixture',BINDING)
+        self.assertIs(caught.exception.evidence,report)
+
     def test_native_capture_failure_closes_diagnostic_input(self):
         failure=OSError('native')
         with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \

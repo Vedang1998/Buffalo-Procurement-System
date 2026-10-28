@@ -6,6 +6,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock,patch
@@ -119,6 +120,35 @@ class LifecycleTests(unittest.TestCase):
         with patch.object(value,'_quarantined',return_value=['RESERVED']):report=value.finish(None,boot.BootstrapCleanupError('uncertain'))
         self.assertEqual(report['assertion'],'PASS');self.assertEqual(report['cleanup'],'QUARANTINED')
         self.assertEqual(report['resource_acceptance'],'UNVERIFIED');self.assertEqual(report['privileged_live_acceptance'],'INCOMPLETE')
+
+    def test_lost_ack_can_report_proven_drain_without_generation_acceptance(self):
+        value,account,observed=self.fixture('lost_ack')
+        account.closed=True;account.drain_proof=SimpleNamespace(scope='PRE_ACK_EXIT',operation_succeeded=False,aggregate={'peak':1234})
+        observed.closed=True;observed.descriptors_closed_successfully=True
+        value.child_report={'namespace_attempt':{'external_observer_failure':'external_observer_ack_refused'}}
+        with patch.object(observer,'require_drain_proof'):
+            report=value.finish(None,boot.BootstrapRefusal('expected missing ACK'))
+        self.assertEqual(report['assertion'],'PASS');self.assertEqual(report['operation'],'FAILED')
+        self.assertEqual(report['cleanup'],'DRAINED_IDENTITY_REMOVED')
+        self.assertEqual(report['cleanup_scope'],'PRE_ACK_EXIT')
+        self.assertFalse(report['acknowledged_generation_lifetime'])
+        self.assertEqual(report['privileged_live_acceptance'],'INCOMPLETE')
+
+    def test_account_cleanup_failure_after_pre_ack_drain_remains_quarantined(self):
+        value,account,observed=self.fixture('lost_ack')
+        account.uncertain=True;account.drain_proof=SimpleNamespace(scope='PRE_ACK_EXIT',operation_succeeded=False)
+        observed.closed=True;observed.descriptors_closed_successfully=True
+        value.child_report={'namespace_attempt':{'external_observer_failure':'external_observer_ack_refused'}}
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'owned-journal';path.write_bytes(b'synthetic journal')
+            account.journal=SimpleNamespace(path=str(path),raw=b'synthetic journal',_verify_descriptor=Mock())
+            header={'commit':BINDING.commit,'nonce':ID.nonce}
+            with patch.object(observer,'require_drain_proof') as proof,patch('hosted_synthetic_quarantine._decode',return_value=(header,['RESERVED','external_accounting_removed','remove_attempt_2'])),patch('hosted_synthetic_quarantine.reserved_ids',return_value={(ID.uid,ID.gid)}):
+                report=value.finish(None,boot.BootstrapCleanupError('synthetic account deletion uncertainty'))
+            proof.assert_called_once_with(account.drain_proof,account)
+            self.assertEqual(path.read_bytes(),b'synthetic journal')
+        self.assertEqual(report['cleanup'],'QUARANTINED');self.assertEqual(report['resource_acceptance'],'UNVERIFIED')
+        self.assertFalse(report['acknowledged_generation_lifetime']);self.assertEqual(report['operation'],'FAILED')
 
     def test_timeout_requires_exact_source_bound_refusal_cause(self):
         value,account,observed=self.fixture('timeout');account.uncertain=True;observed.closed=True;observed.descriptors_closed_successfully=True

@@ -15,6 +15,7 @@ import pwd
 import re
 import stat
 import sys
+import time
 import uuid
 
 import hosted_synthetic_bootstrap as boot
@@ -47,10 +48,16 @@ def validate(identity):
         and identity.uid != identity.operator_uid and identity.gid != identity.operator_gid)
 
 
-def native(argv, *, purpose="account"):
+def native(argv, *, purpose="account", timeout_seconds=None):
     boot._require(purpose in ("account","scan","copy"))
+    boot._require(timeout_seconds is None or (purpose=='scan' and type(timeout_seconds) is int and 1<=timeout_seconds<=60))
+    seconds=timeout_seconds if timeout_seconds is not None else (15 if purpose=='account' else 60)
     return ('/usr/bin/sudo','-n','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','LC_ALL=C.UTF-8',
-            '/usr/bin/timeout','--signal=TERM','--kill-after=2s','15s' if purpose=='account' else '60s',*argv)
+            '/usr/bin/timeout','--signal=TERM','--kill-after=2s',str(seconds)+'s',*argv)
+
+
+class CandidateOwnershipCollision(boot.BootstrapRefusal):
+    """Only emitted when account creation returned no lease or mutation."""
 
 
 def dropped(identity, argv, *, purpose="account"):
@@ -194,7 +201,7 @@ def inspect_account_platform():
         boot._require(not os.path.lexists(path),'account_cache_helper_requires_review')
     programs={}
     for path in ('/usr/sbin/groupadd','/usr/sbin/useradd','/usr/sbin/userdel','/usr/sbin/groupdel','/usr/bin/passwd',
-                 '/usr/sbin/nologin','/usr/bin/mkdir','/usr/bin/chown','/usr/bin/git','/usr/bin/find','/usr/bin/rmdir'):
+                 '/usr/sbin/nologin','/usr/bin/mkdir','/usr/bin/chown','/usr/bin/git','/usr/bin/find','/usr/bin/rmdir','/usr/bin/stat'):
         selected=Path(path)
         for parent in (selected,*selected.parents):
             info=parent.lstat()
@@ -223,7 +230,7 @@ class AccountLease:
     def __init__(self):raise boot.BootstrapRefusal('use_explicit_account_provisioning')
 
     @classmethod
-    def create(cls, identity, source, commit, *, lifecycle=None):
+    def create(cls, identity, source, commit, *, lifecycle=None, ownership_deadline=None):
         validate(identity)
         if lifecycle is not None:
             from hosted_synthetic_lifecycle import require_case
@@ -235,9 +242,10 @@ class AccountLease:
                       and not os.path.lexists('/sys/fs/cgroup'+boot.launcher.service_cgroup_path(identity.unit)))
         from hosted_synthetic_account_preflight import inspect_source,inspect_ownership
         source_preflight=inspect_source(identity,source,commit)
-        ownership_preflight=inspect_ownership(identity)
+        ownership_preflight=inspect_ownership(identity,**({} if ownership_deadline is None else {'scan_deadline':ownership_deadline}))
         inspect_account(identity,present=False)
         boot._require(not identity_processes(identity),"identity_appeared_before_reservation")
+        boot._require(ownership_deadline is None or time.monotonic()<ownership_deadline,'identity_selection_deadline')
         from hosted_synthetic_quarantine import Quarantine
         lease=object.__new__(cls);lease.identity=identity;lease._owner=lease
         lease.created=False;lease.root_identity=None;lease.closed=False;lease.uncertain=False
@@ -335,7 +343,7 @@ class AccountLease:
             raise boot.BootstrapCleanupError('dedicated_cleanup_unverified_identity_retained') from error
 
 
-def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained"):
+def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained", ownership_deadline=None):
     """Complete dormant wiring; CLI/workflow review gate never calls this."""
     from hosted_synthetic_source import bind_hosted_source, _resource_operation
     from hosted_synthetic_capability import _require_clean_supervisor
@@ -348,8 +356,18 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             from hosted_synthetic_lifecycle import require_case
             require_case(lifecycle,identity,commit)
             boot._require(lifecycle.binding==binding)
+        if diagnostic=='postgres-version':
+            from hosted_synthetic_postgres_runtime import require_phase_fit
+            try:selected_python=Path(python).resolve(strict=True)
+            except OSError as error:raise boot.BootstrapRefusal('postgres_fit_interpreter_refused') from error
+            boot._require(selected_python==Path('/proc/self/exe').resolve(strict=True),'postgres_fit_interpreter_refused')
+            require_phase_fit(source,binding)
         options={} if lifecycle is None else {'lifecycle':lifecycle}
-        lease=AccountLease.create(identity,source,commit,**options)
+        from hosted_synthetic_account_preflight import OwnershipCollision
+        try:lease=AccountLease.create(identity,source,commit,**options,
+            **({} if ownership_deadline is None else {'ownership_deadline':ownership_deadline}))
+        except OwnershipCollision as error:
+            raise CandidateOwnershipCollision('candidate_ownership_collision_before_reservation') from error
         body_error=None
         try:
             initial=os.stat('/proc/self/ns/user')
@@ -369,7 +387,8 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             raise
         if body_error is not None:raise body_error
         result.update(dedicated_identity_removed=lease.closed,worker_control_exclusion='UNPROVEN',
-                      full_service_lifetime_cleanup='OBSERVED' if lease.drain_proof is not None else 'UNPROVEN',
+                      full_service_lifetime_cleanup=('OBSERVED' if lease.drain_proof.scope=='ACKNOWLEDGED_GENERATION'
+                          else 'PRE_ACK_EXIT_DRAIN_ONLY') if lease.drain_proof is not None else 'UNPROVEN',
                       account_native_programs=lease.platform)
         return result
     return execute()
@@ -393,7 +412,9 @@ def activation_entry(arguments, *, diagnostic="retained"):
     nonce=str(uuid.uuid4())
     from hosted_synthetic_quarantine import reserved_ids
     reserved=reserved_ids()
+    deadline=time.monotonic()+60;collisions=0
     for number in range(900,1000):
+        boot._require(time.monotonic()<deadline,'identity_selection_deadline')
         if any(number in pair for pair in reserved):continue
         candidate=DedicatedIdentity(nonce,number,number,os.geteuid(),os.getegid())
         try:
@@ -404,9 +425,13 @@ def activation_entry(arguments, *, diagnostic="retained"):
                 continue
             raise
         if identity_processes(candidate):continue
-        return run_provisioned_candidate(candidate,source=source,python=sys.executable,
-            repository=repository,event=event,ref=ref,commit=commit,
-            **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
+        try:
+            return run_provisioned_candidate(candidate,source=source,python=sys.executable,
+                repository=repository,event=event,ref=ref,commit=commit,ownership_deadline=deadline,
+                **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
+        except CandidateOwnershipCollision:
+            collisions+=1
+            boot._require(collisions<3,'identity_selection_collision_bound')
     raise boot.BootstrapRefusal('dedicated_identity_range_unavailable')
 
 

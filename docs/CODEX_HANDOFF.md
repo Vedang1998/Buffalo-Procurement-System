@@ -10,6 +10,64 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+
+### 2026-10-28 Claude d863 review received; specific remediation candidate
+
+Actual owner-supplied Claude review ofd863bc7d/tree31336c2 is REQUEST CHANGES.
+`docs/review/2026-10-27-runtime-control-lifecycle/external-review-d863bc7d.json`
+records container2.1.312/session_01JyrJEUAi36GJ6AfNcmBBxV/reported configured+served
+claude-opus-5-5/high, exact scope,977 executed/966 passed/11 B1 errors underUID65534,
+reviewer PID1 11/11, runtime component3/3 and the105,340,350-byte PG phase measurement.
+Those are reviewer observations, not this host's reproduction. No cgroupv2/systemd/
+GitHub/nativePG/browser/full-suite reproduction was performed by Claude. Six original
+closures are kept with no regression atd863; N2/N3 accepted, N4 closed there. N1 is
+blocked by B1; runtime/control/external-cleanup remain OPEN. Later descendants are
+not approved. No callable Claude channel was invoked.
+
+Specific repairs onb454eea descendants: B1 uses fixed verified native stat for
+PID1 IPC/mount identities before/after the ownership scan; native stat joins the
+platform-owned executable inventory. Self/initial namespace and IPC failures have
+fixed refusal codes; unit tests no longer dereference actual PID1 links. A new
+read-only workflow observation reports mount types/stacked fixed mount points and
+the non-root/root-PID1 condition before the unconditional review gate. It runs no
+sudo, ownership scan, namespace operation or account command. Current allowlist is
+unchanged pending actual N8 evidence; no automount is traversed.
+
+N7 now has a separate PRE_ACK_EXIT drain path only after completed canonical
+source-validated transport. It requires exact owned accounting identity, actual
+unit/path/descendant/process absence, fresh zero-OOM counters and closed descriptors.
+READY-bound actors also require terminal pidfds/deleted dentries. Missing generation
+staysNone; operation remainsFAILED. Unknown transport/partial binding remains
+quarantined. Later account cleanup uncertainty cannot be hidden by external drain.
+N10 retries only a typed pre-reservation ownership collision, at most3 candidates,
+with one shared60s scan/reservation deadline. This is not an interrupting60s wall
+clock bound on all source/native preflight work; original command and job limits
+remain. Coverage errors, timeouts and post-mutation uncertainty never retry.
+
+B2 remains OPEN. Exact deduplicated phase size/parent count can now be measured
+without creating the composed image, with both input memfds closed. PG activation
+checks fit before account creation and binds the measured interpreter to the selected
+launcher. A real Ubuntu24.04/PG16 capture-fit driver is available as
+`timeout --signal=TERM --kill-after=2s 60s python3.13 -I -S -B procurement/tools/hosted_synthetic_runtime_regression.py --measure-postgres-phase COMMIT`
+from the exact detached checkout. It creates only owned memfds; processRSS is not
+whole-service memory accounting. Native PG is absent in Cloud; that real test is
+NOT_RUN here. The synchronous library measurement is not a service memory proof.
+
+`b2-budget-change-control.json` proposes128MiB for PG_PHASE only, preserving all
+other80MiB bounds,3000entries, child256MiB/pids2, aggregate512MiB/tasks64 and20s.
+Owner decision is pending; no limit was changed. Multiple codec buffers mean that
+byte fit alone does not prove aggregate memory fit. No dependency is omitted or
+accepted input repinned. Only the necessary delta needs re-review after repairs.
+
+262 affected tests pass on the working implementation; frozen source validation,
+ordinary publication and actual read-only GitHub target observations follow.
+Privileged activation, fixedPG execution and credentials remain disabled. No
+full native suite or known namespace refusal was rerun. Application/schema/rules/
+locks/PHASE_STATUS and production boundaries are unchanged. The next executable
+work is source-bound validation and read-only target inventory; B2's budget decision
+and independent delta/activation review precede any privileged proof.
+
+
 ### 2026-10-28 verified descendant publication; frozen review still pending
 
 Published and freshly fetched material:

@@ -21,6 +21,50 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         self.journal=Mock()
         self.enterContext(patch('hosted_synthetic_quarantine.Quarantine.create',return_value=self.journal))
 
+    def activation_fixture(self):
+        self.enterContext(patch('hosted_synthetic_capability._require_clean_supervisor'))
+        self.enterContext(patch('hosted_synthetic_source.bind_hosted_source'))
+        self.enterContext(patch.object(identity,'inspect_account_platform',return_value={}))
+        self.enterContext(patch.object(identity,'inspect_account'))
+        self.enterContext(patch.object(identity,'identity_processes',return_value=[]))
+        self.enterContext(patch('hosted_synthetic_quarantine.reserved_ids',return_value=set()))
+
+    def test_only_definite_pre_account_collision_advances_to_next_numeric_identity(self):
+        self.activation_fixture()
+        with patch.object(identity,'run_provisioned_candidate',side_effect=[identity.CandidateOwnershipCollision('collision'),{'result':'synthetic'}]) as run:
+            result=identity.activation_entry(['repo','push','ref','a'*40])
+        self.assertEqual(result,{'result':'synthetic'})
+        self.assertEqual([call.args[0].uid for call in run.call_args_list],[900,901])
+        self.assertEqual(run.call_args_list[0].kwargs['ownership_deadline'],run.call_args_list[1].kwargs['ownership_deadline'])
+
+    def test_incomplete_scan_and_post_mutation_error_are_never_retried(self):
+        self.activation_fixture()
+        for failure in (boot.BootstrapRefusal('coverage incomplete'),boot.BootstrapCleanupError('partial setup retained')):
+            with self.subTest(error=type(failure)),patch.object(identity,'run_provisioned_candidate',side_effect=failure) as run,self.assertRaises(type(failure)) as caught:
+                identity.activation_entry(['repo','push','ref','a'*40])
+            self.assertIs(caught.exception,failure);self.assertEqual(run.call_count,1)
+
+    def test_collision_selection_keeps_shared_deadline_and_three_candidate_bound(self):
+        self.activation_fixture()
+        with patch.object(identity,'run_provisioned_candidate',side_effect=identity.CandidateOwnershipCollision('collision')) as run,self.assertRaisesRegex(boot.BootstrapRefusal,'collision_bound'):
+            identity.activation_entry(['repo','push','ref','a'*40])
+        self.assertEqual(run.call_count,3)
+        with patch.object(identity.time,'monotonic',side_effect=[0,0,61]),patch.object(identity,'run_provisioned_candidate',side_effect=identity.CandidateOwnershipCollision('collision')) as run,self.assertRaisesRegex(boot.BootstrapRefusal,'selection_deadline'):
+            identity.activation_entry(['repo','push','ref','a'*40])
+        self.assertEqual(run.call_count,1)
+
+    def test_collision_retry_type_is_minted_only_before_a_lease_is_returned(self):
+        import hosted_synthetic_account_preflight as pre
+        failure=pre.OwnershipCollision('synthetic ownership')
+        with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source'),patch.object(identity.AccountLease,'create',side_effect=failure),patch.object(boot,'run_native_plan') as native,self.assertRaises(identity.CandidateOwnershipCollision) as caught:
+            identity.run_provisioned_candidate(ID,source='/fixture',python='/usr/bin/python3.13',repository='repo',event='push',ref='ref',commit='a'*40)
+        self.assertIs(caught.exception.__cause__,failure);native.assert_not_called()
+
+    def test_shared_scan_budget_cannot_expand_account_or_copy_timeouts(self):
+        for purpose,seconds in (('scan',61),('scan',0),('scan',True),('account',60),('copy',1)):
+            with self.subTest(purpose=purpose,seconds=seconds),self.assertRaises(boot.BootstrapRefusal):identity.native(('/usr/bin/find',),purpose=purpose,timeout_seconds=seconds)
+        self.assertIn('7s',identity.native(('/usr/bin/find',),purpose='scan',timeout_seconds=7))
+
     def test_complete_owned_native_sequence_and_final_identity_removal(self):
         state={'root':None};commands=[]
         def collect(command,**kwargs):
@@ -133,6 +177,22 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         observed=boot.diagnostic_failure_evidence(caught.exception)
         self.assertEqual(observed['namespace_prerequisite']['operation']['errno'],1)
         self.assertFalse(observed['execution_authority'])
+
+    def test_postgres_capacity_refusal_occurs_before_any_account_reservation(self):
+        import hosted_synthetic_postgres_runtime as pg
+        from hosted_synthetic_source import HostedSourceBinding
+        binding=HostedSourceBinding('a'*40,'b'*40,())
+        failure=pg.PhaseCapacityRefusal({'capacity':'REFUSED','execution_authority':False})
+        with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=binding),patch.object(pg,'require_phase_fit',side_effect=failure) as fit,patch.object(identity.AccountLease,'create') as create,patch.object(boot,'run_native_plan') as run,self.assertRaises(pg.PhaseCapacityRefusal) as caught:
+            identity.run_provisioned_candidate(ID,source='/fixture',python='/usr/bin/python3.13',repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
+        self.assertIs(caught.exception,failure);fit.assert_called_once_with('/fixture',binding)
+        create.assert_not_called();run.assert_not_called()
+
+    def test_fit_cannot_measure_a_different_interpreter_than_selected_launcher(self):
+        import hosted_synthetic_postgres_runtime as pg
+        with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source'),patch.object(pg,'require_phase_fit') as fit,patch.object(identity.AccountLease,'create') as create,self.assertRaisesRegex(boot.BootstrapRefusal,'fit_interpreter_refused'):
+            identity.run_provisioned_candidate(ID,source='/fixture',python='/usr/bin/true',repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
+        fit.assert_not_called();create.assert_not_called()
 
     def account(self):
         return SimpleNamespace(pw_name=ID.user,pw_uid=ID.uid,pw_gid=ID.gid,
