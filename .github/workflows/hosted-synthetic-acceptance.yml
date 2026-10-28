@@ -61,7 +61,19 @@ jobs:
         run: |
           set -euo pipefail
           # Observe only. No sudo, traversal, namespace operation or account.
-          env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import json,pathlib,sys; sys.path.insert(0,"procurement/tools"); from hosted_synthetic_source import bind_hosted_source; from hosted_synthetic_account_preflight import observe_scan_host; binding=bind_hosted_source(pathlib.Path.cwd(),repository=sys.argv[1],event=sys.argv[2],ref=sys.argv[3],sha=sys.argv[4]); report=observe_scan_host(binding); raw=json.dumps(report,sort_keys=True,separators=(",",":")); assert len(raw)<=16384; print(raw)' "$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"
+          diagnostic=$(env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B -c 'import json,pathlib,sys; sys.path.insert(0,"procurement/tools"); from hosted_synthetic_source import bind_hosted_source; from hosted_synthetic_account_preflight import observe_scan_host; binding=bind_hosted_source(pathlib.Path.cwd(),repository=sys.argv[1],event=sys.argv[2],ref=sys.argv[3],sha=sys.argv[4]); report=observe_scan_host(binding); raw=json.dumps(report,sort_keys=True,separators=(",",":")); assert len(raw)<=16384; print(raw)' "$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA")
+          # Begin bounded public inventory. No raw paths, mount options or credentials.
+          test "${#diagnostic}" -le 16384
+          digest=$(printf '%s' "$diagnostic" | sha256sum)
+          digest=${digest%% *}
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          payload=$(printf '%s' "$diagnostic" | base64 --wrap=0)
+          count=$(( (${#payload} + 2999) / 3000 ))
+          test "$count" -ge 1 && test "$count" -le 8
+          for (( index=0; index<count; index++ )); do
+            printf '::notice title=Read-only ownership-scan inventory::v1 index=%s count=%s sha256=%s data=%s\n' "$index" "$count" "$digest" "${payload:index*3000:3000}"
+          done
+          # End bounded public inventory.
 
       - name: Focused source and diagnostic validation
         shell: bash

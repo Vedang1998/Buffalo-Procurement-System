@@ -115,31 +115,34 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.test_review_gate_exits_before_any_live_service_command()
 
     def test_public_notice_chunks_reconstruct_exact_bytes_and_keep_failure(self):
-        block = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1].split('      - name:', 1)[0]
-        commands = '\n'.join(line[10:] for line in block.splitlines())
-        for raw in ('{"test":"100%\r\n::error::synthetic"}', 'a'*12000, 'b'*16384):
-            with self.subTest(size=len(raw)):
-                result = subprocess.run(['/bin/bash', '-c', 'set -euo pipefail; diagnostic="$1"; status=1;\n' + commands,
-                                         'annotation-test', raw], env={'PATH': '/usr/bin:/bin'},
-                                        capture_output=True, timeout=3)
-                self.assertEqual(result.returncode, 1)
-                self.assertEqual(result.stderr, b'')
-                lines = result.stdout.splitlines()
-                self.assertTrue(1 <= len(lines) <= 8)
-                encoded = []
-                digest = hashlib.sha256(raw.encode()).hexdigest().encode()
-                for index, line in enumerate(lines):
-                    self.assertLess(len(line), 4096)
-                    matched = re.fullmatch(rb'::notice title=Buffalo diagnostic part::v1 index=([0-7]) count=([1-8]) sha256=([0-9a-f]{64}) data=([A-Za-z0-9+/=]{1,3000})', line)
-                    self.assertIsNotNone(matched)
-                    self.assertEqual((int(matched[1]), int(matched[2]), matched[3]), (index, len(lines), digest))
-                    encoded.append(matched[4])
-                self.assertEqual(base64.b64decode(b''.join(encoded), validate=True), raw.encode())
-        result = subprocess.run(['/bin/bash', '-c', 'set -euo pipefail; diagnostic="$1"; status=1;\n' + commands,
-                                 'annotation-test', 'a'*16385], env={'PATH': '/usr/bin:/bin'},
-                                capture_output=True, timeout=3)
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(result.stdout, b'')
+        diagnostic = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1].split('      - name:', 1)[0]
+        inventory = self.text.split('          # Begin bounded public inventory.', 1)[1].split('\n', 1)[1].split('          # End bounded public inventory.', 1)[0]
+        for block,title,expected_code in ((diagnostic,b'Buffalo diagnostic part',1),
+                                           (inventory,b'Read-only ownership-scan inventory',0)):
+            commands = '\n'.join(line[10:] for line in block.splitlines())
+            for raw in ('{"test":"100%\r\n::error::synthetic"}', 'a'*12000, 'b'*16384):
+                with self.subTest(size=len(raw)):
+                    result = subprocess.run(['/bin/bash', '-c', 'set -euo pipefail; diagnostic="$1"; status=1;\n' + commands,
+                                             'annotation-test', raw], env={'PATH': '/usr/bin:/bin'},
+                                            capture_output=True, timeout=3)
+                    self.assertEqual(result.returncode, expected_code)
+                    self.assertEqual(result.stderr, b'')
+                    lines = result.stdout.splitlines()
+                    self.assertTrue(1 <= len(lines) <= 8)
+                    encoded = []
+                    digest = hashlib.sha256(raw.encode()).hexdigest().encode()
+                    for index, line in enumerate(lines):
+                        self.assertLess(len(line), 4096)
+                        matched = re.fullmatch(rb'::notice title='+re.escape(title)+rb'::v1 index=([0-7]) count=([1-8]) sha256=([0-9a-f]{64}) data=([A-Za-z0-9+/=]{1,3000})', line)
+                        self.assertIsNotNone(matched)
+                        self.assertEqual((int(matched[1]), int(matched[2]), matched[3]), (index, len(lines), digest))
+                        encoded.append(matched[4])
+                    self.assertEqual(base64.b64decode(b''.join(encoded), validate=True), raw.encode())
+            result = subprocess.run(['/bin/bash', '-c', 'set -euo pipefail; diagnostic="$1"; status=1;\n' + commands,
+                                     'annotation-test', 'a'*16385], env={'PATH': '/usr/bin:/bin'},
+                                    capture_output=True, timeout=3)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, b'')
 
     def test_owned_launch_drops_extra_descriptor_preserving_parent_and_assertion(self):
         observer = self.text.split('- name: Review gate', 1)[1]
