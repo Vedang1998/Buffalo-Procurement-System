@@ -69,6 +69,59 @@ class NativeInputTests(unittest.TestCase):
         self.assertEqual(report['privileged_activation'],'DISABLED')
         self.assertTrue(report['unresolved']);self.assertEqual(report['publisher_authentication'],'NOT_ESTABLISHED_BY_DPKG_OR_LOCAL_HASH')
 
+    def test_public_inventory_compression_is_complete_digest_bound_and_notice_bounded(self):
+        import hosted_synthetic_native_observation as observation
+        import base64,gzip
+        value={'status':'TARGET_OBSERVATION_ONLY','rows':[{'path':'/usr/lib/example'+str(i),'sha256':hashlib.sha256(str(i).encode()).hexdigest()} for i in range(300)]}
+        encoded=observation.public_envelope(value);envelope=json.loads(encoded)
+        raw=gzip.decompress(base64.b64decode(envelope['payload'],validate=True))
+        self.assertEqual(json.loads(raw),value);self.assertEqual(len(raw),envelope['bytes'])
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),envelope['sha256'])
+        self.assertLessEqual((len(base64.b64encode(encoded.encode()))+2999)//3000,10)
+        with self.assertRaises(ns.NamespaceProofError):observation.public_envelope({'oversized':'x'*65537})
+
+    def test_streamed_import_rechecks_bytes_and_rejects_partial_consumption(self):
+        stage=self.stage();stage.materialize_tar(archive(),[row()])
+        with patch.object(native,'inventory',return_value={'rows':[row()]}):
+            with stage.verified_stream(row()) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
+            with self.assertRaisesRegex(ns.NamespaceProofError,'not_fully_consumed'):
+                with stage.verified_stream(row()):pass
+            (stage.path/'opt/example').chmod(0o644);(stage.path/'opt/example').write_bytes(b'synthetic DATA');(stage.path/'opt/example').chmod(0o444)
+            with self.assertRaisesRegex(ns.NamespaceProofError,'content_changed'):
+                with stage.verified_stream(row()):self.fail('changed bytes streamed')
+
+    def test_artifact_verification_failure_cleans_empty_materialization(self):
+        stage=self.stage()
+        with patch.object(native,'verify_artifact_fd',side_effect=ns.NamespaceProofError('artifact_digest_refused')),self.assertRaisesRegex(ns.NamespaceProofError,'artifact_digest'):
+            stage.materialize_python_artifact(999)
+        self.assertTrue(stage.closed);self.assertFalse(stage.path.exists())
+
+    def test_view_mounts_bind_backing_identity_and_actual_readonly_private_mounts(self):
+        from types import SimpleNamespace
+        request=Mock(root='/run/buffalo-native-'+'a'*32,initial_mount_namespace=(1,2))
+        descriptors=[Mock(number=i,identity=(3,4)) for i in range(10,14)]
+        info=SimpleNamespace(st_uid=0,st_mode=0o40555,st_dev=5,st_ino=6)
+        with patch.object(os,'stat',return_value=info),patch.object(ns,'_acquire',side_effect=descriptors),patch.object(os,'fstat',return_value=info),patch.object(ns,'_mount_id',side_effect=lambda fd:fd.number),patch.object(os,'fstatvfs',return_value=SimpleNamespace(f_flag=os.ST_RDONLY)):
+            result=native._view_mount_snapshot(request)
+        self.assertEqual(result['mount_namespace'],[5,6]);self.assertEqual(set(result['roots']),{'/opt','/usr/share'})
+        for fd in descriptors:fd.close.assert_called_once()
+
+    def test_readonly_mount_of_wrong_backing_refuses_and_closes_descriptors(self):
+        from types import SimpleNamespace
+        request=Mock(root='/run/buffalo-native-'+'a'*32,initial_mount_namespace=(1,2))
+        descriptors=[Mock(number=10,identity=(3,4)),Mock(number=11,identity=(3,5))]
+        info=SimpleNamespace(st_uid=0,st_mode=0o40555,st_dev=5,st_ino=6)
+        with patch.object(os,'stat',return_value=info),patch.object(ns,'_acquire',side_effect=descriptors),patch.object(os,'fstat',return_value=info),self.assertRaisesRegex(ns.NamespaceProofError,'backing_mismatch'):
+            native._view_mount_snapshot(request)
+        for fd in descriptors:fd.close.assert_called_once()
+
+    def test_original_mount_namespace_cannot_claim_protected_view(self):
+        from types import SimpleNamespace
+        request=Mock(initial_mount_namespace=(1,2))
+        with patch.object(os,'stat',return_value=SimpleNamespace(st_dev=1,st_ino=2)),patch.object(ns,'_acquire') as acquire,self.assertRaisesRegex(ns.NamespaceProofError,'not_private'):
+            native._view_mount_snapshot(request)
+        acquire.assert_not_called()
+
     def test_fixed_inventory_preserves_missing_dependency_gate(self):
         value=native.inventory()
         self.assertEqual(value['known_file_count'],709)

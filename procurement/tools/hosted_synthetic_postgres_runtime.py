@@ -480,6 +480,16 @@ class PhaseMemoryRefusal(ns.NamespaceProofError):
         self.evidence=evidence
 
 
+def _readiness_digest(receipt):
+    try:
+        payload={'root':receipt.root,'commit':receipt.binding.commit,'tree':receipt.binding.tree,
+            'source_files':receipt.binding.files,'deadline':receipt.deadline,
+            'interpreter':receipt.interpreter,'native_files':receipt.native,'report':receipt.report}
+        return hashlib.sha256(__import__('json').dumps(payload,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+    except (AttributeError,TypeError,ValueError,OverflowError):
+        raise ns.NamespaceProofError('postgres_readiness_evidence_malformed') from None
+
+
 class PhaseReadiness:
     """Owner-minted result of this invocation; not a deserialized PASS/report."""
     def __init__(self):raise ns.NamespaceProofError('readiness_must_be_measured')
@@ -491,13 +501,14 @@ class PhaseReadiness:
         with source.source_deadline(self.deadline):_source_identity(root,binding)
         _ready_require(self.interpreter==str(Path('/proc/self/exe').resolve(strict=True)),
                     'postgres_readiness_interpreter_refused')
-        canonical=__import__('json').dumps(self.report,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
-        _ready_require(hashlib.sha256(canonical).hexdigest()==self.digest,'postgres_readiness_report_changed')
+        _ready_require(_readiness_digest(self)==self.digest,'postgres_readiness_report_changed')
         report=self.report
         _validate_memory_result(report,binding)
         _ready_require(report['capacity']=='FIT' and report['memory']['result']=='WITHIN_COMPONENT_ENVELOPE'
             and report['memory']['policy']==MEMORY_READINESS_POLICY and report['owned_descriptors_closed'] is True
-            and (report['commit'],report['tree'])==(binding.commit,binding.tree),
+            and (report['commit'],report['tree'])==(binding.commit,binding.tree)
+            and report['interpreter']==self.interpreter
+            and report['native_inventory_sha256']==hashlib.sha256(__import__('json').dumps(self.native,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
             'postgres_readiness_result_refused')
         # Reuse never substitutes a stale native/source identity. These reads
         # are serial (at most one file), without another capture/clone/union.
@@ -586,7 +597,7 @@ def require_phase_fit(root,binding, *, deadline=None):
     receipt=object.__new__(PhaseReadiness);receipt._owner=receipt;receipt._token=_READINESS_TOKEN
     receipt.root=str(Path(root).resolve(strict=True));receipt.binding=binding;receipt.deadline=deadline
     receipt.interpreter=interpreter;receipt.native=native;receipt.report=report
-    receipt.digest=hashlib.sha256(__import__('json').dumps(report,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+    receipt.digest=_readiness_digest(receipt)
     return receipt
 
 

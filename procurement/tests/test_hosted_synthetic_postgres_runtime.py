@@ -741,6 +741,32 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
             m['process_peak_rss_bytes']+m['child_peak_rss_bytes']+m['maximum_owned_memfd_allocation_bytes'])
         self.assertEqual(report['service_memory_enforcement'],'NOT_PROVEN')
 
+    def test_valid_receipt_rechecks_native_bytes_and_never_reads_generated_host_files(self):
+        entries={entry.path:entry for value in (self.diagnostic,self.postgres) for entry in runtime._entries(value)}
+        actual_resolve=Path.resolve
+        with self.readiness_inputs():
+            receipt=pg.require_phase_fit(Path.cwd(),BINDING)
+            def resolved(path,*args,**kwargs):
+                return Path(receipt.interpreter) if str(path)=='/proc/self/exe' else actual_resolve(path,*args,**kwargs)
+            with patch.object(Path,'resolve',resolved),patch.object(runtime,'read_native',side_effect=lambda path:(entries[path].content,entries[path].mode)) as read:
+                self.assertIs(receipt.verify(Path.cwd(),BINDING),receipt.report)
+            self.assertFalse(set(pg._FIXED)&{call.args[0] for call in read.call_args_list})
+            with patch.object(Path,'resolve',resolved),patch.object(runtime,'read_native',return_value=(b'changed',0o555)),self.assertRaisesRegex(ns.NamespaceProofError,'native_changed'):
+                receipt.verify(Path.cwd(),BINDING)
+
+    def test_receipt_deadline_inventory_or_interpreter_report_tampering_refuses(self):
+        actual_resolve=Path.resolve
+        for field,changed in [('deadline',10**12),('native',{}),('report','interpreter')]:
+            with self.subTest(field=field),self.readiness_inputs():
+                receipt=pg.require_phase_fit(Path.cwd(),BINDING)
+                if field=='report':receipt.report['interpreter']='/foreign/python'
+                else:setattr(receipt,field,changed)
+                def resolved(path,*args,**kwargs):
+                    return Path(receipt.interpreter) if str(path)=='/proc/self/exe' else actual_resolve(path,*args,**kwargs)
+                with patch.object(Path,'resolve',resolved),patch.object(runtime,'read_native') as native,self.assertRaisesRegex(ns.NamespaceProofError,'report_changed'):
+                    receipt.verify(Path.cwd(),BINDING)
+                native.assert_not_called()
+
     def test_memory_evidence_cannot_promote_missing_bad_arithmetic_or_other_source(self):
         with self.readiness_inputs():report=pg.require_phase_fit(Path.cwd(),BINDING).report
         for field,value in [('memory',None),('memory',{}),('commit','f'*40),('tree','f'*40),('owned_descriptors_closed',False),('generation','bad')]:

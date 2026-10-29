@@ -38,6 +38,7 @@ ARTIFACTS={
 _TOKEN=object()
 _ACTIVE_VIEW=ContextVar('buffalo_native_input_view',default=None)
 _ACTIVE_FILES=ContextVar('buffalo_native_input_files',default=None)
+_ACTIVE_OBSERVATION=ContextVar('buffalo_native_input_observation',default=None)
 
 
 def require(value,code='native_input_contract_refused'):
@@ -389,6 +390,7 @@ class ViewRequest:
     interpreter_sha256:str
     deadline:float
     _token:object
+    initial_mount_namespace:tuple|None=None
 
 
 def view_request(binding,root, *, deadline):
@@ -398,7 +400,8 @@ def view_request(binding,root, *, deadline):
     info=root.lstat();require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022)
     rows={r['path']:r for r in value['rows']};require(PYTHON in rows)
     return ViewRequest(os.urandom(32).hex(),binding.commit,binding.tree,DIGESTS[0],str(root),
-        (info.st_dev,info.st_ino),rows[PYTHON]['sha256'],deadline,_TOKEN)
+        (info.st_dev,info.st_ino),rows[PYTHON]['sha256'],deadline,_TOKEN,
+        ns._identity(os.stat('/proc/self/ns/mnt')))
 
 
 def _verify_request(request,binding):
@@ -406,7 +409,9 @@ def _verify_request(request,binding):
         and request.manifest==DIGESTS[0] and (request.commit,request.tree)==(binding.commit,binding.tree)
         and type(request.nonce) is str and re.fullmatch('[0-9a-f]{64}',request.nonce)
         and re.fullmatch('/run/buffalo-native-[0-9a-f]{32}',request.root)
-        and type(request.deadline) in (int,float) and time.monotonic()<request.deadline,'native_view_request_refused')
+        and type(request.deadline) in (int,float) and time.monotonic()<request.deadline
+        and type(request.initial_mount_namespace) is tuple and len(request.initial_mount_namespace)==2
+        and all(type(x) is int and x>0 for x in request.initial_mount_namespace),'native_view_request_refused')
     info=os.lstat(request.root)
     require((info.st_dev,info.st_ino)==request.root_identity and info.st_uid==0
         and stat.S_ISDIR(info.st_mode) and not info.st_mode&0o022,'native_view_root_changed')
@@ -417,6 +422,32 @@ def view_properties(request,binding):
     return ('PrivateMounts=yes','PrivateNetwork=yes','NoNewPrivileges=yes','MemoryMax=536870912','TasksMax=64',
         'BindReadOnlyPaths='+request.root+'/view/opt:/opt',
         'BindReadOnlyPaths='+request.root+'/view/usr/share:/usr/share')
+
+
+def _view_mount_snapshot(request):
+    """Bind private mount roots to the exact protected backing objects."""
+    current=ns._identity(os.stat('/proc/self/ns/mnt'))
+    require(current!=request.initial_mount_namespace,'native_view_not_private')
+    roots={}
+    for base in ('/opt','/usr/share'):
+        held=[]
+        try:
+            for path in (base,request.root+'/view'+base):
+                fd=ns._acquire(lambda p=path:os.open(p,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC))
+                held.append(fd);info=os.fstat(fd.number)
+                require(info.st_uid==0 and not info.st_mode&0o022,'native_view_backing_writable')
+            actual,backing=held
+            require(actual.identity==backing.identity and ns._mount_id(actual)!=ns._mount_id(backing)
+                and os.fstatvfs(actual.number).f_flag&os.ST_RDONLY,'native_view_backing_mismatch')
+            roots[base]={'identity':list(actual.identity),'mount_id':ns._mount_id(actual),
+                         'backing_mount_id':ns._mount_id(backing)}
+        finally:
+            errors=[]
+            for fd in reversed(held):
+                try:fd.close()
+                except BaseException as error:errors.append(error)
+            if errors:raise ns.NamespaceCleanupError('native_view_observation_cleanup_refused') from errors[0]
+    return {'mount_namespace':list(current),'roots':roots}
 
 
 @contextmanager
@@ -433,8 +464,7 @@ def protected_view(request,binding):
     launcher.parse_postdrop_status(Path('/proc/self/status').read_bytes(),uid=os.geteuid(),gid=os.getegid())
     import hosted_synthetic_runtime as runtime
     require(str(Path('/proc/self/exe').resolve(strict=True))==PYTHON,'native_view_interpreter_refused')
-    for base in ('/opt','/usr/share'):
-        require(os.statvfs(base).f_flag&os.ST_RDONLY,'native_view_not_readonly')
+    mounts=_view_mount_snapshot(request)
     for row in value['rows']:
         data,mode=runtime.read_native(row['path'])
         require(len(data)==row['bytes'] and hashlib.sha256(data).hexdigest()==row['sha256']
@@ -443,9 +473,13 @@ def protected_view(request,binding):
     require(bind_hosted_source(Path(__file__).resolve().parents[2],repository=REPOSITORY,event='push',ref=REF,sha=binding.commit)==binding,
             'native_view_source_changed')
     token=_ACTIVE_VIEW.set(request);files_token=_ACTIVE_FILES.set({r['path']:r for r in value['rows']})
-    try:yield request
+    observation_token=_ACTIVE_OBSERVATION.set(mounts)
+    try:
+        yield request
+        require(_view_mount_snapshot(request)==mounts,'native_view_mount_drift')
+        _verify_request(request,binding)
     finally:
-        _ACTIVE_FILES.reset(files_token);_ACTIVE_VIEW.reset(token)
+        _ACTIVE_OBSERVATION.reset(observation_token);_ACTIVE_FILES.reset(files_token);_ACTIVE_VIEW.reset(token)
 
 
 def active_view():return _ACTIVE_VIEW.get()
@@ -470,6 +504,7 @@ def bind_measurement_result(request,binding,receipt):
     return {'policy':POLICY,'nonce':request.nonce,'commit':request.commit,'tree':request.tree,
         'manifest_sha256':request.manifest,'view_identity':list(request.root_identity),
         'interpreter_sha256':request.interpreter_sha256,'memory_readiness':report,
+        'observed_view':_ACTIVE_OBSERVATION.get(),
         'execution_authority':False,'service_memory_proof':'NOT_PROVEN'}
 
 

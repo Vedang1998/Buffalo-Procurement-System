@@ -4,6 +4,8 @@ No apt, ldd, artifact execution, privilege, source mutation or package selection
 A new runner's dpkg claims do not prove equivalence to a previously measured VM.
 """
 import hashlib
+import base64
+import gzip
 import json
 import os
 from pathlib import Path
@@ -140,14 +142,25 @@ def observe(binding, *, image_os='',image_version=''):
         'capture_memory_readiness':'NOT_MEASURED_NATIVE_INPUT_PREREQUISITE','privileged_activation':'DISABLED'}
 
 
+def public_envelope(report):
+    raw=json.dumps(report,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
+    native.require(len(raw)<=65536,'native_observation_output_bound')
+    envelope={'encoding':'GZIP_BASE64_V1','bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),
+              'payload':base64.b64encode(gzip.compress(raw,mtime=0)).decode('ascii')}
+    encoded=json.dumps(envelope,sort_keys=True,separators=(',',':'))
+    # GitHub retains at most ten notices for a step. Preserve the complete
+    # observation in that existing transport, never publish a truncated PASS.
+    native.require(len(encoded)<=22500,'native_observation_notice_bound')
+    return encoded
+
+
 def main(argv):
     native.require(len(argv)==1)
     root=Path(__file__).resolve().parents[2]
     binding=source.bind_hosted_source(root,repository=source.REPOSITORY,event='push',ref=source.REF,sha=argv[0])
     report=observe(binding,image_os=os.environ.get('IMAGE_OS',''),image_version=os.environ.get('IMAGE_VERSION',''))
     native.require(source.bind_hosted_source(root,repository=source.REPOSITORY,event='push',ref=source.REF,sha=argv[0])==binding)
-    raw=json.dumps(report,sort_keys=True,separators=(',',':'),allow_nan=False)
-    native.require(len(raw)<=65536,'native_observation_output_bound');print(raw)
+    print(public_envelope(report))
     return 0
 
 if __name__=='__main__':raise SystemExit(main(sys.argv[1:]))
