@@ -1,6 +1,8 @@
 # Buffalo Procurement OS — Project Governance & Quality System
 
-**Purpose:** define one durable, low-error, low-waste operating process for planning, building, reviewing, approving, releasing, and handing off Buffalo Procurement OS work across ChatGPT, Codex, Claude Code, Cursor, Replit, and GitHub.
+**Purpose:** define one durable, low-error, low-waste operating process for planning, building, reviewing, approving, releasing, and handing off Buffalo Procurement OS work across ChatGPT, Codex Cloud, Claude Code, Cursor, GitHub, and approved infrastructure environments.
+
+**Process revision:** 2026-10-29. Section 13 defines continuous execution inside an authorized task; it does not expand operational authority. Buffalo Procurement OS is separate from ProPo/Stocky.
 
 This document is process authority. It does not replace the canonical procurement specification, `procurement/config/rules.toml`, database constraints, or readiness gates.
 
@@ -94,16 +96,14 @@ Default use:
 
 Do not duplicate a broad Claude review unless the risk justifies it. If used as writer, preserve the one-writer rule and assign a different reviewer.
 
-### Replit — Runtime / Infrastructure Authority
+### Development and infrastructure platforms
 
-Use for:
+- **Codex Cloud:** ordinary implementation and supported development checks. Do not depend on the owner's Mac or Replit SSH for routine development.
+- **GitHub-hosted validation:** use the specifically authorized workflow and supported host for tests requiring capabilities absent from the coding environment. A passing test on another host does not prove deployment compatibility.
+- **Railway:** intended hosting destination, not the editing workspace. Configuration, deployment, data transfer, secrets and cutover retain their own approvals and acceptance gates. An intended destination is not evidence of a completed migration.
+- **Replit:** retained legacy runtime/data/recovery context where applicable. Do not delete, shut down or reconnect to legacy infrastructure without explicit authority. Verify actual state rather than inferring it from migration plans.
 
-- production PostgreSQL;
-- runtime and hosting;
-- Secrets/environment;
-- scheduled jobs/workflows;
-- storage;
-- deployment logs and health.
+Use approved secret management for the relevant environment; never place secrets in Git, chat, reports or reusable development snapshots. This process revision authorizes no secret transfer.
 
 ### Replit Agent — Replit-Specific Specialist / Reserve
 
@@ -154,7 +154,7 @@ Writer must inspect:
 - relevant tests;
 - relevant live database/readiness state when authorized.
 
-Unexpected changes or an invalid prerequisite gate stop work.
+Unexpected changes require reconciliation before touching affected work. An invalid prerequisite blocks its dependent action; other independent, already-authorized work may continue under section 13. A frozen review target must not move.
 
 ### G2 — Branch / change isolation
 
@@ -177,7 +177,7 @@ Before independent AI review:
 - verify idempotency/retry/resume behavior where applicable;
 - verify no secrets or unintended generated data are included.
 
-A failing required machine check returns work to G3.
+A failing required machine check returns the affected work to G3 for diagnosis and in-scope repair. It blocks acceptance, not all authorized implementation; apply section 13 before requesting renewed owner approval.
 
 ### G5 — Independent adversarial review
 
@@ -394,3 +394,73 @@ After the first foundation gates pass, continue the canonical ordered workstream
 ## 12. Current-state source
 
 For the latest verified checkpoint, always read `docs/CODEX_HANDOFF.md` directly. Do not copy current counts from this governance document.
+
+## 13. Continuous, goal-based execution (2026-10-29)
+
+### 13.1 Goal and scope
+
+Use one active, bounded delivery objective in the existing task plan and handoff. Record the objective, scope/exclusions, prerequisites, exactly one writer, risk level, acceptance tests/control totals, required reviewers, resource/usage bounds and authorization boundary before implementation. Describe the user-visible outcome or necessary proof, not an elapsed-hours or test-count target.
+
+Reuse the existing plan, finding ledger and evidence format. Do not introduce an agent-management service, new state-file hierarchy, orchestrator or duplicated roadmap merely to make a run longer. Where the actual interface supplies a persistent Goal control, use it; otherwise retain the objective in the existing task context and repository. Do not claim a control was enabled or automatic resumption exists without verification.
+
+This section governs how authorized work proceeds. It grants no new architecture, production, installation, runtime-input, resource, spending, credential, deployment or business authority. Existing narrow approvals and unresolved change-control decisions remain controlling.
+
+### 13.2 Continuous implementation loop
+
+The designated writer owns inspect -> implement -> focused test -> diagnose -> repair -> revalidate -> checkpoint -> continue. A checkpoint preserves progress; it is not a stopping condition. Do not ask the owner to approve routine edits, test runs, commits, in-scope repairs or the written restatement of an already-approved design.
+
+Run the smallest trustworthy causal test first. Reuse source-bound evidence only where code, inputs and environment assumptions are unchanged and the gate permits it. Run the required full authoritative and startup suites on the final coherent candidate and after material fixes as applicable; do not rerun an unchanged known host refusal merely to increase activity. Never reduce floors, skip failures or replace full acceptance with focused results.
+
+Before retrying a deterministic failure, record new evidence or a materially changed hypothesis/correction. Do not repeat an unchanged attempt. After two distinct evidence-backed repairs fail to reduce the same blocker, reassess the approach and choose another authorized path; escalate only if the remaining choice requires new authority or no defensible in-scope path exists. This is a diagnostic rule, not permission to ignore a failed gate.
+
+Continue while executable authorized work remains. Progress updates, component completion, reviewer requests and documentation commits do not themselves end the task. Do not manufacture busywork or spin to consume time or evade platform budgets.
+
+### 13.3 Parallel work and review handoffs
+
+Codex remains the single implementation writer unless the owner explicitly reassigns the role. Parallel subagents may investigate, inspect logs, analyze tests and review read-only; they must not edit the active branch/worktree. Claude supplies broad independent review for material work. Cursor supplies targeted specialist review where useful, not another duplicate broad review.
+
+Freeze and publish a coherent candidate with passing applicable machine checks, exact base/commit/tree, changed scope, evidence manifest, findings, known failures and requested gate decision. Code with unresolved blockers may receive early diagnosis, but no acceptance approval is implied.
+
+Claude may review the frozen candidate while Codex works on independent authorized descendants. Reviews never follow a moving tip. Do not update the frozen target silently. Material later changes require a targeted delta review; unchanged historical closures retain their original commit and limitations. A code review, host measurement and operational authorization are different gates.
+
+Actual reviewer identity/tool/model where exposed, reviewed commit/tree, commands/results, findings and limitations must be retained in the existing review package. Owner-pasted reports are attributed as owner-supplied, not independently fetched. Internal Codex reviews cannot satisfy a required external Claude gate. Do not say a reviewer was invoked merely because a prompt/package was prepared.
+
+Read-only review forbids candidate edits, commits, pushes and unauthorized external effects; it permits bounded tests to create and modify reviewer-owned disposable fixtures, including fixture permissions, then clean them up. Do not change the original checkout or shared runtime to make a test pass.
+
+If no callable reviewer channel exists, give the owner one exact review handoff and continue independent authorized work. Request another report only for a genuinely new candidate/delta or missing evidence. Do not send the same frozen target through duplicate internal audits while awaiting Claude.
+
+### 13.4 Continue versus pause
+
+A failed check blocks the affected acceptance/release transition. Missing review blocks the action requiring it. Missing private data blocks data-dependent validation. None automatically blocks other independent, authorized development.
+
+Pause the whole task only when the owner pauses it, the actual budget/session/access prevents further work, source/authority uncertainty prevents all safe progress, or every remaining executable path depends on unavailable review/evidence or new authority. Preserve the checkpoint and state the precise reason.
+
+For a genuine owner decision, consolidate the current rule, demonstrated problem, smallest proposed change, alternatives, risk, exact effects, tests and approval boundary into one request. Record and reuse the decision; do not ask again merely because a context was compacted. Changed facts or material scope require a new decision, not silent reuse.
+
+Privileged proof, synthetic credential release, deployment, production data access, pricing/cutover and real purchasing remain separate transitions. An owner-approved task must still satisfy its machine and review prerequisites before executing a gated action. No self-authored PASS flag, increased autonomy setting or instruction file supplies missing authority. Stop at the canonical phase boundary unless the next phase has its own explicit authorization.
+
+### 13.5 Evidence, memory and resumption
+
+Use docs/CODEX_HANDOFF.md as the current checkpoint, the existing plan as the objective/dependency map, and the existing finding/evidence package as the review record. Do not assume ChatGPT, Codex, Claude and Cursor share conversation memory. Read the actual published state at startup; do not infer it from an old chat or static memory note.
+
+At a meaningful checkpoint or before a foreseeable budget stop, record:
+
+- branch, published commit/tree, tested material commit/tree and worktree state;
+- objective, completed outcome/gate, next executable action and its prerequisites;
+- actual test counts including not-run/error-event distinctions and evidence locations;
+- reviewer target, attributed dispositions, affected later changes and blocked gates;
+- existing approvals versus new decisions, resource cleanup and remaining budget/access limitation.
+
+Scan secrets/private payloads before publishing only the authorized branch; verify the remote tip. A local commit is not remote recovery. Preserve failed evidence. Documentation-only descendants do not acquire unexecuted test results. Never add overlapping populations, label discovery as execution, or combine separate hosts/launches into a same-generation PASS.
+
+A new session resumes the verified next action rather than recreating plans or completed packaging. Saved setup instructions, a published environment snapshot and a tested fresh-task restoration are different statuses. Do not promise resumption after a usage reset, purchase credits, raise limits or change plans without authority.
+
+### 13.6 Product delivery and proportionality
+
+Prioritize the shortest authorized path to the required buying workflow: verified current inputs -> approved supplier/price/pack economics -> supported demand/net need -> owner accept/edit/reject and recalculation -> separate vendor DRAFTs and reconciled outputs. Real release and supplier transmission retain their separate human approvals. This objective does not reduce canonical business scope.
+
+Keep four readiness states separate: component/synthetic proof, hosted staging, current commercial/data readiness, and production purchasing. Test counts and infrastructure commits are not a completion percentage.
+
+Every infrastructure change must identify the next application/proof gate it unblocks. If consecutive checkpoints add only infrastructure while the same live gate remains unrun, explicitly reassess the critical path and identify the smallest permitted experiment or a consolidated change-control decision. Do not silently redesign the security model, omit required controls, expand the harness into a general framework, or let the deadline substitute for acceptance.
+
+Measure outcomes using the existing handoff: newly demonstrated gates, remaining causal blockers, review turnaround and owner interruptions. No telemetry platform or new automation is required by this revision. Cosmetic/docs-only changes receive lightweight checks; material backend, data, security and procurement changes retain their existing risk-based reviews.
