@@ -65,8 +65,7 @@ recorded layout reconciliation before installation. These are not hidden PASSes.
 
 Provenance assurance remains precise: Python publisher HTTPS/GitHub digest is
 verified, not signed build attestation. Ubuntu signed index/package chains are
-verified with the publisher keyring; independent target-keyring comparison and
-installation-time freshness/trust-root requirements are still gates. No existing
+verified with the publisher keyring; the later63e2c54 target keyring bytes match, but its0777 mode means equality is not a protected trust anchor. Installation-time freshness/trust-root requirements remain gates. No existing
 writable host input was copied/chowned into trust.
 
 The sections below preserve the earlier proposal's details. Where their earlier

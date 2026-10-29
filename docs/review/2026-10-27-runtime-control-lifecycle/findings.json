@@ -605,10 +605,10 @@
     }
   ],
   "current_candidate": {
-    "commit": "652842794f02f9d41f05d61097a7332a20e3f3b2",
-    "tree": "cbce8d02c63173f23df4b292bc17cfb60035bfda",
+    "commit": "63e2c5421374c391eb9af9c00fb00227c8b90599",
+    "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
     "evidence": "oct29-memory-native-evidence.json",
-    "status": "INTERMEDIATE_IMPLEMENTATION_CHECKPOINT_NOT_COMPLETE_NATIVE_TRANSPORT",
+    "status": "FROZEN_MEMORY_REPAIR_AND_NATIVE_PREFLIGHT_CANDIDATE; EXECUTION_CONTRACT_BLOCKED",
     "independent_review": "PENDING",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
@@ -687,5 +687,21 @@
     "cause": "Per-call byte total allowed cumulative multi-artifact overflow",
     "repair": "Lease byte/file totals, aliases count every logical output; causal overflow cleanup tests",
     "authority": "unprivileged materialization only"
+  },
+  "prepared_combined_memory_review": {
+    "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "implementation": "63e2c5421374c391eb9af9c00fb00227c8b90599",
+    "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+    "status": "PREPARED_NOT_SENT_OR_APPROVED",
+    "external_report": "Owner summary only for e5e8; original full attribution/results missing",
+    "requested_scope": [
+      "M1 actual pre-account path",
+      "streaming lifetime and unchanged formula",
+      "N7 bounded collection",
+      "one shared preflight deadline and reuse drift",
+      "authenticated fixed artifact graph and capacity contradiction",
+      "dormant native RUNPATH/view/staging and activation effects"
+    ],
+    "historical_target_preserved": true
   }
 }

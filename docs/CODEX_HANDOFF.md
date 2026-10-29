@@ -10,6 +10,36 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-29 frozen memory/native successor published
+
+Verified implementation `63e2c5421374c391eb9af9c00fb00227c8b90599`, tree
+`a359999f65532f4c0ef38d318f90039856e2da5e`, ordinary single-branch push and fresh remote fetch.
+Source/evidence and protected-ref readbacks are indexed in
+`docs/review/2026-10-27-runtime-control-lifecycle/oct29-memory-native-evidence.json`.
+This follow-up is documentation/evidence only; its Git tree is separate.
+
+Frozen validation:1,118focused locally and on GitHub run40951578086,181scrubbed,88related and10startup passed;
+2,682tests discovered/132modules, not a full execution. Actual authenticated
+Python staging/65ELF parsing cleaned exact646files and restored FD inventory.
+Current combined review packet is prepared at the existing README. It is not a
+Claude review execution/approval, and e5e8/a04ef is preserved.
+
+Capacity now refuses from authenticated pinned metadata before proposed native
+install/view/measurement effects.149,540,145logicalB;149,303,529physical-lower-boundB
+exceed134,217,728 before source/generated costs. No cap, dependency or production
+setting changed. A newly scoped capacity decision is needed;160MiB PG_PHASE-only
+is proposed in the existing contract, not implemented. Installation remains a
+later single manifest/review/effects decision. Native transport and cleanup executor
+remain incomplete, not writer-certified. Do not claim definition-of-done B.
+
+The final GitHub inventory read132files/66package claims in17.61s. Host PGDG16.15 server/client and libpq18.6 differ from selected Ubuntu16.15. Keyring digest matches but mode0777 remains untrusted. Capture returned REFUSED_NATIVE_INPUT_TRUST with zero accounts/privileged children and matching FD inventory. This is not owned-service or memory proof.
+
+Exact next action: read the prepared e5e8..63e2c54 delta and actual e5e8 report;
+resolve the fixed-input/cap contradiction before trying live capture/installation.
+Continue independent authorized repairs without reopening old reviews or routine
+process approval. Current activation/credentials stay disabled. Full authoritative
+validation, owned-service runtime/cleanup and integrated acceptance remain unproven.
+
 ### 2026-10-29 M1 repair and authenticated native-capacity contradiction
 
 Latest verified published implementation before this descendant:

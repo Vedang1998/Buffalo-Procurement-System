@@ -1,0 +1,27 @@
+{
+  "commit": "63e2c5421374c391eb9af9c00fb00227c8b90599",
+  "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+  "results": {
+    "isolated": {
+      "returncode": 0,
+      "seconds": 6.461819260002812,
+      "sha256": "659b9d42a33fa83cbade9b7ea849ea6a053ce1e7494b5302a8a7fbec65036fb6"
+    },
+    "inert": {
+      "returncode": 78,
+      "seconds": 0.21436785400146618,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "discovery": {
+      "returncode": 0,
+      "seconds": 2.421326722978847,
+      "sha256": "8f9c92714be94bcd9041e0d3dd4dc6dd82b759735fac50253ca5ab551962913c"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 7.744005354994442,
+      "sha256": "f273c6fb9f7216de45c5232001583e1adbae29ee2b3440fc6fff956aed14d9e9"
+    }
+  },
+  "disposable_clone_removed": true
+}

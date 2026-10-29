@@ -1,6 +1,6 @@
 {
-  "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
-  "tree": "cbce8d02c63173f23df4b292bc17cfb60035bfda",
+  "candidate": "63e2c5421374c391eb9af9c00fb00227c8b90599",
+  "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
   "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
   "baseline_tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
   "classification": "WRITER_MACHINE_EVIDENCE_NOT_INDEPENDENT_CLAUDE_REVIEW",
@@ -47,6 +47,51 @@
         "capture": "REFUSED_NATIVE_INPUT_TRUST; capture skipped after fixed metadata observation",
         "privileged_activation": "NOT_RUN"
       }
+    },
+    "63e2c5421374c391eb9af9c00fb00227c8b90599": {
+      "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+      "local_focused": {
+        "discovered": 1118,
+        "executed": 1118,
+        "passed": 1118,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "scrubbed_components": 181,
+      "related": 88,
+      "startup": 10,
+      "discovery": {
+        "registered": 2682,
+        "modules": 132,
+        "executed": 0
+      },
+      "full_authoritative": "NOT_RUN_UNSUPPORTED_NATIVE_PREREQUISITES; unchanged Cloud pg_dump refusal not retried",
+      "github": {
+        "run": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40951578086",
+        "focused": {
+          "discovered": 1118,
+          "executed": 1118,
+          "passed_methods": 1118,
+          "failure_events": 0,
+          "error_events": 0,
+          "skipped": 0
+        },
+        "native_readonly_inventory": {
+          "rows": 132,
+          "package_claims": 66,
+          "seconds": 17.611777290999996,
+          "root_or_account_effects": 0,
+          "unresolved_owner_aliases": [
+            "/lib64/ld-linux-x86-64.so.2",
+            "/bin/sh"
+          ]
+        },
+        "capture": "REFUSED_NATIVE_INPUT_TRUST; actual capture skipped",
+        "owned_descriptor_inventory_match": true,
+        "privileged_execution": "NOT_RUN",
+        "whole_service_memory": "NOT_PROVEN"
+      }
     }
   },
   "memory_comparison": {
@@ -79,7 +124,24 @@
     "exact_artifacts": 66,
     "ubuntu_package_records": 65,
     "target_package_payloads_verified": 62,
-    "target_file_rows_matched": 122
+    "target_file_rows_matched": 122,
+    "proposed_capacity": "CODE_PINNED_REFUSAL_BEFORE_INSTALL_VIEW_OR_MEASUREMENT",
+    "lifetime_staging": "CUMULATIVE_BYTES_FILES_AND_ALIAS_OUTPUTS; causal refusal cleanup tested",
+    "actual_python_materialization": {
+      "artifact_sha256": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "cleanup": "EXACT_OWNED_FILES_REMOVED_FD_INVENTORY_MATCH",
+      "exact_authenticated_elf_objects_parsed": 65,
+      "execution_authority": false,
+      "lifetime_regular_bytes": 59636822,
+      "lifetime_regular_files": 646,
+      "members": 646,
+      "publisher_verification": "PINNED_PUBLISHER_DIGEST_NOT_BUILD_ATTESTATION",
+      "regular_bytes": 59636822,
+      "rss_peak_bytes": 118390784,
+      "scope": "UNPRIVILEGED_SELECTED_ARCHIVE_MATERIALIZATION_NOT_RUNTIME_CAPTURE_OR_SERVICE",
+      "seconds": 3.474418543977663,
+      "traced_peak_bytes": 93987910
+    }
   },
   "process_adoption": {
     "upstream": "1f4ac6da5fea108d48d8c746ac06e0d3ac586c1a",
@@ -284,6 +346,66 @@
     "oct29-m1-6528427-ci.json": {
       "bytes": 52329,
       "sha256": "d7f1c2e21cba6c42cbffccb1538c684bfdeed2edcd55e6d2822042d222fc1a82"
+    },
+    "oct29-m1-63e2c54-related.txt": {
+      "bytes": 17276,
+      "sha256": "f273c6fb9f7216de45c5232001583e1adbae29ee2b3440fc6fff956aed14d9e9"
+    },
+    "oct29-m1-63e2c54-materialize.json": {
+      "bytes": 587,
+      "sha256": "11d2c08978b85e6458a79083617957044be440967e1d8d8c5ad8c9b3738ba462"
+    },
+    "oct29-m1-63e2c54-other-validation.json": {
+      "bytes": 836,
+      "sha256": "3d2b4009900e0e37e1a98ea78d2ed79f5811de08eaafbd7536cefd8117b6a98e"
+    },
+    "oct29-m1-63e2c54-focused.txt": {
+      "bytes": 203962,
+      "sha256": "3322bd7716724cf976385660319106c306927791cd601aa9b96aa4faaaec2565"
+    },
+    "oct29-m1-63e2c54-publication.json": {
+      "bytes": 992,
+      "sha256": "009de8735d752d67da3d32da60adbb4efb5c1482b276c8afa8c25e30eb87e25b"
+    },
+    "oct29-m1-63e2c54-discovery.txt": {
+      "bytes": 336,
+      "sha256": "8f9c92714be94bcd9041e0d3dd4dc6dd82b759735fac50253ca5ab551962913c"
+    },
+    "oct29-m1-63e2c54-isolated.txt": {
+      "bytes": 34182,
+      "sha256": "659b9d42a33fa83cbade9b7ea849ea6a053ce1e7494b5302a8a7fbec65036fb6"
+    },
+    "oct29-m1-63e2c54-inert.txt": {
+      "bytes": 95,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "oct29-m1-63e2c54-startup.txt": {
+      "bytes": 2041,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "oct29-m1-63e2c54-target-summary.json": {
+      "bytes": 4284,
+      "sha256": "e7193eea10dbd0ebbffb5385972b24fe93eedae4cee0c74740bab8cf099b27c4"
+    },
+    "oct29-m1-63e2c54-ci-final.json": {
+      "bytes": 53029,
+      "sha256": "152754d579f249e09cd80dacf6a1580f9a3638cfe57b6e56b36934eeb10c9d38"
+    },
+    "oct29-m1-63e2c54-native-target.json": {
+      "bytes": 78460,
+      "sha256": "b33026fbce1a9de7e18344c160527671dbeaf2fb409d04843ababb4ad4ed1ea7"
     }
+  },
+  "target_followup": {
+    "source": "63e2c5421374c391eb9af9c00fb00227c8b90599",
+    "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+    "installed_pg_server_and_client": "16.15-1.pgdg24.04+2",
+    "installed_libpq5": "18.6-1.pgdg24.04+2",
+    "selected_pg_and_libpq": "16.15-0ubuntu0.24.04.1",
+    "selected_inputs_changed": false,
+    "keyring_sha256_equal": true,
+    "keyring_mode": "0777",
+    "keyring_assurance": "CONTENT_EQUALITY_ONLY; writable object/ancestors are not a trusted root",
+    "prior_authenticated_payload_research_scope": "6528427 target; not combined with this launch into same-generation containment PASS"
   }
 }

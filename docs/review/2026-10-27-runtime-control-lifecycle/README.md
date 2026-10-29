@@ -1,3 +1,110 @@
+# October 29 M1/native-input successor — frozen combined delta
+
+Implementation: `63e2c5421374c391eb9af9c00fb00227c8b90599`
+
+Tree: `a359999f65532f4c0ef38d318f90039856e2da5e`
+
+Branch: `codex/hosted-synthetic-acceptance`
+
+This is the new **prepared** delta package, not a received independent verdict.
+Frozen e5e8/a04ef remains intact at its original Git identities. The prior packet
+is retained below as historical context. No Claude tool/session was invoked here.
+The owner's e5e8 summary is recorded in `external-review-e5e8-owner-summary.json`;
+its actual full report, attribution, commands/results and original M1 measurement
+are absent. N10's explicitly accepted collision-retry logic stays scoped to e5e8;
+other unspecified dispositions are not inferred. Original six closures and d863
+review limitations remain historical; changed descendants need delta review.
+
+**REQUEST CHANGES / REVIEW_PENDING. Installation and privileged activation remain
+DISABLED; credentials WITHHELD; integrated acceptance NON-GREEN.**
+
+## Necessary review scope
+
+Review the material delta from e5e8 to this exact candidate. Reconcile the actual
+e5e8 report when available; do not request/repeat unchanged architecture review.
+`oct29-memory-native-evidence.json` indexes source-bound raw logs, failures,
+measurements, authenticated artifact evidence and ordinary publication proof.
+
+| Component | Implemented/tested here | Still required |
+|---|---|---|
+| M1 | Actual deciding path requires owned, validated source/runtime/deadline-bound capacity+memory+adoption+cleanup receipt before AccountLease.create. Missing/forged/stale/mismatched evidence refuses. | Independent review; same protected target capture and service measurement. |
+| Memory lifetime | Canonical streaming serialization/hash and per-file descriptor adoption; original hashes/formula preserved; cleanup avoids full-payload reparse. | Target capture/compose/adopt/whole-service measurement, not a synthetic codec substitute. |
+| N7 | Bounded polling for exact delayed collection, two separated canonical absence observations, contradictory/unknown states refuse. | Real normal/timeout/cancellation/manager-kill/pre-ACK lifecycle proof. |
+| Shared deadline | One60s absolute budget from first binding through capture/memory, rehearsal and candidate scans; invariant work reused with source/native/run-destination drift checks and separate timings. | Review; live scan/deadline/resource behavior. |
+| Fixed native inventory |66exact artifacts,831logical rows,170ELF objects; signed Ubuntu index/payload/file reconciliation and Python publisher digest; static capacity gate refuses before native effects. | Capacity authority conflict, final logical layout/protected view, provenance/trust-root disposition. |
+| Dormant compatibility | Exact65object RUNPATH allowance; authenticated unprivileged staging/held streams, cumulative limits and alias accounting; native-only command plan and backing-view readback. | Native install/cleanup executor and actual exec-surviving measurement-child/service binding remain incomplete. |
+
+The M1 receipt is not a deserialized PASS or caller Boolean. Native lower-bound
+metadata cannot substitute for it. Lifecycle cleanup keeps ownership/identity
+checks and original failure attribution. No descriptor-close relaxation grants
+runtime content acceptance. Prior PID1/credentials/numeric-PID controls are not
+removed; reviewer should check impact of caller/codec changes without treating
+old approval as current runtime approval. Memory formula is unchanged. Changed
+`memory.events` V2 approval must be reconciled against the actual e5e8 report;
+no automatic inheritance is asserted here.
+
+## Validation and measurements
+
+At this exact source: local focused1,118/1,118, scrubbed181/181, related88/88,
+startup10/10, all with no failures/errors/skips. Discovery2,682/132modules executes
+zero tests. **Full authoritative suite NOT_RUN**; no repetition of the unchanged
+unsupported native-Cloud pg_dump failure. GitHub run40951578086 also passed1,118/1,118 at this exact commit. Its132row/66package read-only inventory completed in17.61s. Native capture was skipped by REFUSED_NATIVE_INPUT_TRUST; descriptors closed, zero accounts/privileged processes. The full workflow is non-green, not an acceptance PASS.
+
+The same120MiB synthetic codec script/hashes at baseline44fee and repaired3251
+measured conservative totals542,486,528B ->416,731,136B; RSS416,653,312B ->290,897,920B,
+traced peaks377,888,559B ->251,669,359B. Tracemalloc is a subset of RSS; memfd pages
+may overlap RSS and independent maxima are conservatively summed. This is not
+measured cgroup usage or target PG memory proof. Failed historical evidence remains.
+
+Actual authenticated Python staging at this candidate:646files/59,636,822B,65ELFs,
+peakRSS118,390,784B, traced peak93,987,910B,3.4744s. Exact owned files were removed
+and FD inventory matched. No artifact was executed. Full archive digest was
+verified before/after, publisher setup.sh never ran, and no privileged destination
+was created. These are unprivileged materializer observations, not capture or exec.
+
+## Demonstrated capacity conflict and exact next boundary
+
+The proposed authenticated native inventory has149,540,145logical regular bytes
+and915entries including parents. Even physical dedup leaves149,303,529B, exceeding
+the approved134,217,728B by15,085,801B before source/generated entries. Current
+PG_PHASE_V2 remains unchanged. `proposed_capacity()` rejects this exact inventory
+before install-plan/view/measurement effects; aliases count each logical output.
+No budget override or dependency omission exists. The earlier reviewer measurement
+is not reused as this target's result. See `oct29-native-capacity-provenance-summary.json`
+and `native-input-provisioning-proposal.md` for exact reconciliation and limitations.
+
+The target also has PG server/client16.15-1.pgdg24.04+2 and libpq18.6-1.pgdg24.04+2, which are not the approved Ubuntu16.15-0ubuntu0.24.04.1 artifacts. Its keyring hash matches the publisher keyring, but mode0777 cannot establish a protected trust root. Prior authenticated package research and this later observation retain separate source/launch attribution.
+
+Smallest prospective decision is a separately versioned PG_PHASE-only capacity
+change for these fixed bytes (160MiB is proposed, not implemented/approved or a
+memory-fit claim). All other limits and gates remain unchanged. This decision is
+separate from the eventual single native-installation decision. The current
+contract cannot produce a valid combined image, so no privileged proof is spent.
+Native child/service transport and installer/cleanup executor are explicitly
+unfinished; this packet does not claim all authorized implementation is complete.
+
+## Exact dormant activation and effects
+
+Workflow `hosted-synthetic-acceptance.yml` performs fixed source/metadata inventory
+and focused tests. The known writable-input preflight refuses before capture.
+Its later bootstrap CLI unconditionally exits78 before any live service/privilege
+call. `activate_installation()` always refuses. No environment/caller PASS enables
+installation. `run_provisioned_candidate` retains real M1 verification before
+AccountLease.create. Proposed native commands are fixed mkdir/dd stdin/sha256sum/
+chmod under one new nonce-owned `/run/buffalo-native-*`; root must never reopen an
+operator-owned source path or execute repository Python. No command was activated.
+
+Review the measurement/cleanup code for safety without demanding unavailable live
+proof as a prerequisite to source review. Separately judge whether prerequisites
+permit execution: currently they do not. Whole-service resource/cleanup, runtime,
+worker-control exclusion, sentinel/release and browser/BackupV2/APPLY/DRAFT/packet/
+restart/restore remain OPEN/NOT_RUN. Railway and real purchasing readiness remain
+separate and ungranted. No production, private data or supplier action occurred.
+
+---
+
+## Historical frozen e5e8 review packet
+
 # October 29 combined Claude delta — B2 implemented, host inputs refused
 
 Frozen implementation: `e5e8a337476b7e0ffa678627e84c2b5ce82a744a`
