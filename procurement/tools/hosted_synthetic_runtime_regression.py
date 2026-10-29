@@ -12,6 +12,8 @@ import json
 import os
 import resource
 import re
+import stat
+import sysconfig
 import time
 import tracemalloc
 from pathlib import Path
@@ -206,6 +208,9 @@ def _shared_job_memory():
             data=ns._read(str(path/name),4096)
             if name=='memory.events':
                 from hosted_synthetic_cgroup import parse_memory_events
+                keys=[line.partition(b' ')[0] for line in data.splitlines()]
+                if len(keys)<=32 and all(re.fullmatch(rb'[a-z_]{1,32}',key) for key in keys):
+                    result['observed_event_keys']=[key.decode('ascii') for key in keys]
                 values[name]=parse_memory_events(data)
             else:
                 ns._require(re.fullmatch(rb'[0-9]{1,20}\n',data) is not None)
@@ -214,6 +219,49 @@ def _shared_job_memory():
         result.update(status='OBSERVED',identity=list(identity),values=values)
     except CgroupProofError:result['status']='REFUSED_COUNTER_SCHEMA'
     except (OSError,ns.NamespaceProofError):pass
+    return result
+
+
+def _capture_failure_frames(error):
+    """Fixed source locations only; never exception strings or frame locals."""
+    allowed={str(Path(__file__).resolve().parent/name) for name in (
+        'hosted_synthetic_runtime.py','hosted_synthetic_postgres_runtime.py',
+        'hosted_synthetic_runtime_regression.py','hosted_synthetic_source.py',
+        'hosted_synthetic_namespace.py','run_local_staging_acceptance.py')}
+    frames=[];trace=error.__traceback__
+    for _ in range(64):
+        if trace is None:break
+        filename=trace.tb_frame.f_code.co_filename
+        if filename in allowed and 0<trace.tb_lineno<20000:
+            frames.append({'file':'procurement/tools/'+Path(filename).name,'line':trace.tb_lineno})
+        trace=trace.tb_next
+    return frames[-8:]
+
+
+def _native_input_chain(path):
+    """Observe fixed native inputs; this neither establishes trust nor changes it."""
+    result={'status':'NOT_OBSERVED','scope':'READ_ONLY_NATIVE_METADATA_NOT_TRUST_APPROVAL'}
+    def public(value):
+        return (type(value) is str and re.fullmatch(r'/[A-Za-z0-9_./+\-]+',value)
+                and '..' not in Path(value).parts
+                and value.startswith(('/usr/','/lib/','/lib64/','/opt/hostedtoolcache/')))
+    if not public(path):return result
+    try:
+        requested=Path(path);resolved=requested.resolve(strict=True)
+        if not public(str(resolved)):return result
+        chains={}
+        for name,selected in (('requested',requested),('canonical',resolved)):
+            paths=(selected,*selected.parents)
+            if len(paths)>16:return result
+            rows=[]
+            for item in paths:
+                info=item.lstat();link=stat.S_ISLNK(info.st_mode)
+                rows.append({'path':str(item),'uid':info.st_uid,'gid':info.st_gid,
+                    'mode':oct(stat.S_IMODE(info.st_mode)),'symlink':link,
+                    'root_owned_no_write':info.st_uid==0 and (link or not info.st_mode&0o022)})
+            chains[name]=rows
+        result.update(status='OBSERVED',chains=chains)
+    except OSError as error:result.update(status='UNREADABLE',errno=error.errno)
     return result
 
 
@@ -290,6 +338,10 @@ def run_postgres_fit(binding,root):
             and re.search(rb'(?m)^VERSION_ID=(?:24\.04|"24\.04")$',release)):
         return dict(result,reason='TARGET_IS_NOT_UBUNTU_24_04')
     if not Path(pg.BIN+'postgres').is_file():return dict(result,reason='FIXED_NATIVE_PG16_PATH_UNAVAILABLE')
+    result['native_inputs']={name:_native_input_chain(path) for name,path in (
+        ('interpreter',str(Path('/proc/self/exe').resolve(strict=True))),
+        ('stdlib',sysconfig.get_path('stdlib')),('libdir',sysconfig.get_config_var('LIBDIR')),
+        ('postgres',pg.BIN+'postgres'))}
     before=_descriptor_inventory();started=time.monotonic();stages=[]
     tracemalloc.start()
     try:
@@ -313,11 +365,13 @@ def run_postgres_fit(binding,root):
             if envelope>536870912:result['capture_fit']='REFUSED_MEMORY_ENVELOPE'
         stages.append(_memory_stage('AFTER_OWNED_CLEANUP'))
     except (ns.NamespaceProofError,HostedSourceError,ns.backend.LocalStagingAcceptanceError,MemoryError,OSError) as error:
-        result.update(capture_fit='REFUSED_COMPONENT',failure_type=type(error).__name__)
+        result.update(capture_fit='REFUSED_COMPONENT',failure_type=type(error).__name__,
+                      failure_frames=_capture_failure_frames(error))
         # No exception text, caller data or private filesystem paths in evidence.
     finally:
         tracemalloc.stop();ns._require(_descriptor_inventory()==before)
     observed=[stage['shared_job'] for stage in stages]
+    result['component_result_before_counter_gate']=result['capture_fit']
     result['shared_job_zero_oom']='NOT_PROVEN'
     if any(item['status']=='REFUSED_COUNTER_SCHEMA' for item in observed):
         result['capture_fit']='REFUSED_COUNTER_SCHEMA'

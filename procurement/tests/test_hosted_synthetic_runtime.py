@@ -43,6 +43,24 @@ def fixture_bundle():
 
 
 class HostedRuntimeTests(unittest.TestCase):
+    def test_capture_refusal_evidence_has_only_bound_source_locations(self):
+        import hosted_synthetic_runtime_regression as driver
+        try:runtime._aggregate_limit('private-untrusted-policy')
+        except ns.NamespaceProofError as error:frames=driver._capture_failure_frames(error)
+        self.assertTrue(frames);self.assertLessEqual(len(frames),8)
+        self.assertTrue(all(set(row)=={'file','line'} and row['file'].startswith('procurement/tools/') for row in frames))
+        self.assertNotIn('private-untrusted-policy',str(frames))
+        self.assertEqual(driver._capture_failure_frames(RuntimeError('private-message')),[])
+
+    def test_native_input_observation_reports_untrusted_ownership_without_mutation(self):
+        import hosted_synthetic_runtime_regression as driver
+        self.assertEqual(driver._native_input_chain('/private/input')['status'],'NOT_OBSERVED')
+        info=SimpleNamespace(st_uid=1001,st_gid=1001,st_mode=0o100775)
+        with patch.object(Path,'resolve',return_value=Path('/usr/bin/python3.13')),patch.object(Path,'lstat',return_value=info),patch.object(os,'chmod') as chmod,patch.object(os,'chown') as chown:
+            report=driver._native_input_chain('/usr/bin/python3.13')
+        self.assertEqual(report['status'],'OBSERVED');chmod.assert_not_called();chown.assert_not_called()
+        self.assertFalse(any(row['root_owned_no_write'] for rows in report['chains'].values() for row in rows))
+
     def test_codec_copy_reduction_keeps_exact_legacy_bytes_and_digest(self):
         raw=b'fixed synthetic bytes'*1000
         entries=(ns.backend._BrowserRuntimeBundleEntry('/a','F',0o444,0,0,'native-runtime:'+hashlib.sha256(raw).hexdigest(),raw),)
@@ -112,6 +130,7 @@ class HostedRuntimeTests(unittest.TestCase):
             report=driver._shared_job_memory()
         self.assertEqual(report['status'],'REFUSED_COUNTER_SCHEMA')
         self.assertNotIn('values',report)
+        self.assertIn('unknown_safety_event',report['observed_event_keys'])
 
     def test_capacity_refusal_never_enters_composition_or_changes_trace_state(self):
         import hosted_synthetic_runtime_regression as driver
