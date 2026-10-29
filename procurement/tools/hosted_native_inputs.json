@@ -6708,13 +6708,16 @@
       }
     },
     {
-      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
       "artifact_sha256": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
       "artifact_member": "./usr/lib/x86_64-linux-gnu/libpq.so.5.16",
       "bytes": 354488,
       "sha256": "b4ba0da9e51354cf40a599e787f0942c98fc268cf29b51806c62770d8f2a2a71",
-      "mode": "0555",
-      "elf_inventory": "PRIOR_COMPONENT_RECORD; full library-resolution mapping missing"
+      "mode": "0444",
+      "elf_inventory": "PRIOR_COMPONENT_RECORD; full library-resolution mapping missing",
+      "layout_reconciliation": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1",
+      "mode_evidence": "AUTHENTICATED_ARCHIVE_0644_NORMALIZED_AS_READ_NATIVE",
+      "physical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16"
     },
     {
       "path": "/usr/share/postgresql/16/extension/pgcrypto--1.3.sql",
@@ -6960,5 +6963,16 @@
   "external_soname_list_scope": "DIRECT_ROOTS_ONLY; recursive closure not authenticated/resolved",
   "complete_runtime_manifest": false,
   "known_bytes_are_capacity_fit_proof": false,
-  "physical_file_inventory_not_final_logical_alias_layout": true
+  "physical_file_inventory_not_final_logical_alias_layout": true,
+  "libpq_layout_reconciliation": {
+    "artifact_member": "./usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+    "authenticated_alias_target": "libpq.so.5.16",
+    "bytes_and_artifact_identity_unchanged": true,
+    "evidence": "oct29-native-selected-client-libpq-elf.json",
+    "installation_authority": false,
+    "logical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
+    "mode": "0444",
+    "physical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+    "policy": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1"
+  }
 }

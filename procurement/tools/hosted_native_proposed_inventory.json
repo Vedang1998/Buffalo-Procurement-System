@@ -1,7 +1,7 @@
 {
   "activation": "DISABLED",
   "added_authenticated_target_rows": 122,
-  "alias_layout_status": "PHYSICAL_FILE_INVENTORY_PRESERVED_NOT_FINAL_CODEC_LAYOUT",
+  "alias_layout_status": "LIBPQ_LOGICAL_NAME_AND_MODE_RECONCILED_STATICALLY; PROTECTED_VIEW_NOT_PROVEN",
   "artifact_count_including_python": 66,
   "artifacts": {
     "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58": {
@@ -2784,25 +2784,22 @@
   },
   "known_file_count": 831,
   "known_regular_bytes": 149540145,
-  "logical_path_layout_blockers": [
-    {
-      "current_resolver_requested_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
-      "effect": "Explicit logical-name reconciliation required; replacing displayed name preserves count and bytes; adding both would increase count and bytes",
-      "inventory_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
-      "resolution": "AUTHENTICATED_ALIAS_TO_SAME_ALREADY_COUNTED_BYTES"
-    }
-  ],
-  "mode_binding_blockers": [
-    {
-      "authenticated_archive_mode": "0644",
-      "current_read_native_mode": "0444",
-      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
-      "preserved_manifest_mode": "0555"
-    }
-  ],
+  "libpq_layout_reconciliation": {
+    "artifact_member": "./usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+    "authenticated_alias_target": "libpq.so.5.16",
+    "bytes_and_artifact_identity_unchanged": true,
+    "evidence": "oct29-native-selected-client-libpq-elf.json",
+    "installation_authority": false,
+    "logical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
+    "mode": "0444",
+    "physical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+    "policy": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1"
+  },
+  "logical_path_layout_blockers": [],
+  "mode_binding_blockers": [],
   "physical_content_bytes": 149303529,
   "physical_content_count": 830,
-  "prior_selected_rows_preserved": 709,
+  "prior_selected_rows_preserved": 708,
   "protected_view_binding": "NOT_PROVEN",
   "provenance_requirements_satisfied": false,
   "remaining_gates": [
@@ -3040,7 +3037,7 @@
     "/usr/lib/postgresql/16/bin/initdb": {
       "libc.so.6": "/usr/lib/x86_64-linux-gnu/libc.so.6",
       "libicuuc.so.74": "/usr/lib/x86_64-linux-gnu/libicuuc.so.74.2",
-      "libpq.so.5": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16"
+      "libpq.so.5": "/usr/lib/x86_64-linux-gnu/libpq.so.5"
     },
     "/usr/lib/postgresql/16/bin/pg_controldata": {
       "libc.so.6": "/usr/lib/x86_64-linux-gnu/libc.so.6"
@@ -3049,7 +3046,7 @@
       "libc.so.6": "/usr/lib/x86_64-linux-gnu/libc.so.6",
       "libcrypto.so.3": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
       "liblz4.so.1": "/usr/lib/x86_64-linux-gnu/liblz4.so.1.9.4",
-      "libpq.so.5": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+      "libpq.so.5": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
       "libz.so.1": "/usr/lib/x86_64-linux-gnu/libz.so.1.3",
       "libzstd.so.1": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.5"
     },
@@ -3057,7 +3054,7 @@
       "libc.so.6": "/usr/lib/x86_64-linux-gnu/libc.so.6",
       "libcrypto.so.3": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
       "liblz4.so.1": "/usr/lib/x86_64-linux-gnu/liblz4.so.1.9.4",
-      "libpq.so.5": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+      "libpq.so.5": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
       "libz.so.1": "/usr/lib/x86_64-linux-gnu/libz.so.1.3",
       "libzstd.so.1": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.5"
     },
@@ -3333,7 +3330,7 @@
       "libm.so.6": "/usr/lib/x86_64-linux-gnu/libm.so.6",
       "libz.so.1": "/usr/lib/x86_64-linux-gnu/libz.so.1.3"
     },
-    "/usr/lib/x86_64-linux-gnu/libpq.so.5.16": {
+    "/usr/lib/x86_64-linux-gnu/libpq.so.5": {
       "libc.so.6": "/usr/lib/x86_64-linux-gnu/libc.so.6",
       "libcrypto.so.3": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
       "libgssapi_krb5.so.2": "/usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2.2",
@@ -14949,7 +14946,7 @@
         "/usr/lib/x86_64-linux-gnu/libm.so.6",
         "/usr/lib/x86_64-linux-gnu/libnettle.so.8.8",
         "/usr/lib/x86_64-linux-gnu/libp11-kit.so.0.3.1",
-        "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+        "/usr/lib/x86_64-linux-gnu/libpq.so.5",
         "/usr/lib/x86_64-linux-gnu/libresolv.so.2",
         "/usr/lib/x86_64-linux-gnu/libsasl2.so.2.0.25",
         "/usr/lib/x86_64-linux-gnu/libssl.so.3",
@@ -15033,7 +15030,7 @@
         "/usr/lib/x86_64-linux-gnu/liblz4.so.1.9.4",
         "/usr/lib/x86_64-linux-gnu/libnettle.so.8.8",
         "/usr/lib/x86_64-linux-gnu/libp11-kit.so.0.3.1",
-        "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+        "/usr/lib/x86_64-linux-gnu/libpq.so.5",
         "/usr/lib/x86_64-linux-gnu/libresolv.so.2",
         "/usr/lib/x86_64-linux-gnu/libsasl2.so.2.0.25",
         "/usr/lib/x86_64-linux-gnu/libssl.so.3",
@@ -15093,7 +15090,7 @@
         "/usr/lib/x86_64-linux-gnu/liblz4.so.1.9.4",
         "/usr/lib/x86_64-linux-gnu/libnettle.so.8.8",
         "/usr/lib/x86_64-linux-gnu/libp11-kit.so.0.3.1",
-        "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+        "/usr/lib/x86_64-linux-gnu/libpq.so.5",
         "/usr/lib/x86_64-linux-gnu/libresolv.so.2",
         "/usr/lib/x86_64-linux-gnu/libsasl2.so.2.0.25",
         "/usr/lib/x86_64-linux-gnu/libssl.so.3",
@@ -17447,10 +17444,11 @@
         "soname": "libpq.so.5"
       },
       "elf_inventory": "PRIOR_COMPONENT_RECORD; full library-resolution mapping missing",
-      "mode": "0555",
-      "mode_evidence": "PRESERVED_PRIOR_MANIFEST_MODE",
+      "layout_reconciliation": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1",
+      "mode": "0444",
+      "mode_evidence": "AUTHENTICATED_ARCHIVE_0644_NORMALIZED_AS_READ_NATIVE",
       "package": "libpq5",
-      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
       "physical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
       "recursive_dependency_inventory_paths": [
         "/lib64/ld-linux-x86-64.so.2",

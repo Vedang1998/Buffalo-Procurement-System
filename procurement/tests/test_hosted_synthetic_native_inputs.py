@@ -90,6 +90,27 @@ class NativeInputTests(unittest.TestCase):
         with self.assertRaises(native.NativeCapacityRefusal) as caught:native.require_native_capacity()
         self.assertEqual(caught.exception.evidence,result)
 
+    def test_libpq_layout_preserves_authenticated_bytes_and_uses_requested_name(self):
+        name='/usr/lib/x86_64-linux-gnu/libpq.so.5'
+        for value in (native.inventory(),native._proposed_inventory()):
+            selected=[r for r in value['rows'] if r['path']==name]
+            self.assertEqual(len(selected),1);row=selected[0]
+            self.assertEqual(row['mode'],'0444')
+            self.assertEqual(row['artifact_member'],'./usr/lib/x86_64-linux-gnu/libpq.so.5.16')
+            self.assertEqual(row['artifact_sha256'],'3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1')
+            self.assertEqual((row['bytes'],row['sha256']),(354488,'b4ba0da9e51354cf40a599e787f0942c98fc268cf29b51806c62770d8f2a2a71'))
+            self.assertFalse(any(r['path']==name+'.16' for r in value['rows']))
+        for deps in native._proposed_inventory()['resolved_dependencies'].values():
+            if 'libpq.so.5' in deps:self.assertEqual(deps['libpq.so.5'],name)
+
+    def test_loader_logical_name_can_materialize_a_different_authenticated_member(self):
+        stage=self.stage();selected=dict(row(),artifact_member='lib/libpq.so.5.16',path='/usr/lib/libpq.so.5')
+        stage.materialize_tar(archive(name=selected['artifact_member']),[selected])
+        with patch.object(native,'inventory',return_value={'rows':[selected]}):
+            with stage.verified_stream(selected) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
+        self.assertEqual((stage.path/'usr/lib/libpq.so.5').stat().st_mode&0o777,0o444)
+        self.assertFalse((stage.path/'usr/lib/libpq.so.5.16').exists())
+
     def test_proposed_inventory_totals_policy_and_alias_conflicts_are_not_authority(self):
         original=native._proposed_inventory()
         cases=[]
