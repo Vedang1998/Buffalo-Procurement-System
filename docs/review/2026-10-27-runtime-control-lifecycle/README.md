@@ -1,153 +1,185 @@
-# October 29 B2 capacity correction — combined Claude delta
+# October 29 combined Claude delta — B2 implemented, host inputs refused
 
-Owner approved the PG_PHASE-only128MiB option on2026-10-29. The implementation
-revises the fixed policy to `BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2` under
-`BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29`; historical V1 manifests/evidence are not
-reinterpreted. `b2-budget-change-control.json` records the exact decision and
-unchanged limits. New candidate identities and source-bound target measurement
-will be recorded in the evidence follow-up after publication.
+Frozen implementation: `e5e8a337476b7e0ffa678627e84c2b5ce82a744a`
 
-**REQUEST CHANGES remains in force. Privileged activation is DISABLED;
-credentials are WITHHELD; integrated acceptance is NON-GREEN.** The owner budget
-choice is resolved; technical B2 closure and all pending repairs require one
-combined independent delta review. No Claude tool or approval is claimed.
+Tree: `c73e1dbb9d57e59792b9fb449575b07033244476`
 
-The necessary delta since reviewed d863 includes B1/N7/N8/N10, V2 producer and
-receiver capacity enforcement, canonical sealed policy binding, unchanged per-file
-and other-policy bounds, and bounded codec/capture lifetimes. Codec wire bytes and
-hashes are unchanged. The owning capture closes its two input memfds before sealing
-the union. Tests cover exact scaled aggregate boundary, over-capacity, other-policy
-isolation, per-file and entry limits, relabeling, malformed capacity identity,
-integer overflow, receiver agreement, failed capture and cleanup.
+Branch: `codex/hosted-synthetic-acceptance`
 
-A fixed read-only workflow step now measures actual Ubuntu24.04 selectedPython/
-trustedPG16 capture, composition, serialization and adoption before the unconditional
-review gate. It does not execute PostgreSQL, namespaces, accounts or services.
-Process/heap/owned-memfd observations and shared-job counters are separately scoped;
-capacity or component memory fit is not whole-service or20s namespace proof.
-An exact-source freeze, target observation and combined review remain required.
+The documentation/evidence follow-up has a separate tree. Tests and observations
+below belong to the frozen implementation or their explicitly named predecessors.
+`oct29-b2-evidence.json` indexes raw results, failed attempts, reproduction scripts,
+publication verification and source identities.
 
-The October28 remediation details/results below are historical. Their B2 decision
-blocker is superseded by the owner approval and V2 implementation above; their
-source-attributed failures and other pending findings remain preserved.
+**REQUEST CHANGES remains in force. New combined review is PENDING. Privileged
+activation is DISABLED; credentials are WITHHELD; integrated acceptance is NON-GREEN.**
+The B2 owner capacity decision is resolved. A different, demonstrated native-input
+provisioning blocker now prevents actual phase capture on this GitHub image.
 
-## Received external review and preserved scope
+## Exact external-review baseline
 
-`external-review-d863bc7d.json` records the actual owner-supplied review of
+Review only the necessary delta since
 `d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea`, tree
-`31336c2aa583e6f68b3589c4dfe54578b3b956f3`, with evidence checkpoint
-`03035fff71d63adab5b36e6f775db3932edae1e7` / tree
-`44177adcde660cc0b8d194df7b0934eb109a952a`.
+`31336c2aa583e6f68b3589c4dfe54578b3b956f3`. Its evidence checkpoint was
+`03035fff71d63adab5b36e6f775db3932edae1e7`.
 
-Reviewer attribution: Claude Code container 2.1.312, session
-`session_01JyrJEUAi36GJ6AfNcmBBxV`; reviewer-reported get_session configured and
-served model `claude-opus-5-5`, effort high. Codex did not inspect that account.
-Claude retained six historical closures with no regression at d863; N2 and N3
-were accepted and N4 closed there. Runtime, worker-control exclusion and external
-cleanup stayed OPEN. New blocking findings were B1 and B2; N7–N10 are separately
-tracked in `findings.json`. Later changes do not inherit those approvals.
+The owner supplied the actual Claude Code container 2.1.312 review, session
+`session_01JyrJEUAi36GJ6AfNcmBBxV`, reported configured/served model
+`claude-opus-5-5`, effort high. Verdict: REQUEST CHANGES. Codex did not inspect
+that account. `external-review-d863bc7d.json` preserves the received attribution,
+findings, tests and execution limitations. No callable Claude channel or later
+approval is claimed.
 
-Claude reported 977 unprivileged tests: 966 passed and 11 B1 errors; real PID1
-11/11 and runtime component 3/3 passed in its separate environment. PG capture
-was read-only measurement, not execution. Claude did not reproduce systemd,
-sudo/account tools, real cgroup v2, GitHub execution, the full/startup/related
-suites or browser acceptance. Its Node 22.22.0 differed from the writer's runtime.
-The original review of 3c1ae555 and six closures at 5e62c8e3 remain historical.
+Six historical closures at 5e62/d863 remain recorded: PID1, credentials, numeric-PID
+reuse-window protocol, descriptor close boundary, memory-accounting disclosure and
+then-current event schema. N2/N3 were accepted and N4 closed at d863. These do not
+approve changed descendants. Runtime, worker-control exclusion and external cleanup
+remain OPEN. B1/B2/N7/N8/N10 are REPAIRED_PENDING_REVIEW, never writer-closed.
 
-## October28 remediation and decision history
+## Necessary implementation delta
 
-- **B1 / N1 — REPAIRED_PENDING_REVIEW.** Fixed, inventory-verified native stat
-  reads PID1's IPC/mount identities before and after the scan. Failures become
-  fixed refusal codes; tests are hermetic. Actual GitHub runner UID1001/PID1 UID0
-  and direct EACCES13 were observed. The new privileged stat path has NOT_RUN.
-- **B2 — OPEN.** Claude measured 105,340,350 composed bytes against 83,886,080.
-  Exact capture-fit measurement now precedes account reservation, binds the
-  selected interpreter, closes both captures and refuses capacity without a
-  quarantined account. That does not make the bundle fit. The real Ubuntu24.04/
-  native PG16 capture-fit driver is implemented but has NOT_RUN in this task.
-  `b2-budget-change-control.json` proposes a PG_PHASE-only 128 MiB cap; it is
-  NOT_APPLIED. Other 80 MiB bounds, 3,000 entries, 256 MiB/2 child processes,
-  512 MiB/64 aggregate tasks and 20-second deadline stay unchanged. Neither
-  capacity fit nor process RSS proves aggregate memory fit. No ICU dependency
-  is omitted and no accepted runtime input is repinned.
-- **N7 — REPAIRED_PENDING_REVIEW.** A separate pre-ACK exit drain requires canonical
-  source-bound terminal transport, exact service/path/process absence, retained
-  actor termination where available, fresh zero-OOM aggregate counters and closed
-  descriptors. Missing generation remains missing; operation remains FAILED.
-  Unknown transport or partial binding stays quarantined. Later account cleanup
-  uncertainty cannot be hidden by an external drain proof. Live cases have NOT_RUN.
-- **N8 — REPAIRED_PENDING_REVIEW.** Actual target inventory confirmed vfat EFI and
-  stacked autofs/binfmt. The repair permits only the fixed EFI path and explicitly
-  scans the fixed active binfmt root. O_PATH, mount ID, filesystem magic, held/named
-  identity, unchanged mountinfo and cleanup checks guard that access. Inactive or
-  other automounts refuse. A GitHub read-only component observed and closed the
-  active binfmt handle; the privileged ownership scan has NOT_RUN. Hidden autofs
-  is not claimed scanned; trusted administration must not overmount/lazy-unmount
-  during the scan. This is not atomic pathname binding.
-- **N9 — OPEN measurement risk.** The full native scan retains its 60-second bound.
-  No target scan has run, so timeout is not a demonstrated kernel/platform failure.
-- **N10 — REPAIRED_PENDING_REVIEW.** Only typed, definite pre-reservation ownership
-  collisions retry, at most three candidates under one shared scan/reservation
-  deadline. Incomplete coverage, timeout or cleanup uncertainty cannot retry.
+- **B2:** owner-approved change-control
+  `BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29` creates
+  `BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2`. Only the combined PG phase gains
+  134,217,728 regular-file bytes. V1 retains its historical 83,886,080-byte meaning
+  and is refused by current V2 receivers. A canonical sealed capacity record is
+  checked before applying the allowance; packet/object relabeling cannot promote
+  another policy. Incremental/final composition, pre-account fit, verification and
+  adoption agree. Other-policy/per-file 80 MiB, 3,000 entries, child 256 MiB/pids 2,
+  service 512 MiB/tasks 64, namespace 20 seconds and generic codec 512 MiB stay fixed.
+- **Copy lifetime:** encoding uses one join and incremental hashing; parsing avoids
+  a whole payload copy; validation returns the already checked entries. Wire bytes,
+  hashes and integrity checks stay unchanged. Owning phase capture closes both input
+  memfds before sealing the combined image. Borrowed helpers retain caller ownership.
+  Cleanup failures prevent a result or execution grant.
+- **B1/N7/N8/N10:** the previously published native PID1 stat/refusal mapping,
+  pre-ACK exit drain, fixed active-mount coverage and bounded definite-collision
+  retry are included in this one delta. Their live privileged paths have NOT_RUN.
+  N9's bounded full ownership scan is still unmeasured.
+- **Observed socket event:** the target has optional `sock_throttled` in
+  `memory.events`. The explicit V2 parser retains all six required counters and
+  this separate pressure counter. Unknown/duplicate/malformed keys refuse; delta
+  keysets must match; nonzero socket pressure is a distinct refusal. It is not
+  relabeled as OOM or malformed schema. Canonical Linux source URLs/hashes and
+  tests are in the evidence index. The old event-schema closure is historical;
+  this changed policy needs review.
+- **Target evidence:** fixed native ancestry and bounded source-frame observations
+  diagnose capture refusals without exception text, locals or arbitrary paths.
+  Known-disproven input trust now prevents unchanged capture retries. An independent
+  fixed PG-only capture measurement exists, but is also withheld when its own data
+  inputs fail trust. This is not the rejected separate-root redesign or PG execution.
 
-The preceding d9c2670 delta preserves bounded source-bound failure evidence and
-rejects other-source fallback. The workflow now exports only bounded test counts,
-test/type/source-line failure identities and sanitized mount inventory. It excludes
-exception messages, locals and subtest parameter values. The hosted-only test error
-at edf8d12 was a hardcoded interpreter path; 3cbb2d3 fixes that test while retaining
-the actual production interpreter identity check and negative regression.
+## Actual target result and precise blocker
 
-## October28 source-bound validation history
+GitHub run [40913301918](https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40913301918)
+ran the frozen candidate on `ubuntu-24.04`, selected Python **3.13.5**.
+All **1,054 focused tests passed**. The measurement returned
+**REFUSED_NATIVE_INPUT_TRUST**, before account reservation, service creation,
+namespace work or native execution:
 
-At 3cbb2d3, GitHub run40699325717 executed1,033/1,033 diagnostics with zero
-failures/errors/skips. The exact workflow command separately passed1,033/1,033 in
-Cloud; startup10/10 passed there. Discovery2,597/131 modules is discovery only.
-The GitHub review gate intentionally exited78; real PID1 was skipped. This was
-not a privileged proof, full authoritative suite or browser acceptance.
+- Python interpreter, stdlib and library paths under
+  `/opt/hostedtoolcache/Python/3.13.5/x64` are UID 1001. `/opt`, toolcache and
+  several ancestors are mode `0777`.
+- PostgreSQL's fixed executable path has acceptable ownership metadata, but
+  `/usr/share`, `/usr/share/postgresql/16` and the required data files, including
+  `postgres.bki`, are mode `0777`. Executable metadata alone cannot establish the
+  required native closure.
 
-At preceding de34685, normal and scrubbed diagnostic runs each passed1,033; price17,
-snapshot20, related88 and startup10 also passed. These are separately attributed
-results, not tests rerun at the final candidate. The original checkout's pinned
-runner mode remains0600; related validation used a disposable exact-source0644
-clone and removed it without changing existing checkout permissions.
+Earlier a26 and 5d attempts reached `read_native`'s unchanged ownership predicate
+for Python. The d3 independent PG attempt reached the same predicate while reading
+its fixed data list. Their source-bound failures remain retained. The final run
+observed both conflicts together and skipped both known-failing captures.
 
-The10af37d hosted focused step failed with unavailable detailed counts. Theedf8d12
-run executed1,033:1,032 passed/one test error. Both failures remain indexed in the
-packet. Full supported final-candidate validation is still required after the
-blocking implementation/review prerequisites are met.
+Consequently, **no actual target combined byte total, entry count, composition,
+adoption or phase-memory fit is available**. Claude's prior 105,340,350-byte /786-entry
+measurement remains reviewer evidence, not this target's measurement. The selected
+native inputs were not accepted or assigned invented trusted hashes. The final
+read-only observation took 0.020546 seconds, had matching descriptor inventory and
+created no account/service/database/privileged child. Shared-job counter deltas were
+zero, including socket pressure. That existing job cgroup is not an owned service;
+its memory usage/peak cannot establish the 512 MiB service gate.
 
-## Exact activation and review boundary (unchanged)
+The current host recipe cannot meet the unchanged native-input trust contract.
+No global chmod/chown, toolcache copying-as-provenance, alternative interpreter,
+package upgrade, input repinning or kernel-policy change was attempted. The smallest
+proposed extension is **separately reviewed, provenance-verified native provisioning**:
+fixed same-version Python 3.13.5 and PostgreSQL 16 artifacts, authenticated publisher
+digests, an owned non-writable native closure, native-only provisioning and exact
+cleanup within existing budgets. This needs a scoped provisioning/input decision;
+the present account/source/cgroup approval does not supply that authority or those
+artifact identities. No new provisioning implementation or activation is included.
 
-Review only the material delta since the actual d863 review, including d9c2670
-and these repairs, plus the approved V2 B2 change and shared codec/lifetime delta. Do not repeat the
-unchanged architecture review. Recheck impact on the six historical closures,
-pre-account ordering, native stat/find authority, collision retry, pre-ACK cleanup,
-N8 coverage, failure evidence and exact activation wiring.
+## Validation and memory evidence
+
+| Executed source | Actual validation |
+| --- | --- |
+| e5e8a33 | GitHub 1,054/1,054; local affected 199/199; startup 10/10; inert CLI exits 78 |
+| d3fad54 | GitHub 1,053/1,053; local affected 198/198; startup 10/10; PG data trust refusal |
+| 5d548af | GitHub 1,050/1,050; local affected 127/127; startup 10/10; Python trust/schema refusal |
+| a26a1f8 | GitHub and local scrubbed each 1,048/1,048; startup 10/10; initial capture refusal |
+| 1dfd7a9 | Local normal/scrubbed each 1,048/1,048; related 88, price 17, snapshot 20, startup 10; first GitHub run 1,047 passed/one failed |
+
+The first hosted failure was a mocked capture fixture retaining actual process-
+lifetime RSS/shared-job inputs. Its public result identified the assertion but did
+not emit the exact returned status. The repair isolates those unit inputs and adds
+an explicit oversized-memory refusal; live measurements still use actual inputs.
+Pre-freeze writer/test-helper failures are separately retained. No failed result was
+converted into a passing one by moving it to a newer commit.
+
+Final discovery is **2,618 tests in 131 modules, zero executed by discovery**. Floors
+increased by 21; no test population was removed. The 199 affected tests include PG
+81, runtime 33, workflow 16, cgroup 38 and observer 31. Boundary tests use actual
+sealed bundles with scaled aggregate thresholds, assert the exact production
+constants, exercise exact/+1 limits, policy/per-file/entry isolation, receiver
+agreement, malformed sealed records, provenance, integer overflow and cleanup.
+
+The frozen 16 MiB codec experiment measured **51,256,490 traced peak bytes**, versus
+**83,901,933** at the clean 02e6 baseline. Process peak RSS was 86,744 versus 104,156
+KiB; owned memfd allocation was 16,781,312 bytes in both. Bundle and manifest hashes
+were identical, and descriptors closed. This is a scaled codec component, **not**
+actual combined-phase or whole-service memory proof. The current source-bound raw
+record is `oct29-b2-codec-frozen.json`.
+
+The full authoritative supported suite has NOT_RUN at this candidate. Historical
+failed/full and component results remain attributed to their original sources. The
+known unchanged native-Cloud pg_dump refusal was not repeated.
+
+## One combined re-review and exact activation boundary
 
 ```bash
 git fetch --no-tags origin refs/heads/codex/hosted-synthetic-acceptance
-git rev-parse 3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c 3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c^{tree}
-git diff d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea 3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
+git rev-parse e5e8a337476b7e0ffa678627e84c2b5ce82a744a e5e8a337476b7e0ffa678627e84c2b5ce82a744a^{tree}
+git diff d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea e5e8a337476b7e0ffa678627e84c2b5ce82a744a -- .github/workflows/hosted-synthetic-acceptance.yml procurement/tools procurement/tests
 ```
 
-The bootstrap CLI still unconditionally exits78. The workflow cannot reach live
-service or PID1 execution. Its obsolete user-service body is unreachable and is
-not the proposed PG activation. Dormant
-`hosted_synthetic_identity.postgres_version_activation_entry([repository,"push",ref,commit])`
-selects the dedicated identity, preflights, and runs only
-`--native-bootstrap-postgres-version` through the reviewed native privilege-drop
-chain. `run_lifecycle_case(...,diagnostic="postgres-version")` retains the six fixed
-lifecycle cases. Exact published activation wiring needs independent review before
-use; no caller-supplied PASS flag or old conditional approval enables it.
+Claude should review that necessary delta: B1/B2/N7/N8/N10, the sealed capacity and
+copy-lifetime changes, measured limitations, socket policy, impact on the six old
+closures, and exact activation wiring. Do not repeat unchanged architecture review
+or inherit approval for later code. Internal read-only Codex inspections are labeled
+as such and do not satisfy this review.
 
-After B2 and applicable review gates close, the bounded credential-free proof is
-already owner-authorized; no second routine approval is needed. It must bind the
-actual generation's identity, enrollment, fixed FD execution, resources and cleanup.
-This remains separate from worker adversarial proof, full runtime closure,
-sentinel/release and browser/Backup V2/APPLY/DRAFT/packet/restart/restore acceptance.
-The canonical two DRAFTs, three lines, 14 members and $282+$7=$289 have NOT_RUN here.
-Railway, current business data, price activation/cutover and purchasing authority
-remain separate and unproven. No deployment or production action is authorized.
+The workflow calls the bootstrap CLI that unconditionally exits 78. It cannot reach
+live service/PID1 execution. Its obsolete user-service body after that gate is
+unreachable and is not the proposed PostgreSQL activation. The dormant exact entry
+is `hosted_synthetic_identity.postgres_version_activation_entry([repository,"push",ref,commit])`,
+which selects the dedicated identity, performs pre-account checks and runs only
+`--native-bootstrap-postgres-version` through the native privilege-drop chain.
+`run_lifecycle_case(..., diagnostic="postgres-version")` retains the six fixed cases.
+No PASS flag enables it. Current native-input conflicts independently make it
+ineligible, even if a subset of repairs receives review approval.
+
+Next executable action: the one read-only Claude delta review above, with the
+native-provisioning blocker explicitly retained. A separately approved native-input
+contract and its exact implementation/wiring must be reviewed before activation.
+Once applicable prerequisites/review pass, the bounded credential-free proof is
+already authorized; no second routine owner approval is needed for that proof.
+
+Runtime/control exclusion/external cleanup, actual PG execution, whole-service
+resources, sentinel/release, browser confirmation/Backup V2/APPLY/review/edit/reject/
+DRAFT/packet/restart/restore and full authoritative validation remain open. The
+canonical two DRAFTs, three lines, 14 members and $282+$7=$289 have NOT_RUN here.
+Railway and commercial readiness remain separate. App source, locks, accepted pins,
+PHASE_STATUS, main and PR #24 are unchanged; no production/purchasing action occurred.
 
 ## Earlier component history (scope and historical evidence retained)
 

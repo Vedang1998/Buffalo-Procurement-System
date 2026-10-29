@@ -1,0 +1,230 @@
+{
+  "commit": "a26a1f8aae6bd579d72064d2c11c4bcc976221c8",
+  "run": "40909915635",
+  "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40909915635",
+  "jobs": [
+    {
+      "job": "123574763189",
+      "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40909915635/job/123574763189",
+      "steps": [
+        {
+          "name": "Set up job",
+          "number": "1",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:16:25Z",
+          "completed-at": "2026-10-29T16:16:26Z"
+        },
+        {
+          "name": "Check out exact event source",
+          "number": "2",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:16:26Z",
+          "completed-at": "2026-10-29T16:16:27Z"
+        },
+        {
+          "name": "Verify trusted source before repository code",
+          "number": "3",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:16:27Z",
+          "completed-at": "2026-10-29T16:16:27Z"
+        },
+        {
+          "name": "Prepare Python for the diagnostic",
+          "number": "4",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:16:27Z",
+          "completed-at": "2026-10-29T16:16:36Z"
+        },
+        {
+          "name": "Read-only target ownership-scan prerequisites",
+          "number": "5",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:16:36Z",
+          "completed-at": "2026-10-29T16:16:37Z"
+        },
+        {
+          "name": "Focused source and diagnostic validation",
+          "number": "6",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:16:37Z",
+          "completed-at": "2026-10-29T16:17:22Z"
+        },
+        {
+          "name": "Read-only PostgreSQL phase capture and memory measurement",
+          "number": "7",
+          "conclusion": "failure",
+          "started-at": "2026-10-29T16:17:22Z",
+          "completed-at": "2026-10-29T16:17:26Z"
+        },
+        {
+          "name": "Review gate before hosted execution",
+          "number": "8",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:17:26Z",
+          "completed-at": "2026-10-29T16:17:26Z"
+        },
+        {
+          "name": "Credential-free real PID1 lifecycle regression",
+          "number": "9",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:17:26Z",
+          "completed-at": "2026-10-29T16:17:26Z"
+        },
+        {
+          "name": "Post Prepare Python for the diagnostic",
+          "number": "17",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:17:26Z",
+          "completed-at": "2026-10-29T16:17:26Z"
+        },
+        {
+          "name": "Post Check out exact event source",
+          "number": "18",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:17:26Z",
+          "completed-at": "2026-10-29T16:17:26Z"
+        },
+        {
+          "name": "Complete job",
+          "number": "19",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:17:26Z",
+          "completed-at": "2026-10-29T16:17:26Z"
+        }
+      ],
+      "reports": [
+        {
+          "sha256": "3681f646672ff8fffaf87457223abb2a2e2c8f8ec338dbcf00654296a4b9aaae",
+          "report": {
+            "account_mutations": 0,
+            "capture_fit": "REFUSED_COUNTER_SCHEMA",
+            "commit": "a26a1f8aae6bd579d72064d2c11c4bcc976221c8",
+            "credential_release": "WITHHELD",
+            "elapsed_seconds": 2.67647,
+            "execution_authority": false,
+            "failure_type": "NamespaceProofError",
+            "memory_stages": [
+              {
+                "child_process_peak_rss_bytes": 50466816,
+                "process_cumulative_peak_rss_bytes": 50466816,
+                "shared_job": {
+                  "scope": "SHARED_JOB_CGROUP_NOT_OWNED_SERVICE",
+                  "status": "REFUSED_COUNTER_SCHEMA"
+                },
+                "stage": "BEFORE_CAPTURE",
+                "traced_current_bytes": 0,
+                "traced_peak_bytes": 0
+              }
+            ],
+            "namespace_deadline_proof": "NOT_RUN",
+            "native_execution": "NOT_RUN",
+            "owned_descriptors_closed": true,
+            "privileged_processes_started": 0,
+            "service_limits_applied": "NOT_RUN_REVIEW_REQUIRED",
+            "shared_job_zero_oom": "NOT_PROVEN",
+            "tree": "7c9b77cb19f7796245c4b3a226dcab59f063a06a",
+            "whole_service_memory": "NOT_PROVEN"
+          }
+        },
+        {
+          "sha256": "69a46a0482dade40c9d1403ecda971bcab9855c66f166c4a5b64417ad9529044",
+          "report": {
+            "discovered": 1048,
+            "error_events": 0,
+            "executed": 1048,
+            "expected_failures": 0,
+            "failure_events": 0,
+            "observations": [],
+            "omitted_observations": 0,
+            "passed_methods": 1048,
+            "scope": "DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF",
+            "skipped": 0,
+            "unexpected_successes": 0
+          }
+        },
+        {
+          "sha256": "acf9a27711dff91a3ea5946a0c67cb878a7e6c98654ffa5bf14a94eb8b637bd9",
+          "report": {
+            "account_mutations": 0,
+            "active_binfmt_observation": "ACTIVE_BINFMT_FD_OBSERVED_AND_CLOSED",
+            "commit": "a26a1f8aae6bd579d72064d2c11c4bcc976221c8",
+            "credential_release": "WITHHELD",
+            "direct_pid1_namespace_read": {
+              "ipc": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              },
+              "mnt": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              }
+            },
+            "execution_authority": false,
+            "filesystem_counts": {
+              "autofs": 1,
+              "binfmt_misc": 1,
+              "bpf": 1,
+              "cgroup2": 1,
+              "configfs": 1,
+              "debugfs": 1,
+              "devpts": 1,
+              "devtmpfs": 1,
+              "efivarfs": 1,
+              "ext4": 2,
+              "fusectl": 1,
+              "hugetlbfs": 1,
+              "mqueue": 1,
+              "proc": 1,
+              "pstore": 1,
+              "securityfs": 1,
+              "sysfs": 1,
+              "tmpfs": 4,
+              "tracefs": 1,
+              "vfat": 1
+            },
+            "fixed_mount_points": {
+              "/": [
+                "ext4"
+              ],
+              "/boot/efi": [
+                "vfat"
+              ],
+              "/proc": [
+                "proc"
+              ],
+              "/proc/sys/fs/binfmt_misc": [
+                "autofs",
+                "binfmt_misc"
+              ],
+              "/sys": [
+                "sysfs"
+              ]
+            },
+            "mountinfo_sha256": "2cf43b51aa8dec48e37df6cca1b7ac88f681f4013bb3b4f14376554c7215780f",
+            "namespace_operations": 0,
+            "non_proc_mounts_beneath_proc": [
+              {
+                "filesystem": "autofs",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              },
+              {
+                "filesystem": "binfmt_misc",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              }
+            ],
+            "operator_uid": 1001,
+            "ownership_scan": "NOT_RUN_REVIEW_REQUIRED",
+            "ownership_scan_mount_policy": "SCHEMA_AND_FIXED_MOUNT_READBACK_OBSERVED",
+            "pid1_uid": 0,
+            "privileged_processes_started": 0,
+            "refusal": null,
+            "repaired_native_stat_regression": "NOT_RUN_REVIEW_REQUIRED",
+            "root_owned_pid1_condition": "MET",
+            "tree": "7c9b77cb19f7796245c4b3a226dcab59f063a06a"
+          }
+        }
+      ],
+      "raw_page_sha256": "839e3580bef7b29df20058999979f5eb4fa372e60b52fe86383f4d88961eafbf"
+    }
+  ]
+}

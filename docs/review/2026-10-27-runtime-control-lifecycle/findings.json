@@ -44,7 +44,7 @@
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -89,7 +89,7 @@
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -127,7 +127,7 @@
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -164,7 +164,7 @@
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -193,7 +193,7 @@
         "disposition": "OPEN_KEPT"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -230,7 +230,7 @@
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -257,7 +257,7 @@
         "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN",
         "d1b8124:66 PG runtime,35 image,21 shared runtime component tests; phase-only locale proof and actual disposable descriptor failure paths; native exec NOT_RUN"
       ],
-      "remaining": "V2 PG_PHASE-only128MiB implemented under explicit owner approval; target capture/memory and delta review pending. Native PG execution and full application/browser closure NOT_RUN/OPEN.",
+      "remaining": "V2 approved128MiB policy implemented/tested. Actual target capture fails unchanged trust: runner-owned Python and writable PG data/ancestors. Combined byte/entry/memory fit, native execution and full application/browser closure unproven.",
       "d863_external_review": {
         "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
@@ -265,7 +265,7 @@
         "disposition": "OPEN_KEPT"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -283,7 +283,7 @@
         "test_malformed_counters_refuse",
         "test_oom_increment_or_any_decrease_refuses"
       ],
-      "remaining": "Exact six-key versioned schema retained. Unknown keys fail compatibility; no alleged observed future-kernel failure or ignored safety event",
+      "remaining": "Historical six-key closure at5e62/d863 preserved. Actual target adds sock_throttled. New V2 retains six required keys and optional socket-pressure value, requires zero socket pressure, identical delta keysets; unknown/malformed keys refuse. New policy NOT independently reviewed.",
       "closure": {
         "commit": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
         "tree": "6271745239da49a24e3664ed2623977a7d21de07",
@@ -302,9 +302,10 @@
         "disposition": "VERIFIED_CLOSED_KEPT_NO_REGRESSION"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
-        "historical_disposition_preserved": true
+        "historical_disposition_preserved": true,
+        "impact": "MATERIAL_PARSER_POLICY_REVISION_REQUIRES_REVIEW; no historical closure extended"
       }
     },
     {
@@ -333,7 +334,7 @@
         "disposition": "OPEN_KEPT"
       },
       "current_descendant_review": {
-        "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
+        "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
         "status": "PENDING_DELTA_REVIEW",
         "historical_disposition_preserved": true
       }
@@ -344,8 +345,8 @@
   "frozen_evidence": "oct27-postgres-version-repaired-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
-  "independent_re_review": "REQUEST_CHANGES_AT_d863; B2 owner capacity decision resolved2026-10-29; new combined technical delta pending validation/review; no Claude call or approval claimed",
-  "current_delta": "B1 native PID1 stat; N7 pre-ACK drain; N8 active mount coverage; N10 bounded collision retry; V2 PG_PHASE-only128MiB sealed capacity policy, producer/receiver enforcement, bounded codec copies/input lifetime and real target capture/memory measurement. No activation.",
+  "independent_re_review": "REQUEST_CHANGES at reviewed d863; ONE combined new delta ready at e5e8a33; no new Claude review received or callable channel claimed",
+  "current_delta": "Approved V2 PG_PHASE-only128MiB; sealed producer/receiver capacity; bounded codec copies/input lifetimes; B1/N7/N8/N10 pending repairs; strict optional zero socket-pressure counter revision; source-bound native input refusal observations. Current GitHub Python and PG data fail unchanged trust; no activation.",
   "new_findings": [
     {
       "id": "N1",
@@ -463,8 +464,8 @@
         "hosted_synthetic_identity.py:inspect_account_platform"
       ],
       "current_validation": "42 preflight tests; target direct EACCES observed; native privileged stat NOT_RUN",
-      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
-      "evidence": "oct28-claude-remediation-evidence.json"
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "evidence": "oct29-b2-evidence.json"
     },
     {
       "id": "B2",
@@ -478,9 +479,9 @@
         "hosted_synthetic_identity.py:run_provisioned_candidate",
         "hosted_synthetic_runtime_regression.py:run_postgres_fit"
       ],
-      "current_validation": "125 runtime/PG/workflow causal tests in progress; actual target capture/memory pending; no live native execution",
-      "candidate": "WORKTREE_DESCENDANT_OF_02e6ff8",
-      "evidence": "oct28-claude-remediation-evidence.json",
+      "current_validation": "81 PG/runtime policy tests within1054/1054 GitHub focused tests; exact/scaled boundary+receiver+integrity+cleanup. Real combined capture NOT_MEASURED because actual native inputs fail existing trust. No source/byte/memory equivalence inferred from reviewer105340350B.",
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "evidence": "oct29-b2-evidence.json",
       "change_control": "b2-budget-change-control.json",
       "owner_decision": "APPROVED2026-10-29_PG_PHASE_ONLY128MiB"
     },
@@ -497,8 +498,8 @@
         "hosted_synthetic_lifecycle.py:_quarantined"
       ],
       "current_validation": "31 observer/28 lifecycle/37 bootstrap regressions; actual lifetime cleanup NOT_RUN",
-      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
-      "evidence": "oct28-claude-remediation-evidence.json"
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "evidence": "oct29-b2-evidence.json"
     },
     {
       "id": "N8",
@@ -511,8 +512,8 @@
         "hosted_synthetic_account_preflight.py:_mount_plan/_open_binfmt/_scan_mount_lease/inspect_ownership/observe_scan_host"
       ],
       "current_validation": "42 preflight regressions; same-job fixed mount readback/closure at3cbb2d3; native ownership scan NOT_RUN",
-      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
-      "evidence": "oct28-claude-remediation-evidence.json"
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "evidence": "oct29-b2-evidence.json"
     },
     {
       "id": "N9",
@@ -540,17 +541,47 @@
         "hosted_synthetic_account_preflight.py:OwnershipCollision"
       ],
       "current_validation": "23 identity/42 preflight regressions; at most3 definite collisions, shared scan/reservation deadline; no retry of uncertainty",
-      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
-      "evidence": "oct28-claude-remediation-evidence.json"
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "evidence": "oct29-b2-evidence.json"
     }
   ],
   "current_candidate": {
-    "commit": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
-    "tree": "0cbeccf63ab37d32672a455867086358e2c7b134",
-    "evidence": "oct28-claude-remediation-evidence.json",
+    "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+    "evidence": "oct29-b2-evidence.json",
     "independent_review": "NOT_RECEIVED",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
-    "in_progress_descendant": "B2 V2 capacity and copy-lifetime delta; commit/tree to be recorded after freeze"
-  }
+    "combined_capture": "NOT_MEASURED_NATIVE_INPUT_TRUST_REFUSED",
+    "full_authoritative": "NOT_RUN"
+  },
+  "prepared_combined_review_target": {
+    "implementation": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+    "baseline": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+    "status": "REVIEW_PENDING_NOT_SENT_BY_TOOL",
+    "evidence": "oct29-b2-evidence.json"
+  },
+  "target_input_blockers": [
+    {
+      "id": "HOST-NATIVE-INPUT-TRUST",
+      "status": "OPEN",
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "evidence": "oct29-b2-evidence.json",
+      "observations": [
+        "Python3.13.5 binary/stdlib/library paths UID1001; /opt and toolcache ancestors0777",
+        "/usr/share and PostgreSQL16 data paths0777; executable path ownership alone is insufficient"
+      ],
+      "constraint": "Do not chmod/chown shared paths, trust mutable hashes, repin inputs or add privileged native provisioning without a new scoped contract",
+      "native_execution": "NOT_RUN"
+    },
+    {
+      "id": "HOST-SOCKET-COUNTER",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+      "policy": "BUFFALO_MEMORY_EVENTS_SIX_PLUS_ZERO_SOCKET_V2",
+      "observed": "sock_throttled=0 retained separately; unknown keys still refuse",
+      "whole_service_proof": "NOT_PROVEN"
+    }
+  ]
 }

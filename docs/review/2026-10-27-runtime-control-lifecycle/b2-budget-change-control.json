@@ -1,5 +1,5 @@
 {
-  "status": "OWNER_APPROVED_IMPLEMENTED_PENDING_TARGET_VALIDATION_AND_REVIEW",
+  "status": "OWNER_APPROVED_IMPLEMENTED_TARGET_TRUST_BLOCKED_REVIEW_PENDING",
   "finding": "B2",
   "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
   "reviewer_measurement": {
@@ -56,5 +56,36 @@
     "legacy_manifests": "V1 retains historical80MiB meaning; current V2 receivers refuse V1, never reinterpret it",
     "sealed_record": "exact code-owned capacity_policy included in canonical sealed identity; compare before selecting allowance; packet relabeling refuses"
   },
-  "copy_lifetime": "Single encode join and incremental hash; parser memoryview avoids full payload copies; validated entries reused. Owning capture closes both input memfds before composed sealing; borrowed helper retains caller ownership. Wire format, bytes and hashes unchanged."
+  "copy_lifetime": "Single encode join and incremental hash; parser memoryview avoids full payload copies; validated entries reused. Owning capture closes both input memfds before composed sealing; borrowed helper retains caller ownership. Wire format, bytes and hashes unchanged.",
+  "candidate": {
+    "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+    "evidence": "oct29-b2-evidence.json"
+  },
+  "actual_target_result": {
+    "run": "40913301918",
+    "focused_executed": 1054,
+    "focused_passed": 1054,
+    "capture_fit": "REFUSED_NATIVE_INPUT_TRUST",
+    "composed_regular_bytes": "NOT_MEASURED",
+    "composed_entries": "NOT_MEASURED",
+    "phase_memory_fit": "NOT_PROVEN",
+    "pg_only_capture": "NOT_RUN_NATIVE_INPUT_TRUST_REFUSED",
+    "reason": "runner-owned/writable Python inputs; writable PG data/ancestors",
+    "owned_descriptor_cleanup": "verified inventory unchanged; no account/service/database/probe process created",
+    "scope": "read-only target observation; not bootstrap/live containment"
+  },
+  "copy_measurement": {
+    "evidence": "oct29-b2-codec-frozen.json",
+    "synthetic_regular_bytes": 16777216,
+    "baseline_traced_peak_bytes": 83901933,
+    "candidate_traced_peak_bytes": 51256490,
+    "baseline_process_peak_rss_kib": 104156,
+    "candidate_process_peak_rss_kib": 86744,
+    "wire_and_manifest_hashes": "identical",
+    "owned_memfd_allocated_bytes": 16781312,
+    "owned_descriptors_closed": true,
+    "scope": "scaled codec component, not actual combined phase or service memory"
+  },
+  "required_next": "One combined Claude delta review since d863, and separately scoped provenance-verified native runtime provisioning decision. Current host must not be retried unchanged or activated."
 }

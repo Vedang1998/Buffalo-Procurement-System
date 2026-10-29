@@ -1,0 +1,209 @@
+{
+  "commit": "1dfd7a967e54334f22f7a850c99177ed17fc93bf",
+  "run": "40909254420",
+  "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40909254420",
+  "jobs": [
+    {
+      "job": "123572407794",
+      "url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40909254420/job/123572407794",
+      "steps": [
+        {
+          "name": "Set up job",
+          "number": "1",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:12:26Z",
+          "completed-at": "2026-10-29T16:12:27Z"
+        },
+        {
+          "name": "Check out exact event source",
+          "number": "2",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:12:27Z",
+          "completed-at": "2026-10-29T16:12:29Z"
+        },
+        {
+          "name": "Verify trusted source before repository code",
+          "number": "3",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:12:29Z",
+          "completed-at": "2026-10-29T16:12:30Z"
+        },
+        {
+          "name": "Prepare Python for the diagnostic",
+          "number": "4",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:12:30Z",
+          "completed-at": "2026-10-29T16:12:39Z"
+        },
+        {
+          "name": "Read-only target ownership-scan prerequisites",
+          "number": "5",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:12:39Z",
+          "completed-at": "2026-10-29T16:12:40Z"
+        },
+        {
+          "name": "Focused source and diagnostic validation",
+          "number": "6",
+          "conclusion": "failure",
+          "started-at": "2026-10-29T16:12:40Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        },
+        {
+          "name": "Read-only PostgreSQL phase capture and memory measurement",
+          "number": "7",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:13:33Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        },
+        {
+          "name": "Review gate before hosted execution",
+          "number": "8",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:13:33Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        },
+        {
+          "name": "Credential-free real PID1 lifecycle regression",
+          "number": "9",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:13:33Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        },
+        {
+          "name": "Post Prepare Python for the diagnostic",
+          "number": "17",
+          "conclusion": "skipped",
+          "started-at": "2026-10-29T16:13:33Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        },
+        {
+          "name": "Post Check out exact event source",
+          "number": "18",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:13:33Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        },
+        {
+          "name": "Complete job",
+          "number": "19",
+          "conclusion": "success",
+          "started-at": "2026-10-29T16:13:33Z",
+          "completed-at": "2026-10-29T16:13:33Z"
+        }
+      ],
+      "reports": [
+        {
+          "sha256": "8bb2dde36c222054c198b17e2672b696af3d339d90cb56c1b29bf8bb691b9d4c",
+          "report": {
+            "discovered": 1048,
+            "error_events": 0,
+            "executed": 1048,
+            "expected_failures": 0,
+            "failure_events": 1,
+            "observations": [
+              {
+                "exception": "AssertionError",
+                "frames": [
+                  {
+                    "file": "procurement/tests/test_hosted_synthetic_runtime.py",
+                    "line": 66
+                  }
+                ],
+                "kind": "FAILURE",
+                "test": "test_hosted_synthetic_runtime.HostedRuntimeTests.test_real_capture_fit_driver_has_no_namespace_or_native_execution"
+              }
+            ],
+            "omitted_observations": 0,
+            "passed_methods": 1047,
+            "scope": "DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF",
+            "skipped": 0,
+            "unexpected_successes": 0
+          }
+        },
+        {
+          "sha256": "14dfacc16fd779531a39e1a5424f6237f5cf9dc0c7a04da494095c37c6c3bcc1",
+          "report": {
+            "account_mutations": 0,
+            "active_binfmt_observation": "ACTIVE_BINFMT_FD_OBSERVED_AND_CLOSED",
+            "commit": "1dfd7a967e54334f22f7a850c99177ed17fc93bf",
+            "credential_release": "WITHHELD",
+            "direct_pid1_namespace_read": {
+              "ipc": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              },
+              "mnt": {
+                "errno": 13,
+                "result": "DIRECT_READ_REFUSED"
+              }
+            },
+            "execution_authority": false,
+            "filesystem_counts": {
+              "autofs": 1,
+              "binfmt_misc": 1,
+              "bpf": 1,
+              "cgroup2": 1,
+              "configfs": 1,
+              "debugfs": 1,
+              "devpts": 1,
+              "devtmpfs": 1,
+              "efivarfs": 1,
+              "ext4": 2,
+              "fusectl": 1,
+              "hugetlbfs": 1,
+              "mqueue": 1,
+              "proc": 1,
+              "pstore": 1,
+              "securityfs": 1,
+              "sysfs": 1,
+              "tmpfs": 4,
+              "tracefs": 1,
+              "vfat": 1
+            },
+            "fixed_mount_points": {
+              "/": [
+                "ext4"
+              ],
+              "/boot/efi": [
+                "vfat"
+              ],
+              "/proc": [
+                "proc"
+              ],
+              "/proc/sys/fs/binfmt_misc": [
+                "autofs",
+                "binfmt_misc"
+              ],
+              "/sys": [
+                "sysfs"
+              ]
+            },
+            "mountinfo_sha256": "50ef35665385447cb6be3920bf023ddf12d651b97593b4ed9a48dc3c18036813",
+            "namespace_operations": 0,
+            "non_proc_mounts_beneath_proc": [
+              {
+                "filesystem": "autofs",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              },
+              {
+                "filesystem": "binfmt_misc",
+                "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+              }
+            ],
+            "operator_uid": 1001,
+            "ownership_scan": "NOT_RUN_REVIEW_REQUIRED",
+            "ownership_scan_mount_policy": "SCHEMA_AND_FIXED_MOUNT_READBACK_OBSERVED",
+            "pid1_uid": 0,
+            "privileged_processes_started": 0,
+            "refusal": null,
+            "repaired_native_stat_regression": "NOT_RUN_REVIEW_REQUIRED",
+            "root_owned_pid1_condition": "MET",
+            "tree": "32ed38cd64b45b4ca8216c9ac6370d2d5cd68217"
+          }
+        }
+      ],
+      "raw_page_sha256": "263683c07fbf8579efe590b928ab83eb512e3ba53a7b01a98ab3d755030ecf7f"
+    }
+  ]
+}

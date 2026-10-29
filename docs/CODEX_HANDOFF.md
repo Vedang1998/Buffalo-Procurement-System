@@ -10,34 +10,68 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
-### 2026-10-29 B2 owner decision implemented; independent review still required
+### 2026-10-29 B2 implemented; exact GitHub native-input trust blocker
 
-Owner selected the combined PG_PHASE-only128MiB option. Change-control identity
-`BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29` revises the manifest to
-`BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2`; old V1 evidence retains its80MiB
-meaning and is refused by current receivers. The canonical sealed identity binds
-the exact allowance before producer/receiver checks. Diagnostic/application/
-PG-only and individual-file80MiB, entries3000, child256MiB/pids2, service512MiB/
-tasks64, namespace20s and generic codec512MiB remain unchanged.
+Frozen published candidate `e5e8a337476b7e0ffa678627e84c2b5ce82a744a`, tree
+`c73e1dbb9d57e59792b9fb449575b07033244476`. Ordinary publication/fresh fetch and unchanged
+main/PR24/recovery identities are in `docs/review/2026-10-27-runtime-control-lifecycle/oct29-b2-evidence.json`. This follow-up
+adds documentation/evidence only; its tree is separate and is not a tested source.
 
-The existing codec now avoids redundant full buffers without changing wire bytes
-or hashes. Owning phase capture closes both input memfds before sealing the union.
-Focused boundary, relabeling, integrity, cleanup and receiver tests cover the new
-policy. A fixed read-only Ubuntu24.04/Python3.13/trustedPG16 workflow measurement
-captures, composes, serializes and adopts actual bundles before the unconditional
-review gate. It reports process/heap/memfd/shared-job observations separately;
-none establishes whole-service memory, namespace execution or credential release.
-Exact frozen tests and target observations will be recorded in the evidence
-follow-up. The previous B2 authority blocker below is historical and resolved.
+Owner-approved `BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29` is implemented as sealed
+`BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2`:134,217,728 aggregate regular bytes
+only for the composed PG phase. V1 retains its historical80MiB meaning and is
+refused by V2 receivers. Other-policy/per-file80MiB,3,000 entries,256MiB/pids2
+child,512MiB/tasks64 aggregate,20s namespace and512MiB codec bounds are unchanged.
+Producer/receiver checks bind the policy inside canonical sealed bytes; relabeling
+cannot promote another bundle. Codec copies and owned input lifetimes are bounded
+without changing wire bytes or hashes. The owning phase closes both input memfds
+before combined sealing; borrowed component helpers retain caller ownership.
 
-B1/N7/N8/N10 and B2 require ONE combined Claude delta review since actual d863.
-The six historical closures and N2/N3/N4 dispositions are preserved at their
-reviewed sources; new impact is pending. Bootstrap activation and credentials
-remain disabled. Native PG execution, full authoritative supported suite and
-integrated browser/purchasing acceptance are NOT_RUN/NON-GREEN. No production,
-Railway, accepted input, lockfile, canonical phase or business authority changes.
+GitHub run40913301918 executed1,054/1,054 focused tests with zero failures/errors/
+skips. Local frozen affected199/199 and startup10/10 passed. Discovery2,618 across
+131 modules executes zero tests. Earlier1dfd normal/scrubbed1,048, related88,
+price17 and snapshot20 remain attributed to1dfd. Its first hosted run failed one
+mocked-memory fixture (1,047 passed/1 failed); the failure and repaired hermetic
+fixture/overflow negative are retained. No full authoritative PASS is claimed.
 
+Actual target input trust is disproven: selected Python3.13.5 files are UID1001
+beneath writable `/opt`/toolcache ancestors; `/usr/share`, PG16 data directories
+and required data files are0777. PG executable metadata alone passes, but the
+closure does not. Native `read_native` checks remain unchanged. Earlier direct
+capture attempts refused; current measurement preflights those fixed paths and
+does not repeat either known refusal. Combined byte/entry totals and memory fit
+are NOT_MEASURED/NOT_PROVEN. The reviewer's105,340,350B is prior evidence only.
 
+The actual extra `sock_throttled` memory event is now retained under an explicit
+V2 parser policy. Six keys stay required; unknown/duplicate/malformed counters
+refuse, delta keysets must match, and nonzero socket pressure has a distinct
+refusal. GitHub observed zero shared-job deltas; that is not owned-service proof.
+Historical Claude event-schema closure remains scoped to the old candidate.
+A frozen16MiB codec component measured51,256,490B traced peak versus83,901,933B
+baseline, with identical hashes and closed descriptors. It is not phase/service
+memory validation. No test account, service, database, browser or privileged
+child was created; final descriptor inventory matched.
+
+B1/B2/N7/N8/N10 remain REPAIRED_PENDING_REVIEW. Runtime/control-exclusion/external
+cleanup remain OPEN. ONE combined Claude delta since actual reviewed d863 is
+ready in the existing review README; no callable Claude tool or new approval is
+claimed. Its target is the frozen candidate above. Exact next action: read-only
+Claude delta review, plus a scoped provenance-verified native-runtime provisioning
+decision. Existing account/source/cgroup authority does not authorize new package
+provenance, global permission changes, or trusting copies from writable inputs.
+Smallest proposed extension: fixed same-version Python3.13.5/PG16 artifacts,
+authenticated publisher digests, a separately owned non-writable native closure,
+reviewed native-only provisioning and exact cleanup, within existing budgets.
+No such provisioning code/action has been introduced or activated.
+
+After that input prerequisite and applicable independent review close, the bounded
+credential-free proof remains already authorized; no second routine approval is
+needed. Current bootstrap/credentials stay disabled. Native PG execution, whole-
+service resources/cleanup, sentinel/release, browser/BackupV2/APPLY/DRAFT/packet/
+restart/restore and full supported authoritative validation remain NOT_RUN or
+NON-GREEN. App source,locks,accepted pins,PHASE_STATUS and protected refs are
+unchanged. Railway and commercial readiness retain their separate data/authority
+blockers. No automatic resumption or production/deployment authority is claimed.
 
 ### 2026-10-28 published remediation verified; B2 remains an authority blocker
 

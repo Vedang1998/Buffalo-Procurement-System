@@ -1,0 +1,17 @@
+{
+  "codec_sha256": "47a5c0d276d2578419ca3700c1ce743bbc043b127b5c7cb77a704e18d638e584",
+  "manifest_sha256": "0a647a842b1042cade75e08b2bd330c53d7d46046426e4e4565b71582981aa7f",
+  "owned_descriptors_closed": true,
+  "owned_memfd_allocated_bytes": 16781312,
+  "process_peak_rss_kib": 86744,
+  "scope": "SCALED_CODEC_COMPONENT_NOT_TARGET_SERVICE_MEMORY",
+  "seconds": 0.092,
+  "synthetic_regular_bytes": 16777216,
+  "traced_current_bytes": 16781035,
+  "traced_peak_bytes": 51256490,
+  "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+  "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+  "python": "Python 3.13.5",
+  "codec_source_sha256": "c3d0ac7533d048c59583336292cebd78f778d60e6c021accb9deb33683b04a75",
+  "driver_sha256": "982fd136fd3b5fe6a24ab1c16ab540f190105c17147f4cbe07567f055ccadabb"
+}

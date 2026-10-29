@@ -1,0 +1,19 @@
+test_artifact_routes_production_through_supervisor (test_replit_production_start.ReplitProductionStartupTests.test_artifact_routes_production_through_supervisor) ... ok
+test_main_never_starts_node_when_fastapi_readiness_fails (test_replit_production_start.ReplitProductionStartupTests.test_main_never_starts_node_when_fastapi_readiness_fails) ... Starting FastAPI procurement backend
+ERROR: Replit production startup failed closed: backend unavailable
+ok
+test_main_starts_node_only_after_fastapi_readiness (test_replit_production_start.ReplitProductionStartupTests.test_main_starts_node_only_after_fastapi_readiness) ... Starting FastAPI procurement backend
+FastAPI procurement backend is healthy; starting Node API service
+ok
+test_pyproject_does_not_block_replit_platform_uv_hook (test_replit_production_start.ReplitProductionStartupTests.test_pyproject_does_not_block_replit_platform_uv_hook) ... ok
+test_replit_build_uses_pinned_uv_without_obsolete_runtime_command (test_replit_production_start.ReplitProductionStartupTests.test_replit_build_uses_pinned_uv_without_obsolete_runtime_command) ... ok
+test_wait_for_fastapi_fails_closed_on_timeout (test_replit_production_start.ReplitProductionStartupTests.test_wait_for_fastapi_fails_closed_on_timeout) ... ok
+test_wait_for_fastapi_fails_if_backend_exits (test_replit_production_start.ReplitProductionStartupTests.test_wait_for_fastapi_fails_if_backend_exits) ... ok
+test_wait_for_fastapi_requires_health_before_returning (test_replit_production_start.ReplitProductionStartupTests.test_wait_for_fastapi_requires_health_before_returning) ... ok
+test_wait_for_services_fails_if_fastapi_dies_after_readiness (test_replit_production_start.ReplitProductionStartupTests.test_wait_for_services_fails_if_fastapi_dies_after_readiness) ... ok
+test_wait_for_services_returns_node_exit_code (test_replit_production_start.ReplitProductionStartupTests.test_wait_for_services_returns_node_exit_code) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.003s
+
+OK

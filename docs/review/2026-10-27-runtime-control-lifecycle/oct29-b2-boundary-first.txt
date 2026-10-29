@@ -1,0 +1,2042 @@
+test_codec_copy_reduction_keeps_exact_legacy_bytes_and_digest (test_hosted_synthetic_runtime.HostedRuntimeTests.test_codec_copy_reduction_keeps_exact_legacy_bytes_and_digest) ... ok
+test_compact_resume_reconstructs_exact_inventory_from_sealed_identity (test_hosted_synthetic_runtime.HostedRuntimeTests.test_compact_resume_reconstructs_exact_inventory_from_sealed_identity) ... ERROR
+test_consumer_cannot_relabel_current_host_root_as_projected_exec (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_cannot_relabel_current_host_root_as_projected_exec) ... ERROR
+test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) ... 
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='execution_authority') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='credential_release') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='old_root_detached') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='consumer_exec_verified') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='regular_bytes') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='generation') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='policy') ... ERROR
+  test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='root_identity') ... ERROR
+test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) ... ERROR
+test_copied_handle_cannot_close_original (test_hosted_synthetic_runtime.HostedRuntimeTests.test_copied_handle_cannot_close_original) ... ERROR
+test_delegated_entry_requires_runtime_before_exec_or_projection (test_hosted_synthetic_runtime.HostedRuntimeTests.test_delegated_entry_requires_runtime_before_exec_or_projection) ... ok
+test_diagnostic_postseal_constructor_failure_closes_new_descriptor (test_hosted_synthetic_runtime.HostedRuntimeTests.test_diagnostic_postseal_constructor_failure_closes_new_descriptor) ... ok
+test_distinct_library_candidates_refuse_instead_of_guessing (test_hosted_synthetic_runtime.HostedRuntimeTests.test_distinct_library_candidates_refuse_instead_of_guessing) ... ok
+test_dynamic_string_table_must_map_to_one_file_backed_segment (test_hosted_synthetic_runtime.HostedRuntimeTests.test_dynamic_string_table_must_map_to_one_file_backed_segment) ... ok
+test_dynamic_termination_and_bounds_are_required (test_hosted_synthetic_runtime.HostedRuntimeTests.test_dynamic_termination_and_bounds_are_required) ... ok
+test_elf_interpreter_and_needed_are_extracted_without_execution (test_hosted_synthetic_runtime.HostedRuntimeTests.test_elf_interpreter_and_needed_are_extracted_without_execution) ... ok
+test_equal_library_aliases_are_accepted_and_missing_libraries_refuse (test_hosted_synthetic_runtime.HostedRuntimeTests.test_equal_library_aliases_are_accepted_and_missing_libraries_refuse) ... ok
+test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes (test_hosted_synthetic_runtime.HostedRuntimeTests.test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes) ... 
+  test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes (test_hosted_synthetic_runtime.HostedRuntimeTests.test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes) (field='generation') ... ERROR
+test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes (test_hosted_synthetic_runtime.HostedRuntimeTests.test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes) ... ERROR
+test_identity_gate_precedes_every_projection_effect (test_hosted_synthetic_runtime.HostedRuntimeTests.test_identity_gate_precedes_every_projection_effect) ... ERROR
+test_interpreter_must_be_an_absolute_canonical_path (test_hosted_synthetic_runtime.HostedRuntimeTests.test_interpreter_must_be_an_absolute_canonical_path) ... ok
+test_needed_names_cannot_select_paths_or_loader_tokens (test_hosted_synthetic_runtime.HostedRuntimeTests.test_needed_names_cannot_select_paths_or_loader_tokens) ... ok
+test_real_capture_fit_driver_has_no_namespace_or_native_execution (test_hosted_synthetic_runtime.HostedRuntimeTests.test_real_capture_fit_driver_has_no_namespace_or_native_execution) ... ok
+test_real_capture_fit_unavailable_target_is_not_a_passing_substitute (test_hosted_synthetic_runtime.HostedRuntimeTests.test_real_capture_fit_unavailable_target_is_not_a_passing_substitute) ... ok
+test_replaced_resume_descriptor_stays_open_and_inheritable (test_hosted_synthetic_runtime.HostedRuntimeTests.test_replaced_resume_descriptor_stays_open_and_inheritable) ... ERROR
+test_sealed_bundle_refuses_write_and_has_no_writer_descriptor (test_hosted_synthetic_runtime.HostedRuntimeTests.test_sealed_bundle_refuses_write_and_has_no_writer_descriptor) ... ERROR
+test_search_override_and_injected_loader_tags_refuse (test_hosted_synthetic_runtime.HostedRuntimeTests.test_search_override_and_injected_loader_tags_refuse) ... ok
+test_supervisor_binds_report_to_its_own_generation_source_and_bundle (test_hosted_synthetic_runtime.HostedRuntimeTests.test_supervisor_binds_report_to_its_own_generation_source_and_bundle) ... ERROR
+test_user_owned_or_writable_native_source_is_not_promoted_to_trust (test_hosted_synthetic_runtime.HostedRuntimeTests.test_user_owned_or_writable_native_source_is_not_promoted_to_trust) ... ok
+test_wrong_architecture_class_and_truncated_tables_refuse (test_hosted_synthetic_runtime.HostedRuntimeTests.test_wrong_architecture_class_and_truncated_tables_refuse) ... ok
+test_capacity_integer_overflow_and_wrong_type_fail_closed (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capacity_integer_overflow_and_wrong_type_fail_closed) ... ERROR
+test_capacity_refusal_preserves_measurement_without_execution_authority (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capacity_refusal_preserves_measurement_without_execution_authority) ... ERROR
+test_capture_fit_closes_both_inputs_and_rebinds_source (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capture_fit_closes_both_inputs_and_rebinds_source) ... ERROR
+test_capture_rebinds_source_and_closes_inputs_before_return (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capture_rebinds_source_and_closes_inputs_before_return) ... ERROR
+test_captured_libc_locale_maps_are_data_not_elf (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_captured_libc_locale_maps_are_data_not_elf) ... ERROR
+test_combined_regular_byte_limit_is_not_sum_of_independent_limits (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_combined_regular_byte_limit_is_not_sum_of_independent_limits) ... ERROR
+test_conflicting_bytes_mode_or_provenance_refuse_without_seal (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_conflicting_bytes_mode_or_provenance_refuse_without_seal) ... ERROR
+test_consumer_separates_duplicate_locale_data_from_elf_count (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_consumer_separates_duplicate_locale_data_from_elf_count) ... ERROR
+test_entry_bound_3000_and_3001_is_independent_of_codec_limit (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_entry_bound_3000_and_3001_is_independent_of_codec_limit) ... ERROR
+test_final_source_drift_closes_both_inputs_and_unreturned_output (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_final_source_drift_closes_both_inputs_and_unreturned_output) ... ERROR
+test_fit_capture_failure_or_source_drift_still_closes_owned_inputs (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_fit_capture_failure_or_source_drift_still_closes_owned_inputs) ... ERROR
+test_fit_cleanup_failure_prevents_capacity_report (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_fit_cleanup_failure_prevents_capacity_report) ... ERROR
+test_generation_commit_and_tree_mismatch_refuse_before_merge (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_generation_commit_and_tree_mismatch_refuse_before_merge) ... ERROR
+test_input_close_failure_closes_other_input_before_any_composed_allocation (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_input_close_failure_closes_other_input_before_any_composed_allocation) ... ERROR
+test_invalid_phase_resume_closes_adopted_descriptor (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_invalid_phase_resume_closes_adopted_descriptor) ... ERROR
+test_later_mapping_of_same_locale_cannot_add_execute_permission (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_later_mapping_of_same_locale_cannot_add_execute_permission) ... ERROR
+test_legacy_and_malformed_sealed_capacity_records_refuse_on_receive (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_legacy_and_malformed_sealed_capacity_records_refuse_on_receive) ... ERROR
+test_locale_exception_never_applies_to_other_policies_paths_or_permissions (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_locale_exception_never_applies_to_other_policies_paths_or_permissions) ... ERROR
+test_native_capture_failure_closes_diagnostic_input (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_native_capture_failure_closes_diagnostic_input) ... ERROR
+test_object_and_packet_relabel_cannot_promote_other_policy (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_object_and_packet_relabel_cannot_promote_other_policy) ... ERROR
+test_other_policies_keep_scaled_80k_aggregate (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_other_policies_keep_scaled_80k_aggregate) ... ERROR
+test_owned_capture_closes_inputs_before_composed_seal (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_owned_capture_closes_inputs_before_composed_seal) ... ERROR
+test_pending_cancellation_closes_complete_untransferred_phase (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pending_cancellation_closes_complete_untransferred_phase) ... ERROR
+test_pg_only_bundle_cannot_claim_phase_runtime (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pg_only_bundle_cannot_claim_phase_runtime) ... ERROR
+test_phase_consumer_uses_same_actual_map_checks_with_separate_scope (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_consumer_uses_same_actual_map_checks_with_separate_scope) ... ERROR
+test_phase_individual_file_cannot_use_aggregate_allowance (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_individual_file_cannot_use_aggregate_allowance) ... ERROR
+test_phase_locale_metadata_cannot_expand_the_fixed_data_allowlist (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_locale_metadata_cannot_expand_the_fixed_data_allowlist) ... ERROR
+test_phase_policy_is_rejected_by_diagnostic_and_pg_only_entrypoints (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_policy_is_rejected_by_diagnostic_and_pg_only_entrypoints) ... ERROR
+test_phase_projection_refuses_existing_children_before_shared_mount_change (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_projection_refuses_existing_children_before_shared_mount_change) ... ERROR
+test_phase_projection_requires_actual_mapped_identity_before_effects (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_projection_requires_actual_mapped_identity_before_effects) ... ERROR
+test_phase_report_cannot_be_promoted_to_native_execution_or_diagnostic_scope (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_report_cannot_be_promoted_to_native_execution_or_diagnostic_scope) ... ERROR
+test_phase_resume_preserves_identity_and_closes_owned_fd (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_resume_preserves_identity_and_closes_owned_fd) ... ERROR
+test_phase_scaled_exact_boundary_and_receiver_agreement (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_scaled_exact_boundary_and_receiver_agreement) ... ERROR
+test_phase_source_inventory_must_match_pg_capture_source_binding (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_source_inventory_must_match_pg_capture_source_binding) ... ERROR
+test_postseal_constructor_failure_closes_only_new_descriptor (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_postseal_constructor_failure_closes_only_new_descriptor) ... ERROR
+test_pre_account_measurement_matches_actual_composed_bytes_and_parents (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pre_account_measurement_matches_actual_composed_bytes_and_parents) ... ERROR
+test_pre_account_measurement_refuses_capacity_without_sealing_or_mutating_inputs (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pre_account_measurement_refuses_capacity_without_sealing_or_mutating_inputs) ... ERROR
+test_regenerated_parent_count_is_bounded (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_regenerated_parent_count_is_bounded) ... ERROR
+test_revision_preserves_exact_unrelated_bounds (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_revision_preserves_exact_unrelated_bounds) ... ERROR
+test_sealed_union_keeps_both_exact_inputs_and_one_identity (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_sealed_union_keeps_both_exact_inputs_and_one_identity) ... ERROR
+test_shared_native_library_requires_complete_entry_equality (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_shared_native_library_requires_complete_entry_equality) ... ERROR
+test_source_native_category_collision_refuses (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_source_native_category_collision_refuses) ... ERROR
+test_wrong_capture_policy_refuses (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_wrong_capture_policy_refuses) ... ERROR
+test_bounded_ascii_module_data_required (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_bounded_ascii_module_data_required) ... ok
+test_capture_keeps_existing_entry_and_byte_limits (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_capture_keeps_existing_entry_and_byte_limits) ... ok
+test_capture_seals_all_native_and_generated_data_without_execution_authority (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_capture_seals_all_native_and_generated_data_without_execution_authority) ... ERROR
+test_changed_source_refuses_before_native_capture (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_changed_source_refuses_before_native_capture) ... ok
+test_complete_module_references_are_deduplicated_and_sorted (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_complete_module_references_are_deduplicated_and_sorted) ... ok
+test_complete_source_binding_repeated_before_and_after_native_reads (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_complete_source_binding_repeated_before_and_after_native_reads) ... ERROR
+test_constructor_failure_closes_already_sealed_bundle (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_constructor_failure_closes_already_sealed_bundle) ... ok
+test_data_file_cannot_smuggle_executable_image (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_data_file_cannot_smuggle_executable_image) ... ok
+test_default_timezone_includes_fixed_workflow_and_referenced_zones (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_default_timezone_includes_fixed_workflow_and_referenced_zones) ... ok
+test_diagnostic_policy_cannot_carry_postgres_identity (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_diagnostic_policy_cannot_carry_postgres_identity) ... ERROR
+test_diagnostic_receiver_rejects_postgres_before_touching_descriptor (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_diagnostic_receiver_rejects_postgres_before_touching_descriptor) ... ERROR
+test_exact_extension_controls_and_versions (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_exact_extension_controls_and_versions) ... ok
+test_explicit_postgres_resume_reconstructs_sealed_metadata (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_explicit_postgres_resume_reconstructs_sealed_metadata) ... ERROR
+test_extension_directory_requires_duplicates_and_version_drift_refuse (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_extension_directory_requires_duplicates_and_version_drift_refuse) ... ok
+test_extension_references_cannot_exceed_total_module_bound (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_extension_references_cannot_exceed_total_module_bound) ... ok
+test_failed_final_validation_closes_unreturned_memfd (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_failed_final_validation_closes_unreturned_memfd) ... ok
+test_failed_receive_closes_consumed_matching_descriptor (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_failed_receive_closes_consumed_matching_descriptor) ... ERROR
+test_failed_receive_keeps_foreign_descriptor_unchanged (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_failed_receive_keeps_foreign_descriptor_unchanged) ... ERROR
+test_initdb_system_collation_locale_program_cannot_be_silently_absent (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_initdb_system_collation_locale_program_cannot_be_silently_absent) ... ok
+test_missing_module_stopword_timezone_or_extension_script_refuses (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_missing_module_stopword_timezone_or_extension_script_refuses) ... ok
+test_native_dependencies_are_loaded_lazily_with_budget_checks (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_dependencies_are_loaded_lazily_with_budget_checks) ... ok
+test_native_locale_category_is_required_without_host_archive_fallback (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_locale_category_is_required_without_host_archive_fallback) ... ok
+test_native_metadata_mutation_refuses_sealed_identity (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_metadata_mutation_refuses_sealed_identity) ... ERROR
+test_native_policy_cannot_enter_diagnostic_or_claim_python_consumer_proof (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_policy_cannot_enter_diagnostic_or_claim_python_consumer_proof) ... ERROR
+test_native_root_trust_refusal_is_not_substituted (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_root_trust_refusal_is_not_substituted) ... ok
+test_no_path_fallback_for_missing_native_executable (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_no_path_fallback_for_missing_native_executable) ... ok
+test_non_elf_or_nonexecutable_native_program_refuses (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_non_elf_or_nonexecutable_native_program_refuses) ... ok
+test_partial_paths_expansions_and_unquoted_modules_refuse (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_partial_paths_expansions_and_unquoted_modules_refuse) ... ok
+test_pending_cancellation_closes_untransferred_result (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_pending_cancellation_closes_untransferred_result) ... ok
+test_pending_cancellation_with_close_failure_is_cleanup_refusal (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_pending_cancellation_with_close_failure_is_cleanup_refusal) ... ok
+test_postgres_receiver_rejects_diagnostic_policy (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_postgres_receiver_rejects_diagnostic_policy) ... ERROR
+test_repeated_native_dependency_paths_are_not_read_again (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_repeated_native_dependency_paths_are_not_read_again) ... ERROR
+test_sample_configuration_libdir_search_path_is_not_a_module_reference (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_sample_configuration_libdir_search_path_is_not_a_module_reference) ... ERROR
+test_stopword_assignment_requires_full_terminal (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_stopword_assignment_requires_full_terminal) ... ok
+test_timezone_directives_duplicate_or_unknown_fields_refuse (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_timezone_directives_duplicate_or_unknown_fields_refuse) ... ok
+test_timezone_size_and_line_bounds_refuse (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_timezone_size_and_line_bounds_refuse) ... ok
+test_timezone_traversal_and_absolute_paths_refuse (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_timezone_traversal_and_absolute_paths_refuse) ... ok
+test_wrong_bki_major_refuses (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_wrong_bki_major_refuses) ... ok
+
+======================================================================
+ERROR: test_compact_resume_reconstructs_exact_inventory_from_sealed_identity (test_hosted_synthetic_runtime.HostedRuntimeTests.test_compact_resume_reconstructs_exact_inventory_from_sealed_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 155, in test_compact_resume_reconstructs_exact_inventory_from_sealed_identity
+    packet=value.packet();packet['bundle']['descriptor']=fd
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 255, in packet
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 166, in test_compact_resume_reconstructs_exact_inventory_from_sealed_identity
+    value.close()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_cannot_relabel_current_host_root_as_projected_exec (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_cannot_relabel_current_host_root_as_projected_exec)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 227, in test_consumer_cannot_relabel_current_host_root_as_projected_exec
+    with self.assertRaises(ns.NamespaceProofError):runtime.verify_consumer(value,proof)
+                                                   ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 228, in test_consumer_cannot_relabel_current_host_root_as_projected_exec
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='execution_authority')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='credential_release')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='old_root_detached')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='consumer_exec_verified')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='regular_bytes')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='generation')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='policy')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields) (field='root_identity')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 189, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    runtime.verify_consumer(value,dict(base,**{field:changed}))
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 553, in verify_consumer
+    return _verify_consumer(runtime,root_observation,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 575, in _verify_consumer
+    _entries(runtime)
+    ~~~~~~~~^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_refuses_forged_authority_and_unbound_root_fields (test_hosted_synthetic_runtime.HostedRuntimeTests.test_consumer_refuses_forged_authority_and_unbound_root_fields)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 191, in test_consumer_refuses_forged_authority_and_unbound_root_fields
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_copied_handle_cannot_close_original (test_hosted_synthetic_runtime.HostedRuntimeTests.test_copied_handle_cannot_close_original)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 147, in test_copied_handle_cannot_close_original
+    value.verify()
+    ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 148, in test_copied_handle_cannot_close_original
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes (test_hosted_synthetic_runtime.HostedRuntimeTests.test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes) (field='generation')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 140, in test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes
+    with self.subTest(field=field),self.assertRaises(ns.NamespaceProofError):runtime._entries(value)
+                                                                             ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes (test_hosted_synthetic_runtime.HostedRuntimeTests.test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 141, in test_generation_commit_and_dependency_maps_are_bound_inside_sealed_bytes
+    finally:setattr(value,field,old);value.close()
+                                     ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_identity_gate_precedes_every_projection_effect (test_hosted_synthetic_runtime.HostedRuntimeTests.test_identity_gate_precedes_every_projection_effect)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 219, in test_identity_gate_precedes_every_projection_effect
+    patch.object(runtime,'_enter_projection') as project,self.assertRaises(ns.NamespaceProofError):runtime.enter_runtime(value)
+                                                                                                   ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 453, in enter_runtime
+    runtime.verify();ns._require(runtime.policy in (POLICY,APPLICATION_POLICY));ns._require_mapped_identity()
+    ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 221, in test_identity_gate_precedes_every_projection_effect
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_replaced_resume_descriptor_stays_open_and_inheritable (test_hosted_synthetic_runtime.HostedRuntimeTests.test_replaced_resume_descriptor_stays_open_and_inheritable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 171, in test_replaced_resume_descriptor_stays_open_and_inheritable
+    packet=value.packet();packet['bundle']['descriptor']=foreign
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 255, in packet
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 176, in test_replaced_resume_descriptor_stays_open_and_inheritable
+    finally:os.close(foreign);value.close()
+                              ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_sealed_bundle_refuses_write_and_has_no_writer_descriptor (test_hosted_synthetic_runtime.HostedRuntimeTests.test_sealed_bundle_refuses_write_and_has_no_writer_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 132, in test_sealed_bundle_refuses_write_and_has_no_writer_descriptor
+    self.assertTrue(runtime._entries(value))
+                    ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 133, in test_sealed_bundle_refuses_write_and_has_no_writer_descriptor
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_supervisor_binds_report_to_its_own_generation_source_and_bundle (test_hosted_synthetic_runtime.HostedRuntimeTests.test_supervisor_binds_report_to_its_own_generation_source_and_bundle)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 207, in test_supervisor_binds_report_to_its_own_generation_source_and_bundle
+    runtime.verify_report_binding(value,proof)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 636, in verify_report_binding
+    return _verify_report_binding(runtime,proof,(POLICY,APPLICATION_POLICY))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 640, in _verify_report_binding
+    runtime.verify()
+    ~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_runtime.py", line 213, in test_supervisor_binds_report_to_its_own_generation_source_and_bundle
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_capacity_integer_overflow_and_wrong_type_fail_closed (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capacity_integer_overflow_and_wrong_type_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_capacity_refusal_preserves_measurement_without_execution_authority (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capacity_refusal_preserves_measurement_without_execution_authority)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_capture_fit_closes_both_inputs_and_rebinds_source (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capture_fit_closes_both_inputs_and_rebinds_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_capture_rebinds_source_and_closes_inputs_before_return (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capture_rebinds_source_and_closes_inputs_before_return)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_captured_libc_locale_maps_are_data_not_elf (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_captured_libc_locale_maps_are_data_not_elf)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_combined_regular_byte_limit_is_not_sum_of_independent_limits (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_combined_regular_byte_limit_is_not_sum_of_independent_limits)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_conflicting_bytes_mode_or_provenance_refuse_without_seal (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_conflicting_bytes_mode_or_provenance_refuse_without_seal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_consumer_separates_duplicate_locale_data_from_elf_count (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_consumer_separates_duplicate_locale_data_from_elf_count)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_entry_bound_3000_and_3001_is_independent_of_codec_limit (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_entry_bound_3000_and_3001_is_independent_of_codec_limit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_final_source_drift_closes_both_inputs_and_unreturned_output (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_final_source_drift_closes_both_inputs_and_unreturned_output)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_fit_capture_failure_or_source_drift_still_closes_owned_inputs (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_fit_capture_failure_or_source_drift_still_closes_owned_inputs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_fit_cleanup_failure_prevents_capacity_report (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_fit_cleanup_failure_prevents_capacity_report)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_generation_commit_and_tree_mismatch_refuse_before_merge (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_generation_commit_and_tree_mismatch_refuse_before_merge)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_input_close_failure_closes_other_input_before_any_composed_allocation (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_input_close_failure_closes_other_input_before_any_composed_allocation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_invalid_phase_resume_closes_adopted_descriptor (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_invalid_phase_resume_closes_adopted_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_later_mapping_of_same_locale_cannot_add_execute_permission (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_later_mapping_of_same_locale_cannot_add_execute_permission)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_legacy_and_malformed_sealed_capacity_records_refuse_on_receive (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_legacy_and_malformed_sealed_capacity_records_refuse_on_receive)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_locale_exception_never_applies_to_other_policies_paths_or_permissions (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_locale_exception_never_applies_to_other_policies_paths_or_permissions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_native_capture_failure_closes_diagnostic_input (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_native_capture_failure_closes_diagnostic_input)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_object_and_packet_relabel_cannot_promote_other_policy (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_object_and_packet_relabel_cannot_promote_other_policy)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_other_policies_keep_scaled_80k_aggregate (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_other_policies_keep_scaled_80k_aggregate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_owned_capture_closes_inputs_before_composed_seal (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_owned_capture_closes_inputs_before_composed_seal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_pending_cancellation_closes_complete_untransferred_phase (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pending_cancellation_closes_complete_untransferred_phase)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_pg_only_bundle_cannot_claim_phase_runtime (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pg_only_bundle_cannot_claim_phase_runtime)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_consumer_uses_same_actual_map_checks_with_separate_scope (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_consumer_uses_same_actual_map_checks_with_separate_scope)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_individual_file_cannot_use_aggregate_allowance (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_individual_file_cannot_use_aggregate_allowance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_locale_metadata_cannot_expand_the_fixed_data_allowlist (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_locale_metadata_cannot_expand_the_fixed_data_allowlist)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_policy_is_rejected_by_diagnostic_and_pg_only_entrypoints (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_policy_is_rejected_by_diagnostic_and_pg_only_entrypoints)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_projection_refuses_existing_children_before_shared_mount_change (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_projection_refuses_existing_children_before_shared_mount_change)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_projection_requires_actual_mapped_identity_before_effects (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_projection_requires_actual_mapped_identity_before_effects)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_report_cannot_be_promoted_to_native_execution_or_diagnostic_scope (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_report_cannot_be_promoted_to_native_execution_or_diagnostic_scope)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_resume_preserves_identity_and_closes_owned_fd (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_resume_preserves_identity_and_closes_owned_fd)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_scaled_exact_boundary_and_receiver_agreement (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_scaled_exact_boundary_and_receiver_agreement)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_phase_source_inventory_must_match_pg_capture_source_binding (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_phase_source_inventory_must_match_pg_capture_source_binding)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_postseal_constructor_failure_closes_only_new_descriptor (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_postseal_constructor_failure_closes_only_new_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_pre_account_measurement_matches_actual_composed_bytes_and_parents (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pre_account_measurement_matches_actual_composed_bytes_and_parents)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_pre_account_measurement_refuses_capacity_without_sealing_or_mutating_inputs (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_pre_account_measurement_refuses_capacity_without_sealing_or_mutating_inputs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_regenerated_parent_count_is_bounded (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_regenerated_parent_count_is_bounded)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_revision_preserves_exact_unrelated_bounds (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_revision_preserves_exact_unrelated_bounds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_sealed_union_keeps_both_exact_inputs_and_one_identity (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_sealed_union_keeps_both_exact_inputs_and_one_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_shared_native_library_requires_complete_entry_equality (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_shared_native_library_requires_complete_entry_equality)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_source_native_category_collision_refuses (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_source_native_category_collision_refuses)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_wrong_capture_policy_refuses (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_wrong_capture_policy_refuses)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 319, in setUp
+    if e.path==runtime.SENTINEL else e for e in runtime._entries(value)]
+                                                ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 321, in setUp
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_capture_seals_all_native_and_generated_data_without_execution_authority (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_capture_seals_all_native_and_generated_data_without_execution_authority)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 114, in test_capture_seals_all_native_and_generated_data_without_execution_authority
+    value=self.capture()
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_complete_source_binding_repeated_before_and_after_native_reads (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_complete_source_binding_repeated_before_and_after_native_reads)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 244, in test_complete_source_binding_repeated_before_and_after_native_reads
+    value=pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_diagnostic_policy_cannot_carry_postgres_identity (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_diagnostic_policy_cannot_carry_postgres_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 148, in test_diagnostic_policy_cannot_carry_postgres_identity
+    finally:value.postgres=None;value.close()
+                                ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_diagnostic_receiver_rejects_postgres_before_touching_descriptor (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_diagnostic_receiver_rejects_postgres_before_touching_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 177, in test_diagnostic_receiver_rejects_postgres_before_touching_descriptor
+    value=self.capture()
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_explicit_postgres_resume_reconstructs_sealed_metadata (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_explicit_postgres_resume_reconstructs_sealed_metadata)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 191, in test_explicit_postgres_resume_reconstructs_sealed_metadata
+    value=self.capture();received=None;fd=None
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_failed_receive_closes_consumed_matching_descriptor (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_failed_receive_closes_consumed_matching_descriptor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 204, in test_failed_receive_closes_consumed_matching_descriptor
+    value=self.capture();fd=None
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_failed_receive_keeps_foreign_descriptor_unchanged (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_failed_receive_keeps_foreign_descriptor_unchanged)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 216, in test_failed_receive_keeps_foreign_descriptor_unchanged
+    value=self.capture();fd=os.open('/dev/null',os.O_RDONLY|os.O_CLOEXEC)
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_native_metadata_mutation_refuses_sealed_identity (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_metadata_mutation_refuses_sealed_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 225, in test_native_metadata_mutation_refuses_sealed_identity
+    value=self.capture();original=value.postgres
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_native_policy_cannot_enter_diagnostic_or_claim_python_consumer_proof (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_native_policy_cannot_enter_diagnostic_or_claim_python_consumer_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 232, in test_native_policy_cannot_enter_diagnostic_or_claim_python_consumer_proof
+    value=self.capture()
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_postgres_receiver_rejects_diagnostic_policy (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_postgres_receiver_rejects_diagnostic_policy)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 186, in test_postgres_receiver_rejects_diagnostic_policy
+    with self.assertRaises(ns.NamespaceProofError):pg.receive_postgres(value.packet())
+                                                                       ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 255, in packet
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 188, in test_postgres_receiver_rejects_diagnostic_policy
+    finally:value.close()
+            ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 249, in close
+    self.verify()
+    ~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_repeated_native_dependency_paths_are_not_read_again (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_repeated_native_dependency_paths_are_not_read_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 303, in test_repeated_native_dependency_paths_are_not_read_again
+    value=pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+======================================================================
+ERROR: test_sample_configuration_libdir_search_path_is_not_a_module_reference (test_hosted_synthetic_postgres_runtime.PostgresRuntimeTests.test_sample_configuration_libdir_search_path_is_not_a_module_reference)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 135, in test_sample_configuration_libdir_search_path_is_not_a_module_reference
+    value=self.capture(values)
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 70, in capture
+    return pg.capture_postgres('a'*64,Path('/fixture'),BINDING)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 124, in capture_postgres
+    try:return guarded()
+               ~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 122, in guarded
+    result=_capture(generation,root,binding)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 220, in _capture
+    runtime._entries(result);return result
+    ~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 401, in _entries
+    entries=runtime.verify()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_runtime.py", line 244, in verify
+    ns._require(sealed==expected,'runtime_identity_refused')  # Bind object policy before its allowance.
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _require() takes 1 positional argument but 2 were given
+
+----------------------------------------------------------------------
+Ran 105 tests in 0.195s
+
+FAILED (errors=73)

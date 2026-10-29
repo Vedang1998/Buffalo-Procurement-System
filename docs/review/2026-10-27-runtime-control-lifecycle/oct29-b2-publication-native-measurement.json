@@ -1,0 +1,21 @@
+{
+  "base": "5d548af046122f1b46b343ad7ce5fec5d7147376",
+  "published_commit": "d3fad5414101adc9cef50f8e004dad0e649c9e67",
+  "tree": "992d170ab2d32b185a38fe4e1dffd5d5d7e89d63",
+  "fetched_commit": "d3fad5414101adc9cef50f8e004dad0e649c9e67",
+  "fetched_tree": "992d170ab2d32b185a38fe4e1dffd5d5d7e89d63",
+  "new_objects_scanned": 16,
+  "secret_pattern_hits": 0,
+  "private_commit_email_hits": 0,
+  "push": "ordinary single acceptance branch, no force",
+  "protected_refs_before": {
+    "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+    "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+    "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+  },
+  "protected_refs_after": {
+    "refs/heads/main": "f308ac666a2377f540e528bc873463daecc20cf8",
+    "refs/pull/24/head": "e25704e117a3c5bede843cac65ddfdeb7f30024f",
+    "refs/heads/recovery/mac-hosted-validation-20261017": "fe15815de527175b144cbbd61a2f9d4c16b5c72c"
+  }
+}

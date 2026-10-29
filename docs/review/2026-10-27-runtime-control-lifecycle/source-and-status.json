@@ -145,5 +145,14 @@
     "populated native capture and fenced target reconstruction using existing fixed SQL",
     "approved phase-specific browser/runtime/network/lifecycle composition and final harness wiring"
   ],
-  "authority_correction": "Approved Oct10 design6 and plan4/7/8 already authorize separate browser/PG composition within their phase limits. Diagnostic pids2/512MiB are not a plan-wide prohibition on coding. Review/live gates remain closed; no runtime repinning or resource expansion beyond approved phase contracts. The historical acceptance ceiling does not authorize raising the current diagnostic envelope; preserve each profile and resolve any demonstrated need to exceed an applicable limit explicitly."
+  "authority_correction": "Approved Oct10 design6 and plan4/7/8 already authorize separate browser/PG composition within their phase limits. Diagnostic pids2/512MiB are not a plan-wide prohibition on coding. Review/live gates remain closed; no runtime repinning or resource expansion beyond approved phase contracts. The historical acceptance ceiling does not authorize raising the current diagnostic envelope; preserve each profile and resolve any demonstrated need to exceed an applicable limit explicitly.",
+  "current_candidate": {
+    "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+    "evidence": "oct29-b2-evidence.json",
+    "independent_review": "PENDING",
+    "privileged_activation": "DISABLED",
+    "credential_release": "WITHHELD"
+  },
+  "historical_top_level_material": "Existing material/source_history fields retained as historical component evidence; current_candidate is the latest continuation target."
 }

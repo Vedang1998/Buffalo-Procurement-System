@@ -1,0 +1,12 @@
+{
+  "commit": "1dfd7a967e54334f22f7a850c99177ed17fc93bf",
+  "tree": "32ed38cd64b45b4ca8216c9ac6370d2d5cd68217",
+  "returncode": 0,
+  "seconds": 8.029,
+  "log_sha256": "8c82479ac104d0aa0b1a2bfe498bd7a22f757e6bb892714ea1724d328c3152a8",
+  "original_runner_mode": "0600",
+  "disposable_runner_mode": "0644",
+  "runner_sha256": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+  "existing_permissions_unchanged": true,
+  "owned_copy_removed": true
+}
