@@ -605,8 +605,8 @@
     }
   ],
   "current_candidate": {
-    "commit": "63e2c5421374c391eb9af9c00fb00227c8b90599",
-    "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+    "commit": "052aa93292a9eb462564039a0b645313e0494b28",
+    "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
     "evidence": "oct29-memory-native-evidence.json",
     "status": "FROZEN_MEMORY_REPAIR_AND_NATIVE_PREFLIGHT_CANDIDATE; EXECUTION_CONTRACT_BLOCKED",
     "independent_review": "PENDING",
@@ -670,8 +670,14 @@
       "source_and_generated": "ADDITIONAL_POSITIVE_COST",
       "decision": "NO_INCREASE_AUTHORIZED_OR_IMPLEMENTED"
     },
-    "transport": "INCOMPLETE; ContextVars do not survive guardian exec; pre-account child/service observer binding and native cleanup executor still require implementation/review",
-    "installation_authority": false
+    "transport": "INCOMPLETE; actual protected native installation/cleanup and exec-surviving capture-child/service binding remain unimplemented; new capacity decision pending, no activation",
+    "installation_authority": false,
+    "libpq_layout": {
+      "status": "REPAIRED_PENDING_REVIEW",
+      "policy": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1",
+      "material": "052aa93292a9eb462564039a0b645313e0494b28",
+      "artifact_and_bytes_unchanged": true
+    }
   },
   "owner_received_e5e8_summary": "external-review-e5e8-owner-summary.json",
   "review_status": "Owner reports e5e8 review and N10 acceptance; full report not received. Preserve old actual reviews, do not invent remaining e5e8 dispositions. All later material requires delta review.",
@@ -690,8 +696,8 @@
   },
   "prepared_combined_memory_review": {
     "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-    "implementation": "63e2c5421374c391eb9af9c00fb00227c8b90599",
-    "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+    "implementation": "052aa93292a9eb462564039a0b645313e0494b28",
+    "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
     "status": "PREPARED_NOT_SENT_OR_APPROVED",
     "external_report": "Owner summary only for e5e8; original full attribution/results missing",
     "requested_scope": [

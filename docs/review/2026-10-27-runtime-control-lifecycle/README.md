@@ -1,3 +1,34 @@
+# Current frozen delta: memory repair plus authenticated libpq layout
+
+Implementation: `052aa93292a9eb462564039a0b645313e0494b28`
+
+Tree: `8777e880c3799b1aaf3e7aaf33f1f4977927530d`
+
+This descendant adds only the explicit `BUFFALO_SELECTED_LIBPQ_LAYOUT_V1` repair
+and test registration to63e2c54's material. It changes the logical libpq path to
+`/usr/lib/x86_64-linux-gnu/libpq.so.5` and normalizes the authenticated archive0644
+mode to0444. Physical member `.so.5.16`, selected artifact digest,354,488file bytes,
+file SHA256, Python/PG versions and every budget are unchanged. Both the partial
+and prospective manifest pins record this compatibility correction; the historical
+709row pin remains in prior Git history. No dependency/input version is repinned.
+
+At this exact candidate,183affected scrubbed tests and10startup pass; discovery
+2,684/132modules executes zero tests. GitHub run40952484457 passed1,120/1,120 focused tests at this exact candidate. Actual capture remains skipped by REFUSED_NATIVE_INPUT_TRUST; zero accounts/privileged processes, matching FD inventory. The workflow remains non-green. The1,118local/full focused group and memory/materialization observations
+below retain their63e2c54/3251attribution, not a fictitious rerun at052aa93.
+
+Use this latest candidate for the ONE prepared combined delta review sincee5e8.
+Frozen e5e8/a04ef remains preserved; Claude was not called or approved here.
+The libpq layout item is REPAIRED_PENDING_REVIEW. Runtime, worker control, external
+cleanup, full authoritative validation and installation/view transport stay OPEN.
+The selected native inventory still exceeds128MiB. A narrowly versioned160MiB
+PG_PHASE-only decision is requested separately; no approval or capacity change is
+inferred. No live privileged proof, credential release or installation is enabled.
+
+The following packet describes the parent material and source-bound evidence;
+apply only this small layout delta on top when reviewing the latest candidate.
+
+---
+
 # October 29 M1/native-input successor — frozen combined delta
 
 Implementation: `63e2c5421374c391eb9af9c00fb00227c8b90599`

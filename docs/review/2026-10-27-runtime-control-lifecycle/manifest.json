@@ -1,7 +1,7 @@
 {
   "README.md": {
-    "bytes": 31443,
-    "sha256": "402a966f67409411b803675e59c4466a897522792681ee51fc557a5db6fe43cb"
+    "bytes": 33433,
+    "sha256": "4767b84e453522d52065b30e74115e8a4210289424feda6d02cf75ebe7ca297f"
   },
   "b2-budget-change-control.json": {
     "bytes": 4804,
@@ -24,16 +24,16 @@
     "sha256": "aecd51c9ed86e57bf31ebb8704028c8347545145c044596fb780fb0e0b3b79ed"
   },
   "findings.json": {
-    "bytes": 36056,
-    "sha256": "35572a2e51797192f568b7c4da0380f4c5de8ce77ee412dc51e33e14ac80202c"
+    "bytes": 36297,
+    "sha256": "766f5ae72799f14ee8c4892edcb52651a45077c4125e05960baf70dd9b108a2d"
   },
   "native-input-artifact-evidence.json": {
     "bytes": 11107,
     "sha256": "39ed7fa4a7e2abf32b2086959bfddf47b7083962445ef74152834d3125753346"
   },
   "native-input-provisioning-proposal.md": {
-    "bytes": 23221,
-    "sha256": "82f395f032c2396ab1f6dc37362ab9c9e35b26ff23afecd854b248f0063fcf11"
+    "bytes": 23324,
+    "sha256": "7d43ed6fd1b83924b121a690c2af37ede250e64d471e6e914662a927c9a4e38f"
   },
   "native-postgres-server-inventory.json": {
     "bytes": 17048,
@@ -1915,6 +1915,38 @@
     "bytes": 3872,
     "sha256": "a8cc3ef783a039e7327862234ee3efcbb9258eaa703057b6816b633e10be2b0d"
   },
+  "oct29-m1-052aa93-ci-final.json": {
+    "bytes": 53033,
+    "sha256": "0cc82d2435b2880543ba9f9a320a156323bd2a905451dbf1977b6a3c0f3096f8"
+  },
+  "oct29-m1-052aa93-discovery.txt": {
+    "bytes": 336,
+    "sha256": "70c6e6be5412d2c2d42ab91b36ea632eb1679586688e35685ef7aa4ae80952d1"
+  },
+  "oct29-m1-052aa93-focused.txt": {
+    "bytes": 34453,
+    "sha256": "a15ad9106d87fd55ae49092d108e459130ab225a854262727cb798b54e91be03"
+  },
+  "oct29-m1-052aa93-layout-evidence.json": {
+    "bytes": 1624,
+    "sha256": "b0d6c5f24da11f4d5884451a46d800f3f9015081623d4d4bbce52c4de0adbbca"
+  },
+  "oct29-m1-052aa93-native-target.json": {
+    "bytes": 78461,
+    "sha256": "3ccca53d3c61345c1dcbfda30505bdedc7f54b7993205a3aa78c3b545c68137e"
+  },
+  "oct29-m1-052aa93-publication.json": {
+    "bytes": 992,
+    "sha256": "67b35e502046ee4ac3c702f79d09b171f679199afe2fc6d2107647fa4fc02e1e"
+  },
+  "oct29-m1-052aa93-startup.txt": {
+    "bytes": 2041,
+    "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+  },
+  "oct29-m1-052aa93-target-summary.json": {
+    "bytes": 4285,
+    "sha256": "1597b5a860d3694bad5bb532e6de0c4662be8cf41c217a832b4ac153f4d176cb"
+  },
   "oct29-m1-3251-ci-complete-partial.json": {
     "bytes": 28026,
     "sha256": "403257d8a992ea6c8d5adf184d16241fff3756fb30226fd2402720c7f90a05a1"
@@ -2031,6 +2063,10 @@
     "bytes": 2018,
     "sha256": "02ccf8c875a631d1e7336a9235793845343649d8aa5aca04ffa49f08c2f744ac"
   },
+  "oct29-m1-ca420b8-publication.json": {
+    "bytes": 992,
+    "sha256": "4d5c2b69e411052cde3c259fb12634f9d9e8d0f7bb8ae1fc5bcc3351f3f35aba"
+  },
   "oct29-m1-codec-probe.py": {
     "bytes": 1841,
     "sha256": "8e68ceb0568ee079ac042a8344ea8e7d874cd6127188443c065712265383acfa"
@@ -2072,8 +2108,8 @@
     "sha256": "ad5964ae77082b5fc325a73b164f0525b5ea01d4e1c60a7af76f411e31c002a9"
   },
   "oct29-memory-native-evidence.json": {
-    "bytes": 16168,
-    "sha256": "d0a5b42fa2957e20c0500feac58258f7b8894f7f0846bbaac0c56c08e72b863e"
+    "bytes": 18961,
+    "sha256": "b1bd4bf7ce68ac53164ed9bc2beb295fb5c51dad03f5a9d83d7f1ab061c2dad0"
   },
   "oct29-native-authenticated-target-files.json": {
     "bytes": 162695,

@@ -9,7 +9,7 @@ and protected-view compatibility development. It does not authorize privileged
 installation, change any capacity/memory limit, or close the independent review.
 Frozen e5e8/a04ef review identities remain preserved in the existing README.
 
-The original 709-file executable pin is retained. A separate code-pinned
+The709-file executable pin now records an explicit authenticated libpq logical-name/mode correction (artifact and content digests unchanged). A separate code-pinned
 `procurement/tools/hosted_native_proposed_inventory.json` provides the authenticated
 prospective native inventory: 831 logical names, 149,540,145 bytes; 170 ELF rows
 with resolved dependencies; 65 exact Ubuntu package identities plus the fixed
@@ -58,10 +58,7 @@ useful and tested within its existing limits.
 pre-account child -> original-host observer -> later service transport. Current
 ContextVar/view helpers are not an exec-surviving binding. Existing in-process M1
 checks remain enforced; no untrusted report can replace them. Current view-root
-checks do not yet prove all proposed per-file library mounts. The prospective
-inventory preserves the earlier libpq physical-name/mode discrepancy explicitly;
-its final logical .so.5 alias and archive-normalized0444 mode need a separately
-recorded layout reconciliation before installation. These are not hidden PASSes.
+checks do not yet prove all proposed per-file library mounts. The libpq logical .so.5 alias and archive-normalized0444 mode are reconciled by BUFFALO_SELECTED_LIBPQ_LAYOUT_V1 at052aa93, preserving physical member/artifact/content identity. No live binding or installation is inferred from that repair. These are not hidden PASSes.
 
 Provenance assurance remains precise: Python publisher HTTPS/GitHub digest is
 verified, not signed build attestation. Ubuntu signed index/package chains are

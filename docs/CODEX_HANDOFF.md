@@ -10,6 +10,29 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-29 authenticated libpq normalization descendant
+
+Latest verified published implementation `052aa93292a9eb462564039a0b645313e0494b28`, tree
+`8777e880c3799b1aaf3e7aaf33f1f4977927530d`. Artifact evidence justified a further independent
+repair: use the exact approved libpq loader alias.so.5 and0444mode, preserving
+physical.so.5.16member, artifact/content hashes,354,488bytes and all versions/limits.
+Change-control identity: BUFFALO_SELECTED_LIBPQ_LAYOUT_V1.183affected scrubbed and
+10startup tests passed; discovery2,684/132modules is not execution. Full parent
+local focused evidence remains at63e2c54. GitHub run40952484457 passed1,120/1,120 at052aa93, then native-input trust correctly prevented actual capture. No account/privileged process was created and FD inventory matched; whole-service memory and integrated acceptance remain unproven.
+
+Combined review package is updated to this descendant, while e5e8/a04ef remains
+unchanged. No Claude verdict is invented; actual e5e8full report is still missing.
+The new128MiB/native-file contradiction remains:149,540,145logicalB before source.
+A concrete PG_PHASE-only160MiB successor decision has been requested under the
+owner's explicit limit; no response, new cap or installation permission is assumed.
+The existing native proposal contains the exact artifacts/effects/limitations.
+Native child/service transport and installer/cleanup executor remain incomplete;
+no all-independent-work-finished claim. Exact next action after a capacity decision:
+implement only the approved versioned policy if granted, then finish the existing
+fixed view/measurement transport and combined delta review before installation.
+Until then preserve source/evidence, review package and dormant gates. No privileged
+activation, credential release, production, deployment or purchasing action.
+
 ### 2026-10-29 frozen memory/native successor published
 
 Verified implementation `63e2c5421374c391eb9af9c00fb00227c8b90599`, tree

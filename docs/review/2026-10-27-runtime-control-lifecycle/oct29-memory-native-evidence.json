@@ -1,6 +1,6 @@
 {
-  "candidate": "63e2c5421374c391eb9af9c00fb00227c8b90599",
-  "tree": "a359999f65532f4c0ef38d318f90039856e2da5e",
+  "candidate": "052aa93292a9eb462564039a0b645313e0494b28",
+  "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
   "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
   "baseline_tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
   "classification": "WRITER_MACHINE_EVIDENCE_NOT_INDEPENDENT_CLAUDE_REVIEW",
@@ -92,6 +92,40 @@
         "privileged_execution": "NOT_RUN",
         "whole_service_memory": "NOT_PROVEN"
       }
+    },
+    "052aa93292a9eb462564039a0b645313e0494b28": {
+      "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
+      "affected_scrubbed": {
+        "executed": 183,
+        "passed": 183,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "startup": 10,
+      "discovery": {
+        "registered": 2684,
+        "modules": 132,
+        "executed": 0
+      },
+      "full_authoritative": "NOT_RUN",
+      "github": {
+        "run": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/40952484457",
+        "focused": {
+          "discovered": 1120,
+          "executed": 1120,
+          "passed_methods": 1120,
+          "failure_events": 0,
+          "error_events": 0,
+          "skipped": 0
+        },
+        "capture": "REFUSED_NATIVE_INPUT_TRUST",
+        "actual_capture": "NOT_RUN",
+        "owned_descriptors_closed": true,
+        "account_mutations": 0,
+        "privileged_processes_started": 0,
+        "integrated_acceptance": "NON_GREEN"
+      }
     }
   },
   "memory_comparison": {
@@ -114,7 +148,7 @@
     "exact_runpath_objects": 65,
     "materialization": "UNPRIVILEGED_TESTED_AND_CLEANED",
     "complete_inventory": false,
-    "missing": "Native runtime layout/alias/mode reconciliation, protected capture-child/service transport, applicable review and installation decision. Signed build attestation is not established; target trust-root comparison pending. Required fixed bytes exceed approved capacity.",
+    "missing": "Actual native installer/cleanup executor, exec-surviving capture-child/service/view binding, target protected trust and memory proof, review and installation decisions. Fixed native bytes exceed current cap.",
     "authenticated_prospective_inventory": "procurement/tools/hosted_native_proposed_inventory.json",
     "authenticated_logical_files": 831,
     "authenticated_logical_bytes": 149540145,
@@ -141,7 +175,8 @@
       "scope": "UNPRIVILEGED_SELECTED_ARCHIVE_MATERIALIZATION_NOT_RUNTIME_CAPTURE_OR_SERVICE",
       "seconds": 3.474418543977663,
       "traced_peak_bytes": 93987910
-    }
+    },
+    "libpq_layout": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1: exact authenticated .so.5 alias and0444 mode; artifact/content hashes and byte totals unchanged; installation/execution ungranted"
   },
   "process_adoption": {
     "upstream": "1f4ac6da5fea108d48d8c746ac06e0d3ac586c1a",
@@ -394,6 +429,42 @@
     "oct29-m1-63e2c54-native-target.json": {
       "bytes": 78460,
       "sha256": "b33026fbce1a9de7e18344c160527671dbeaf2fb409d04843ababb4ad4ed1ea7"
+    },
+    "oct29-m1-052aa93-layout-evidence.json": {
+      "bytes": 1624,
+      "sha256": "b0d6c5f24da11f4d5884451a46d800f3f9015081623d4d4bbce52c4de0adbbca"
+    },
+    "oct29-m1-052aa93-focused.txt": {
+      "bytes": 34453,
+      "sha256": "a15ad9106d87fd55ae49092d108e459130ab225a854262727cb798b54e91be03"
+    },
+    "oct29-m1-052aa93-discovery.txt": {
+      "bytes": 336,
+      "sha256": "70c6e6be5412d2c2d42ab91b36ea632eb1679586688e35685ef7aa4ae80952d1"
+    },
+    "oct29-m1-052aa93-publication.json": {
+      "bytes": 992,
+      "sha256": "67b35e502046ee4ac3c702f79d09b171f679199afe2fc6d2107647fa4fc02e1e"
+    },
+    "oct29-m1-ca420b8-publication.json": {
+      "bytes": 992,
+      "sha256": "4d5c2b69e411052cde3c259fb12634f9d9e8d0f7bb8ae1fc5bcc3351f3f35aba"
+    },
+    "oct29-m1-052aa93-startup.txt": {
+      "bytes": 2041,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "oct29-m1-052aa93-native-target.json": {
+      "bytes": 78461,
+      "sha256": "3ccca53d3c61345c1dcbfda30505bdedc7f54b7993205a3aa78c3b545c68137e"
+    },
+    "oct29-m1-052aa93-target-summary.json": {
+      "bytes": 4285,
+      "sha256": "1597b5a860d3694bad5bb532e6de0c4662be8cf41c217a832b4ac153f4d176cb"
+    },
+    "oct29-m1-052aa93-ci-final.json": {
+      "bytes": 53033,
+      "sha256": "0cc82d2435b2880543ba9f9a320a156323bd2a905451dbf1977b6a3c0f3096f8"
     }
   },
   "target_followup": {
@@ -407,5 +478,11 @@
     "keyring_mode": "0777",
     "keyring_assurance": "CONTENT_EQUALITY_ONLY; writable object/ancestors are not a trusted root",
     "prior_authenticated_payload_research_scope": "6528427 target; not combined with this launch into same-generation containment PASS"
+  },
+  "new_capacity_decision": {
+    "requested": true,
+    "scope": "Separately versioned PG_PHASE-only167772160B; all other budgets/artifacts/review/installation restrictions unchanged",
+    "status": "PENDING_NO_APPROVAL_INFERRED",
+    "current_cap_unchanged": 134217728
   }
 }

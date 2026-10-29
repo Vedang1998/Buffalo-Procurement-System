@@ -1,0 +1,32 @@
+{
+  "commit": "052aa93292a9eb462564039a0b645313e0494b28",
+  "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
+  "policy": "BUFFALO_SELECTED_LIBPQ_LAYOUT_V1",
+  "artifact_identity_unchanged": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+  "file_bytes_unchanged": 354488,
+  "file_sha256_unchanged": "b4ba0da9e51354cf40a599e787f0942c98fc268cf29b51806c62770d8f2a2a71",
+  "logical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
+  "physical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+  "mode": "0444",
+  "partial_manifest_sha256": "2c75d0d2f3adf65cfbc5f76e4479e0a4a6697aaee32e1971442981846192a521",
+  "prospective_manifest_sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+  "capacity": {
+    "policy": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2",
+    "inventory_sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+    "logical_regular_bytes": 149540145,
+    "logical_files": 831,
+    "native_entries_with_parents": 915,
+    "physical_lower_bound_bytes": 149303529,
+    "maximum_regular_bytes": 134217728,
+    "maximum_entries": 3000,
+    "excess_regular_bytes": 15322417,
+    "status": "REFUSED_NATIVE_CAPACITY",
+    "source_and_generated_entries": "EXCLUDED_POSITIVE_COSTS",
+    "memory_readiness": "NOT_MEASURED",
+    "complete_runtime": "NOT_ESTABLISHED",
+    "execution_authority": false
+  },
+  "installation_authority": false,
+  "runtime_execution": "NOT_RUN",
+  "evidence_helper_first_attempt": "Default Python3.12 lacks fcntl.F_SEAL_SEAL; helper import refused before observation. Repeated with existing3.13, not a source/test failure."
+}

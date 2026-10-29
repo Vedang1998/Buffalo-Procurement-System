@@ -1,0 +1,99 @@
+{"report_keys": ["account_mutations", "capture_fit", "commit", "component_result_before_counter_gate", "credential_release", "elapsed_seconds", "execution_authority", "measurement", "memory_stages", "namespace_deadline_proof", "native_execution", "native_inputs", "owned_descriptors_closed", "privileged_processes_started", "service_limits_applied", "shared_job_zero_oom", "tree", "whole_service_memory"], "result": null, "status": null, "summary": null, "tests": null}
+{"report_keys": ["discovered", "error_events", "executed", "expected_failures", "failure_events", "observations", "omitted_observations", "passed_methods", "scope", "skipped", "unexpected_successes"], "result": null, "status": null, "summary": null, "tests": null}
+{
+  "rows": 132,
+  "packages": 66,
+  "seconds": 15.448261430999992,
+  "unresolved": [
+    {
+      "path": "/lib64/ld-linux-x86-64.so.2",
+      "reason": "PACKAGE_OWNER_AMBIGUOUS"
+    },
+    {
+      "path": "/bin/sh",
+      "reason": "PACKAGE_OWNER_MISSING"
+    }
+  ],
+  "selected_rows": [
+    {
+      "bytes": 3607,
+      "gid": 0,
+      "mode": "0777",
+      "package": "ubuntu-keyring",
+      "path": "/usr/share/keyrings/ubuntu-archive-keyring.gpg",
+      "physical_path": "/usr/share/keyrings/ubuntu-archive-keyring.gpg",
+      "selected_artifact_file_match": null,
+      "sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+      "uid": 0
+    },
+    {
+      "bytes": 387248,
+      "gid": 0,
+      "mode": "0644",
+      "package": "libpq5:amd64",
+      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
+      "physical_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.18",
+      "selected_artifact_file_match": false,
+      "sha256": "e6f752c5ad7005afab0d9ea2932b93d6ad2d863b4333a55aafa1cdd734e74bde",
+      "uid": 0
+    },
+    {
+      "bytes": 51624,
+      "gid": 0,
+      "mode": "0755",
+      "package": "postgresql-16",
+      "path": "/usr/lib/postgresql/16/bin/pg_controldata",
+      "physical_path": "/usr/lib/postgresql/16/bin/pg_controldata",
+      "selected_artifact_file_match": false,
+      "sha256": "7ec0700899cb4b785afa71e9fcf7ff658fd7e5d4a0e6401319053da21cf0af5f",
+      "uid": 0
+    },
+    {
+      "bytes": 192320,
+      "gid": 0,
+      "mode": "0755",
+      "package": "postgresql-client-16",
+      "path": "/usr/lib/postgresql/16/bin/pg_restore",
+      "physical_path": "/usr/lib/postgresql/16/bin/pg_restore",
+      "selected_artifact_file_match": false,
+      "sha256": "37059a2e745d53e5d112223a31f76f9b53e0bda1fae3dfbc17fe11b83fdac791",
+      "uid": 0
+    },
+    {
+      "bytes": 442928,
+      "gid": 0,
+      "mode": "0755",
+      "package": "postgresql-client-16",
+      "path": "/usr/lib/postgresql/16/bin/pg_dump",
+      "physical_path": "/usr/lib/postgresql/16/bin/pg_dump",
+      "selected_artifact_file_match": false,
+      "sha256": "84b6c45e52a8e01a4e50784a09694633a84a530e6b8e19b4139698c4d1e3ac45",
+      "uid": 0
+    },
+    {
+      "bytes": 122464,
+      "gid": 0,
+      "mode": "0755",
+      "package": "postgresql-16",
+      "path": "/usr/lib/postgresql/16/bin/initdb",
+      "physical_path": "/usr/lib/postgresql/16/bin/initdb",
+      "selected_artifact_file_match": false,
+      "sha256": "83876f42d8ccdd2d9117e848364daeab89db057a232ad0e91c6a160d5c5b507c",
+      "uid": 0
+    },
+    {
+      "bytes": 10511456,
+      "gid": 0,
+      "mode": "0755",
+      "package": "postgresql-16",
+      "path": "/usr/lib/postgresql/16/bin/postgres",
+      "physical_path": "/usr/lib/postgresql/16/bin/postgres",
+      "selected_artifact_file_match": false,
+      "sha256": "3a089a86625851a42ea1561dcdffa30569c24879c4eb6eb7be9055a72172e431",
+      "uid": 0
+    }
+  ],
+  "keyring_digest_equal": true,
+  "keyring_trust": "EQUALITY_ONLY; shared ancestor trust separately refused"
+}
+{"report_keys": ["account_mutations", "active_binfmt_observation", "commit", "credential_release", "direct_pid1_namespace_read", "execution_authority", "filesystem_counts", "fixed_mount_points", "mountinfo_sha256", "namespace_operations", "non_proc_mounts_beneath_proc", "operator_uid", "ownership_scan", "ownership_scan_mount_policy", "pid1_uid", "privileged_processes_started", "refusal", "repaired_native_stat_regression", "root_owned_pid1_condition", "tree"], "result": null, "status": null, "summary": null, "tests": null}
