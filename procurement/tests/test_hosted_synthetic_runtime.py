@@ -59,8 +59,10 @@ class HostedRuntimeTests(unittest.TestCase):
     def test_real_capture_fit_driver_has_no_namespace_or_native_execution(self):
         import hosted_synthetic_runtime_regression as driver
         import hosted_synthetic_postgres_runtime as pg
-        for capacity,expected in (('FIT','PASS'),('REFUSED','REFUSED_CAPACITY')):
-            with self.subTest(capacity=capacity),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity,'input_memfd_allocated_bytes':0}) as capture,patch.object(driver,'_measure_composed_phase',return_value={'phase_memfd_allocated_bytes':0,'stages':[]}) as composed,patch.object(driver,'_execute') as execute:
+        for capacity,rss,expected in (('FIT',1024,'PASS'),('REFUSED',1024,'REFUSED_CAPACITY'),('FIT',536870912,'REFUSED_MEMORY_ENVELOPE')):
+            # Process-lifetime peaks and host job counters are separate live
+            # inputs, not deterministic facts of this mocked capture fixture.
+            with self.subTest(capacity=capacity,rss=rss),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(driver.resource,'getrusage',return_value=SimpleNamespace(ru_maxrss=rss)),patch.object(driver,'_shared_job_memory',return_value={'status':'NOT_OBSERVED'}),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity,'input_memfd_allocated_bytes':0}) as capture,patch.object(driver,'_measure_composed_phase',return_value={'phase_memfd_allocated_bytes':0,'stages':[]}) as composed,patch.object(driver,'_execute') as execute:
                 result=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
             capture.assert_called_once();execute.assert_not_called()
             self.assertEqual(result['capture_fit'],expected);self.assertTrue(result['owned_descriptors_closed'])
