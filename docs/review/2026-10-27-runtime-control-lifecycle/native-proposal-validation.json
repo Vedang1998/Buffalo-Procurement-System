@@ -1,0 +1,30 @@
+{
+  "scope": "DOCUMENT_AND_PUBLIC_PROVENANCE_RECORD_VALIDATION_ONLY",
+  "baseline": "a04ef478ced5f992156784a26de43827a8e7115b",
+  "frozen_claude_implementation": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+  "checks": {
+    "existing_ledger_fields_and_statuses_unchanged": true,
+    "source_tests_workflow_locks_unchanged": true,
+    "frozen_packet_unchanged": true,
+    "new_json_valid": true,
+    "publisher_raw_metadata_digests_match": true,
+    "server_inventory_count_and_digests_consistent": true,
+    "changes_docs_only": true
+  },
+  "validation_harness_correction": "Initial textual search used lowercase digest against uppercase publisher list; corrected named-entry hex normalization; publisher bytes unchanged",
+  "application_tests_this_turn": "NOT_RUN_DOCS_ONLY",
+  "internal_audit_repeated": false,
+  "privileged_actions": 0,
+  "artifact_executions": 0,
+  "independent_claude_gate": "REVIEW_PENDING",
+  "files": {
+    "docs/CODEX_HANDOFF.md": "6529879732df17e933660d94289e86e112b6385725c8929ccf0ad50771d00049",
+    "docs/review/2026-10-27-runtime-control-lifecycle/findings.json": "3546460e3486159f4108ac5a97ccaa211b3c97877d72577fc7cf57d9b5540f02",
+    "docs/review/2026-10-27-runtime-control-lifecycle/native-input-artifact-evidence.json": "39ed7fa4a7e2abf32b2086959bfddf47b7083962445ef74152834d3125753346",
+    "docs/review/2026-10-27-runtime-control-lifecycle/native-input-provisioning-proposal.md": "7bc8009825ff2e7b5e048ae0a8b71c52727891e0001815f265672fc1c94ddd52",
+    "docs/review/2026-10-27-runtime-control-lifecycle/native-postgres-server-inventory.json": "5ca3785c03f3a9fe87ddf5a4cb76de9f4ab931cf04dbcdf9c101fa9faee42194",
+    "docs/review/2026-10-27-runtime-control-lifecycle/native-python-publisher-hashes.txt": "b29cad0b8f44df881f177f24151b363674ea401e025c56276fbff7fdce107e98",
+    "docs/review/2026-10-27-runtime-control-lifecycle/native-ubuntu-InRelease.txt": "1af76bea40c6b8ddbc51a51046c5a3e7912c9611536e97afc673a4b1c39d1886",
+    "docs/review/2026-10-27-runtime-control-lifecycle/oct29-internal-codex-review.json": "a8cc3ef783a039e7327862234ee3efcbb9258eaa703057b6816b633e10be2b0d"
+  }
+}

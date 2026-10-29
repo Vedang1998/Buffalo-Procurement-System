@@ -1,0 +1,259 @@
+{
+  "scope": "NATIVE_INPUT_PROPOSAL_PREFLIGHT_ONLY",
+  "date": "2026-10-29",
+  "writer": "Codex",
+  "independent_claude_verdict": "NOT_RECEIVED",
+  "frozen_review_implementation": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+  "frozen_review_packet": "a04ef478ced5f992156784a26de43827a8e7115b",
+  "not_performed": [
+    "installation",
+    "artifact execution",
+    "sudo",
+    "account or service creation",
+    "permission changes",
+    "workflow dispatch",
+    "runtime capture or bounded execution",
+    "internal audit rerun"
+  ],
+  "python": {
+    "version": "3.13.5",
+    "platform": "Ubuntu 24.04 x64 ordinary GIL",
+    "publisher": "actions/python-versions",
+    "publisher_repository_id": 250077933,
+    "release_tag": "3.13.5-15601068749",
+    "release_commit_from_publisher_page": "7c0308cd7d15c7d1e806a788bffed43fa48ee666",
+    "asset_timestamp": "2025-06-12T04:00:54Z",
+    "release_url": "https://github.com/actions/python-versions/releases/tag/3.13.5-15601068749",
+    "url": "https://github.com/actions/python-versions/releases/download/3.13.5-15601068749/python-3.13.5-linux-24.04-x64.tar.gz",
+    "bytes": 129234019,
+    "sha256": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+    "verification": "Complete downloaded bytes match independent publisher HTTPS hash list and GitHub asset digest",
+    "publisher_hash_list": {
+      "url": "https://github.com/actions/python-versions/releases/download/3.13.5-15601068749/hashes.sha256",
+      "bytes": 1895,
+      "sha256": "b29cad0b8f44df881f177f24151b363674ea401e025c56276fbff7fdce107e98",
+      "local_record": "native-python-publisher-hashes.txt"
+    },
+    "trust_scope": "Publisher HTTPS/GitHub account release attribution; NOT verified signed build attestation",
+    "attestation_query": "https://github.com/actions/python-versions/attestations?subject_digest=sha256%3Ac12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+    "attestation_observation": "Public query returned empty list/totalCount0; not proof no attestation exists elsewhere",
+    "installed_target_equality": "NOT_PROVEN",
+    "release_asset_id": "NOT_OBTAINED",
+    "release_immutability_flag": "NOT_OBTAINED",
+    "archive": {
+      "entries": 9212,
+      "regular_bytes": 350129899,
+      "selected_stdlib_files_under_current_rules": 644,
+      "selected_stdlib_bytes_under_current_rules": 29112670,
+      "extracted_files": 0,
+      "artifact_executions": 0,
+      "metadata_uid": 1001,
+      "metadata_gid": 118
+    },
+    "elf": [
+      {
+        "member": "bin/python3.13",
+        "bytes": 17752,
+        "sha256": "9cf89c50189de85411dd34b0f0ec5daaab41bf6cd447628572defe3b3ffd0a04",
+        "pt_interp": "/lib64/ld-linux-x86-64.so.2",
+        "dt_needed": [
+          "libpython3.13.so.1.0",
+          "libc.so.6"
+        ],
+        "dt_runpath": [
+          "/opt/hostedtoolcache/Python/3.13.5/x64/lib"
+        ],
+        "dt_rpath": []
+      },
+      {
+        "member": "lib/libpython3.13.so.1.0",
+        "bytes": 30506400,
+        "sha256": "0a7f60222bc0c8af1d5f8f629aaa43db11fca68a201e098d965efc5134e8538b",
+        "dt_needed": [
+          "libm.so.6",
+          "libc.so.6",
+          "ld-linux-x86-64.so.2"
+        ],
+        "dt_runpath": [
+          "/opt/hostedtoolcache/Python/3.13.5/x64/lib"
+        ],
+        "dt_rpath": []
+      }
+    ],
+    "compatibility": "BLOCKED: current parse_elf rejects DT_RUNPATH; protected ownership alone cannot make these bytes acceptable",
+    "installer": {
+      "member": "setup.sh",
+      "bytes": 1971,
+      "sha256": "4169399cfcbb12f5b5aa2a78a5d9a00f3973dc760878d3c4c109a97468791a8d",
+      "execution": "PROHIBITED; shared deletion/copy plus Python ensurepip/pip upgrades"
+    },
+    "downloads": [
+      {
+        "bytes": 129234019,
+        "seconds": 3.339,
+        "purpose": "complete archive and selection metadata"
+      },
+      {
+        "bytes": 129234019,
+        "seconds": 2.654,
+        "purpose": "actual ELF tag inspection"
+      }
+    ],
+    "measurement_scope": "Public artifact inspection, not runtime/service memory or capture fit"
+  },
+  "ubuntu": {
+    "suite": "noble-updates",
+    "architecture": "amd64",
+    "keyring": {
+      "url": "https://archive.ubuntu.com/ubuntu/project/ubuntu-archive-keyring.gpg",
+      "bytes": 3607,
+      "sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+      "bootstrap_trust": "Official publisher HTTPS; independent target trusted-keyring comparison remains missing"
+    },
+    "signed_release": {
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease",
+      "sha256": "1af76bea40c6b8ddbc51a51046c5a3e7912c9611536e97afc673a4b1c39d1886",
+      "release_date": "Thu, 29 Oct 2026 13:22:21 UTC",
+      "signature_timestamp": 1793280195,
+      "fingerprint": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+      "native_gpg_exit_code": 0,
+      "native_gpg_status": [
+        "GOODSIG",
+        "VALIDSIG"
+      ],
+      "trust_qualification": "GPG --trust-model always preserves signature verification but does not establish local ownertrust; warning Using untrusted key retained",
+      "local_record": "native-ubuntu-InRelease.txt"
+    },
+    "packages_index": {
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/by-hash/SHA256/8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "bytes": 1406168,
+      "sha256": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "verification": "Matches signed Release length and SHA256"
+    },
+    "artifacts": [
+      {
+        "package": "postgresql-16",
+        "version": "16.15-0ubuntu0.24.04.1",
+        "architecture": "amd64",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/p/postgresql-16/postgresql-16_16.15-0ubuntu0.24.04.1_amd64.deb",
+        "bytes": 15610426,
+        "sha256": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+        "verification": "FULL_PAYLOAD_LENGTH_AND_SHA256_MATCH_SIGNED_PACKAGES_RECORD"
+      },
+      {
+        "package": "postgresql-client-16",
+        "version": "16.15-0ubuntu0.24.04.1",
+        "architecture": "amd64",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/p/postgresql-16/postgresql-client-16_16.15-0ubuntu0.24.04.1_amd64.deb",
+        "bytes": 1301302,
+        "sha256": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+        "verification": "FULL_PAYLOAD_LENGTH_AND_SHA256_MATCH_SIGNED_PACKAGES_RECORD"
+      },
+      {
+        "package": "libpq5",
+        "version": "16.15-0ubuntu0.24.04.1",
+        "architecture": "amd64",
+        "url": "https://archive.ubuntu.com/ubuntu/pool/main/p/postgresql-16/libpq5_16.15-0ubuntu0.24.04.1_amd64.deb",
+        "bytes": 151262,
+        "sha256": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+        "verification": "FULL_PAYLOAD_LENGTH_AND_SHA256_MATCH_SIGNED_PACKAGES_RECORD"
+      }
+    ],
+    "verification_tools": [
+      "GnuPG 2.4.7/libgcrypt 1.11.0",
+      "sqv 1.3.0/sequoia-openpgp 2.0.0",
+      "zstd 1.5.7"
+    ],
+    "installed_target_package_inventory": "MISSING",
+    "transitive_exact_package_versions": "MISSING; no latest-index dependency selection authorized",
+    "static_client_inventory": [
+      {
+        "path": "/usr/lib/postgresql/16/bin/pg_dump",
+        "bytes": 442928,
+        "sha256": "5abfee921d2efd952aa91912b033285820575df17840bb1faf69f8f9b0431e8d"
+      },
+      {
+        "path": "/usr/lib/postgresql/16/bin/pg_restore",
+        "bytes": 192320,
+        "sha256": "eb91db5f9ce7a1e4d8a72a9319544f5944ef00b6741c948b85e0a2ed532f9ad4"
+      },
+      {
+        "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+        "bytes": 354488,
+        "sha256": "b4ba0da9e51354cf40a599e787f0942c98fc268cf29b51806c62770d8f2a2a71"
+      }
+    ],
+    "public_evidence_cleanup": "Verification memfds closed; no package extracted or executed. Initial sqv --output - created one owned untracked public Release file; exact file removed immediately, tracked files unaffected.",
+    "server_inventory": {
+      "record": "native-postgres-server-inventory.json",
+      "sha256": "5ca3785c03f3a9fe87ddf5a4cb76de9f4ab931cf04dbcdf9c101fa9faee42194",
+      "archive_entries": 1477,
+      "archive_regular_bytes": 41707325,
+      "selected_server_files": 60,
+      "referenced_modules": 27,
+      "referenced_stopwords": 15,
+      "external_timezone_names": 38,
+      "result": "STATIC_INVENTORY_COMPLETE_FOR_SELECTED_SERVER_PACKAGE_MEMBERS; external closure still incomplete"
+    },
+    "preflight_harness_history": [
+      {
+        "attempt": 1,
+        "artifact_sha256_verified": true,
+        "static_inventory": "ERROR_PYTHON_TARFILE_COMPRESSED_HEADER",
+        "interpretation": "Research parser did not decode data.tar.zst; not a candidate defect"
+      },
+      {
+        "attempt": 2,
+        "artifact_sha256_verified": true,
+        "static_inventory": "ERROR_ZSTD_REFUSED_PROC_FD_SYMLINK",
+        "interpretation": "Native decoder path argument refused; synthetic stdin descriptor repair passed"
+      },
+      {
+        "attempt": 3,
+        "artifact_sha256_verified": true,
+        "static_inventory": "ERROR_PYTHON_3_12_FCNTL_IMPORT",
+        "interpretation": "Research interpreter lacked F_SEAL_SEAL; no server binary ran"
+      },
+      {
+        "attempt": 4,
+        "artifact_sha256_verified": true,
+        "static_inventory": "PASS_PYTHON_3_13_5_ZSTD_STDIN",
+        "interpretation": "Module import preflight passed before download; actual signed package inspected using frozen scanners; selected ELF inputs parsed without native execution"
+      }
+    ],
+    "download_accounting": {
+      "server_reads": 4,
+      "server_bytes_each": 15610426,
+      "client_bytes": 1301302,
+      "libpq_bytes": 151262,
+      "total_deb_download_bytes": 63894268,
+      "scope": "Separate bounded public research requests, not provisioning budget or acceptance measurements"
+    },
+    "server_inspection_tools": [
+      "/usr/bin/python3.13 Python 3.13.5",
+      "/usr/bin/zstd 1.5.7 decoding stdin",
+      "frozen e5e8 candidate pure scanner/ELF functions; no native artifact execution"
+    ],
+    "server_inspection_bounds": {
+      "outer_seconds": 55,
+      "http_timeout_seconds": 20,
+      "maximum_compressed_response_bytes": 15610427,
+      "expected_compressed_bytes": 15610426,
+      "zstd_window_bytes": 134217728,
+      "decoder_timeout_seconds": 15,
+      "post_decode_size_check_bytes": 268435456,
+      "member_cap": 50000,
+      "qualification": "Research checks, not a production decompression memory-fit proof; actual data tar42813440B"
+    }
+  },
+  "remaining_gates": [
+    "Exact installed target equality",
+    "Complete authenticated executable/data/library inventory",
+    "Target trust anchor match and Python provenance decision",
+    "Explicit fixed RUNPATH policy and private-view/pre-account handoff decision",
+    "Independent review of actual implementation/activation",
+    "Actual capture and service memory/cleanup measurements"
+  ],
+  "activation": "DISABLED",
+  "credential_release": "WITHHELD"
+}

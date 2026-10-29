@@ -1,0 +1,583 @@
+{
+  "scope": "STATIC_AUTHENTICATED_SERVER_PACKAGE_INVENTORY_ONLY",
+  "url": "https://archive.ubuntu.com/ubuntu/pool/main/p/postgresql-16/postgresql-16_16.15-0ubuntu0.24.04.1_amd64.deb",
+  "package_bytes": 15610426,
+  "package_sha256": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+  "data_tar_bytes": 42813440,
+  "archive_entries": 1477,
+  "regular_file_bytes": 41707325,
+  "modules": [
+    "cyrillic_and_mic",
+    "dict_snowball",
+    "euc2004_sjis2004",
+    "euc_cn_and_mic",
+    "euc_jp_and_sjis",
+    "euc_kr_and_mic",
+    "euc_tw_and_big5",
+    "latin2_and_win1250",
+    "latin_and_mic",
+    "pgcrypto",
+    "plpgsql",
+    "utf8_and_big5",
+    "utf8_and_cyrillic",
+    "utf8_and_euc2004",
+    "utf8_and_euc_cn",
+    "utf8_and_euc_jp",
+    "utf8_and_euc_kr",
+    "utf8_and_euc_tw",
+    "utf8_and_gb18030",
+    "utf8_and_gbk",
+    "utf8_and_iso8859",
+    "utf8_and_iso8859_1",
+    "utf8_and_johab",
+    "utf8_and_sjis",
+    "utf8_and_sjis2004",
+    "utf8_and_uhc",
+    "utf8_and_win"
+  ],
+  "stopwords": [
+    "danish",
+    "dutch",
+    "english",
+    "finnish",
+    "french",
+    "german",
+    "hungarian",
+    "italian",
+    "nepali",
+    "norwegian",
+    "portuguese",
+    "russian",
+    "spanish",
+    "swedish",
+    "turkish"
+  ],
+  "timezones_requiring_external_tzdata": [
+    "America/Argentina/Buenos_Aires",
+    "America/Asuncion",
+    "America/Caracas",
+    "America/Guyana",
+    "America/New_York",
+    "America/Santiago",
+    "Antarctica/Davis",
+    "Antarctica/Mawson",
+    "Asia/Anadyr",
+    "Asia/Ashgabat",
+    "Asia/Baku",
+    "Asia/Bishkek",
+    "Asia/Colombo",
+    "Asia/Irkutsk",
+    "Asia/Kamchatka",
+    "Asia/Krasnoyarsk",
+    "Asia/Magadan",
+    "Asia/Novosibirsk",
+    "Asia/Omsk",
+    "Asia/Singapore",
+    "Asia/Tbilisi",
+    "Asia/Ulaanbaatar",
+    "Asia/Vladivostok",
+    "Asia/Yakutsk",
+    "Asia/Yekaterinburg",
+    "Asia/Yerevan",
+    "Atlantic/Stanley",
+    "Australia/Lord_Howe",
+    "Europe/Moscow",
+    "Europe/Volgograd",
+    "Indian/Chagos",
+    "Pacific/Easter",
+    "Pacific/Fakaofo",
+    "Pacific/Kiritimati",
+    "Pacific/Kosrae",
+    "Pacific/Niue",
+    "Pacific/Rarotonga",
+    "UTC"
+  ],
+  "required_server_members": [
+    {
+      "path": "/usr/lib/postgresql/16/bin/initdb",
+      "bytes": 122464,
+      "sha256": "df8c50fd508bb31db312a8519a2e7922c63b44f7d963c39d58dc107169078a0d",
+      "elf": {
+        "interpreter": "/lib64/ld-linux-x86-64.so.2",
+        "needed": [
+          "libpq.so.5",
+          "libicuuc.so.74",
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/bin/pg_controldata",
+      "bytes": 51624,
+      "sha256": "6a1e9ba10c7c484dafb57ccfdd7668acc130e4b862fa8cd3e730f097b519fd53",
+      "elf": {
+        "interpreter": "/lib64/ld-linux-x86-64.so.2",
+        "needed": [
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/bin/postgres",
+      "bytes": 10511456,
+      "sha256": "201d8daff9a5bd9df70b820471b965c39f5a776d677f395232c477d051270722",
+      "elf": {
+        "interpreter": "/lib64/ld-linux-x86-64.so.2",
+        "needed": [
+          "libzstd.so.1",
+          "liblz4.so.1",
+          "libxml2.so.2",
+          "libpam.so.0",
+          "libssl.so.3",
+          "libcrypto.so.3",
+          "libgssapi_krb5.so.2",
+          "libz.so.1",
+          "libm.so.6",
+          "libldap.so.2",
+          "libicui18n.so.74",
+          "libicuuc.so.74",
+          "libsystemd.so.0",
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/cyrillic_and_mic.so",
+      "bytes": 14336,
+      "sha256": "4a61be1007aa642b8a9b69bc2520d2c00102647c995aad736adbc2955475aef8",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/dict_snowball.so",
+      "bytes": 821480,
+      "sha256": "8b88c2fa392f911e8a40b6ba3b9550f1d772131fbf10fa1baf85b734e0aa58d3",
+      "elf": {
+        "interpreter": null,
+        "needed": [
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/euc2004_sjis2004.so",
+      "bytes": 14336,
+      "sha256": "e4471e2a2f4473567a92b5ade95f9a02b7ebda9495d9e747afb3a57e3d36ca99",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/euc_cn_and_mic.so",
+      "bytes": 14336,
+      "sha256": "d77cd9a54e64ea4c257decd9581c2706cca904146f86e93e20a45fa7ba0ffe76",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/euc_jp_and_sjis.so",
+      "bytes": 18432,
+      "sha256": "8246bbffb56f0d0a183f89765467cf3ad61b22ab217cf30ef59b07ccd2edb320",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/euc_kr_and_mic.so",
+      "bytes": 14336,
+      "sha256": "802497711edb30cbae8f1d6be98612112521eac1b0c657c7e5aa7cab78dd60aa",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/euc_tw_and_big5.so",
+      "bytes": 14488,
+      "sha256": "fa32e7714adb4f5eeeb2051961aec55f8aa47443673cd1ce384eb789ca25361c",
+      "elf": {
+        "interpreter": null,
+        "needed": [
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/latin2_and_win1250.so",
+      "bytes": 14336,
+      "sha256": "4ca50693287ba962224002b046ffe8d29421b3944d7756b303490f5e490bae52",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/latin_and_mic.so",
+      "bytes": 14336,
+      "sha256": "447dfc62f2961bed492bcb1c1a0103d86adc3a361f7c28b5a52e05377aba6358",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/pgcrypto.so",
+      "bytes": 125920,
+      "sha256": "dd75646738dde1ba2762e47a5bbcd7b948de0b14bc6574192a694f179edd4da8",
+      "elf": {
+        "interpreter": null,
+        "needed": [
+          "libcrypto.so.3",
+          "libz.so.1",
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/plpgsql.so",
+      "bytes": 202984,
+      "sha256": "ab3bc0477e3c0c3922aaae7613a5e0abb3c0821ff9dd8d7fb01a3b09f35a134f",
+      "elf": {
+        "interpreter": null,
+        "needed": [
+          "libc.so.6"
+        ],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_big5.so",
+      "bytes": 129104,
+      "sha256": "d2f0ff2d1a27ad31f0ce174d32734b40b572908ef51c944c5a19d3f0795d9b03",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_cyrillic.so",
+      "bytes": 18512,
+      "sha256": "3cb4da21c8eb91c591e769e366c6da9d69bbdef9d411caff10e02706b8f2aed2",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_euc2004.so",
+      "bytes": 219216,
+      "sha256": "52782cc3774810bc02b63ab94ea9c92b87c05efbdd11ff85b40a14e1ee89d243",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_euc_cn.so",
+      "bytes": 88144,
+      "sha256": "2e1cbd133d0c41a085dd550faf2b86a6aa1398b6bb8f98abd31051183924a4c5",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_euc_jp.so",
+      "bytes": 165968,
+      "sha256": "667618d78704f8937ab360deffe1023a9954110aaca7aa22cf113bd70fdb65c7",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_euc_kr.so",
+      "bytes": 116816,
+      "sha256": "03ef22fec22fa4645c024b865f992b0409d19af175dd273a9d15f886507d6468",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_euc_tw.so",
+      "bytes": 211024,
+      "sha256": "22d439c609d3fb29bb081b3580716973ad967395314e29fcb615806d33c77a28",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_gb18030.so",
+      "bytes": 272464,
+      "sha256": "ffd3b5f6d3806e557bb77b6e2f922d0a05133fb18daedb40e1f6961142f465c8",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_gbk.so",
+      "bytes": 157776,
+      "sha256": "6b380e025c41599010820c95b0f8e3de24bbb8cd38591341148359e967b13355",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_iso8859.so",
+      "bytes": 34896,
+      "sha256": "e8689710d8521b54314594dc1bd7212bd6024f817dc560a4c8734f7f8196a580",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_iso8859_1.so",
+      "bytes": 14336,
+      "sha256": "0f9da7cd25c2ac8ff08a216a0ca896312a3096a4760a9a5bf5d7ca6dab14f12e",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_johab.so",
+      "bytes": 174160,
+      "sha256": "bd0f082e7c245f99954e1ef43b5a9e365b7b8a23f9bc0d8db59b58fcbc75a8a2",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_sjis.so",
+      "bytes": 96336,
+      "sha256": "a6ada7a9e11354978e3a32815a7b2fc4a01ca56fb7fa791c77eb17176ce89b00",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_sjis2004.so",
+      "bytes": 137296,
+      "sha256": "c2f0aec2e2c50be71ee9aaaac6a875be284ca30efcd19ec75a0250d8bbf8e7b2",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_uhc.so",
+      "bytes": 178256,
+      "sha256": "e7ee4b9558b17672de9af94393e7f3023b41b695472f55eeb6673c240ca10aa0",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/lib/postgresql/16/lib/utf8_and_win.so",
+      "bytes": 38992,
+      "sha256": "0ee46135d3fcc39c123b7f1d0c0f4ee0301d3d952e56ed46c21377ec0fb4c575",
+      "elf": {
+        "interpreter": null,
+        "needed": [],
+        "soname": null
+      }
+    },
+    {
+      "path": "/usr/share/postgresql/16/extension/pgcrypto--1.3.sql",
+      "bytes": 5708,
+      "sha256": "84f8eee1d6b03982fac596988b46bf89d5d5d8790d3133783eedad38bc7d8d38"
+    },
+    {
+      "path": "/usr/share/postgresql/16/extension/pgcrypto.control",
+      "bytes": 152,
+      "sha256": "2a6c81eef34ae6cee9ff5b557f3b6285db7fdd7bc76ee57798e82c945c61c939"
+    },
+    {
+      "path": "/usr/share/postgresql/16/extension/plpgsql--1.0.sql",
+      "bytes": 658,
+      "sha256": "f4e7e05438808ac0da0b3801397d16e36102969af7e2ffc982def5b7524fb557"
+    },
+    {
+      "path": "/usr/share/postgresql/16/extension/plpgsql.control",
+      "bytes": 193,
+      "sha256": "9457c3f51d6bdfab93f13080d177795a9274c025e378fb613218342e3a3c7b45"
+    },
+    {
+      "path": "/usr/share/postgresql/16/information_schema.sql",
+      "bytes": 114975,
+      "sha256": "6680d96b4619788df3ca4ad5b4b0c5e946ecb68ea1e80e3782b4f0e1f3c0c5b2"
+    },
+    {
+      "path": "/usr/share/postgresql/16/pg_hba.conf.sample",
+      "bytes": 5625,
+      "sha256": "773da9453bd833227b59aba7f2b686c0e6f6ac51c6779405659cda7f71b7a451"
+    },
+    {
+      "path": "/usr/share/postgresql/16/pg_ident.conf.sample",
+      "bytes": 2640,
+      "sha256": "b4dfef08731a7d20a3bb724ad4cf3e1cd91ec01fbe51349c6a3acc5704072965"
+    },
+    {
+      "path": "/usr/share/postgresql/16/postgres.bki",
+      "bytes": 944104,
+      "sha256": "e7ccf0cbdf9a993e2bbfd99e3c4bb2161036ad33233d66281756750c409c983f"
+    },
+    {
+      "path": "/usr/share/postgresql/16/postgresql.conf.sample",
+      "bytes": 30044,
+      "sha256": "039f4c08e86206580c87af332f0d12ccc0bc99e16d2910c5925d53a6433bc34d"
+    },
+    {
+      "path": "/usr/share/postgresql/16/snowball_create.sql",
+      "bytes": 44176,
+      "sha256": "82299ac2cdf8ca19ed6a82c9b51a7572aecb44c616c6d6bcd34b73cae2740af4"
+    },
+    {
+      "path": "/usr/share/postgresql/16/sql_features.txt",
+      "bytes": 35681,
+      "sha256": "5a15f999e425de2ab9097c05dff67b6cc05f97ccb979110fec80381e112adc37"
+    },
+    {
+      "path": "/usr/share/postgresql/16/system_constraints.sql",
+      "bytes": 8895,
+      "sha256": "09407a5554a7b4310fc1aa7570c010e151e0f89ad4fb6d659dd6acc870725a01"
+    },
+    {
+      "path": "/usr/share/postgresql/16/system_functions.sql",
+      "bytes": 23315,
+      "sha256": "56b935b41d653a9dd7282b7d0871b37a4ecccd72bbfe03e79a89e05e0131347c"
+    },
+    {
+      "path": "/usr/share/postgresql/16/system_views.sql",
+      "bytes": 50273,
+      "sha256": "1c47b3f1172e7ff8a0736d6747cd4487a3e970cc8f437705b1484baf2aae29e0"
+    },
+    {
+      "path": "/usr/share/postgresql/16/timezonesets/Default",
+      "bytes": 27214,
+      "sha256": "0dadd689b1998cc2d3acec42f66913194661f8d4835623776593b7bcdd075cb1"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/danish.stop",
+      "bytes": 424,
+      "sha256": "1bedc9cf5a8830dacf8c4ee0d8b301f0801861756ad0d504431d01047f961b0c"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/dutch.stop",
+      "bytes": 453,
+      "sha256": "e5a2a7c390fe3ad0c0a132586ed11492b635d66a1f426cd89677f80b07bc76a6"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/english.stop",
+      "bytes": 622,
+      "sha256": "b3f772a000465cb76e23adb03b47073c591c156fad8f7af09c8b8e80d6bd8eac"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/finnish.stop",
+      "bytes": 1579,
+      "sha256": "952af766edc9b8e7ddc877fc464cbd94b91754b5621fdfdd7020568fd4813fcd"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/french.stop",
+      "bytes": 805,
+      "sha256": "6ca60ffd4257c35cc3981d0e923881c3d8b85c8c0f6ef7a6697bd4ae97200fd8"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/german.stop",
+      "bytes": 1349,
+      "sha256": "46bf0dcec5b5bd83cd7fb96a5283876fdf91cfae7f988252132218545a61d1f7"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/hungarian.stop",
+      "bytes": 1227,
+      "sha256": "cb66b000fe0c852579ab2cb01e086f3d0eef80d650353bcd854958556dcf917d"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/italian.stop",
+      "bytes": 1654,
+      "sha256": "293d7841f198e4012f49e8e5653c3bfd073a58cea1259fa2c0fcec894167b628"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/nepali.stop",
+      "bytes": 4261,
+      "sha256": "43245d062fa39a6543d5ff3216552a391bac95fd2ba26c05b1d6959d26f441fb"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/norwegian.stop",
+      "bytes": 851,
+      "sha256": "f7e5b42208ccf1b1f282f9e0f8570e464272762bda5718b6b26750f510a688dc"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/portuguese.stop",
+      "bytes": 1267,
+      "sha256": "5f305fac1d830620eeb9b2a68a1b96bf26f65c2e9257d56c8413d6fb36ed6cac"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/russian.stop",
+      "bytes": 1235,
+      "sha256": "1743191192b4a4f77fcc216499455dc00c1b8626fdd407076a8deefff80e3d59"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/spanish.stop",
+      "bytes": 2178,
+      "sha256": "7450c1f7196c161d9a4e537de43f88bd55cdb64028c808e14587bd7a6ac7be3d"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/swedish.stop",
+      "bytes": 559,
+      "sha256": "2a9d9d756bc4257d49329994f805c712cd5ab6746162e2082752238766c1c0c8"
+    },
+    {
+      "path": "/usr/share/postgresql/16/tsearch_data/turkish.stop",
+      "bytes": 260,
+      "sha256": "f2c7f0c2bd3dba42da700776266831853a3b5f1207fada5c15207334109abb57"
+    }
+  ],
+  "executed_artifacts": 0,
+  "extracted_files": 0,
+  "external_libraries_and_tzdata": "NOT_AUTHENTICATED_OR_VERSION_RESOLVED",
+  "decoder": "zstd 1.5.7 stdin pipe; fixed repaired descriptor transport",
+  "cleanup": "decoder reaped; in-memory archive/inputs released at process exit"
+}

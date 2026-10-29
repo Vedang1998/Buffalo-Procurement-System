@@ -10,6 +10,56 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-29 internal review recorded; native-input proposal made concrete
+
+The latest report is recorded as **INTERNAL CODEX REVIEW ONLY** in
+`docs/review/2026-10-27-runtime-control-lifecycle/oct29-internal-codex-review.json`.
+The internal audit was not repeated. Its prior151 attempted/149 passed/two
+review-restriction errors and12 mocked B1 probes remain internal observations;
+they do not close the independent gate. Actual Claude delta review is still
+REVIEW_PENDING. B1/B2/N7/N8/N10 and historical external dispositions are unchanged.
+
+Frozen Claude implementation remains `e5e8a337476b7e0ffa678627e84c2b5ce82a744a`,
+tree `c73e1dbb9d57e59792b9fb449575b07033244476`; its exact frozen evidence checkpoint
+remains `a04ef478ced5f992156784a26de43827a8e7115b`, tree
+`f037f46393b9bcea6500021545042d053102b4ee`. This descendant records proposal/evidence
+only and does not replace the target or modify the frozen review packet.
+
+`native-input-provisioning-proposal.md` in the same packet directory now specifies
+exact versions/artifacts, publisher trust, the complete required input rules,
+proposed owned paths/host effects, ordering, measurements, negatives and cleanup.
+`native-input-artifact-evidence.json` separates verified facts from missing target
+identities. The full Python3.13.5 Ubuntu24.04 x64 archive from actions/python-versions
+release3.13.5-15601068749 matches publisher hash
+c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b.
+The PG server/client/libpq16.15-0ubuntu0.24.04.1 payloads match Ubuntu's signed
+index. This was bounded public download/static inspection only, no artifact exec.
+Python signed build provenance, installed target equality and the complete exact
+transitive package manifest remain missing; no dependency version was selected
+from a moving index or accepted pin changed.
+
+A concrete additional compatibility issue is now demonstrated: Python and
+libpython in that authenticated archive have absolute DT_RUNPATH, which the
+current parser refuses. Also moving the whole operator into a protected mount
+view would violate the existing original-host namespace ownership scan. The
+proposal identifies an exact artifact-bound search-policy decision and a fixed
+capture-child/service input-view handoff; neither is approved or implemented.
+The existing combined V2 root is retained, not the rejected PG-only redesign.
+No shared chmod/chown, existing-writable-input trust, privileged installation,
+new resource limit or activation change occurred. Full archive extraction would
+exceed256MiB; capture and whole-service memory fit remain NOT_PROVEN.
+
+Next executable preflight is the bounded read-only actual-target file/package
+inventory and reconciliation against authenticated artifacts; existing public
+reports lack it. Resolve the exact input-contract incompatibilities before any
+provisioner implementation/activation. Record Claude's actual e5e8/a04ef result
+when supplied and repair its specific findings within authority; do not repeat
+this internal audit. Applicable review and native prerequisites still gate the
+already-authorized bounded proof, without a second routine confirmation when
+they pass. Privileged activation/credentials remain disabled, live execution and
+integrated acceptance remain NOT_RUN/NON-GREEN. Phase numbering, source, tests,
+locks, workflow and all production/commercial boundaries remain unchanged.
+
 ### 2026-10-29 B2 implemented; exact GitHub native-input trust blocker
 
 Frozen published candidate `e5e8a337476b7e0ffa678627e84c2b5ce82a744a`, tree

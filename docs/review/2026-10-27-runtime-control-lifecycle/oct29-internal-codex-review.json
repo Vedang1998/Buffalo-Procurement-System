@@ -1,0 +1,107 @@
+{
+  "classification": "INTERNAL CODEX REVIEW ONLY",
+  "recorded_date": "2026-10-29",
+  "report_source": "Prior Codex read-only response in this task; recorded without rerunning the audit",
+  "reviewer": {
+    "tool": "Codex",
+    "model_family": "GPT-6-based",
+    "served_revision": "NOT_EXPOSED",
+    "external_reviewer_session": "NONE",
+    "independent_claude_review": false
+  },
+  "baseline": {
+    "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+    "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3"
+  },
+  "implementation": {
+    "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "tree": "c73e1dbb9d57e59792b9fb449575b07033244476"
+  },
+  "frozen_packet": {
+    "commit": "a04ef478ced5f992156784a26de43827a8e7115b",
+    "tree": "f037f46393b9bcea6500021545042d053102b4ee",
+    "path": "docs/review/2026-10-27-runtime-control-lifecycle/README.md"
+  },
+  "judgment_A": {
+    "assessment": "No concrete new blocking implementation defect identified in the inspected delta; not an independent closure decision",
+    "topics": [
+      "B1",
+      "B2",
+      "N7",
+      "N8",
+      "N10"
+    ],
+    "ledger_effect": "NONE; REPAIRED_PENDING_REVIEW retained",
+    "historical_closures": "Preserved at exact reviewed scope; changed memory.events V2 does not inherit historical approval"
+  },
+  "judgment_B": {
+    "bounded_proof_executable": false,
+    "blockers": [
+      "Demonstrated mutable/untrusted Python and PostgreSQL data input chains",
+      "Missing approved authenticated native-input provisioning contract and evidence",
+      "Applicable independent Claude delta review not received"
+    ],
+    "open_gates": [
+      "runtime",
+      "worker_control_exclusion",
+      "external_cleanup",
+      "actual_capture_and_memory",
+      "sentinel_release",
+      "full_authoritative",
+      "browser_acceptance"
+    ]
+  },
+  "prior_review_verification": {
+    "git_commit_tree_objects": 6,
+    "evidence_files": 59,
+    "public_github_annotation_reports": 3,
+    "source_and_worktree_unchanged": true
+  },
+  "prior_review_tests": {
+    "environment": {
+      "distribution": "Debian 13",
+      "kernel": "6.18.55 x86_64",
+      "glibc": "2.41",
+      "python": "3.13.5 /usr/bin/python3.13",
+      "uid": 1000,
+      "gid": 1000,
+      "supplementary_groups": []
+    },
+    "selected_existing_tests": {
+      "attempted": 151,
+      "passed": 149,
+      "assertion_failures": 0,
+      "errors": 2,
+      "skipped": 0,
+      "errors_attribution": "Review-only audit hook blocked fixture chmod; no permission changes occurred",
+      "blocked_tests": [
+        "test_hosted_synthetic_workflow.HostedSyntheticWorkflowTests.test_diagnostic_node_override_is_explicit_and_fail_closed",
+        "test_hosted_synthetic_workflow.HostedSyntheticWorkflowTests.test_manager_failure_status_and_unobserved_cleanup_never_pass"
+      ],
+      "reported_log_sha256": "77913f907eeb1d862eb7b8dcf716b3b9caa3e5a92c676904ed6f4a032b3bead9",
+      "raw_log_persistence": "Not included in this record; prior in-memory reviewer output only"
+    },
+    "additional_mocked_B1_probes": {
+      "executed": 12,
+      "passed": 12,
+      "native_privileged_stat": "NOT_RUN"
+    },
+    "not_run": [
+      "permission-mutating fixture cases",
+      "actual privileged stat",
+      "live PID1/cgroup/systemd/PostgreSQL",
+      "full authoritative suite",
+      "startup suite",
+      "browser acceptance"
+    ],
+    "github_1054": "Previously published evidence verified; not freshly rerun by this review"
+  },
+  "disposition": {
+    "independent_claude_gate": "REVIEW_PENDING",
+    "latest_actual_claude_review": "external-review-d863bc7d.json",
+    "privileged_activation": "DISABLED",
+    "credential_release": "WITHHELD",
+    "external_findings_closed_by_this_record": []
+  },
+  "current_turn": "Record and native-provisioning proposal/preflight only; internal audit not repeated"
+}

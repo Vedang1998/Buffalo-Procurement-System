@@ -583,5 +583,20 @@
       "observed": "sock_throttled=0 retained separately; unknown keys still refuse",
       "whole_service_proof": "NOT_PROVEN"
     }
-  ]
+  ],
+  "internal_codex_review_records": [
+    {
+      "record": "oct29-internal-codex-review.json",
+      "classification": "INTERNAL CODEX REVIEW ONLY",
+      "ledger_status_changes": false,
+      "claude_target_unchanged": true
+    }
+  ],
+  "native_input_proposal": {
+    "document": "native-input-provisioning-proposal.md",
+    "evidence": "native-input-artifact-evidence.json",
+    "status": "PROPOSAL_PREFLIGHT_ONLY",
+    "installation_authorized": false,
+    "activation_authorized_by_proposal": false
+  }
 }
