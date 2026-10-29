@@ -5,6 +5,7 @@ Synthetic package bytes are not trusted-host native execution evidence.
 from dataclasses import replace
 import fcntl
 import hashlib
+import json
 import os
 import copy
 from types import SimpleNamespace
@@ -331,6 +332,145 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
         self.addCleanup(self.close_owned,value)
         return value
 
+    def padded(self,value,sizes,**changes):
+        entries=list(runtime._entries(value));native=dict(value.native_files)
+        for index,size in enumerate(sizes):
+            raw=bytes([65+index])*size;path='/padding/f'+str(index)
+            digest=hashlib.sha256(raw).hexdigest();native[path]=digest
+            entries.append(ns.backend._BrowserRuntimeBundleEntry(path,'F',0o444,0,0,'native-runtime:'+digest,raw))
+        return repack(value,entries,native_files=native,**changes)
+
+    def receive_copy(self,value):
+        packet=value.packet();fd=os.dup(value.bundle.descriptor);packet['bundle']['descriptor']=fd
+        result=pg.receive_postgres_phase(packet)
+        self.assertEqual(result.bundle.sha256,value.bundle.sha256);result.close()
+        with self.assertRaises(OSError):os.fstat(fd)
+
+    def receiver_refuses_capacity(self,value,reason):
+        # Build the untrusted transport directly: packet() correctly refuses
+        # these values at the producer boundary before a receiver can see them.
+        packet={'generation':value.generation,'policy':value.policy,'source_commit':value.source_commit,'source_tree':value.source_tree,
+                'bundle':{name:getattr(value.bundle,name) for name in ('descriptor','target','device','inode','size','sha256','manifest_sha256','entries','regular_bytes','execution_authority')}}
+        fd=os.dup(value.bundle.descriptor);packet['bundle']['descriptor']=fd
+        receiver=(pg.receive_postgres_phase if value.policy==runtime.POSTGRES_PHASE_POLICY
+                  else pg.receive_postgres if value.policy==runtime.POSTGRES_POLICY else runtime.receive_runtime)
+        with self.assertRaisesRegex(ns.NamespaceProofError,reason):receiver(packet)
+        with self.assertRaises(OSError):os.fstat(fd)
+
+    def test_revision_preserves_exact_unrelated_bounds(self):
+        self.assertEqual(runtime.POSTGRES_PHASE_POLICY,'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2')
+        self.assertEqual(runtime.POSTGRES_PHASE_MAX_BYTES,134217728)
+        self.assertEqual(runtime.MAX_BYTES,83886080);self.assertEqual(runtime.MAX_ENTRIES,3000)
+        self.assertEqual(ns.backend._BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT,536870912)
+        value=self.compose();identity=json.loads(next(e.content for e in runtime._entries(value) if e.path==runtime._IDENTITY_PATH))
+        self.assertEqual(identity['capacity_policy'],{'change_control':'BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29','regular_bytes':134217728,'per_file_bytes':83886080,'entries':3000})
+        with self.assertRaises(ns.NamespaceProofError):runtime._aggregate_limit(runtime.LEGACY_POSTGRES_PHASE_POLICY)
+
+    def test_phase_scaled_exact_boundary_and_receiver_agreement(self):
+        # Actual sealed entries/receiver, scaled to keep deterministic tests small.
+        # Exact production constants are asserted separately; target capture is real-size.
+        with patch.object(runtime,'MAX_BYTES',80*1024),patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',128*1024):
+            base=self.compose();trial=self.padded(base,(50*1024,50*1024))
+            gap=runtime.POSTGRES_PHASE_MAX_BYTES-trial.bundle.regular_bytes;trial.close()
+            value=self.padded(base,(50*1024,50*1024+gap))
+            try:
+                self.assertEqual(value.bundle.regular_bytes,131072)
+                self.assertGreater(value.bundle.regular_bytes,runtime.MAX_BYTES)
+                value.verify();pg._phase_inventory(value);self.receive_copy(value)
+            finally:value.close()
+            above=self.padded(base,(50*1024,50*1024+gap+1))
+            try:
+                with self.assertRaisesRegex(ns.NamespaceProofError,'runtime_aggregate_capacity_refused'):above.verify()
+                packet={'generation':above.generation,'policy':above.policy,'source_commit':above.source_commit,'source_tree':above.source_tree,
+                        'bundle':{name:getattr(above.bundle,name) for name in ('descriptor','target','device','inode','size','sha256','manifest_sha256','entries','regular_bytes','execution_authority')}}
+                fd=os.dup(above.bundle.descriptor);packet['bundle']['descriptor']=fd
+                with self.assertRaisesRegex(ns.NamespaceProofError,'runtime_aggregate_capacity_refused'):pg.receive_postgres_phase(packet)
+                with self.assertRaises(OSError):os.fstat(fd)
+            finally:
+                ns.backend._close_browser_runtime_bundle_descriptor(above.bundle.descriptor,above.bundle.target,(above.bundle.device,above.bundle.inode));above._token=None
+            base.close()
+
+    def test_other_policies_keep_scaled_80k_aggregate(self):
+        with patch.object(runtime,'MAX_BYTES',80*1024):
+            for policy,application,postgres in ((runtime.POLICY,None,None),(runtime.APPLICATION_POLICY,{},None),(runtime.POSTGRES_POLICY,None,{})):
+                value=self.padded(self.diagnostic,(45*1024,45*1024),policy=policy,application=application,postgres=postgres)
+                try:
+                    with self.subTest(policy=policy),self.assertRaisesRegex(ns.NamespaceProofError,'runtime_aggregate_capacity_refused'):value.verify()
+                    self.receiver_refuses_capacity(value,'runtime_aggregate_capacity_refused')
+                finally:
+                    ns.backend._close_browser_runtime_bundle_descriptor(value.bundle.descriptor,value.bundle.target,(value.bundle.device,value.bundle.inode));value._token=None
+
+    def test_phase_individual_file_cannot_use_aggregate_allowance(self):
+        with patch.object(runtime,'MAX_BYTES',80*1024),patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',128*1024):
+            base=self.compose();value=self.padded(base,(80*1024+1,))
+            try:
+                self.assertLess(value.bundle.regular_bytes,runtime.POSTGRES_PHASE_MAX_BYTES)
+                with self.assertRaisesRegex(ns.NamespaceProofError,'runtime_file_capacity_refused'):value.verify()
+                self.receiver_refuses_capacity(value,'runtime_file_capacity_refused')
+            finally:
+                ns.backend._close_browser_runtime_bundle_descriptor(value.bundle.descriptor,value.bundle.target,(value.bundle.device,value.bundle.inode));value._token=None;base.close()
+
+    def test_entry_bound_3000_and_3001_is_independent_of_codec_limit(self):
+        base=self.compose();entries=list(runtime._entries(base));native=dict(base.native_files)
+        needed=3000-base.bundle.entries-1
+        for index in range(needed+1):
+            raw=b'x';path='/entry-padding/f'+str(index);digest=hashlib.sha256(raw).hexdigest();native[path]=digest
+            entries.append(ns.backend._BrowserRuntimeBundleEntry(path,'F',0o444,0,0,'native-runtime:'+digest,raw))
+            if index!=needed-1 and index!=needed:continue
+            value=repack(base,entries,native_files=dict(native))
+            try:
+                self.assertEqual(value.bundle.entries,3000 if index==needed-1 else 3001)
+                if index==needed-1:value.verify();self.receive_copy(value)
+                else:
+                    with self.assertRaisesRegex(ns.NamespaceProofError,'runtime_entry_capacity_refused'):value.verify()
+                    self.receiver_refuses_capacity(value,'runtime_entry_capacity_refused')
+            finally:
+                ns.backend._close_browser_runtime_bundle_descriptor(value.bundle.descriptor,value.bundle.target,(value.bundle.device,value.bundle.inode));value._token=None
+
+    def test_object_and_packet_relabel_cannot_promote_other_policy(self):
+        value=self.postgres;original=value.policy;value.policy=runtime.POSTGRES_PHASE_POLICY
+        try:
+            for method in (value.verify,value.packet):
+                with self.assertRaisesRegex(ns.NamespaceProofError,'runtime_identity_refused'):method()
+        finally:value.policy=original
+        packet=value.packet();fd=os.dup(value.bundle.descriptor);packet['bundle']['descriptor']=fd;packet['policy']=runtime.POSTGRES_PHASE_POLICY
+        with self.assertRaises(ns.NamespaceProofError):pg.receive_postgres_phase(packet)
+        with self.assertRaises(OSError):os.fstat(fd)
+        value.verify()
+
+    def test_legacy_and_malformed_sealed_capacity_records_refuse_on_receive(self):
+        value=self.compose();original=list(runtime._entries(value))
+        mutations=[lambda d:d.update(policy=runtime.LEGACY_POSTGRES_PHASE_POLICY),lambda d:d.pop('capacity_policy'),
+            lambda d:d['capacity_policy'].update(regular_bytes=134217729),lambda d:d['capacity_policy'].update(entries=3001),
+            lambda d:d['capacity_policy'].update(per_file_bytes=134217728),lambda d:d['capacity_policy'].update(change_control='unapproved'),
+            lambda d:d['capacity_policy'].update(extra=True),lambda d:d['capacity_policy'].update(regular_bytes=134217728.0)]
+        for mutate in mutations:
+            identity=json.loads(next(e.content for e in original if e.path==runtime._IDENTITY_PATH));mutate(identity)
+            raw=json.dumps(identity,sort_keys=True,separators=(',',':')).encode()
+            entries=tuple(replace(e,content=raw,provenance='audit-source:'+hashlib.sha256(raw).hexdigest()) if e.path==runtime._IDENTITY_PATH else e for e in original if e.path not in ('/proc','/tmp'))
+            bundle=ns.backend._seal_browser_runtime_bundle(entries);packet=value.packet()
+            packet['bundle']={name:getattr(bundle,name) for name in packet['bundle']}
+            with self.subTest(identity=identity['policy']),self.assertRaises(ns.NamespaceProofError):pg.receive_postgres_phase(packet)
+            with self.assertRaises(OSError):os.fstat(bundle.descriptor)
+        value.verify()
+
+    def test_capacity_integer_overflow_and_wrong_type_fail_closed(self):
+        for size in (-1,True,134217728.0,2**64,2**1024):
+            with self.subTest(size=size),self.assertRaisesRegex(ns.NamespaceProofError,'runtime_aggregate_capacity_refused'):
+                runtime._verify_capacity(runtime.POSTGRES_PHASE_POLICY,(),size)
+
+    def test_owned_capture_closes_inputs_before_composed_seal(self):
+        seal=pg._seal_phase;observed=[]
+        def checked(*args):
+            observed.append((self.diagnostic._token,self.postgres._token))
+            for v in (self.diagnostic,self.postgres):
+                with self.assertRaises(OSError):os.fstat(v.bundle.descriptor)
+            return seal(*args)
+        with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic),patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_seal_phase',side_effect=checked):
+            result=pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
+        try:self.assertEqual(observed,[(None,None)]);result.verify()
+        finally:result.close()
+
     def test_sealed_union_keeps_both_exact_inputs_and_one_identity(self):
         value=self.compose();entries=pg._phase_inventory(value)
         self.assertEqual(value.policy,runtime.POSTGRES_PHASE_POLICY)
@@ -386,7 +526,7 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
 
     def test_combined_regular_byte_limit_is_not_sum_of_independent_limits(self):
         limit=max(self.diagnostic.bundle.regular_bytes,self.postgres.bundle.regular_bytes)
-        with patch.object(runtime,'MAX_BYTES',limit),self.assertRaises(ns.NamespaceProofError):self.compose()
+        with patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',limit),self.assertRaises(ns.NamespaceProofError):self.compose()
 
     def test_regenerated_parent_count_is_bounded(self):
         limit=max(self.diagnostic.bundle.entries,self.postgres.bundle.entries)
@@ -537,7 +677,7 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
         # this synthetic limit. No accepted production budget is changed.
         limit=max(self.diagnostic.bundle.regular_bytes,self.postgres.bundle.regular_bytes)
         self.assertLess(limit,normal['composed_regular_bytes'])
-        with patch.object(runtime,'MAX_BYTES',limit),patch.object(ns.backend,'_seal_browser_runtime_bundle') as seal:
+        with patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',limit),patch.object(ns.backend,'_seal_browser_runtime_bundle') as seal:
             report=pg.measure_phase_fit(self.diagnostic,self.postgres)
         seal.assert_not_called();self.assertEqual(report['capacity'],'REFUSED')
         self.diagnostic.verify();self.postgres.verify()
@@ -578,19 +718,19 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
         with patch.object(pg,'_source_identity',side_effect=[None,failure]), \
              patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
              patch.object(pg,'capture_postgres',return_value=self.postgres), \
-             patch.object(pg,'_compose_phase',return_value=result),self.assertRaises(source.HostedSourceError) as caught:
+             patch.object(pg,'_seal_phase',return_value=result),self.assertRaises(source.HostedSourceError) as caught:
             pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
         self.assertIs(caught.exception,failure);result.close.assert_called_once()
         self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
 
-    def test_input_close_failure_still_closes_other_input_and_result(self):
+    def test_input_close_failure_closes_other_input_before_any_composed_allocation(self):
         result=Mock();close=self.postgres.close;failure=OSError('close')
         def closed_then_failed():close();raise failure
         with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
-             patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_compose_phase',return_value=result), \
+             patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_seal_phase',return_value=result) as seal, \
              patch.object(self.postgres,'close',side_effect=closed_then_failed),self.assertRaises(ns.NamespaceCleanupError) as caught:
             pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
-        self.assertIs(caught.exception.__cause__,failure);result.close.assert_called_once()
+        self.assertIs(caught.exception.__cause__,failure);seal.assert_not_called();result.close.assert_not_called()
         self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
 
     def test_postseal_constructor_failure_closes_only_new_descriptor(self):
@@ -605,7 +745,7 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
     def test_pending_cancellation_closes_complete_untransferred_phase(self):
         result=Mock()
         with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=self.diagnostic), \
-             patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_compose_phase',return_value=result), \
+             patch.object(pg,'capture_postgres',return_value=self.postgres),patch.object(pg,'_seal_phase',return_value=result), \
              patch.object(source.signal,'pthread_sigmask',side_effect=[set(),KeyboardInterrupt()]),self.assertRaises(KeyboardInterrupt):
             pg.capture_postgres_phase('a'*64,Path('/fixture'),BINDING)
         result.close.assert_called_once()

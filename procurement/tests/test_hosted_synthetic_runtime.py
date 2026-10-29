@@ -6,6 +6,7 @@ import copy
 import errno
 import fcntl
 import hashlib
+import json
 import os
 import struct
 import tempfile
@@ -42,15 +43,85 @@ def fixture_bundle():
 
 
 class HostedRuntimeTests(unittest.TestCase):
+    def test_codec_copy_reduction_keeps_exact_legacy_bytes_and_digest(self):
+        raw=b'fixed synthetic bytes'*1000
+        entries=(ns.backend._BrowserRuntimeBundleEntry('/a','F',0o444,0,0,'native-runtime:'+hashlib.sha256(raw).hexdigest(),raw),)
+        encoded,manifest_hash,bundle_hash,size=ns.backend._encode_browser_runtime_bundle(entries)
+        count=int.from_bytes(encoded[:8],'big');manifest=encoded[8:8+count]
+        self.assertEqual(encoded,len(manifest).to_bytes(8,'big')+manifest+raw)
+        self.assertEqual(bundle_hash,hashlib.sha256(ns.backend._BROWSER_RUNTIME_BUNDLE_MAGIC+manifest+raw).hexdigest())
+        self.assertEqual(manifest_hash,hashlib.sha256(manifest).hexdigest());self.assertEqual(size,len(raw))
+        parsed=ns.backend._parse_browser_runtime_bundle(encoded)
+        self.assertEqual(parsed,(entries,manifest_hash,bundle_hash,size));self.assertIs(type(parsed[0][0].content),bytes)
+        corrupt=bytearray(encoded);corrupt[-1]^=1
+        with self.assertRaises(ns.backend.LocalStagingAcceptanceError):ns.backend._parse_browser_runtime_bundle(bytes(corrupt))
+
     def test_real_capture_fit_driver_has_no_namespace_or_native_execution(self):
         import hosted_synthetic_runtime_regression as driver
         import hosted_synthetic_postgres_runtime as pg
-        for capacity,expected in (('FIT','PASS'),('REFUSED','REFUSED')):
-            with self.subTest(capacity=capacity),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity}) as capture,patch.object(driver,'_execute') as execute:
+        for capacity,expected in (('FIT','PASS'),('REFUSED','REFUSED_CAPACITY')):
+            with self.subTest(capacity=capacity),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity,'input_memfd_allocated_bytes':0}) as capture,patch.object(driver,'_measure_composed_phase',return_value={'phase_memfd_allocated_bytes':0,'stages':[]}) as composed,patch.object(driver,'_execute') as execute:
                 result=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
             capture.assert_called_once();execute.assert_not_called()
             self.assertEqual(result['capture_fit'],expected);self.assertTrue(result['owned_descriptors_closed'])
-            self.assertEqual(result['native_execution'],'NOT_RUN');self.assertEqual(result['whole_service_memory'],'NOT_MEASURED')
+            self.assertEqual(result['native_execution'],'NOT_RUN');self.assertEqual(result['whole_service_memory'],'NOT_PROVEN')
+            self.assertEqual(composed.call_count,1 if capacity=='FIT' else 0)
+
+    def test_memory_measurement_runs_actual_composition_and_adoption_then_closes(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        from test_hosted_synthetic_postgres_runtime import PostgresPhaseRuntimeTests,BINDING
+        import tracemalloc
+        fixture=PostgresPhaseRuntimeTests();fixture.setUp()
+        try:
+            measurement=pg.measure_phase_fit(fixture.diagnostic,fixture.postgres)
+            with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=fixture.diagnostic),patch.object(pg,'capture_postgres',return_value=fixture.postgres):
+                before=driver._descriptor_inventory();tracemalloc.start()
+                try:report=driver._measure_composed_phase(BINDING,Path('/fixture'),measurement)
+                finally:tracemalloc.stop()
+            self.assertEqual(report['composition'],'PASS');self.assertEqual(report['adoption'],'PASS')
+            self.assertTrue(report['owned_captures_and_adoption_closed'])
+            self.assertEqual(len(report['stages']),2)
+            self.assertEqual(len(driver._descriptor_inventory()),len(before)-2)
+        finally:fixture.doCleanups()
+
+    def test_measurement_adoption_refusal_closes_transferred_and_original_fd(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        from test_hosted_synthetic_postgres_runtime import PostgresPhaseRuntimeTests,BINDING
+        fixture=PostgresPhaseRuntimeTests();fixture.setUp()
+        try:
+            measurement=pg.measure_phase_fit(fixture.diagnostic,fixture.postgres);before=driver._descriptor_inventory()
+            def refused(packet):
+                owned=pg.runtime._receive_runtime(packet,(runtime.POSTGRES_PHASE_POLICY,));owned.close()
+                raise ns.NamespaceProofError('synthetic adopter refusal')
+            with patch.object(pg,'_source_identity'),patch.object(runtime,'capture_runtime',return_value=fixture.diagnostic),patch.object(pg,'capture_postgres',return_value=fixture.postgres),patch.object(pg,'receive_postgres_phase',side_effect=refused),self.assertRaisesRegex(ns.NamespaceProofError,'synthetic adopter refusal'):
+                driver._measure_composed_phase(BINDING,Path('/fixture'),measurement)
+            self.assertEqual(len(driver._descriptor_inventory()),len(before)-2)
+        finally:fixture.doCleanups()
+
+    def test_shared_counter_unknown_safety_key_is_explicit_refusal(self):
+        import hosted_synthetic_runtime_regression as driver
+        values=b'low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n'
+        def read(path,*args):
+            if path=='/proc/self/cgroup':return b'0::/owned-job\n'
+            return values+b'unknown_safety_event 0\n' if path.endswith('memory.events') else b'0\n'
+        with patch.object(driver.ns,'_read',side_effect=read),patch.object(driver.Path,'stat',return_value=SimpleNamespace(st_dev=1,st_ino=2)):
+            report=driver._shared_job_memory()
+        self.assertEqual(report['status'],'REFUSED_COUNTER_SCHEMA')
+        self.assertNotIn('values',report)
+
+    def test_capacity_refusal_never_enters_composition_or_changes_trace_state(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        from hosted_synthetic_source import HostedSourceError
+        for kind in (MemoryError,HostedSourceError,ns.backend.LocalStagingAcceptanceError):
+            with self.subTest(kind=kind.__name__),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(driver,'_shared_job_memory',return_value={'status':'OBSERVED','identity':[1,2],'values':{'memory.events':{}}}),patch.object(pg,'capture_phase_fit',side_effect=kind('excluded failure text')),patch.object(driver,'_measure_composed_phase') as composed:
+                report=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
+            composed.assert_not_called();self.assertEqual(report['capture_fit'],'REFUSED_COMPONENT')
+            self.assertEqual(report['failure_type'],kind.__name__);self.assertFalse(driver.tracemalloc.is_tracing())
+            self.assertNotIn('excluded failure text',str(report))
+            self.assertEqual(report['shared_job_zero_oom'],'NOT_PROVEN')
 
     def test_real_capture_fit_unavailable_target_is_not_a_passing_substitute(self):
         import hosted_synthetic_runtime_regression as driver

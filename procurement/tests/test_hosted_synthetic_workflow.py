@@ -49,12 +49,12 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_repository_python_has_no_site_or_ambient_environment(self):
         launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
-        self.assertEqual(len(launches), 5)
+        self.assertEqual(len(launches), 6)
         self.assertTrue(launches[1].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertTrue(launches[3].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[3])
-        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[3])
-        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[4])
+        self.assertTrue(launches[4].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[4])
+        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[4])
+        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[5])
         self.assertNotIn('BUFFALO_DIAGNOSTIC_NODE', ''.join([launches[0],*launches[2:]]))
         self.assertIn('diagnostic_node=$(command -v node)', self.text)
         self.assertIn('sha256sum "$diagnostic_node"', self.text)
@@ -94,7 +94,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,15,66,22,37,20,11,17,37,23,23,23,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,72,36,16,35,42,35,14]', 'result.wasSuccessful()', 'result.testsRun == 1033', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,16,66,22,37,20,11,17,37,23,23,28,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,81,36,16,35,42,35,14]', 'result.wasSuccessful()', 'result.testsRun == 1048', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -124,6 +124,17 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)['privileged_processes_started'],0)
         self.assertNotIn('sudo ',self.text)
 
+    def test_readonly_capture_is_fixed_bounded_and_cannot_activate_bootstrap(self):
+        block=self.text.split('- name: Read-only PostgreSQL phase capture and memory measurement',1)[1].split('- name: Review gate',1)[0]
+        self.assertIn('/usr/bin/timeout --signal=TERM --kill-after=2s 60s',block)
+        self.assertIn('--measure-postgres-phase "$EXPECTED_SHA"',block)
+        self.assertIn('exit "$status"',block)
+        self.assertIn('"capture_fit":"OUTER_TIMEOUT"',block)
+        for forbidden in ('systemd-run','--native-bootstrap','postgres_version_activation_entry','--run-runtime-component','sudo','--version'):
+            self.assertNotIn(forbidden,block)
+        self.assertLess(self.text.index('- name: Focused source and diagnostic validation'),self.text.index('- name: Read-only PostgreSQL'))
+        self.assertLess(self.text.index('- name: Read-only PostgreSQL'),self.text.index('- name: Review gate'))
+
     def test_review_gate_precedes_real_kernel_and_service_steps(self):
         gate = self.text.index('- name: Review gate before hosted execution')
         self.assertLess(gate, self.text.index('- name: Credential-free real PID1 lifecycle regression'))
@@ -137,7 +148,8 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
     def test_public_notice_chunks_reconstruct_exact_bytes_and_keep_failure(self):
         diagnostic = self.text.split('          diagnostic=$(head -n 1 "$report")\n', 1)[1].split('      - name:', 1)[0]
         inventory = self.text.split('          # Begin bounded public inventory.', 1)[1].split('\n', 1)[1].split('          # End bounded public inventory.', 1)[0]
-        for block,title,expected_code in ((diagnostic,b'Buffalo diagnostic part',1),
+        capture=self.text.split('          # Begin bounded public capture measurement.\n',1)[1].split('          # End bounded public capture measurement.',1)[0]
+        for block,title,expected_code in ((capture,b'PostgreSQL capture memory component',0),(diagnostic,b'Buffalo diagnostic part',1),
                                            (inventory,b'Read-only ownership-scan inventory',0)):
             commands = '\n'.join(line[10:] for line in block.splitlines())
             for raw in ('{"test":"100%\r\n::error::synthetic"}', 'a'*12000, 'b'*16384):

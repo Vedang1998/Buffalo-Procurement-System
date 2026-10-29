@@ -13,6 +13,7 @@ import os
 import resource
 import re
 import time
+import tracemalloc
 from pathlib import Path
 import subprocess
 import sys
@@ -191,28 +192,146 @@ def run_application(binding,root,cache):
     finally:value.close()
 
 
-def run_postgres_fit(binding,root):
-    """Real native capture-fit test; invoke under the fixed60s outer timeout.
+def _shared_job_memory():
+    """Read only the existing job cgroup; never claim exclusive attribution."""
+    from hosted_synthetic_cgroup import CgroupProofError
+    result={'scope':'SHARED_JOB_CGROUP_NOT_OWNED_SERVICE','status':'NOT_OBSERVED'}
+    try:
+        raw=ns._read('/proc/self/cgroup',4096)
+        matched=re.fullmatch(rb'0::(/[A-Za-z0-9_.@/\\-]*)\n',raw)
+        ns._require(matched is not None and b'..' not in matched[1].split(b'/'))
+        path=Path('/sys/fs/cgroup')/matched[1].decode().lstrip('/')
+        identity=ns._identity(path.stat());values={}
+        for name in ('memory.current','memory.peak','memory.events'):
+            data=ns._read(str(path/name),4096)
+            if name=='memory.events':
+                from hosted_synthetic_cgroup import parse_memory_events
+                values[name]=parse_memory_events(data)
+            else:
+                ns._require(re.fullmatch(rb'[0-9]{1,20}\n',data) is not None)
+                values[name]=int(data)
+        ns._require(ns._identity(path.stat())==identity)
+        result.update(status='OBSERVED',identity=list(identity),values=values)
+    except CgroupProofError:result['status']='REFUSED_COUNTER_SCHEMA'
+    except (OSError,ns.NamespaceProofError):pass
+    return result
 
-    No namespace, native PG execution or account. Process RSS is reported
-    separately and excludes unmapped memfd charges; it is not service proof.
+
+def _memory_stage(name):
+    current,peak=tracemalloc.get_traced_memory()
+    return {'stage':name,'traced_current_bytes':current,'traced_peak_bytes':peak,
+            'process_cumulative_peak_rss_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024,
+            'child_process_peak_rss_bytes':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024,
+            'shared_job':_shared_job_memory()}
+
+
+def _measure_composed_phase(binding,root,measurement):
+    """Execute real composition/codec/adoption, never PostgreSQL or projection."""
+    import hosted_synthetic_postgres_runtime as pg
+    value=received=None;descriptor=None;failure=None;errors=[];report=None;stages=[]
+    try:
+        tracemalloc.reset_peak();started=time.monotonic()
+        value=pg.capture_postgres_phase(measurement['generation'],root,binding)
+        stages.append(_memory_stage('CAPTURE_COMPOSE_SERIALIZE_AND_VERIFY'))
+        ns._require(value.bundle.regular_bytes==measurement['composed_regular_bytes']
+            and value.bundle.entries==measurement['composed_entries']
+            and value.postgres['diagnostic_bundle_sha256']==measurement['diagnostic_bundle_sha256']
+            and value.postgres['postgres_bundle_sha256']==measurement['postgres_bundle_sha256'])
+        allocated=os.fstat(value.bundle.descriptor).st_blocks*512
+        report={'composition':'PASS','regular_bytes':value.bundle.regular_bytes,'entries':value.bundle.entries,
+            'bundle_sha256':value.bundle.sha256,'manifest_sha256':value.bundle.manifest_sha256,
+            'phase_memfd_allocated_bytes':allocated,'phase_memfd_logical_bytes':value.bundle.size,
+            'source_bound_input_hashes_match_fit':True,'fit_and_phase_are_separate_captures':True,
+            'capture_compose_seconds':round(time.monotonic()-started,6),
+            'interpreter':{'path':value.executable,'version':sys.version.split()[0],'sha256':value.native_files[value.executable]},
+            'postgres':{'path':pg.BIN+'postgres','sha256':value.native_files[pg.BIN+'postgres']},
+            'native_inventory_sha256':hashlib.sha256(json.dumps(value.native_files,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+        tracemalloc.reset_peak();packet=value.packet()
+        descriptor=os.dup(value.bundle.descriptor);packet['bundle']['descriptor']=descriptor
+        received=pg.receive_postgres_phase(packet);descriptor=None
+        ns._require(received.bundle.sha256==value.bundle.sha256)
+        stages.append(_memory_stage('SAME_PROCESS_DESCRIPTOR_ADOPTION'))
+        report.update(adoption='PASS',adoption_scope='ACTUAL_RECEIVER_SAME_PROCESS_NOT_EXECUTION',stages=stages)
+    except BaseException as error:failure=error
+    if descriptor is not None:
+        # Receiver may have closed a transferred descriptor on refusal. Never
+        # close a number without proving it is still the exact owned bundle.
+        try:os.fstat(descriptor)
+        except OSError as error:
+            if error.errno!=errno.EBADF:errors.append(error)
+        else:
+            try:ns._require(ns.backend._close_browser_runtime_bundle_descriptor(descriptor,value.bundle.target,(value.bundle.device,value.bundle.inode)))
+            except BaseException as error:errors.append(error)
+    for owned in (received,value):
+        if owned is not None:
+            try:owned.close()
+            except BaseException as error:errors.append(error)
+    if errors:raise ns.NamespaceCleanupError('postgres_measurement_cleanup_refused') from (failure or errors[0])
+    if failure is not None:raise failure
+    ns._require(report is not None)
+    report['owned_captures_and_adoption_closed']=True
+    return report
+
+
+def run_postgres_fit(binding,root):
+    """Fixed60s outer bound; read-only real capture plus memory components.
+
+    No namespace, PG execution, account or service. RSS/heap and owned memfd
+    allocation are separate. Shared-job counters never prove owned-service fit.
     """
     import hosted_synthetic_postgres_runtime as pg
-    ns._require(os.geteuid()>0 and os.getegid()>0)
+    from hosted_synthetic_source import HostedSourceError
+    ns._require(os.geteuid()>0 and os.getegid()>0 and not tracemalloc.is_tracing())
     result={'capture_fit':'NOT_RUN','commit':binding.commit,'tree':binding.tree,
         'native_execution':'NOT_RUN','privileged_processes_started':0,'account_mutations':0,
-        'credential_release':'WITHHELD','execution_authority':False,'whole_service_memory':'NOT_MEASURED'}
+        'credential_release':'WITHHELD','execution_authority':False,'whole_service_memory':'NOT_PROVEN'}
     release,_=runtime.read_native('/etc/os-release')
     if not (re.search(rb'(?m)^ID=(?:ubuntu|"ubuntu")$',release)
             and re.search(rb'(?m)^VERSION_ID=(?:24\.04|"24\.04")$',release)):
         return dict(result,reason='TARGET_IS_NOT_UBUNTU_24_04')
     if not Path(pg.BIN+'postgres').is_file():return dict(result,reason='FIXED_NATIVE_PG16_PATH_UNAVAILABLE')
-    before=_descriptor_inventory();started=time.monotonic()
-    try:measurement=pg.capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
-    finally:ns._require(_descriptor_inventory()==before)
-    result.update(capture_fit='PASS' if measurement['capacity']=='FIT' else 'REFUSED',measurement=measurement,
-        elapsed_seconds=round(time.monotonic()-started,6),process_peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-        rss_scope='PROCESS_PEAK_ONLY_EXCLUDES_UNMAPPED_MEMFD_CHARGES',owned_descriptors_closed=True)
+    before=_descriptor_inventory();started=time.monotonic();stages=[]
+    tracemalloc.start()
+    try:
+        stages.append(_memory_stage('BEFORE_CAPTURE'))
+        measurement=pg.capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
+        stages.append(_memory_stage('CAPTURE_FIT_INPUTS_AND_CLEANUP'))
+        result.update(capture_fit='PASS' if measurement['capacity']=='FIT' else 'REFUSED_CAPACITY',measurement=measurement)
+        if measurement['capacity']=='FIT':
+            detail=_measure_composed_phase(binding,root,measurement);result['phase_component']=detail
+            stages.extend(detail.pop('stages'))
+            # Owning capture closes both inputs before composed allocation. FD
+            # aliases share an inode, so adoption does not duplicate backing.
+            peak_backing=max(measurement['input_memfd_allocated_bytes'],detail['phase_memfd_allocated_bytes'])
+            rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024
+            children=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024
+            envelope=rss+children+peak_backing
+            result['memory_envelope']={'process_peak_rss_bytes':rss,'child_peak_rss_bytes':children,
+                'maximum_owned_memfd_allocation_bytes':peak_backing,'conservative_sum_bytes':envelope,
+                'service_limit_bytes':536870912,'result':'WITHIN_COMPONENT_ENVELOPE' if envelope<=536870912 else 'REFUSED_COMPONENT_ENVELOPE',
+                'limitations':'Independent maxima summed; excludes unowned job processes, kernel charges, later projection/tmpfs; not service/cgroup acceptance'}
+            if envelope>536870912:result['capture_fit']='REFUSED_MEMORY_ENVELOPE'
+        stages.append(_memory_stage('AFTER_OWNED_CLEANUP'))
+    except (ns.NamespaceProofError,HostedSourceError,ns.backend.LocalStagingAcceptanceError,MemoryError,OSError) as error:
+        result.update(capture_fit='REFUSED_COMPONENT',failure_type=type(error).__name__)
+        # No exception text, caller data or private filesystem paths in evidence.
+    finally:
+        tracemalloc.stop();ns._require(_descriptor_inventory()==before)
+    observed=[stage['shared_job'] for stage in stages]
+    result['shared_job_zero_oom']='NOT_PROVEN'
+    if any(item['status']=='REFUSED_COUNTER_SCHEMA' for item in observed):
+        result['capture_fit']='REFUSED_COUNTER_SCHEMA'
+    elif (len(observed)>=2 and stages[0]['stage']=='BEFORE_CAPTURE'
+          and stages[-1]['stage']=='AFTER_OWNED_CLEANUP'
+          and all(item['status']=='OBSERVED' for item in observed)):
+        from hosted_synthetic_cgroup import require_zero_oom_delta,CgroupProofError
+        try:
+            ns._require(all(item['identity']==observed[0]['identity'] for item in observed))
+            for earlier,later in zip(observed,observed[1:]):require_zero_oom_delta(earlier['values']['memory.events'],later['values']['memory.events'])
+        except (ns.NamespaceProofError,CgroupProofError):result['capture_fit']='REFUSED_SHARED_JOB_COUNTERS'
+        else:result['shared_job_zero_oom']='OBSERVED_ZERO_DELTA_SHARED_SCOPE_ONLY'
+    result.update(elapsed_seconds=round(time.monotonic()-started,6),memory_stages=stages,
+        owned_descriptors_closed=True,namespace_deadline_proof='NOT_RUN',service_limits_applied='NOT_RUN_REVIEW_REQUIRED')
     return result
 
 

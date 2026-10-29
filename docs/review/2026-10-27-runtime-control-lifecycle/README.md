@@ -1,15 +1,35 @@
-# October 28 Claude remediation — necessary delta only
+# October 29 B2 capacity correction — combined Claude delta
 
-Latest published implementation: `3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c`, tree
-`0cbeccf63ab37d32672a455867086358e2c7b134`. The evidence follow-up has a separate
-tree. `oct28-claude-remediation-evidence.json` indexes exact executed sources,
-raw logs, failed runs, target observations and ordinary publication verification.
+Owner approved the PG_PHASE-only128MiB option on2026-10-29. The implementation
+revises the fixed policy to `BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2` under
+`BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29`; historical V1 manifests/evidence are not
+reinterpreted. `b2-budget-change-control.json` records the exact decision and
+unchanged limits. New candidate identities and source-bound target measurement
+will be recorded in the evidence follow-up after publication.
 
 **REQUEST CHANGES remains in force. Privileged activation is DISABLED;
-credentials are WITHHELD; integrated acceptance is NON-GREEN.** B2's budget
-choice is pending. This package prepares the necessary delta for one re-review;
-no Claude call or new approval is claimed. Do not spend the privileged proof
-while the composed PostgreSQL phase still exceeds its unchanged 80 MiB bound.
+credentials are WITHHELD; integrated acceptance is NON-GREEN.** The owner budget
+choice is resolved; technical B2 closure and all pending repairs require one
+combined independent delta review. No Claude tool or approval is claimed.
+
+The necessary delta since reviewed d863 includes B1/N7/N8/N10, V2 producer and
+receiver capacity enforcement, canonical sealed policy binding, unchanged per-file
+and other-policy bounds, and bounded codec/capture lifetimes. Codec wire bytes and
+hashes are unchanged. The owning capture closes its two input memfds before sealing
+the union. Tests cover exact scaled aggregate boundary, over-capacity, other-policy
+isolation, per-file and entry limits, relabeling, malformed capacity identity,
+integer overflow, receiver agreement, failed capture and cleanup.
+
+A fixed read-only workflow step now measures actual Ubuntu24.04 selectedPython/
+trustedPG16 capture, composition, serialization and adoption before the unconditional
+review gate. It does not execute PostgreSQL, namespaces, accounts or services.
+Process/heap/owned-memfd observations and shared-job counters are separately scoped;
+capacity or component memory fit is not whole-service or20s namespace proof.
+An exact-source freeze, target observation and combined review remain required.
+
+The October28 remediation details/results below are historical. Their B2 decision
+blocker is superseded by the owner approval and V2 implementation above; their
+source-attributed failures and other pending findings remain preserved.
 
 ## Received external review and preserved scope
 
@@ -34,7 +54,7 @@ sudo/account tools, real cgroup v2, GitHub execution, the full/startup/related
 suites or browser acceptance. Its Node 22.22.0 differed from the writer's runtime.
 The original review of 3c1ae555 and six closures at 5e62c8e3 remain historical.
 
-## Remediation and remaining decision
+## October28 remediation and decision history
 
 - **B1 / N1 — REPAIRED_PENDING_REVIEW.** Fixed, inventory-verified native stat
   reads PID1's IPC/mount identities before and after the scan. Failures become
@@ -77,7 +97,7 @@ exception messages, locals and subtest parameter values. The hosted-only test er
 at edf8d12 was a hardcoded interpreter path; 3cbb2d3 fixes that test while retaining
 the actual production interpreter identity check and negative regression.
 
-## Source-bound validation
+## October28 source-bound validation history
 
 At 3cbb2d3, GitHub run40699325717 executed1,033/1,033 diagnostics with zero
 failures/errors/skips. The exact workflow command separately passed1,033/1,033 in
@@ -96,10 +116,10 @@ run executed1,033:1,032 passed/one test error. Both failures remain indexed in t
 packet. Full supported final-candidate validation is still required after the
 blocking implementation/review prerequisites are met.
 
-## Exact activation and review boundary
+## Exact activation and review boundary (unchanged)
 
 Review only the material delta since the actual d863 review, including d9c2670
-and these repairs, plus the eventual owner-selected B2 change. Do not repeat the
+and these repairs, plus the approved V2 B2 change and shared codec/lifetime delta. Do not repeat the
 unchanged architecture review. Recheck impact on the six historical closures,
 pre-account ordering, native stat/find authority, collision retry, pre-ACK cleanup,
 N8 coverage, failure evidence and exact activation wiring.

@@ -235,34 +235,41 @@ def receive_postgres(packet):
 def capture_postgres_phase(generation,root,binding):
     """Fixed CPython supervisor + native PG closure, never a payload grant.
 
-    A PG-only root cannot reexec its Python guardian. Compose the two existing
-    authenticated captures without changing inputs or increasing either bound.
-    Keep this policy separate from diagnostic/application dispatch.
+    A PG-only root cannot reexec its Python guardian. V2 composes the existing
+    authenticated inputs under the approved phase-only128MiB cap. Individual
+    captures remain80MiB; close their owned memfds before sealing the union.
     """
     result=None
     @source._resource_operation
     def guarded():
         nonlocal result
         _source_identity(root,binding)
-        diagnostic=None;postgres=None;failure=None;combined=None
+        diagnostic=None;postgres=None;failure=None;prepared=None
         try:
             diagnostic=runtime.capture_runtime(generation,root,binding)
             postgres=capture_postgres(generation,root,binding)
-            combined=_compose_phase(diagnostic,postgres)
-            _source_identity(root,binding)
+            prepared=_prepare_phase(diagnostic,postgres)
         except BaseException as error:failure=error
         errors=[]
         for value in (postgres,diagnostic):
             if value is None:continue
             try:value.close()
             except BaseException as error:errors.append(error)
-        if failure is not None or errors:
+        if errors:raise ns.NamespaceCleanupError('postgres_phase_capture_cleanup_refused') from (failure or errors[0])
+        if failure is not None:raise failure
+        # Prepared immutable bytes retain both authenticated inputs. Only this
+        # owning path closes their memfds before allocating the composed image.
+        ns._require(prepared is not None)
+        combined=None
+        try:
+            combined=_seal_phase(*prepared)
+            del prepared
+            _source_identity(root,binding)
+        except BaseException as error:
             if combined is not None:
                 try:combined.close()
-                except BaseException as error:errors.append(error)
-            if errors:raise ns.NamespaceCleanupError('postgres_phase_capture_cleanup_refused') from (failure or errors[0])
-            raise failure
-        ns._require(combined is not None)
+                except BaseException:raise ns.NamespaceCleanupError('postgres_phase_capture_cleanup_refused') from error
+            raise
         result=combined
         return result
     try:return guarded()
@@ -294,7 +301,12 @@ def _phase_identity(diagnostic,postgres):
 
 
 def _compose_phase(diagnostic,postgres):
-    """Inputs are borrowed here; capture_postgres_phase owns their cleanup."""
+    """Borrowed-input component helper; never closes the caller's captures."""
+    return _seal_phase(*_prepare_phase(diagnostic,postgres))
+
+
+def _prepare_phase(diagnostic,postgres):
+    """Retain authenticated immutable union bytes without creating a new memfd."""
     native,metadata,identity=_phase_identity(diagnostic,postgres)
     entries={};total=0
     for value in (diagnostic,postgres):
@@ -304,16 +316,21 @@ def _compose_phase(diagnostic,postgres):
                 ns._require(entries[entry.path]==entry)
                 continue
             total+=len(entry.content)
-            ns._require(total<=runtime.MAX_BYTES and len(entries)<runtime.MAX_ENTRIES)
+            ns._require(total<=runtime.POSTGRES_PHASE_MAX_BYTES and len(entries)<runtime.MAX_ENTRIES)
             entries[entry.path]=entry
     entries[runtime._IDENTITY_PATH]=ns.backend._BrowserRuntimeBundleEntry(path=runtime._IDENTITY_PATH,kind='F',
         mode=0o444,user_id=0,group_id=0,provenance='audit-source:'+hashlib.sha256(identity).hexdigest(),content=identity)
     complete=ns.backend._complete_browser_runtime_bundle_parents(tuple(entries.values()))
-    ns._require(len(complete)<=runtime.MAX_ENTRIES and sum(len(e.content) for e in complete)<=runtime.MAX_BYTES)
+    ns._require(len(complete)<=runtime.MAX_ENTRIES and sum(len(e.content) for e in complete)<=runtime.POSTGRES_PHASE_MAX_BYTES)
+    fields=(diagnostic.generation,diagnostic.executable,dict(diagnostic.source_files),
+            native,diagnostic.source_commit,diagnostic.source_tree,runtime.POSTGRES_PHASE_POLICY,None,metadata)
+    return complete,fields
+
+
+def _seal_phase(complete,fields):
     bundle=ns.backend._seal_browser_runtime_bundle(complete)
     try:
-        result=runtime.RuntimeBundle(bundle,diagnostic.generation,diagnostic.executable,dict(diagnostic.source_files),
-            native,diagnostic.source_commit,diagnostic.source_tree,runtime.POSTGRES_PHASE_POLICY,None,metadata)
+        result=runtime.RuntimeBundle(bundle,*fields)
         result._owner=result;result._token=runtime._TOKEN
         _phase_inventory(result)
         return result
@@ -347,9 +364,11 @@ def measure_phase_fit(diagnostic,postgres):
     return {'policy':runtime.POSTGRES_PHASE_POLICY,'commit':diagnostic.source_commit,'tree':diagnostic.source_tree,
         'generation':diagnostic.generation,'diagnostic_regular_bytes':diagnostic.bundle.regular_bytes,
         'postgres_regular_bytes':postgres.bundle.regular_bytes,'composed_regular_bytes':total,
-        'composed_entries':len(paths),'maximum_regular_bytes':runtime.MAX_BYTES,'maximum_entries':runtime.MAX_ENTRIES,
+        'composed_entries':len(paths),'maximum_regular_bytes':runtime.POSTGRES_PHASE_MAX_BYTES,'maximum_entries':runtime.MAX_ENTRIES,'capacity_policy':runtime._phase_capacity_identity(),
         'diagnostic_bundle_sha256':diagnostic.bundle.sha256,'postgres_bundle_sha256':postgres.bundle.sha256,
-        'capacity':'FIT' if total<=runtime.MAX_BYTES and len(paths)<=runtime.MAX_ENTRIES else 'REFUSED',
+        'input_memfd_allocated_bytes':sum(os.fstat(v.bundle.descriptor).st_blocks*512 for v in (diagnostic,postgres)),
+        'input_memfd_logical_bytes':sum(v.bundle.size for v in (diagnostic,postgres)),
+        'capacity':'FIT' if total<=runtime.POSTGRES_PHASE_MAX_BYTES and len(paths)<=runtime.MAX_ENTRIES else 'REFUSED',
         'account_mutations':0,'native_execution':'NOT_RUN','service_memory_fit':'NOT_PROVEN',
         'credential_release':'WITHHELD','execution_authority':False}
 

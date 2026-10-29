@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-28 (UTC)
+**Updated:** 2026-10-29 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,34 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-29 B2 owner decision implemented; independent review still required
+
+Owner selected the combined PG_PHASE-only128MiB option. Change-control identity
+`BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29` revises the manifest to
+`BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2`; old V1 evidence retains its80MiB
+meaning and is refused by current receivers. The canonical sealed identity binds
+the exact allowance before producer/receiver checks. Diagnostic/application/
+PG-only and individual-file80MiB, entries3000, child256MiB/pids2, service512MiB/
+tasks64, namespace20s and generic codec512MiB remain unchanged.
+
+The existing codec now avoids redundant full buffers without changing wire bytes
+or hashes. Owning phase capture closes both input memfds before sealing the union.
+Focused boundary, relabeling, integrity, cleanup and receiver tests cover the new
+policy. A fixed read-only Ubuntu24.04/Python3.13/trustedPG16 workflow measurement
+captures, composes, serializes and adopts actual bundles before the unconditional
+review gate. It reports process/heap/memfd/shared-job observations separately;
+none establishes whole-service memory, namespace execution or credential release.
+Exact frozen tests and target observations will be recorded in the evidence
+follow-up. The previous B2 authority blocker below is historical and resolved.
+
+B1/N7/N8/N10 and B2 require ONE combined Claude delta review since actual d863.
+The six historical closures and N2/N3/N4 dispositions are preserved at their
+reviewed sources; new impact is pending. Bootstrap activation and credentials
+remain disabled. Native PG execution, full authoritative supported suite and
+integrated browser/purchasing acceptance are NOT_RUN/NON-GREEN. No production,
+Railway, accepted input, lockfile, canonical phase or business authority changes.
+
 
 
 ### 2026-10-28 published remediation verified; B2 remains an authority blocker

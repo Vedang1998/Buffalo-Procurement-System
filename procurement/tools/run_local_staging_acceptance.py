@@ -5768,14 +5768,16 @@ def _encode_browser_runtime_bundle(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         )
-    payload = b"".join(payload_parts)
-    raw = len(manifest).to_bytes(8, "big") + manifest + payload
+    # Preserve the exact wire bytes without a second full joined payload.
+    raw = b"".join((len(manifest).to_bytes(8, "big"), manifest, *payload_parts))
+    bundle_digest = hashlib.sha256(_BROWSER_RUNTIME_BUNDLE_MAGIC)
+    bundle_digest.update(manifest)
+    for part in payload_parts:
+        bundle_digest.update(part)
     return (
         raw,
         hashlib.sha256(manifest).hexdigest(),
-        hashlib.sha256(
-            _BROWSER_RUNTIME_BUNDLE_MAGIC + manifest + payload
-        ).hexdigest(),
+        bundle_digest.hexdigest(),
         regular_bytes,
     )
 
@@ -5804,7 +5806,7 @@ def _parse_browser_runtime_bundle(
             "local acceptance browser runtime bundle differs"
         )
     manifest_raw = raw[8 : 8 + manifest_bytes]
-    payload = raw[8 + manifest_bytes :]
+    payload = memoryview(raw)[8 + manifest_bytes :]
     try:
         manifest = parse_single_json_object(manifest_raw)
         canonical = json.dumps(
@@ -5856,9 +5858,9 @@ def _parse_browser_runtime_bundle(
                 or _SHA256_TEXT.fullmatch(row["sha256"]) is None
             ):
                 raise ValueError
-            content = payload[
+            content = bytes(payload[
                 expected_offset : expected_offset + row["size"]
-            ]
+            ])
             if hashlib.sha256(content).hexdigest() != row["sha256"]:
                 raise ValueError
             entry = _BrowserRuntimeBundleEntry(
@@ -5891,12 +5893,13 @@ def _parse_browser_runtime_bundle(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         ) from None
+    bundle_digest = hashlib.sha256(_BROWSER_RUNTIME_BUNDLE_MAGIC)
+    bundle_digest.update(manifest_raw)
+    bundle_digest.update(payload)
     return (
         entries,
         hashlib.sha256(manifest_raw).hexdigest(),
-        hashlib.sha256(
-            _BROWSER_RUNTIME_BUNDLE_MAGIC + manifest_raw + payload
-        ).hexdigest(),
+        bundle_digest.hexdigest(),
         regular_bytes,
     )
 
@@ -7997,7 +8000,7 @@ def _read_browser_runtime_bundle_descriptor(
 
 def _validate_pinned_browser_runtime_bundle(
     bundle: _PinnedBrowserRuntimeBundle,
-) -> None:
+) -> tuple[_BrowserRuntimeBundleEntry, ...]:
     if (
         type(bundle) is not _PinnedBrowserRuntimeBundle
         or bundle._owner_token is not _BROWSER_HANDLE_TOKEN
@@ -8073,6 +8076,8 @@ def _validate_pinned_browser_runtime_bundle(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         )
+    return entries
+
 
 
 def _validate_frozen_browser_runtime_bundle(
@@ -8238,6 +8243,7 @@ def _seal_browser_runtime_bundle(
             execution_authority=False,
         )
         bundle._owner_token = _BROWSER_HANDLE_TOKEN
+        del raw  # Written/sealed bytes remain in the owned memfd; readback revalidates all bytes.
         _validate_pinned_browser_runtime_bundle(bundle)
         return bundle
     except BaseException:

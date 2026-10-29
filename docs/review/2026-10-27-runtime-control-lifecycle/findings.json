@@ -257,7 +257,7 @@
         "38 native dependency/policy/sealed FD tests; actual PG execution NOT_RUN",
         "d1b8124:66 PG runtime,35 image,21 shared runtime component tests; phase-only locale proof and actual disposable descriptor failure paths; native exec NOT_RUN"
       ],
-      "remaining": "B2 reviewer-measured105340350 bytes exceeds83886080 cap; pre-account measurement implemented but limit unchanged/owner choice pending. Native PG execution and full application/browser closure NOT_RUN/OPEN.",
+      "remaining": "V2 PG_PHASE-only128MiB implemented under explicit owner approval; target capture/memory and delta review pending. Native PG execution and full application/browser closure NOT_RUN/OPEN.",
       "d863_external_review": {
         "commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
         "tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
@@ -344,8 +344,8 @@
   "frozen_evidence": "oct27-postgres-version-repaired-frozen-validation.json",
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
-  "independent_re_review": "REQUEST_CHANGES_AT_d863; current necessary delta prepared, B2 owner decision pending; no Claude call or approval claimed",
-  "current_delta": "B1 fixed native PID1 stat/refusal mapping; N7 pre-ACK drain; N8 fixed active mount coverage; N10 bounded definite-collision retry; B2 pre-account capacity measurement only, unchanged80MiB; sanitized failure evidence and test-only actual-interpreter correction. B2 decision remains OPEN.",
+  "independent_re_review": "REQUEST_CHANGES_AT_d863; B2 owner capacity decision resolved2026-10-29; new combined technical delta pending validation/review; no Claude call or approval claimed",
+  "current_delta": "B1 native PID1 stat; N7 pre-ACK drain; N8 active mount coverage; N10 bounded collision retry; V2 PG_PHASE-only128MiB sealed capacity policy, producer/receiver enforcement, bounded codec copies/input lifetime and real target capture/memory measurement. No activation.",
   "new_findings": [
     {
       "id": "N1",
@@ -469,7 +469,7 @@
     {
       "id": "B2",
       "severity": "P1",
-      "status": "OPEN",
+      "status": "REPAIRED_PENDING_REVIEW",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
       "description": "Composed PG phase exceeds unchanged80MiB bound before cgroup/enrollment; account already provisioned",
@@ -478,9 +478,11 @@
         "hosted_synthetic_identity.py:run_provisioned_candidate",
         "hosted_synthetic_runtime_regression.py:run_postgres_fit"
       ],
-      "current_validation": "72 PG runtime/23 identity tests at preceding frozen material; source-bound test repair at3cbb2d3; real capture-fit NOT_RUN. Owner phase-only128MiB proposal NOT_APPLIED; b2-budget-change-control.json",
-      "candidate": "3cbb2d34ed07c182336cfdab4dcbd41fdf4ab06c",
-      "evidence": "oct28-claude-remediation-evidence.json"
+      "current_validation": "125 runtime/PG/workflow causal tests in progress; actual target capture/memory pending; no live native execution",
+      "candidate": "WORKTREE_DESCENDANT_OF_02e6ff8",
+      "evidence": "oct28-claude-remediation-evidence.json",
+      "change_control": "b2-budget-change-control.json",
+      "owner_decision": "APPROVED2026-10-29_PG_PHASE_ONLY128MiB"
     },
     {
       "id": "N7",
@@ -548,6 +550,7 @@
     "evidence": "oct28-claude-remediation-evidence.json",
     "independent_review": "NOT_RECEIVED",
     "privileged_activation": "DISABLED",
-    "credential_release": "WITHHELD"
+    "credential_release": "WITHHELD",
+    "in_progress_descendant": "B2 V2 capacity and copy-lifetime delta; commit/tree to be recorded after freeze"
   }
 }

@@ -27,11 +27,15 @@ import hosted_synthetic_namespace as ns
 POLICY = 'BUFFALO_HOSTED_STDLIB_RUNTIME_V1'
 APPLICATION_POLICY = 'BUFFALO_HOSTED_APPLICATION_RUNTIME_V1'
 POSTGRES_POLICY = 'BUFFALO_HOSTED_POSTGRES_RUNTIME_V1'
-POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V1'
+# V1 retains its historical80MiB meaning and is not accepted by V2 dispatch.
+LEGACY_POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V1'
+POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2'
+POSTGRES_PHASE_CHANGE_CONTROL = 'BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29'
 PROJECTED_ROOT = '/opt/buffalo-hosted'
 PROJECTED_TOOLS = PROJECTED_ROOT + '/procurement/tools'
 SENTINEL = '/buffalo-runtime/sentinel'
 MAX_BYTES = 80 * 1024**2
+POSTGRES_PHASE_MAX_BYTES = 128 * 1024**2
 MAX_ENTRIES = 3000
 _TOKEN = object()
 _IDENTITY_PATH = '/buffalo-runtime/identity.json'
@@ -183,6 +187,33 @@ def _selected_stdlib(root):
     return files
 
 
+def _phase_capacity_identity():
+    # Code-owned revision, never a command/environment/packet budget override.
+    return {'change_control':POSTGRES_PHASE_CHANGE_CONTROL,'regular_bytes':POSTGRES_PHASE_MAX_BYTES,
+            'per_file_bytes':MAX_BYTES,'entries':MAX_ENTRIES}
+
+
+def _aggregate_limit(policy):
+    ns._require(policy in (POLICY,APPLICATION_POLICY,POSTGRES_POLICY,POSTGRES_PHASE_POLICY))
+    return POSTGRES_PHASE_MAX_BYTES if policy==POSTGRES_PHASE_POLICY else MAX_BYTES
+
+
+def _verify_capacity(policy,entries,regular_bytes):
+    if not (type(regular_bytes) is int and 0<=regular_bytes<=_aggregate_limit(policy)):
+        raise ns.NamespaceProofError('runtime_aggregate_capacity_refused')
+    if len(entries)>MAX_ENTRIES:raise ns.NamespaceProofError('runtime_entry_capacity_refused')
+    if any(len(entry.content)>MAX_BYTES for entry in entries):raise ns.NamespaceProofError('runtime_file_capacity_refused')
+
+
+def _sealed_identity(entries):
+    identities=[entry.content for entry in entries if entry.path==_IDENTITY_PATH and entry.kind=='F']
+    ns._require(len(identities)==1 and len(identities[0])<=512*1024)
+    identity=json.loads(identities[0])
+    ns._require(type(identity) is dict
+        and json.dumps(identity,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')==identities[0])
+    return identity,identities[0]
+
+
 @dataclass
 class RuntimeBundle:
     bundle: object
@@ -207,8 +238,13 @@ class RuntimeBundle:
                     and re.fullmatch('[0-9a-f]{64}',self.generation)
                     and re.fullmatch('[0-9a-f]{40}',self.source_commit)
                     and re.fullmatch('[0-9a-f]{40}',self.source_tree))
-        ns.backend._validate_pinned_browser_runtime_bundle(self.bundle)
-        ns._require(self.bundle.regular_bytes<=MAX_BYTES and self.bundle.entries<=MAX_ENTRIES)
+        entries=ns.backend._validate_pinned_browser_runtime_bundle(self.bundle)
+        _,sealed=_sealed_identity(entries)
+        expected=_identity_bytes(self.generation,self.executable,self.source_files,self.native_files,
+            self.source_commit,self.source_tree,policy=self.policy,application=self.application,postgres=self.postgres)
+        if sealed!=expected:raise ns.NamespaceProofError('runtime_identity_refused')
+        _verify_capacity(self.policy,entries,self.bundle.regular_bytes)
+        return entries
 
     def close(self):
         self.verify()
@@ -265,19 +301,20 @@ def _receive_runtime(packet, policies):
 def _adopt_runtime(packet,bundle):
     os.set_inheritable(bundle.descriptor,False)
     bundle._owner_token=ns.backend._BROWSER_HANDLE_TOKEN
-    ns.backend._validate_pinned_browser_runtime_bundle(bundle)
-    ns._require(bundle.regular_bytes<=MAX_BYTES and bundle.entries<=MAX_ENTRIES)
-    raw=ns.backend._read_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.size)
-    entries,manifest,digest,size=ns.backend._parse_browser_runtime_bundle(raw)
-    ns._require((manifest,digest,size)==(bundle.manifest_sha256,bundle.sha256,bundle.regular_bytes))
-    identities=[entry.content for entry in entries if entry.path==_IDENTITY_PATH and entry.kind=='F']
-    ns._require(len(identities)==1 and len(identities[0])<=512*1024)
-    identity=json.loads(identities[0])
-    ns._require(type(identity) is dict and set(identity)==({'policy','generation','executable','source_files','native_files','source_commit','source_tree'}
+    entries=ns.backend._validate_pinned_browser_runtime_bundle(bundle)
+    identity,sealed=_sealed_identity(entries)
+    ns._require(set(identity)==({'policy','generation','executable','source_files','native_files','source_commit','source_tree'}
                     | ({'application'} if packet['policy']==APPLICATION_POLICY else
-                       {'postgres'} if packet['policy'] in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY) else set()))
-                and all(identity[key]==packet[key] for key in ('policy','generation','source_commit','source_tree'))
-                and json.dumps(identity,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')==identities[0])
+                       {'postgres','capacity_policy'} if packet['policy']==POSTGRES_PHASE_POLICY else
+                       {'postgres'} if packet['policy']==POSTGRES_POLICY else set()))
+                and all(identity[key]==packet[key] for key in ('policy','generation','source_commit','source_tree')))
+    # Exact canonical comparison rejects bool/numeric coercion, missing/extra
+    # fields and a packet attempting to promote sealed legacy/other-policy bytes.
+    ns._require(sealed==_identity_bytes(packet['generation'],identity['executable'],identity['source_files'],
+        identity['native_files'],packet['source_commit'],packet['source_tree'],policy=packet['policy'],
+        application=identity.get('application'),postgres=identity.get('postgres')))
+    _verify_capacity(identity['policy'],entries,bundle.regular_bytes)
+    del entries  # Do not retain a second complete payload during adoption checks.
     result=RuntimeBundle(bundle,packet['generation'],identity['executable'],identity['source_files'],identity['native_files'],
                          packet['source_commit'],packet['source_tree'],packet['policy'],identity.get('application'),identity.get('postgres'))
     result._owner=result;result._token=_TOKEN
@@ -292,6 +329,7 @@ def _identity_bytes(generation,executable,source,native,commit,tree, *, policy=P
         ns._require(type(application) is dict and postgres is None);value['application']=application
     elif policy in (POSTGRES_POLICY,POSTGRES_PHASE_POLICY):
         ns._require(type(postgres) is dict and application is None);value['postgres']=postgres
+        if policy==POSTGRES_PHASE_POLICY:value['capacity_policy']=_phase_capacity_identity()
     else:ns._require(policy==POLICY and application is None and postgres is None)
     return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
 
@@ -361,10 +399,7 @@ def capture_runtime(generation, source_root, binding):
 
 
 def _entries(runtime):
-    runtime.verify()
-    raw=ns.backend._read_browser_runtime_bundle_descriptor(runtime.bundle.descriptor,runtime.bundle.size)
-    entries,manifest,digest,size=ns.backend._parse_browser_runtime_bundle(raw)
-    ns._require((manifest,digest,size)==(runtime.bundle.manifest_sha256,runtime.bundle.sha256,runtime.bundle.regular_bytes))
+    entries=runtime.verify()
     regular={entry.path:hashlib.sha256(entry.content).hexdigest() for entry in entries if entry.kind=='F'}
     identity=_identity_bytes(runtime.generation,runtime.executable,runtime.source_files,runtime.native_files,
                              runtime.source_commit,runtime.source_tree,policy=runtime.policy,application=runtime.application,postgres=runtime.postgres)

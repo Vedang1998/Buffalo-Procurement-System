@@ -1,5 +1,5 @@
 {
-  "status": "OWNER_DECISION_REQUIRED_NOT_APPLIED",
+  "status": "OWNER_APPROVED_IMPLEMENTED_PENDING_TARGET_VALIDATION_AND_REVIEW",
   "finding": "B2",
   "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
   "reviewer_measurement": {
@@ -27,10 +27,10 @@
     "generic_codec_bytes": 536870912
   },
   "enforcement_sites": [
-    "hosted_synthetic_postgres_runtime._compose_phase incremental/final checks",
-    "hosted_synthetic_postgres_runtime.measure_phase_fit",
-    "hosted_synthetic_runtime.RuntimeBundle.verify",
-    "hosted_synthetic_runtime._adopt_runtime"
+    "hosted_synthetic_postgres_runtime._prepare_phase incremental/final checks",
+    "hosted_synthetic_postgres_runtime.measure_phase_fit (pre-account)",
+    "hosted_synthetic_runtime.RuntimeBundle.verify/_verify_capacity",
+    "hosted_synthetic_runtime._adopt_runtime/_verify_capacity"
   ],
   "pre_account_behavior": "Exact source/native capture-fit measurement closes both memfds and refuses before AccountLease.create; service recaptures/revalidates; no arbitrary FD transfer",
   "required_validation": [
@@ -39,8 +39,22 @@
     "memory allocation analysis/measurement; unchanged512MiB aggregate and zeroOOM live gate",
     "independent delta/activation review before privilege"
   ],
-  "limitations": "128MiB capacity does not prove512MiB service peak fit. Current codec holds several full buffers; copy reduction may be required. No ICU/dependency omission or accepted input repinning.",
-  "alternative": "Separate PG-only worker root requires new mount/root transition and review; materially larger than existing composed-phase contract.",
+  "limitations": "Capacity fit is not service memory fit. Actual target capture/codec/adoption measurement required; RSS+childRSS+peak owned memfd envelope excludes kernel/later projection and does not prove512MiB aggregate service. Privileged live/20s namespace/zeroOOM acceptance remains gated on review.",
+  "alternative": "Separate root redesign explicitly not selected; not implemented.",
   "activation": "DISABLED",
-  "credential_release": "WITHHELD"
+  "credential_release": "WITHHELD",
+  "owner_decision": {
+    "date": "2026-10-29",
+    "source": "owner instruction APPROVED \u2014 B2 POSTGRESQL-PHASE CAPACITY CHANGE",
+    "identity": "BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29",
+    "selected": "PG_PHASE-only 134217728 regular bytes",
+    "separate_root_redesign": "NOT_AUTHORIZED_NOT_IMPLEMENTED"
+  },
+  "policy_revision": {
+    "previous": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V1",
+    "current": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2",
+    "legacy_manifests": "V1 retains historical80MiB meaning; current V2 receivers refuse V1, never reinterpret it",
+    "sealed_record": "exact code-owned capacity_policy included in canonical sealed identity; compare before selecting allowance; packet relabeling refuses"
+  },
+  "copy_lifetime": "Single encode join and incremental hash; parser memoryview avoids full payload copies; validated entries reused. Owning capture closes both input memfds before composed sealing; borrowed helper retains caller ownership. Wire format, bytes and hashes unchanged."
 }
