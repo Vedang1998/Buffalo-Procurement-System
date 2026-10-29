@@ -50,11 +50,15 @@ def _path(value):
     return value
 
 
-def parse_elf(data, *, expected_rpath=None):
+def parse_elf(data, *, expected_rpath=None, native_permission=None):
     """Strict ELF64 little-endian x86-64 loader metadata, never ldd/exec."""
     ns._require(type(data) is bytes and 64 <= len(data) <= MAX_BYTES
                 and data[:7] == b'\x7fELF\x02\x01\x01'
                 and struct.unpack_from('<HHI', data, 16) in ((2, 62, 1), (3, 62, 1)))
+    expected_runpath=None
+    if native_permission is not None:
+        from hosted_synthetic_native_inputs import require_elf_permission
+        expected_runpath=require_elf_permission(native_permission,data)
     phoff = struct.unpack_from('<Q', data, 32)[0]
     ehsize, phsize, count = struct.unpack_from('<HHH', data, 52)
     ns._require(ehsize == 64 and phsize == 56 and 0 < count <= 128
@@ -83,9 +87,9 @@ def parse_elf(data, *, expected_rpath=None):
             if tag==1:needed.append(value)
             elif tag in (5,10,14,15,29):
                 ns._require(tag not in tags);tags[tag]=value
-        ns._require(terminated and 29 not in tags and ((15 in tags)==(expected_rpath is not None)))
+        ns._require(terminated and ((29 in tags)==(expected_runpath is not None)) and ((15 in tags)==(expected_rpath is not None)))
         ns._require((5 in tags)==(10 in tags))
-        if needed or 14 in tags or 15 in tags:ns._require(5 in tags)
+        if needed or 14 in tags or 15 in tags or 29 in tags:ns._require(5 in tags)
         if 5 in tags:
             address,length=tags[5],tags[10]
             matches=[off+address-virtual for virtual,off,size in loads
@@ -103,6 +107,10 @@ def parse_elf(data, *, expected_rpath=None):
                 index=tags[15];ns._require(index < len(strings))
                 end=strings.find(b'\0',index)
                 ns._require(end>index and strings[index:end]==expected_rpath.encode('ascii'))
+            if 29 in tags:
+                index=tags[29];ns._require(index<len(strings))
+                end=strings.find(b'\0',index)
+                ns._require(end>index and strings[index:end]==expected_runpath.encode('ascii'))
             needed=[name(index) for index in needed]
             ns._require(len(needed)==len(set(needed)))
             soname=name(tags[14]) if 14 in tags else None
@@ -112,6 +120,14 @@ def parse_elf(data, *, expected_rpath=None):
             'needed': tuple(needed), 'soname': soname}
 
 
+
+def _native_elf(path,data):
+    from hosted_synthetic_native_inputs import active_view,parse_selected_elf,PYTHON
+    if active_view() is not None and path.startswith(str(Path(PYTHON).parents[1])+'/'):
+        return parse_selected_elf(path,data)
+    return parse_elf(data)
+
+
 def _metadata(info):
     return (info.st_dev,info.st_ino,info.st_mode,info.st_uid,info.st_gid,
             info.st_nlink,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
@@ -119,6 +135,8 @@ def _metadata(info):
 
 def read_native(path):
     """Flatten a bounded, root-owned alias to immutable bytes, preserving name."""
+    from hosted_synthetic_source import _check_deadline
+    _check_deadline()
     requested=Path(_path(str(path)))
     # Validate both alias parents and the canonical chain. A writable ancestor
     # can replace a root-owned final inode and is never accepted as trust.
@@ -143,7 +161,10 @@ def read_native(path):
         data=os.pread(fd.number,before.st_size+1,0)
         ns._require(len(data)==before.st_size and requested.resolve(strict=True)==resolved
                     and _metadata(before)==_metadata(os.fstat(fd.number))==_metadata(resolved.lstat()))
-        return data, 0o555 if before.st_mode & 0o111 else 0o444
+        mode=0o555 if before.st_mode & 0o111 else 0o444
+        from hosted_synthetic_native_inputs import active_view,require_selected_file
+        if active_view() is not None:require_selected_file(str(requested),data,mode)
+        return data,mode
     finally:fd.close()
 
 
@@ -247,7 +268,11 @@ class RuntimeBundle:
         return entries
 
     def close(self):
-        self.verify()
+        # A payload/MemoryError refusal must not allocate the entire runtime
+        # again before releasing its exact owned descriptor. Use the same
+        # kernel identity/seal checks, never an unbound descriptor number.
+        ns._require(getattr(self,'_owner',None) is self and getattr(self,'_token',None) is _TOKEN)
+        ns.backend._validate_browser_runtime_bundle_handle(self.bundle)
         ns._require(ns.backend._close_browser_runtime_bundle_descriptor(self.bundle.descriptor,self.bundle.target,
                     (self.bundle.device,self.bundle.inode)))
         self._token=None
@@ -353,7 +378,7 @@ def capture_runtime(generation, source_root, binding):
         ns._require(total<=MAX_BYTES and len(contents)<=MAX_ENTRIES)
         native[path]=hashlib.sha256(data).hexdigest()
         if data.startswith(b'\x7fELF'):
-            elf=parse_elf(data)
+            elf=_native_elf(path,data)
             if path==executable:ns._require(elf['interpreter'] is not None)
             if elf['interpreter']:
                 interpreter=elf['interpreter'];pending.append((interpreter,*read_native(interpreter)))
@@ -362,7 +387,7 @@ def capture_runtime(generation, source_root, binding):
                provenance='native-runtime:'+native[path],content=data) for path,(data,mode) in contents.items()]
     expected=dict(binding.files);source={}
     for relative in SOURCE_PATHS:
-        if not relative.endswith('.py'):continue
+        if not (relative.endswith('.py') or relative in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json')):continue
         path=root/relative
         fd=ns._acquire(lambda:os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW))
         try:

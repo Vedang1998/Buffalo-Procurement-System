@@ -345,14 +345,17 @@ def verify_postdrop_access(root, unit):
             raise BootstrapCleanupError('bootstrap_access_cleanup_failed') from errors[0]
 
 
-def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None):
+def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None, operation_deadline=None):
     """Bounded direct-child ownership; stderr is never included in reports."""
     process = None
+    if operation_deadline is not None:_require(type(operation_deadline) in (int,float) and time.monotonic()<operation_deadline,'bootstrap_client_timeout')
     try:
         process = subprocess.Popen(argv, cwd=cwd, env=_ENVIRONMENT, close_fds=True,
                                    stdin=subprocess.PIPE if observer is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, bufsize=0)
         deadline = time.monotonic() + 165  # native timeout150 + kill5 + reap grace
+        if operation_deadline is not None:deadline=min(deadline,operation_deadline)
+        if observer is not None:observer.lifecycle_deadline=deadline
         output = {process.stdout: bytearray(), process.stderr: bytearray()}
         limits = {process.stdout: 65536, process.stderr: 4096}
         observer_acknowledged=False

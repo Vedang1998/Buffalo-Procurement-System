@@ -12,6 +12,9 @@ import copy
 import os
 from pathlib import Path
 import re
+import resource
+import time
+import tracemalloc
 
 import hosted_synthetic_namespace as ns
 import hosted_synthetic_runtime as runtime
@@ -183,7 +186,7 @@ def _capture(generation,root,binding):
             if name in resolved_libraries:continue
             path,raw,mode=runtime._resolve_library(name,roots);resolved_libraries.add(name)
         ns._require(raw.startswith(b'\x7fELF'))
-        image=runtime.parse_elf(raw)
+        image=runtime._native_elf(path,raw)
         if path in EXECUTABLES:ns._require(image['interpreter'] is not None and mode==0o555)
         if not add(path,raw,mode):continue
         if image['interpreter']:
@@ -404,10 +407,187 @@ def capture_phase_fit(generation,root,binding):
     return report
 
 
-def require_phase_fit(root,binding):
-    report=capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
-    if report['capacity']!='FIT':raise PhaseCapacityRefusal(report)
-    return report
+MEMORY_READINESS_POLICY='BUFFALO_PG_PREFLIGHT_MEMORY_V1'
+SERVICE_MEMORY_MAX=536870912
+_READINESS_TOKEN=object()
+
+
+def _ready_require(condition,code='postgres_readiness_refused'):
+    if not condition:raise ns.NamespaceProofError(code)
+
+
+def _validate_memory_result(report,binding):
+    try:
+        m=report['memory'];values=[m[k] for k in ('process_peak_rss_bytes','child_peak_rss_bytes',
+            'maximum_owned_memfd_allocation_bytes','conservative_sum_bytes','service_limit_bytes')]
+        _ready_require(all(type(v) is int and 0<=v<2**63 for v in values))
+        _ready_require(m['policy']==MEMORY_READINESS_POLICY and values[4]==SERVICE_MEMORY_MAX
+            and values[3]==sum(values[:3]) and values[3]<=values[4]
+            and m['result']=='WITHIN_COMPONENT_ENVELOPE'
+            and (report['commit'],report['tree'])==(binding.commit,binding.tree)
+            and report['capacity']=='FIT' and report['maximum_regular_bytes']==runtime.POSTGRES_PHASE_MAX_BYTES
+            and type(report['composed_regular_bytes']) is int and 0<report['composed_regular_bytes']<=runtime.POSTGRES_PHASE_MAX_BYTES
+            and type(report['composed_entries']) is int and 0<report['composed_entries']<=runtime.MAX_ENTRIES
+            and report['capacity_policy']==runtime._phase_capacity_identity()
+            and report['owned_descriptors_closed'] is True and report['execution_authority'] is False
+            and report['adoption']=='VERIFIED_SAME_PROCESS_NOT_SERVICE'
+            and all(type(report[k]) is str and re.fullmatch('[0-9a-f]{64}',report[k])
+                for k in ('generation','diagnostic_bundle_sha256','postgres_bundle_sha256','bundle_sha256',
+                          'manifest_sha256','native_inventory_sha256')))
+    except (KeyError,TypeError,ValueError,OverflowError):
+        raise ns.NamespaceProofError('postgres_readiness_evidence_malformed') from None
+
+
+def _fd_inventory():
+    result=[]
+    for name in os.listdir('/proc/self/fd'):
+        try:info=os.fstat(int(name))
+        except OSError as error:
+            if error.errno==__import__('errno').EBADF:continue
+            raise
+        result.append((int(name),info.st_dev,info.st_ino,info.st_mode))
+    return tuple(sorted(result))
+
+
+def memory_envelope(input_backing,phase_backing):
+    """Unchanged conservative formula; never label this measured cgroup usage.
+
+    RSS includes resident Python/native allocations (tracemalloc is a subset).
+    memfd page cache can overlap RSS if mapped; descriptor aliases share backing.
+    Independent maxima deliberately overcount possible overlap. Kernel charges,
+    unowned processes and later tmpfs projection remain outside this observation.
+    """
+    rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024
+    children=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024
+    _ready_require(all(type(v) is int and 0<=v<2**63 for v in (rss,children,input_backing,phase_backing)))
+    backing=max(input_backing,phase_backing);total=rss+children+backing
+    return {'policy':MEMORY_READINESS_POLICY,'process_peak_rss_bytes':rss,
+        'child_peak_rss_bytes':children,'maximum_owned_memfd_allocation_bytes':backing,
+        'conservative_sum_bytes':total,'service_limit_bytes':SERVICE_MEMORY_MAX,
+        'result':'WITHIN_COMPONENT_ENVELOPE' if total<=SERVICE_MEMORY_MAX else 'REFUSED_COMPONENT_ENVELOPE',
+        'scope':'PREFLIGHT_COMPONENT_NOT_SERVICE_ENFORCEMENT_OR_CGROUP_USAGE'}
+
+
+def _memory_sample(stage):
+    current,peak=tracemalloc.get_traced_memory()
+    return {'stage':stage,'traced_current_bytes':current,'traced_peak_bytes':peak,
+        'process_cumulative_peak_rss_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024}
+
+
+class PhaseMemoryRefusal(ns.NamespaceProofError):
+    def __init__(self,evidence):
+        super().__init__('postgres_phase_memory_refused_before_account')
+        self.evidence=evidence
+
+
+class PhaseReadiness:
+    """Owner-minted result of this invocation; not a deserialized PASS/report."""
+    def __init__(self):raise ns.NamespaceProofError('readiness_must_be_measured')
+
+    def verify(self,root,binding):
+        _ready_require(getattr(self,'_token',None) is _READINESS_TOKEN and self._owner is self
+            and self.root==str(Path(root).resolve(strict=True)) and self.binding==binding
+            and time.monotonic()<self.deadline,'postgres_readiness_binding_refused')
+        with source.source_deadline(self.deadline):_source_identity(root,binding)
+        _ready_require(self.interpreter==str(Path('/proc/self/exe').resolve(strict=True)),
+                    'postgres_readiness_interpreter_refused')
+        canonical=__import__('json').dumps(self.report,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+        _ready_require(hashlib.sha256(canonical).hexdigest()==self.digest,'postgres_readiness_report_changed')
+        report=self.report
+        _validate_memory_result(report,binding)
+        _ready_require(report['capacity']=='FIT' and report['memory']['result']=='WITHIN_COMPONENT_ENVELOPE'
+            and report['memory']['policy']==MEMORY_READINESS_POLICY and report['owned_descriptors_closed'] is True
+            and (report['commit'],report['tree'])==(binding.commit,binding.tree),
+            'postgres_readiness_result_refused')
+        # Reuse never substitutes a stale native/source identity. These reads
+        # are serial (at most one file), without another capture/clone/union.
+        for path,digest in self.native.items():
+            _ready_require(time.monotonic()<self.deadline,'postgres_readiness_deadline')
+            # PG's historical native_files map also includes fixed generated
+            # configuration. Re-derive those source-owned bytes; never read the
+            # host passwd/group/hosts/OpenSSL files as measurement evidence.
+            if path in _FIXED:data=_FIXED[path]
+            else:data,_=runtime.read_native(path)
+            _ready_require(hashlib.sha256(data).hexdigest()==digest,'postgres_readiness_native_changed')
+        return self.report
+
+
+def _fresh_generation():return hashlib.sha256(os.urandom(32)).hexdigest()
+
+
+@source._resource_operation
+def require_phase_fit(root,binding, *, deadline=None):
+    """Actual pre-account capacity AND memory decision; no supplied result accepted.
+
+    One capture per input, ownership-bound closure before return on every path.
+    The same canonical composition/receiver is exercised. Later service limits
+    and measurements remain mandatory and are never inferred from this receipt.
+    """
+    started=time.monotonic()
+    deadline=started+60 if deadline is None else min(deadline,started+60)
+    _ready_require(type(deadline) in (int,float) and started<deadline
+                and not tracemalloc.is_tracing(),'postgres_readiness_precondition_refused')
+    with source.source_deadline(deadline):_source_identity(root,binding)
+    before_fds=_fd_inventory()
+    generation=_fresh_generation()
+    diagnostic=postgres=phase=received=None;descriptor=None;prepared=None
+    failure=None;report=None;stages=[];native=None;interpreter=None
+    tracemalloc.start()
+    try:
+        with source.source_deadline(deadline):diagnostic=runtime.capture_runtime(generation,root,binding)
+        stages.append(_memory_sample('DIAGNOSTIC_CAPTURE'))
+        with source.source_deadline(deadline):postgres=capture_postgres(generation,root,binding)
+        stages.append(_memory_sample('POSTGRES_CAPTURE'))
+        report=measure_phase_fit(diagnostic,postgres)
+        _ready_require(report['generation']==generation,'postgres_readiness_generation_refused')
+        if report['capacity']!='FIT':raise PhaseCapacityRefusal(report)
+        _ready_require(time.monotonic()<deadline,'postgres_readiness_deadline')
+        prepared=_prepare_phase(diagnostic,postgres)
+        stages.append(_memory_sample('COMPOSITION_PREPARED'))
+        postgres.close();postgres=None;diagnostic.close();diagnostic=None
+        phase=_seal_phase(*prepared);prepared=None
+        stages.append(_memory_sample('SEALED_SERIALIZATION'))
+        phase_backing=os.fstat(phase.bundle.descriptor).st_blocks*512
+        packet=phase.packet();descriptor=os.dup(phase.bundle.descriptor)
+        packet['bundle']['descriptor']=descriptor
+        received=receive_postgres_phase(packet);descriptor=None
+        _ready_require(received.bundle.sha256==phase.bundle.sha256)
+        native=dict(phase.native_files);interpreter=phase.executable
+        stages.append(_memory_sample('DESCRIPTOR_ADOPTION'))
+        report.update(memory=memory_envelope(report['input_memfd_allocated_bytes'],phase_backing),
+            bundle_sha256=phase.bundle.sha256,manifest_sha256=phase.bundle.manifest_sha256,
+            native_inventory_sha256=hashlib.sha256(__import__('json').dumps(native,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+            interpreter=interpreter,adoption='VERIFIED_SAME_PROCESS_NOT_SERVICE',
+            service_memory_enforcement='NOT_PROVEN',memory_stages=stages)
+        with source.source_deadline(deadline):_source_identity(root,binding)
+        _ready_require(time.monotonic()<deadline,'postgres_readiness_deadline')
+    except BaseException as error:failure=error
+    errors=[];prepared=None
+    if descriptor is not None:
+        try:os.fstat(descriptor)
+        except OSError as error:
+            if error.errno!=__import__('errno').EBADF:errors.append(error)
+        else:
+            try:_ready_require(ns.backend._close_browser_runtime_bundle_descriptor(descriptor,phase.bundle.target,(phase.bundle.device,phase.bundle.inode)))
+            except BaseException as error:errors.append(error)
+    for value in (received,phase,postgres,diagnostic):
+        if value is not None:
+            try:value.close()
+            except BaseException as error:errors.append(error)
+    try:stages.append(_memory_sample('OWNED_CLEANUP'))
+    finally:tracemalloc.stop()
+    if _fd_inventory()!=before_fds:errors.append(ns.NamespaceCleanupError('postgres_readiness_fd_inventory_changed'))
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+    if failure is not None:raise failure
+    _ready_require(report is not None)
+    report.update(owned_descriptors_closed=True,elapsed_seconds=time.monotonic()-started)
+    if report['memory']['result']!='WITHIN_COMPONENT_ENVELOPE':raise PhaseMemoryRefusal(report)
+    _validate_memory_result(report,binding)
+    receipt=object.__new__(PhaseReadiness);receipt._owner=receipt;receipt._token=_READINESS_TOKEN
+    receipt.root=str(Path(root).resolve(strict=True));receipt.binding=binding;receipt.deadline=deadline
+    receipt.interpreter=interpreter;receipt.native=native;receipt.report=report
+    receipt.digest=hashlib.sha256(__import__('json').dumps(report,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+    return receipt
 
 
 def _phase_inventory(value):
@@ -428,11 +608,11 @@ def _phase_inventory(value):
         and entries['/usr/lib/locale/C.utf8/'+name].mode==0o444 for name in _LOCALE))
     ns._require(value.executable not in EXECUTABLES)
     expected_source={runtime.PROJECTED_ROOT+'/'+p:digest for p,digest in metadata['native_capture']['source_files'].items()
-                     if p.endswith('.py')}
+                     if p.endswith('.py') or p in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json')}
     ns._require(expected_source==value.source_files)
     for path in (value.executable,*EXECUTABLES):
         ns._require(path in value.native_files and entries[path].mode==0o555
-            and runtime.parse_elf(entries[path].content)['interpreter'] in value.native_files)
+            and runtime._native_elf(path,entries[path].content)['interpreter'] in value.native_files)
     return entries
 
 

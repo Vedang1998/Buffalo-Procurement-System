@@ -10,6 +10,7 @@ from functools import wraps
 import errno
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -68,14 +69,18 @@ def plan_slice(unit):
         *(token for row in properties for token in row),'0'))
 
 
-def _manager(unit, *, service=False):
+def _manager(unit, *, service=False, deadline=None):
     boot._require(boot._UNIT.fullmatch(unit) or re.fullmatch(r'system-buffalo[0-9a-f]{32}\.slice',unit))
     keys=('Id','LoadState','ActiveState','ControlGroup','InvocationID','MemoryMax','TasksMax')
     if service:keys+=('MainPID',)
-    result=subprocess.run(['/usr/bin/timeout','--signal=TERM','--kill-after=1s','3s',
+    remaining=5 if deadline is None else deadline-time.monotonic()
+    boot._require(type(remaining) in (int,float) and math.isfinite(remaining) and remaining>0,'observer_removal_not_observed')
+    command_timeout='3s' if deadline is None else str(min(3,remaining))+'s'
+    result=subprocess.run(['/usr/bin/timeout','--signal=TERM','--kill-after=1s',command_timeout,
         '/usr/bin/systemctl','--system','--no-ask-password','show',unit,
         *('--property='+key for key in keys)],env=boot._ENVIRONMENT,stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=5)
+        stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=min(5,remaining))
+    boot._require(deadline is None or time.monotonic()<deadline,'observer_removal_not_observed')
     boot._require(result.returncode in (0,1) and len(result.stdout)<=4096,'observer_manager_refused')
     values={}
     for line in result.stdout.splitlines():
@@ -139,19 +144,63 @@ def _removed(directory,path,mount):
     cg._filesystem(directory.number)
 
 
-def _await_absence(unit,path,invocation,actors=()):
-    deadline=time.monotonic()+5
+def _await_absence(unit,path,invocation,actors=(), *, deadline=None):
+    now=time.monotonic();deadline=now+5 if deadline is None else min(now+5,deadline)
+    boot._require(type(deadline) in (int,float) and math.isfinite(deadline) and now<deadline,
+                  'observer_removal_not_observed')
+    absent=False
     while True:
-        current=_manager(unit)
-        if current['LoadState']=='not-found' and not os.path.lexists(path):
+        current=_manager(unit,deadline=deadline)
+        boot._require(time.monotonic()<deadline,'observer_removal_not_observed')
+        gone=current['LoadState']=='not-found' and not os.path.lexists(path)
+        if gone:
             for descriptor in actors:
                 descriptor.verify()
                 boot._require(ns.backend._browser_pidfd_is_terminal(descriptor.number))
-            return
-        if current['LoadState']!='not-found':
-            boot._require(current['InvocationID']==invocation,'observer_unit_replaced')
-        boot._require(time.monotonic()<deadline,'observer_removal_not_observed')
-        time.sleep(.05)
+            if absent:return
+            absent=True
+        else:
+            boot._require(not absent,'observer_absence_contradicted')
+            if current['LoadState']!='not-found':
+                boot._require(current['InvocationID']==invocation,'observer_unit_replaced')
+        remaining=deadline-time.monotonic()
+        boot._require(remaining>0,'observer_removal_not_observed')
+        time.sleep(min(.05,remaining))
+
+
+def _await_pre_ack_collection(observer,path):
+    """Read-only terminal collection, never an inferred/created generation."""
+    from hosted_synthetic_identity import identity_processes
+    now=time.monotonic();deadline=min(now+5,getattr(observer,'lifecycle_deadline',now+5))
+    boot._require(type(deadline) in (int,float) and math.isfinite(deadline) and now<deadline,
+                  'pre_ack_collection_deadline')
+    invocation=None;absent=False
+    while True:
+        boot._require(time.monotonic()<deadline,'pre_ack_collection_deadline')
+        observer.verify()
+        current=_manager(observer.unit,service=True,deadline=deadline)
+        boot._require(time.monotonic()<deadline,'pre_ack_collection_deadline')
+        # Every sample observes the exact owned parent and all identity processes.
+        # A reappearing subtree or UID process cannot be hidden by unit collection.
+        boot._require(not os.path.lexists(path) and _children(observer.root)==[]
+            and observer.read('cgroup.procs')==observer.read('cgroup.threads')==b''
+            and _events_empty(observer.read('cgroup.events'))
+            and not identity_processes(observer.account.identity),'pre_ack_service_absence_unverified')
+        if current.get('LoadState')=='not-found':
+            if absent:return
+            absent=True
+        else:
+            boot._require(not absent and current.get('LoadState')=='loaded'
+                and current.get('ActiveState') in ('inactive','failed') and current.get('MainPID')=='0'
+                and current.get('ControlGroup') in ('',service_path(observer.unit))
+                and type(current.get('InvocationID')) is str
+                and re.fullmatch('[0-9a-f]{32}',current['InvocationID'])
+                and current['InvocationID']!='0'*32,'pre_ack_terminal_unit_unverified')
+            if invocation is None:invocation=current['InvocationID']
+            boot._require(current['InvocationID']==invocation,'pre_ack_unit_replaced')
+        remaining=deadline-time.monotonic()
+        boot._require(remaining>0,'pre_ack_collection_deadline')
+        time.sleep(min(.05,remaining))
 
 
 def _actor(pid, start, uid, gid, path, role):
@@ -361,10 +410,9 @@ class ExternalObserver:
         if self.generation is None:
             boot._require(self.service is None and self.generation_dir is None and not self.actors
                           and self.service_invocation is None)
-            # No earlier service identity was retained. Do not wait through or
-            # stop an unbound loaded unit; absence must already be observed.
-            boot._require(_manager(self.unit,service=True)['LoadState']=='not-found'
-                          and not os.path.lexists(service),'pre_ack_service_absence_unverified')
+            # No generation was observed. Only terminal collection of this
+            # exact owned empty service may be polled, with no service signal.
+            _await_pre_ack_collection(self,service)
         else:
             boot._require(len(self.actors)==5 and self.service is not None and self.generation_dir is not None
                           and type(self.service_invocation) is str)

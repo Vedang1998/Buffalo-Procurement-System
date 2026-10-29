@@ -9,6 +9,8 @@ authority. No GitHub API, network, credential, database, or payload is used.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
+import math
 from dataclasses import dataclass
 from functools import wraps
 import hashlib
@@ -42,6 +44,10 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_account_preflight.py",
     "procurement/tools/hosted_synthetic_pid1_regression.py",
     "procurement/tools/hosted_synthetic_runtime.py",
+    "procurement/tools/hosted_synthetic_native_inputs.py",
+    "procurement/tools/hosted_synthetic_native_observation.py",
+    "procurement/tools/hosted_native_inputs.json",
+    "procurement/tools/hosted_native_runpath.json",
     "procurement/tools/hosted_synthetic_postgres_runtime.py",
     "procurement/tools/hosted_synthetic_postgres_identity.py",
     "procurement/tools/hosted_synthetic_postgres_image.py",
@@ -97,6 +103,38 @@ class HostedSourceBinding:
         return False
 
 
+_SOURCE_DEADLINE=ContextVar('hosted_source_deadline',default=None)
+
+
+def _check_deadline():
+    deadline=_SOURCE_DEADLINE.get()
+    if deadline is not None and time.monotonic()>=deadline:
+        raise HostedSourceError('source_shared_deadline')
+
+
+@contextmanager
+def source_deadline(deadline):
+    previous=_SOURCE_DEADLINE.get()
+    if deadline is not None:
+        if type(deadline) not in (int,float) or not math.isfinite(deadline):
+            raise HostedSourceError('source_shared_deadline')
+        deadline=deadline if previous is None else min(deadline,previous)
+    else:deadline=previous
+    token=_SOURCE_DEADLINE.set(deadline)
+    try:
+        _check_deadline()
+        yield
+        _check_deadline()
+    finally:_SOURCE_DEADLINE.reset(token)
+
+
+def _with_deadline(function):
+    @wraps(function)
+    def bounded(*args,operation_deadline=None,**kwargs):
+        with source_deadline(operation_deadline):return function(*args,**kwargs)
+    return bounded
+
+
 def _resource_operation(function):
     """Defer process cancellation until bounded resource ownership is closed."""
     @wraps(function)
@@ -125,6 +163,7 @@ def _resource_operation(function):
     return guarded
 
 
+@_with_deadline
 @_resource_operation
 def _git(root: Path, *arguments: str, absent_ok: bool = False) -> bytes:
     # No inherited Git configuration, libpq variables, credentials, hooks, or
@@ -145,13 +184,15 @@ def _git(root: Path, *arguments: str, absent_ok: bool = False) -> bytes:
         "-c", "core.untrackedCache=false", "-c", "protocol.allow=never",
         "-C", str(root), *arguments,
     ]
+    _check_deadline()
+    deadline = time.monotonic() + _GIT_TIMEOUT_SECONDS
+    if _SOURCE_DEADLINE.get() is not None:deadline=min(deadline,_SOURCE_DEADLINE.get())
     process = None
     try:
         process = subprocess.Popen(
             command, env=environment, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, bufsize=0,
         )
-        deadline = time.monotonic() + _GIT_TIMEOUT_SECONDS
         output = bytearray()
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ)
@@ -184,8 +225,8 @@ def _git(root: Path, *arguments: str, absent_ok: bool = False) -> bytes:
             try:
                 if process.poll() is None:
                     process.kill()
-                process.wait()
-            except OSError:
+                process.wait(timeout=5)
+            except (OSError,subprocess.TimeoutExpired):
                 cleanup_error = True
             try:
                 process.stdout.close()
@@ -274,6 +315,7 @@ def _file_bytes(root: Path, relative: str, expected_mode: bytes) -> bytes:
         chunks = []
         remaining = before.st_size + 1
         while remaining:
+            _check_deadline()
             block = os.read(descriptor, min(remaining, 65536))
             if not block:
                 break
@@ -326,6 +368,7 @@ def _check_index(root: Path, records: tuple[tuple[str, bytes, bytes], ...]) -> N
 def _bind_files(root: Path, records: tuple[tuple[str, bytes, bytes], ...]) -> tuple[tuple[str, str], ...]:
     bindings = {}
     for relative, mode, blob in records:
+        _check_deadline()
         raw = _file_bytes(root, relative, mode)
         expected_blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw)
         if expected_blob.hexdigest().encode("ascii") != blob:
@@ -335,6 +378,7 @@ def _bind_files(root: Path, records: tuple[tuple[str, bytes, bytes], ...]) -> tu
     return tuple((path, bindings[path]) for path in SOURCE_PATHS)
 
 
+@_with_deadline
 def bind_hosted_source(
     checkout: Path, *, repository: str, event: str, ref: str, sha: str,
 ) -> HostedSourceBinding:

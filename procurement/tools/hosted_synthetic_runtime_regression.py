@@ -425,14 +425,8 @@ def run_postgres_fit(binding,root):
             # Owning capture closes both inputs before composed allocation. FD
             # aliases share an inode, so adoption does not duplicate backing.
             peak_backing=max(measurement['input_memfd_allocated_bytes'],detail['phase_memfd_allocated_bytes'])
-            rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024
-            children=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024
-            envelope=rss+children+peak_backing
-            result['memory_envelope']={'process_peak_rss_bytes':rss,'child_peak_rss_bytes':children,
-                'maximum_owned_memfd_allocation_bytes':peak_backing,'conservative_sum_bytes':envelope,
-                'service_limit_bytes':536870912,'result':'WITHIN_COMPONENT_ENVELOPE' if envelope<=536870912 else 'REFUSED_COMPONENT_ENVELOPE',
-                'limitations':'Independent maxima summed; excludes unowned job processes, kernel charges, later projection/tmpfs; not service/cgroup acceptance'}
-            if envelope>536870912:result['capture_fit']='REFUSED_MEMORY_ENVELOPE'
+            result['memory_envelope']=pg.memory_envelope(peak_backing,0)
+            if result['memory_envelope']['result']!='WITHIN_COMPONENT_ENVELOPE':result['capture_fit']='REFUSED_MEMORY_ENVELOPE'
         stages.append(_memory_stage('AFTER_OWNED_CLEANUP'))
     except (ns.NamespaceProofError,HostedSourceError,ns.backend.LocalStagingAcceptanceError,MemoryError,OSError) as error:
         result.update(capture_fit='REFUSED_COMPONENT',failure_type=type(error).__name__,

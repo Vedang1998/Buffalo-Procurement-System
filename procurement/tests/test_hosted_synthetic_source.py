@@ -66,6 +66,23 @@ class HostedSyntheticSourceTests(unittest.TestCase):
         self.assertFalse(result.execution_authority)
         self.assertEqual(self.git("status", "--porcelain=v1", "--untracked-files=all"), before)
 
+    def test_shared_deadline_refuses_before_any_git_process(self):
+        with patch.object(source.time,'monotonic',return_value=10),patch.object(source.subprocess,'Popen') as process:
+            with self.assertRaisesRegex(source.HostedSourceError,'source_shared_deadline'):
+                self.bind(operation_deadline=9)
+            with self.assertRaisesRegex(source.HostedSourceError,'source_shared_deadline'):
+                source._git(self.root,'rev-parse','HEAD',operation_deadline=9)
+        process.assert_not_called()
+
+    def test_source_drift_pass_does_not_reset_shared_deadline(self):
+        clock=[0];original=source._file_bytes
+        def read(*args):
+            result=original(*args);clock[0]=11;return result
+        with patch.object(source.time,'monotonic',side_effect=lambda:clock[0]),patch.object(source,'_file_bytes',side_effect=read):
+            with self.assertRaisesRegex(source.HostedSourceError,'source_shared_deadline'):
+                self.bind(operation_deadline=10)
+        self.assertIsNone(source._SOURCE_DEADLINE.get())
+
     def test_wrong_repository_ref_and_events_refuse_before_git(self):
         for changes in (
             {"repository": "foreign/repository"}, {"ref": "refs/heads/main"},

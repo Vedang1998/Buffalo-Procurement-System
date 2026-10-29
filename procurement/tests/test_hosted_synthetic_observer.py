@@ -72,6 +72,29 @@ class HostedObserverTests(unittest.TestCase):
         self.assertTrue(value.descriptors_closed_successfully)
         observer.require_drain_proof(value.proof,value.account)
 
+    def test_delayed_terminal_collection_requires_two_complete_absence_samples(self):
+        value=self.pre_ack_fixture();terminal={'LoadState':'loaded','ActiveState':'inactive','MainPID':'0','ControlGroup':'','InvocationID':'e'*32}
+        with patch.object(observer,'_manager',side_effect=[terminal,{'LoadState':'not-found'},{'LoadState':'not-found'}]) as manager,patch.object(observer.time,'sleep'):
+            proof=value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        self.assertEqual(manager.call_count,3);self.assertEqual(proof.scope,'PRE_ACK_EXIT')
+        self.assertFalse(proof.operation_succeeded);self.assertIsNone(proof.generation)
+
+    def test_pre_ack_collection_reappearance_or_invocation_change_refuses(self):
+        terminal={'LoadState':'loaded','ActiveState':'inactive','MainPID':'0','ControlGroup':'','InvocationID':'e'*32}
+        for sequence in ([{'LoadState':'not-found'},terminal],[terminal,dict(terminal,InvocationID='f'*32)],
+                         [dict(terminal,ActiveState='active')],[dict(terminal,MainPID='123')]):
+            value=self.pre_ack_fixture()
+            with patch.object(observer,'_manager',side_effect=sequence),patch.object(observer.time,'sleep'),self.assertRaises(boot.BootstrapRefusal):
+                value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+            self.assertTrue(value.failed);self.assertIsNone(value.proof)
+
+    def test_success_looking_pre_ack_query_after_deadline_cannot_mint_proof(self):
+        value=self.pre_ack_fixture();clock=[0.0]
+        def query(*args,**kwargs):clock[0]=6;return {'LoadState':'not-found'}
+        with patch.object(observer.time,'monotonic',side_effect=lambda:clock[0]),patch.object(observer,'_manager',side_effect=query),self.assertRaises(boot.BootstrapRefusal):
+            value.finish_pre_ack_exit(self.pre_ack_report(),client_returncode=1)
+        self.assertIsNone(value.proof)
+
     def test_ready_without_ack_requires_retained_terminal_actors_and_deleted_dentries(self):
         value=self.pre_ack_fixture(ready=True)
         with patch.object(observer,'_await_absence') as absence,patch.object(observer,'_removed') as removed:

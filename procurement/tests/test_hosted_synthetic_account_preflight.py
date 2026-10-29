@@ -274,6 +274,42 @@ class AccountPreflightTests(unittest.TestCase):
         self.assertEqual(result['commit'],commit);self.assertEqual(result['account_mutations'],0)
         self.assertEqual(result['copy_command_timeout_seconds'],60)
 
+    def test_rehearsal_reused_once_with_candidate_access_and_source_drift_checks(self):
+        source,commit=self.setup_git();cache={}
+        with patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001):
+            first=pre.inspect_source(ID,str(source),commit,rehearsal=cache)
+            with patch.object(boot,'_collect_native_client') as execute:
+                second=pre.inspect_source(replace(ID,uid=952,gid=953),str(source),commit,rehearsal=cache)
+            execute.assert_not_called()
+            self.assertEqual(first['rehearsal'],'EXECUTED_ONCE')
+            self.assertEqual(second['rehearsal'],'REUSED_WITH_FULL_METADATA_ACCESS_AND_SOURCE_DRIFT_CHECKS')
+            (source/'synthetic').write_text('changed')
+            with self.assertRaisesRegex(boot.BootstrapRefusal,'rehearsal_drift'):
+                pre.inspect_source(ID,str(source),commit,rehearsal=cache)
+
+    def test_rehearsal_reuse_still_checks_candidate_access(self):
+        source,commit=self.setup_git();cache={}
+        with patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001):
+            pre.inspect_source(ID,str(source),commit,rehearsal=cache)
+            with patch.object(pre,'_access',side_effect=boot.BootstrapRefusal('candidate_access')) as access, self.assertRaisesRegex(boot.BootstrapRefusal,'candidate_access'):
+                pre.inspect_source(replace(ID,uid=952,gid=953),str(source),commit,rehearsal=cache)
+            access.assert_called()
+
+    def test_rehearsal_reuse_refuses_changed_destination_identity(self):
+        source,commit=self.setup_git();cache={}
+        with patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001):
+            pre.inspect_source(ID,str(source),commit,rehearsal=cache)
+            cache['destination']=(0,0,0,0,0)
+            with patch.object(boot,'_collect_native_client') as execute,self.assertRaisesRegex(boot.BootstrapRefusal,'destination_changed'):
+                pre.inspect_source(ID,str(source),commit,rehearsal=cache)
+            execute.assert_not_called()
+
+    def test_expired_rehearsal_starts_no_git_or_native_command(self):
+        source,commit=self.setup_git()
+        with patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(pre.time,'monotonic',return_value=11),patch.object(pre,'_git') as git,patch.object(boot,'_collect_native_client') as native,self.assertRaisesRegex(boot.BootstrapRefusal,'source_scan_timeout'):
+            pre.inspect_source(ID,str(source),commit,operation_deadline=10)
+        git.assert_not_called();native.assert_not_called()
+
     def test_copy_failure_refuses_without_source_permissions_change(self):
         source,commit=self.setup_git();before=(source/'synthetic').stat().st_mode
         with patch.object(boot,'_collect_native_client',return_value=(124,b'')),self.assertRaisesRegex(boot.BootstrapRefusal,'copy_rehearsal'):self.run_source(source,commit)

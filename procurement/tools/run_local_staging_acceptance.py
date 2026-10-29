@@ -5723,9 +5723,9 @@ def _complete_browser_runtime_bundle_parents(
     )
 
 
-def _encode_browser_runtime_bundle(
+def _browser_runtime_bundle_parts(
     entries: tuple[_BrowserRuntimeBundleEntry, ...],
-) -> tuple[bytes, str, str, int]:
+) -> tuple[bytes, tuple[bytes, ...], str, str, int]:
     selected = _validate_browser_runtime_bundle_entries(entries)
     manifest_entries: list[dict[str, object]] = []
     payload_parts: list[bytes] = []
@@ -5768,45 +5768,57 @@ def _encode_browser_runtime_bundle(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         )
-    # Preserve the exact wire bytes without a second full joined payload.
-    raw = b"".join((len(manifest).to_bytes(8, "big"), manifest, *payload_parts))
     bundle_digest = hashlib.sha256(_BROWSER_RUNTIME_BUNDLE_MAGIC)
     bundle_digest.update(manifest)
     for part in payload_parts:
         bundle_digest.update(part)
     return (
-        raw,
+        manifest,
+        tuple(payload_parts),
         hashlib.sha256(manifest).hexdigest(),
         bundle_digest.hexdigest(),
         regular_bytes,
     )
 
 
-def _parse_browser_runtime_bundle(
-    raw: bytes,
-) -> tuple[tuple[_BrowserRuntimeBundleEntry, ...], str, str, int]:
-    if (
-        type(raw) is not bytes
-        or len(raw) < 9
-        or len(raw)
-        > 8
-        + _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT
-        + _BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT
-    ):
-        raise LocalStagingAcceptanceError(
-            "local acceptance browser runtime bundle differs"
-        )
-    manifest_bytes = int.from_bytes(raw[:8], "big")
+def _encode_browser_runtime_bundle(entries):
+    """Compatibility bytes API; sealing uses the same canonical parts directly."""
+    manifest, payload, manifest_hash, bundle_hash, regular = _browser_runtime_bundle_parts(entries)
+    return (b"".join((len(manifest).to_bytes(8,"big"),manifest,*payload)),
+            manifest_hash,bundle_hash,regular)
+
+
+def _parse_browser_runtime_bundle(raw):
+    if type(raw) is not bytes:
+        raise LocalStagingAcceptanceError("local acceptance browser runtime bundle differs")
+    return _parse_browser_runtime_bundle_input(len(raw),lambda offset,size:raw[offset:offset+size])
+
+
+def _parse_browser_runtime_bundle_input(size, reader, *, known_entries=None):
+    """One immutable file at a time; never materialize the aggregate payload."""
+    if (type(size) is not int or size<9 or size>
+            8+_BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT+_BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT):
+        raise LocalStagingAcceptanceError("local acceptance browser runtime bundle differs")
+    def read(offset,count):
+        value=reader(offset,count)
+        if type(value) is not bytes or len(value)!=count:
+            raise LocalStagingAcceptanceError("local acceptance browser runtime bundle differs")
+        return value
+    manifest_bytes = int.from_bytes(read(0,8), "big")
     if (
         manifest_bytes <= 0
         or manifest_bytes > _BROWSER_RUNTIME_BUNDLE_MANIFEST_LIMIT
-        or 8 + manifest_bytes > len(raw)
+        or 8 + manifest_bytes > size
     ):
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         )
-    manifest_raw = raw[8 : 8 + manifest_bytes]
-    payload = memoryview(raw)[8 + manifest_bytes :]
+    manifest_raw = read(8,manifest_bytes)
+    payload_start = 8 + manifest_bytes
+    payload_size = size - payload_start
+    bundle_digest = hashlib.sha256(_BROWSER_RUNTIME_BUNDLE_MAGIC)
+    bundle_digest.update(manifest_raw)
+    known = None if known_entries is None else _validate_browser_runtime_bundle_entries(known_entries)
     try:
         manifest = parse_single_json_object(manifest_raw)
         canonical = json.dumps(
@@ -5840,7 +5852,9 @@ def _parse_browser_runtime_bundle(
             "size",
             "user_id",
         }
-        for row in rows:
+        if known is not None and len(known)!=len(rows):
+            raise ValueError
+        for index,row in enumerate(rows):
             if type(row) is not dict or set(row) != expected_keys:
                 raise ValueError
             integer_values = (
@@ -5853,15 +5867,27 @@ def _parse_browser_runtime_bundle(
             if (
                 any(type(value) is not int or value < 0 for value in integer_values)
                 or row["offset"] != expected_offset
-                or row["size"] > len(payload) - expected_offset
+                or row["size"] > payload_size - expected_offset
                 or type(row["sha256"]) is not str
                 or _SHA256_TEXT.fullmatch(row["sha256"]) is None
             ):
                 raise ValueError
-            content = bytes(payload[
-                expected_offset : expected_offset + row["size"]
-            ])
-            if hashlib.sha256(content).hexdigest() != row["sha256"]:
+            if known is None:
+                content = read(payload_start+expected_offset,row["size"])
+                digest = hashlib.sha256(content)
+                bundle_digest.update(content)
+            else:
+                # Original entries are immutable bytes, already validated. Read
+                # back every sealed byte in chunks; reuse them only after hash
+                # and complete row equality. No full duplicate payload retained.
+                content = known[index].content
+                digest = hashlib.sha256()
+                offset = 0
+                while offset < row["size"]:
+                    block = read(payload_start+expected_offset+offset,
+                                 min(_CHUNK_BYTES,row["size"]-offset))
+                    digest.update(block);bundle_digest.update(block);offset+=len(block)
+            if len(content)!=row["size"] or digest.hexdigest()!=row["sha256"]:
                 raise ValueError
             entry = _BrowserRuntimeBundleEntry(
                 path=row["path"],
@@ -5872,16 +5898,19 @@ def _parse_browser_runtime_bundle(
                 provenance=row["provenance"],
                 content=content,
             )
+            if known is not None and entry!=known[index]:
+                raise ValueError
             selected.append(entry)
             expected_offset += row["size"]
             if row["kind"] == "F":
                 regular_bytes += row["size"]
-        if expected_offset != len(payload):
+        if expected_offset != payload_size:
             raise ValueError
         entries = _validate_browser_runtime_bundle_entries(tuple(selected))
         if tuple(selected) != entries:
             raise ValueError
     except (
+        OSError,
         KeyError,
         TypeError,
         ValueError,
@@ -5893,9 +5922,6 @@ def _parse_browser_runtime_bundle(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         ) from None
-    bundle_digest = hashlib.sha256(_BROWSER_RUNTIME_BUNDLE_MAGIC)
-    bundle_digest.update(manifest_raw)
-    bundle_digest.update(payload)
     return (
         entries,
         hashlib.sha256(manifest_raw).hexdigest(),
@@ -7998,9 +8024,8 @@ def _read_browser_runtime_bundle_descriptor(
     return bytes(selected)
 
 
-def _validate_pinned_browser_runtime_bundle(
-    bundle: _PinnedBrowserRuntimeBundle,
-) -> tuple[_BrowserRuntimeBundleEntry, ...]:
+def _validate_browser_runtime_bundle_handle(bundle):
+    """Kernel ownership/seal proof only; safe without allocating payload bytes."""
     if (
         type(bundle) is not _PinnedBrowserRuntimeBundle
         or bundle._owner_token is not _BROWSER_HANDLE_TOKEN
@@ -8060,13 +8085,26 @@ def _validate_pinned_browser_runtime_bundle(
         raise LocalStagingAcceptanceError(
             "local acceptance browser runtime bundle differs"
         )
-    raw = _read_browser_runtime_bundle_descriptor(
-        bundle.descriptor,
-        bundle.size,
-    )
+
+
+def _validate_pinned_browser_runtime_bundle(bundle, *, known_entries=None):
+    _validate_browser_runtime_bundle_handle(bundle)
+    def read(offset,size):
+        # Linux pread on an ordinary sealed memfd normally fills the request.
+        # Retain bounded partial results only for short/EINTR reads of ONE file.
+        blocks=[];received=0
+        while received<size:
+            try:block=os.pread(bundle.descriptor,size-received,offset+received)
+            except InterruptedError:continue
+            if not block:raise LocalStagingAcceptanceError("local acceptance browser runtime bundle differs")
+            if received==0 and len(block)==size:return block
+            blocks.append(block);received+=len(block)
+        return b"".join(blocks)
     entries, manifest_sha256, bundle_sha256, regular_bytes = (
-        _parse_browser_runtime_bundle(raw)
+        _parse_browser_runtime_bundle_input(bundle.size,read,known_entries=known_entries)
     )
+    if os.pread(bundle.descriptor,1,bundle.size):
+        raise LocalStagingAcceptanceError("local acceptance browser runtime bundle differs")
     if (
         len(entries) != bundle.entries
         or manifest_sha256 != bundle.manifest_sha256
@@ -8157,8 +8195,9 @@ def _seal_browser_runtime_bundle(
 ) -> _PinnedBrowserRuntimeBundle:
     """Seal supplied bytes without granting frozen-source or execution authority."""
 
-    raw, manifest_sha256, bundle_sha256, regular_bytes = (
-        _encode_browser_runtime_bundle(entries)
+    entries = _validate_browser_runtime_bundle_entries(entries)
+    manifest, payload, manifest_sha256, bundle_sha256, regular_bytes = (
+        _browser_runtime_bundle_parts(entries)
     )
     staging_descriptor = -1
     sealed_descriptor = -1
@@ -8188,15 +8227,13 @@ def _seal_browser_runtime_bundle(
             raise LocalStagingAcceptanceError(
                 "local acceptance browser runtime bundle differs"
             )
-        offset = 0
-        while offset < len(raw):
-            try:
-                written = os.write(staging_descriptor, raw[offset:])
-            except InterruptedError:
-                continue
-            if written <= 0:
-                raise OSError
-            offset += written
+        for part in (len(manifest).to_bytes(8,"big"),manifest,*payload):
+            view=memoryview(part);offset=0
+            while offset<len(view):
+                try:written=os.write(staging_descriptor,view[offset:offset+_CHUNK_BYTES])
+                except InterruptedError:continue
+                if written<=0:raise OSError
+                offset+=written
         os.fchmod(staging_descriptor, _BROWSER_RUNTIME_BUNDLE_MODE)
         fcntl.fcntl(
             staging_descriptor,
@@ -8243,8 +8280,7 @@ def _seal_browser_runtime_bundle(
             execution_authority=False,
         )
         bundle._owner_token = _BROWSER_HANDLE_TOKEN
-        del raw  # Written/sealed bytes remain in the owned memfd; readback revalidates all bytes.
-        _validate_pinned_browser_runtime_bundle(bundle)
+        _validate_pinned_browser_runtime_bundle(bundle,known_entries=entries)
         return bundle
     except BaseException:
         if sealed_descriptor >= 0:

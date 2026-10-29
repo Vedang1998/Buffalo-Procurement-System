@@ -174,7 +174,7 @@ def _self_namespaces():
     except OSError as error:raise boot.BootstrapRefusal('host_self_namespace_unreadable') from error
 
 
-def _initial_namespaces():
+def _initial_namespaces(*, deadline=None):
     """PID1's links are ptrace-gated; only fixed native stat receives privilege.
 
     AccountLease verifies this executable and every privileged wrapper before
@@ -183,7 +183,7 @@ def _initial_namespaces():
     from hosted_synthetic_identity import native
     command=native(('/usr/bin/stat','-L','--format=%d:%i','--',
                     '/proc/1/ns/ipc','/proc/1/ns/mnt'))
-    try:code,raw=boot._collect_native_client(command,cwd='/')
+    try:code,raw=boot._collect_native_client(command,cwd='/',**({} if deadline is None else {'operation_deadline':deadline}))
     except boot.BootstrapCleanupError:raise
     except (OSError,boot.BootstrapRefusal) as error:
         raise boot.BootstrapRefusal('host_initial_namespace_unreadable') from error
@@ -202,7 +202,7 @@ def inspect_ownership(identity, *, scan_deadline=None):
     boot._require(scan_deadline is None or (type(scan_deadline) in (int,float) and math.isfinite(scan_deadline)),
                   'identity_selection_deadline')
     namespaces=_self_namespaces()
-    boot._require(namespaces==_initial_namespaces(),'host_scan_namespace_refused')
+    boot._require(namespaces==_initial_namespaces(**({} if scan_deadline is None else {'deadline':scan_deadline})),'host_scan_namespace_refused')
     try:mounts=ns._read('/proc/self/mountinfo',1024**2)
     except OSError as error:raise boot.BootstrapRefusal('mount_coverage_incomplete') from error
     with _scan_mount_lease(mounts) as (digest,extra_roots):
@@ -213,7 +213,7 @@ def inspect_ownership(identity, *, scan_deadline=None):
         boot._require(remaining>0,'identity_selection_deadline')
         command=native(('/usr/bin/find','-P','/',*extra_roots,'-path','/proc','-prune','-o',
             '(','-uid',str(identity.uid),'-o','-gid',str(identity.gid),')','-printf','COLLISION\n','-quit'),purpose='scan',timeout_seconds=remaining)
-        code,raw=boot._collect_native_client(command,cwd='/')
+        code,raw=boot._collect_native_client(command,cwd='/',**({} if scan_deadline is None else {'operation_deadline':scan_deadline}))
         boot._require(scan_deadline is None or time.monotonic()<scan_deadline,'identity_selection_deadline')
         if code==0 and raw==b'COLLISION\n':raise OwnershipCollision('dedicated_filesystem_ownership_collision')
         boot._require(code==0 and raw==b'','dedicated_filesystem_coverage_or_collision_refused')
@@ -225,7 +225,7 @@ def inspect_ownership(identity, *, scan_deadline=None):
         try:repeated=ns._read('/proc/self/mountinfo',1024**2)
         except OSError as error:raise boot.BootstrapRefusal('mount_coverage_incomplete') from error
         boot._require(repeated==mounts,'mount_coverage_changed')
-        boot._require(_self_namespaces()==namespaces==_initial_namespaces(),'host_scan_namespace_changed')
+        boot._require(_self_namespaces()==namespaces==_initial_namespaces(**({} if scan_deadline is None else {'deadline':scan_deadline})),'host_scan_namespace_changed')
     return {'policy':POLICY,'scope':'VISIBLE_HOST_MOUNTS_AND_INITIAL_SYSV_IPC','root':'/',
         'exclusions':{'/proc':'kernel process metadata; separate full process/SysV IPC checks; active binfmt mount scanned explicitly'},
         'additional_scan_roots':list(extra_roots),
@@ -252,7 +252,7 @@ def _access(path,identity,*,directory=False):
     return info
 
 
-def inspect_source(identity,source,commit):
+def inspect_source(identity,source,commit, *, operation_deadline=None, rehearsal=None):
     """Check prospective numeric credentials and rehearse exact local Git copy.
 
     No permissions on the checkout change. Rehearsal is the current non-root
@@ -261,9 +261,42 @@ def inspect_source(identity,source,commit):
     from hosted_synthetic_identity import validate,git_arguments
     validate(identity);boot._path(source)
     boot._require(os.geteuid()==identity.operator_uid and os.getegid()==identity.operator_gid,'source_operator_refused')
-    root=Path(source);deadline=time.monotonic()+30;count=0;size=0
+    root=Path(source);started=time.monotonic();deadline=started+30;count=0;size=0
+    if operation_deadline is not None:deadline=min(deadline,operation_deadline)
+    def git(where,*args):
+        return _git(where,*args,**({} if operation_deadline is None else {'operation_deadline':operation_deadline}))
+    def identity_of(info,name):
+        value=(info.st_dev,info.st_ino,info.st_mode,info.st_uid,info.st_gid)
+        # Unrelated siblings of source ancestors (including our own /tmp
+        # rehearsal) may change directory times. Never relax checkout metadata.
+        return value if Path(name) in root.parents else value+(info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+    def destination_identity():
+        info=os.stat('/run',follow_symlinks=False)
+        boot._require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022
+                      and info.st_mode&1,'source_destination_changed')
+        return (info.st_dev,info.st_ino,info.st_mode,info.st_uid,info.st_gid)
+    boot._require(time.monotonic()<deadline,'source_scan_timeout')
+    reused=rehearsal is not None and bool(rehearsal)
+    if reused:
+        boot._require(set(rehearsal)=={'source','commit','rows','original','report','destination'}
+                      and rehearsal['source']==source and rehearsal['commit']==commit,'source_rehearsal_binding_refused')
+        for name,expected in rehearsal['rows']:
+            boot._require(time.monotonic()<deadline,'source_scan_timeout')
+            info=os.lstat(name)
+            boot._require(identity_of(info,name)==expected,'source_rehearsal_drift')
+            _access(Path(name),identity,directory=stat.S_ISDIR(info.st_mode))
+        original=git(root,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()
+        boot._require(original==rehearsal['original'],'source_commit_changed')
+        boot._require(destination_identity()==rehearsal['destination'],'source_destination_changed')
+        capacity=os.statvfs('/run');report=dict(rehearsal['report'])
+        boot._require(not capacity.f_flag&os.ST_RDONLY and capacity.f_favail>=2*report['entries']+128
+            and capacity.f_bavail*capacity.f_frsize>=2*report['regular_bytes']+16*1024**2,'source_destination_preflight_refused')
+        boot._require(time.monotonic()<deadline,'source_scan_timeout')
+        return dict(report,rehearsal='REUSED_WITH_FULL_METADATA_ACCESS_AND_SOURCE_DRIFT_CHECKS',
+                    candidate_access_seconds=time.monotonic()-started)
+
     for parent in (root,*root.parents):_access(parent,identity,directory=True)
-    listed=_git(root,'ls-files','-z').split(b'\0');boot._require(listed[-1]==b'','source_index_refused')
+    listed=git(root,'ls-files','-z').split(b'\0');boot._require(listed[-1]==b'','source_index_refused')
     paths=set()
     for name in listed[:-1]:
         boot._require(time.monotonic()<deadline and len(paths)<=MAX_FILES,'source_index_bound')
@@ -287,9 +320,11 @@ def inspect_source(identity,source,commit):
                     paths.add(path)
                     if entry.is_dir(follow_symlinks=False):pending.append(path)
         except OSError as error:raise boot.BootstrapRefusal('source_traversal_incomplete') from error
+    rows=[]
     for path in sorted(paths):
         boot._require(time.monotonic()<deadline,'source_scan_timeout')
         info=_access(path,identity,directory=stat.S_ISDIR(os.lstat(path).st_mode))
+        rows.append((str(path),identity_of(info,path)))
         count+=1;size+=info.st_size if stat.S_ISREG(info.st_mode) else 0
         boot._require(count<=MAX_FILES and size<=MAX_BYTES,'source_copy_bound')
     destination=os.stat('/run',follow_symlinks=False);capacity=os.statvfs('/run')
@@ -298,22 +333,31 @@ def inspect_source(identity,source,commit):
         and not capacity.f_flag & os.ST_RDONLY and capacity.f_favail>=2*count+128
         and capacity.f_bavail*capacity.f_frsize>=2*size+16*1024**2,
         'source_destination_preflight_refused')
-    original=_git(root,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()
+    original=git(root,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()
     boot._require(len(original)==2 and original[0]==commit,'source_commit_changed')
     with tempfile.TemporaryDirectory(prefix='buffalo-source-preflight-') as temporary:
         stage=Path(temporary)/'repo';space=os.statvfs(temporary)
         boot._require(space.f_bavail*space.f_frsize>=2*size+16*1024**2,'source_copy_space_refused')
-        git=git_arguments(source)
-        for args in ((*git,'clone','--no-local','--no-hardlinks','--no-checkout','--single-branch','--no-tags','--',source,str(stage)),
-                     (*git,'-C',str(stage),'checkout','--detach',commit)):
-            command=('/usr/bin/timeout','--signal=TERM','--kill-after=2s','60s',*args)
-            code,_=boot._collect_native_client(command,cwd=source)
+        git_argv=git_arguments(source)
+        for args in ((*git_argv,'clone','--no-local','--no-hardlinks','--no-checkout','--single-branch','--no-tags','--',source,str(stage)),
+                     (*git_argv,'-C',str(stage),'checkout','--detach',commit)):
+            remaining=60 if operation_deadline is None else min(60,int(operation_deadline-time.monotonic()))
+            boot._require(remaining>0,'source_copy_rehearsal_deadline')
+            command=('/usr/bin/timeout','--signal=TERM','--kill-after=2s',str(remaining)+'s',*args)
+            code,_=boot._collect_native_client(command,cwd=source,
+                **({} if operation_deadline is None else {'operation_deadline':operation_deadline}))
+            boot._require(operation_deadline is None or time.monotonic()<operation_deadline,'source_copy_rehearsal_deadline')
             boot._require(code==0,'source_copy_rehearsal_refused')
-        boot._require(_git(stage,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()==original,'source_copy_identity_refused')
+        boot._require(git(stage,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()==original,'source_copy_identity_refused')
     repeated=os.stat('/run',follow_symlinks=False)
     boot._require((destination.st_dev,destination.st_ino,destination.st_mode)==(repeated.st_dev,repeated.st_ino,repeated.st_mode),'source_destination_changed')
-    boot._require(_git(root,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()==original,'source_commit_changed')
-    return {'policy':POLICY,'candidate_mode_access':'VERIFIED_WITHOUT_ACL','copy':'LOCAL_GIT_CLONE_AND_DETACHED_CHECKOUT_REHEARSED',
+    boot._require(git(root,'rev-parse','HEAD','HEAD^{tree}').decode().splitlines()==original,'source_commit_changed')
+    report={'policy':POLICY,'candidate_mode_access':'VERIFIED_WITHOUT_ACL','copy':'LOCAL_GIT_CLONE_AND_DETACHED_CHECKOUT_REHEARSED',
         'commit':commit,'tree':original[1],'entries':count,'regular_bytes':size,
         'account_mutations':0,'account_command_timeout_seconds':15,'copy_command_timeout_seconds':60,
         'future_permission_or_disk_drift':'FAIL_CLOSED_AT_ACTUAL_COPY; quarantine on ambiguous post-account failure'}
+
+    boot._require(operation_deadline is None or time.monotonic()<operation_deadline,'source_copy_rehearsal_deadline')
+    if rehearsal is not None:
+        rehearsal.update(source=source,commit=commit,rows=rows,original=original,report=dict(report),destination=destination_identity())
+    return dict(report,rehearsal='EXECUTED_ONCE',source_rehearsal_seconds=time.monotonic()-started)

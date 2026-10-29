@@ -125,6 +125,35 @@ class HostedRuntimeTests(unittest.TestCase):
         corrupt=bytearray(encoded);corrupt[-1]^=1
         with self.assertRaises(ns.backend.LocalStagingAcceptanceError):ns.backend._parse_browser_runtime_bundle(bytes(corrupt))
 
+    def test_sealer_streams_without_calling_aggregate_encoder_or_reader(self):
+        raw=b'synthetic'*10000
+        entries=(ns.backend._BrowserRuntimeBundleEntry('/a','F',0o444,0,0,'native-runtime:'+hashlib.sha256(raw).hexdigest(),raw),)
+        encoded=ns.backend._encode_browser_runtime_bundle(entries)
+        with patch.object(ns.backend,'_encode_browser_runtime_bundle',side_effect=AssertionError('aggregate encode')),patch.object(ns.backend,'_read_browser_runtime_bundle_descriptor',side_effect=AssertionError('aggregate read')):
+            bundle=ns.backend._seal_browser_runtime_bundle(entries)
+            try:
+                self.assertEqual(os.pread(bundle.descriptor,bundle.size,0),encoded[0])
+                self.assertEqual(ns.backend._validate_pinned_browser_runtime_bundle(bundle),entries)
+            finally:self.assertTrue(ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode)))
+
+    def test_streamed_short_writes_and_eintr_preserve_canonical_bytes(self):
+        raw=b'x'*4096;entries=(ns.backend._BrowserRuntimeBundleEntry('/a','F',0o444,0,0,'native-runtime:'+hashlib.sha256(raw).hexdigest(),raw),)
+        original=os.write;calls=[]
+        def short(fd,data):
+            calls.append(len(data))
+            if len(calls)==1:raise InterruptedError()
+            return original(fd,data[:127])
+        with patch.object(os,'write',side_effect=short):bundle=ns.backend._seal_browser_runtime_bundle(entries)
+        try:self.assertEqual(ns.backend._validate_pinned_browser_runtime_bundle(bundle),entries)
+        finally:ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode))
+        self.assertGreater(len(calls),10)
+
+    def test_owned_cleanup_does_not_allocate_or_validate_payload_again(self):
+        value=fixture_bundle();fd=value.bundle.descriptor
+        with patch.object(value,'verify',side_effect=MemoryError('payload')),patch.object(ns.backend,'_parse_browser_runtime_bundle_input',side_effect=MemoryError('payload')):
+            value.close()
+        with self.assertRaises(OSError):os.fstat(fd)
+
     def test_real_capture_fit_driver_has_no_namespace_or_native_execution(self):
         import hosted_synthetic_runtime_regression as driver
         import hosted_synthetic_postgres_runtime as pg

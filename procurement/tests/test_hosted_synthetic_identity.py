@@ -188,6 +188,38 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
         self.assertIs(caught.exception,failure);fit.assert_called_once_with('/fixture',binding)
         create.assert_not_called();run.assert_not_called()
 
+    def test_capacity_fit_memory_refusal_never_reaches_account_or_native_plan(self):
+        import hosted_synthetic_postgres_runtime as pg
+        from hosted_synthetic_source import HostedSourceBinding
+        failure=pg.PhaseMemoryRefusal({'capacity':'FIT','memory':{'result':'REFUSED_COMPONENT_ENVELOPE'}})
+        with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=HostedSourceBinding('a'*40,'b'*40,())),patch.object(pg,'require_phase_fit',side_effect=failure),patch.object(identity.AccountLease,'create') as create,patch.object(boot,'run_native_plan') as run,self.assertRaises(pg.PhaseMemoryRefusal):
+            identity.run_provisioned_candidate(ID,source='/fixture',python=str(Path('/proc/self/exe').resolve()),repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
+        create.assert_not_called();run.assert_not_called()
+
+    def test_missing_dict_or_boolean_memory_result_never_creates_an_account(self):
+        import hosted_synthetic_postgres_runtime as pg
+        for result in (None,True,{}, {'capacity':'FIT','memory':{'result':'WITHIN_COMPONENT_ENVELOPE'}}):
+            with self.subTest(result=result),patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source'),patch.object(pg,'require_phase_fit',return_value=result),patch.object(identity.AccountLease,'create') as create,self.assertRaisesRegex(boot.BootstrapRefusal,'memory_readiness_required'):
+                identity.run_provisioned_candidate(ID,source='/fixture',python=str(Path('/proc/self/exe').resolve()),repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
+            create.assert_not_called()
+
+    def test_valid_owned_readiness_still_cannot_bypass_the_next_account_gate(self):
+        import hosted_synthetic_postgres_runtime as pg
+        receipt=object.__new__(pg.PhaseReadiness)
+        failure=boot.BootstrapRefusal('next_account_gate')
+        with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source'),patch.object(pg,'require_phase_fit',return_value=receipt),patch.object(receipt,'verify') as verified,patch.object(identity.AccountLease,'create',side_effect=failure) as create,patch.object(boot,'run_native_plan') as run,self.assertRaisesRegex(boot.BootstrapRefusal,'next_account_gate'):
+            identity.run_provisioned_candidate(ID,source='/fixture',python=str(Path('/proc/self/exe').resolve()),repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version')
+        verified.assert_called_once();create.assert_called_once();run.assert_not_called()
+
+    def test_shared_preflight_never_repeats_measurement_after_verified_collision(self):
+        import hosted_synthetic_postgres_runtime as pg
+        receipt=object.__new__(pg.PhaseReadiness);python=str(Path('/proc/self/exe').resolve())
+        pre=identity.SelectionPreflight('/fixture','a'*40,python,identity.time.monotonic()+60)
+        with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source'),patch.object(pg,'require_phase_fit',return_value=receipt) as measured,patch.object(receipt,'verify') as verify,patch.object(identity.AccountLease,'create',side_effect=__import__('hosted_synthetic_account_preflight').OwnershipCollision('synthetic')):
+            for candidate in (ID,replace(ID,uid=952,gid=952)):
+                with self.assertRaises(identity.CandidateOwnershipCollision):identity.run_provisioned_candidate(candidate,source='/fixture',python=python,repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version',preflight=pre,ownership_deadline=pre.deadline)
+        self.assertEqual(measured.call_count,1);self.assertEqual(verify.call_count,2)
+
     def test_fit_cannot_measure_a_different_interpreter_than_selected_launcher(self):
         import hosted_synthetic_postgres_runtime as pg
         with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source'),patch.object(pg,'require_phase_fit') as fit,patch.object(identity.AccountLease,'create') as create,self.assertRaisesRegex(boot.BootstrapRefusal,'fit_interpreter_refused'):

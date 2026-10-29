@@ -701,10 +701,78 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
         self.assertIsNone(self.diagnostic._token);self.assertIsNone(self.postgres._token)
 
     def test_capacity_refusal_preserves_measurement_without_execution_authority(self):
-        report={'capacity':'REFUSED','composed_regular_bytes':105340350,'maximum_regular_bytes':83886080,'execution_authority':False}
-        with patch.object(pg,'capture_phase_fit',return_value=report),self.assertRaises(pg.PhaseCapacityRefusal) as caught:
-            pg.require_phase_fit('/fixture',BINDING)
+        report={'capacity':'REFUSED','generation':'a'*64,'composed_regular_bytes':134217729,
+                'maximum_regular_bytes':134217728,'execution_authority':False}
+        with self.readiness_inputs(),patch.object(pg,'measure_phase_fit',return_value=report),self.assertRaises(pg.PhaseCapacityRefusal) as caught:
+            pg.require_phase_fit(Path.cwd(),BINDING)
         self.assertIs(caught.exception.evidence,report)
+
+    def readiness_inputs(self, *, rss=1024):
+        from contextlib import ExitStack
+        stack=ExitStack()
+        stack.enter_context(patch.object(pg,'_source_identity'))
+        stack.enter_context(patch.object(pg,'_fresh_generation',return_value='a'*64))
+        self.measured=[]
+        def capture(value):
+            result=repack(value,runtime._entries(value));self.measured.append(result)
+            self.addCleanup(self.close_owned,result);return result
+        stack.enter_context(patch.object(runtime,'capture_runtime',side_effect=lambda *a:capture(self.diagnostic)))
+        stack.enter_context(patch.object(pg,'capture_postgres',side_effect=lambda *a:capture(self.postgres)))
+        stack.enter_context(patch.object(pg.resource,'getrusage',return_value=SimpleNamespace(ru_maxrss=rss)))
+        return stack
+
+    def test_memory_refusal_closes_captures_before_any_readiness_is_returned(self):
+        before=set(os.listdir('/proc/self/fd'))
+        with self.readiness_inputs(rss=536870912),self.assertRaises(pg.PhaseMemoryRefusal) as caught:
+            pg.require_phase_fit(Path.cwd(),BINDING)
+        self.assertEqual(caught.exception.evidence['capacity'],'FIT')
+        self.assertEqual(caught.exception.evidence['memory']['result'],'REFUSED_COMPONENT_ENVELOPE')
+        self.assertTrue(caught.exception.evidence['owned_descriptors_closed'])
+        self.assertTrue(all(value._token is None for value in self.measured))
+        self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+
+    def test_actual_readiness_composes_adopts_and_preserves_memory_formula(self):
+        with self.readiness_inputs():receipt=pg.require_phase_fit(Path.cwd(),BINDING)
+        self.assertIs(type(receipt),pg.PhaseReadiness)
+        report=receipt.report;pg._validate_memory_result(report,BINDING)
+        self.assertEqual([row['stage'] for row in report['memory_stages']],
+            ['DIAGNOSTIC_CAPTURE','POSTGRES_CAPTURE','COMPOSITION_PREPARED','SEALED_SERIALIZATION','DESCRIPTOR_ADOPTION','OWNED_CLEANUP'])
+        m=report['memory'];self.assertEqual(m['conservative_sum_bytes'],
+            m['process_peak_rss_bytes']+m['child_peak_rss_bytes']+m['maximum_owned_memfd_allocation_bytes'])
+        self.assertEqual(report['service_memory_enforcement'],'NOT_PROVEN')
+
+    def test_memory_evidence_cannot_promote_missing_bad_arithmetic_or_other_source(self):
+        with self.readiness_inputs():report=pg.require_phase_fit(Path.cwd(),BINDING).report
+        for field,value in [('memory',None),('memory',{}),('commit','f'*40),('tree','f'*40),('owned_descriptors_closed',False),('generation','bad')]:
+            bad=copy.deepcopy(report);bad[field]=value
+            with self.subTest(field=field),self.assertRaises(ns.NamespaceProofError):pg._validate_memory_result(bad,BINDING)
+        for value in (True,-1,2**64,536870913):
+            bad=copy.deepcopy(report);bad['memory']['conservative_sum_bytes']=value
+            with self.subTest(value=value),self.assertRaises(ns.NamespaceProofError):pg._validate_memory_result(bad,BINDING)
+        bad=copy.deepcopy(report);bad['memory']['service_limit_bytes']*=2
+        with self.assertRaises(ns.NamespaceProofError):pg._validate_memory_result(bad,BINDING)
+
+    def test_measurement_memory_error_closes_owned_inputs_and_stops_tracing(self):
+        with self.readiness_inputs(),patch.object(pg,'_prepare_phase',side_effect=MemoryError('injected')),self.assertRaises(MemoryError):
+            pg.require_phase_fit(Path.cwd(),BINDING)
+        self.assertTrue(all(value._token is None for value in self.measured))
+        self.assertFalse(pg.tracemalloc.is_tracing())
+
+    def test_readiness_cleanup_failure_never_returns_a_receipt(self):
+        close=runtime.RuntimeBundle.close
+        def failure(value):
+            close(value)
+            if value.policy==runtime.POSTGRES_POLICY:raise OSError('synthetic close')
+        with self.readiness_inputs(),patch.object(runtime.RuntimeBundle,'close',failure),self.assertRaises(ns.NamespaceCleanupError):
+            pg.require_phase_fit(Path.cwd(),BINDING)
+        self.assertFalse(pg.tracemalloc.is_tracing())
+
+    def test_readiness_expiry_or_foreign_owner_cannot_reuse_report(self):
+        with self.readiness_inputs():receipt=pg.require_phase_fit(Path.cwd(),BINDING)
+        receipt.deadline=0
+        with self.assertRaises(ns.NamespaceProofError):receipt.verify(Path.cwd(),BINDING)
+        with self.assertRaises(ns.NamespaceProofError):pg.PhaseReadiness()
+
 
     def test_native_capture_failure_closes_diagnostic_input(self):
         failure=OSError('native')

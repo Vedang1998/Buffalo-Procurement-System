@@ -49,13 +49,13 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_repository_python_has_no_site_or_ambient_environment(self):
         launches = [line.strip() for line in self.text.splitlines() if 'env -i ' in line and '"$DIAGNOSTIC_PYTHON" -I -S -B' in line]
-        self.assertEqual(len(launches), 6)
-        self.assertTrue(launches[1].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertTrue(launches[4].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
-        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[4])
-        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[4])
-        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[5])
-        self.assertNotIn('BUFFALO_DIAGNOSTIC_NODE', ''.join([launches[0],*launches[2:]]))
+        self.assertEqual(len(launches), 7)
+        self.assertTrue(launches[2].startswith('env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 BUFFALO_DIAGNOSTIC_NODE="$diagnostic_node" "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertTrue(launches[5].startswith('/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 "$DIAGNOSTIC_PYTHON" -I -S -B '))
+        self.assertIn('"procurement/tools/hosted_synthetic_capability.py",*sys.argv[1:]],close_fds=True', launches[5])
+        self.assertIn('"$EXPECTED_REPOSITORY" "$EXPECTED_EVENT" "$EXPECTED_REF" "$EXPECTED_SHA"', launches[5])
+        self.assertIn('hosted_synthetic_pid1_regression.py --run-pid1-regressions',launches[6])
+        self.assertNotIn('BUFFALO_DIAGNOSTIC_NODE', ''.join([launches[0],launches[1],*launches[3:]]))
         self.assertIn('diagnostic_node=$(command -v node)', self.text)
         self.assertIn('sha256sum "$diagnostic_node"', self.text)
 
@@ -94,7 +94,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [36,33,16,66,22,38,20,11,17,37,23,23,33,14,31,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,81,36,16,35,42,35,14]', 'result.wasSuccessful()', 'result.testsRun == 1054', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [38,33,17,66,22,38,20,11,17,37,27,23,36,14,34,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,87,36,16,35,46,35,14,26]', 'result.wasSuccessful()', 'result.testsRun == 1103', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)
@@ -123,6 +123,14 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
         self.assertNotIn(b'LIVE_SERVICE_REACHED',result.stdout)
         self.assertEqual(json.loads(result.stdout)['privileged_processes_started'],0)
         self.assertNotIn('sudo ',self.text)
+
+    def test_native_target_observation_is_readonly_and_non_authorizing(self):
+        block=self.text.split('- name: Read-only native artifact reconciliation inputs',1)[1].split('- name: Focused source',1)[0]
+        for required in ('hosted_synthetic_native_observation.py "$EXPECTED_SHA"','INCOMPLETE_OBSERVATION',
+                         '"execution_authority":false','60s','-I -S -B','65536'):
+            self.assertIn(required,block)
+        for forbidden in ('sudo','apt ','systemd-run','chmod','chown','ldd ','--version'):
+            self.assertNotIn(forbidden,block)
 
     def test_readonly_capture_is_fixed_bounded_and_cannot_activate_bootstrap(self):
         block=self.text.split('- name: Read-only PostgreSQL phase capture and memory measurement',1)[1].split('- name: Review gate',1)[0]

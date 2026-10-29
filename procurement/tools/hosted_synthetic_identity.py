@@ -226,11 +226,28 @@ def inspect_account_platform():
     return {'wrappers_and_ancestors':wrappers,'account_programs':programs}
 
 
+
+class SelectionPreflight:
+    """One activation's invariant work, sharing the original absolute deadline."""
+    def __init__(self,source,commit,python,deadline):
+        self._owner=self;self.source=source;self.commit=commit;self.python=python
+        self.deadline=deadline;self.rehearsal={};self.readiness=None;self.stages=[]
+
+    def verify(self,source,commit):
+        boot._require(self._owner is self and (self.source,self.commit)==(source,commit)
+            and time.monotonic()<self.deadline,'identity_selection_deadline')
+
+    def record(self,name,started):
+        ended=time.monotonic();self.stages.append({'stage':name,'elapsed_seconds':ended-started,
+            'remaining_shared_seconds':max(0,self.deadline-ended)})
+        self.verify(self.source,self.commit)
+
+
 class AccountLease:
     def __init__(self):raise boot.BootstrapRefusal('use_explicit_account_provisioning')
 
     @classmethod
-    def create(cls, identity, source, commit, *, lifecycle=None, ownership_deadline=None):
+    def create(cls, identity, source, commit, *, lifecycle=None, ownership_deadline=None, preflight=None):
         validate(identity)
         if lifecycle is not None:
             from hosted_synthetic_lifecycle import require_case
@@ -241,8 +258,16 @@ class AccountLease:
                       and not os.path.lexists('/sys/fs/cgroup/system.slice/'+identity.unit)
                       and not os.path.lexists('/sys/fs/cgroup'+boot.launcher.service_cgroup_path(identity.unit)))
         from hosted_synthetic_account_preflight import inspect_source,inspect_ownership
-        source_preflight=inspect_source(identity,source,commit)
+        if preflight is not None:
+            boot._require(type(preflight) is SelectionPreflight)
+            preflight.verify(source,commit)
+        started=time.monotonic()
+        source_preflight=inspect_source(identity,source,commit,**({} if preflight is None else
+            {'operation_deadline':preflight.deadline,'rehearsal':preflight.rehearsal}))
+        if preflight is not None:preflight.record('SOURCE_REHEARSAL_OR_CANDIDATE_DRIFT',started)
+        started=time.monotonic()
         ownership_preflight=inspect_ownership(identity,**({} if ownership_deadline is None else {'scan_deadline':ownership_deadline}))
+        if preflight is not None:preflight.record('CANDIDATE_OWNERSHIP_SCAN',started)
         inspect_account(identity,present=False)
         boot._require(not identity_processes(identity),"identity_appeared_before_reservation")
         boot._require(ownership_deadline is None or time.monotonic()<ownership_deadline,'identity_selection_deadline')
@@ -343,7 +368,7 @@ class AccountLease:
             raise boot.BootstrapCleanupError('dedicated_cleanup_unverified_identity_retained') from error
 
 
-def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained", ownership_deadline=None):
+def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained", ownership_deadline=None, preflight=None):
     """Complete dormant wiring; CLI/workflow review gate never calls this."""
     from hosted_synthetic_source import bind_hosted_source, _resource_operation
     from hosted_synthetic_capability import _require_clean_supervisor
@@ -351,7 +376,11 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
     def execute():
         boot._require(diagnostic in ("retained","postgres-version"))
         _require_clean_supervisor()
-        binding=bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit)
+        if preflight is not None:
+            boot._require(type(preflight) is SelectionPreflight and preflight.deadline==ownership_deadline)
+            preflight.verify(source,commit)
+        binding=bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit,
+            **({} if ownership_deadline is None else {'operation_deadline':ownership_deadline}))
         if lifecycle is not None:
             from hosted_synthetic_lifecycle import require_case
             require_case(lifecycle,identity,commit)
@@ -361,8 +390,20 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             try:selected_python=Path(python).resolve(strict=True)
             except OSError as error:raise boot.BootstrapRefusal('postgres_fit_interpreter_refused') from error
             boot._require(selected_python==Path('/proc/self/exe').resolve(strict=True),'postgres_fit_interpreter_refused')
-            require_phase_fit(source,binding)
+            from hosted_synthetic_postgres_runtime import PhaseReadiness
+            if preflight is not None:
+                boot._require(type(preflight) is SelectionPreflight and preflight.python==python)
+                preflight.verify(source,commit)
+            started=time.monotonic()
+            readiness=None if preflight is None else preflight.readiness
+            if readiness is None:
+                readiness=require_phase_fit(source,binding,**({} if ownership_deadline is None else {'deadline':ownership_deadline}))
+            boot._require(type(readiness) is PhaseReadiness,'postgres_memory_readiness_required')
+            readiness.verify(source,binding)
+            if preflight is not None:
+                preflight.readiness=readiness;preflight.record('CAPACITY_MEMORY_OR_NATIVE_DRIFT',started)
         options={} if lifecycle is None else {'lifecycle':lifecycle}
+        if preflight is not None:options['preflight']=preflight
         from hosted_synthetic_account_preflight import OwnershipCollision
         try:lease=AccountLease.create(identity,source,commit,**options,
             **({} if ownership_deadline is None else {'ownership_deadline':ownership_deadline}))
@@ -375,7 +416,7 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
                 event=event,ref=ref,commit=commit,uid=identity.uid,gid=identity.gid,unit=identity.unit,
                 initial_user_namespace=(initial.st_dev,initial.st_ino),
                 **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
-            result=boot.run_native_plan(plan,source_root=source,account=lease,**options)
+            result=boot.run_native_plan(plan,source_root=source,account=lease,**({} if lifecycle is None else {'lifecycle':lifecycle}))
             boot._require(result['report']['tree']==binding.tree)
         except BaseException as error:
             body_error=error
@@ -407,12 +448,14 @@ def activation_entry(arguments, *, diagnostic="retained"):
     boot._require(len(arguments)==4 and diagnostic in ("retained","postgres-version"))
     repository,event,ref,commit=arguments
     source=str(Path(__file__).resolve().parents[2])
-    bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit)
+    deadline=time.monotonic()+60
+    bind_hosted_source(Path(source),repository=repository,event=event,ref=ref,sha=commit,operation_deadline=deadline)
     inspect_account_platform()
     nonce=str(uuid.uuid4())
     from hosted_synthetic_quarantine import reserved_ids
     reserved=reserved_ids()
-    deadline=time.monotonic()+60;collisions=0
+    collisions=0
+    preflight=SelectionPreflight(source,commit,sys.executable,deadline)
     for number in range(900,1000):
         boot._require(time.monotonic()<deadline,'identity_selection_deadline')
         if any(number in pair for pair in reserved):continue
@@ -427,7 +470,7 @@ def activation_entry(arguments, *, diagnostic="retained"):
         if identity_processes(candidate):continue
         try:
             return run_provisioned_candidate(candidate,source=source,python=sys.executable,
-                repository=repository,event=event,ref=ref,commit=commit,ownership_deadline=deadline,
+                repository=repository,event=event,ref=ref,commit=commit,ownership_deadline=deadline,preflight=preflight,
                 **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
         except CandidateOwnershipCollision:
             collisions+=1
