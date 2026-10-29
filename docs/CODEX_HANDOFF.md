@@ -10,6 +10,33 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-29 process adoption during memory/native-input repair
+
+Adopted the exact five-file documentation-only delta from owner-approved
+`1f4ac6da5fea108d48d8c746ac06e0d3ac586c1a` on
+`docs/agentic-execution-20261029`. Verified all four prior instruction blobs match
+our current lineage, the fifth file is new, and no executable path/mode is in that
+delta. Applied without merge/reset or overwriting ongoing implementation work.
+Actual implementation HEAD at adoption: `44fee111045fd56c463958674480c7fb2bb81711`,
+tree `8434b445dcb712b3af455e44fc6dcb68e82b8424`; M1/native-input source edits were
+still uncommitted and are not attributed as tested to that HEAD.
+
+Section13 now governs checkpoint-and-continue within the existing Risk3 scope.
+Current objective remains memory readiness before account provisioning, bounded
+streaming, cleanup/deadline repairs and the dormant fixed native-input successor.
+Frozen e5e8 implementation/a04ef evidence remain unchanged. The owner's latest M1
+instruction refers to a Claude report; the actual e5e8 report text/attribution,
+commands and original failing measurement have not been supplied to this task.
+Do not invent its accepted dispositions; keep previous actual reviews scoped.
+Current repairs require their own combined delta review; native installation,
+privileged activation, credentials and deployment/purchasing remain gated.
+
+The reusable cloud Start draft was shortened to read AGENTS.md, current governance
+and this handoff instead of copying stale counts/reviews/process. Install/network/
+secrets were not changed. Saved draft is not a published snapshot or a tested
+fresh-task restoration. Next action: finish current causal tests and native-input
+wiring, freeze exact source, measure memory and publish the source-bound packet.
+
 ### 2026-10-29 internal review recorded; native-input proposal made concrete
 
 The latest report is recorded as **INTERNAL CODEX REVIEW ONLY** in

@@ -11,7 +11,7 @@ This repository is Buffalo Procurement OS. These instructions apply to every fut
 5. `docs/CODEX_HANDOFF.md`.
 6. The schema, migrations, and tests relevant to the requested phase.
 
-If authorities conflict or material facts remain uncertain, stop and surface the conflict; do not improvise.
+If authorities conflict or material facts remain uncertain, block the affected action and surface the conflict; do not improvise. Continue independent authorized work only where the conflict does not apply.
 
 ## Mandatory project-management workflow
 
@@ -23,6 +23,18 @@ If authorities conflict or material facts remain uncertain, stop and surface the
 - At every meaningful milestone/phase boundary, update `docs/CODEX_HANDOFF.md` with verified current state, blockers, gate states, test result, relevant counts/control totals, branch/commit/PR, owner decisions needed, and the exact next authorization boundary.
 - Update `procurement/docs/PHASE_STATUS.md` when the phase/program milestone changes.
 - Do not mark a phase complete or begin the next phase merely because code exists. Satisfy the applicable Definition of Done and obtain required owner authorization.
+
+## Continuous execution inside approved scope
+
+Apply section 13 of `docs/PROJECT_GOVERNANCE.md` as the durable execution protocol. Buffalo Procurement OS is separate from ProPo/Stocky; never import their identities, governance or tasks.
+
+- Codex Cloud is the ordinary development workspace; no dependence on the owner's Mac or Replit SSH. GitHub is durable source and review evidence; Railway is the intended host, not a completed migration claim.
+- Work toward the existing authorized outcome through implementation, focused tests, diagnosis and repairs. **Checkpoint, then continue** while authorized executable work remains.
+- A failed gate blocks its dependent acceptance/action, not all coding. Do not request renewed approval for routine in-scope decisions or repeat an unchanged deterministic failure.
+- Keep exactly one implementation writer. Claude reviews a frozen published SHA/tree read-only while the writer can progress on independent descendants; material later changes need delta review. Cursor is a targeted specialist, not a duplicate broad reviewer.
+- Preserve actual external-review attribution, original closures, limitations and new findings. Internal reviews and prepared prompts are not Claude execution or approval.
+- Use the existing handoff/plan/ledger for resumability. Do not create another orchestrator or repeated roadmap. No shared-chat-memory or automatic-resumption assumption.
+- Prioritize a demonstrated workflow or necessary live gate over more helper modules or test-count growth. No reduction of required security, business, data or owner-approval gates is permitted.
 
 ## Permanent operating guardrails
 
