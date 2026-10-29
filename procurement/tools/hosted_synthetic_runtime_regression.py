@@ -267,6 +267,23 @@ def _native_input_chain(path):
     return result
 
 
+def _postgres_data_inputs():
+    """Bounded metadata for the existing fixed data list, with shared paths once."""
+    import hosted_synthetic_postgres_runtime as pg
+    rows={}
+    for name in pg._DATA:
+        value=_native_input_chain(pg.SHARE+name)
+        if value['status']!='OBSERVED':return {'status':'NOT_OBSERVED'}
+        for chain in value['chains'].values():
+            for row in chain:
+                if row['path'] in rows and rows[row['path']]!=row:
+                    return {'status':'METADATA_CHANGED'}
+                rows[row['path']]=row
+                ns._require(len(rows)<=64)
+    return {'status':'OBSERVED','scope':'FIXED_PG_DATA_METADATA_NOT_CAPTURE_OR_TRUST_APPROVAL',
+            'chains':{'distinct_observed_paths':[rows[key] for key in sorted(rows)]}}
+
+
 def _memory_stage(name):
     current,peak=tracemalloc.get_traced_memory()
     return {'stage':name,'traced_current_bytes':current,'traced_peak_bytes':peak,
@@ -303,9 +320,13 @@ def _measure_inputs(binding,root,native_inputs):
     refused=any(value['status']=='OBSERVED' and any(not row['root_owned_no_write']
         for rows in value['chains'].values() for row in rows)
         for name,value in native_inputs.items() if name in ('interpreter','stdlib','libdir'))
-    if refused:
+    pg_refused=any(value['status']=='OBSERVED' and any(not row['root_owned_no_write']
+        for rows in value['chains'].values() for row in rows)
+        for name,value in native_inputs.items() if name in ('postgres','postgres_data'))
+    if refused or pg_refused:
         return {'capacity':'NOT_MEASURED_INPUT_TRUST_REFUSED',
-            'postgres_input':_measure_postgres_input(binding,root)}
+            'postgres_input':({'status':'NOT_RUN_NATIVE_INPUT_TRUST_REFUSED'} if pg_refused
+                              else _measure_postgres_input(binding,root))}
     import hosted_synthetic_postgres_runtime as pg
     return pg.capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
 
@@ -379,6 +400,7 @@ def run_postgres_fit(binding,root):
         ('interpreter',str(Path('/proc/self/exe').resolve(strict=True))),
         ('stdlib',sysconfig.get_path('stdlib')),('libdir',sysconfig.get_config_var('LIBDIR')),
         ('postgres',pg.BIN+'postgres'))}
+    result['native_inputs']['postgres_data']=_postgres_data_inputs()
     before=_descriptor_inventory();started=time.monotonic();stages=[]
     tracemalloc.start()
     try:
@@ -388,7 +410,7 @@ def run_postgres_fit(binding,root):
         status={'FIT':'PASS','REFUSED':'REFUSED_CAPACITY',
                 'NOT_MEASURED_INPUT_TRUST_REFUSED':'REFUSED_NATIVE_INPUT_TRUST'}[measurement['capacity']]
         result.update(capture_fit=status,measurement=measurement)
-        if 'postgres_input' in measurement:
+        if measurement.get('postgres_input',{}).get('status')=='PASS':
             native=measurement['postgres_input']
             rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024
             children=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024

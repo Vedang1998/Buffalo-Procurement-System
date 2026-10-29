@@ -37,7 +37,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_bootstrap.py": 37,
     "test_hosted_synthetic_identity.py": 23,
     "test_hosted_synthetic_pid1_regression.py": 23,
-    "test_hosted_synthetic_runtime.py": 32,
+    "test_hosted_synthetic_runtime.py": 33,
     "test_hosted_synthetic_postgres_runtime.py": 81,
     "test_hosted_synthetic_postgres_identity.py": 36,
     "test_hosted_synthetic_postgres_image.py": 35,

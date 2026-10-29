@@ -69,6 +69,30 @@ class HostedRuntimeTests(unittest.TestCase):
             report=driver._measure_inputs(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'),inputs)
         combined.assert_not_called();native.assert_called_once()
         self.assertEqual(report['capacity'],'NOT_MEASURED_INPUT_TRUST_REFUSED')
+        inputs['postgres_data']=inputs['interpreter']
+        with patch.object(pg,'capture_phase_fit') as combined,patch.object(driver,'_measure_postgres_input') as native:
+            report=driver._measure_inputs(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'),inputs)
+        combined.assert_not_called();native.assert_not_called()
+        self.assertEqual(report['postgres_input']['status'],'NOT_RUN_NATIVE_INPUT_TRUST_REFUSED')
+        del inputs['interpreter']
+        with patch.object(pg,'capture_phase_fit') as combined,patch.object(driver,'_measure_postgres_input') as native:
+            report=driver._measure_inputs(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'),inputs)
+        combined.assert_not_called();native.assert_not_called()
+        self.assertEqual(report['capacity'],'NOT_MEASURED_INPUT_TRUST_REFUSED')
+
+    def test_fixed_pg_data_observation_deduplicates_and_detects_changed_metadata(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        def observe(path):return {'status':'OBSERVED','chains':{'requested':[
+            {'path':pg.SHARE,'root_owned_no_write':False},{'path':path,'root_owned_no_write':True}]}}
+        with patch.object(driver,'_native_input_chain',side_effect=observe):report=driver._postgres_data_inputs()
+        rows=report['chains']['distinct_observed_paths'];self.assertEqual(len(rows),len(pg._DATA)+1)
+        self.assertEqual(sum(not row['root_owned_no_write'] for row in rows),1)
+        counter=iter(range(100))
+        def changed(path):return {'status':'OBSERVED','chains':{'requested':[
+            {'path':pg.SHARE,'root_owned_no_write':bool(next(counter)%2)}]}}
+        with patch.object(driver,'_native_input_chain',side_effect=changed):
+            self.assertEqual(driver._postgres_data_inputs()['status'],'METADATA_CHANGED')
 
     def test_native_pg_input_measurement_owns_cleanup_and_close_refusal(self):
         import hosted_synthetic_runtime_regression as driver
