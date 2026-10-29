@@ -196,7 +196,7 @@ def run_application(binding,root,cache):
 
 def _shared_job_memory():
     """Read only the existing job cgroup; never claim exclusive attribution."""
-    from hosted_synthetic_cgroup import CgroupProofError
+    from hosted_synthetic_cgroup import CgroupProofError,CgroupSocketPressureError,_require_zero_socket
     result={'scope':'SHARED_JOB_CGROUP_NOT_OWNED_SERVICE','status':'NOT_OBSERVED'}
     try:
         raw=ns._read('/proc/self/cgroup',4096)
@@ -212,11 +212,13 @@ def _shared_job_memory():
                 if len(keys)<=32 and all(re.fullmatch(rb'[a-z_]{1,32}',key) for key in keys):
                     result['observed_event_keys']=[key.decode('ascii') for key in keys]
                 values[name]=parse_memory_events(data)
+                _require_zero_socket(values[name])
             else:
                 ns._require(re.fullmatch(rb'[0-9]{1,20}\n',data) is not None)
                 values[name]=int(data)
         ns._require(ns._identity(path.stat())==identity)
         result.update(status='OBSERVED',identity=list(identity),values=values)
+    except CgroupSocketPressureError:result['status']='REFUSED_SOCKET_PRESSURE'
     except CgroupProofError:result['status']='REFUSED_COUNTER_SCHEMA'
     except (OSError,ns.NamespaceProofError):pass
     return result
@@ -271,6 +273,41 @@ def _memory_stage(name):
             'process_cumulative_peak_rss_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024,
             'child_process_peak_rss_bytes':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024,
             'shared_job':_shared_job_memory()}
+
+
+def _measure_postgres_input(binding,root):
+    """Independent fixed native-input measurement, never an alternative root."""
+    import hosted_synthetic_postgres_runtime as pg
+    value=None;failure=None;report=None
+    try:
+        value=pg.capture_postgres(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
+        value.verify()
+        report={'status':'PASS','scope':'PG_ONLY_CAPTURE_NOT_COMPOSED_PHASE_OR_EXECUTION',
+            'policy':value.policy,'maximum_regular_bytes':runtime.MAX_BYTES,
+            'regular_bytes':value.bundle.regular_bytes,'entries':value.bundle.entries,
+            'bundle_sha256':value.bundle.sha256,'manifest_sha256':value.bundle.manifest_sha256,
+            'memfd_allocated_bytes':os.fstat(value.bundle.descriptor).st_blocks*512,
+            'postgres_sha256':value.native_files[pg.BIN+'postgres'],
+            'native_inventory_sha256':hashlib.sha256(json.dumps(value.native_files,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+    except BaseException as error:failure=error
+    if value is not None:
+        try:value.close()
+        except BaseException as error:raise ns.NamespaceCleanupError('postgres_input_measurement_cleanup_refused') from (failure or error)
+    if failure is not None:raise failure
+    report['owned_capture_closed']=True
+    return report
+
+
+def _measure_inputs(binding,root,native_inputs):
+    """Do not repeat a capture whose fixed native trust precondition is disproven."""
+    refused=any(value['status']=='OBSERVED' and any(not row['root_owned_no_write']
+        for rows in value['chains'].values() for row in rows)
+        for name,value in native_inputs.items() if name in ('interpreter','stdlib','libdir'))
+    if refused:
+        return {'capacity':'NOT_MEASURED_INPUT_TRUST_REFUSED',
+            'postgres_input':_measure_postgres_input(binding,root)}
+    import hosted_synthetic_postgres_runtime as pg
+    return pg.capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
 
 
 def _measure_composed_phase(binding,root,measurement):
@@ -346,9 +383,20 @@ def run_postgres_fit(binding,root):
     tracemalloc.start()
     try:
         stages.append(_memory_stage('BEFORE_CAPTURE'))
-        measurement=pg.capture_phase_fit(hashlib.sha256(os.urandom(32)).hexdigest(),root,binding)
+        measurement=_measure_inputs(binding,root,result['native_inputs'])
         stages.append(_memory_stage('CAPTURE_FIT_INPUTS_AND_CLEANUP'))
-        result.update(capture_fit='PASS' if measurement['capacity']=='FIT' else 'REFUSED_CAPACITY',measurement=measurement)
+        status={'FIT':'PASS','REFUSED':'REFUSED_CAPACITY',
+                'NOT_MEASURED_INPUT_TRUST_REFUSED':'REFUSED_NATIVE_INPUT_TRUST'}[measurement['capacity']]
+        result.update(capture_fit=status,measurement=measurement)
+        if 'postgres_input' in measurement:
+            native=measurement['postgres_input']
+            rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024
+            children=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*1024
+            envelope=rss+children+native['memfd_allocated_bytes']
+            result['pg_input_memory']={'process_peak_rss_bytes':rss,'child_peak_rss_bytes':children,
+                'owned_memfd_allocation_bytes':native['memfd_allocated_bytes'],'conservative_sum_bytes':envelope,
+                'service_limit_bytes':536870912,'within_component_envelope':envelope<=536870912,
+                'scope':'PG_ONLY_CAPTURE_COMPONENT_NOT_COMPOSED_PHASE_OR_WHOLE_SERVICE'}
         if measurement['capacity']=='FIT':
             detail=_measure_composed_phase(binding,root,measurement);result['phase_component']=detail
             stages.extend(detail.pop('stages'))
@@ -375,6 +423,8 @@ def run_postgres_fit(binding,root):
     result['shared_job_zero_oom']='NOT_PROVEN'
     if any(item['status']=='REFUSED_COUNTER_SCHEMA' for item in observed):
         result['capture_fit']='REFUSED_COUNTER_SCHEMA'
+    elif any(item['status']=='REFUSED_SOCKET_PRESSURE' for item in observed):
+        result['capture_fit']='REFUSED_SOCKET_PRESSURE'
     elif (len(observed)>=2 and stages[0]['stage']=='BEFORE_CAPTURE'
           and stages[-1]['stage']=='AFTER_OWNED_CLEANUP'
           and all(item['status']=='OBSERVED' for item in observed)):

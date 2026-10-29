@@ -63,6 +63,28 @@ print('subreaper and kernel autoreap guards verified; no migration')
         self.assertEqual(cg.parse_memory_events(EVENTS), expected)
         cg.require_zero_oom_delta(expected, dict(expected, high=2, max=3))
 
+    def test_socket_pressure_counter_is_optional_retained_and_zero(self):
+        old=cg.parse_memory_events(EVENTS)
+        value=cg.parse_memory_events(EVENTS+b'sock_throttled 0\n')
+        self.assertEqual(value,dict(old,sock_throttled=0))
+        self.assertEqual(cg.MEMORY_EVENTS_SCHEMA,'BUFFALO_MEMORY_EVENTS_SIX_PLUS_ZERO_SOCKET_V2')
+        cg.require_zero_oom_delta(value,dict(value,high=1))
+        pressure=cg.parse_memory_events(EVENTS+b'sock_throttled 1\n')
+        self.assertEqual(pressure['sock_throttled'],1)
+        with self.assertRaises(cg.CgroupSocketPressureError):cg._require_zero_socket(pressure)
+        with self.assertRaises(cg.CgroupSocketPressureError):
+            cg._memory_observation(lambda name:{'memory.current':b'0\n','memory.peak':b'0\n',
+                'memory.events':EVENTS+b'sock_throttled 1\n'}[name],1024)
+        for raw in (EVENTS+b'sock_throttled 00\n',
+                    EVENTS+b'sock_throttled 18446744073709551616\n',
+                    EVENTS+b'sock_throttled 0\nsock_throttled 0\n',
+                    EVENTS.replace(b'oom 0\n',b'')+b'sock_throttled 0\n',
+                    EVENTS+b'sock_throttled 0\nunknown_safety_event 0\n'):
+            with self.subTest(raw=raw),self.assertRaises(cg.CgroupProofError):cg.parse_memory_events(raw)
+        for before,after in ((old,value),(value,old),(value,dict(value,sock_throttled=1)),
+                             (dict(value,sock_throttled=True),value)):
+            with self.subTest(before=before,after=after),self.assertRaises(cg.CgroupProofError):cg.require_zero_oom_delta(before,after)
+
     def test_malformed_counters_refuse(self):
         for raw in (EVENTS[:-1], EVENTS + b'oom 0\n', EVENTS.replace(b'oom 0\n', b''),
                     EVENTS + b'new 0\n', EVENTS.replace(b'high 0', b'high  0'),

@@ -61,6 +61,33 @@ class HostedRuntimeTests(unittest.TestCase):
         self.assertEqual(report['status'],'OBSERVED');chmod.assert_not_called();chown.assert_not_called()
         self.assertFalse(any(row['root_owned_no_write'] for rows in report['chains'].values() for row in rows))
 
+    def test_disproven_native_trust_never_retries_combined_capture(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        inputs={'interpreter':{'status':'OBSERVED','chains':{'requested':[{'root_owned_no_write':False}]}}}
+        with patch.object(pg,'capture_phase_fit') as combined,patch.object(driver,'_measure_postgres_input',return_value={'status':'PASS','scope':'PG_ONLY_CAPTURE_NOT_COMPOSED_PHASE_OR_EXECUTION'}) as native:
+            report=driver._measure_inputs(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'),inputs)
+        combined.assert_not_called();native.assert_called_once()
+        self.assertEqual(report['capacity'],'NOT_MEASURED_INPUT_TRUST_REFUSED')
+
+    def test_native_pg_input_measurement_owns_cleanup_and_close_refusal(self):
+        import hosted_synthetic_runtime_regression as driver
+        import hosted_synthetic_postgres_runtime as pg
+        from test_hosted_synthetic_postgres_runtime import PostgresRuntimeTests,BINDING
+        for refuse in (False,True):
+            value=PostgresRuntimeTests.capture(self);fd=value.bundle.descriptor
+            try:
+                with patch.object(pg,'capture_postgres',return_value=value):
+                    if refuse:
+                        with patch.object(value,'close',side_effect=ns.NamespaceCleanupError('injected')),self.assertRaises(ns.NamespaceCleanupError):driver._measure_postgres_input(BINDING,Path('/fixture'))
+                    else:
+                        report=driver._measure_postgres_input(BINDING,Path('/fixture'))
+                        self.assertTrue(report['owned_capture_closed']);self.assertEqual(report['status'],'PASS')
+                        self.assertEqual(report['maximum_regular_bytes'],83886080)
+            finally:
+                if getattr(value,'_token',None) is runtime._TOKEN:value.close()
+            with self.assertRaises(OSError):os.fstat(fd)
+
     def test_codec_copy_reduction_keeps_exact_legacy_bytes_and_digest(self):
         raw=b'fixed synthetic bytes'*1000
         entries=(ns.backend._BrowserRuntimeBundleEntry('/a','F',0o444,0,0,'native-runtime:'+hashlib.sha256(raw).hexdigest(),raw),)
@@ -80,7 +107,7 @@ class HostedRuntimeTests(unittest.TestCase):
         for capacity,rss,expected in (('FIT',1024,'PASS'),('REFUSED',1024,'REFUSED_CAPACITY'),('FIT',536870912,'REFUSED_MEMORY_ENVELOPE')):
             # Process-lifetime peaks and host job counters are separate live
             # inputs, not deterministic facts of this mocked capture fixture.
-            with self.subTest(capacity=capacity,rss=rss),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(driver.resource,'getrusage',return_value=SimpleNamespace(ru_maxrss=rss)),patch.object(driver,'_shared_job_memory',return_value={'status':'NOT_OBSERVED'}),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity,'input_memfd_allocated_bytes':0}) as capture,patch.object(driver,'_measure_composed_phase',return_value={'phase_memfd_allocated_bytes':0,'stages':[]}) as composed,patch.object(driver,'_execute') as execute:
+            with self.subTest(capacity=capacity,rss=rss),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(driver,'_native_input_chain',return_value={'status':'NOT_OBSERVED'}),patch.object(driver.resource,'getrusage',return_value=SimpleNamespace(ru_maxrss=rss)),patch.object(driver,'_shared_job_memory',return_value={'status':'NOT_OBSERVED'}),patch.object(pg,'capture_phase_fit',return_value={'capacity':capacity,'input_memfd_allocated_bytes':0}) as capture,patch.object(driver,'_measure_composed_phase',return_value={'phase_memfd_allocated_bytes':0,'stages':[]}) as composed,patch.object(driver,'_execute') as execute:
                 result=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
             capture.assert_called_once();execute.assert_not_called()
             self.assertEqual(result['capture_fit'],expected);self.assertTrue(result['owned_descriptors_closed'])
@@ -120,24 +147,28 @@ class HostedRuntimeTests(unittest.TestCase):
             self.assertEqual(len(driver._descriptor_inventory()),len(before)-2)
         finally:fixture.doCleanups()
 
-    def test_shared_counter_unknown_safety_key_is_explicit_refusal(self):
+    def test_shared_counter_refusals_distinguish_schema_from_socket_pressure(self):
         import hosted_synthetic_runtime_regression as driver
         values=b'low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n'
-        def read(path,*args):
-            if path=='/proc/self/cgroup':return b'0::/owned-job\n'
-            return values+b'unknown_safety_event 0\n' if path.endswith('memory.events') else b'0\n'
-        with patch.object(driver.ns,'_read',side_effect=read),patch.object(driver.Path,'stat',return_value=SimpleNamespace(st_dev=1,st_ino=2)):
-            report=driver._shared_job_memory()
-        self.assertEqual(report['status'],'REFUSED_COUNTER_SCHEMA')
-        self.assertNotIn('values',report)
-        self.assertIn('unknown_safety_event',report['observed_event_keys'])
+        for extra,expected in ((b'unknown_safety_event 0\n','REFUSED_COUNTER_SCHEMA'),
+                               (b'sock_throttled 1\n','REFUSED_SOCKET_PRESSURE'),
+                               (b'sock_throttled 0\n','OBSERVED')):
+            def read(path,*args):
+                if path=='/proc/self/cgroup':return b'0::/owned-job\n'
+                return values+extra if path.endswith('memory.events') else b'0\n'
+            with self.subTest(extra=extra),patch.object(driver.ns,'_read',side_effect=read),patch.object(driver.Path,'stat',return_value=SimpleNamespace(st_dev=1,st_ino=2)):
+                report=driver._shared_job_memory()
+            self.assertEqual(report['status'],expected)
+            self.assertIn(extra.partition(b' ')[0].decode(),report['observed_event_keys'])
+            if expected!='OBSERVED':self.assertNotIn('values',report)
+            else:self.assertEqual(report['values']['memory.events']['sock_throttled'],0)
 
     def test_capacity_refusal_never_enters_composition_or_changes_trace_state(self):
         import hosted_synthetic_runtime_regression as driver
         import hosted_synthetic_postgres_runtime as pg
         from hosted_synthetic_source import HostedSourceError
         for kind in (MemoryError,HostedSourceError,ns.backend.LocalStagingAcceptanceError):
-            with self.subTest(kind=kind.__name__),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(driver,'_shared_job_memory',return_value={'status':'OBSERVED','identity':[1,2],'values':{'memory.events':{}}}),patch.object(pg,'capture_phase_fit',side_effect=kind('excluded failure text')),patch.object(driver,'_measure_composed_phase') as composed:
+            with self.subTest(kind=kind.__name__),patch.object(os,'geteuid',return_value=1001),patch.object(os,'getegid',return_value=1001),patch.object(runtime,'read_native',return_value=(b'ID=ubuntu\nVERSION_ID="24.04"\n',0o444)),patch.object(Path,'is_file',return_value=True),patch.object(driver,'_native_input_chain',return_value={'status':'NOT_OBSERVED'}),patch.object(driver,'_shared_job_memory',return_value={'status':'OBSERVED','identity':[1,2],'values':{'memory.events':{}}}),patch.object(pg,'capture_phase_fit',side_effect=kind('excluded failure text')),patch.object(driver,'_measure_composed_phase') as composed:
                 report=driver.run_postgres_fit(SimpleNamespace(commit='a'*40,tree='b'*40),Path('/fixture'))
             composed.assert_not_called();self.assertEqual(report['capture_fit'],'REFUSED_COMPONENT')
             self.assertEqual(report['failure_type'],kind.__name__);self.assertFalse(driver.tracemalloc.is_tracing())

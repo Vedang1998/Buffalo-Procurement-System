@@ -31,16 +31,22 @@ class CgroupCleanupError(CgroupProofError):
     pass
 
 
+class CgroupSocketPressureError(CgroupProofError):
+    pass
+
+
 _CGROUP2_MAGIC = 0x63677270
 _MAXIMUM = 4096
 _CONTROLS = ('cgroup.type', 'cgroup.procs', 'cgroup.threads', 'cgroup.events',
              'cgroup.subtree_control', 'memory.max', 'memory.oom.group',
              'memory.current', 'memory.peak', 'memory.events', 'pids.max')
 _WRITABLE = frozenset(('cgroup.procs', 'memory.max', 'memory.oom.group', 'pids.max'))
-# Explicit version-bound parser policy, not a claim about a kernel version.
-# Unknown keys refuse compatibility; they are never dropped or assumed safe.
-MEMORY_EVENTS_SCHEMA = 'BUFFALO_MEMORY_EVENTS_SIX_KEYS_V1'
+# Explicit parser revision, not a kernel-version claim. Linux's optional socket
+# throttling counter is retained as a separate pressure event and must be zero.
+# All six prior keys remain required; every other unknown key still refuses.
+MEMORY_EVENTS_SCHEMA = 'BUFFALO_MEMORY_EVENTS_SIX_PLUS_ZERO_SOCKET_V2'
 _MEMORY_KEYS = frozenset(('low', 'high', 'max', 'oom', 'oom_kill', 'oom_group_kill'))
+_OPTIONAL_MEMORY_KEYS = frozenset(('sock_throttled',))
 
 
 def _require(value):
@@ -61,19 +67,28 @@ def parse_memory_events(raw: bytes) -> dict[str, int]:
     values = {}
     for line in raw[:-1].split(b'\n'):
         key, separator, number = line.partition(b' ')
-        _require(separator and key in {item.encode() for item in _MEMORY_KEYS}
+        _require(separator and key in {item.encode() for item in _MEMORY_KEYS|_OPTIONAL_MEMORY_KEYS}
                  and key.decode() not in values)
         values[key.decode()] = parse_scalar(number + b'\n')
-    _require(set(values) == _MEMORY_KEYS)
+    _validate_event_mapping(values)
     return values
+
+
+def _validate_event_mapping(values):
+    _require(type(values) is dict and set(values) in (_MEMORY_KEYS,_MEMORY_KEYS|_OPTIONAL_MEMORY_KEYS)
+             and all(type(value) is int and 0<=value<2**64 for value in values.values()))
+
+
+def _require_zero_socket(values):
+    if values.get('sock_throttled',0)!=0:
+        raise CgroupSocketPressureError('socket_pressure_refused')
 
 
 def require_zero_oom_delta(before: dict, after: dict) -> None:
     for selected in (before, after):
-        _require(type(selected) is dict and set(selected) == _MEMORY_KEYS
-                 and all(type(value) is int and 0 <= value < 2**64
-                         for value in selected.values()))
-    _require(all(after[key] >= before[key] for key in _MEMORY_KEYS)
+        _validate_event_mapping(selected)
+        _require_zero_socket(selected)
+    _require(set(before)==set(after) and all(after[key] >= before[key] for key in before)
              and all(after[key] == before[key] for key in ('oom', 'oom_kill', 'oom_group_kill')))
 
 
@@ -81,6 +96,7 @@ def _memory_observation(read, limit, previous=None):
     current = parse_scalar(read('memory.current'))
     peak = parse_scalar(read('memory.peak'))
     events = parse_memory_events(read('memory.events'))
+    _require_zero_socket(events)
     _require(parse_scalar(read('memory.max')) == limit and 0 <= current <= peak <= limit
              and all(events[key] == 0 for key in ('oom', 'oom_kill', 'oom_group_kill')))
     if previous is not None:
