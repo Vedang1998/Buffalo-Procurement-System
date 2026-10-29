@@ -80,6 +80,71 @@ class NativeInputTests(unittest.TestCase):
         self.assertLessEqual((len(base64.b64encode(encoded.encode()))+2999)//3000,10)
         with self.assertRaises(ns.NamespaceProofError):observation.public_envelope({'oversized':'x'*65537})
 
+    def test_authenticated_native_inventory_refuses_unchanged_capacity(self):
+        result=native.proposed_capacity()
+        self.assertEqual((result['logical_files'],result['logical_regular_bytes'],result['native_entries_with_parents']),(831,149540145,915))
+        self.assertEqual(result['physical_lower_bound_bytes'],149303529)
+        self.assertEqual((result['maximum_regular_bytes'],result['maximum_entries']),(134217728,3000))
+        self.assertEqual((native._STAGE_MAX_BYTES,native._STAGE_MAX_FILES),(134217728,3000))
+        self.assertFalse(result['execution_authority']);self.assertEqual(result['memory_readiness'],'NOT_MEASURED')
+        with self.assertRaises(native.NativeCapacityRefusal) as caught:native.require_native_capacity()
+        self.assertEqual(caught.exception.evidence,result)
+
+    def test_proposed_inventory_totals_policy_and_alias_conflicts_are_not_authority(self):
+        original=native._proposed_inventory()
+        cases=[]
+        for key,value in [('known_regular_bytes',1),('known_file_count',True),('physical_content_count',True),('physical_content_bytes',1)]:
+            changed=copy.deepcopy(original);changed[key]=value;cases.append(changed)
+        for key,value in [('policy','BUFFALO_DIAGNOSTIC'),('cap_bytes',150000000)]:
+            changed=copy.deepcopy(original);changed['capacity'][key]=value;cases.append(changed)
+        changed=copy.deepcopy(original);changed['rows'][0]['bytes']=True;cases.append(changed)
+        changed=copy.deepcopy(original);changed['rows'][0]['physical_path']=changed['rows'][1]['physical_path'];cases.append(changed)
+        for changed in cases:
+            with self.subTest(change=cases.index(changed)),patch.object(native,'_proposed_inventory',return_value=changed),self.assertRaises(ns.NamespaceProofError):native.proposed_capacity()
+
+    def test_proposed_inventory_hash_cannot_be_replaced_by_new_local_hash(self):
+        with patch.object(Path,'read_bytes',return_value=b'{}'),self.assertRaisesRegex(ns.NamespaceProofError,'inventory_identity'):
+            native.proposed_capacity()
+
+    def test_capacity_refusal_precedes_every_native_plan_and_view_effect(self):
+        def protected():
+            with native.protected_view(object(),object()):self.fail('view entered')
+        actions=(lambda:native.native_install_plan('a'*32,object()),
+            lambda:native.view_request(object(),'/foreign',deadline=10**12),
+            lambda:native.view_properties(object(),object()),protected,
+            lambda:native.bind_measurement_result(object(),object(),True))
+        with patch.object(native,'require_complete_inventory') as complete,patch.object(native,'_verify_request') as verify,patch.object(os.path,'lexists') as exists:
+            for action in actions:
+                with self.assertRaises(native.NativeCapacityRefusal):action()
+        complete.assert_not_called();verify.assert_not_called();exists.assert_not_called()
+
+    def test_alias_outputs_count_separately_and_duplicate_destinations_refuse(self):
+        stage=self.stage();selected=[row(),dict(row(),path='/opt/alias')]
+        result=stage.materialize_tar(archive(),selected)
+        self.assertEqual(result['lifetime_regular_bytes'],28);self.assertEqual(result['lifetime_regular_files'],2)
+        self.assertEqual((stage.path/'opt/alias').read_bytes(),b'synthetic data')
+        other=self.stage()
+        with self.assertRaisesRegex(ns.NamespaceProofError,'duplicate_destination'):other.materialize_tar(archive(),[row(),row()])
+        self.assertTrue(other.closed);self.assertFalse(other.path.exists())
+
+    def test_materializer_enforces_lifetime_bytes_across_artifacts_and_cleans(self):
+        stage=self.stage()
+        # Scale only this fixture; production constants are separately asserted.
+        with patch.object(native,'_STAGE_MAX_BYTES',41):
+            stage.materialize_tar(archive(),[row(),dict(row(),path='/opt/alias')])
+            with self.assertRaisesRegex(ns.NamespaceProofError,'capacity'):
+                stage.materialize_tar(archive(),[dict(row(),path='/opt/next'),dict(row(),path='/opt/next-alias')])
+        self.assertTrue(stage.closed);self.assertFalse(stage.path.exists())
+        with self.assertRaises(OSError):os.fstat(stage.fd)
+
+    def test_materializer_enforces_lifetime_entries_across_artifacts(self):
+        stage=self.stage()
+        with patch.object(native,'_STAGE_MAX_FILES',2):
+            stage.materialize_tar(archive(),[row(),dict(row(),path='/opt/alias')])
+            with self.assertRaisesRegex(ns.NamespaceProofError,'capacity'):
+                stage.materialize_tar(archive(),[dict(row(),path='/opt/next')])
+        self.assertTrue(stage.closed);self.assertFalse(stage.path.exists())
+
     def test_streamed_import_rechecks_bytes_and_rejects_partial_consumption(self):
         stage=self.stage();stage.materialize_tar(archive(),[row()])
         with patch.object(native,'inventory',return_value={'rows':[row()]}):
@@ -218,13 +283,13 @@ class NativeInputTests(unittest.TestCase):
 
     def test_incomplete_inventory_blocks_plan_before_destination_or_privilege(self):
         stage=self.stage()
-        with patch.object(os.path,'lexists') as exists,self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+        with patch.object(native,'require_native_capacity'),patch.object(os.path,'lexists') as exists,self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
             native.native_install_plan('a'*32,stage)
         exists.assert_not_called()
 
     def test_native_plan_never_reads_operator_paths_as_root_or_contains_python(self):
         stage=self.stage();stage.materialize_tar(archive(),[row()])
-        with patch.object(native,'require_complete_inventory',return_value={'rows':[row()]}),patch.object(os.path,'lexists',return_value=False):
+        with patch.object(native,'require_native_capacity'),patch.object(native,'require_complete_inventory',return_value={'rows':[row()]}),patch.object(os.path,'lexists',return_value=False):
             plan=native.native_install_plan('a'*32,stage)
         self.assertFalse(plan['installation_authority'])
         for command in plan['commands']:
@@ -239,7 +304,7 @@ class NativeInputTests(unittest.TestCase):
             with self.assertRaisesRegex(ns.NamespaceProofError,'not_authorized'):native.activate_installation(**args)
 
     def test_view_cannot_be_minted_from_partial_manifest(self):
-        with self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+        with patch.object(native,'require_native_capacity'),self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
             native.view_request(Mock(commit='a'*40,tree='b'*40),'/run/buffalo-native-'+'a'*32,deadline=10**12)
 
     def test_changed_view_source_manifest_or_nonce_refuses(self):
@@ -250,7 +315,7 @@ class NativeInputTests(unittest.TestCase):
             observed.assert_not_called()
 
     def test_caller_json_or_boolean_cannot_bind_measurement(self):
-        with patch.object(native,'_verify_request'),patch.object(native,'active_view',return_value=object()):
+        with patch.object(native,'require_native_capacity'),patch.object(native,'_verify_request'),patch.object(native,'active_view',return_value=object()):
             for report in (True,{}, {'capacity':'FIT','memory':'PASS'}):
                 with self.assertRaisesRegex(ns.NamespaceProofError,'measurement_view'):native.bind_measurement_result(object(),object(),report)
 

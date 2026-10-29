@@ -346,7 +346,7 @@
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "REQUEST_CHANGES at reviewed d863; ONE combined new delta ready at e5e8a33; no new Claude review received or callable channel claimed",
-  "current_delta": "Approved V2 PG_PHASE-only128MiB; sealed producer/receiver capacity; bounded codec copies/input lifetimes; B1/N7/N8/N10 pending repairs; strict optional zero socket-pressure counter revision; source-bound native input refusal observations. Current GitHub Python and PG data fail unchanged trust; no activation.",
+  "current_delta": "M1 deciding gate + streaming/copy lifetimes, retained conservative memory formula, N7 bounded collection polling, shared deadline/cache drift checks, fixed native inventory/RUNPATH/view primitives and bounded read-only target reconciliation. Child/service transport and native installation incomplete; no activation.",
   "new_findings": [
     {
       "id": "N1",
@@ -499,7 +499,14 @@
       ],
       "current_validation": "31 observer/28 lifecycle/37 bootstrap regressions; actual lifetime cleanup NOT_RUN",
       "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-      "evidence": "oct29-b2-evidence.json"
+      "evidence": "oct29-b2-evidence.json",
+      "current_repair": {
+        "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
+        "status": "REPAIRED_PENDING_REVIEW",
+        "code": "hosted_synthetic_observer.py:_await_pre_ack_collection/_await_absence",
+        "tests": "delayed terminal collection, two separated absence observations, replacement/reappearance/active/timeout negatives",
+        "live_cleanup": "NOT_RUN"
+      }
     },
     {
       "id": "N8",
@@ -532,7 +539,7 @@
     {
       "id": "N10",
       "severity": "P2",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
       "description": "First definite ownership collision aborts activation rather than trying next numeric candidate",
@@ -542,17 +549,70 @@
       ],
       "current_validation": "23 identity/42 preflight regressions; at most3 definite collisions, shared scan/reservation deadline; no retry of uncertainty",
       "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-      "evidence": "oct29-b2-evidence.json"
+      "evidence": "oct29-b2-evidence.json",
+      "closure": {
+        "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+        "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+        "source": "external-review-e5e8-owner-summary.json",
+        "scope": "Owner explicitly reports accepted typed collision-retry logic only; full reviewer text/attribution not available"
+      },
+      "descendant_change_impact": {
+        "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
+        "status": "PENDING_DELTA_REVIEW",
+        "separate_issue": "N10-SHARED-DEADLINE"
+      }
+    },
+    {
+      "id": "M1",
+      "title": "Capacity FIT must not bypass memory refusal before account provisioning",
+      "severity": "P1",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "owner_source": "external-review-e5e8-owner-summary.json",
+      "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
+      "code": [
+        "hosted_synthetic_identity.py:run_provisioned_candidate",
+        "hosted_synthetic_postgres_runtime.py:require_phase_fit/PhaseReadiness",
+        "run_local_staging_acceptance.py:streaming bundle codec"
+      ],
+      "tests": [
+        "capacity FIT + memory REFUSED reaches no AccountLease.create",
+        "missing/forged/stale/changed source/interpreter/inventory evidence refuses",
+        "actual composition/adoption fixture and cleanup failures",
+        "same canonical 120MiB codec bytes; unchanged conservative formula"
+      ],
+      "evidence": "oct29-memory-native-evidence.json",
+      "remaining": "Independent delta review and supported-target machine evidence; no writer closure"
+    },
+    {
+      "id": "N10-SHARED-DEADLINE",
+      "title": "One absolute pre-account budget across invariant work and collision retries",
+      "severity": "P2",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "owner_source": "external-review-e5e8-owner-summary.json",
+      "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
+      "code": [
+        "hosted_synthetic_identity.py:SelectionPreflight/activation_entry",
+        "hosted_synthetic_source.py:source_deadline",
+        "hosted_synthetic_account_preflight.py:inspect_source/inspect_ownership"
+      ],
+      "tests": [
+        "expired deadline starts no Git/account process",
+        "real rehearsal reused once with metadata/access/source/destination drift checks",
+        "same absolute deadline across typed collisions"
+      ],
+      "evidence": "oct29-memory-native-evidence.json",
+      "remaining": "Independent delta review and supported-target machine evidence; no writer closure"
     }
   ],
   "current_candidate": {
-    "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-    "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
-    "evidence": "oct29-b2-evidence.json",
-    "independent_review": "NOT_RECEIVED",
+    "commit": "652842794f02f9d41f05d61097a7332a20e3f3b2",
+    "tree": "cbce8d02c63173f23df4b292bc17cfb60035bfda",
+    "evidence": "oct29-memory-native-evidence.json",
+    "status": "INTERMEDIATE_IMPLEMENTATION_CHECKPOINT_NOT_COMPLETE_NATIVE_TRANSPORT",
+    "independent_review": "PENDING",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
-    "combined_capture": "NOT_MEASURED_NATIVE_INPUT_TRUST_REFUSED",
+    "combined_capture": "NOT_TARGET_MEASURED",
     "full_authoritative": "NOT_RUN"
   },
   "prepared_combined_review_target": {
@@ -595,8 +655,37 @@
   "native_input_proposal": {
     "document": "native-input-provisioning-proposal.md",
     "evidence": "native-input-artifact-evidence.json",
-    "status": "PROPOSAL_PREFLIGHT_ONLY",
+    "status": "DORMANT_IMPLEMENTATION_AND_AUTHENTICATED_NATIVE_INVENTORY; CAPACITY_REFUSED",
     "installation_authorized": false,
-    "activation_authorized_by_proposal": false
+    "activation_authorized_by_proposal": false,
+    "current_inventory": "procurement/tools/hosted_native_inputs.json",
+    "complete": false,
+    "complete_native_file_evidence": "procurement/tools/hosted_native_proposed_inventory.json",
+    "capacity_contradiction": {
+      "logical_files": 831,
+      "logical_bytes": 149540145,
+      "physical_lower_bound_bytes": 149303529,
+      "approved_cap_bytes": 134217728,
+      "minimum_excess_bytes": 15085801,
+      "source_and_generated": "ADDITIONAL_POSITIVE_COST",
+      "decision": "NO_INCREASE_AUTHORIZED_OR_IMPLEMENTED"
+    },
+    "transport": "INCOMPLETE; ContextVars do not survive guardian exec; pre-account child/service observer binding and native cleanup executor still require implementation/review",
+    "installation_authority": false
+  },
+  "owner_received_e5e8_summary": "external-review-e5e8-owner-summary.json",
+  "review_status": "Owner reports e5e8 review and N10 acceptance; full report not received. Preserve old actual reviews, do not invent remaining e5e8 dispositions. All later material requires delta review.",
+  "new_native_capacity_finding": {
+    "identifier": "NATIVE-FIXED-INPUT-CAPACITY",
+    "status": "OPEN",
+    "evidence": "oct29-native-capacity-provenance-summary.json",
+    "writer_repair": "No larger cap or dependency omission implemented. Proposed inventory capacity refuses before native install/view/measurement effects.",
+    "next_decision": "Separate narrowly versioned PG_PHASE capacity change, if owner chooses;128MiB cannot contain the approved artifacts."
+  },
+  "staging_lifetime_repair": {
+    "status": "REPAIRED_PENDING_REVIEW",
+    "cause": "Per-call byte total allowed cumulative multi-artifact overflow",
+    "repair": "Lease byte/file totals, aliases count every logical output; causal overflow cleanup tests",
+    "authority": "unprivileged materialization only"
   }
 }

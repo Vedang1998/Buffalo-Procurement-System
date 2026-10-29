@@ -1,0 +1,14 @@
+.....F.....................................................
+======================================================================
+FAIL: test_collision_selection_keeps_shared_deadline_and_three_candidate_bound (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_collision_selection_keeps_shared_deadline_and_three_candidate_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_identity.py", line 54, in test_collision_selection_keeps_shared_deadline_and_three_candidate_bound
+    self.assertEqual(run.call_count,1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 1
+
+----------------------------------------------------------------------
+Ran 59 tests in 0.156s
+
+FAILED (failures=1)

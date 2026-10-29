@@ -10,6 +10,63 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-29 M1 repair and authenticated native-capacity contradiction
+
+Latest verified published implementation before this descendant:
+`652842794f02f9d41f05d61097a7332a20e3f3b2`, tree
+`cbce8d02c63173f23df4b292bc17cfb60035bfda`. Its GitHub run40948776586 passed
+1,111/1,111 focused tests; fixed native metadata still refused actual capture.
+Previous3251 froze the memory repair with1,103focused,166scrubbed components,
+88related and10startup passes. These are component evidence, not a full suite.
+New changes in this descendant require their own frozen validation/publication
+receipt; do not attribute uncommitted tests to6528427.
+
+M1's actual pre-account deciding path now requires its own source/runtime-bound,
+validated capacity+memory+adoption+cleanup receipt before AccountLease.create.
+Missing, malformed, altered, stale or Boolean evidence refuses. Streaming codec
+preserves canonical hashes and the existing conservative memory formula. A120MiB
+synthetic codec comparison reduced the conservative sum from542,486,528B to
+416,731,136B; this is not target PG capture or measured service memory. N7 polls
+exact delayed unit collection within its existing deadline. One shared60s budget
+covers initial binding, capacity/memory, source rehearsal/drift and ownership
+collision attempts; stage timing is separate from cleanup reap grace.
+
+Authenticated prospective inventory now lists66exact artifacts (Python plus65
+Ubuntu package records),831logical native files/149,540,145B. All122target library/
+data observations match62exact signed-index-bound Ubuntu package payloads. The
+approved Ubuntu PG16.15 build is retained; GitHub's installedPGDG16.15 is different.
+Even physical dedup leaves149,303,529B, above the approved134,217,728B cap by
+15,085,801B before source/generated files. Code-pinned static capacity preflight
+refuses proposed install/view/measurement paths before effects. No budget increased.
+The full file/artifact graph is evidence, not a completed or installable worker root.
+
+Unprivileged staging now enforces cumulative byte/file bounds across artifacts,
+counts alias outputs and cleans owned resources on overflow. Actual fixedPython
+646-file materialization/cleanup was tested separately. Remaining native work is
+explicit: final libpq logical-name/mode reconciliation, native installer/cleanup
+executor, complete per-file protected view and exec-surviving pre-account-child/
+service binding. Current helpers do not establish those properties. Capacity
+change-control is a newly demonstrated authority boundary; installation remains
+a later single explicit decision with manifest/review/bounded effects.
+
+Frozen e5e8/a04ef target stays unchanged. The owner's received summary adds M1P1,
+N7delay and acceptedN10retry; actual e5e8review attribution/commands/results/text
+are missing from this task and are not invented. N10's historical retry acceptance
+is separate from the new shared-deadline repair. All changed material remains
+PENDING independent Claude review. Internal evidence does not close that gate.
+
+Current packet: `docs/review/2026-10-27-runtime-control-lifecycle/`,
+`oct29-memory-native-evidence.json` and updated native-input proposal. Keep
+privileged activation/installation disabled and credentials withheld. Exact next
+work: freeze and verify this descendant, complete bounded target readback, and
+publish the source-bound combined delta/evidence. Resolve the authenticated fixed-
+input/cap contradiction before attempting any live native installation/proof.
+Runtime/control-exclusion/external-cleanup/sentinel/release and browser/BackupV2/
+APPLY/DRAFT/packet/restart/restore remain OPEN/NOT_RUN. Full authoritative native
+suite remains NOT_RUN; do not repeat the unchanged Cloud pg_dump refusal.
+No canonical milestone changed; PHASE_STATUS, app, locks and protected refs stay
+unchanged. No Railway/production/commercial readiness or automatic resumption claim.
+
 ### 2026-10-29 process adoption during memory/native-input repair
 
 Adopted the exact five-file documentation-only delta from owner-approved

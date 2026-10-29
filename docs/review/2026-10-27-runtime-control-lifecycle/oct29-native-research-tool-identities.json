@@ -1,0 +1,29 @@
+{
+  "scope": "READ_ONLY_RESEARCH_TOOL_IDENTITIES_NOT_TARGET_EXECUTION",
+  "tools": [
+    {
+      "path": "/usr/bin/gpg",
+      "resolved": "/usr/bin/gpg",
+      "sha256": "7c9d2f9416aabcd10199e2984439f49612644a948279ac56bdf70d69c8958ddf",
+      "version_first_line": "gpg (GnuPG) 2.4.7"
+    },
+    {
+      "path": "/usr/bin/dpkg-deb",
+      "resolved": "/usr/bin/dpkg-deb",
+      "sha256": "5346e5fdfdc81d58bbc9d2a3de20ff3738dc479cdb04cc52b91503cbb13440eb",
+      "version_first_line": "Debian 'dpkg-deb' package archive backend version 1.22.22 (amd64)."
+    },
+    {
+      "path": "/usr/bin/python3.13",
+      "resolved": "/usr/bin/python3.13",
+      "sha256": "889c603f0d17cb54060951bcf4c4f9b8c9ebd9e52b392c70209bbb9755d797d9",
+      "version_first_line": "Python 3.13.5"
+    },
+    {
+      "path": "/usr/bin/timeout",
+      "resolved": "/usr/bin/timeout",
+      "sha256": "6ca1891dfc0b05d7680770c2884c0391b92467c7bb6500a5c84677e6481739f1",
+      "version_first_line": "timeout (GNU coreutils) 9.7"
+    }
+  ]
+}

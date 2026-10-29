@@ -1,0 +1,18 @@
+{
+  "classification": "OWNER_SUPPLIED_REVIEW_SUMMARY_NOT_FULL_CLAUDE_REPORT",
+  "reviewed_commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+  "reviewed_tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
+  "source": "Owner instruction COMPLETE MEMORY REPAIR AND NATIVE-INPUT CANDIDATE, 2026-10-29",
+  "received_facts": {
+    "M1": "Blocking P1: memory readiness must decide before AccountLease.create; capacity-only FIT insufficient",
+    "N10": "Owner explicitly describes accepted collision-retry logic, separate from new shared-deadline issue",
+    "N7": "Bounded delayed pre-ACK cleanup waiting still needs repair"
+  },
+  "reviewer_tool_model_session": "NOT_SUPPLIED_FOR_THIS_e5e8_REVIEW; do not inherit d863 attribution",
+  "commands_results_original_M1_measurement": "NOT_SUPPLIED",
+  "unreported_dispositions": "NOT_INFERRED",
+  "internal_reproductions": "oct29-m1-baseline-memory.json and oct29-m1-baseline-deciding-gate.json; not Claude evidence",
+  "actual_report_requested_once": true,
+  "live_approval": "NOT_ESTABLISHED",
+  "later_descendants": "NOT_REVIEWED"
+}

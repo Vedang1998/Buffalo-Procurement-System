@@ -1,18 +1,77 @@
 # Fixed native-input provisioning proposal
 
-Status: **PROPOSAL / READ-ONLY ARTIFACT PREFLIGHT ONLY — NOT INSTALLATION AUTHORITY**.
-Recorded 2026-10-29. This is the concrete input contract for the existing fixed
-PostgreSQL diagnostic, not a new acceptance architecture or a runnable installer.
-No provisioner, workflow, parser, accepted pin, dependency, limit or gate changed.
+## Current successor status — October 29 memory repair
 
-The pending Claude target remains implementation
-`e5e8a337476b7e0ffa678627e84c2b5ce82a744a`, tree
-`c73e1dbb9d57e59792b9fb449575b07033244476`, with frozen evidence checkpoint
-`a04ef478ced5f992156784a26de43827a8e7115b`, tree
-`f037f46393b9bcea6500021545042d053102b4ee`. Its packet and historical review are
-unchanged. `oct29-internal-codex-review.json` records the prior report as INTERNAL
-CODEX REVIEW ONLY. No external finding is closed by it. This proposal is outside
-that frozen review target and would need its own implementation/delta review.
+**Dormant implementation/test authority is approved. Native installation is not.**
+The owner's COMPLETE MEMORY REPAIR AND NATIVE-INPUT CANDIDATE instruction permits
+fixed artifact inventory, unprivileged materialization, narrow RUNPATH parsing
+and protected-view compatibility development. It does not authorize privileged
+installation, change any capacity/memory limit, or close the independent review.
+Frozen e5e8/a04ef review identities remain preserved in the existing README.
+
+The original 709-file executable pin is retained. A separate code-pinned
+`procurement/tools/hosted_native_proposed_inventory.json` provides the authenticated
+prospective native inventory: 831 logical names, 149,540,145 bytes; 170 ELF rows
+with resolved dependencies; 65 exact Ubuntu package identities plus the fixed
+Python artifact. All 122 observed transitive library/data rows match 62 exact
+Ubuntu package payloads authenticated by signed InRelease -> index -> package
+hash -> selected member. The three approved Ubuntu PG artifacts are included;
+the target's PGDG build is explicitly excluded. Evidence and exact versions/URLs/
+hashes are in `oct29-native-exact-package-records.json`,
+`oct29-native-authenticated-target-files.json` and the prospective inventory.
+
+**New demonstrated contract contradiction:** the conservative native-only lower
+bound is 149,303,529 bytes even after deduplicating the two loader names. This is
+15,085,801 bytes above the unchanged 134,217,728-byte PG_PHASE_V2 cap, before source,
+generated configuration, identity and sentinel. The current logical sum exceeds
+that cap by 15,322,417 bytes. Native files and parents require 915 entries, below
+3,000. `proposed_capacity()` recomputes these values from a code-owned evidence
+pin, accepts no caller budget/PASS, and refuses every proposed install/view/
+measurement consumer before effects. Static fit could never replace M1's actual
+capacity, adoption, memory and cleanup receipt before AccountLease.create.
+
+This is not the old reviewer's 105,340,350-byte measurement and is not a successful
+capture. It uses the owner's selected full Python artifact/extension inventory and
+the current required PostgreSQL data/library closure. Reconciliation includes the
+explicit NSS root and loader aliases; exact arithmetic and source attribution are
+in `oct29-native-capacity-provenance-summary.json`. No dependency was dropped,
+no separate root was introduced and no cap was increased. The earlier128MiB B2
+approval remains implemented; it does not authorize another increase.
+
+Smallest prospective change-control option: another PG_PHASE-only versioned cap
+large enough for these exact inputs plus the finally measured source/generated
+entries (160MiB is a concrete candidate, not an approved or proven fit). Preserve
+all individual/diagnostic/PG-only80MiB, memory, tasks, deadline, provenance and
+release limits. A capacity decision is separate from later native installation;
+neither grants missing memory, view, review or execution proof. Do not spend a
+privileged proof on this known capacity contradiction.
+
+Implemented/tested independently: exact65-object RUNPATH permission, default
+RUNPATH refusal for every other object; unprivileged authenticated Python staging;
+held-file streaming/digest checks; explicit native-only install command plan;
+protected backing/mount readback; no installation API can activate. Staging now
+counts bytes/files across the entire lease and counts each alias output, with
+owned cleanup on partial/overflow failure. Python-only materialization remains
+useful and tested within its existing limits.
+
+**Still incomplete:** native installer/cleanup executor and the actual fixed
+pre-account child -> original-host observer -> later service transport. Current
+ContextVar/view helpers are not an exec-surviving binding. Existing in-process M1
+checks remain enforced; no untrusted report can replace them. Current view-root
+checks do not yet prove all proposed per-file library mounts. The prospective
+inventory preserves the earlier libpq physical-name/mode discrepancy explicitly;
+its final logical .so.5 alias and archive-normalized0444 mode need a separately
+recorded layout reconciliation before installation. These are not hidden PASSes.
+
+Provenance assurance remains precise: Python publisher HTTPS/GitHub digest is
+verified, not signed build attestation. Ubuntu signed index/package chains are
+verified with the publisher keyring; independent target-keyring comparison and
+installation-time freshness/trust-root requirements are still gates. No existing
+writable host input was copied/chowned into trust.
+
+The sections below preserve the earlier proposal's details. Where their earlier
+"not implemented/authorized" status differs, the current status above controls;
+they remain useful historical rationale, not an additional approval request.
 
 ## Artifact selection and evidence
 

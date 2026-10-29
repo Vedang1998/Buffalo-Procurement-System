@@ -1,0 +1,921 @@
+[
+  {
+    "sha256": "45fd4e4365e5b64a869cadda4c1ca8c359e8a166babaa09b302f6ec96df6f0ad",
+    "report": {
+      "account_mutations": 0,
+      "capture_fit": "REFUSED_NATIVE_INPUT_TRUST",
+      "commit": "3251bcc8f54aa90a32a10a0793473b897a594963",
+      "component_result_before_counter_gate": "REFUSED_NATIVE_INPUT_TRUST",
+      "credential_release": "WITHHELD",
+      "elapsed_seconds": 0.017579,
+      "execution_authority": false,
+      "measurement": {
+        "capacity": "NOT_MEASURED_INPUT_TRUST_REFUSED",
+        "postgres_input": {
+          "status": "NOT_RUN_NATIVE_INPUT_TRUST_REFUSED"
+        }
+      },
+      "memory_stages": [
+        {
+          "child_process_peak_rss_bytes": 50954240,
+          "process_cumulative_peak_rss_bytes": 50954240,
+          "shared_job": {
+            "identity": [
+              31,
+              6632
+            ],
+            "observed_event_keys": [
+              "low",
+              "high",
+              "max",
+              "oom",
+              "oom_kill",
+              "oom_group_kill",
+              "sock_throttled"
+            ],
+            "scope": "SHARED_JOB_CGROUP_NOT_OWNED_SERVICE",
+            "status": "OBSERVED",
+            "values": {
+              "memory.current": 1639247872,
+              "memory.events": {
+                "high": 0,
+                "low": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_group_kill": 0,
+                "oom_kill": 0,
+                "sock_throttled": 0
+              },
+              "memory.peak": 1709686784
+            }
+          },
+          "stage": "BEFORE_CAPTURE",
+          "traced_current_bytes": 0,
+          "traced_peak_bytes": 0
+        },
+        {
+          "child_process_peak_rss_bytes": 50954240,
+          "process_cumulative_peak_rss_bytes": 50954240,
+          "shared_job": {
+            "identity": [
+              31,
+              6632
+            ],
+            "observed_event_keys": [
+              "low",
+              "high",
+              "max",
+              "oom",
+              "oom_kill",
+              "oom_group_kill",
+              "sock_throttled"
+            ],
+            "scope": "SHARED_JOB_CGROUP_NOT_OWNED_SERVICE",
+            "status": "OBSERVED",
+            "values": {
+              "memory.current": 1639247872,
+              "memory.events": {
+                "high": 0,
+                "low": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_group_kill": 0,
+                "oom_kill": 0,
+                "sock_throttled": 0
+              },
+              "memory.peak": 1709686784
+            }
+          },
+          "stage": "CAPTURE_FIT_INPUTS_AND_CLEANUP",
+          "traced_current_bytes": 85158,
+          "traced_peak_bytes": 1827514
+        },
+        {
+          "child_process_peak_rss_bytes": 50954240,
+          "process_cumulative_peak_rss_bytes": 50954240,
+          "shared_job": {
+            "identity": [
+              31,
+              6632
+            ],
+            "observed_event_keys": [
+              "low",
+              "high",
+              "max",
+              "oom",
+              "oom_kill",
+              "oom_group_kill",
+              "sock_throttled"
+            ],
+            "scope": "SHARED_JOB_CGROUP_NOT_OWNED_SERVICE",
+            "status": "OBSERVED",
+            "values": {
+              "memory.current": 1639247872,
+              "memory.events": {
+                "high": 0,
+                "low": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_group_kill": 0,
+                "oom_kill": 0,
+                "sock_throttled": 0
+              },
+              "memory.peak": 1709686784
+            }
+          },
+          "stage": "AFTER_OWNED_CLEANUP",
+          "traced_current_bytes": 87002,
+          "traced_peak_bytes": 1827514
+        }
+      ],
+      "namespace_deadline_proof": "NOT_RUN",
+      "native_execution": "NOT_RUN",
+      "native_inputs": {
+        "interpreter": {
+          "chains": {
+            "canonical": [
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/bin/python3.13",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/bin",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1000,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ],
+            "requested": [
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/bin/python3.13",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/bin",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1000,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ]
+          },
+          "scope": "READ_ONLY_NATIVE_METADATA_NOT_TRUST_APPROVAL",
+          "status": "OBSERVED"
+        },
+        "libdir": {
+          "chains": {
+            "canonical": [
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/lib",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1000,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ],
+            "requested": [
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/lib",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1000,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ]
+          },
+          "scope": "READ_ONLY_NATIVE_METADATA_NOT_TRUST_APPROVAL",
+          "status": "OBSERVED"
+        },
+        "postgres": {
+          "chains": {
+            "canonical": [
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql/16/bin/postgres",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql/16/bin",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql/16",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ],
+            "requested": [
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql/16/bin/postgres",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql/16/bin",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql/16",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib/postgresql",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr/lib",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ]
+          },
+          "scope": "READ_ONLY_NATIVE_METADATA_NOT_TRUST_APPROVAL",
+          "status": "OBSERVED"
+        },
+        "postgres_data": {
+          "chains": {
+            "distinct_observed_paths": [
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/usr",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/information_schema.sql",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/pg_hba.conf.sample",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/pg_ident.conf.sample",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/postgres.bki",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/postgresql.conf.sample",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/snowball_create.sql",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/sql_features.txt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/system_constraints.sql",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/system_functions.sql",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/system_views.sql",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/timezonesets",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/usr/share/postgresql/16/timezonesets/Default",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              }
+            ]
+          },
+          "scope": "FIXED_PG_DATA_METADATA_NOT_CAPTURE_OR_TRUST_APPROVAL",
+          "status": "OBSERVED"
+        },
+        "stdlib": {
+          "chains": {
+            "canonical": [
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/lib/python3.13",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/lib",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1000,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ],
+            "requested": [
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/lib/python3.13",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o755",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64/lib",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5/x64",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1001,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python/3.13.5",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 1000,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache/Python",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt/hostedtoolcache",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 1001
+              },
+              {
+                "gid": 0,
+                "mode": "0o777",
+                "path": "/opt",
+                "root_owned_no_write": false,
+                "symlink": false,
+                "uid": 0
+              },
+              {
+                "gid": 0,
+                "mode": "0o755",
+                "path": "/",
+                "root_owned_no_write": true,
+                "symlink": false,
+                "uid": 0
+              }
+            ]
+          },
+          "scope": "READ_ONLY_NATIVE_METADATA_NOT_TRUST_APPROVAL",
+          "status": "OBSERVED"
+        }
+      },
+      "owned_descriptors_closed": true,
+      "privileged_processes_started": 0,
+      "service_limits_applied": "NOT_RUN_REVIEW_REQUIRED",
+      "shared_job_zero_oom": "OBSERVED_ZERO_DELTA_SHARED_SCOPE_ONLY",
+      "tree": "d5d5476d64e5dd939c363ab81bb26212f79e9b47",
+      "whole_service_memory": "NOT_PROVEN"
+    }
+  },
+  {
+    "sha256": "7a4e79e2c70c9f7de673c15ff5e6b2b7baaa6a3fa1b33eaeab3c7644f9400e05",
+    "report": {
+      "discovered": 1103,
+      "error_events": 0,
+      "executed": 1103,
+      "expected_failures": 0,
+      "failure_events": 0,
+      "observations": [],
+      "omitted_observations": 0,
+      "passed_methods": 1103,
+      "scope": "DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF",
+      "skipped": 0,
+      "unexpected_successes": 0
+    }
+  },
+  {
+    "status": "TRUNCATED_PUBLIC_ANNOTATIONS_NOT_COMPLETE_EVIDENCE",
+    "expected": 26,
+    "received": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "sha256_not_verified": "525f6cb7b883eaeef0f4e3a1fb4162d697c0b445c4c6d2bd394f1414e09a7e12"
+  },
+  {
+    "sha256": "17b6f94a6c2c0b123e1396635d362d4de54e5d7523995030defb04bbfb863732",
+    "report": {
+      "account_mutations": 0,
+      "active_binfmt_observation": "ACTIVE_BINFMT_FD_OBSERVED_AND_CLOSED",
+      "commit": "3251bcc8f54aa90a32a10a0793473b897a594963",
+      "credential_release": "WITHHELD",
+      "direct_pid1_namespace_read": {
+        "ipc": {
+          "errno": 13,
+          "result": "DIRECT_READ_REFUSED"
+        },
+        "mnt": {
+          "errno": 13,
+          "result": "DIRECT_READ_REFUSED"
+        }
+      },
+      "execution_authority": false,
+      "filesystem_counts": {
+        "autofs": 1,
+        "binfmt_misc": 1,
+        "bpf": 1,
+        "cgroup2": 1,
+        "configfs": 1,
+        "debugfs": 1,
+        "devpts": 1,
+        "devtmpfs": 1,
+        "efivarfs": 1,
+        "ext4": 2,
+        "fusectl": 1,
+        "hugetlbfs": 1,
+        "mqueue": 1,
+        "proc": 1,
+        "pstore": 1,
+        "securityfs": 1,
+        "sysfs": 1,
+        "tmpfs": 4,
+        "tracefs": 1,
+        "vfat": 1
+      },
+      "fixed_mount_points": {
+        "/": [
+          "ext4"
+        ],
+        "/boot/efi": [
+          "vfat"
+        ],
+        "/proc": [
+          "proc"
+        ],
+        "/proc/sys/fs/binfmt_misc": [
+          "autofs",
+          "binfmt_misc"
+        ],
+        "/sys": [
+          "sysfs"
+        ]
+      },
+      "mountinfo_sha256": "96360015df101cfe95a5df0c79533fdaf3486c7e131a1f169dc9aecb85f541e4",
+      "namespace_operations": 0,
+      "non_proc_mounts_beneath_proc": [
+        {
+          "filesystem": "autofs",
+          "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+        },
+        {
+          "filesystem": "binfmt_misc",
+          "target_sha256": "35c89b71cdf1a3fdb1f53302a116f200823f1b0ba8a0cbe28fdfa43d1954563c"
+        }
+      ],
+      "operator_uid": 1001,
+      "ownership_scan": "NOT_RUN_REVIEW_REQUIRED",
+      "ownership_scan_mount_policy": "SCHEMA_AND_FIXED_MOUNT_READBACK_OBSERVED",
+      "pid1_uid": 0,
+      "privileged_processes_started": 0,
+      "refusal": null,
+      "repaired_native_stat_regression": "NOT_RUN_REVIEW_REQUIRED",
+      "root_owned_pid1_condition": "MET",
+      "tree": "d5d5476d64e5dd939c363ab81bb26212f79e9b47"
+    }
+  }
+]

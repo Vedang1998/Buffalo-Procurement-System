@@ -1,0 +1,98 @@
+{
+  "classification": "READ_ONLY_AUTHENTICATED_PUBLISHER_INDEX_EVIDENCE_NOT_TARGET_TRUST_ANCHOR_OR_INSTALLATION",
+  "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+  "keyring_source": "official Ubuntu publisher HTTPS",
+  "expected_signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+  "target_keyring_comparison": "MISSING",
+  "releases": {
+    "noble": {
+      "signed_sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0",
+      "verified_release_sha256": "26758a13cecfaff9ff274d31ea9a4633674a999bd130c09f6ecd66a4b8071184",
+      "date": "Thu, 25 Apr 2024 15:10:33 UTC",
+      "validsig": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+      "release_url": "https://archive.ubuntu.com/ubuntu/dists/noble/InRelease",
+      "signature_math": "VERIFIED",
+      "freshness_scope": "noble static base; updates retained exact October29 signed release; security fetched current; installation freshness decision still required"
+    },
+    "noble-updates": {
+      "signed_sha256": "1af76bea40c6b8ddbc51a51046c5a3e7912c9611536e97afc673a4b1c39d1886",
+      "verified_release_sha256": "17ed1348ac084120c823fa5d81e848a96c67f4e6bf242cbaf6f05e1e3a3315c2",
+      "date": "Thu, 29 Oct 2026 13:22:21 UTC",
+      "validsig": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+      "release_url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease",
+      "signature_math": "VERIFIED",
+      "freshness_scope": "noble static base; updates retained exact October29 signed release; security fetched current; installation freshness decision still required"
+    },
+    "noble-security": {
+      "signed_sha256": "d90e89008640e66a6eacc13ffaad0fbbd205877cc51acdd8d4f99f9d21fcfee0",
+      "verified_release_sha256": "45db9f07c69b73cfa038167ebd81fd454334f6792c743f133ee26eed2ace9c3b",
+      "date": "Thu, 29 Oct 2026 16:38:05 UTC",
+      "validsig": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+      "release_url": "https://archive.ubuntu.com/ubuntu/dists/noble-security/InRelease",
+      "signature_math": "VERIFIED",
+      "freshness_scope": "noble static base; updates retained exact October29 signed release; security fetched current; installation freshness decision still required"
+    }
+  },
+  "indexes": [
+    {
+      "suite": "noble",
+      "component": "main",
+      "path": "noble-main-Packages.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble/main/binary-amd64/by-hash/SHA256/2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451",
+      "sha256": "2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451",
+      "bytes": 1401160,
+      "uncompressed_sha256": "8f6f71ae839c8cba390a7643fcbbdacddb0bc7d12c1583a2dd80a1f8443a30e5",
+      "uncompressed_bytes": 7165069
+    },
+    {
+      "suite": "noble",
+      "component": "universe",
+      "path": "noble-universe-Packages.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble/universe/binary-amd64/by-hash/SHA256/ba9057fa1b91438cc8a1d26808d00c85389fe101d0c1496254df97236405599a",
+      "sha256": "ba9057fa1b91438cc8a1d26808d00c85389fe101d0c1496254df97236405599a",
+      "bytes": 15037908,
+      "uncompressed_sha256": "687ffc969e7700137677b9cfe2f614ee2d638052a91a7c9bf31f3f6a3040a99a",
+      "uncompressed_bytes": 73379142
+    },
+    {
+      "suite": "noble-updates",
+      "component": "main",
+      "path": "noble-updates-main-Packages.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/by-hash/SHA256/8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "sha256": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "bytes": 1406168,
+      "uncompressed_sha256": "8c5e3ce08e29065193b930451b54c7c0f79a049632755010171d3179efbd863e",
+      "uncompressed_bytes": 7607567
+    },
+    {
+      "suite": "noble-updates",
+      "component": "universe",
+      "path": "noble-updates-universe-Packages.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/universe/binary-amd64/by-hash/SHA256/8ae1a30eead0c830c0c4c2dc65b2ff50ec207ddd64c71a9607b30f0c38c07e44",
+      "sha256": "8ae1a30eead0c830c0c4c2dc65b2ff50ec207ddd64c71a9607b30f0c38c07e44",
+      "bytes": 1707240,
+      "uncompressed_sha256": "329bd7c3982b56b9c5cdc0184419bca843a6f30267ae7108ece2d5fd636bd1d9",
+      "uncompressed_bytes": 10645659
+    },
+    {
+      "suite": "noble-security",
+      "component": "main",
+      "path": "noble-security-main-Packages.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-security/main/binary-amd64/by-hash/SHA256/a65b8532f4c3f3b864c7c0a423fbc6a4f4c6ee1a871bb78c0f5f0f27cc44a195",
+      "sha256": "a65b8532f4c3f3b864c7c0a423fbc6a4f4c6ee1a871bb78c0f5f0f27cc44a195",
+      "bytes": 1146132,
+      "uncompressed_sha256": "dd8f0e30250c8a7df48247a76479d8b533acfcbd16e77181c2457ede52e6a618",
+      "uncompressed_bytes": 6241173
+    },
+    {
+      "suite": "noble-security",
+      "component": "universe",
+      "path": "noble-security-universe-Packages.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-security/universe/binary-amd64/by-hash/SHA256/7f6bfafb5359adcace1390e09c38136112cf76f1d0d3c3126bded07ab364a716",
+      "sha256": "7f6bfafb5359adcace1390e09c38136112cf76f1d0d3c3126bded07ab364a716",
+      "bytes": 1222620,
+      "uncompressed_sha256": "9c5ba85b87832d284963422965704dde2c8ab861661f571aa1bf45e9180bf9bc",
+      "uncompressed_bytes": 7675869
+    }
+  ]
+}

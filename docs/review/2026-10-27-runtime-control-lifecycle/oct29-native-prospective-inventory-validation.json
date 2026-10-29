@@ -1,0 +1,35 @@
+{
+  "scope": "STATIC_DATA_STRUCTURAL_VALIDATION_NOT_RUNTIME_CONSUMER_TEST_OR_REVIEW",
+  "manifest_sha256": "1dd931ac4eb35670349d1b6fdd0104b1547e9d32de0e1dbdcd83da664dd6e3c9",
+  "checks": {
+    "original_709_rows_all_original_fields_preserved": true,
+    "unique_absolute_canonical_paths": true,
+    "fixed_artifact_members_and_hash_shapes": true,
+    "all_170_elf_soname_edges_resolve": true,
+    "all_loader_edges_resolve": true,
+    "all_recursive_edges_resolve": true,
+    "65_ubuntu_plus_python_artifact_records": true,
+    "native_capacity_fails_unchanged_policy": true,
+    "conservative_physical_capacity_also_fails": true,
+    "inventory_does_not_grant_installation_or_runtime": true
+  },
+  "known_compatibility_refusals": [
+    {
+      "current_resolver_requested_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
+      "effect": "Explicit logical-name reconciliation required; replacing displayed name preserves count and bytes; adding both would increase count and bytes",
+      "inventory_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+      "resolution": "AUTHENTICATED_ALIAS_TO_SAME_ALREADY_COUNTED_BYTES"
+    },
+    {
+      "authenticated_archive_mode": "0644",
+      "current_read_native_mode": "0444",
+      "path": "/usr/lib/x86_64-linux-gnu/libpq.so.5.16",
+      "preserved_manifest_mode": "0555"
+    }
+  ],
+  "runtime_consumers_invoked": false,
+  "plans_generated": false,
+  "privileged_actions": false,
+  "artifact_execution": false,
+  "existing_policy_limit_changed": false
+}

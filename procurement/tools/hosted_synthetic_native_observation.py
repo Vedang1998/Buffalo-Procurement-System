@@ -20,7 +20,7 @@ import hosted_synthetic_runtime as runtime
 import hosted_synthetic_bootstrap as boot
 import hosted_synthetic_source as source
 
-ROOTS=('/usr/lib/x86_64-linux-gnu','/lib/x86_64-linux-gnu','/usr/lib64','/lib64','/usr/lib','/lib')
+ROOTS=(native.RUNPATH,'/usr/lib/x86_64-linux-gnu','/lib/x86_64-linux-gnu','/usr/lib64','/lib64','/usr/lib','/lib')
 PACKAGE=re.compile(r'[a-z0-9][a-z0-9+.-]*(?::amd64)?\Z')
 VERSION=re.compile(r'[A-Za-z0-9.+:~_-]{1,128}\Z')
 
@@ -76,9 +76,9 @@ def observe(binding, *, image_os='',image_version=''):
     native.require(os.geteuid()>0,'native_observation_root_refused')
     native.require(all(type(x) is str and re.fullmatch(r'[A-Za-z0-9_.-]{0,80}',x) for x in (image_os,image_version)))
     deadline=time.monotonic()+60;value=native.inventory();rows={};unresolved=[];graph={};total=0
-    from hosted_synthetic_postgres_runtime import _LOCALE
-    pending=[native.PYTHON,native.RUNPATH+'/libpython3.13.so.1.0','/usr/lib/postgresql/16/bin/postgres',
-             '/bin/sh','/usr/bin/locale',*('/usr/lib/locale/C.utf8/'+p for p in _LOCALE)]
+    from hosted_synthetic_postgres_runtime import _LOCALE,EXECUTABLES
+    pending=[native.PYTHON,native.RUNPATH+'/libpython3.13.so.1.0',*EXECUTABLES,
+             '/usr/lib/x86_64-linux-gnu/libpq.so.5','/usr/share/keyrings/ubuntu-archive-keyring.gpg','/bin/sh','/usr/bin/locale',*('/usr/lib/locale/C.utf8/'+p for p in _LOCALE)]
     pending.extend(value['required_unresolved_timezone_files'])
     names=list(value['required_unresolved_external_sonames']);resolved_names={}
     while names or pending:

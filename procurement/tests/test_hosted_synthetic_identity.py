@@ -219,6 +219,7 @@ class HostedDedicatedIdentityTests(unittest.TestCase):
             for candidate in (ID,replace(ID,uid=952,gid=952)):
                 with self.assertRaises(identity.CandidateOwnershipCollision):identity.run_provisioned_candidate(candidate,source='/fixture',python=python,repository='repo',event='push',ref='ref',commit='a'*40,diagnostic='postgres-version',preflight=pre,ownership_deadline=pre.deadline)
         self.assertEqual(measured.call_count,1);self.assertEqual(verify.call_count,2)
+        self.assertEqual([r['stage'] for r in pre.stages],['CAPACITY_AND_MEMORY_PREFLIGHT','SOURCE_NATIVE_READINESS_DRIFT'])
 
     def test_fit_cannot_measure_a_different_interpreter_than_selected_launcher(self):
         import hosted_synthetic_postgres_runtime as pg

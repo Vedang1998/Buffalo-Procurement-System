@@ -29,12 +29,15 @@ RUNPATH='/opt/hostedtoolcache/Python/3.13.5/x64/lib'
 FILES=('hosted_native_inputs.json','hosted_native_runpath.json')
 DIGESTS=('840a10c4228e055680567ec5e902bd9a00af7588bb31bf23bf493ffec22e8609',
          'ac4fb80664ff012a4625cee81f8627e27dba045f35a5fabfb84cfbfb069d31c1')
+PROPOSED_INVENTORY_SHA256='1dd931ac4eb35670349d1b6fdd0104b1547e9d32de0e1dbdcd83da664dd6e3c9'
 ARTIFACTS={
  'c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b':129234019,
  'd60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666':15610426,
  '4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac':1301302,
  '3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1':151262,
 }
+_STAGE_MAX_BYTES=134217728
+_STAGE_MAX_FILES=3000
 _TOKEN=object()
 _ACTIVE_VIEW=ContextVar('buffalo_native_input_view',default=None)
 _ACTIVE_FILES=ContextVar('buffalo_native_input_files',default=None)
@@ -93,6 +96,67 @@ def require_complete_inventory():
         require(interp is None or interp in rows,'native_loader_missing')
     require(value.get('provenance_requirements_satisfied') is True,'native_provenance_incomplete')
     return value
+
+
+def _proposed_inventory():
+    # Evidence pin only; not an installation pin, layout approval or budget.
+    raw=Path(__file__).with_name('hosted_native_proposed_inventory.json').read_bytes()
+    require(len(raw)<=2*1024**2 and hashlib.sha256(raw).hexdigest()==PROPOSED_INVENTORY_SHA256,
+            'native_proposed_inventory_identity_refused')
+    return json.loads(raw)
+
+
+def proposed_capacity():
+    """No caller-selected total/policy/budget; static lower bound, not M1 fit."""
+    import hosted_synthetic_runtime as runtime
+    value=_proposed_inventory();rows=value['rows'];paths=set();parents=set();physical={};total=0
+    require(value['schema']=='BUFFALO_AUTHENTICATED_NATIVE_FILE_INVENTORY_V1'
+        and value['capacity']['policy']==runtime.POSTGRES_PHASE_POLICY
+        and type(value['capacity']['cap_bytes']) is int
+        and value['capacity']['cap_bytes']==runtime.POSTGRES_PHASE_MAX_BYTES,
+        'native_proposed_policy_refused')
+    require(type(rows) is list and type(value['known_file_count']) is int
+        and len(rows)==value['known_file_count']<=runtime.MAX_ENTRIES)
+    for row in rows:
+        path=row['path'];size=row['bytes'];digest=row['sha256']
+        require(type(path) is str and path.startswith('/') and str(Path(path))==path
+            and '..' not in Path(path).parts and path not in paths
+            and type(size) is int and 0<=size<=runtime.MAX_BYTES
+            and type(digest) is str and re.fullmatch('[0-9a-f]{64}',digest)
+            and row['artifact_sha256'] in value['artifacts'],'native_proposed_row_refused')
+        paths.add(path);total+=size
+        parents.update(str(p) for p in Path(path).parents if str(p)!='/')
+        key=row['physical_path'];identity=(size,digest)
+        require(type(key) is str and key.startswith('/') and '..' not in Path(key).parts)
+        require(key not in physical or physical[key]==identity,'native_proposed_alias_conflict')
+        physical[key]=identity
+    require(type(value['known_regular_bytes']) is int and total==value['known_regular_bytes']
+        and type(value['physical_content_bytes']) is int
+        and sum(v[0] for v in physical.values())==value['physical_content_bytes']
+        and type(value['physical_content_count']) is int and len(physical)==value['physical_content_count']
+        and not paths&parents,'native_proposed_totals_refused')
+    entries=len(paths|parents)
+    return {'policy':runtime.POSTGRES_PHASE_POLICY,'inventory_sha256':PROPOSED_INVENTORY_SHA256,
+        'logical_regular_bytes':total,'logical_files':len(paths),'native_entries_with_parents':entries,
+        'physical_lower_bound_bytes':sum(v[0] for v in physical.values()),
+        'maximum_regular_bytes':runtime.POSTGRES_PHASE_MAX_BYTES,'maximum_entries':runtime.MAX_ENTRIES,
+        'excess_regular_bytes':max(0,total-runtime.POSTGRES_PHASE_MAX_BYTES),
+        'status':'REFUSED_NATIVE_CAPACITY' if total>runtime.POSTGRES_PHASE_MAX_BYTES or entries>runtime.MAX_ENTRIES
+            else 'NO_NATIVE_LOWER_BOUND_CONTRADICTION',
+        'source_and_generated_entries':'EXCLUDED_POSITIVE_COSTS','memory_readiness':'NOT_MEASURED',
+        'complete_runtime':'NOT_ESTABLISHED','execution_authority':False}
+
+
+class NativeCapacityRefusal(ns.NamespaceProofError):
+    def __init__(self,evidence):
+        super().__init__('native_capacity_refused_before_installation_or_provisioning')
+        self.evidence=evidence
+
+
+def require_native_capacity():
+    report=proposed_capacity()
+    if report['status']=='REFUSED_NATIVE_CAPACITY':raise NativeCapacityRefusal(report)
+    return report
 
 
 @dataclass(frozen=True)
@@ -200,6 +264,7 @@ class Stage:
     def __init__(self,path):
         require(os.geteuid()>0 and os.getegid()>0,'native_python_root_refused')
         self.path=Path(path);self.owned=[];self._owner=self;self.closed=False
+        self.regular_bytes=0;self.regular_files=0
         self.path.mkdir(mode=0o700)
         self.fd=os.open(self.path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
         info=os.fstat(self.fd);self.identity=(info.st_dev,info.st_ino)
@@ -220,13 +285,15 @@ class Stage:
         file is also digest-bound; no tarfile extraction or metadata restoration.
         This helper alone cannot authorize installation of its output.
         """
-        self.verify();expected={_member(row['artifact_member']):row for row in rows}
-        require(len(expected)==len(rows)<=3000)
+        self.verify();expected={};destinations=set()
+        require(len(rows)<=3000)
         for row in rows:
             require(type(row['bytes']) is int and 0<=row['bytes']<=83886080
                 and row['mode'] in ('0444','0555') and re.fullmatch('[0-9a-f]{64}',row['sha256'])
                 and type(row['path']) is str and row['path'].startswith('/')
                 and '..' not in Path(row['path']).parts,'native_stage_row_refused')
+            require(row['path'] not in destinations,'native_stage_duplicate_destination')
+            destinations.add(row['path']);expected.setdefault(_member(row['artifact_member']),[]).append(row)
         found=set();seen=set();total=0
         with tarfile.open(fileobj=stream,mode='r|') as archive:
             for index,entry in enumerate(archive):
@@ -234,18 +301,26 @@ class Stage:
                 name=_member(entry.name)
                 require(name not in seen,'native_archive_duplicate');seen.add(name)
                 if name not in expected:continue
-                row=expected[name]
+                selected=expected[name];row=selected[0]
+                require(all((r['bytes'],r['sha256'])==(row['bytes'],row['sha256']) for r in selected),
+                        'native_archive_alias_content_refused')
                 require(entry.isfile() and not entry.issym() and not entry.islnk()
                         and not entry.mode&0o7000 and not entry.pax_headers
                         and entry.size==row['bytes']<=83886080,'native_archive_member_refused')
-                total+=entry.size;require(total<=134217728,'native_stage_capacity_refused')
+                logical_bytes=entry.size*len(selected)
+                require(self.regular_bytes+logical_bytes<=_STAGE_MAX_BYTES
+                    and self.regular_files+len(selected)<=_STAGE_MAX_FILES,'native_stage_capacity_refused')
+                total+=logical_bytes
                 content=archive.extractfile(entry).read(entry.size+1)
                 require(len(content)==entry.size and hashlib.sha256(content).hexdigest()==row['sha256'],
                         'native_archive_content_refused')
-                _new_file(self.fd,row['path'].lstrip('/'),content,int(row['mode'],8),self.owned)
+                for target in selected:
+                    _new_file(self.fd,target['path'].lstrip('/'),content,int(target['mode'],8),self.owned)
+                    self.regular_bytes+=entry.size;self.regular_files+=1
                 found.add(name)
         require(found==set(expected),'native_archive_member_missing');self.verify()
-        return {'members':len(found),'regular_bytes':total,'execution_authority':False}
+        return {'members':len(found),'regular_bytes':total,'lifetime_regular_bytes':self.regular_bytes,
+            'lifetime_regular_files':self.regular_files,'execution_authority':False}
 
     @_stage_operation
     def materialize_python_artifact(self,descriptor):
@@ -350,7 +425,7 @@ def native_install_plan(nonce,stage):
     dd stdin. New output stays under0700 root until publisher digest checks pass.
     A plan is not installation permission and cannot be activated from this API.
     """
-    value=require_complete_inventory()
+    require_native_capacity();value=require_complete_inventory()
     require(type(nonce) is str and re.fullmatch('[0-9a-f]{32}',nonce))
     require(type(stage) is Stage);stage.verify()
     destination='/run/buffalo-native-'+nonce
@@ -394,7 +469,7 @@ class ViewRequest:
 
 
 def view_request(binding,root, *, deadline):
-    value=require_complete_inventory()
+    require_native_capacity();value=require_complete_inventory()
     require(type(deadline) in (int,float) and time.monotonic()<deadline)
     root=Path(root);require(re.fullmatch('/run/buffalo-native-[0-9a-f]{32}',str(root)))
     info=root.lstat();require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022)
@@ -418,7 +493,7 @@ def _verify_request(request,binding):
 
 
 def view_properties(request,binding):
-    _verify_request(request,binding);require_complete_inventory()
+    require_native_capacity();_verify_request(request,binding);require_complete_inventory()
     return ('PrivateMounts=yes','PrivateNetwork=yes','NoNewPrivileges=yes','MemoryMax=536870912','TasksMax=64',
         'BindReadOnlyPaths='+request.root+'/view/opt:/opt',
         'BindReadOnlyPaths='+request.root+'/view/usr/share:/usr/share')
@@ -457,7 +532,7 @@ def protected_view(request,binding):
     Only callable after native view setup. Original-host ownership/IPC scanning
     remains outside this context. This never sets up mounts or starts a child.
     """
-    _verify_request(request,binding);value=require_complete_inventory()
+    require_native_capacity();_verify_request(request,binding);value=require_complete_inventory()
     require(os.geteuid()>0 and os.getegid()>0 and not os.getgroups(),'native_view_credentials_refused')
     from hosted_synthetic_bootstrap import launcher,_ENVIRONMENT
     require(dict(os.environ)==_ENVIRONMENT,'native_view_environment_override_refused')
@@ -496,7 +571,7 @@ def require_selected_file(path,data,mode):
 
 def bind_measurement_result(request,binding,receipt):
     """No exit-code/JSON/Boolean substitution for actual code-minted readiness."""
-    _verify_request(request,binding)
+    require_native_capacity();_verify_request(request,binding)
     from hosted_synthetic_postgres_runtime import PhaseReadiness
     require(type(receipt) is PhaseReadiness and active_view() is request,'native_measurement_view_refused')
     report=receipt.verify(Path(__file__).resolve().parents[2],binding)

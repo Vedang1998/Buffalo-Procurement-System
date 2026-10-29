@@ -264,7 +264,7 @@ class AccountLease:
         started=time.monotonic()
         source_preflight=inspect_source(identity,source,commit,**({} if preflight is None else
             {'operation_deadline':preflight.deadline,'rehearsal':preflight.rehearsal}))
-        if preflight is not None:preflight.record('SOURCE_REHEARSAL_OR_CANDIDATE_DRIFT',started)
+        if preflight is not None:preflight.record('SOURCE_REHEARSAL' if source_preflight.get('rehearsal')=='EXECUTED_ONCE' else 'CANDIDATE_SOURCE_DRIFT',started)
         started=time.monotonic()
         ownership_preflight=inspect_ownership(identity,**({} if ownership_deadline is None else {'scan_deadline':ownership_deadline}))
         if preflight is not None:preflight.record('CANDIDATE_OWNERSHIP_SCAN',started)
@@ -396,12 +396,13 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
                 preflight.verify(source,commit)
             started=time.monotonic()
             readiness=None if preflight is None else preflight.readiness
-            if readiness is None:
+            measured=readiness is None
+            if measured:
                 readiness=require_phase_fit(source,binding,**({} if ownership_deadline is None else {'deadline':ownership_deadline}))
             boot._require(type(readiness) is PhaseReadiness,'postgres_memory_readiness_required')
             readiness.verify(source,binding)
             if preflight is not None:
-                preflight.readiness=readiness;preflight.record('CAPACITY_MEMORY_OR_NATIVE_DRIFT',started)
+                preflight.readiness=readiness;preflight.record('CAPACITY_AND_MEMORY_PREFLIGHT' if measured else 'SOURCE_NATIVE_READINESS_DRIFT',started)
         options={} if lifecycle is None else {'lifecycle':lifecycle}
         if preflight is not None:options['preflight']=preflight
         from hosted_synthetic_account_preflight import OwnershipCollision
@@ -427,6 +428,9 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
                 raise boot.BootstrapCleanupError('candidate_cleanup_unverified_identity_retained') from body_error
             raise
         if body_error is not None:raise body_error
+        if preflight is not None:
+            result['preaccount_preflight']={'shared_deadline_seconds':60,'stages':[dict(row) for row in preflight.stages],
+                'scope':'PREFLIGHT_WALL_TIME_NOT_SERVICE_MEMORY_OR_LIFETIME','cleanup_grace':'SEPARATE_EXISTING_BOUNDED_TERMINATION_REAP'}
         result.update(dedicated_identity_removed=lease.closed,worker_control_exclusion='UNPROVEN',
                       full_service_lifetime_cleanup=('OBSERVED' if lease.drain_proof.scope=='ACKNOWLEDGED_GENERATION'
                           else 'PRE_ACK_EXIT_DRAIN_ONLY') if lease.drain_proof is not None else 'UNPROVEN',

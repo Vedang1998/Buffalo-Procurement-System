@@ -94,7 +94,7 @@ class HostedSyntheticWorkflowTests(unittest.TestCase):
 
     def test_focused_gate_rejects_skips_xfails_and_missing_population(self):
         focused = self.text.split('- name: Focused source and diagnostic validation', 1)[1].split('- name: Review gate', 1)[0]
-        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [38,33,17,66,22,38,20,11,17,37,27,23,36,14,34,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,89,36,16,35,46,35,14,32]', 'result.wasSuccessful()', 'result.testsRun == 1111', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
+        for fragment in ('"test_hosted_synthetic_source"', '"test_hosted_synthetic_capability"', '"test_hosted_synthetic_workflow"', '"test_hosted_synthetic_namespace"', '"test_hosted_synthetic_projection"', '"test_hosted_synthetic_cgroup"', '"test_hosted_synthetic_host"', 'assert [item.countTestCases() for item in modules] == [38,33,17,66,22,38,20,11,17,37,27,23,36,14,34,10,23,14,28,15,20,23,21,28,18,26,23,21,22,16,24,26,17,89,36,16,35,46,35,14,39]', 'result.wasSuccessful()', 'result.testsRun == 1118', 'not result.skipped', 'not result.expectedFailures', 'not result.unexpectedSuccesses'):
             self.assertIn(fragment, focused)
         self.assertNotIn('continue-on-error', self.text)
         self.assertNotIn('always()', self.text)

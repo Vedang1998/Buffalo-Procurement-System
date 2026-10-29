@@ -1,0 +1,47 @@
+{
+  "commit": "44fee111045fd56c463958674480c7fb2bb81711",
+  "tree": "8434b445dcb712b3af455e44fc6dcb68e82b8424",
+  "implementation": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+  "classification": "INTERNAL CODEX CAUSAL SYNTHETIC MEASUREMENT; NOT CLAUDE OR TARGET",
+  "script": "codec_probe.py",
+  "script_sha256": "8e68ceb0568ee079ac042a8344ea8e7d874cd6127188443c065712265383acfa",
+  "command": "/usr/bin/timeout --signal=TERM --kill-after=2s 20s /usr/bin/python3.13 -I -S -B /tmp/buffalo-memory-review/codec_probe.py {50|60}",
+  "runs": [
+    {
+      "file_mib": 50,
+      "regular_bytes": 104857600,
+      "bundle_bytes": 104858195,
+      "bundle_sha256": "d362d4f577bfb9018a435b6eab8ac2fd3f397c43733230de8db87d6999fa542f",
+      "manifest_sha256": "40aff2fda62bbe0992d54f9574659fef8c9eb0d5f798efba52297364d5c758d7",
+      "traced_peak_bytes": 321789743,
+      "peak_rss_bytes": 353738752,
+      "memfd_allocated_bytes": 104861696,
+      "conservative_sum_bytes": 458600448,
+      "result": "WITHIN_COMPONENT_ENVELOPE",
+      "seconds": 0.918193
+    },
+    {
+      "file_mib": 60,
+      "regular_bytes": 125829120,
+      "bundle_bytes": 125829715,
+      "bundle_sha256": "d09446cf04cfc791692da37c9417a3ff6d8d62f6dc137cb54ab7c19e28e37a5c",
+      "manifest_sha256": "60aaaaee87556c08a2736274fe50ab3d9b538e6a16213fb3cb789d1eb58826dd",
+      "traced_peak_bytes": 377888559,
+      "peak_rss_bytes": 416653312,
+      "memfd_allocated_bytes": 125833216,
+      "conservative_sum_bytes": 542486528,
+      "result": "REFUSED_COMPONENT_ENVELOPE",
+      "seconds": 1.014211
+    }
+  ],
+  "limits": {
+    "aggregate_service_bytes": 536870912,
+    "composed_phase_regular_bytes": 134217728,
+    "per_file_bytes": 83886080
+  },
+  "all_runs_descriptors_closed": true,
+  "account_mutations": 0,
+  "artifact_or_native_payload_executions": 0,
+  "kernel_privilege_or_service_operations": 0,
+  "scope": "Two ordinary synthetic files via existing codec; no valid full PG phase constructed, no same-generation service/cgroup measurement"
+}

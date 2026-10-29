@@ -1,0 +1,84 @@
+{
+  "classification": "AUTHENTICATED_STATIC_NATIVE_CAPACITY_CONTRADICTION_NOT_CAPTURE_OR_MEMORY_PROOF",
+  "source_commit": "652842794f02f9d41f05d61097a7332a20e3f3b2",
+  "source_tree": "cbce8d02c63173f23df4b292bc17cfb60035bfda",
+  "target_image": "20261026.354.1",
+  "target_report_sha256": "6fadcab0e82060c4684b0f83b9d052d9d955f2ece430a102f2fbc8853671e4ab",
+  "reconciliation": "The earlier 149,525,809-byte graph counted named loader aliases but omitted the explicit libnss_files.so.2 root (14,336 bytes), which PostgreSQL _capture adds independently of DT_NEEDED. Adding that required object gives the current logical native-file sum of 149,540,145 bytes across 831 names. Deduplicating /lib64/ld-linux-x86-64.so.2 and /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2, both the same 236,616-byte physical loader, gives 149,303,529 bytes across 830 physical objects, exactly matching native-capacity-calculation.json. The libpq.so.5 publisher alias resolves to the already-counted libpq.so.5.16 bytes; changing that displayed name adds no bytes. The physical result is the safer conservative lower bound: it exceeds the unchanged 134,217,728-byte combined cap by 15,085,801 bytes even before source/generated entries. The logical sum models current name-preserving capture semantics; neither figure is a successful capture, memory-fit or execution measurement.",
+  "native_capacity": {
+    "diagnostic": {
+      "logical_names": 682,
+      "logical_bytes": 78968310,
+      "physical_objects": 681,
+      "physical_lower_bound_bytes": 78731694,
+      "cap_bytes": 83886080,
+      "conservative_excess_bytes": 0
+    },
+    "postgres": {
+      "logical_names": 158,
+      "logical_bytes": 80496595,
+      "physical_objects": 157,
+      "physical_lower_bound_bytes": 80259979,
+      "cap_bytes": 83886080,
+      "conservative_excess_bytes": 0
+    },
+    "combined": {
+      "logical_names": 831,
+      "logical_bytes": 149540145,
+      "physical_objects": 830,
+      "physical_lower_bound_bytes": 149303529,
+      "cap_bytes": 134217728,
+      "conservative_excess_bytes": 15085801
+    }
+  },
+  "provenance": {
+    "exact_signed_index_package_records": 65,
+    "verified_exact_target_ubuntu_package_payloads": 62,
+    "matched_target_file_rows": 122,
+    "verified_selected_client_libpq_payloads": 2,
+    "verified_selected_client_libpq_files": 3,
+    "signer_fingerprint": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+    "keyring_url": "https://archive.ubuntu.com/ubuntu/project/ubuntu-archive-keyring.gpg",
+    "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "assurance": "Ubuntu detached data authenticated by valid signed InRelease -> exact SHA256 Packages index -> exact-version paragraph -> complete package SHA256 -> selected member bytes. This is publisher-digest verification, not signed build attestation. Selected Python and PG server evidence is reused from the fixed repository manifest, not newly substituted."
+  },
+  "exclusions": [
+    "No accepted input, dependency, budget or runtime policy changed",
+    "No package install, extraction, artifact execution, privileged command or repository edit",
+    "Observed PGDG16.15-1.pgdg24.04+2 not selected; approved Ubuntu16.15-0ubuntu0.24.04.1 retained",
+    "No target protected-view capture, cgroup/service memory or runtime execution performed",
+    "Target trust-anchor comparison and missing signed-build-attestation claims remain unproven"
+  ],
+  "cleanup": {
+    "sequential_payload_spool_removed": true,
+    "decoder_children_reaped": "Each native decoder wait checked before payload removal",
+    "retained_public_evidence_directory": "/tmp/buffalo-native-packages-readonly"
+  },
+  "evidence_index": {
+    "index-evidence.json": {
+      "bytes": 5430,
+      "sha256": "299fb170b0069a3c8186cfde7d4b34e552de64ef7f10ce0333af25a0cc7a4706"
+    },
+    "exact-package-records.json": {
+      "bytes": 47541,
+      "sha256": "670d79dd2e3ff96c6359da8f6bdda4ab71c51f51ff818362e48b4c97d644e3ad"
+    },
+    "authenticated-target-files.json": {
+      "bytes": 162695,
+      "sha256": "a542ecef82c7997beb4a1a57d1389aff2afa33ea794d62e2fbfa0f6507dee92e"
+    },
+    "selected-client-libpq-elf.json": {
+      "bytes": 2398,
+      "sha256": "ed51bf1cabd5f5b342d5574a7ce7ee730b7fd385e4dad85aef25cd935aa3be01"
+    },
+    "capacity-logical-with-explicit-nss.json": {
+      "bytes": 247473,
+      "sha256": "9986b32f3d597ff447beb8dfdd54f70b774cdf0fc59004171380536f6166ffca"
+    },
+    "research-tool-identities.json": {
+      "bytes": 1013,
+      "sha256": "27bbdf3bfe00e2cba83591c353d8f7c2a4de446f1e5175cb4311ed2bd12e9fc3"
+    }
+  },
+  "reconciled_parent_calculation_sha256": "45c055de7c68951f71907d0ebb9b1e96d3da81f4527cc76401d14e1964977538"
+}

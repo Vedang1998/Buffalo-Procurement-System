@@ -47,6 +47,7 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_native_inputs.py",
     "procurement/tools/hosted_synthetic_native_observation.py",
     "procurement/tools/hosted_native_inputs.json",
+    "procurement/tools/hosted_native_proposed_inventory.json",
     "procurement/tools/hosted_native_runpath.json",
     "procurement/tools/hosted_synthetic_postgres_runtime.py",
     "procurement/tools/hosted_synthetic_postgres_identity.py",

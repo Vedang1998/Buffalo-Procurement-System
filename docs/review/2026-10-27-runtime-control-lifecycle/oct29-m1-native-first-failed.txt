@@ -1,0 +1,74 @@
+======================================================================
+ERROR: test_fixed_inventory_preserves_missing_dependency_gate (test_hosted_synthetic_native_inputs.NativeInputTests.test_fixed_inventory_preserves_missing_dependency_gate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 42, in test_fixed_inventory_preserves_missing_dependency_gate
+    value=native.inventory()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 63, in inventory
+    path=row['path'];require(type(path) is str and path.startswith('/')
+                     ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and '..' not in Path(path).parts and str(Path(path))==path
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and path not in paths and row['artifact_sha256'] in ARTIFACTS
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and type(row['bytes']) is int and 0<row['bytes']<=83886080
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and re.fullmatch('[0-9a-f]{64}',row['sha256']) and row['mode'] in ('0444','0555'))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 42, in require
+    if not value:raise ns.NamespaceProofError(code)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceProofError: native_input_contract_refused
+
+======================================================================
+ERROR: test_relabeling_partial_inventory_is_not_completion (test_hosted_synthetic_native_inputs.NativeInputTests.test_relabeling_partial_inventory_is_not_completion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 49, in test_relabeling_partial_inventory_is_not_completion
+    value=native.inventory();value['status']='COMPLETE_VERIFIED';value['complete_runtime_manifest']=True
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 63, in inventory
+    path=row['path'];require(type(path) is str and path.startswith('/')
+                     ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and '..' not in Path(path).parts and str(Path(path))==path
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and path not in paths and row['artifact_sha256'] in ARTIFACTS
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and type(row['bytes']) is int and 0<row['bytes']<=83886080
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and re.fullmatch('[0-9a-f]{64}',row['sha256']) and row['mode'] in ('0444','0555'))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 42, in require
+    if not value:raise ns.NamespaceProofError(code)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceProofError: native_input_contract_refused
+
+======================================================================
+FAIL: test_incomplete_inventory_blocks_plan_before_destination_or_privilege (test_hosted_synthetic_native_inputs.NativeInputTests.test_incomplete_inventory_blocks_plan_before_destination_or_privilege)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceProofError: native_input_contract_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 123, in test_incomplete_inventory_blocks_plan_before_destination_or_privilege
+    with patch.object(os.path,'lexists') as exists,self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+                                                   ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "inventory_incomplete" does not match "native_input_contract_refused"
+
+======================================================================
+FAIL: test_view_cannot_be_minted_from_partial_manifest (test_hosted_synthetic_native_inputs.NativeInputTests.test_view_cannot_be_minted_from_partial_manifest)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceProofError: native_input_contract_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 144, in test_view_cannot_be_minted_from_partial_manifest
+    with self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "inventory_incomplete" does not match "native_input_contract_refused"
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.035s
+
+FAILED (failures=2, errors=2)

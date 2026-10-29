@@ -1,0 +1,139 @@
+======================================================================
+ERROR: test_actual_readiness_composes_adopts_and_preserves_memory_formula (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_actual_readiness_composes_adopts_and_preserves_memory_formula)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_fd_inventory_changed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 732, in test_actual_readiness_composes_adopts_and_preserves_memory_formula
+    with self.readiness_inputs():receipt=pg.require_phase_fit(Path.cwd(),BINDING)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 576, in require_phase_fit
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_cleanup_refused
+
+======================================================================
+ERROR: test_capacity_refusal_preserves_measurement_without_execution_authority (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_capacity_refusal_preserves_measurement_without_execution_authority)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 539, in require_phase_fit
+    if report['capacity']!='FIT':raise PhaseCapacityRefusal(report)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_postgres_runtime.PhaseCapacityRefusal: postgres_phase_capacity_refused_before_account
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 707, in test_capacity_refusal_preserves_measurement_without_execution_authority
+    pg.require_phase_fit(Path.cwd(),BINDING)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 576, in require_phase_fit
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_cleanup_refused
+
+======================================================================
+ERROR: test_measurement_memory_error_closes_owned_inputs_and_stops_tracing (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_measurement_memory_error_closes_owned_inputs_and_stops_tracing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 541, in require_phase_fit
+    prepared=_prepare_phase(diagnostic,postgres)
+  File "/usr/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/unittest/mock.py", line 1228, in _execute_mock_call
+    raise effect
+MemoryError: injected
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 754, in test_measurement_memory_error_closes_owned_inputs_and_stops_tracing
+    pg.require_phase_fit(Path.cwd(),BINDING)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 576, in require_phase_fit
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_cleanup_refused
+
+======================================================================
+ERROR: test_memory_evidence_cannot_promote_missing_bad_arithmetic_or_other_source (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_memory_evidence_cannot_promote_missing_bad_arithmetic_or_other_source)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_fd_inventory_changed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 742, in test_memory_evidence_cannot_promote_missing_bad_arithmetic_or_other_source
+    with self.readiness_inputs():report=pg.require_phase_fit(Path.cwd(),BINDING).report
+                                        ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 576, in require_phase_fit
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_cleanup_refused
+
+======================================================================
+ERROR: test_memory_refusal_closes_captures_before_any_readiness_is_returned (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_memory_refusal_closes_captures_before_any_readiness_is_returned)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_fd_inventory_changed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 723, in test_memory_refusal_closes_captures_before_any_readiness_is_returned
+    pg.require_phase_fit(Path.cwd(),BINDING)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 576, in require_phase_fit
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_cleanup_refused
+
+======================================================================
+ERROR: test_readiness_expiry_or_foreign_owner_cannot_reuse_report (test_hosted_synthetic_postgres_runtime.PostgresPhaseRuntimeTests.test_readiness_expiry_or_foreign_owner_cannot_reuse_report)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_fd_inventory_changed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_postgres_runtime.py", line 766, in test_readiness_expiry_or_foreign_owner_cannot_reuse_report
+    with self.readiness_inputs():receipt=pg.require_phase_fit(Path.cwd(),BINDING)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 123, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 114, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_postgres_runtime.py", line 576, in require_phase_fit
+    if errors:raise ns.NamespaceCleanupError('postgres_readiness_cleanup_refused') from (failure or errors[0])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceCleanupError: postgres_readiness_cleanup_refused
+
+----------------------------------------------------------------------
+Ran 184 tests in 4.033s
+
+FAILED (errors=6)
