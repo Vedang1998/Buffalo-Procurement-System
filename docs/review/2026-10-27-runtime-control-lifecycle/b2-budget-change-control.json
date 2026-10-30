@@ -97,8 +97,15 @@
     "new_regular_bytes": 167772160,
     "other_limits": "UNCHANGED",
     "historical_evidence": "not reinterpreted; earlier records above remain source-attributed",
-    "status": "IMPLEMENTED_PENDING_FROZEN_VALIDATION_AND_CLAUDE",
+    "status": "IMPLEMENTED_FOCUSED_TESTED_PENDING_CLAUDE_TARGET_CAPTURE",
     "installation": "NOT_AUTHORIZED",
-    "activation": "DISABLED"
+    "activation": "DISABLED",
+    "candidate": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+    "evidence": "oct30-v3-native-evidence.json",
+    "complete_static_regular_bytes": 152170928,
+    "entries": 972,
+    "actual_target_capture": "REFUSED_NATIVE_INPUT_TRUST",
+    "memory": "SYNTHETIC_CODEC_ONLY_NOT_SERVICE"
   }
 }

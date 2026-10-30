@@ -10,6 +10,39 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-10-30 frozen V3/native candidate published and verified
+
+Implementation `34e8f3ad16ef31e8ecafc2d915b76f16a9571b98`, tree `5d300467117ce3e577c72c92068a13970aa1826f`; ordinary acceptance-branch push and fresh
+fetch verified, main/PR24/recovery unchanged. Existing review packet now identifies
+this exact material and `oct30-v3-native-evidence.json`. Evidence follow-up is docs-only.
+V3 changes only PG_PHASE aggregate to167,772,160B. All other approved limits, versions
+and artifact hashes remain. No application source/lockfiles/PHASE_STATUS changes.
+
+1,159/1,159 focused locally and GitHub;222scrubbed,88related and10startup passed.
+2,723/134modules discovery executes zero. Complete static bundle152,170,928B/972entries
+includes45source files and all generated costs. Synthetic same-sized codec measured
+495,792,128B conservative RSS+memfd envelope with exact descriptor cleanup. Neither
+result is actual native target capture or service memory proof. GitHub run41050805200
+refused native inputs before capture, with0accounts/privileged processes and cleanup.
+Full authoritative and fixed PG/cgroup/browser acceptance remain NOT_RUN/NON-GREEN.
+
+Dormant native child/service binding and importer cleanup are implemented/tested,
+including M1 before account creation, protected backing plus loaded mappings, exact
+parent-held view, sealed-FD transfer, and source-bound pre-READY drain. Unknown
+resource/lost creation acknowledgment stays quarantined; no risky cleanup retry.
+New delta still needs Claude review. Native installation APIs remain unconditionally
+inert and complete executable installation pin/provenance disposition stays gated.
+No source-review approval, live memory fit or containment closure is claimed.
+
+Exact next action: Claude read-only review of e5e8..34e8f3a using the existing
+packet; record actual verdict and repair its concrete findings. Then present the one
+exact native-manifest/provenance/effects installation decision, without activating
+unreviewed or unresolved inputs. Existing bounded credential-free proof needs no
+second routine owner approval once its applicable prerequisites actually pass.
+Current real host work is blocked by review/installation/native trust, not by capacity.
+The saved Start draft remains distinct from a published/fresh-restored snapshot.
+
+
 ### 2026-10-30 approved PG_PHASE_V3 and dormant native execution handoff
 
 Verified continuation base: `5b8dc5425cbb5d087c79beab4d6c2e467b29a92b`, tree

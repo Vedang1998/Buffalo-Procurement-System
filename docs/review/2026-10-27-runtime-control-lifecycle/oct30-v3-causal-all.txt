@@ -1,0 +1,23 @@
+..............................................................................EE...........................................................................................................................................................................................
+======================================================================
+ERROR: test_logical_layout_collision_refuses_without_ambient_resolution (test_hosted_synthetic_native_inputs.NativeInputTests.test_logical_layout_collision_refuses_without_ambient_resolution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 369, in test_logical_layout_collision_refuses_without_ambient_resolution
+    runtime._resolve_library('lib-unknown-owner.so')
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: _resolve_library() missing 1 required positional argument: 'roots'
+
+======================================================================
+ERROR: test_logical_soname_layout_preserves_all_authenticated_bytes (test_hosted_synthetic_native_inputs.NativeInputTests.test_logical_soname_layout_preserves_all_authenticated_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 360, in test_logical_soname_layout_preserves_all_authenticated_bytes
+    for name in row.get('elf',{}).get('needed',[]):self.assertIn(value['sonames'][name],value['rows'])
+                ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'get'
+
+----------------------------------------------------------------------
+Ran 267 tests in 5.425s
+
+FAILED (errors=2)

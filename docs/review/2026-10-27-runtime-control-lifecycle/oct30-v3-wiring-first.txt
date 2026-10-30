@@ -1,0 +1,49 @@
+.....................................................................................................................................................................................E.....EE...E.............................................
+======================================================================
+ERROR: test_collision_selection_keeps_shared_deadline_and_three_candidate_bound (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_collision_selection_keeps_shared_deadline_and_three_candidate_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_identity.py", line 50, in test_collision_selection_keeps_shared_deadline_and_three_candidate_bound
+    identity.activation_entry(['repo','push','ref','a'*40])
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_identity.py", line 499, in activation_entry
+    **({} if service_consumer is None else {"native_view_wire":service_consumer.wire}))
+             ^^^^^^^^^^^^^^^^
+NameError: name 'service_consumer' is not defined
+
+======================================================================
+ERROR: test_incomplete_scan_and_post_mutation_error_are_never_retried (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_incomplete_scan_and_post_mutation_error_are_never_retried) (error=<class 'hosted_synthetic_launcher.LauncherRefusal'>)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_identity.py", line 44, in test_incomplete_scan_and_post_mutation_error_are_never_retried
+    identity.activation_entry(['repo','push','ref','a'*40])
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_identity.py", line 499, in activation_entry
+    **({} if service_consumer is None else {"native_view_wire":service_consumer.wire}))
+             ^^^^^^^^^^^^^^^^
+NameError: name 'service_consumer' is not defined
+
+======================================================================
+ERROR: test_incomplete_scan_and_post_mutation_error_are_never_retried (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_incomplete_scan_and_post_mutation_error_are_never_retried)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_identity.py", line 45, in test_incomplete_scan_and_post_mutation_error_are_never_retried
+    self.assertIs(caught.exception,failure);self.assertEqual(run.call_count,1)
+                  ^^^^^^^^^^^^^^^^
+AttributeError: '_AssertRaisesContext' object has no attribute 'exception'
+
+======================================================================
+ERROR: test_only_definite_pre_account_collision_advances_to_next_numeric_identity (test_hosted_synthetic_identity.HostedDedicatedIdentityTests.test_only_definite_pre_account_collision_advances_to_next_numeric_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_identity.py", line 35, in test_only_definite_pre_account_collision_advances_to_next_numeric_identity
+    result=identity.activation_entry(['repo','push','ref','a'*40])
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_identity.py", line 499, in activation_entry
+    **({} if service_consumer is None else {"native_view_wire":service_consumer.wire}))
+             ^^^^^^^^^^^^^^^^
+NameError: name 'service_consumer' is not defined
+
+----------------------------------------------------------------------
+Ran 237 tests in 5.422s
+
+FAILED (errors=4)

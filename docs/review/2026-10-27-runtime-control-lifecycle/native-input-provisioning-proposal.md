@@ -1,5 +1,55 @@
 # Fixed native-input provisioning proposal
 
+## Frozen October 30 candidate and actual results
+
+Implementation `34e8f3ad16ef31e8ecafc2d915b76f16a9571b98`, tree `5d300467117ce3e577c72c92068a13970aa1826f` is ordinarily published and freshly
+fetched. The documentation/evidence follow-up has a separate Git identity.
+`oct30-v3-native-evidence.json` indexes raw logs, reproduction helpers, exact
+publication/protected-reference receipts and failures. All39new tests are registered:
+2,723tests/134modules discovered, zero executed by discovery. Actual validation:
+1,159/1,159 focused locally and GitHub run41050805200;222scrubbed components;
+88related in a removed disposable clone;10startup. Zero failures/errors/skips in
+these final groups. The complete authoritative suite was NOT_RUN; unchanged native
+Cloud pg_dump/trust failures were not replayed as a supposed full passing suite.
+
+Complete inventory-derived composition, including45projected source files and every
+generated file/identity/sentinel, is **152,170,928 regular bytes /972entries**;
+15,601,232bytes below the167,772,160 cap. Serialized wire accounting is152,487,219B.
+Diagnostic81,571,878B and PG-only80,524,643B retain their80MiB limits. This calculation
+uses exact authenticated file sizes and fixed-length identity slots: no captured
+bundle digest or execution generation is fabricated. The actual deciding capture
+still must measure, seal, adopt and clean these exact bytes.
+
+A real unprivileged synthetic codec run with152,170,928 payload bytes measured
+RSSpeak343,617,536B; traced peak304,352,975B (a subset of allocations/RSS); memfd
+allocation152,174,592B. The unchanged conservative formula yielded495,792,128B,
+within536,870,912. Descriptor inventory matched after cleanup. Two synthetic payloads
+are not the native capture pipeline; no measured cgroup usage, actual M1 target
+receipt, child256MiB fit or later service memory fit is inferred.
+
+Supported GitHub host read132files/66package claims. The native input trust gate
+returned REFUSED_NATIVE_INPUT_TRUST before capture: no accounts or privileged
+processes, cleanup verified. Fixed PostgreSQL --version, delegated containment,
+whole-service memory, worker exclusion, sentinel/release and browser gates remain
+NOT_RUN/OPEN. The candidate is deliberately NON-GREEN for integrated acceptance.
+
+**One combined Claude delta review:** use e5e8..34e8f3a, preserving the older
+d863/5e62 closures at their own scope. Review the new V3 producer/receiver policy,
+complete accounting, inherited M1 streaming repair and new deciding measurement
+receipt; exact selected artifact/provenance distinctions; SONAME/physical aliases,
+RUNPATH/actual mapped objects; pre-ACK/timeout/quarantine cleanup; every new native
+command and the dormant activation wiring. The importer constructor and activation
+APIs refuse; no live installation is authorized. Historical e5e8full prose is still
+missing; do not invent it or reuse the internal Codex findings as Claude approval.
+
+After applicable review, the ONE installation decision must cover the exact66-artifact
+manifest, provenance/freshness/trust-root disposition, private/run-owned effects,
+measurement/service view and bounded cleanup. Only then may the existing bounded
+credential-free proof proceed under its separate gates. No duplicate approval is
+needed for already-authorized in-scope repairs; no installation/activation is inferred
+from this cap decision. Railway, production and real purchasing remain unauthorized.
+
+
 ## October 30 approved V3 and dormant native handoff candidate
 
 Owner instruction explicitly authorizes PG_PHASE-only167,772,160 regular bytes.

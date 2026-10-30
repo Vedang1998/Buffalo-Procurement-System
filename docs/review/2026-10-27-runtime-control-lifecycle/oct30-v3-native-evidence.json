@@ -1,0 +1,312 @@
+{
+  "candidate": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+  "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+  "continuation_base": "5b8dc5425cbb5d087c79beab4d6c2e467b29a92b",
+  "combined_delta_baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+  "classification": "WRITER_MACHINE_EVIDENCE_NOT_INDEPENDENT_CLAUDE_REVIEW",
+  "policy": {
+    "current": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V3",
+    "change_control": "BUFFALO_PG_PHASE_FIXED_NATIVE_CAPACITY_2026_10_30",
+    "regular_bytes": 167772160,
+    "owner_authorized": "2026-10-30",
+    "legacy_V1_V2": "HISTORICAL_MEANINGS_PRESERVED_CURRENT_RECEIVERS_REFUSE"
+  },
+  "validation": {
+    "local_focused": {
+      "discovered": 1159,
+      "executed": 1159,
+      "passed": 1159,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "github_focused": {
+      "discovered": 1159,
+      "error_events": 0,
+      "executed": 1159,
+      "expected_failures": 0,
+      "failure_events": 0,
+      "observations": [],
+      "omitted_observations": 0,
+      "passed_methods": 1159,
+      "scope": "DIAGNOSTIC_TESTS_ONLY_NO_LIVE_PROOF",
+      "skipped": 0,
+      "unexpected_successes": 0
+    },
+    "github_url": "https://github.com/Vedang1998/Buffalo-Procurement-System/actions/runs/41050805200",
+    "scrubbed_components": {
+      "executed": 222,
+      "passed": 222
+    },
+    "related_in_disposable_clone": {
+      "executed": 88,
+      "passed": 88,
+      "clone_removed": true
+    },
+    "startup": {
+      "executed": 10,
+      "passed": 10
+    },
+    "discovery": {
+      "registered": 2723,
+      "modules": 134,
+      "executed": 0,
+      "previous_registered_population": 2684,
+      "new_tests": 39,
+      "floors_lowered": false
+    },
+    "full_authoritative": "NOT_RUN_UNCHANGED_NATIVE_INPUT_TRUST_BLOCKER_NOT_REPEATED",
+    "initial_failed_logs": "Intermediate dirty-worktree evidence, not executions at frozen commit; one named-refusal call and test fixtures repaired before source freeze"
+  },
+  "static_complete_bundle": {
+    "source_commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "source_tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+    "classification": "EXACT_INVENTORY_DERIVED_FILE_BYTES_AND_CANONICAL_IDENTITY_LENGTH_NOT_CAPTURE_OR_MEMORY_PROOF",
+    "source_projection_contains_required_prospective_inventory": true,
+    "native_regular_bytes": 149540145,
+    "layout_renames": 59,
+    "source_projection_files": 45,
+    "source_projection_bytes": 2498654,
+    "fixed_generated_bytes": 287,
+    "results": {
+      "diagnostic": {
+        "regular_files": 729,
+        "entries_with_parents": 792,
+        "regular_bytes": 81571878,
+        "identity_bytes": 104573,
+        "sentinel_bytes": 341,
+        "canonical_codec_manifest_bytes": 262753,
+        "codec_header_bytes": 8,
+        "sealed_wire_bytes": 81834639,
+        "generic_codec_payload_limit_unchanged": 536870912,
+        "generic_codec_manifest_limit_unchanged": 4194304,
+        "cap_bytes": 83886080,
+        "headroom_bytes": 2314202,
+        "within_bytes_and_entries": true
+      },
+      "postgres": {
+        "regular_files": 165,
+        "entries_with_parents": 196,
+        "regular_bytes": 80524643,
+        "identity_bytes": 27420,
+        "sentinel_bytes": 341,
+        "canonical_codec_manifest_bytes": 58001,
+        "codec_header_bytes": 8,
+        "sealed_wire_bytes": 80582652,
+        "generic_codec_payload_limit_unchanged": 536870912,
+        "generic_codec_manifest_limit_unchanged": 4194304,
+        "cap_bytes": 83886080,
+        "headroom_bytes": 3361437,
+        "within_bytes_and_entries": true
+      },
+      "phase": {
+        "regular_files": 883,
+        "entries_with_parents": 972,
+        "regular_bytes": 152170928,
+        "identity_bytes": 131501,
+        "sentinel_bytes": 341,
+        "canonical_codec_manifest_bytes": 316283,
+        "codec_header_bytes": 8,
+        "sealed_wire_bytes": 152487219,
+        "generic_codec_payload_limit_unchanged": 536870912,
+        "generic_codec_manifest_limit_unchanged": 4194304,
+        "cap_bytes": 167772160,
+        "headroom_bytes": 15601232,
+        "within_bytes_and_entries": true
+      }
+    },
+    "identity_placeholder_scope": "Only fixed-length generation/input-bundle digest slots. No bundle digest/generation/execution is claimed. Canonical JSON length is invariant over valid hexadecimal values.",
+    "source_filter_correction": "Required proposed inventory included explicitly; if false above this is corrected-design accounting, not actual old capture output.",
+    "limits_changed": false,
+    "actual_capture": "NOT_RUN",
+    "memory_readiness": "NOT_PROVEN",
+    "execution_authority": false
+  },
+  "synthetic_codec_memory": {
+    "bundle_bytes": 152171523,
+    "bundle_sha256": "da3c291050004ea14e8621167a2b19d61737e9f0d08a69292fbea6f41faa9933",
+    "cleanup": "FD_INVENTORY_MATCH",
+    "manifest_sha256": "1b51704483e5329cd06a3599c3d83c8cb7cd3a8c4109d35c726b8ba0291b2727",
+    "memfd_allocated_bytes": 152174592,
+    "memory_envelope": {
+      "child_peak_rss_bytes": 0,
+      "conservative_sum_bytes": 495792128,
+      "maximum_owned_memfd_allocation_bytes": 152174592,
+      "policy": "BUFFALO_PG_PREFLIGHT_MEMORY_V1",
+      "process_peak_rss_bytes": 343617536,
+      "result": "WITHIN_COMPONENT_ENVELOPE",
+      "scope": "PREFLIGHT_COMPONENT_NOT_SERVICE_ENFORCEMENT_OR_CGROUP_USAGE",
+      "service_limit_bytes": 536870912
+    },
+    "python_executable": "/usr/bin/python3.13",
+    "python_version": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+    "regular_bytes": 152170928,
+    "same_formula_rss_plus_memfd": 495792128,
+    "scope": "SYNTHETIC_CODEC_ONLY_NOT_ACTUAL_PG_OR_SERVICE",
+    "seconds": 0.883001,
+    "source_commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "source_tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+    "stages": [
+      {
+        "current": 152172180,
+        "name": "original_entries",
+        "peak": 152172612,
+        "rss_peak": 191311872
+      },
+      {
+        "current": 152174856,
+        "name": "seal_and_readback",
+        "peak": 154280084,
+        "rss_peak": 191442944
+      },
+      {
+        "current": 304347284,
+        "name": "retained_validation_result",
+        "peak": 304352975,
+        "rss_peak": 343617536
+      }
+    ],
+    "within_512m_component_envelope": true
+  },
+  "supported_target": {
+    "capture_fit": "REFUSED_NATIVE_INPUT_TRUST",
+    "actual_composed_bytes": "NOT_MEASURED",
+    "actual_phase_memory": "NOT_PROVEN",
+    "fixed_postgresql_execution": "NOT_RUN",
+    "account_mutations": 0,
+    "privileged_processes_started": 0,
+    "owned_descriptor_cleanup": true,
+    "full_service_memory": "NOT_PROVEN"
+  },
+  "native_contract": {
+    "python": "3.13.5 release3.13.5-15601068749",
+    "postgresql_server_client_libpq": "16.15-0ubuntu0.24.04.1",
+    "artifact_records": 66,
+    "native_files": 831,
+    "native_bytes": 149540145,
+    "elf_objects": 170,
+    "logical_soname_renames": 59,
+    "artifact_manifest_sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+    "artifacts_changed": false,
+    "publisher_authentication": "Python publisher HTTPS/GitHub digest; Ubuntu signed InRelease/index/package/member chain; not a new local-hash provenance claim",
+    "unresolved": "Installation-time release freshness/trust-root disposition, Python signed build attestation NOT_ESTABLISHED, final complete executable installation pin remains gated"
+  },
+  "status_dimensions": {
+    "IMPLEMENTED": "V3, complete projection source filter, fixed logical/physical aliases, sealed capsule, loaded-mapping checks, deciding native M1 path, source-bound measurement/service observer, importer/cleanup",
+    "TESTED": "focused, scrubbed, related, startup, real unprivileged capsule exec, synthetic codec; native commands/manager lifecycle simulated",
+    "REVIEWED": "NO_NEW_CLAUDE_VERDICT; INTERNAL_CODEX_TARGETED_PATH_INVESTIGATIONS_ONLY",
+    "TARGET_MEASURED": "read-only trust refusal only; no actual complete capture or owned-service proof",
+    "ACTIVATED": false
+  },
+  "internal_codex": {
+    "scope": "targeted new capacity, native handoff and installer cleanup path investigation; read-only subagents; no external-review attribution",
+    "result": "Concrete defects repaired and regressed; no writer VERIFIED_CLOSED promotion"
+  },
+  "remaining_gates": [
+    "combined Claude delta and activation-wiring review",
+    "complete provenance/installation-pin disposition and ONE native installation decision",
+    "same-generation supported target actual capture+M1 memory/containment/cleanup proof",
+    "worker exclusion/runtime sealing/sentinel/release",
+    "full authoritative/startup validation and canonical browser BackupV2/APPLY/DRAFT/packet/restart/restore"
+  ],
+  "authority": {
+    "native_installation": "NOT_AUTHORIZED",
+    "privileged_activation": "DISABLED",
+    "credential_release": "WITHHELD",
+    "railway": "UNPROVEN_NO_CHANGE",
+    "purchasing": "NOT_AUTHORIZED",
+    "main_PR24": "UNCHANGED"
+  },
+  "business_readiness": "unchanged separate current data, mapped-offer/rollover and purchasing authority blockers; no repeated audit",
+  "source_and_lockfiles": "Application source, dependency pins, lockfiles and PHASE_STATUS unchanged; acceptance tooling/tests/workflow/docs changed",
+  "artifacts": {
+    "oct30-v3-34e8f3a-focused.txt": {
+      "bytes": 212056,
+      "sha256": "a5daae20d2c2e344b5d07b168f572f9bd2cf1fd95a4c16da3604fa3d5f75ed6e"
+    },
+    "oct30-v3-34e8f3a-startup.txt": {
+      "bytes": 2041,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "oct30-v3-34e8f3a-isolated.txt": {
+      "bytes": 42276,
+      "sha256": "3af8d1d5cba67a7022a811a3e0be6d4f28f202ad747a04c6d62d936d2eb18171"
+    },
+    "oct30-v3-34e8f3a-related.txt": {
+      "bytes": 17276,
+      "sha256": "256e15b40b804706c951befb7c2958dd41d4b21b575d33a8d2ff8a9329cb1fc4"
+    },
+    "oct30-v3-34e8f3a-inert.txt": {
+      "bytes": 95,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "oct30-v3-34e8f3a-discovery.txt": {
+      "bytes": 336,
+      "sha256": "1539d179ebf12694ecf315830acc95cc24280c0b584d5dcd08471b3823522abc"
+    },
+    "oct30-v3-34e8f3a-other-validation.json": {
+      "bytes": 835,
+      "sha256": "92c806be032b666efd35c0e86399865c23aeaa97bdcce6fbb32f8bfd900c3d83"
+    },
+    "oct30-v3-34e8f3a-publication.json": {
+      "bytes": 992,
+      "sha256": "027e995334781838d1d9f42eafa6d9b75584033c5605be92998c465b4860ba0e"
+    },
+    "oct30-v3-34e8f3a-complete-static-accounting.json": {
+      "bytes": 2536,
+      "sha256": "d813592977db455a0d82ce9bdc39fb72b077bc2cbc7e101a87dc96a953a27991"
+    },
+    "oct30-v3-34e8f3a-synthetic-memory.json": {
+      "bytes": 1360,
+      "sha256": "b92e793e64062c2a8c286aff2c53fa6e52180c0a7816039d6d9c3838ad98da7a"
+    },
+    "oct30-v3-34e8f3a-ci-later.json": {
+      "bytes": 53028,
+      "sha256": "4ca6e4f9369bae83bc3f14b6a9a78ddf254604522cad69bb12bf5cac2d176fdc"
+    },
+    "oct30-v3-34e8f3a-native-target.json": {
+      "bytes": 78455,
+      "sha256": "48596ab7998ac6594480326359f7229ff986a653963876b8f95569a49e92b791"
+    },
+    "oct30-v3-34e8f3a-target-summary.json": {
+      "bytes": 26243,
+      "sha256": "5c66da9c2053e4f4d546ae6a953daa9c6247c80d0985f66b9e47986fc985a773"
+    },
+    "oct30-v3-working-focused.txt": {
+      "bytes": 213104,
+      "sha256": "181c69ad7ad5e110b5665c71e7ffa2adfb76cc1e2a148888b7533fd12ca0e4e1"
+    },
+    "oct30-v3-wiring-first.txt": {
+      "bytes": 4046,
+      "sha256": "a633171b7c5483b7c512d609dfd468764ddf8135edf1c381fb6870cba3fe0152"
+    },
+    "oct30-v3-native-causal-second.txt": {
+      "bytes": 11093,
+      "sha256": "599c04ed7dd42c8da62babc20d0affe50573f6b53e71b48597cca9add6e52ff0"
+    },
+    "oct30-v3-causal-all.txt": {
+      "bytes": 1858,
+      "sha256": "36517b749181c1245e6d3f716d1258cb496dc43a6f8b1b63d5cdbe701aa4ed29"
+    },
+    "oct30-v3-final-causal.txt": {
+      "bytes": 179,
+      "sha256": "4ff8cdde835a953df6d5fb7f04b792fbd08a55c7960fd82d5e3700906fe61fbd"
+    },
+    "oct30-v3-validate-frozen.py": {
+      "bytes": 3917,
+      "sha256": "ea77a38c20434ff78938fe497dd080e063d72a65bbb986b56360794b16060b6f"
+    },
+    "oct30-v3-codec-complete-sized.py": {
+      "bytes": 2198,
+      "sha256": "24f597288e3356c3841e1f01a4e9e04dd1e3bfc60aac113c9cd6005d97138487"
+    },
+    "oct30-v3-decode-target.py": {
+      "bytes": 1568,
+      "sha256": "a2e0971ff700b22c693372176205bc8a7b503396bb70e86c85329b9fe69a7ab5"
+    },
+    "oct30-v3-full-static-accounting.py": {
+      "bytes": 10097,
+      "sha256": "5291df6bc6b49c01d3afd85150364226ef0d95980b5c8d703876906802f5be3d"
+    }
+  }
+}

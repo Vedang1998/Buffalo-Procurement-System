@@ -714,8 +714,8 @@
     "status": "REPAIRED_PENDING_REVIEW",
     "capacity": "PG_PHASE_V3_167772160_OWNER_APPROVED",
     "M1": "same-process and new exact-view measurement receipt before AccountLease.create; actual target proof still required",
-    "native_transport": "IMPLEMENTED_DORMANT_PENDING_FROZEN_VALIDATION",
-    "installer_cleanup": "IMPLEMENTED_DORMANT_PENDING_FROZEN_VALIDATION",
+    "native_transport": "IMPLEMENTED_DORMANT_FOCUSED_TESTED_REVIEW_PENDING",
+    "installer_cleanup": "IMPLEMENTED_DORMANT_FOCUSED_TESTED_REVIEW_PENDING",
     "new_delta_review": "PENDING; INTERNAL_CODEX_ONLY is not Claude",
     "historical_closures": "unchanged at their exact reviewed commits",
     "remaining": [
@@ -725,6 +725,17 @@
       "same-generation target memory/containment/lifecycle proof",
       "worker-control exclusion/sentinel/release",
       "full authoritative and browser/restart/restore acceptance"
-    ]
+    ],
+    "candidate": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+    "evidence": "oct30-v3-native-evidence.json",
+    "target_capture": "REFUSED_NATIVE_INPUT_TRUST"
+  },
+  "prepared_combined_oct30_review": {
+    "candidate": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+    "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+    "status": "PREPARED_NOT_CALLED_NO_CLAUDE_VERDICT",
+    "historical_frozen_target_preserved": true
   }
 }

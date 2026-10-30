@@ -1,0 +1,104 @@
+.........EFFF..E.F...............................................................................
+======================================================================
+ERROR: test_native_route_memory_refusal_precedes_account_creation (test_hosted_synthetic_native_measurement.NativeMeasurementTests.test_native_route_memory_refusal_precedes_account_creation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_measurement.py", line 126, in test_native_route_memory_refusal_precedes_account_creation
+    identity.run_provisioned_candidate(ID,source='/fixture',python=native.PYTHON,repository='repo',event='push',ref='ref',commit=BINDING.commit,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        diagnostic='postgres-version',ownership_deadline=c.request.deadline,native_measurement=c)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_identity.py", line 461, in run_provisioned_candidate
+    return execute()
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 164, in guarded
+    raise error
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_source.py", line 155, in guarded
+    result = function(*args, **kwargs)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_identity.py", line 396, in execute
+    boot._require(native_measurement.binding==binding and native_measurement.request.deadline==ownership_deadline
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and native_measurement.role=='measurement'
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        and (native_measurement.uid,native_measurement.gid)==(identity.operator_uid,identity.operator_gid),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        'native_measurement_source_or_deadline_refused')
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_bootstrap.py", line 169, in _require
+    raise BootstrapRefusal(code)
+hosted_synthetic_launcher.LauncherRefusal: native_measurement_source_or_deadline_refused
+
+======================================================================
+ERROR: test_service_plan_keeps_native_drop_bounds_and_exact_view (test_hosted_synthetic_native_measurement.NativeMeasurementTests.test_service_plan_keeps_native_drop_bounds_and_exact_view)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_measurement.py", line 155, in test_service_plan_keeps_native_drop_bounds_and_exact_view
+    result=plan(python=native.PYTHON,diagnostic='postgres-version',native_view_wire=c.wire)
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_bootstrap.py", line 38, in plan
+    return boot.plan_native_bootstrap(**values)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_bootstrap.py", line 232, in plan_native_bootstrap
+    view_properties=native.view_properties(request,HostedSourceBinding(commit,value['tree'],()))
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 593, in view_properties
+    extra=tuple('BindReadOnlyPaths='+request.root+'/view'+logical+':'+path for path,logical in sorted(view_aliases().items()) if not path.startswith(('/opt/','/usr/share/')))
+                                                                                                      ~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 145, in view_aliases
+    return {**{p:p for p in layout['rows']},**layout['renamed_logical_files']}
+                                              ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'renamed_logical_files'
+
+======================================================================
+FAIL: test_native_route_missing_or_boolean_readiness_never_creates_account (test_hosted_synthetic_native_measurement.NativeMeasurementTests.test_native_route_missing_or_boolean_readiness_never_creates_account) (result=None)
+----------------------------------------------------------------------
+hosted_synthetic_launcher.LauncherRefusal: native_measurement_source_or_deadline_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_measurement.py", line 133, in test_native_route_missing_or_boolean_readiness_never_creates_account
+    with self.subTest(result=result),patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=BINDING),patch.object(measurement,'measure',return_value=result),patch.object(identity.AccountLease,'create') as create,self.assertRaisesRegex(boot.BootstrapRefusal,'memory_readiness_required'):
+                                                                                                                                                                                                                                                                                            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "memory_readiness_required" does not match "native_measurement_source_or_deadline_refused"
+
+======================================================================
+FAIL: test_native_route_missing_or_boolean_readiness_never_creates_account (test_hosted_synthetic_native_measurement.NativeMeasurementTests.test_native_route_missing_or_boolean_readiness_never_creates_account) (result=True)
+----------------------------------------------------------------------
+hosted_synthetic_launcher.LauncherRefusal: native_measurement_source_or_deadline_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_measurement.py", line 133, in test_native_route_missing_or_boolean_readiness_never_creates_account
+    with self.subTest(result=result),patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=BINDING),patch.object(measurement,'measure',return_value=result),patch.object(identity.AccountLease,'create') as create,self.assertRaisesRegex(boot.BootstrapRefusal,'memory_readiness_required'):
+                                                                                                                                                                                                                                                                                            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "memory_readiness_required" does not match "native_measurement_source_or_deadline_refused"
+
+======================================================================
+FAIL: test_native_route_missing_or_boolean_readiness_never_creates_account (test_hosted_synthetic_native_measurement.NativeMeasurementTests.test_native_route_missing_or_boolean_readiness_never_creates_account) (result={'capacity': 'FIT'})
+----------------------------------------------------------------------
+hosted_synthetic_launcher.LauncherRefusal: native_measurement_source_or_deadline_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_measurement.py", line 133, in test_native_route_missing_or_boolean_readiness_never_creates_account
+    with self.subTest(result=result),patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=BINDING),patch.object(measurement,'measure',return_value=result),patch.object(identity.AccountLease,'create') as create,self.assertRaisesRegex(boot.BootstrapRefusal,'memory_readiness_required'):
+                                                                                                                                                                                                                                                                                            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "memory_readiness_required" does not match "native_measurement_source_or_deadline_refused"
+
+======================================================================
+FAIL: test_valid_owned_readiness_reaches_next_gate_and_is_verified_first (test_hosted_synthetic_native_measurement.NativeMeasurementTests.test_valid_owned_readiness_reaches_next_gate_and_is_verified_first)
+----------------------------------------------------------------------
+hosted_synthetic_launcher.LauncherRefusal: native_measurement_source_or_deadline_refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_measurement.py", line 140, in test_valid_owned_readiness_reaches_next_gate_and_is_verified_first
+    with patch('hosted_synthetic_capability._require_clean_supervisor'),patch('hosted_synthetic_source.bind_hosted_source',return_value=BINDING),patch.object(measurement,'measure',return_value=receipt),patch.object(receipt,'verify',side_effect=lambda *a:seen.append('verify')),patch.object(identity.AccountLease,'create',side_effect=lambda *a,**k:(_ for _ in ()).throw(boot.BootstrapRefusal('next_account_gate'))) as create,self.assertRaisesRegex(boot.BootstrapRefusal,'next_account_gate'):
+                                                                                                                                                                                                                                                                                                                                                                                                                                        ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "next_account_gate" does not match "native_measurement_source_or_deadline_refused"
+
+----------------------------------------------------------------------
+Ran 95 tests in 0.648s
+
+FAILED (failures=4, errors=2)
