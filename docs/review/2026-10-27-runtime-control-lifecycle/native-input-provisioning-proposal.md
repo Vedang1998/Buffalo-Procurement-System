@@ -1,5 +1,46 @@
 # Fixed native-input provisioning proposal
 
+## October 30 approved V3 and dormant native handoff candidate
+
+Owner instruction explicitly authorizes PG_PHASE-only167,772,160 regular bytes.
+Implemented policy `BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V3`, change control
+`BUFFALO_PG_PHASE_FIXED_NATIVE_CAPACITY_2026_10_30`. V1/V2 evidence retains its old
+meaning; current receivers refuse historical policy labels. Diagnostic/application/
+PG-only and individual files remain80MiB, staging128MiB,3,000entries, child256MiB/
+2processes, enclosing service/slice512MiB/64tasks and namespace20s remain unchanged.
+
+The candidate adds the missing proposed-inventory JSON to projected source; exact
+frozen accounting must include both new modules, every source/generated entry,
+identity, sentinel and directories. Native831files/149,540,145B alone is only a
+lower bound. No artifact hash, package version, application source or lock changed.
+Fifty-nine explicit SONAME mappings and physical-view aliases preserve authenticated
+archive members and bytes. Protected and sealed execution resolve only this graph;
+actual mapped files are checked by device/inode, not version strings or path hashes.
+
+Dormant implementation now includes an ownership-bound native importer/cleanup
+state machine and a fixed pre-account measurement child with external PID/service/
+view observations, same-view sealed-FD launcher handoff, exact native inventory and
+M1 receipt before AccountLease.create. Capacity alone cannot create an account.
+Typed consumer reservations precede launch; unknown/partial/lost-ACK cleanup stays
+quarantined. Source-bound pre-READY refusal polls exact empty owned resources;
+unknown refusal never grants drain. Only existing5s cleanup grace is available.
+
+Real importer constructor and activation APIs still refuse unconditionally. The
+partial executable manifest still cannot satisfy require_complete_inventory();
+provenance/freshness/trust-root disposition and the single installation decision
+remain unresolved. No sudo, account, mount, service, PostgreSQL or credential-bearing
+execution occurred in this implementation session. Source review and target live
+measurements remain required; these components do not establish runtime sealing,
+worker exclusion, full cleanup, browser or integrated purchasing acceptance.
+
+Current causal validation is in progress; the follow-up evidence will identify the
+exact frozen commit/tree and retain initial test failures. Latest supplied external
+review attribution remains in the existing records. This development work and
+read-only Codex path investigations are INTERNAL CODEX work only. Preserve the
+frozen e5e8/a04ef review scope and all historical closures; request one combined
+material delta review, never inherit old approval for this code.
+
+
 ## Current successor status — October 29 memory repair
 
 **Dormant implementation/test authority is approved. Native installation is not.**

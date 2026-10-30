@@ -87,5 +87,18 @@
     "owned_descriptors_closed": true,
     "scope": "scaled codec component, not actual combined phase or service memory"
   },
-  "required_next": "One combined Claude delta review since d863, and separately scoped provenance-verified native runtime provisioning decision. Current host must not be retried unchanged or activated."
+  "required_next": "One combined Claude delta review since d863, and separately scoped provenance-verified native runtime provisioning decision. Current host must not be retried unchanged or activated.",
+  "current_successor": {
+    "identity": "BUFFALO_PG_PHASE_FIXED_NATIVE_CAPACITY_2026_10_30",
+    "owner_approval": "2026-10-30 explicit PG_PHASE-only160MiB instruction",
+    "previous_policy": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2",
+    "current_policy": "BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V3",
+    "old_regular_bytes": 134217728,
+    "new_regular_bytes": 167772160,
+    "other_limits": "UNCHANGED",
+    "historical_evidence": "not reinterpreted; earlier records above remain source-attributed",
+    "status": "IMPLEMENTED_PENDING_FROZEN_VALIDATION_AND_CLAUDE",
+    "installation": "NOT_AUTHORIZED",
+    "activation": "DISABLED"
+  }
 }

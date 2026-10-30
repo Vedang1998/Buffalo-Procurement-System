@@ -329,7 +329,7 @@ class ExternalObserver:
     def bind_ready(self,frame):
         """Same live generation, before sending work ACK; no child PASS trusted."""
         boot._require(self.creation_acknowledged and not self.work_acknowledged and self.generation is None
-                      and type(frame) is dict and set(frame)=={'generation','commit','tree','unit','actors','generation_identity'}
+                      and type(frame) is dict and set(frame)==({'generation','commit','tree','unit','actors','generation_identity'}|({'native_view_sha256'} if getattr(self,'native_consumer',None) is not None else set()))
                       and frame['unit']==self.unit and frame['commit']==self.binding.commit and frame['tree']==self.binding.tree
                       and re.fullmatch('[0-9a-f]{64}',frame['generation'])
                       and type(frame['actors']) is dict and set(frame['actors'])==set(_ROLES))
@@ -358,6 +358,12 @@ class ExternalObserver:
                       and records['worker']['state']=='T'
                       and statuses['init']['nspid']==[records['init']['pid'],1]
                       and statuses['worker']['nspid']==[records['worker']['pid'],2])
+        consumer=getattr(self,'native_consumer',None)
+        if consumer is not None:
+            from hosted_synthetic_native_measurement import observe_process_view
+            boot._require(frame['native_view_sha256']==consumer.digest)
+            for role in ('launcher','supervisor'):
+                observe_process_view(consumer,records[role]['pid'],records[role]['start'])
         self.sample()
         self.account.service_creation_acknowledged=True
         self.account.journal.record('external_generation_bound',{'generation':self.generation,
@@ -512,6 +518,10 @@ def await_external_observer(*,unit,generation,binding,lease,guardian,guardian_st
             'worker':{'pid':outer['worker_pid'],'start':outer['worker_start']}}
     frame={'unit':unit,'generation':generation,'commit':binding.commit,'tree':binding.tree,
            'actors':actors,'generation_identity':list(lease.child.identity)}
+    import hosted_synthetic_native_inputs as native
+    request=native.active_view()
+    if request is not None:
+        frame['native_view_sha256']=__import__('hashlib').sha256(native.view_wire(request,binding)).hexdigest()
     raw=_PREFIX+json.dumps(frame,sort_keys=True,separators=(',',':')).encode()+b'\n'
     boot._require(len(raw)<=4096)
     with selectors.DefaultSelector() as ready:

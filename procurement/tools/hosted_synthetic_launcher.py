@@ -1,5 +1,6 @@
 """Post-native-drop launcher; repository code is never a root bootstrap."""
 import os
+import json
 import re
 import stat
 from pathlib import Path
@@ -97,25 +98,45 @@ def main(arguments=None):
     if os.getuid() == 0 or os.geteuid() == 0:
         return 78
     args = list(sys.argv[1:] if arguments is None else arguments)
-    if len(args) != 10 or args[4] not in ('--native-bootstrap','--native-bootstrap-postgres-version'):
+    if len(args) not in (10,12) or (len(args)==12 and args[10]!='--native-view-v1') or args[4] not in ('--native-bootstrap','--native-bootstrap-postgres-version'):
         return 78
     try:
-        if any(not value.isascii() or not value.isdecimal() or value.startswith('0') or len(value)>20 for value in args[6:]):
+        if any(not value.isascii() or not value.isdecimal() or value.startswith('0') or len(value)>20 for value in args[6:10]):
             return 78
         inspect_postdrop_identity(uid=int(args[6]), gid=int(args[7]), unit=args[5],
                                  initial_user_namespace=(int(args[8]), int(args[9])))
         _require(stat.S_ISFIFO(os.fstat(0).st_mode),'bootstrap_observer_channel_refused')
     except (LauncherRefusal, OSError, ValueError):
         return 78
+    capsule=None
     try:
+        options={}
+        if len(args)==12:
+            _require(args[4]=='--native-bootstrap-postgres-version')
+            sys.path.insert(0,str(Path(__file__).resolve().parent))
+            import hosted_synthetic_native_inputs as native
+            from hosted_synthetic_source import bind_hosted_source
+            binding=bind_hosted_source(Path(__file__).resolve().parents[2],repository=args[0],event=args[1],ref=args[2],sha=args[3])
+            request=native.view_from_wire(args[11].encode('ascii'),binding)
+            capsule=native.seal_view_request(request,binding)
+            packet={k:getattr(capsule,k) for k in ('descriptor','target','device','inode','size','sha256','manifest_sha256','entries','regular_bytes','execution_authority')}
+            args=args[:10]+['--native-view-capsule-v1',native._canonical(packet).decode()]
+            options['pass_fds']=(capsule.descriptor,)
         return subprocess.run([sys.executable, '-I', '-S', '-B',
                                str(Path(__file__).with_name('hosted_synthetic_capability.py')), *args],
                               close_fds=True, env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'},
-                              stdin=0, timeout=110).returncode
+                              stdin=0, timeout=110, **options).returncode
     except subprocess.TimeoutExpired:
         # systemd's exact owned control group and stop bound cover descendants.
         # Timeout is never a successful cleanup or capability result.
         return 124
+    except Exception:
+        return 78
+    finally:
+        if capsule is not None:
+            import hosted_synthetic_namespace as ns
+            if not ns.backend._close_browser_runtime_bundle_descriptor(capsule.descriptor,capsule.target,(capsule.device,capsule.inode)):
+                raise LauncherRefusal('native_view_capsule_cleanup_refused')
 
 
 if __name__ == '__main__':

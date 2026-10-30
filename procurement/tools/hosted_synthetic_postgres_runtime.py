@@ -238,8 +238,8 @@ def receive_postgres(packet):
 def capture_postgres_phase(generation,root,binding):
     """Fixed CPython supervisor + native PG closure, never a payload grant.
 
-    A PG-only root cannot reexec its Python guardian. V2 composes the existing
-    authenticated inputs under the approved phase-only128MiB cap. Individual
+    A PG-only root cannot reexec its Python guardian. V3 composes the existing
+    authenticated inputs under the approved phase-only160MiB cap. Individual
     captures remain80MiB; close their owned memfds before sealing the union.
     """
     result=None
@@ -527,7 +527,7 @@ def _fresh_generation():return hashlib.sha256(os.urandom(32)).hexdigest()
 
 
 @source._resource_operation
-def require_phase_fit(root,binding, *, deadline=None):
+def require_phase_fit(root,binding, *, deadline=None, generation=None):
     """Actual pre-account capacity AND memory decision; no supplied result accepted.
 
     One capture per input, ownership-bound closure before return on every path.
@@ -540,7 +540,8 @@ def require_phase_fit(root,binding, *, deadline=None):
                 and not tracemalloc.is_tracing(),'postgres_readiness_precondition_refused')
     with source.source_deadline(deadline):_source_identity(root,binding)
     before_fds=_fd_inventory()
-    generation=_fresh_generation()
+    generation=_fresh_generation() if generation is None else generation
+    _ready_require(type(generation) is str and re.fullmatch('[0-9a-f]{64}',generation),'postgres_readiness_generation_refused')
     diagnostic=postgres=phase=received=None;descriptor=None;prepared=None
     failure=None;report=None;stages=[];native=None;interpreter=None
     tracemalloc.start()
@@ -619,7 +620,7 @@ def _phase_inventory(value):
         and entries['/usr/lib/locale/C.utf8/'+name].mode==0o444 for name in _LOCALE))
     ns._require(value.executable not in EXECUTABLES)
     expected_source={runtime.PROJECTED_ROOT+'/'+p:digest for p,digest in metadata['native_capture']['source_files'].items()
-                     if p.endswith('.py') or p in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json')}
+                     if p.endswith('.py') or p in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json','procurement/tools/hosted_native_proposed_inventory.json')}
     ns._require(expected_source==value.source_files)
     for path in (value.executable,*EXECUTABLES):
         ns._require(path in value.native_files and entries[path].mode==0o555

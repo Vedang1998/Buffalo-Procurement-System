@@ -197,7 +197,7 @@ def _report(binding=None, observation=None, *, reason="INCOMPLETE_PREFLIGHT", ho
     }
 
 
-def main(arguments=None) -> int:
+def _main(arguments=None, *, native_wire=None, view_stack=None) -> int:
     args = list(sys.argv[1:] if arguments is None else arguments)
     binding = None
     host = delegation = None
@@ -237,6 +237,10 @@ def main(arguments=None) -> int:
         binding = bind_hosted_source(
             root, repository=args[0], event=args[1], ref=args[2], sha=args[3],
         )
+        if native_wire is not None:
+            import hosted_synthetic_native_inputs as native
+            request=native.view_from_wire(native_wire,binding)
+            view_stack.enter_context(native.protected_view(request,binding))
         # Import only after trusted workflow metadata and source binding.
         from hosted_synthetic_namespace import NamespaceCleanupError, NamespaceProofError, observe_private_proc
         from hosted_synthetic_host import observe_host_prerequisites, observe_supervisor_identity
@@ -300,6 +304,24 @@ def main(arguments=None) -> int:
     result['postdrop_access'] = access
     if namespace_prerequisite is not None:result['namespace_prerequisite']=namespace_prerequisite
     return _emit(result)
+
+
+def main(arguments=None) -> int:
+    from contextlib import ExitStack
+    args=list(sys.argv[1:] if arguments is None else arguments)
+    try:
+        wire=None
+        if len(args)==12:
+            if args[10]!='--native-view-capsule-v1' or args[4]!='--native-bootstrap-postgres-version':
+                raise HostedDiagnosticError('invocation_refused')
+            from hosted_synthetic_launcher import inspect_host_identity
+            inspect_host_identity()  # Before descriptor handling; old gate follows.
+            import hosted_synthetic_native_inputs as native
+            if len(args[11])>4096:raise HostedDiagnosticError('invocation_refused')
+            wire=native.consume_view_capsule(json.loads(args[11]));args=args[:10]
+        with ExitStack() as stack:return _main(args,native_wire=wire,view_stack=stack)
+    except (Exception,KeyboardInterrupt):
+        return _emit(_report(reason='NATIVE_VIEW_OR_CLEANUP_REFUSED'))
 
 
 def _emit(result):

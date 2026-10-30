@@ -358,27 +358,28 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
         with self.assertRaises(OSError):os.fstat(fd)
 
     def test_revision_preserves_exact_unrelated_bounds(self):
-        self.assertEqual(runtime.POSTGRES_PHASE_POLICY,'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2')
-        self.assertEqual(runtime.POSTGRES_PHASE_MAX_BYTES,134217728)
+        self.assertEqual(runtime.POSTGRES_PHASE_POLICY,'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V3')
+        self.assertEqual(runtime.POSTGRES_PHASE_MAX_BYTES,167772160)
         self.assertEqual(runtime.MAX_BYTES,83886080);self.assertEqual(runtime.MAX_ENTRIES,3000)
         self.assertEqual(ns.backend._BROWSER_RUNTIME_BUNDLE_BYTES_LIMIT,536870912)
         value=self.compose();identity=json.loads(next(e.content for e in runtime._entries(value) if e.path==runtime._IDENTITY_PATH))
-        self.assertEqual(identity['capacity_policy'],{'change_control':'BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29','regular_bytes':134217728,'per_file_bytes':83886080,'entries':3000})
-        with self.assertRaises(ns.NamespaceProofError):runtime._aggregate_limit(runtime.LEGACY_POSTGRES_PHASE_POLICY)
+        self.assertEqual(identity['capacity_policy'],{'change_control':'BUFFALO_PG_PHASE_FIXED_NATIVE_CAPACITY_2026_10_30','regular_bytes':167772160,'per_file_bytes':83886080,'entries':3000})
+        for legacy in (runtime.LEGACY_POSTGRES_PHASE_POLICY,runtime.PREVIOUS_POSTGRES_PHASE_POLICY):
+            with self.assertRaises(ns.NamespaceProofError):runtime._aggregate_limit(legacy)
 
     def test_phase_scaled_exact_boundary_and_receiver_agreement(self):
         # Actual sealed entries/receiver, scaled to keep deterministic tests small.
         # Exact production constants are asserted separately; target capture is real-size.
-        with patch.object(runtime,'MAX_BYTES',80*1024),patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',128*1024):
-            base=self.compose();trial=self.padded(base,(50*1024,50*1024))
+        with patch.object(runtime,'MAX_BYTES',80*1024),patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',160*1024):
+            base=self.compose();trial=self.padded(base,(50*1024,50*1024,50*1024))
             gap=runtime.POSTGRES_PHASE_MAX_BYTES-trial.bundle.regular_bytes;trial.close()
-            value=self.padded(base,(50*1024,50*1024+gap))
+            value=self.padded(base,(50*1024,50*1024,50*1024+gap))
             try:
-                self.assertEqual(value.bundle.regular_bytes,131072)
+                self.assertEqual(value.bundle.regular_bytes,163840)
                 self.assertGreater(value.bundle.regular_bytes,runtime.MAX_BYTES)
                 value.verify();pg._phase_inventory(value);self.receive_copy(value)
             finally:value.close()
-            above=self.padded(base,(50*1024,50*1024+gap+1))
+            above=self.padded(base,(50*1024,50*1024,50*1024+gap+1))
             try:
                 with self.assertRaisesRegex(ns.NamespaceProofError,'runtime_aggregate_capacity_refused'):above.verify()
                 packet={'generation':above.generation,'policy':above.policy,'source_commit':above.source_commit,'source_tree':above.source_tree,
@@ -401,7 +402,7 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
                     ns.backend._close_browser_runtime_bundle_descriptor(value.bundle.descriptor,value.bundle.target,(value.bundle.device,value.bundle.inode));value._token=None
 
     def test_phase_individual_file_cannot_use_aggregate_allowance(self):
-        with patch.object(runtime,'MAX_BYTES',80*1024),patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',128*1024):
+        with patch.object(runtime,'MAX_BYTES',80*1024),patch.object(runtime,'POSTGRES_PHASE_MAX_BYTES',160*1024):
             base=self.compose();value=self.padded(base,(80*1024+1,))
             try:
                 self.assertLess(value.bundle.regular_bytes,runtime.POSTGRES_PHASE_MAX_BYTES)
@@ -440,7 +441,7 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
 
     def test_legacy_and_malformed_sealed_capacity_records_refuse_on_receive(self):
         value=self.compose();original=list(runtime._entries(value))
-        mutations=[lambda d:d.update(policy=runtime.LEGACY_POSTGRES_PHASE_POLICY),lambda d:d.pop('capacity_policy'),
+        mutations=[lambda d:d.update(policy=runtime.PREVIOUS_POSTGRES_PHASE_POLICY),lambda d:d.update(policy=runtime.LEGACY_POSTGRES_PHASE_POLICY),lambda d:d.pop('capacity_policy'),
             lambda d:d['capacity_policy'].update(regular_bytes=134217729),lambda d:d['capacity_policy'].update(entries=3001),
             lambda d:d['capacity_policy'].update(per_file_bytes=134217728),lambda d:d['capacity_policy'].update(change_control='unapproved'),
             lambda d:d['capacity_policy'].update(extra=True),lambda d:d['capacity_policy'].update(regular_bytes=134217728.0)]

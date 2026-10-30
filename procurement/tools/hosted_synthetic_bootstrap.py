@@ -198,10 +198,11 @@ class NativeBootstrapPlan:
     python: str
     source: tuple[str, str, str, str]
     diagnostic: str = "retained"
+    native_view_wire: bytes | None = None
 
 
 def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
-                          uid, gid, unit, initial_user_namespace, diagnostic="retained"):
+                          uid, gid, unit, initial_user_namespace, diagnostic="retained", native_view_wire=None):
     """Pure argv construction. Never creates a unit or calls sudo."""
     from hosted_synthetic_source import REPOSITORY, REF
     _require(diagnostic in ("retained","postgres-version"))
@@ -221,6 +222,15 @@ def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
              python, '-I', '-S', '-B', root + '/procurement/tools/hosted_synthetic_launcher.py',
              repository, event, ref, commit, '--native-bootstrap-postgres-version' if diagnostic=='postgres-version' else '--native-bootstrap', unit, str(uid), str(gid),
              str(initial_user_namespace[0]), str(initial_user_namespace[1]))
+    view_properties=()
+    if native_view_wire is not None:
+        import hosted_synthetic_native_inputs as native
+        from hosted_synthetic_source import HostedSourceBinding
+        _require(diagnostic=='postgres-version' and python==native.PYTHON and type(native_view_wire) is bytes)
+        value=json.loads(native_view_wire)
+        request=native.view_from_wire(native_view_wire,HostedSourceBinding(commit,value['tree'],()))
+        view_properties=native.view_properties(request,HostedSourceBinding(commit,value['tree'],()))
+        chain+=('--native-view-v1',native_view_wire.decode('ascii'))
     properties = (f'User={uid}', f'Group={gid}', 'Delegate=memory pids',
                   'DelegateSubgroup=supervisor', 'NoNewPrivileges=yes',
                   'CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP', 'AmbientCapabilities=',
@@ -228,7 +238,7 @@ def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
                   'MemoryAccounting=yes', 'TasksAccounting=yes',
                   'TimeoutStartSec=120s', 'TimeoutStopSec=5s', 'KillMode=control-group',
                   'MemoryMax=512M', 'TasksMax=64',
-                  'ExecStartEx=:!' + ' '.join(_quote(token) for token in chain))
+                  *view_properties, 'ExecStartEx=:!' + ' '.join(_quote(token) for token in chain))
     # ! omits credential switching only: User/Group still own the delegated
     # unit and NNP/capability/resource controls still apply to native setpriv.
     # Type=oneshot supports two ExecStart records. A failed first command skips
@@ -241,7 +251,7 @@ def plan_native_bootstrap(*, root, python, repository, event, ref, commit,
             '--unit=' + unit, '--working-directory=' + root,
             *(('--property=' + value) for value in properties), '--', '/usr/bin/true')
     return NativeBootstrapPlan(tuple(argv), unit, uid, gid, initial_user_namespace, root, python,
-                               (repository, event, ref, commit), diagnostic)
+                               (repository, event, ref, commit), diagnostic, native_view_wire)
 
 
 @_resource_operation
@@ -458,7 +468,7 @@ def _decode_report(raw, plan):
 
 
 @_resource_operation
-def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
+def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None, native_consumer=None):
     """Dormant execution implementation: no CLI/workflow path calls this yet.
 
     Independent review must precede its later activation. The source-bound
@@ -472,7 +482,8 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
     repository, event, ref, commit = plan.source
     rebuilt = plan_native_bootstrap(root=plan.root, python=plan.python, repository=repository,
                                     event=event, ref=ref, commit=commit, uid=plan.uid, gid=plan.gid,
-                                    unit=plan.unit, initial_user_namespace=plan.initial_user_namespace,diagnostic=plan.diagnostic)
+                                    unit=plan.unit, initial_user_namespace=plan.initial_user_namespace,diagnostic=plan.diagnostic,
+                                    **({} if plan.native_view_wire is None else {'native_view_wire':plan.native_view_wire}))
     _require(plan == rebuilt and ns._identity(os.stat('/proc/self/ns/user')) == plan.initial_user_namespace)
     # The historical shared-runner identity route is no longer executable.
     from hosted_synthetic_identity import AccountLease
@@ -485,6 +496,13 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
              and plan.root==selected.root+'/repo' and plan.unit==selected.unit
              and type(source_root) is str and source_root!=plan.root)
     binding = bind_hosted_source(Path(source_root), repository=repository, event=event, ref=ref, sha=commit)
+    if plan.native_view_wire is not None:
+        from hosted_synthetic_native_measurement import verify_consumer
+        verify_consumer(native_consumer)
+        _require(native_consumer.role=='service' and native_consumer.binding==binding
+            and native_consumer.wire==plan.native_view_wire and native_consumer.unit==plan.unit
+            and native_consumer.uid==plan.uid and native_consumer.gid==plan.gid and not native_consumer.attempted)
+    else:_require(native_consumer is None)
     if lifecycle is not None:
         from hosted_synthetic_lifecycle import require_case
         require_case(lifecycle,account.identity,commit)
@@ -496,7 +514,10 @@ def run_native_plan(plan, *, source_root=None, account=None, lifecycle=None):
     try:
         _require(account.service_attempted is False and account.service_acknowledged is False,
                  'native_attempt_cannot_be_retried')
+        if native_consumer is not None:native_consumer.attempted=True
         observer=ExternalObserver.create(account,binding)
+        if native_consumer is not None:
+            native_consumer.observer=observer;observer.native_consumer=native_consumer
         if lifecycle is not None:lifecycle.observer_created(observer)
         account.journal.record('service_start_attempt')
         account.service_attempted=True

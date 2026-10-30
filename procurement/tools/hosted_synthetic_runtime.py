@@ -27,15 +27,16 @@ import hosted_synthetic_namespace as ns
 POLICY = 'BUFFALO_HOSTED_STDLIB_RUNTIME_V1'
 APPLICATION_POLICY = 'BUFFALO_HOSTED_APPLICATION_RUNTIME_V1'
 POSTGRES_POLICY = 'BUFFALO_HOSTED_POSTGRES_RUNTIME_V1'
-# V1 retains its historical80MiB meaning and is not accepted by V2 dispatch.
+# Historical V1=80MiB and V2=128MiB remain distinct and are refused by V3 dispatch.
 LEGACY_POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V1'
-POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2'
-POSTGRES_PHASE_CHANGE_CONTROL = 'BUFFALO_B2_PG_PHASE_CAPACITY_2026_10_29'
+PREVIOUS_POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V2'
+POSTGRES_PHASE_POLICY = 'BUFFALO_HOSTED_POSTGRES_PHASE_RUNTIME_V3'
+POSTGRES_PHASE_CHANGE_CONTROL = 'BUFFALO_PG_PHASE_FIXED_NATIVE_CAPACITY_2026_10_30'
 PROJECTED_ROOT = '/opt/buffalo-hosted'
 PROJECTED_TOOLS = PROJECTED_ROOT + '/procurement/tools'
 SENTINEL = '/buffalo-runtime/sentinel'
 MAX_BYTES = 80 * 1024**2
-POSTGRES_PHASE_MAX_BYTES = 128 * 1024**2
+POSTGRES_PHASE_MAX_BYTES = 160 * 1024**2
 MAX_ENTRIES = 3000
 _TOKEN = object()
 _IDENTITY_PATH = '/buffalo-runtime/identity.json'
@@ -180,6 +181,13 @@ def _library_roots():
 
 
 def _resolve_library(name, roots):
+    from hosted_synthetic_native_inputs import active_view,execution_inventory
+    if active_view() is not None:
+        inventory=execution_inventory();path=inventory['sonames'].get(name)
+        if path not in inventory['rows']:raise ns.NamespaceProofError('native_unlisted_soname_refused')
+        data,mode=read_native(path)
+        ns._require(hashlib.sha256(data).hexdigest()==inventory['rows'][path]['sha256'])
+        return path,data,mode
     candidates=[]
     for root in roots:
         path=root/name
@@ -387,7 +395,7 @@ def capture_runtime(generation, source_root, binding):
                provenance='native-runtime:'+native[path],content=data) for path,(data,mode) in contents.items()]
     expected=dict(binding.files);source={}
     for relative in SOURCE_PATHS:
-        if not (relative.endswith('.py') or relative in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json')):continue
+        if not (relative.endswith('.py') or relative in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json','procurement/tools/hosted_native_proposed_inventory.json')):continue
         path=root/relative
         fd=ns._acquire(lambda:os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW))
         try:
@@ -562,7 +570,9 @@ def projected_images(runtime):
     try:
         data=os.pread(executable.number,MAX_BYTES+1,0)
         ns._require(hashlib.sha256(data).hexdigest()==runtime.native_files[runtime.executable])
-        interpreter=parse_elf(data)['interpreter']
+        from hosted_synthetic_native_inputs import PYTHON,sealed_elf_permission
+        permission=sealed_elf_permission(runtime,runtime.executable,data) if runtime.policy==POSTGRES_PHASE_POLICY and runtime.executable==PYTHON else None
+        interpreter=parse_elf(data,**({} if permission is None else {'native_permission':permission}))['interpreter']
         ns._require(interpreter in runtime.native_files)
         loader=ns._acquire(lambda:os.open(interpreter,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW))
         try:

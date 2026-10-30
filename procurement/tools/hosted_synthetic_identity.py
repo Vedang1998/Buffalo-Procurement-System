@@ -368,7 +368,7 @@ class AccountLease:
             raise boot.BootstrapCleanupError('dedicated_cleanup_unverified_identity_retained') from error
 
 
-def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained", ownership_deadline=None, preflight=None):
+def run_provisioned_candidate(identity, *, source, python, repository, event, ref, commit, lifecycle=None, diagnostic="retained", ownership_deadline=None, preflight=None, native_measurement=None):
     """Complete dormant wiring; CLI/workflow review gate never calls this."""
     from hosted_synthetic_source import bind_hosted_source, _resource_operation
     from hosted_synthetic_capability import _require_clean_supervisor
@@ -385,7 +385,22 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             from hosted_synthetic_lifecycle import require_case
             require_case(lifecycle,identity,commit)
             boot._require(lifecycle.binding==binding)
-        if diagnostic=='postgres-version':
+        service_consumer=None
+        if native_measurement is not None:
+            from hosted_synthetic_native_measurement import NativeConsumer,NativePhaseReadiness,verify_consumer,measure
+            import hosted_synthetic_native_inputs as native
+            boot._require(diagnostic=='postgres-version' and python==native.PYTHON
+                and type(native_measurement) is NativeConsumer and preflight is None,
+                'native_measurement_route_refused')
+            verify_consumer(native_measurement)
+            boot._require(native_measurement.binding==binding and native_measurement.request.deadline==ownership_deadline
+                and native_measurement.role=='measurement'
+                and (native_measurement.uid,native_measurement.gid)==(identity.operator_uid,identity.operator_gid),
+                'native_measurement_source_or_deadline_refused')
+            readiness=measure(native_measurement,source)
+            boot._require(type(readiness) is NativePhaseReadiness,'postgres_memory_readiness_required')
+            readiness.verify(source,binding)  # Deciding M1 gate BEFORE account creation.
+        elif diagnostic=='postgres-version':
             from hosted_synthetic_postgres_runtime import require_phase_fit
             try:selected_python=Path(python).resolve(strict=True)
             except OSError as error:raise boot.BootstrapRefusal('postgres_fit_interpreter_refused') from error
@@ -413,11 +428,18 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
         body_error=None
         try:
             initial=os.stat('/proc/self/ns/user')
+            if native_measurement is not None:
+                from hosted_synthetic_native_measurement import reserve_consumer
+                readiness.verify(source,binding)
+                service_consumer=reserve_consumer(native_measurement.installation,native_measurement.request,binding,
+                    identity.unit,role='service',uid=identity.uid,gid=identity.gid)
             plan=boot.plan_native_bootstrap(root=identity.root+'/repo',python=python,repository=repository,
                 event=event,ref=ref,commit=commit,uid=identity.uid,gid=identity.gid,unit=identity.unit,
                 initial_user_namespace=(initial.st_dev,initial.st_ino),
-                **({"diagnostic":diagnostic} if diagnostic!="retained" else {}))
-            result=boot.run_native_plan(plan,source_root=source,account=lease,**({} if lifecycle is None else {'lifecycle':lifecycle}))
+                **({"diagnostic":diagnostic} if diagnostic!="retained" else {}),
+                **({} if service_consumer is None else {"native_view_wire":service_consumer.wire}))
+            result=boot.run_native_plan(plan,source_root=source,account=lease,**({} if lifecycle is None else {'lifecycle':lifecycle}),
+                **({} if service_consumer is None else {'native_consumer':service_consumer}))
             boot._require(result['report']['tree']==binding.tree)
         except BaseException as error:
             body_error=error

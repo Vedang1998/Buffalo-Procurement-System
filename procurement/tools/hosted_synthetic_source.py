@@ -45,6 +45,8 @@ SOURCE_PATHS = (
     "procurement/tools/hosted_synthetic_pid1_regression.py",
     "procurement/tools/hosted_synthetic_runtime.py",
     "procurement/tools/hosted_synthetic_native_inputs.py",
+    "procurement/tools/hosted_synthetic_native_installation.py",
+    "procurement/tools/hosted_synthetic_native_measurement.py",
     "procurement/tools/hosted_synthetic_native_observation.py",
     "procurement/tools/hosted_native_inputs.json",
     "procurement/tools/hosted_native_proposed_inventory.json",

@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-29 (UTC)
+**Updated:** 2026-10-30 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,37 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-30 approved PG_PHASE_V3 and dormant native execution handoff
+
+Verified continuation base: `5b8dc5425cbb5d087c79beab4d6c2e467b29a92b`, tree
+`4521e0bddd14c9a4c42babef81b011bd4a9b19db`. This descendant implements the owner's
+160MiB PG_PHASE-only decision and continues the measurement/service and importer/
+cleanup work; no prior source is reset. All other resource and artifact pins remain.
+Actual implementation identity and frozen measurements are recorded by the next
+source-bound evidence follow-up; do not attribute dirty-worktree tests to this base.
+
+The V3 policy is enforced in composition, pre-account capacity, verify/adoption and
+receiver paths, with legacy-label and wrong-policy refusals. Complete source projection
+now includes the proposed inventory. New native-only importer/cleanup code is dormant;
+root0700 backing, fixed streams, per-artifact stage retirement, typed consumer drain,
+sticky uncertainty and exact deletion prevent guessed cleanup. The fixed measurement
+child and later service bind the same source/view/interpreter, kernel process identity,
+loaded mappings and sealed capsule; M1 remains before account creation. Pre-READY
+source-bound refusal has bounded read-only drain, unknown setup stays quarantined.
+
+Focused validation continues; one wrong ns._require call was found by the full focused
+group and repaired. No full-suite or supported native execution PASS is claimed.
+Preserve prior e5e8/a04ef frozen review and exact historical Claude closures. New delta
+review remains pending. Actual provenance/trust-root/freshness disposition, complete
+installation pin, single installation decision, target memory/live lifecycle and release
+requirements remain gates. No privileged/native activation or credentials are enabled.
+
+Reusable Start remains a saved/readback-verified draft referencing AGENTS, governance
+and this handoff, not a published or fresh-task-restored snapshot. Continue validation,
+freeze/publish exact candidate and one combined delta packet. Canonical phase status
+and business readiness do not change; Railway/production/purchasing stay unauthorized.
+
 
 ### 2026-10-29 authenticated libpq normalization descendant
 

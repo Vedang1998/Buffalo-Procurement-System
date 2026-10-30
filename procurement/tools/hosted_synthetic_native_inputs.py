@@ -10,6 +10,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
 import errno
+import fcntl
+import math
 import gzip
 import hashlib
 import json
@@ -106,14 +108,100 @@ def _proposed_inventory():
     return json.loads(raw)
 
 
+def execution_inventory():
+    """Fixed virtual SONAME layout, not publisher symlink provenance.
+
+    Exact authenticated ELF DT_NEEDED/DT_SONAME supplies the loader name;
+    physical archive members and bytes stay unchanged. No ambient search.
+    """
+    value=_proposed_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+    require(len(by_path)==len(rows));changes={};names={}
+    for origin,edges in value['resolved_dependencies'].items():
+        require(origin in by_path and set(edges)==set(by_path[origin]['elf']['needed']))
+        for name,target in edges.items():
+            row=by_path[target]
+            require(re.fullmatch(r'[A-Za-z0-9_.+\-]+',name) and row['elf']['soname']==name)
+            path=target
+            if Path(target).name!=name:
+                require(str(Path(target).parent)=='/usr/lib/x86_64-linux-gnu','native_layout_root_refused')
+                path=str(Path(target).parent/name)
+                require(path not in by_path and (target not in changes or changes[target]==path),'native_layout_collision')
+                changes[target]=path
+            require(name not in names or names[name]==path,'native_layout_ambiguous_soname')
+            names[name]=path
+    selected={}
+    for row in rows:
+        path=changes.get(row['path'],row['path'])
+        require(path not in selected,'native_layout_collision')
+        selected[path]=dict(row,path=path)
+    return {'policy':'BUFFALO_AUTHENTICATED_SONAME_LAYOUT_V1','rows':selected,'sonames':names,
+        'renamed_logical_files':changes,'regular_bytes':sum(r['bytes'] for r in selected.values()),
+        'publisher_symlink_assurance':'NOT_CLAIMED; names derive from exact authenticated ELF',
+        'execution_authority':False}
+
+
+def view_aliases():
+    layout=execution_inventory()
+    return {**{p:p for p in layout['rows']},**layout['renamed_logical_files']}
+
+
+def validate_loaded_mappings(raw,request):
+    require(type(raw) is bytes and 0<len(raw)<=65536 and raw.endswith(b'\n'),'native_maps_bound')
+    aliases=view_aliases();observed=[]
+    for line in raw.splitlines():
+        fields=line.split(None,5)
+        require(len(fields) in (5,6) and re.fullmatch(rb'[0-9a-f]+-[0-9a-f]+',fields[0])
+            and re.fullmatch(rb'[r-][w-][x-][ps]',fields[1]) and re.fullmatch(rb'[0-9a-f]+',fields[2])
+            and re.fullmatch(rb'[0-9a-f]+:[0-9a-f]+',fields[3]) and fields[4].isdigit(),'native_maps_schema_refused')
+        inode=int(fields[4]);path=fields[5].decode('ascii') if len(fields)==6 else ''
+        if inode==0:
+            require(path in ('','[heap]','[stack]','[vvar]','[vvar_vclock]','[vdso]','[vsyscall]')
+                and (b'x' not in fields[1] or path in ('[vdso]','[vsyscall]')),'native_anonymous_mapping_refused')
+            continue
+        logical=aliases.get(path);require(logical in request.backing,'native_host_mapping_fallback_refused')
+        device,expected_inode=request.backing[logical];major,minor=(int(v,16) for v in fields[3].split(b':'))
+        require((major,minor,inode)==(os.major(device),os.minor(device),expected_inode),'native_mapping_identity_refused')
+        observed.append((logical,device,inode))
+    require(any(p==PYTHON for p,_,_ in observed),'native_mapped_interpreter_missing')
+    return sorted(set(observed))
+
+
+def loaded_mappings(request):
+    with open('/proc/self/maps','rb') as stream:return validate_loaded_mappings(stream.read(65537),request)
+
+
+def sealed_elf_permission(value,path,data):
+    """The sealed PG phase carries the exact inventories across guardian exec."""
+    import hosted_synthetic_runtime as runtime
+    require(value.policy==runtime.POSTGRES_PHASE_POLICY,'native_sealed_policy_refused')
+    expected={runtime.PROJECTED_ROOT+'/procurement/tools/'+FILES[1]:DIGESTS[1],
+        runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_proposed_inventory.json':PROPOSED_INVENTORY_SHA256}
+    require(all(value.source_files.get(p)==digest for p,digest in expected.items()),'native_sealed_inventory_binding_refused')
+    inventory=execution_inventory();row=inventory['rows'].get(path)
+    require(row is not None and value.native_files.get(path)==row['sha256']
+        and hashlib.sha256(data).hexdigest()==row['sha256'],'native_sealed_image_refused')
+    # Bind every edge reachable by this exact image, including ELF loaders.
+    seen=set();pending=[path]
+    while pending:
+        current=pending.pop()
+        if current in seen:continue
+        seen.add(current);selected=inventory['rows'].get(current)
+        require(selected is not None and value.native_files.get(current)==selected['sha256'],'native_sealed_dependency_refused')
+        metadata=selected.get('elf')
+        if metadata:
+            pending.extend(inventory['sonames'][name] for name in metadata['needed'])
+            if metadata['interpreter']:pending.append(metadata['interpreter'])
+    return elf_permission(path,data)
+
+
 def proposed_capacity():
     """No caller-selected total/policy/budget; static lower bound, not M1 fit."""
     import hosted_synthetic_runtime as runtime
     value=_proposed_inventory();rows=value['rows'];paths=set();parents=set();physical={};total=0
     require(value['schema']=='BUFFALO_AUTHENTICATED_NATIVE_FILE_INVENTORY_V1'
-        and value['capacity']['policy']==runtime.POSTGRES_PHASE_POLICY
+        and value['capacity']['policy']==runtime.PREVIOUS_POSTGRES_PHASE_POLICY
         and type(value['capacity']['cap_bytes']) is int
-        and value['capacity']['cap_bytes']==runtime.POSTGRES_PHASE_MAX_BYTES,
+        and value['capacity']['cap_bytes']==134217728,
         'native_proposed_policy_refused')
     require(type(rows) is list and type(value['known_file_count']) is int
         and len(rows)==value['known_file_count']<=runtime.MAX_ENTRIES)
@@ -143,6 +231,7 @@ def proposed_capacity():
         'excess_regular_bytes':max(0,total-runtime.POSTGRES_PHASE_MAX_BYTES),
         'status':'REFUSED_NATIVE_CAPACITY' if total>runtime.POSTGRES_PHASE_MAX_BYTES or entries>runtime.MAX_ENTRIES
             else 'NO_NATIVE_LOWER_BOUND_CONTRADICTION',
+        'historical_evidence_policy':value['capacity']['policy'],'historical_evidence_cap_bytes':value['capacity']['cap_bytes'],
         'source_and_generated_entries':'EXCLUDED_POSITIVE_COSTS','memory_readiness':'NOT_MEASURED',
         'complete_runtime':'NOT_ESTABLISHED','execution_authority':False}
 
@@ -351,7 +440,7 @@ class Stage:
         Root must never reopen this operator-owned pathname. Its newly written
         destination is separately hashed against the publisher-bound manifest.
         """
-        self.verify();require(row in inventory()['rows'],'native_stream_unselected')
+        self.verify();require(row in inventory()['rows'] or row in execution_inventory()['rows'].values(),'native_stream_unselected')
         relative=row['path'].lstrip('/');matches=[x for x in self.owned if x[0]=='F' and x[1]==relative]
         require(len(matches)==1,'native_stream_missing')
         path=self.path/relative
@@ -425,7 +514,7 @@ def native_install_plan(nonce,stage):
     dd stdin. New output stays under0700 root until publisher digest checks pass.
     A plan is not installation permission and cannot be activated from this API.
     """
-    require_native_capacity();value=require_complete_inventory()
+    require_native_capacity();require_complete_inventory();value={'rows':list(execution_inventory()['rows'].values())}
     require(type(nonce) is str and re.fullmatch('[0-9a-f]{32}',nonce))
     require(type(stage) is Stage);stage.verify()
     destination='/run/buffalo-native-'+nonce
@@ -439,15 +528,15 @@ def native_install_plan(nonce,stage):
         commands.append({'argv':('/usr/bin/mkdir','--mode=0700','--',path),'stdin':'DEVNULL'})
     for row in value['rows']:
         target=destination+'/view'+row['path']
-        commands.append({'argv':('/usr/bin/dd','bs=1048576','of='+target,'oflag=excl,nofollow','status=none'),
+        commands.append({'argv':('/usr/bin/dd','bs=65536','iflag=count_bytes,fullblock','count='+str(row['bytes']),'of='+target,'oflag=excl,nofollow','status=none'),
             'stdin':'VERIFIED_UNPRIVILEGED_STAGE_STREAM','source_path':row['path'],
             'maximum_input_bytes':row['bytes'],'sha256':row['sha256']})
         commands.append({'argv':('/usr/bin/sha256sum','--',target),'stdin':'DEVNULL','expected_sha256':row['sha256']})
         commands.append({'argv':('/usr/bin/chmod',row['mode'],'--',target),'stdin':'DEVNULL'})
     for path in sorted(directories,key=lambda p:(-p.count('/'),p)):
         commands.append({'argv':('/usr/bin/chmod','0555','--',path),'stdin':'DEVNULL'})
-    commands.append({'argv':('/usr/bin/chmod','0555','--',destination),'stdin':'DEVNULL'})
-    return {'policy':POLICY,'manifest_sha256':DIGESTS[0],'destination':destination,
+    # Top stays root0700; only exact private read-only views expose selected files.
+    return {'policy':POLICY,'manifest_sha256':PROPOSED_INVENTORY_SHA256,'destination':destination,
         'commands':tuple(commands),'expected_files':tuple((r['path'],r['sha256']) for r in value['rows']),
         'installation_authority':False,'execution_authority':False,
         'activation':'DISABLED_PENDING_SINGLE_INSTALLATION_DECISION_AND_REVIEW',
@@ -466,17 +555,24 @@ class ViewRequest:
     deadline:float
     _token:object
     initial_mount_namespace:tuple|None=None
+    backing:dict|None=None
 
 
-def view_request(binding,root, *, deadline):
+def view_request(binding,root, *, deadline, installation=None):
     require_native_capacity();value=require_complete_inventory()
     require(type(deadline) in (int,float) and time.monotonic()<deadline)
     root=Path(root);require(re.fullmatch('/run/buffalo-native-[0-9a-f]{32}',str(root)))
     info=root.lstat();require(stat.S_ISDIR(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022)
-    rows={r['path']:r for r in value['rows']};require(PYTHON in rows)
-    return ViewRequest(os.urandom(32).hex(),binding.commit,binding.tree,DIGESTS[0],str(root),
+    from hosted_synthetic_native_installation import InstallationLease
+    require(type(installation) is InstallationLease and installation.installed and installation.root==str(root) and installation.binding==binding,'native_view_installation_required')
+    installation.verify();rows=execution_inventory()['rows'];require(PYTHON in rows)
+    names=['/opt','/usr/share',*sorted(rows)]
+    backing={name:list(installation.owned['view'+name][:2]) for name in names}
+    request=ViewRequest(os.urandom(32).hex(),binding.commit,binding.tree,DIGESTS[0],str(root),
         (info.st_dev,info.st_ino),rows[PYTHON]['sha256'],deadline,_TOKEN,
-        ns._identity(os.stat('/proc/self/ns/mnt')))
+        ns._identity(os.stat('/proc/self/ns/mnt')),backing)
+    installation.view_requests[request.nonce]=request
+    return request
 
 
 def _verify_request(request,binding):
@@ -484,7 +580,7 @@ def _verify_request(request,binding):
         and request.manifest==DIGESTS[0] and (request.commit,request.tree)==(binding.commit,binding.tree)
         and type(request.nonce) is str and re.fullmatch('[0-9a-f]{64}',request.nonce)
         and re.fullmatch('/run/buffalo-native-[0-9a-f]{32}',request.root)
-        and type(request.deadline) in (int,float) and time.monotonic()<request.deadline
+        and type(request.deadline) in (int,float) and math.isfinite(request.deadline) and time.monotonic()<request.deadline
         and type(request.initial_mount_namespace) is tuple and len(request.initial_mount_namespace)==2
         and all(type(x) is int and x>0 for x in request.initial_mount_namespace),'native_view_request_refused')
     info=os.lstat(request.root)
@@ -494,12 +590,34 @@ def _verify_request(request,binding):
 
 def view_properties(request,binding):
     require_native_capacity();_verify_request(request,binding);require_complete_inventory()
+    extra=tuple('BindReadOnlyPaths='+request.root+'/view'+logical+':'+path for path,logical in sorted(view_aliases().items()) if not path.startswith(('/opt/','/usr/share/')))
     return ('PrivateMounts=yes','PrivateNetwork=yes','NoNewPrivileges=yes','MemoryMax=536870912','TasksMax=64',
         'BindReadOnlyPaths='+request.root+'/view/opt:/opt',
-        'BindReadOnlyPaths='+request.root+'/view/usr/share:/usr/share')
+        'BindReadOnlyPaths='+request.root+'/view/usr/share:/usr/share',*extra)
 
 
 def _view_mount_snapshot(request):
+    if type(getattr(request,'backing',None)) is dict:
+        current=ns._identity(os.stat('/proc/self/ns/mnt'))
+        require(current!=request.initial_mount_namespace,'native_view_not_private')
+        rows=execution_inventory()['rows'];expected={'/opt','/usr/share',*rows}
+        require(set(request.backing)==expected,'native_view_backing_population_refused')
+        observations={}
+        aliases={'/opt':'/opt','/usr/share':'/usr/share',**view_aliases()}
+        for path,logical in sorted(aliases.items()):
+            # Follow only the fixed logical name. read_native separately checks
+            # every alias/ancestor and exact content; no unlisted host fallback.
+            descriptor=ns._acquire(lambda p=path:os.open(p,os.O_RDONLY|os.O_CLOEXEC))
+            try:
+                info=os.fstat(descriptor.number)
+                require(list(descriptor.identity)==request.backing[logical] and info.st_uid==0
+                    and not info.st_mode&0o022 and os.fstatvfs(descriptor.number).f_flag&os.ST_RDONLY,
+                    'native_view_backing_mismatch')
+                if logical in rows:require(stat.S_ISREG(info.st_mode) and info.st_size==rows[logical]['bytes'] and stat.S_IMODE(info.st_mode)==int(rows[logical]['mode'],8))
+                else:require(stat.S_ISDIR(info.st_mode))
+                observations[path]={'identity':list(descriptor.identity),'mount_id':ns._mount_id(descriptor)}
+            finally:descriptor.close()
+        return {'mount_namespace':list(current),'bindings':observations}
     """Bind private mount roots to the exact protected backing objects."""
     current=ns._identity(os.stat('/proc/self/ns/mnt'))
     require(current!=request.initial_mount_namespace,'native_view_not_private')
@@ -540,17 +658,19 @@ def protected_view(request,binding):
     import hosted_synthetic_runtime as runtime
     require(str(Path('/proc/self/exe').resolve(strict=True))==PYTHON,'native_view_interpreter_refused')
     mounts=_view_mount_snapshot(request)
-    for row in value['rows']:
+    loaded_mappings(request)
+    for row in execution_inventory()['rows'].values():
         data,mode=runtime.read_native(row['path'])
         require(len(data)==row['bytes'] and hashlib.sha256(data).hexdigest()==row['sha256']
             and mode==int(row['mode'],8),'native_view_input_changed')
     from hosted_synthetic_source import bind_hosted_source,REPOSITORY,REF
-    require(bind_hosted_source(Path(__file__).resolve().parents[2],repository=REPOSITORY,event='push',ref=REF,sha=binding.commit)==binding,
+    require(bind_hosted_source(Path(__file__).resolve().parents[2],repository=REPOSITORY,event='push',ref=REF,sha=binding.commit,operation_deadline=request.deadline)==binding,
             'native_view_source_changed')
-    token=_ACTIVE_VIEW.set(request);files_token=_ACTIVE_FILES.set({r['path']:r for r in value['rows']})
+    token=_ACTIVE_VIEW.set(request);files_token=_ACTIVE_FILES.set(execution_inventory()['rows'])
     observation_token=_ACTIVE_OBSERVATION.set(mounts)
     try:
         yield request
+        loaded_mappings(request)
         require(_view_mount_snapshot(request)==mounts,'native_view_mount_drift')
         _verify_request(request,binding)
     finally:
@@ -576,11 +696,89 @@ def bind_measurement_result(request,binding,receipt):
     require(type(receipt) is PhaseReadiness and active_view() is request,'native_measurement_view_refused')
     report=receipt.verify(Path(__file__).resolve().parents[2],binding)
     require(receipt.native.get(PYTHON)==request.interpreter_sha256,'native_measurement_interpreter_changed')
+    from hosted_synthetic_postgres_runtime import _FIXED
+    expected={p:r['sha256'] for p,r in execution_inventory()['rows'].items()}
+    expected.update({p:hashlib.sha256(data).hexdigest() for p,data in _FIXED.items()})
+    require(receipt.native==expected,'native_measurement_inventory_changed')
     return {'policy':POLICY,'nonce':request.nonce,'commit':request.commit,'tree':request.tree,
         'manifest_sha256':request.manifest,'view_identity':list(request.root_identity),
         'interpreter_sha256':request.interpreter_sha256,'memory_readiness':report,
-        'observed_view':_ACTIVE_OBSERVATION.get(),
+        'observed_view_binding_sha256':_digest({'mount_namespace':_ACTIVE_OBSERVATION.get()['mount_namespace'], 'backing':request.backing}),
         'execution_authority':False,'service_memory_proof':'NOT_PROVEN'}
+
+
+def view_wire(request,binding):
+    _verify_request(request,binding)
+    paths=['/opt','/usr/share',*sorted(execution_inventory()['rows'])]
+    require(type(request.backing) is dict and set(request.backing)==set(paths))
+    value={'policy':'BUFFALO_FIXED_NATIVE_VIEW_WIRE_V1','nonce':request.nonce,
+        'commit':request.commit,'tree':request.tree,'manifest':request.manifest,
+        'proposed_manifest':PROPOSED_INVENTORY_SHA256,'root':request.root,
+        'root_identity':list(request.root_identity),'interpreter_sha256':request.interpreter_sha256,
+        'deadline':request.deadline,'initial_mount_namespace':list(request.initial_mount_namespace),
+        'backing':[request.backing[path] for path in paths]}
+    raw=_canonical(value);require(len(raw)<=65536,'native_view_wire_bound');return raw
+
+
+def view_from_wire(raw,binding):
+    require(type(raw) is bytes and 0<len(raw)<=65536,'native_view_wire_bound')
+    try:value=json.loads(raw)
+    except (ValueError,UnicodeError):raise ns.NamespaceProofError('native_view_wire_refused') from None
+    require(type(value) is dict and _canonical(value)==raw and set(value)=={'policy','nonce','commit','tree','manifest','proposed_manifest',
+        'root','root_identity','interpreter_sha256','deadline','initial_mount_namespace','backing'}
+        and value['policy']=='BUFFALO_FIXED_NATIVE_VIEW_WIRE_V1'
+        and value['proposed_manifest']==PROPOSED_INVENTORY_SHA256,'native_view_wire_refused')
+    require(all(type(value[k]) is list and len(value[k])==2 and all(type(n) is int and 0<n<2**64 for n in value[k]) for k in ('root_identity','initial_mount_namespace')))
+    paths=['/opt','/usr/share',*sorted(execution_inventory()['rows'])]
+    require(type(value['backing']) is list and len(value['backing'])==len(paths)
+        and all(type(row) is list and len(row)==2 and all(type(n) is int and 0<n<2**64 for n in row) for row in value['backing']))
+    result=ViewRequest(value['nonce'],value['commit'],value['tree'],value['manifest'],value['root'],
+        tuple(value['root_identity']),value['interpreter_sha256'],value['deadline'],_TOKEN,
+        tuple(value['initial_mount_namespace']),dict(zip(paths,value['backing'])))
+    _verify_request(result,binding)
+    require(result.interpreter_sha256==execution_inventory()['rows'][PYTHON]['sha256'])
+    return result
+
+
+def seal_view_request(request,binding):
+    raw=view_wire(request,binding)
+    entry=ns.backend._BrowserRuntimeBundleEntry('/native-view.json','F',0o444,0,0,
+        'audit-source:'+hashlib.sha256(raw).hexdigest(),raw)
+    return ns.backend._seal_browser_runtime_bundle((entry,))
+
+
+def consume_view_capsule(packet):
+    """Return bounded wire bytes, not authority; close only a proven owned FD.
+
+    Source/view checks occur after the normal clean-supervisor descriptor gate.
+    A stale or foreign descriptor is neither closed nor marked CLOEXEC.
+    """
+    require(type(packet) is dict and set(packet)=={'descriptor','target','device','inode','size','sha256',
+        'manifest_sha256','entries','regular_bytes','execution_authority'})
+    bundle=ns.backend._PinnedBrowserRuntimeBundle(**packet)
+    require(type(bundle.descriptor) is int and bundle.descriptor>2)
+    info=os.fstat(bundle.descriptor)
+    require(stat.S_ISREG(info.st_mode) and info.st_nlink==0
+        and (info.st_dev,info.st_ino,info.st_size)==(bundle.device,bundle.inode,bundle.size)
+        and (info.st_uid,info.st_gid)==(os.geteuid(),os.getegid())
+        and stat.S_IMODE(info.st_mode)==ns.backend._BROWSER_RUNTIME_BUNDLE_MODE
+        and os.readlink(f'/proc/self/fd/{bundle.descriptor}')==bundle.target
+        and ns.backend._BROWSER_RUNTIME_BUNDLE_MEMFD_TARGET.fullmatch(bundle.target)
+        and fcntl.fcntl(bundle.descriptor,fcntl.F_GETFL)&(os.O_ACCMODE|os.O_NONBLOCK)==os.O_RDONLY
+        and fcntl.fcntl(bundle.descriptor,fcntl.F_GET_SEALS)==ns.backend._BROWSER_RUNTIME_BUNDLE_SEALS,
+        'native_view_capsule_owner_refused')
+    try:
+        require(bundle.entries==1 and type(bundle.regular_bytes) is int and 0<bundle.regular_bytes<=65536
+            and type(bundle.size) is int and 0<bundle.size<=69632,'native_view_capsule_bound')
+        os.set_inheritable(bundle.descriptor,False)
+        bundle._owner_token=ns.backend._BROWSER_HANDLE_TOKEN
+        entries=ns.backend._validate_pinned_browser_runtime_bundle(bundle)
+        require(len(entries)==1 and entries[0].path=='/native-view.json' and entries[0].kind=='F'
+            and 0<len(entries[0].content)<=65536,'native_view_capsule_content_refused')
+        return entries[0].content
+    finally:
+        require(ns.backend._close_browser_runtime_bundle_descriptor(bundle.descriptor,bundle.target,(bundle.device,bundle.inode)),
+            'native_view_capsule_cleanup_refused')
 
 
 def activate_installation(*args,**kwargs):

@@ -709,5 +709,22 @@
       "dormant native RUNPATH/view/staging and activation effects"
     ],
     "historical_target_preserved": true
+  },
+  "oct30_capacity_native_delta": {
+    "status": "REPAIRED_PENDING_REVIEW",
+    "capacity": "PG_PHASE_V3_167772160_OWNER_APPROVED",
+    "M1": "same-process and new exact-view measurement receipt before AccountLease.create; actual target proof still required",
+    "native_transport": "IMPLEMENTED_DORMANT_PENDING_FROZEN_VALIDATION",
+    "installer_cleanup": "IMPLEMENTED_DORMANT_PENDING_FROZEN_VALIDATION",
+    "new_delta_review": "PENDING; INTERNAL_CODEX_ONLY is not Claude",
+    "historical_closures": "unchanged at their exact reviewed commits",
+    "remaining": [
+      "complete installation pin/provenance disposition",
+      "native installation owner decision",
+      "combined Claude delta review",
+      "same-generation target memory/containment/lifecycle proof",
+      "worker-control exclusion/sentinel/release",
+      "full authoritative and browser/restart/restore acceptance"
+    ]
   }
 }
