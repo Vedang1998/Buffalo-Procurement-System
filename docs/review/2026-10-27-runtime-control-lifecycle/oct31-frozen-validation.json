@@ -1,0 +1,38 @@
+{
+  "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+  "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+  "results": {
+    "focused": {
+      "returncode": 0,
+      "seconds": 40.02048326899239,
+      "sha256": "a351842c6c29d9746f882922d6934429e051b16868995225d9b22d12ab775809"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 6.641712216005544,
+      "sha256": "23a87cb4177fac2dcce467077e5d0d2b691be33f0a2588523fbd84263b719273"
+    },
+    "inert": {
+      "returncode": 78,
+      "seconds": 0.16428614499454852,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "discovery": {
+      "returncode": 0,
+      "seconds": 2.321002597003826,
+      "sha256": "ea7559d8ea5dfa2baf69ed69e6f7f4e935a159aa8883f97233c7c4db13bb499b"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.11405453899351414,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "related": {
+      "returncode": 0,
+      "seconds": 7.0891078599961475,
+      "sha256": "b27e8a7f5b33171c027ff332a09f5ecfd3cd3dd59d74e86645d08277cbc6934a"
+    }
+  },
+  "related_disposable_clone_removed": true,
+  "clean_after": true
+}

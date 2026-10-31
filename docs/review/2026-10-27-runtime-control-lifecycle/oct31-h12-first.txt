@@ -1,0 +1,30 @@
+======================================================================
+FAIL: test_incomplete_inventory_blocks_plan_before_destination_or_privilege (test_hosted_synthetic_native_inputs.NativeInputTests.test_incomplete_inventory_blocks_plan_before_destination_or_privilege)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceProofError: native_destination_collision
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 308, in test_incomplete_inventory_blocks_plan_before_destination_or_privilege
+    with patch.object(native,'require_native_capacity'),patch.object(os.path,'lexists') as exists,self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+                                                                                                  ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "inventory_incomplete" does not match "native_destination_collision"
+
+======================================================================
+FAIL: test_logical_layout_collision_refuses_without_ambient_resolution (test_hosted_synthetic_native_inputs.NativeInputTests.test_logical_layout_collision_refuses_without_ambient_resolution)
+----------------------------------------------------------------------
+hosted_synthetic_namespace.NamespaceProofError: native_dependency_graph_missing
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 366, in test_logical_layout_collision_refuses_without_ambient_resolution
+    with patch.object(native,'_proposed_inventory',return_value=changed),self.assertRaisesRegex(ns.NamespaceProofError,'layout_collision'):
+                                                                         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "layout_collision" does not match "native_dependency_graph_missing"
+
+----------------------------------------------------------------------
+Ran 74 tests in 0.823s
+
+FAILED (failures=2)

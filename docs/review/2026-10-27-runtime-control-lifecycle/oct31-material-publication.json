@@ -1,0 +1,18 @@
+{
+  "published_commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+  "published_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+  "expected_previous_tip": "386e5e2100ea9d721f130cbd2f10a7f0f304abe2",
+  "push": "ORDINARY_SINGLE_BRANCH_NONFORCE",
+  "fresh_fetch_verified": true,
+  "secret_scan": {
+    "changed_files": 22,
+    "patterns": "private-key,GitHub token,AWS access-key,Shopify token; new commit email exact public noreply",
+    "findings": 0
+  },
+  "object_integrity": "PASS",
+  "protected_refs_before_after_equal": [
+    "f308ac666a2377f540e528bc873463daecc20cf8\trefs/heads/main",
+    "e25704e117a3c5bede843cac65ddfdeb7f30024f\trefs/pull/24/head"
+  ],
+  "worktree_clean": true
+}

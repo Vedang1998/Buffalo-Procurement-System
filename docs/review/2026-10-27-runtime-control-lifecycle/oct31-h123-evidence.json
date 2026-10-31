@@ -1,0 +1,95 @@
+{
+  "material_commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+  "material_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+  "review_baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+  "review_baseline_tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+  "classification": "INSTALLATION_MEASUREMENT_CANDIDATE_NOT_INSTALLATION_OR_ACCEPTANCE_PASS",
+  "external_review_record": "external-review-34e8-owner-report.json",
+  "review_status": "TARGETED_DELTA_PENDING; NO_CALLABLE_CLAUDE_CHANNEL",
+  "tests": {
+    "focused": {
+      "discovered": 1201,
+      "executed": 1201,
+      "passed": 1201,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "isolated": {
+      "executed": 264,
+      "passed": 264
+    },
+    "related_disposable_clone": {
+      "executed": 88,
+      "passed": 88
+    },
+    "startup": {
+      "executed": 10,
+      "passed": 10
+    },
+    "accounting": "Groups overlap; do not add their passing counts into a disjoint total. Startup tests use controlled processes; no production startup.",
+    "discovery": {
+      "registered": 2765,
+      "modules": 135,
+      "executed": 0,
+      "registration_issues": 0
+    },
+    "complete_authoritative_suite": "NOT_RUN; still required on supported installed candidate. Known unchanged Cloud native pg_dump/trust refusal was not rerun."
+  },
+  "limits_unchanged": true,
+  "capacity_static_bytes": 152232841,
+  "capacity_static_entries": 976,
+  "native_files": 832,
+  "native_artifacts": 66,
+  "actual_cache_materialization": "UNPRIVILEGED_SELECTED_LIBC6_MEMBER_ONLY; stage removed and descriptor inventory restored",
+  "real_private_view_capture": "NOT_RUN",
+  "native_memory_pipeline": "NOT_RUN",
+  "whole_service_memory": "NOT_RUN",
+  "fixed_postgres_execution": "NOT_RUN",
+  "containment_worker_exclusion_cleanup": "LIVE_GATES_OPEN",
+  "credential_release": "DISABLED",
+  "sentinel_browser_backup_apply_draft_packet_restart_restore": "NOT_RUN; canonical2DRAFT/3lines/14members/$282+$7=$289 remains unchanged",
+  "gh_actions_status": "UNAVAILABLE: authenticated gh run list returned Forbidden. No auth investigation or retry; Git publication/fetch verified independently.",
+  "internal_codex_scope": "Read-only targeted investigations and writer tests only; no independent Claude closure",
+  "historical_failures_retained": [
+    "H1 missing cache and H2/H3 owner-reported defects at34e8",
+    "Historical1668/1637/1632/1failure/4method+3classsetup/31unexecuted unchanged in earlier evidence",
+    "Prefreeze test-expectation failures retained; not source-bound final pass",
+    "One evidence-builder invocation used ambient Python lacking fcntl.F_SEAL_SEAL; exact3.13.5 invocation succeeded. Not a target runtime result."
+  ],
+  "unchanged_files": {
+    "application_source": "UNCHANGED",
+    "lockfiles": "UNCHANGED",
+    "accepted_artifact_versions_and_digests": "UNCHANGED",
+    "PHASE_STATUS": "UNCHANGED",
+    "main_PR24": "UNCHANGED"
+  },
+  "next_gate": "One Claude34e8..de4eda5 delta review, then ONE owner decision for exact native manifest/pinned snapshot/protected trust root/effects. Installation remains disabled until both prerequisites pass.",
+  "evidence_files": {
+    "oct31-frozen-validation.json": "adb212771efaca66b2ff16d0758d9b7eefa84167fe767970b0263569a74b3ee2",
+    "oct31-material-publication.json": "96e85dacd110ab17d323c083bdf69cf4eb47a94ef0894ca760cf5db963367176",
+    "oct31-de4eda5-full-static-accounting.json": "62208492554090efe103f44d46ac8f177b7bef15412d2e461e6db04f6d7c1549",
+    "oct31-de4eda5-cache-materialization.json": "d4e9952429f2ddeead6d12f43a013d027892bbbf5fafb2590b50e666042f3896",
+    "oct31-native-installation-decision.json": "fba7931239eb64afed5ccb49c3d4ed3104921ed7033a1a635b4e0d8e174de302",
+    "oct31-de4eda5-focused.txt": "a351842c6c29d9746f882922d6934429e051b16868995225d9b22d12ab775809",
+    "oct31-de4eda5-isolated.txt": "23a87cb4177fac2dcce467077e5d0d2b691be33f0a2588523fbd84263b719273",
+    "oct31-de4eda5-inert.txt": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb",
+    "oct31-de4eda5-discovery.txt": "ea7559d8ea5dfa2baf69ed69e6f7f4e935a159aa8883f97233c7c4db13bb499b",
+    "oct31-de4eda5-startup.txt": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7",
+    "oct31-de4eda5-related.txt": "b27e8a7f5b33171c027ff332a09f5ecfd3cd3dd59d74e86645d08277cbc6934a",
+    "oct31-complete-static-accounting.py": "096f255b74c26d7497fe204bdb6804daa6faa42de1a19785df6ee2f9b50db0aa",
+    "oct31-cache-materialize.py": "6c303947db9a2fcd34d2f6db89dfc41305d246850c0bf8c7948d83af1def5f7b",
+    "oct31-validate-frozen.py": "cb694fc763006ea98b4c3393692b72f86fcc59b431b7cd1d939f489e38c328a9",
+    "oct31-build-decision.py": "58dd4843cd6af60f0352adabe8f535613ea37dd79100345afb5185523a90b04a",
+    "oct31-dependencies.txt": "dfa3bfbdf3f52fffe08b1ccf11cac50ca1cc1c5ca194d1a2d121e3dd708d0318",
+    "oct31-h12-first.txt": "214d0c945a57592d0853ab8c99f989e7eadbb3e346308a7ecd2c4d3e375b07e1",
+    "oct31-components-second.txt": "25a9699e0838a202fbc151a9830d5d965b94108e953fd5ffda5898f77bc2e60f",
+    "oct31-h3-first.txt": "e68df21350c2e606673c38dcf5dfe4b1a31fc6d26c59ea10313ff44bd46d0cfc",
+    "oct31-h3-second.txt": "01596bed77aa949860658a996f80805bf2ea0908e70855c1dcd21c5349dfbcc0",
+    "oct31-route-first.txt": "63aea946ba762355afad2c11312f893bd54836134c311b4d5c1a997511ae65c7",
+    "oct31-route-second.txt": "49d91de34cba6ac73e813b5fbf5a7d62ec8be19c46744130b71adfb5a9971483",
+    "oct31-route-third.txt": "102a06f0c44e91dea5b944fa43fe36c4b973e0b72d98307754c70ba8ec55a8d5",
+    "oct31-causal-third.txt": "007cbf2c258947d58da4bc3ce00318e3913a37f1de18eb244740633bbbe5bfa9",
+    "oct31-focused-first.txt": "c046e0c17bf28c727ce3cef17aa98912e2be0ffa11fa467c62a05c4006104d34"
+  }
+}

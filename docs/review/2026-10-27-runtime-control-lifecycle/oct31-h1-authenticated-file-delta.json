@@ -1,0 +1,26 @@
+{
+  "baseline_manifest_sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+  "additions": [
+    {
+      "artifact_sha256": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "artifact_member_evidence": "EXACT_ARCHIVE_MEMBER_VERIFIED_NOT_INFERRED_FROM_LOGICAL_PATH",
+      "mode_evidence": "AUTHENTICATED_ARCHIVE_MODE_NORMALIZED_AS_READ_NATIVE",
+      "package": "libc6",
+      "version": "2.39-0ubuntu8.9",
+      "path": "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache",
+      "physical_path": "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache",
+      "artifact_member": "./usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache",
+      "archive_mode": "0644",
+      "mode": "0444",
+      "elf": null,
+      "selection_evidence": "H1_OWNER_REPORTED_C_UTF8_STARTUP_MAPPING; EXACT_SELECTED_LIBC6_ARCHIVE_MEMBER",
+      "physical_alias_evidence": "DIRECT_PHYSICAL_PATH",
+      "bytes": 27028,
+      "sha256": "52c227df9d53248238602c1ddaccd2c8ddc4cc6a61aa45d7c425af590b8806a5"
+    }
+  ],
+  "new_native_regular_bytes": 149567173,
+  "new_regular_file_count": 832,
+  "existing_libc_bytes_reconciled": true,
+  "scope": "READ_ONLY_AUTHENTICATED_ARCHIVE_INSPECTION; actual interpreter/view execution NOT_RUN"
+}

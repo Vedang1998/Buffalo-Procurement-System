@@ -1,3 +1,14 @@
+## October31 continuation checkpoint — no canonical milestone change
+
+Frozen H1–H3 installation/measurement candidate `de4eda5fb6d7a8a586f415451dcb2ddc055536e4`,
+tree `87e35b1f4412c82c9a236801971a26157d3e6996`. Received34e8 Claude M1/N7 closures are historical;
+new delta review pending. Exact current implementation, causal evidence,832-file
+manifest, dormant route and ONE proposed installation decision are in
+`docs/review/2026-10-27-runtime-control-lifecycle/oct31-h123-installation-candidate.md`.
+No installation, credential release, target memory/PG/browser acceptance or phase
+completion is claimed. Current next executable gate is targeted Claude delta review,
+then the consolidated installation decision; existing authorization is preserved.
+
 # Hosted Synthetic Acceptance Implementation Plan
 
 **Design:**

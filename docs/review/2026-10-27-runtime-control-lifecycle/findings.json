@@ -346,7 +346,7 @@
   "hosted_evidence": "NOT_RUN_REVIEW_GATE_CLOSED",
   "prior_frozen_review_target": "5e62c8e3a7030e60f77108517f5f9e06c7fc06a3",
   "independent_re_review": "REQUEST_CHANGES at reviewed d863; ONE combined new delta ready at e5e8a33; no new Claude review received or callable channel claimed",
-  "current_delta": "M1 deciding gate + streaming/copy lifetimes, retained conservative memory formula, N7 bounded collection polling, shared deadline/cache drift checks, fixed native inventory/RUNPATH/view primitives and bounded read-only target reconciliation. Child/service transport and native installation incomplete; no activation.",
+  "current_delta": "H1 exact libc6 cache and complete fixed file graph/NSS resolver; H2 same-process READY/final maps before readiness; H3 separate bounded known-owned cleanup/error retention; connected dormant exact installation-measurement-M1-service-drain route. Review and installation decision pending.",
   "new_findings": [
     {
       "id": "N1",
@@ -408,12 +408,11 @@
     }
   ],
   "frozen_current_claude_target": {
-    "implementation": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
-    "implementation_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
-    "evidence": "03035fff71d63adab5b36e6f775db3932edae1e7",
-    "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
-    "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
-    "owner_explicit_freeze": true
+    "implementation": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "implementation_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+    "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "status": "TARGETED_DELTA_REVIEW_PENDING",
+    "previous_exact_targets_preserved": true
   },
   "descendants_outside_frozen_review": [
     {
@@ -450,7 +449,7 @@
       "credential_release": "WITHHELD"
     }
   ],
-  "latest_received_external_review": "external-review-d863bc7d.json",
+  "latest_received_external_review": "external-review-34e8-owner-report.json",
   "remediation_findings": [
     {
       "id": "B1",
@@ -625,10 +624,10 @@
     }
   ],
   "current_candidate": {
-    "commit": "052aa93292a9eb462564039a0b645313e0494b28",
-    "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
-    "evidence": "oct29-memory-native-evidence.json",
-    "status": "FROZEN_MEMORY_REPAIR_AND_NATIVE_PREFLIGHT_CANDIDATE; EXECUTION_CONTRACT_BLOCKED",
+    "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+    "evidence": "oct31-h123-evidence.json",
+    "status": "FROZEN_INSTALLATION_MEASUREMENT_CANDIDATE",
     "independent_review": "PENDING",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
@@ -706,7 +705,8 @@
     "status": "OPEN",
     "evidence": "oct29-native-capacity-provenance-summary.json",
     "writer_repair": "No larger cap or dependency omission implemented. Proposed inventory capacity refuses before native install/view/measurement effects.",
-    "next_decision": "Separate narrowly versioned PG_PHASE capacity change, if owner chooses;128MiB cannot contain the approved artifacts."
+    "next_decision": "Separate narrowly versioned PG_PHASE capacity change, if owner chooses;128MiB cannot contain the approved artifacts.",
+    "current_disposition": "Historical V2 contradiction superseded by owner-approved V3 and reviewer V3 verification at34e8; no current capacity increase requested. Target memory remains unmeasured."
   },
   "staging_lifetime_repair": {
     "status": "REPAIRED_PENDING_REVIEW",
@@ -755,7 +755,7 @@
     "candidate": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
     "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
     "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-    "status": "PREPARED_NOT_CALLED_NO_CLAUDE_VERDICT",
+    "status": "OWNER_SUPPLIED_REVIEW_DISPOSITIONS_RECEIVED_AT_EXACT34e8",
     "historical_frozen_target_preserved": true
   },
   "owner_received_34e8_report": {
@@ -809,7 +809,7 @@
   },
   "oct31_h123_delta": {
     "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
-    "status": "IMPLEMENTED_PENDING_FROZEN_VALIDATION_AND_CLAUDE_DELTA_REVIEW",
+    "status": "REPAIRED_TESTED_PENDING_CLAUDE_DELTA",
     "findings": [
       {
         "id": "H1",
@@ -864,6 +864,41 @@
     "installation_authority": false,
     "activation": "DISABLED",
     "independent_review": "PENDING",
-    "internal_codex": "Targeted read-only code-path analysis only; not independent Claude review"
-  }
+    "internal_codex": "Targeted read-only code-path analysis only; not independent Claude review",
+    "candidate_commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "candidate_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+    "evidence": "oct31-h123-evidence.json",
+    "decision": "oct31-native-installation-decision.json"
+  },
+  "prepared_combined_oct31_review": {
+    "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "candidate": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+    "status": "REVIEW_PENDING",
+    "scope": "H1-H3; fixed manifest/provenance; exact dormant connected route; affected prior closures; bounded installation decision readiness",
+    "no_live_installation": true
+  },
+  "historical_frozen_targets": [
+    {
+      "implementation": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
+      "implementation_tree": "31336c2aa583e6f68b3589c4dfe54578b3b956f3",
+      "evidence": "03035fff71d63adab5b36e6f775db3932edae1e7",
+      "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
+      "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
+      "owner_explicit_freeze": true
+    }
+  ],
+  "historical_candidates": [
+    {
+      "commit": "052aa93292a9eb462564039a0b645313e0494b28",
+      "tree": "8777e880c3799b1aaf3e7aaf33f1f4977927530d",
+      "evidence": "oct29-memory-native-evidence.json",
+      "status": "FROZEN_MEMORY_REPAIR_AND_NATIVE_PREFLIGHT_CANDIDATE; EXECUTION_CONTRACT_BLOCKED",
+      "independent_review": "PENDING",
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD",
+      "combined_capture": "NOT_TARGET_MEASURED",
+      "full_authoritative": "NOT_RUN"
+    }
+  ]
 }

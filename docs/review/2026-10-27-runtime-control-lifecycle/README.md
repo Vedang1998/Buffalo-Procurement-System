@@ -1,3 +1,16 @@
+# Current October31 H1–H3 candidate
+
+Implementation `de4eda5fb6d7a8a586f415451dcb2ddc055536e4`, tree `87e35b1f4412c82c9a236801971a26157d3e6996`.
+The received34e8 Claude dispositions are recorded; M1/N7 closures remain scoped
+there. New H1–H3 delta is REPAIRED_PENDING_REVIEW, installation remains disabled.
+Use [the single current candidate/decision packet](oct31-h123-installation-candidate.md)
+and [source-bound evidence](oct31-h123-evidence.json). Full832-file/66-artifact
+inventory: [exact proposed decision](oct31-native-installation-decision.json).
+The sections below are historical checkpoints; their old pending work/review
+statements do not override the current packet. No historical evidence is relabeled.
+
+---
+
 # Current delta: approved160MiB PG phase and native handoff
 
 ## Frozen October 30 candidate and actual results

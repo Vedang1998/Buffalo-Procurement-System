@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-30 (UTC)
+**Updated:** 2026-10-31 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,52 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-10-31 H1–H3 candidate: published, tested, installation disabled
+
+Implementation `de4eda5fb6d7a8a586f415451dcb2ddc055536e4`, tree `87e35b1f4412c82c9a236801971a26157d3e6996`. Ordinary branch-only
+publication/fresh fetch verified; main/PR24 unchanged. This preserves386e5e2 and
+reviewed34e8 lineage. Source-bound evidence and the single delta/decision packet:
+`docs/review/2026-10-27-runtime-control-lifecycle/oct31-h123-installation-candidate.md`.
+
+The owner-supplied Claude2.1.314 report dispositions are RECEIVED and recorded.
+M1/N7 CLOSED and V3 verified at34e8 only; historical closures retain exact scope.
+Additional session/model/effort/commands/counts were not included in the available
+owner text; one clarification is pending, with no fabricated attribution. New
+H1/H2/H3 repairs remain pending independent delta review. H4 is unmeasured memory
+risk; the receipt-copy P3 remains an observation, not demonstrated forgery.
+
+Implemented: authenticated libc6 cache successor, derived832-file/66-artifact graph,
+explicit NSS resolution, real READY/final map parsing and same-process/source/view
+binding before readiness, separate immutable5s cleanup deadline, bounded native
+cleanup, original-error retention and safe stage-constructor rollback. The exact
+connected dormant entry is `hosted_synthetic_native_route.installation_measurement_entry`:
+closed decision gate → installation → protected measurement → validated M1 receipt
+before account → same-view fixed-PG service → consumer drain → owned removal.
+Collision retries reuse actual readiness with drift checks and the same60s budget.
+
+Frozen validation:1,201focused;264scrubbed;88related in removed clone;10startup,
+all passed. Groups overlap. Discovery2,765/135modules is zero execution. Exact
+unprivileged cache extraction passed and cleaned up. Full composition is
+152,232,841B/976entries including47source files and all generated costs. All caps,
+artifact versions, application source, locks and canonical PHASE_STATUS unchanged.
+No full authoritative, native memory, protected target view, privileged installation,
+fixed PG execution, worker/cleanup lifetime or browser acceptance PASS is claimed.
+Known unchanged host refusals were not rerun. Actions API lookup was Forbidden;
+only local frozen validation and Git publication are verified for this candidate.
+
+Exact next action: Claude read-only delta34e8..de4eda5 using the current packet;
+record its verdict and repair concrete findings. Then ONE owner installation
+contract decision covers the exact manifest, protected keyring/fingerprint,
+pinned snapshots/provenance limitations, aliases/modes, effects and unchanged
+bounds. No routine approval is required for already-authorized repairs; no new
+installation authority or future memory PASS is inferred. Review and this single
+installation decision currently block target execution; independent implementation
+and applicable local validation in this packet are complete. No automatic resumption
+claim. Runtime/release/browser, Railway and real purchasing gates remain open.
+Saved reusable Start references AGENTS/governance/current handoff; it remains a
+draft, not a verified fresh-task restoration. Governance§13 remains adopted.
+
 
 ### 2026-10-30 frozen V3/native candidate published and verified
 
