@@ -82,14 +82,14 @@ class NativeInputTests(unittest.TestCase):
 
     def test_authenticated_native_inventory_is_only_a_lower_bound_under_v3(self):
         result=native.proposed_capacity()
-        self.assertEqual((result['logical_files'],result['logical_regular_bytes'],result['native_entries_with_parents']),(831,149540145,915))
-        self.assertEqual(result['physical_lower_bound_bytes'],149303529)
+        self.assertEqual((result['logical_files'],result['logical_regular_bytes'],result['native_entries_with_parents']),(832,149567173,917))
+        self.assertEqual(result['physical_lower_bound_bytes'],149330557)
         self.assertEqual((result['maximum_regular_bytes'],result['maximum_entries']),(167772160,3000))
         self.assertEqual((native._STAGE_MAX_BYTES,native._STAGE_MAX_FILES),(134217728,3000))
         self.assertFalse(result['execution_authority']);self.assertEqual(result['memory_readiness'],'NOT_MEASURED')
         self.assertEqual(native.require_native_capacity()['status'],'NO_NATIVE_LOWER_BOUND_CONTRADICTION')
         self.assertEqual(result['historical_evidence_cap_bytes'],134217728)
-        with self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):native.require_complete_inventory()
+        self.assertEqual(native.require_complete_inventory()['derived_completeness']['files'],832)
 
     def test_libpq_layout_preserves_authenticated_bytes_and_uses_requested_name(self):
         name='/usr/lib/x86_64-linux-gnu/libpq.so.5'
@@ -125,7 +125,7 @@ class NativeInputTests(unittest.TestCase):
             with self.subTest(change=cases.index(changed)),patch.object(native,'_proposed_inventory',return_value=changed),self.assertRaises(ns.NamespaceProofError):native.proposed_capacity()
 
     def test_proposed_inventory_hash_cannot_be_replaced_by_new_local_hash(self):
-        with patch.object(Path,'read_bytes',return_value=b'{}'),self.assertRaisesRegex(ns.NamespaceProofError,'inventory_identity'):
+        with patch.object(Path,'read_bytes',return_value=b'{}'),self.assertRaisesRegex(ns.NamespaceProofError,'manifest_identity'):
             native.proposed_capacity()
 
     def test_capacity_refusal_precedes_every_native_plan_and_view_effect(self):
@@ -214,11 +214,11 @@ class NativeInputTests(unittest.TestCase):
         self.assertEqual(value['known_file_count'],709)
         self.assertEqual(value['known_regular_bytes'],75947095)
         self.assertEqual(len(value['required_unresolved_external_sonames']),29)
-        with self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):native.require_complete_inventory()
+        self.assertEqual(native.require_complete_inventory()['derived_completeness']['files'],832)
 
     def test_relabeling_partial_inventory_is_not_completion(self):
         value=native.inventory();value['status']='COMPLETE_VERIFIED';value['complete_runtime_manifest']=True
-        with patch.object(native,'inventory',return_value=value),self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+        with patch.object(native,'installation_inventory',return_value=value),self.assertRaises((ns.NamespaceProofError,KeyError)):
             native.require_complete_inventory()
 
     def test_modified_pin_bytes_refuse_before_any_effect(self):
@@ -305,7 +305,7 @@ class NativeInputTests(unittest.TestCase):
 
     def test_incomplete_inventory_blocks_plan_before_destination_or_privilege(self):
         stage=self.stage()
-        with patch.object(native,'require_native_capacity'),patch.object(os.path,'lexists') as exists,self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+        with patch.object(native,'require_native_capacity'),patch.object(native,'require_complete_inventory',side_effect=ns.NamespaceProofError('inventory_incomplete')),patch.object(os.path,'lexists') as exists,self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
             native.native_install_plan('a'*32,stage)
         exists.assert_not_called()
 
@@ -326,7 +326,7 @@ class NativeInputTests(unittest.TestCase):
             with self.assertRaisesRegex(ns.NamespaceProofError,'not_authorized'):native.activate_installation(**args)
 
     def test_view_cannot_be_minted_from_partial_manifest(self):
-        with patch.object(native,'require_native_capacity'),self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
+        with patch.object(native,'require_native_capacity'),patch.object(native,'require_complete_inventory',side_effect=ns.NamespaceProofError('inventory_incomplete')),self.assertRaisesRegex(ns.NamespaceProofError,'inventory_incomplete'):
             native.view_request(Mock(commit='a'*40,tree='b'*40),'/run/buffalo-native-'+'a'*32,deadline=10**12)
 
     def test_changed_view_source_manifest_or_nonce_refuses(self):
@@ -352,7 +352,7 @@ class NativeInputTests(unittest.TestCase):
 
     def test_logical_soname_layout_preserves_all_authenticated_bytes(self):
         value=native.execution_inventory();original=native._proposed_inventory()
-        self.assertEqual((len(value['rows']),value['regular_bytes'],len(value['renamed_logical_files'])),(831,149540145,59))
+        self.assertEqual((len(value['rows']),value['regular_bytes'],len(value['renamed_logical_files'])),(832,149567173,59))
         previous={r['path']:r for r in original['rows']}
         for old,new in value['renamed_logical_files'].items():
             self.assertEqual(value['rows'][new],dict(previous[old],path=new))
@@ -362,7 +362,7 @@ class NativeInputTests(unittest.TestCase):
 
     def test_logical_layout_collision_refuses_without_ambient_resolution(self):
         original=native._proposed_inventory();layout=native.execution_inventory();old,new=next(iter(layout['renamed_logical_files'].items()))
-        changed=copy.deepcopy(original);changed['rows'].append(dict(next(r for r in changed['rows'] if r['path']==old),path=new))
+        changed=copy.deepcopy(original);changed['rows'].append(dict(next(r for r in changed['rows'] if r['path']==old),path=new));changed['known_file_count']+=1;changed['known_regular_bytes']+=changed['rows'][-1]['bytes'];changed['resolved_dependencies'][new]=changed['resolved_dependencies'][old]
         with patch.object(native,'_proposed_inventory',return_value=changed),self.assertRaisesRegex(ns.NamespaceProofError,'layout_collision'):
             native.execution_inventory()
         with patch.object(native,'active_view',return_value=object()),patch.object(runtime,'read_native') as read,self.assertRaises(ns.NamespaceProofError):
@@ -374,7 +374,8 @@ class NativeInputTests(unittest.TestCase):
         data=elf(needed=native.RUNPATH.encode(),tag=29);digest=hashlib.sha256(data).hexdigest();loader='/lib64/ld-linux-x86-64.so.2'
         rows={native.PYTHON:{'sha256':digest,'elf':{'needed':[],'interpreter':loader}},loader:{'sha256':'e'*64}}
         value=SimpleNamespace(policy=runtime.POSTGRES_PHASE_POLICY,source_files={runtime.PROJECTED_ROOT+'/procurement/tools/'+native.FILES[1]:native.DIGESTS[1],
-            runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_proposed_inventory.json':native.PROPOSED_INVENTORY_SHA256},native_files={native.PYTHON:digest,loader:'e'*64})
+            runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_proposed_inventory.json':native.PROPOSED_INVENTORY_SHA256,
+            runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_installation_manifest.json':native.INSTALLATION_MANIFEST_SHA256},native_files={native.PYTHON:digest,loader:'e'*64})
         selected={'path':native.PYTHON,'sha256':digest,'bytes':len(data),'runpath':native.RUNPATH,'rpath':None}
         with patch.object(native,'execution_inventory',return_value={'rows':rows,'sonames':{}}),patch.object(native,'_pinned',return_value={'objects':[selected]}):
             self.assertIsNone(native.active_view())
@@ -384,3 +385,54 @@ class NativeInputTests(unittest.TestCase):
                 changed=copy.deepcopy(value);setattr(changed,field,replacement)
                 with self.subTest(field=field),self.assertRaises(ns.NamespaceProofError):native.sealed_elf_permission(changed,native.PYTHON,data)
             with self.assertRaises(ns.NamespaceProofError):native.sealed_elf_permission(value,native.PYTHON,data+b'x')
+
+
+    def test_successor_graph_adds_exact_cache_without_promoting_historical_authority(self):
+        value=native.require_complete_inventory();prior=native._proposed_inventory()
+        self.assertEqual(value['derived_completeness']['dependency_edges'],291)
+        self.assertEqual(value['derived_completeness']['elf_objects'],170)
+        self.assertEqual(value['status'],prior['status'])
+        self.assertFalse(value['provenance_requirements_satisfied'])
+        row=next(r for r in value['rows'] if r['path']==native.GCONV_CACHE)
+        self.assertEqual((row['bytes'],row['sha256']),(27028,'52c227df9d53248238602c1ddaccd2c8ddc4cc6a61aa45d7c425af590b8806a5'))
+        self.assertEqual(row['artifact_sha256'],'ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be')
+        self.assertFalse(any(r['path']==native.GCONV_CACHE for r in prior['rows']))
+
+    def test_graph_missing_cache_loader_or_library_refuses(self):
+        original=native.installation_inventory()
+        for path in (native.GCONV_CACHE,'/lib64/ld-linux-x86-64.so.2','/usr/lib/x86_64-linux-gnu/libc.so.6'):
+            value=copy.deepcopy(original);value['rows']=[r for r in value['rows'] if r['path']!=path]
+            with self.subTest(path=path),patch.object(native,'installation_inventory',return_value=value),self.assertRaises(ns.NamespaceProofError):
+                native.require_complete_inventory()
+
+    def test_graph_wrong_publisher_version_signature_or_data_architecture_refuses(self):
+        original=native.installation_inventory()
+        for field,replacement in (('version','latest'),('architecture','all'),('publisher_verification','LOCAL_HASH_ONLY')):
+            value=copy.deepcopy(original);digest=next(r['artifact_sha256'] for r in value['rows'] if r['path']==native.GCONV_CACHE)
+            value['artifacts'][digest][field]=replacement
+            with self.subTest(field=field),patch.object(native,'installation_inventory',return_value=value),self.assertRaises(ns.NamespaceProofError):
+                native.require_complete_inventory()
+
+    def test_cache_mapped_data_permission_is_exact_and_readonly(self):
+        data=b'selected cache fixture';digest=hashlib.sha256(data).hexdigest()
+        selected={'path':native.GCONV_CACHE,'bytes':len(data),'sha256':digest}
+        with patch.object(native,'require_complete_inventory',return_value={'rows':[selected]}):
+            self.assertEqual(runtime._mapped_file_kind(runtime.POSTGRES_PHASE_POLICY,native.GCONV_CACHE,data,digest,b'r--p',0o444),'SELECTED_GCONV_CACHE')
+            for policy,path,raw,sha,perms,mode in (
+                (runtime.APPLICATION_POLICY,native.GCONV_CACHE,data,digest,b'r--p',0o444),
+                (runtime.POSTGRES_PHASE_POLICY,native.GCONV_CACHE,data+b'x',digest,b'r--p',0o444),
+                (runtime.POSTGRES_PHASE_POLICY,native.GCONV_CACHE,data,digest,b'rw-p',0o444),
+                (runtime.POSTGRES_PHASE_POLICY,native.GCONV_CACHE,data,digest,b'r--p',0o644),
+                (runtime.POSTGRES_PHASE_POLICY,'/host/cache',data,digest,b'r--p',0o444)):
+                with self.subTest(path=path,policy=policy),self.assertRaises(ns.NamespaceProofError):
+                    runtime._mapped_file_kind(policy,path,raw,sha,perms,mode)
+
+
+    def test_explicit_nss_root_is_resolved_without_fabricating_a_needed_edge(self):
+        value=native.execution_inventory();path='/usr/lib/x86_64-linux-gnu/libnss_files.so.2'
+        self.assertEqual(value['sonames']['libnss_files.so.2'],path)
+        self.assertFalse(any('libnss_files.so.2' in edges for edges in native.installation_inventory()['resolved_dependencies'].values()))
+        data=b'selected root fixture';fixture=copy.deepcopy(value);fixture['rows'][path]['sha256']=hashlib.sha256(data).hexdigest()
+        with patch.object(native,'active_view',return_value=object()),patch.object(native,'execution_inventory',return_value=fixture),patch.object(runtime,'read_native',return_value=(data,0o444)) as read:
+            self.assertEqual(runtime._resolve_library('libnss_files.so.2',('/foreign',)),(path,data,0o444))
+        read.assert_called_once_with(path)

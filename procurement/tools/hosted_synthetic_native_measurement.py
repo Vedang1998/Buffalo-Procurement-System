@@ -170,15 +170,20 @@ class MeasurementObserver:
         self.actor,_,_=outer._actor(frame['pid'],frame['start'],c.uid,c.gid,path,'supervisor')
         self.mount_namespace=observe_process_view(c,frame['pid'],frame['start'])
         self.observed_view_binding_sha256=native._digest({'mount_namespace':list(self.mount_namespace),'backing':c.request.backing})
-        self.sample();self.ready=True
+        self.ready_actor=(frame['pid'],frame['start']);self.sample();self.ready=True
         return outer._PREFIX+native._canonical({'ack':c.request.nonce})+b'\n'
 
     def acknowledge_sent(self):
         native.require(self.ready and not self.work_acknowledged);self.work_acknowledged=True
 
+    def _cleanup_window(self):
+        if getattr(self,'cleanup_deadline',None) is None:self.cleanup_deadline=time.monotonic()+5
+        native.require(time.monotonic()<self.cleanup_deadline,'native_measurement_cleanup_timeout')
+        self.lifecycle_deadline=self.cleanup_deadline
+
     def finish(self):
         native.require(self.ready and not self.failed)
-        self.lifecycle_deadline=min(time.monotonic()+5,self.consumer.request.deadline+5)
+        self._cleanup_window()
         path='/sys/fs/cgroup'+outer.service_path(self.unit)
         outer._await_absence(self.unit,path,self.service_invocation,(self.actor,),deadline=self.lifecycle_deadline)
         outer._removed(self.service,path,self.mount)
@@ -197,7 +202,7 @@ class MeasurementObserver:
             and self.initial_service_absent and not self.ready and not self.work_acknowledged
             and self.actor is None and self.service is None and not self.failed,
             'native_pre_ack_refusal_unbound')
-        self.lifecycle_deadline=min(time.monotonic()+5,c.request.deadline+5)
+        self._cleanup_window()
         invocation=None;absent=False;path='/sys/fs/cgroup'+outer.service_path(self.unit)
         while True:
             native.require(time.monotonic()<self.lifecycle_deadline,'native_pre_ack_cleanup_timeout')
@@ -252,12 +257,21 @@ class NativePhaseReadiness:
 def validate_result(result,consumer):
     from hosted_synthetic_postgres_runtime import _validate_memory_result
     native.require(type(result) is dict and set(result)=={'policy','nonce','commit','tree','manifest_sha256',
-        'view_identity','interpreter_sha256','memory_readiness','observed_view_binding_sha256','execution_authority','service_memory_proof'}
+        'view_identity','interpreter_sha256','memory_readiness','observed_view_binding_sha256','mapping_observation','execution_authority','service_memory_proof'}
         and (result['policy'],result['nonce'],result['commit'],result['tree'],result['manifest_sha256'],result['view_identity'],result['interpreter_sha256'])==
-            (native.POLICY,consumer.request.nonce,consumer.binding.commit,consumer.binding.tree,native.DIGESTS[0],list(consumer.request.root_identity),consumer.request.interpreter_sha256)
+            (native.POLICY,consumer.request.nonce,consumer.binding.commit,consumer.binding.tree,native.INSTALLATION_MANIFEST_SHA256,list(consumer.request.root_identity),consumer.request.interpreter_sha256)
         and result['execution_authority'] is False and result['service_memory_proof']=='NOT_PROVEN'
         and type(result['observed_view_binding_sha256']) is str and re.fullmatch('[0-9a-f]{64}',result['observed_view_binding_sha256']),
         'native_measurement_result_refused')
+    m=result['mapping_observation'];observer=consumer.observer
+    native.require(type(m) is dict and set(m)=={'pid','start','mount_namespace','source_sha256','backing_sha256',
+        'mappings_sha256','ready_mappings_sha256','scope'} and type(observer) is MeasurementObserver
+        and (m['pid'],m['start'])==observer.ready_actor
+        and m['mount_namespace']==list(observer.mount_namespace)
+        and m['source_sha256']==native._digest({'commit':consumer.binding.commit,'tree':consumer.binding.tree,'files':consumer.binding.files})
+        and m['backing_sha256']==native._digest(consumer.request.backing)
+        and all(type(m[k]) is str and re.fullmatch('[0-9a-f]{64}',m[k]) for k in ('mappings_sha256','ready_mappings_sha256'))
+        and m['scope']=='READY_AND_FINAL_SNAPSHOTS_NOT_CONTINUOUS_LIFETIME','native_final_mapping_binding_refused')
     _validate_memory_result(result['memory_readiness'],consumer.binding)
     from hosted_synthetic_postgres_runtime import _FIXED
     expected={p:r['sha256'] for p,r in native.execution_inventory()['rows'].items()}
@@ -290,7 +304,11 @@ def measure(consumer,root):
         except BaseException as error:
             observer.failed=True;consumer.installation.uncertain=True
             if failure is None:failure=error
-        finally:observer.close_descriptors()
+        finally:
+            try:observer.close_descriptors()
+            except BaseException as cleanup:
+                if failure is None:failure=cleanup
+                else:failure.add_note('native_measurement_handles_unverified')
     if failure is not None:raise failure
     require_consumer_drain(consumer,consumer.installation)
     value=object.__new__(NativePhaseReadiness);value._owner=value;value._token=_TOKEN

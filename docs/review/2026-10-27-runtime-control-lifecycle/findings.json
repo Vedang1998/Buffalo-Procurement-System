@@ -9,7 +9,7 @@
   ],
   "writer_cannot_verify_closure": true,
   "privileged_activation": "DISABLED",
-  "credential_release": "WITHHELD",
+  "credential_release": "DISABLED",
   "findings": [
     {
       "topic_id": "OWNER-P1-PID1",
@@ -488,7 +488,7 @@
     {
       "id": "N7",
       "severity": "P2",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
       "description": "Pre-ACK refusal cannot drain: finish skipped/failed, close requires proof and leaves slice; identity quarantined",
@@ -506,6 +506,16 @@
         "code": "hosted_synthetic_observer.py:_await_pre_ack_collection/_await_absence",
         "tests": "delayed terminal collection, two separated absence observations, replacement/reappearance/active/timeout negatives",
         "live_cleanup": "NOT_RUN"
+      },
+      "closure": {
+        "commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+        "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+        "source": "external-review-34e8-owner-report.json",
+        "scope": "Owner-supplied CLOSED at34e8 within reviewer stated scope; not live lifetime proof"
+      },
+      "descendant_change_impact": {
+        "status": "PENDING_DELTA_REVIEW",
+        "changes": "H3 cleanup and connected M1 receipt reuse require new review; historical closure preserved"
       }
     },
     {
@@ -566,7 +576,7 @@
       "id": "M1",
       "title": "Capacity FIT must not bypass memory refusal before account provisioning",
       "severity": "P1",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "owner_source": "external-review-e5e8-owner-summary.json",
       "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
       "code": [
@@ -581,7 +591,17 @@
         "same canonical 120MiB codec bytes; unchanged conservative formula"
       ],
       "evidence": "oct29-memory-native-evidence.json",
-      "remaining": "Independent delta review and supported-target machine evidence; no writer closure"
+      "remaining": "Independent delta review and supported-target machine evidence; no writer closure",
+      "closure": {
+        "commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+        "tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+        "source": "external-review-34e8-owner-report.json",
+        "scope": "Owner-supplied CLOSED at34e8 within reviewer stated scope; not live lifetime proof"
+      },
+      "descendant_change_impact": {
+        "status": "PENDING_DELTA_REVIEW",
+        "changes": "H3 cleanup and connected M1 receipt reuse require new review; historical closure preserved"
+      }
     },
     {
       "id": "N10-SHARED-DEADLINE",
@@ -680,7 +700,7 @@
     }
   },
   "owner_received_e5e8_summary": "external-review-e5e8-owner-summary.json",
-  "review_status": "Owner reports e5e8 review and N10 acceptance; full report not received. Preserve old actual reviews, do not invent remaining e5e8 dispositions. All later material requires delta review.",
+  "review_status": "34e8_EXTERNAL_DISPOSITIONS_RECORDED; NEW_H123_DELTA_PENDING",
   "new_native_capacity_finding": {
     "identifier": "NATIVE-FIXED-INPUT-CAPACITY",
     "status": "OPEN",
@@ -737,5 +757,113 @@
     "baseline": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
     "status": "PREPARED_NOT_CALLED_NO_CLAUDE_VERDICT",
     "historical_frozen_target_preserved": true
+  },
+  "owner_received_34e8_report": {
+    "classification": "OWNER_SUPPLIED_EXTERNAL_CLAUDE_REVIEW_DISPOSITIONS",
+    "reviewed_commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "reviewed_tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+    "tool": "Claude Code container 2.1.314",
+    "session": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+    "model": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+    "effort": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+    "attribution_scope": "Owner supplied; no callable Claude channel or new account/session inspection",
+    "report_received": true,
+    "verbatim_full_review": "The available owner message supplies the dispositions and remediation requirements below; no additional reviewer prose is fabricated.",
+    "commands_results_limitations": "Exact reviewer commands, execution counts and environment limitations were not included in the available owner message. They are not inherited from earlier reviews or writer tests. A single clarification is pending.",
+    "accepted_at_reviewed_commit": {
+      "M1": "CLOSED within reviewer stated scope",
+      "N7": "CLOSED within reviewer stated scope",
+      "V3": "VERIFIED policy; not capacity/memory/execution equivalence"
+    },
+    "new_findings": [
+      {
+        "id": "H1",
+        "severity": "P1",
+        "topic": "Missing selected libc6 gconv-modules.cache and required authenticated runtime members"
+      },
+      {
+        "id": "H2",
+        "severity": "P2",
+        "topic": "Observe actual interpreter READY mappings and revalidate late capture/import mappings before readiness, binding same actor/source/view/backing"
+      },
+      {
+        "id": "H3",
+        "severity": "P2",
+        "topic": "Expired work must not disable bounded known-owned cleanup; sticky uncertainty and foreign replacement protection remain"
+      },
+      {
+        "id": "H4",
+        "severity": "UNMEASURED_RISK",
+        "topic": "Reviewer smaller-host memory extrapolation is not target native OOM or service peak"
+      },
+      {
+        "id": "P3-RECEIPT-COPY",
+        "severity": "P3",
+        "topic": "Retain receipt-copy observation; no demonstrated forgery claimed"
+      }
+    ],
+    "historical_dispositions": "Preserved at existing exact reviewed commits in findings.json. No unprovided expanded mapping is invented.",
+    "later_descendants": "REQUIRE_TARGETED_DELTA_REVIEW",
+    "privileged_activation": "DISABLED",
+    "credential_release": "DISABLED"
+  },
+  "oct31_h123_delta": {
+    "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "status": "IMPLEMENTED_PENDING_FROZEN_VALIDATION_AND_CLAUDE_DELTA_REVIEW",
+    "findings": [
+      {
+        "id": "H1",
+        "severity": "P1",
+        "status": "REPAIRED_PENDING_REVIEW",
+        "code": [
+          "hosted_native_installation_manifest.json",
+          "hosted_synthetic_native_inputs.py:require_complete_inventory/execution_inventory",
+          "hosted_synthetic_runtime.py:capture_runtime/_mapped_file_kind"
+        ],
+        "target_private_view": "NOT_RUN"
+      },
+      {
+        "id": "H2",
+        "severity": "P2",
+        "status": "REPAIRED_PENDING_REVIEW",
+        "code": [
+          "hosted_synthetic_native_inputs.py:_mapping_observation/_final_mapping_observation/bind_measurement_result",
+          "hosted_synthetic_native_measurement.py:validate_result"
+        ],
+        "scope": "READY/final snapshots, not continuous lifetime",
+        "target_capture": "NOT_RUN"
+      },
+      {
+        "id": "H3",
+        "severity": "P2",
+        "status": "REPAIRED_PENDING_REVIEW",
+        "code": [
+          "hosted_synthetic_native_installation.py:InstallationLease.close/_NativeOps",
+          "hosted_synthetic_native_measurement.py:MeasurementObserver._cleanup_window",
+          "hosted_synthetic_native_inputs.py:Stage.__init__",
+          "hosted_synthetic_bootstrap.py:_collect_native_client"
+        ],
+        "cleanup_seconds": 5,
+        "shared_work_seconds": 60,
+        "target_lifecycle": "NOT_RUN"
+      },
+      {
+        "id": "H4",
+        "status": "OPEN",
+        "classification": "UNMEASURED_RISK_NOT_OBSERVED_OOM",
+        "target_memory": "NOT_RUN"
+      },
+      {
+        "id": "P3-RECEIPT-COPY",
+        "status": "OPEN",
+        "classification": "OBSERVATION_NOT_DEMONSTRATED_FORGERY",
+        "scope": "No unrelated receipt redesign"
+      }
+    ],
+    "route": "hosted_synthetic_native_route.installation_measurement_entry -> closed installation gate -> _run -> artifact materialization -> InstallationLease -> NativeConsumer/measure -> NativePhaseReadiness -> AccountLease -> native service -> exact consumer drain -> installation.close",
+    "installation_authority": false,
+    "activation": "DISABLED",
+    "independent_review": "PENDING",
+    "internal_codex": "Targeted read-only code-path analysis only; not independent Claude review"
   }
 }

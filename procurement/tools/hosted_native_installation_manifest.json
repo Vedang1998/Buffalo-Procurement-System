@@ -1,0 +1,42 @@
+{
+  "additions": [
+    {
+      "archive_mode": "0644",
+      "artifact_member": "./usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache",
+      "artifact_member_evidence": "EXACT_ARCHIVE_MEMBER_VERIFIED_NOT_INFERRED_FROM_LOGICAL_PATH",
+      "artifact_sha256": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "bytes": 27028,
+      "elf": null,
+      "mode": "0444",
+      "mode_evidence": "AUTHENTICATED_ARCHIVE_MODE_NORMALIZED_AS_READ_NATIVE",
+      "package": "libc6",
+      "path": "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache",
+      "physical_alias_evidence": "DIRECT_PHYSICAL_PATH",
+      "physical_path": "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache",
+      "selection_evidence": "H1_OWNER_REPORTED_C_UTF8_STARTUP_MAPPING; EXACT_SELECTED_LIBC6_ARCHIVE_MEMBER",
+      "sha256": "52c227df9d53248238602c1ddaccd2c8ddc4cc6a61aa45d7c425af590b8806a5",
+      "version": "2.39-0ubuntu8.9"
+    }
+  ],
+  "assurance_limitations": [
+    "Python publisher HTTPS/GitHub digest, no verified signed build attestation",
+    "Fixed signed Ubuntu noble and October29 noble-updates snapshots; no rolling latest or implicit freshness acceptance",
+    "Source review and single installation decision remain required; complete static graph is not dynamic lifetime proof"
+  ],
+  "base_manifest": "hosted_native_proposed_inventory.json",
+  "base_sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+  "change_control": "BUFFALO_H1_GCONV_COMPLETENESS_2026_10_31",
+  "installation_authority": false,
+  "mapped_data_roots": [
+    "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache"
+  ],
+  "proposed_snapshot_policy": "BUFFALO_FIXED_PUBLISHER_SNAPSHOT_2026_10_29_V1_OWNER_DECISION_PENDING",
+  "schema": "BUFFALO_FIXED_NATIVE_SUCCESSOR_V2",
+  "trust_root": {
+    "bootstrap": "OFFICIAL_UBUNTU_PUBLISHER_HTTPS_NOT_LOCAL_OWNERTRUST",
+    "bytes": 3607,
+    "protection": "HELD_FULLY_SEALED_READONLY_MEMFD",
+    "sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C"
+  }
+}

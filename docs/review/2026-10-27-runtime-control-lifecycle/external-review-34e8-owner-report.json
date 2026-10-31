@@ -1,0 +1,49 @@
+{
+  "classification": "OWNER_SUPPLIED_EXTERNAL_CLAUDE_REVIEW_DISPOSITIONS",
+  "reviewed_commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+  "reviewed_tree": "5d300467117ce3e577c72c92068a13970aa1826f",
+  "tool": "Claude Code container 2.1.314",
+  "session": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+  "model": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+  "effort": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+  "attribution_scope": "Owner supplied; no callable Claude channel or new account/session inspection",
+  "report_received": true,
+  "verbatim_full_review": "The available owner message supplies the dispositions and remediation requirements below; no additional reviewer prose is fabricated.",
+  "commands_results_limitations": "Exact reviewer commands, execution counts and environment limitations were not included in the available owner message. They are not inherited from earlier reviews or writer tests. A single clarification is pending.",
+  "accepted_at_reviewed_commit": {
+    "M1": "CLOSED within reviewer stated scope",
+    "N7": "CLOSED within reviewer stated scope",
+    "V3": "VERIFIED policy; not capacity/memory/execution equivalence"
+  },
+  "new_findings": [
+    {
+      "id": "H1",
+      "severity": "P1",
+      "topic": "Missing selected libc6 gconv-modules.cache and required authenticated runtime members"
+    },
+    {
+      "id": "H2",
+      "severity": "P2",
+      "topic": "Observe actual interpreter READY mappings and revalidate late capture/import mappings before readiness, binding same actor/source/view/backing"
+    },
+    {
+      "id": "H3",
+      "severity": "P2",
+      "topic": "Expired work must not disable bounded known-owned cleanup; sticky uncertainty and foreign replacement protection remain"
+    },
+    {
+      "id": "H4",
+      "severity": "UNMEASURED_RISK",
+      "topic": "Reviewer smaller-host memory extrapolation is not target native OOM or service peak"
+    },
+    {
+      "id": "P3-RECEIPT-COPY",
+      "severity": "P3",
+      "topic": "Retain receipt-copy observation; no demonstrated forgery claimed"
+    }
+  ],
+  "historical_dispositions": "Preserved at existing exact reviewed commits in findings.json. No unprovided expanded mapping is invented.",
+  "later_descendants": "REQUIRE_TARGETED_DELTA_REVIEW",
+  "privileged_activation": "DISABLED",
+  "credential_release": "DISABLED"
+}

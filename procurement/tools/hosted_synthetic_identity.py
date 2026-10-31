@@ -390,16 +390,24 @@ def run_provisioned_candidate(identity, *, source, python, repository, event, re
             from hosted_synthetic_native_measurement import NativeConsumer,NativePhaseReadiness,verify_consumer,measure
             import hosted_synthetic_native_inputs as native
             boot._require(diagnostic=='postgres-version' and python==native.PYTHON
-                and type(native_measurement) is NativeConsumer and preflight is None,
+                and type(native_measurement) is NativeConsumer,
                 'native_measurement_route_refused')
             verify_consumer(native_measurement)
             boot._require(native_measurement.binding==binding and native_measurement.request.deadline==ownership_deadline
                 and native_measurement.role=='measurement'
                 and (native_measurement.uid,native_measurement.gid)==(identity.operator_uid,identity.operator_gid),
                 'native_measurement_source_or_deadline_refused')
-            readiness=measure(native_measurement,source)
+            started=time.monotonic()
+            readiness=None if preflight is None else preflight.readiness
+            measured=readiness is None
+            if measured:readiness=measure(native_measurement,source)
             boot._require(type(readiness) is NativePhaseReadiness,'postgres_memory_readiness_required')
+            if hasattr(readiness,'consumer'):
+                boot._require(readiness.consumer is native_measurement,'native_readiness_consumer_changed')
             readiness.verify(source,binding)  # Deciding M1 gate BEFORE account creation.
+            if preflight is not None:
+                preflight.readiness=readiness
+                preflight.record('NATIVE_CAPACITY_AND_MEMORY' if measured else 'NATIVE_READINESS_DRIFT',started)
         elif diagnostic=='postgres-version':
             from hosted_synthetic_postgres_runtime import require_phase_fit
             try:selected_python=Path(python).resolve(strict=True)

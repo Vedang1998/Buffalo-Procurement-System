@@ -377,6 +377,8 @@ def capture_runtime(generation, source_root, binding):
     executable=str(Path('/proc/self/exe').resolve(strict=True))
     stdlib=Path(sysconfig.get_path('stdlib')).resolve(strict=True)
     pending=[(executable,*read_native(executable)),*_selected_stdlib(stdlib)]
+    from hosted_synthetic_native_inputs import active_view,GCONV_CACHE
+    if active_view() is not None:pending.append((GCONV_CACHE,*read_native(GCONV_CACHE)))
     native={};contents={};roots=_library_roots();total=0
     while pending:
         path,data,mode=pending.pop()
@@ -395,7 +397,7 @@ def capture_runtime(generation, source_root, binding):
                provenance='native-runtime:'+native[path],content=data) for path,(data,mode) in contents.items()]
     expected=dict(binding.files);source={}
     for relative in SOURCE_PATHS:
-        if not (relative.endswith('.py') or relative in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json','procurement/tools/hosted_native_proposed_inventory.json')):continue
+        if not (relative.endswith('.py') or relative in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json','procurement/tools/hosted_native_proposed_inventory.json','procurement/tools/hosted_native_installation_manifest.json')):continue
         path=root/relative
         fd=ns._acquire(lambda:os.open(path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW))
         try:
@@ -597,6 +599,12 @@ def _consumer_scope(policy):
 def _mapped_file_kind(policy,path,data,digest,permissions,mode):
     ns._require(hashlib.sha256(data).hexdigest()==digest)
     if data.startswith(b'\x7fELF'):return 'ELF'
+    from hosted_synthetic_native_inputs import GCONV_CACHE,require_complete_inventory
+    if path==GCONV_CACHE:
+        row=next(r for r in require_complete_inventory()['rows'] if r['path']==path)
+        ns._require(policy in (POLICY,POSTGRES_PHASE_POLICY) and digest==row['sha256']
+            and len(data)==row['bytes'] and permissions==b'r--p' and mode==0o444)
+        return 'SELECTED_GCONV_CACHE'
     # PG adds exact libc locale files absent from the diagnostic capture.
     # glibc may map them during supervisor startup; they are data, not ELF.
     from hosted_synthetic_postgres_runtime import _LOCALE
@@ -635,7 +643,7 @@ def _verify_consumer(runtime,root_observation,policies):
                     and flags & os.ST_RDONLY and flags & os.ST_NOSUID and flags & os.ST_NODEV
                     and not flags & os.ST_NOEXEC)
     finally:root.close()
-    allowed=dict(runtime.native_files);mapped=set();locale_mapped=set()
+    allowed=dict(runtime.native_files);mapped=set();locale_mapped=set();data_mapped=set()
     for line in ns._read('/proc/self/maps').splitlines():
         fields=line.split(maxsplit=5)
         ns._require(len(fields) in (5,6))
@@ -648,12 +656,15 @@ def _verify_consumer(runtime,root_observation,policies):
         ns._require(stat.S_ISREG(info.st_mode) and info.st_dev==root_observation['root_identity'][0]
                     and fields[4]==str(info.st_ino).encode()
                     and fields[3]==f'{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}'.encode())
-        if path in locale_mapped:
+        if path in data_mapped:
             ns._require(fields[1]==b'r--p' and stat.S_IMODE(info.st_mode)==0o444)
         elif path not in mapped:
             data=ns._read(path,MAX_BYTES)
             kind=_mapped_file_kind(runtime.policy,path,data,allowed[path],fields[1],stat.S_IMODE(info.st_mode))
-            (mapped if kind=='ELF' else locale_mapped).add(path)
+            if kind=='ELF':mapped.add(path)
+            else:
+                data_mapped.add(path)
+                if kind=='LOCALE':locale_mapped.add(path)
     ns._require(runtime.executable in mapped)
     for path,digest in runtime.source_files.items():
         ns._require(hashlib.sha256(ns._read(path,2*1024**2)).hexdigest()==digest)

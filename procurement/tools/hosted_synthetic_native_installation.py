@@ -6,6 +6,8 @@ synthetic transports. No repository Python is ever a privileged command.
 """
 import hashlib
 from functools import wraps
+from contextlib import contextmanager
+import math
 import os
 from pathlib import Path
 import re
@@ -18,17 +20,28 @@ import hosted_synthetic_native_inputs as native
 import hosted_synthetic_bootstrap as boot
 
 _TOKEN=object()
+CLEANUP_SECONDS=5
+
+
+class WorkExpired(native.ns.NamespaceProofError):
+    """No ownership ambiguity: no new work was performed by this refusal."""
+
+
+def _work_deadline(deadline):
+    if not (type(deadline) in (int,float) and math.isfinite(deadline) and time.monotonic()<deadline):
+        raise WorkExpired('native_install_work_expired')
+
 def _sticky(method):
     @wraps(method)
     def guarded(self,*args,**kwargs):
         try:return method(self,*args,**kwargs)
-        except BaseException:
-            if getattr(self,'_owner',None) is self:self.uncertain=True
+        except BaseException as error:
+            if getattr(self,'_owner',None) is self and (not isinstance(error,WorkExpired) or self.pending):self.uncertain=True
             raise
     return guarded
 
 
-_PROGRAMS=frozenset(('mkdir','dd','sha256sum','chmod','stat','find','unlink','rmdir'))
+_PROGRAMS=frozenset(('mkdir','dd','sha256sum','chmod','stat','find','unlink','rmdir','rm'))
 
 
 def _path(root,relative=''):
@@ -38,10 +51,16 @@ def _path(root,relative=''):
     return root+('/'+relative if relative else '')
 
 
-def _command(program,*args):
+def _command(program,*args,remaining=None):
     native.require(program in _PROGRAMS)
+    # Native timeout plus kill grace must fit the same outer cleanup deadline.
+    if remaining is None:kill='2s';work='15s'
+    else:
+        native.require(type(remaining) in (int,float) and math.isfinite(remaining) and remaining>.05,
+            'native_install_cleanup_timeout')
+        kill=f'{min(.2,remaining/4):.6f}s';work=f'{remaining/2:.6f}s'
     return ('/usr/bin/sudo','-n','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','LC_ALL=C.UTF-8',
-        '/usr/bin/timeout','--signal=TERM','--kill-after=2s','15s','/usr/bin/'+program,*args)
+        '/usr/bin/timeout','--signal=TERM','--kill-after='+kill,work,'/usr/bin/'+program,*args)
 
 
 def _source_binding(binding,deadline):
@@ -66,20 +85,30 @@ def inspect_import_tools(deadline):
 
 class _NativeOps:
     def __init__(self,deadline):
-        # Source-reviewed activation is a separate gate, not a Boolean/secret.
-        raise native.ns.NamespaceProofError('native_installation_not_authorized')
+        from hosted_synthetic_native_route import require_installation_scope
+        require_installation_scope();_work_deadline(deadline)
+        self.deadline=deadline;self.cleanup_deadline=None
+
+    def begin_cleanup(self,deadline):
+        native.require(getattr(self,'cleanup_deadline',None) is None and time.monotonic()<deadline)
+        self.cleanup_deadline=deadline
 
     def run(self,program,*args):
-        code,raw=boot._collect_native_client(_command(program,*args),cwd='/',operation_deadline=self.deadline)
+        cleanup=getattr(self,'cleanup_deadline',None)
+        if cleanup is not None:
+            native.require(program in ('stat','find','unlink','rmdir','rm'),'native_cleanup_work_refused')
+        code,raw=boot._collect_native_client(_command(program,*args,remaining=None if cleanup is None else cleanup-time.monotonic()),cwd='/',operation_deadline=self.deadline if cleanup is None else cleanup,**({} if cleanup is None else {'cleanup_deadline':cleanup}))
         native.require(code==0,'native_install_command_refused');return raw
 
     def stream(self,path,row,chunks):
         """Fixed dd stdin, bounded buffering; no privileged Stage path reopen."""
         argv=_command('dd','bs=65536','iflag=count_bytes,fullblock','count='+str(row['bytes']),
             'of='+path,'oflag=excl,nofollow','status=none')
+        native.require(getattr(self,'cleanup_deadline',None) is None,'native_cleanup_work_refused')
         process=None;pending=memoryview(b'');sent=0;iterator=iter(chunks);eof=False;errors=bytearray()
+        failure=None
         try:
-            native.require(time.monotonic()<self.deadline)
+            _work_deadline(self.deadline)
             process=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                 env=boot._ENVIRONMENT,close_fds=True,bufsize=0)
             with selectors.DefaultSelector() as selected:
@@ -108,14 +137,24 @@ class _NativeOps:
                             else:errors.extend(raw);native.require(len(errors)<=4096,'native_import_output_bound')
             remaining=self.deadline-time.monotonic();native.require(remaining>0)
             native.require(process.wait(timeout=remaining)==0 and sent==row['bytes'] and eof,'native_import_terminal_refused')
+        except BaseException as error:failure=error
         finally:
             if process is not None:
-                if process.poll() is None:
-                    process.kill();process.wait(timeout=5)
-                    # This reaps the direct client only. The lease remains
-                    # uncertain; it never claims root descendants drained.
-                for pipe in (process.stdin,process.stdout,process.stderr):
-                    if pipe is not None and not pipe.closed:pipe.close()
+                try:
+                    if process.poll() is None:
+                        process.kill();process.wait(timeout=5)
+                        # Direct client only; pending mutation remains uncertain.
+                except BaseException as cleanup:
+                    if failure is None:failure=cleanup
+                    else:failure.add_note('native_stream_client_reap_unverified')
+                finally:
+                    for pipe in (process.stdin,process.stdout,process.stderr):
+                        try:
+                            if pipe is not None and not pipe.closed:pipe.close()
+                        except BaseException as cleanup:
+                            if failure is None:failure=cleanup
+                            else:failure.add_note('native_stream_pipe_close_unverified')
+        if failure is not None:raise failure
 
     def observe(self,path):
         raw=self.run('stat','--printf=%d %i %f %u %g %h %s\n','--',path)
@@ -169,26 +208,35 @@ class InstallationLease:
         # This remains separate from static capacity and memory readiness.
         native.require_complete_inventory()
         self=object.__new__(cls);self._owner=self;self._token=_TOKEN;self.root=root;self.deadline=deadline
-        self.binding=binding;self.manifest=native.PROPOSED_INVENTORY_SHA256;self.rows=native.execution_inventory()['rows']
+        self.binding=binding;self.manifest=native.INSTALLATION_MANIFEST_SHA256;self.rows=native.execution_inventory()['rows']
         self.ops=_NativeOps(deadline);self.owned={};self.closed=False;self.uncertain=False
-        self.pending=False;self.installed=False;self.consumers=[];self.view_requests={};self.active_stage=None;self.total=0
+        self.pending=False;self.cleanup_deadline=None;self.installed=False;self.consumers=[];self.view_requests={};self.active_stage=None;self.total=0
         try:self._mkdir('');self._mkdir('view');return self
         except BaseException as error:
-            self.uncertain=True
+            if not isinstance(error,WorkExpired) or self.pending:self.uncertain=True
             error.native_installation_lease=self  # Retain exact ownership; never delete ambiguous objects.
             raise
 
+    def _state(self):
+        native.require(self._owner is self and self._token is _TOKEN and not self.closed
+            and not self.uncertain and not self.pending
+            and self.manifest==native.INSTALLATION_MANIFEST_SHA256,'native_install_lease_refused')
+
     @_sticky
     def verify(self, *, all_objects=False):
-        native.require(self._owner is self and self._token is _TOKEN and not self.closed
-            and not self.uncertain and not self.pending and time.monotonic()<self.deadline
-            and self.manifest==native.PROPOSED_INVENTORY_SHA256,'native_install_lease_refused')
+        self._state()
+        native.require(self.cleanup_deadline is None,'native_cleanup_work_refused')
+        _work_deadline(self.deadline)
+        self._objects(all_objects)
+
+    def _objects(self,all_objects):
         if all_objects:
             names=list(self.owned);observed=self.ops.observe_many([_path(self.root,n) for n in names])
             native.require(observed==[self.owned[n] for n in names],'native_install_owned_identity_changed')
         else:native.require(self.ops.observe(self.root)==self.owned[''],'native_install_owned_identity_changed')
 
     def _mkdir(self,name):
+        _work_deadline(self.deadline)
         if name in self.owned:return
         self.pending=True
         try:
@@ -231,11 +279,13 @@ class InstallationLease:
                 self.owned[name]=info;self.total+=row['bytes'];self.pending=False
                 self._refresh_directories(name)
             stage.close();self.active_stage=None
-        except BaseException:
-            self.uncertain=True
-            if not stage.closed:
-                try:stage.close()
-                except BaseException as cleanup:raise native.ns.NamespaceCleanupError('native_stage_cleanup_unverified') from cleanup
+        except BaseException as error:
+            if not isinstance(error,WorkExpired) or self.pending:self.uncertain=True
+            try:
+                if not stage.closed:stage.close()
+            except BaseException:
+                self.uncertain=True;error.add_note('native_stage_cleanup_unverified')
+            else:self.active_stage=None
             raise
 
     @_sticky
@@ -257,28 +307,59 @@ class InstallationLease:
 
     @_sticky
     def close(self):
-        self.verify(all_objects=True);native.require(self.active_stage is None,'native_install_stage_still_live')
-        # Consumers register before launch. Their own kernel/source-bound
-        # observers must be terminal and close every handle, never a Boolean.
-        from hosted_synthetic_native_measurement import require_consumer_drain
-        from hosted_synthetic_native_measurement import NativeConsumer
+        if self._owner is self and self.closed and self._token is None:return
+        self._state()
+        # One cleanup window, independent of expired work, never renewable.
+        if self.cleanup_deadline is None:
+            self.cleanup_deadline=time.monotonic()+CLEANUP_SECONDS
+            self.ops.begin_cleanup(self.cleanup_deadline)
+        self._cleanup_time();self._objects(True)
+        native.require(self.active_stage is None,'native_install_stage_still_live')
+        from hosted_synthetic_native_measurement import require_consumer_drain,NativeConsumer
         native.require(all(type(c) is NativeConsumer for c in self.consumers)
-            and set(self.view_requests)=={c.request.nonce for c in self.consumers},
-            'native_view_without_consumer_refused')
+            and set(self.view_requests)=={c.request.nonce for c in self.consumers},'native_view_without_consumer_refused')
         for consumer in self.consumers:require_consumer_drain(consumer,self)
         native.require(self.ops.inventory(self.root)==set(self.owned)-{''},'native_install_unknown_descendant')
-        for name in sorted(self.owned,key=lambda n:(-n.count('/'),n),reverse=False):
-            if not name:continue
-            info=self.owned[name];native.require(self.ops.observe(_path(self.root,name))==info)
-            self.pending=True
-            if stat.S_ISREG(info[2]):self.ops.run('unlink','--',_path(self.root,name))
-            else:self.ops.run('rmdir','--',_path(self.root,name))
-            native.require(self.ops.absent(_path(self.root,name)),'native_install_removal_unverified')
-            del self.owned[name];self._refresh_directories(name);self.pending=False
+        files=sorted(n for n,v in self.owned.items() if stat.S_ISREG(v[2]))
+        # Exact nonrecursive batches; never globs, -f, -r or unknown paths.
+        for offset in range(0,len(files),64):
+            names=files[offset:offset+64];self._cleanup_time()
+            paths=[_path(self.root,n) for n in names]
+            native.require(self.ops.observe_many(paths)==[self.owned[n] for n in names],'native_install_owned_identity_changed')
+            self.pending=True;self.ops.run('rm','--',*paths)
+            remaining=self.ops.inventory(self.root)
+            native.require(remaining==(set(self.owned)-{''}-set(names)),'native_install_removal_unverified')
+            for name in names:del self.owned[name]
+            self._refresh_parent_batch(names);self.pending=False
+        directories=sorted((n for n in self.owned if n),key=lambda n:(-n.count('/'),n))
+        # A depth group never contains its own ancestor.
+        for depth in sorted({n.count('/') for n in directories},reverse=True):
+            group=[n for n in directories if n.count('/')==depth]
+            for offset in range(0,len(group),64):
+                names=group[offset:offset+64];self._cleanup_time();paths=[_path(self.root,n) for n in names]
+                native.require(self.ops.observe_many(paths)==[self.owned[n] for n in names],'native_install_owned_identity_changed')
+                self.pending=True;self.ops.run('rmdir','--',*paths)
+                native.require(self.ops.inventory(self.root)==set(self.owned)-{''}-set(names),'native_install_removal_unverified')
+                for name in names:del self.owned[name]
+                self._refresh_parent_batch(names);self.pending=False
+        self._cleanup_time();native.require(self.ops.observe(self.root)==self.owned[''])
         self.pending=True;self.ops.run('rmdir','--',self.root)
         native.require(self.ops.absent(self.root),'native_install_removal_unverified')
         self.pending=False;self.closed=True;self._token=None
 
+    def _cleanup_time(self):
+        native.require(self.cleanup_deadline is not None and time.monotonic()<self.cleanup_deadline,'native_install_cleanup_timeout')
+
+    def _refresh_parent_batch(self,names):
+        parents={str(p) if str(p)!='.' else '' for name in names for p in Path(name).parents}&set(self.owned)
+        ordered=sorted(parents)
+        if not ordered:return
+        current=self.ops.observe_many([_path(self.root,n) for n in ordered])
+        for name,new in zip(ordered,current):
+            native.require(new[:5]==self.owned[name][:5],'native_install_parent_replaced');self.owned[name]=new
+
 
 def activate_installation(*args,**kwargs):
-    raise native.ns.NamespaceProofError('native_installation_not_authorized')
+    from hosted_synthetic_native_route import _installation_decision_gate,installation_measurement_entry
+    _installation_decision_gate()
+    return installation_measurement_entry(*args,**kwargs)

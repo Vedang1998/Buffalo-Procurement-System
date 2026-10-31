@@ -620,7 +620,7 @@ def _phase_inventory(value):
         and entries['/usr/lib/locale/C.utf8/'+name].mode==0o444 for name in _LOCALE))
     ns._require(value.executable not in EXECUTABLES)
     expected_source={runtime.PROJECTED_ROOT+'/'+p:digest for p,digest in metadata['native_capture']['source_files'].items()
-                     if p.endswith('.py') or p in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json','procurement/tools/hosted_native_proposed_inventory.json')}
+                     if p.endswith('.py') or p in ('procurement/tools/hosted_native_inputs.json','procurement/tools/hosted_native_runpath.json','procurement/tools/hosted_native_proposed_inventory.json','procurement/tools/hosted_native_installation_manifest.json')}
     ns._require(expected_source==value.source_files)
     for path in (value.executable,*EXECUTABLES):
         ns._require(path in value.native_files and entries[path].mode==0o555

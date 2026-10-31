@@ -619,9 +619,14 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
             with self.assertRaises(ns.NamespaceProofError):pg._phase_inventory(changed)
         finally:changed.close()
 
-    def mapped_consumer(self,*,second_locale_permission=b'r--p'):
+    def mapped_consumer(self,*,second_locale_permission=b'r--p',cache=False):
         value=self.compose();entries=pg._phase_inventory(value)
         path='/usr/lib/locale/C.utf8/LC_CTYPE'
+        if cache:
+            import hosted_synthetic_native_inputs as native
+            old=entries[path];path=native.GCONV_CACHE;entries[path]=old
+            value.native_files=dict(value.native_files,**{path:hashlib.sha256(old.content).hexdigest()})
+            self.enterContext(patch.object(native,'require_complete_inventory',return_value={'rows':[{'path':path,'bytes':len(old.content),'sha256':value.native_files[path]}]}))
         maps=(b'1000-2000 r-xp 0000 00:01 3 /fixture/python\n'
               b'2000-3000 r--p 0000 00:01 4 '+path.encode()+b'\n'
               b'3000-4000 '+second_locale_permission+b' 0000 00:01 4 '+path.encode()+b'\n')
@@ -851,3 +856,11 @@ class PostgresPhaseRuntimeTests(unittest.TestCase):
             pg.receive_postgres_phase(packet)
         with self.assertRaises(OSError):os.fstat(fd)
         value.verify()
+
+
+    def test_mapped_cache_is_data_without_inflating_postgres_locale_count(self):
+        proof=self.mapped_consumer(cache=True)
+        self.assertEqual(proof['mapped_elf_files'],1);self.assertEqual(proof['mapped_postgres_locale_files'],0)
+
+    def test_duplicate_cache_mapping_cannot_gain_execute_permission(self):
+        with self.assertRaises(ns.NamespaceProofError):self.mapped_consumer(cache=True,second_locale_permission=b'r-xp')

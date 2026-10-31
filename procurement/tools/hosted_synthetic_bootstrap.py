@@ -355,9 +355,10 @@ def verify_postdrop_access(root, unit):
             raise BootstrapCleanupError('bootstrap_access_cleanup_failed') from errors[0]
 
 
-def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None, operation_deadline=None):
+def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None, operation_deadline=None, cleanup_deadline=None):
     """Bounded direct-child ownership; stderr is never included in reports."""
-    process = None
+    process = None;body_error=None
+    if cleanup_deadline is not None:_require(type(cleanup_deadline) in (int,float) and time.monotonic()<cleanup_deadline,'bootstrap_cleanup_deadline')
     if operation_deadline is not None:_require(type(operation_deadline) in (int,float) and time.monotonic()<operation_deadline,'bootstrap_client_timeout')
     try:
         process = subprocess.Popen(argv, cwd=cwd, env=_ENVIRONMENT, close_fds=True,
@@ -408,6 +409,8 @@ def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None, operatio
         _require(remaining > 0, 'bootstrap_client_timeout')
         code = process.wait(timeout=remaining)
         return code, bytes(output[process.stdout])
+    except BaseException as error:
+        body_error=error;raise
     finally:
         if process is not None:
             errors = []
@@ -415,10 +418,10 @@ def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None, operatio
                 if process.poll() is None:
                     process.send_signal(signal.SIGTERM)
                     try:
-                        process.wait(timeout=5)
+                        process.wait(timeout=5 if cleanup_deadline is None else max(0,cleanup_deadline-time.monotonic()))
                     except subprocess.TimeoutExpired:
                         process.kill()
-                process.wait(timeout=5)
+                process.wait(timeout=5 if cleanup_deadline is None else max(0,cleanup_deadline-time.monotonic()))
             except BaseException as error:
                 errors.append(error)
             for stream in (process.stdin, process.stdout, process.stderr):
@@ -428,7 +431,8 @@ def _collect_native_client(argv, *, cwd, observer=None, lifecycle=None, operatio
                 except BaseException as error:
                     errors.append(error)
             if errors:
-                raise BootstrapCleanupError('bootstrap_client_cleanup_failed') from errors[0]
+                if body_error is not None:body_error.add_note('bootstrap_client_cleanup_failed')
+                else:raise BootstrapCleanupError('bootstrap_client_cleanup_failed') from errors[0]
 
 
 def _observe_unit_absence(unit):

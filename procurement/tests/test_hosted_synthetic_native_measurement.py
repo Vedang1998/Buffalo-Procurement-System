@@ -42,7 +42,7 @@ class NativeMeasurementTests(unittest.TestCase):
         lease.root='/run/buffalo-native-'+'a'*32;lease.installed=True;lease.consumers=[];lease.view_requests={}
         lease.binding=BINDING;lease.owned={'':(1,2,stat.S_IFDIR|0o700,0,0,2,0)}
         self.enterContext(patch.object(lease,'verify'))
-        request=native.ViewRequest('d'*64,BINDING.commit,BINDING.tree,native.DIGESTS[0],lease.root,(1,2),'c'*64,
+        request=native.ViewRequest('d'*64,BINDING.commit,BINDING.tree,native.INSTALLATION_MANIFEST_SHA256,lease.root,(1,2),'c'*64,
             time.monotonic()+60,native._TOKEN,(1,3),{'/opt':[1,4],'/usr/share':[1,5],native.PYTHON:[1,6]})
         lease.view_requests[request.nonce]=request
         return measurement.reserve_consumer(lease,request,BINDING,UNIT,role=role,uid=os.geteuid(),gid=os.getegid())
@@ -216,3 +216,90 @@ class NativeMeasurementTests(unittest.TestCase):
         c=self.consumer();o=object.__new__(measurement.MeasurementObserver);o.consumer=c
         with patch.object(boot,'_collect_native_client') as command,self.assertRaises(ns.NamespaceProofError):o.finish_refusal({'native_measurement':'REFUSED'},1)
         command.assert_not_called()
+
+
+    def final_context(self,c):
+        mounts={'mount_namespace':[7,8]}
+        before={'pid':123,'start':456,'mount_namespace':[7,8],
+            'source_sha256':native._digest({'commit':BINDING.commit,'tree':BINDING.tree,'files':BINDING.files}),
+            'backing_sha256':native._digest(c.request.backing),'mappings_sha256':'a'*64}
+        token=native._ACTIVE_VIEW.set(c.request);obs=native._ACTIVE_OBSERVATION.set({'mounts':mounts,'ready':before})
+        self.addCleanup(native._ACTIVE_VIEW.reset,token);self.addCleanup(native._ACTIVE_OBSERVATION.reset,obs)
+        self.enterContext(patch.object(native,'_view_mount_snapshot',return_value=mounts))
+        self.enterContext(patch('hosted_synthetic_source.bind_hosted_source',return_value=BINDING))
+        return before
+
+    def receipt(self,c):
+        receipt=object.__new__(pg.PhaseReadiness)
+        receipt.native={native.PYTHON:'c'*64,**{p:hashlib.sha256(data).hexdigest() for p,data in pg._FIXED.items()}}
+        self.enterContext(patch.object(receipt,'verify',return_value={'measured':'fixture'}))
+        self.enterContext(patch.object(native,'require_native_capacity'))
+        return receipt
+
+    def test_late_mapping_check_follows_controlled_receipt_boundary_before_readiness(self):
+        c=self.consumer();before=self.final_context(c);receipt=self.receipt(c);events=[]
+        receipt.verify.side_effect=lambda *a:events.append('capture_receipt_verified') or {'fixture':True}
+        def final(*a):events.append('final_maps');return dict(before,mappings_sha256='b'*64)
+        with patch.object(native,'_mapping_observation',side_effect=final):
+            result=native.bind_measurement_result(c.request,BINDING,receipt)
+        self.assertEqual(events,['capture_receipt_verified','final_maps'])
+        self.assertEqual(result['mapping_observation']['ready_mappings_sha256'],'a'*64)
+        self.assertEqual(result['mapping_observation']['mappings_sha256'],'b'*64)
+        self.assertIn('NOT_CONTINUOUS',result['mapping_observation']['scope'])
+
+    def test_late_unlisted_or_changed_backing_refuses_result_after_capture(self):
+        for code in ('native_host_mapping_fallback_refused','native_mapping_identity_refused'):
+            c=self.consumer();self.final_context(c);receipt=self.receipt(c)
+            with patch.object(native,'_mapping_observation',side_effect=ns.NamespaceProofError(code)),self.assertRaisesRegex(ns.NamespaceProofError,code):
+                native.bind_measurement_result(c.request,BINDING,receipt)
+            receipt.verify.assert_called_once()
+
+    def test_changed_actor_namespace_source_or_backing_refuses_final_snapshot(self):
+        c=self.consumer();before=self.final_context(c)
+        for key,value in [('pid',124),('start',457),('mount_namespace',[7,9]),('source_sha256','f'*64),('backing_sha256','e'*64)]:
+            with self.subTest(key=key),patch.object(native,'_mapping_observation',return_value=dict(before,**{key:value})),self.assertRaisesRegex(ns.NamespaceProofError,'actor_changed'):
+                native._final_mapping_observation(c.request,BINDING)
+
+    def test_changed_mount_refuses_before_final_maps(self):
+        c=self.consumer();self.final_context(c)
+        with patch.object(native,'_view_mount_snapshot',return_value={'mount_namespace':[7,9]}),patch.object(native,'loaded_mappings') as maps,self.assertRaisesRegex(ns.NamespaceProofError,'mount_drift'):
+            native._final_mapping_observation(c.request,BINDING)
+        maps.assert_not_called()
+
+    def test_measurement_cleanup_error_preserves_original_mapping_failure(self):
+        c=self.consumer();error=ns.NamespaceProofError('late_map_refusal');o=Mock(ready=True,closed=False)
+        o.finish.side_effect=RuntimeError('drain');o.close_descriptors.side_effect=RuntimeError('handles')
+        with patch.object(measurement,'measurement_plan',return_value=()),patch.object(measurement.MeasurementObserver,'create',return_value=o),patch.object(boot,'_collect_native_client',side_effect=error),self.assertRaises(ns.NamespaceProofError) as raised:
+            measurement.measure(c,'/fixture')
+        self.assertIs(raised.exception,error);o.finish.assert_called_once();o.close_descriptors.assert_called_once()
+        self.assertTrue(c.installation.uncertain)
+
+    def test_measurement_cleanup_gets_one_existing_grace_after_work_expiry(self):
+        c=self.consumer();c.request=replace(c.request,deadline=time.monotonic()-100)
+        o=object.__new__(measurement.MeasurementObserver);o.consumer=c
+        started=time.monotonic();o._cleanup_window();deadline=o.cleanup_deadline
+        self.assertGreater(deadline,started);self.assertLessEqual(deadline,started+5.01)
+        o._cleanup_window();self.assertEqual(o.cleanup_deadline,deadline)
+        with patch.object(measurement.time,'monotonic',return_value=deadline+1),self.assertRaisesRegex(ns.NamespaceProofError,'cleanup_timeout'):
+            o._cleanup_window()
+        self.assertEqual(o.cleanup_deadline,deadline)
+
+
+    def test_actual_final_map_parser_refuses_late_host_or_replaced_mapping(self):
+        c=self.consumer();receipt=self.receipt(c)
+        device,inode=c.request.backing[native.PYTHON]
+        line=f"1000-2000 r-xp 00000000 {os.major(device):02x}:{os.minor(device):02x} {inode} {native.PYTHON}\n".encode()
+        mounts={'mount_namespace':list(ns._identity(os.stat('/proc/self/ns/mnt')))}
+        self.enterContext(patch.object(native,'_view_mount_snapshot',return_value=mounts))
+        self.enterContext(patch('hosted_synthetic_source.bind_hosted_source',return_value=BINDING))
+        with patch('builtins.open',return_value=io.BytesIO(line)):
+            ready=native._mapping_observation(c.request,BINDING,mounts)
+        token=native._ACTIVE_VIEW.set(c.request);obs=native._ACTIVE_OBSERVATION.set({'mounts':mounts,'ready':ready})
+        try:
+            for raw in (line.replace(native.PYTHON.encode(),b'/unlisted/late-extension.so'),line.replace(b' 6 ',b' 7 ')):
+                with patch('builtins.open',return_value=io.BytesIO(raw)),patch.object(identity.AccountLease,'create') as account,self.assertRaises(ns.NamespaceProofError):
+                    native.bind_measurement_result(c.request,BINDING,receipt)
+                account.assert_not_called()
+        finally:
+            native._ACTIVE_OBSERVATION.reset(obs);native._ACTIVE_VIEW.reset(token)
+        self.assertIsNone(native.active_view())

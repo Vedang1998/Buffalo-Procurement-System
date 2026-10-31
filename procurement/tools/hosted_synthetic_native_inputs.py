@@ -1,6 +1,6 @@
 """Fixed native-input successor contract; installation and activation stay dormant.
 
-Publisher-verified inventory is partial. No supplied manifest, Boolean, version
+The successor derives a fixed-workload file graph from preserved publisher evidence. No supplied manifest, Boolean, version
 string or successful extraction grants complete-closure or execution authority.
 Only native tools appear in proposed privileged commands; this module never runs
 as root, runs package installers, changes host permissions or activates a unit.
@@ -24,7 +24,7 @@ import time
 
 import hosted_synthetic_namespace as ns
 
-POLICY='BUFFALO_NATIVE_INPUT_VIEW_V1'
+POLICY='BUFFALO_NATIVE_INPUT_VIEW_V2'
 LOADER_POLICY='BUFFALO_FIXED_PYTHON_3135_RUNPATH_V1'
 PYTHON='/opt/hostedtoolcache/Python/3.13.5/x64/bin/python3.13'
 RUNPATH='/opt/hostedtoolcache/Python/3.13.5/x64/lib'
@@ -38,6 +38,8 @@ ARTIFACTS={
  '4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac':1301302,
  '3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1':151262,
 }
+INSTALLATION_MANIFEST_SHA256='3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070'
+GCONV_CACHE='/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache'
 _STAGE_MAX_BYTES=134217728
 _STAGE_MAX_FILES=3000
 _TOKEN=object()
@@ -78,25 +80,83 @@ def inventory():
     return value
 
 
+def installation_manifest():
+    raw=Path(__file__).with_name('hosted_native_installation_manifest.json').read_bytes()
+    require(len(raw)<=65536 and hashlib.sha256(raw).hexdigest()==INSTALLATION_MANIFEST_SHA256,
+        'native_successor_manifest_identity_refused')
+    return json.loads(raw)
+
+
+def installation_inventory():
+    """Explicit delta over the preserved authenticated predecessor; no status promotion."""
+    delta=installation_manifest();base=_proposed_inventory()
+    require(type(base['known_file_count']) is int and base['known_file_count']==len(base['rows'])
+        and type(base['known_regular_bytes']) is int and base['known_regular_bytes']==sum(r['bytes'] for r in base['rows'])
+        and type(base['physical_content_count']) is int and base['physical_content_count']==len({r['physical_path'] for r in base['rows']})
+        and type(base['physical_content_bytes']) is int and base['physical_content_bytes']==sum({r['physical_path']:r['bytes'] for r in base['rows']}.values()),
+        'native_predecessor_accounting_refused')
+    require(delta['schema']=='BUFFALO_FIXED_NATIVE_SUCCESSOR_V2' and delta['base_sha256']==PROPOSED_INVENTORY_SHA256)
+    rows=list(base['rows']);paths={r['path'] for r in rows}
+    for row in delta['additions']:
+        require(row['path'] not in paths and row['artifact_sha256'] in base['artifacts'])
+        rows.append(row);paths.add(row['path'])
+    result=dict(base,rows=rows,known_file_count=len(rows),known_regular_bytes=sum(r['bytes'] for r in rows))
+    physical={r['physical_path']:(r['bytes'],r['sha256']) for r in rows}
+    result.update(physical_content_count=len(physical),physical_content_bytes=sum(n for n,_ in physical.values()),
+        successor_manifest_sha256=INSTALLATION_MANIFEST_SHA256)
+    return result
+
+
 def require_complete_inventory():
-    value=inventory()
-    missing=[key for key in value if key.startswith(('required_unresolved_','unresolved_native_')) and value[key]]
-    require(not missing and value['complete_runtime_manifest'] is True
-            and value['exact_transitive_package_versions']=='AUTHENTICATED_AND_TARGET_MATCHED'
-            and value['status']=='COMPLETE_VERIFIED','native_input_inventory_incomplete')
-    # A future complete pin must also enumerate the recursively resolved graph.
-    rows={row['path']:row for row in value['rows']}
-    require(type(value.get('resolved_dependencies')) is dict,'native_dependency_graph_missing')
+    """Derive fixed-workload graph completeness; approval/provenance policy is separate.
+
+    Historical PARTIAL and provenance_requirements_satisfied flags are untouched.
+    Every byte is selected by a source-pinned, publisher-bound file/artifact graph.
+    This return value authorizes neither installation nor target execution.
+    """
+    value=installation_inventory();delta=installation_manifest();rows={r['path']:r for r in value['rows']}
+    require(len(rows)==len(value['rows'])<=3000,'native_inventory_duplicate')
+    artifacts=value['artifacts'];edges=0;names=set()
     for path,row in rows.items():
-        if not row.get('elf'):continue
-        needed=row['elf']['needed'];resolved=value['resolved_dependencies'].get(path)
-        require(type(resolved) is dict and set(resolved)==set(needed))
+        require(path.startswith('/') and str(Path(path))==path and '..' not in Path(path).parts
+            and type(row['bytes']) is int and 0<=row['bytes']<=83886080
+            and re.fullmatch('[0-9a-f]{64}',row['sha256']) and row['mode'] in ('0444','0555'))
+        artifact=artifacts.get(row['artifact_sha256'])
+        require(type(artifact) is dict and artifact['artifact_sha256']==row['artifact_sha256']
+            and (artifact['architecture']=='amd64' or (artifact['architecture']=='all'
+                and artifact['artifact_sha256']=='2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447'
+                and artifact['package']=='tzdata' and path.startswith('/usr/share/zoneinfo/') and row.get('elf') is None))
+            and row['package']==artifact['package']
+            and row['version']==artifact['version'],'native_file_publisher_binding_refused')
+        if artifact['publisher']=='Ubuntu':
+            require(artifact['publisher_verification']=='VALID_SIGNED_RELEASE_INDEX_PACKAGE_DIGEST_CHAIN'
+                and artifact['signed_release']['validsig']==delta['trust_root']['signer']
+                and artifact['index_sha256']==artifact['packages_index']['sha256']
+                and re.fullmatch('[0-9a-f]{64}',artifact['package_record_sha256'])
+                and artifact['suite'] in ('noble','noble-updates'),'native_ubuntu_provenance_refused')
+        else:
+            require(row['artifact_sha256'] in ARTIFACTS and artifact['release_tag']=='3.13.5-15601068749'
+                and artifact['publisher']=='actions/python-versions' and artifact['publisher_repository_id']==250077933
+                and artifact['publisher_hash_list']['sha256']=='b29cad0b8f44df881f177f24151b363674ea401e025c56276fbff7fdce107e98',
+                'native_python_provenance_refused')
+        elf=row.get('elf')
+        if not elf:continue
+        if elf.get('soname'):names.add(elf['soname'])
+        resolved=value['resolved_dependencies'].get(path)
+        require(type(resolved) is dict and set(resolved)==set(elf['needed']),'native_dependency_graph_missing')
         for name,target in resolved.items():
-            require(target in rows and rows[target].get('elf',{}).get('soname')==name,
-                    'native_dependency_resolution_refused')
-        interp=row['elf'].get('interpreter')
-        require(interp is None or interp in rows,'native_loader_missing')
-    require(value.get('provenance_requirements_satisfied') is True,'native_provenance_incomplete')
+            require(target in rows and (rows[target].get('elf') or {}).get('soname')==name,'native_dependency_resolution_refused')
+            names.add(name);edges+=1
+        require(elf.get('interpreter') is None or elf['interpreter'] in rows,'native_loader_missing')
+    require(all(path in rows and rows[path].get('elf') and rows[path]['elf'].get('soname')
+        for path in value['explicit_non_DT_NEEDED_roots']),'native_explicit_root_missing')
+    previous=inventory()
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+    for key in ('required_unresolved_executables','required_unresolved_locale_files','required_unresolved_timezone_files'):
+        require(set(previous[key])<=set(rows),'native_required_root_missing')
+    require(PYTHON in rows and GCONV_CACHE in rows and rows[GCONV_CACHE]['elf'] is None,'native_mapped_cache_missing')
+    value['derived_completeness']={'files':len(rows),'elf_objects':sum(bool(r.get('elf')) for r in rows.values()),
+        'dependency_edges':edges,'scope':'FIXED_NATIVE_FILE_GRAPH_NOT_CONTINUOUS_LIFETIME_OR_INSTALLATION_AUTHORITY'}
     return value
 
 
@@ -114,7 +174,7 @@ def execution_inventory():
     Exact authenticated ELF DT_NEEDED/DT_SONAME supplies the loader name;
     physical archive members and bytes stay unchanged. No ambient search.
     """
-    value=_proposed_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
     require(len(by_path)==len(rows));changes={};names={}
     for origin,edges in value['resolved_dependencies'].items():
         require(origin in by_path and set(edges)==set(by_path[origin]['elf']['needed']))
@@ -129,6 +189,11 @@ def execution_inventory():
                 changes[target]=path
             require(name not in names or names[name]==path,'native_layout_ambiguous_soname')
             names[name]=path
+    for target in value['explicit_non_DT_NEEDED_roots']:
+        row=by_path[target];name=row['elf']['soname'];path=changes.get(target,target)
+        require(re.fullmatch(r'[A-Za-z0-9_.+\-]+',name) and Path(path).name==name
+            and (name not in names or names[name]==path),'native_explicit_soname_refused')
+        names[name]=path
     selected={}
     for row in rows:
         path=changes.get(row['path'],row['path'])
@@ -175,7 +240,8 @@ def sealed_elf_permission(value,path,data):
     import hosted_synthetic_runtime as runtime
     require(value.policy==runtime.POSTGRES_PHASE_POLICY,'native_sealed_policy_refused')
     expected={runtime.PROJECTED_ROOT+'/procurement/tools/'+FILES[1]:DIGESTS[1],
-        runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_proposed_inventory.json':PROPOSED_INVENTORY_SHA256}
+        runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_proposed_inventory.json':PROPOSED_INVENTORY_SHA256,
+        runtime.PROJECTED_ROOT+'/procurement/tools/hosted_native_installation_manifest.json':INSTALLATION_MANIFEST_SHA256}
     require(all(value.source_files.get(p)==digest for p,digest in expected.items()),'native_sealed_inventory_binding_refused')
     inventory=execution_inventory();row=inventory['rows'].get(path)
     require(row is not None and value.native_files.get(path)==row['sha256']
@@ -197,7 +263,7 @@ def sealed_elf_permission(value,path,data):
 def proposed_capacity():
     """No caller-selected total/policy/budget; static lower bound, not M1 fit."""
     import hosted_synthetic_runtime as runtime
-    value=_proposed_inventory();rows=value['rows'];paths=set();parents=set();physical={};total=0
+    value=installation_inventory();rows=value['rows'];paths=set();parents=set();physical={};total=0
     require(value['schema']=='BUFFALO_AUTHENTICATED_NATIVE_FILE_INVENTORY_V1'
         and value['capacity']['policy']==runtime.PREVIOUS_POSTGRES_PHASE_POLICY
         and type(value['capacity']['cap_bytes']) is int
@@ -224,7 +290,7 @@ def proposed_capacity():
         and type(value['physical_content_count']) is int and len(physical)==value['physical_content_count']
         and not paths&parents,'native_proposed_totals_refused')
     entries=len(paths|parents)
-    return {'policy':runtime.POSTGRES_PHASE_POLICY,'inventory_sha256':PROPOSED_INVENTORY_SHA256,
+    return {'policy':runtime.POSTGRES_PHASE_POLICY,'inventory_sha256':INSTALLATION_MANIFEST_SHA256,
         'logical_regular_bytes':total,'logical_files':len(paths),'native_entries_with_parents':entries,
         'physical_lower_bound_bytes':sum(v[0] for v in physical.values()),
         'maximum_regular_bytes':runtime.POSTGRES_PHASE_MAX_BYTES,'maximum_entries':runtime.MAX_ENTRIES,
@@ -354,10 +420,28 @@ class Stage:
         require(os.geteuid()>0 and os.getegid()>0,'native_python_root_refused')
         self.path=Path(path);self.owned=[];self._owner=self;self.closed=False
         self.regular_bytes=0;self.regular_files=0
-        self.path.mkdir(mode=0o700)
-        self.fd=os.open(self.path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
-        info=os.fstat(self.fd);self.identity=(info.st_dev,info.st_ino)
-        require(info.st_uid==os.geteuid() and stat.S_IMODE(info.st_mode)==0o700)
+        self.path.mkdir(mode=0o700);created=None;self.fd=None
+        try:
+            created=self.path.lstat()
+            require(stat.S_ISDIR(created.st_mode) and created.st_uid==os.geteuid() and stat.S_IMODE(created.st_mode)==0o700)
+            self.fd=os.open(self.path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
+            info=os.fstat(self.fd);self.identity=(info.st_dev,info.st_ino)
+            require(self.identity==(created.st_dev,created.st_ino)
+                and info.st_uid==os.geteuid() and stat.S_IMODE(info.st_mode)==0o700)
+        except BaseException as error:
+            try:
+                if created is not None:
+                    current=self.path.lstat()
+                    require((current.st_dev,current.st_ino,current.st_uid,current.st_mode)==
+                        (created.st_dev,created.st_ino,os.geteuid(),stat.S_IFDIR|0o700),'native_stage_initialization_replaced')
+                    self.path.rmdir()  # Only a known, unchanged, empty directory.
+            except BaseException:error.add_note('native_stage_initialization_cleanup_unverified')
+            finally:
+                if self.fd is not None:
+                    try:os.close(self.fd)
+                    except BaseException:error.add_note('native_stage_initialization_descriptor_unverified')
+                self.closed=True
+            raise
 
     def verify(self):
         require(self._owner is self and not self.closed)
@@ -367,7 +451,7 @@ class Stage:
                 and stat.S_IMODE(named.st_mode)==0o700,'native_stage_identity_changed')
 
     @_stage_operation
-    def materialize_tar(self,stream,rows):
+    def materialize_tar(self,stream,rows,*,deadline=None):
         """Decoded tar data from an already authenticated artifact transport.
 
         Caller binds outer .deb/archive digest before this helper. Every selected
@@ -386,6 +470,9 @@ class Stage:
         found=set();seen=set();total=0
         with tarfile.open(fileobj=stream,mode='r|') as archive:
             for index,entry in enumerate(archive):
+                if deadline is not None:
+                    from hosted_synthetic_native_installation import _work_deadline
+                    _work_deadline(deadline)
                 require(index<50000,'native_archive_entry_bound')
                 name=_member(entry.name)
                 require(name not in seen,'native_archive_duplicate');seen.add(name)
@@ -404,6 +491,7 @@ class Stage:
                 require(len(content)==entry.size and hashlib.sha256(content).hexdigest()==row['sha256'],
                         'native_archive_content_refused')
                 for target in selected:
+                    if deadline is not None:_work_deadline(deadline)
                     _new_file(self.fd,target['path'].lstrip('/'),content,int(target['mode'],8),self.owned)
                     self.regular_bytes+=entry.size;self.regular_files+=1
                 found.add(name)
@@ -536,7 +624,7 @@ def native_install_plan(nonce,stage):
     for path in sorted(directories,key=lambda p:(-p.count('/'),p)):
         commands.append({'argv':('/usr/bin/chmod','0555','--',path),'stdin':'DEVNULL'})
     # Top stays root0700; only exact private read-only views expose selected files.
-    return {'policy':POLICY,'manifest_sha256':PROPOSED_INVENTORY_SHA256,'destination':destination,
+    return {'policy':POLICY,'manifest_sha256':INSTALLATION_MANIFEST_SHA256,'destination':destination,
         'commands':tuple(commands),'expected_files':tuple((r['path'],r['sha256']) for r in value['rows']),
         'installation_authority':False,'execution_authority':False,
         'activation':'DISABLED_PENDING_SINGLE_INSTALLATION_DECISION_AND_REVIEW',
@@ -568,7 +656,7 @@ def view_request(binding,root, *, deadline, installation=None):
     installation.verify();rows=execution_inventory()['rows'];require(PYTHON in rows)
     names=['/opt','/usr/share',*sorted(rows)]
     backing={name:list(installation.owned['view'+name][:2]) for name in names}
-    request=ViewRequest(os.urandom(32).hex(),binding.commit,binding.tree,DIGESTS[0],str(root),
+    request=ViewRequest(os.urandom(32).hex(),binding.commit,binding.tree,INSTALLATION_MANIFEST_SHA256,str(root),
         (info.st_dev,info.st_ino),rows[PYTHON]['sha256'],deadline,_TOKEN,
         ns._identity(os.stat('/proc/self/ns/mnt')),backing)
     installation.view_requests[request.nonce]=request
@@ -577,7 +665,7 @@ def view_request(binding,root, *, deadline, installation=None):
 
 def _verify_request(request,binding):
     require(type(request) is ViewRequest and request._token is _TOKEN
-        and request.manifest==DIGESTS[0] and (request.commit,request.tree)==(binding.commit,binding.tree)
+        and request.manifest==INSTALLATION_MANIFEST_SHA256 and (request.commit,request.tree)==(binding.commit,binding.tree)
         and type(request.nonce) is str and re.fullmatch('[0-9a-f]{64}',request.nonce)
         and re.fullmatch('/run/buffalo-native-[0-9a-f]{32}',request.root)
         and type(request.deadline) in (int,float) and math.isfinite(request.deadline) and time.monotonic()<request.deadline
@@ -658,7 +746,6 @@ def protected_view(request,binding):
     import hosted_synthetic_runtime as runtime
     require(str(Path('/proc/self/exe').resolve(strict=True))==PYTHON,'native_view_interpreter_refused')
     mounts=_view_mount_snapshot(request)
-    loaded_mappings(request)
     for row in execution_inventory()['rows'].values():
         data,mode=runtime.read_native(row['path'])
         require(len(data)==row['bytes'] and hashlib.sha256(data).hexdigest()==row['sha256']
@@ -666,15 +753,41 @@ def protected_view(request,binding):
     from hosted_synthetic_source import bind_hosted_source,REPOSITORY,REF
     require(bind_hosted_source(Path(__file__).resolve().parents[2],repository=REPOSITORY,event='push',ref=REF,sha=binding.commit,operation_deadline=request.deadline)==binding,
             'native_view_source_changed')
-    token=_ACTIVE_VIEW.set(request);files_token=_ACTIVE_FILES.set(execution_inventory()['rows'])
-    observation_token=_ACTIVE_OBSERVATION.set(mounts)
+    ready=_mapping_observation(request,binding,mounts)
+    selected=execution_inventory()['rows']
+    token=_ACTIVE_VIEW.set(request);files_token=_ACTIVE_FILES.set(selected)
+    observation_token=_ACTIVE_OBSERVATION.set({'mounts':mounts,'ready':ready})
     try:
         yield request
-        loaded_mappings(request)
-        require(_view_mount_snapshot(request)==mounts,'native_view_mount_drift')
-        _verify_request(request,binding)
+        _final_mapping_observation(request,binding)
     finally:
         _ACTIVE_OBSERVATION.reset(observation_token);_ACTIVE_FILES.reset(files_token);_ACTIVE_VIEW.reset(token)
+
+
+def _mapping_observation(request,binding,mounts):
+    """Same-process snapshot; does not claim continuous mapping observation."""
+    process=ns._process(os.getpid());namespace=ns._identity(os.stat('/proc/self/ns/mnt'))
+    mappings=loaded_mappings(request)
+    require(ns._process(os.getpid())['start']==process['start']
+        and list(namespace)==mounts['mount_namespace'],'native_mapping_actor_changed')
+    return {'pid':os.getpid(),'start':process['start'],'mount_namespace':list(namespace),
+        'source_sha256':_digest({'commit':binding.commit,'tree':binding.tree,'files':binding.files}),
+        'backing_sha256':_digest(request.backing),'mappings_sha256':_digest(mappings)}
+
+
+def _final_mapping_observation(request,binding):
+    initial=_ACTIVE_OBSERVATION.get()
+    require(active_view() is request and type(initial) is dict,'native_mapping_ready_missing')
+    _verify_request(request,binding)
+    mounts=_view_mount_snapshot(request)
+    require(mounts==initial['mounts'],'native_view_mount_drift')
+    from hosted_synthetic_source import bind_hosted_source,REPOSITORY,REF
+    require(bind_hosted_source(Path(__file__).resolve().parents[2],repository=REPOSITORY,event='push',ref=REF,
+        sha=binding.commit,operation_deadline=request.deadline)==binding,'native_view_source_changed')
+    final=_mapping_observation(request,binding,mounts);ready=initial['ready']
+    require(all(final[k]==ready[k] for k in final if k!='mappings_sha256'),'native_mapping_actor_changed')
+    return dict(final,ready_mappings_sha256=ready['mappings_sha256'],
+        scope='READY_AND_FINAL_SNAPSHOTS_NOT_CONTINUOUS_LIFETIME')
 
 
 def active_view():return _ACTIVE_VIEW.get()
@@ -700,10 +813,13 @@ def bind_measurement_result(request,binding,receipt):
     expected={p:r['sha256'] for p,r in execution_inventory()['rows'].items()}
     expected.update({p:hashlib.sha256(data).hexdigest() for p,data in _FIXED.items()})
     require(receipt.native==expected,'native_measurement_inventory_changed')
+    # Recheck AFTER real capture/import/receipt verification, BEFORE minting output.
+    mapping=_final_mapping_observation(request,binding)
     return {'policy':POLICY,'nonce':request.nonce,'commit':request.commit,'tree':request.tree,
         'manifest_sha256':request.manifest,'view_identity':list(request.root_identity),
         'interpreter_sha256':request.interpreter_sha256,'memory_readiness':report,
-        'observed_view_binding_sha256':_digest({'mount_namespace':_ACTIVE_OBSERVATION.get()['mount_namespace'], 'backing':request.backing}),
+        'observed_view_binding_sha256':_digest({'mount_namespace':mapping['mount_namespace'], 'backing':request.backing}),
+        'mapping_observation':mapping,
         'execution_authority':False,'service_memory_proof':'NOT_PROVEN'}
 
 
@@ -711,9 +827,9 @@ def view_wire(request,binding):
     _verify_request(request,binding)
     paths=['/opt','/usr/share',*sorted(execution_inventory()['rows'])]
     require(type(request.backing) is dict and set(request.backing)==set(paths))
-    value={'policy':'BUFFALO_FIXED_NATIVE_VIEW_WIRE_V1','nonce':request.nonce,
+    value={'policy':'BUFFALO_FIXED_NATIVE_VIEW_WIRE_V2','nonce':request.nonce,
         'commit':request.commit,'tree':request.tree,'manifest':request.manifest,
-        'proposed_manifest':PROPOSED_INVENTORY_SHA256,'root':request.root,
+        'proposed_manifest':INSTALLATION_MANIFEST_SHA256,'root':request.root,
         'root_identity':list(request.root_identity),'interpreter_sha256':request.interpreter_sha256,
         'deadline':request.deadline,'initial_mount_namespace':list(request.initial_mount_namespace),
         'backing':[request.backing[path] for path in paths]}
@@ -726,8 +842,8 @@ def view_from_wire(raw,binding):
     except (ValueError,UnicodeError):raise ns.NamespaceProofError('native_view_wire_refused') from None
     require(type(value) is dict and _canonical(value)==raw and set(value)=={'policy','nonce','commit','tree','manifest','proposed_manifest',
         'root','root_identity','interpreter_sha256','deadline','initial_mount_namespace','backing'}
-        and value['policy']=='BUFFALO_FIXED_NATIVE_VIEW_WIRE_V1'
-        and value['proposed_manifest']==PROPOSED_INVENTORY_SHA256,'native_view_wire_refused')
+        and value['policy']=='BUFFALO_FIXED_NATIVE_VIEW_WIRE_V2'
+        and value['proposed_manifest']==INSTALLATION_MANIFEST_SHA256,'native_view_wire_refused')
     require(all(type(value[k]) is list and len(value[k])==2 and all(type(n) is int and 0<n<2**64 for n in value[k]) for k in ('root_identity','initial_mount_namespace')))
     paths=['/opt','/usr/share',*sorted(execution_inventory()['rows'])]
     require(type(value['backing']) is list and len(value['backing'])==len(paths)
@@ -782,4 +898,5 @@ def consume_view_capsule(packet):
 
 
 def activate_installation(*args,**kwargs):
-    raise ns.NamespaceProofError('native_installation_not_authorized')
+    from hosted_synthetic_native_installation import activate_installation as entry
+    return entry(*args,**kwargs)
