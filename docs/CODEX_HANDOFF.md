@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-10-31 (UTC)
+**Updated:** 2026-11-01 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,42 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-11-01 T1/provenance remediation prepared for frozen validation
+
+Verified starting HEAD `ebc60a254ad7a89db8fb77a6775b7aa13d369a87`, tree
+`7ec1395c0936f6131ed4dc64a36c331c2dd29e1c`; no reset or later work discarded.
+The complete owner-supplied Claude2.1.316 report against de4eda5 is retained in
+`docs/review/2026-10-27-runtime-control-lifecycle/external-review-de4eda5-owner-report.md`.
+H1 static graph and H3 code CLOSED there; H2 REPAIRED with READY digest P3.
+M1/N7 and prior closures keep exact scope. Same-session/model/effort attribution
+is now reconciled; historical missing-attribution notes below are superseded.
+Reviewer-disclosed prohibited sudo attempts are excluded from acceptance evidence.
+Future read-only reviewers must not run sudo, including no-op commands.
+
+T1 implementation batches exact native operations and removes redundant ancestor
+refreshes, retaining exclusive streams, identity checks and sticky uncertainty.
+Full-manifest lease trace:12784→1547native calls; cleanup114unchanged. Stream
+selection decoding is now once per Stage, with full pinned-manifest byte checks
+before/after every stream and unchanged two-pass file hashing. READY digest is
+independently observed by the parent and must match the child's corresponding
+claim; final mappings may legitimately differ and remain separately authorized.
+The provenance route now re-derives signed release→exact index→exact package
+record→complete artifact bytes before installation, then verifies selected members.
+
+Blocking evidence: exact noble-updates index8e3c832a not recovered after bounded
+publisher/snapshot/cache attempts. Exact noble2a6a199e index retained. All66fixed
+artifacts175344809B fetched/hash-verified, but only disposable cache exists;
+URLs/current retrievability are not durable retention. No storage resource was
+created. These blockers remain explicit in the single eventual installation
+contract decision; no trust waiver, substitute metadata or version refresh.
+
+Next: freeze and validate the complete candidate, measure optimized unprivileged
+staging/stream cost, publish source-bound evidence and one targeted Claude delta
+from de4eda5. Target privileged timing/memory/service/PG/cleanup NOT_RUN. M1 before
+account remains mandatory; work60s/cleanup5s and all resource limits unchanged.
+Installation/activation/credentials remain disabled. No canonical milestone,
+application source, lockfile, main/PR24 or production action changes.
 
 ### 2026-10-31 H1–H3 candidate: published, tested, installation disabled
 

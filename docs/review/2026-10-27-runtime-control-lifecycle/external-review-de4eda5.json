@@ -1,0 +1,42 @@
+{
+  "classification": "OWNER_SUPPLIED_EXTERNAL_CLAUDE_REVIEW",
+  "report": "external-review-de4eda5-owner-report.md",
+  "reviewed_commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+  "reviewed_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+  "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+  "verdict": "REQUEST_CHANGES",
+  "tool": "Claude Code container 2.1.316",
+  "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+  "configured_and_served_model": "claude-opus-5-5",
+  "effort": "high",
+  "attribution": "Owner-supplied; no fresh account inspection and no callable Claude tool",
+  "tests": {
+    "focused": {
+      "executed": 1201,
+      "passed": 1201,
+      "operator_uid": 65534,
+      "log": "/tmp/claude-0/-home-user-Buffalo-Procurement-System/0f1b2919-2af2-576d-8608-bd347e8aa4f0/scratchpad/de4e-focused1201-uid65534.txt",
+      "sha256_prefix_only": "aba2f948",
+      "full_log_not_available_to_writer": true
+    }
+  },
+  "limitations": [
+    "No target host/systemd/installation/protected view/selected toolcache interpreter",
+    "No native-route memory/lifetime/PG/browser/full-suite execution"
+  ],
+  "prohibited_attempts": {
+    "reported": "sudo -n true 20 times as sandbox root; second timing attempt permission-blocked",
+    "contrary_to_readonly_instruction": true,
+    "excluded_from_acceptance_evidence": true,
+    "future_review": "No sudo, including no-op commands"
+  },
+  "dispositions": {
+    "H1": "CLOSED_STATIC_GRAPH_ONLY",
+    "H2": "REPAIRED_READY_DIGEST_P3_REMAINS",
+    "H3": "CLOSED_CODE_ONLY_TIMING_UNPROVEN",
+    "T1": "OPEN_BLOCKING_P1",
+    "P1-PROV": "OPEN_P2_BEFORE_INSTALLATION_DECISION",
+    "M1_N7": "HISTORICAL_34e8_CLOSURES_PRESERVED_M1_NO_REGRESSION"
+  },
+  "installation_authority": false
+}

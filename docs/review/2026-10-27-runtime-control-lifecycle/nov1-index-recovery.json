@@ -1,0 +1,109 @@
+{
+  "source_commit": "ebc60a254ad7a89db8fb77a6775b7aa13d369a87",
+  "scope": "PUBLIC_EXACT_PIN_RECOVERY_READ_ONLY_NO_INSTALLATION",
+  "attempts": [
+    {
+      "name": "updates_archive",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/by-hash/SHA256/8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "expected_sha256": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "expected_bytes": 1406168,
+      "timeout_s": 20,
+      "maximum_bytes": 2097152,
+      "status": "HTTP_ERROR",
+      "http_status": 404,
+      "elapsed_seconds": 0.413
+    },
+    {
+      "name": "updates_snapshot_1400",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20261029T140000Z/dists/noble-updates/main/binary-amd64/by-hash/SHA256/8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "expected_sha256": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "expected_bytes": 1406168,
+      "timeout_s": 20,
+      "maximum_bytes": 2097152,
+      "status": "TRANSPORT_ERROR",
+      "error_type": "URLError",
+      "elapsed_seconds": 0.028
+    },
+    {
+      "name": "updates_snapshot_0000",
+      "url": "https://snapshot.ubuntu.com/ubuntu/20261030T000000Z/dists/noble-updates/main/binary-amd64/by-hash/SHA256/8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "expected_sha256": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+      "expected_bytes": 1406168,
+      "timeout_s": 20,
+      "maximum_bytes": 2097152,
+      "status": "TRANSPORT_ERROR",
+      "error_type": "URLError",
+      "elapsed_seconds": 0.023
+    },
+    {
+      "name": "noble_archive",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble/main/binary-amd64/by-hash/SHA256/2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451",
+      "expected_sha256": "2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451",
+      "expected_bytes": 1401160,
+      "timeout_s": 20,
+      "maximum_bytes": 2097152,
+      "http_status": 200,
+      "final_url": "https://archive.ubuntu.com/ubuntu/dists/noble/main/binary-amd64/by-hash/SHA256/2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451",
+      "bytes": 1401160,
+      "sha256": "2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451",
+      "status": "EXACT_RECOVERED",
+      "local_path": "/tmp/buffalo-index-recovery-20261101-_067igk5/noble_archive.Packages.xz",
+      "elapsed_seconds": 1.336
+    }
+  ],
+  "storage": "LOCAL_DISPOSABLE_SCRATCH_NOT_DURABLE",
+  "source_tree": "7ec1395c0936f6131ed4dc64a36c331c2dd29e1c",
+  "local_scan": {
+    "scope": [
+      "/tmp",
+      "/workspace",
+      "/var/cache/apt",
+      "/var/lib/apt/lists"
+    ],
+    "excluded_directory_names": [
+      ".git",
+      "node_modules",
+      ".venv",
+      "venv",
+      "__pycache__"
+    ],
+    "files_considered": 1340,
+    "updates_exact_size_hits": 0,
+    "limitation": "PermissionError /var/cache/apt/archives/partial; not exhaustive host absence"
+  },
+  "git_scan": {
+    "scope": "existing local refs, not unreachable objects",
+    "reachable_objects": 5542,
+    "exact_size_blob_candidates": 0
+  },
+  "retained_releases": [
+    {
+      "suite": "noble",
+      "path": "docs/review/2026-10-27-runtime-control-lifecycle/oct29-native-noble-InRelease",
+      "sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0",
+      "matches_selected_sha256": true,
+      "contains_exact_index_digest_and_size": true,
+      "signature_verification": "HISTORICAL_EVIDENCE_NOT_FRESHLY_RERUN"
+    },
+    {
+      "suite": "noble-updates",
+      "path": "docs/review/2026-10-27-runtime-control-lifecycle/oct29-native-noble-updates-InRelease",
+      "sha256": "1af76bea40c6b8ddbc51a51046c5a3e7912c9611536e97afc673a4b1c39d1886",
+      "matches_selected_sha256": true,
+      "contains_exact_index_digest_and_size": true,
+      "signature_verification": "HISTORICAL_EVIDENCE_NOT_FRESHLY_RERUN"
+    }
+  ],
+  "noble_decoded": {
+    "bytes": 7165069,
+    "sha256": "8f6f71ae839c8cba390a7643fcbbdacddb0bc7d12c1583a2dd80a1f8443a30e5",
+    "first_stream_complete": true,
+    "trailing_bytes": 32,
+    "trailing_empty_xz_stream": true
+  },
+  "storage_boundary": {
+    "existing_authorized": "published acceptance-branch docs/evidence",
+    "scratch": "not durable; no future-restoration assurance",
+    "new_object_store_or_release": "no exact approved destination/retention/credential path found; not created"
+  }
+}

@@ -20,12 +20,14 @@ class SyntheticOps:
     def run(self,program,*args):
         self.calls.append((program,args));path=args[-1]
         if program=='mkdir':
-            if path in self.nodes:raise native.ns.NamespaceProofError('exists')
-            self.serial+=1;self.nodes[path]=[1,self.serial,stat.S_IFDIR|0o700,0,0,2,0]
-        elif program=='chmod':self.nodes[path][2]=(self.nodes[path][2]&~0o777)|int(args[0],8)
+            for path in args[2:]:
+                if path in self.nodes:raise native.ns.NamespaceProofError('exists')
+                self.serial+=1;self.nodes[path]=[1,self.serial,stat.S_IFDIR|0o700,0,0,2,0]
+        elif program=='chmod':
+            for path in args[2:]:self.nodes[path][2]=(self.nodes[path][2]&~0o777)|int(args[0],8)
         elif program in ('unlink','rmdir','rm'):
             for path in args[1:]:del self.nodes[path]
-        elif program=='sha256sum':return (hashlib.sha256(self.data[path]).hexdigest()+'  '+path+'\n').encode()
+        elif program=='sha256sum':return ''.join(hashlib.sha256(self.data[p]).hexdigest()+'  '+p+'\n' for p in args[1:]).encode()
         else:raise AssertionError(program)
         return b''
     def begin_cleanup(self,deadline):self.cleanup_deadline=deadline
@@ -60,7 +62,7 @@ class NativeInstallationTests(unittest.TestCase):
 
     def test_exact_import_retires_stage_keeps_backing_private_and_cleans_owned_files(self):
         lease,rows=self.lease([row()]);stage=self.stage(rows)
-        with patch.object(native,'inventory',return_value={'rows':rows}):lease.import_stage(stage,rows)
+        with patch.object(native,'inventory',return_value={'rows':rows}),patch.object(native,'execution_inventory',return_value={'rows':{r['path']:r for r in rows}}):lease.import_stage(stage,rows)
         self.assertTrue(stage.closed);self.assertIsNone(lease.active_stage)
         lease.finish();self.assertTrue(lease.installed)
         self.assertEqual(stat.S_IMODE(lease.owned[''][2]),0o700)
@@ -72,7 +74,7 @@ class NativeInstallationTests(unittest.TestCase):
         rows[1]['artifact_sha256']='b'*64;lease.rows[rows[1]['path']]=rows[1]
         for selected in rows:
             stage=self.stage([selected])
-            with patch.object(native,'inventory',return_value={'rows':rows}):lease.import_stage(stage,[selected])
+            with patch.object(native,'inventory',return_value={'rows':rows}),patch.object(native,'execution_inventory',return_value={'rows':{r['path']:r for r in rows}}):lease.import_stage(stage,[selected])
             self.assertTrue(stage.closed)
         lease.finish();lease.close();self.assertTrue(lease.closed)
 
@@ -83,7 +85,7 @@ class NativeInstallationTests(unittest.TestCase):
 
     def test_lost_stream_ack_quarantines_and_never_claims_root_cleanup(self):
         lease,rows=self.lease([row()]);stage=self.stage(rows);lease.ops.uncertain_stream=True
-        with patch.object(native,'inventory',return_value={'rows':rows}),self.assertRaisesRegex(native.ns.NamespaceProofError,'root_descendants_unknown'):
+        with patch.object(native,'inventory',return_value={'rows':rows}),patch.object(native,'execution_inventory',return_value={'rows':{r['path']:r for r in rows}}),self.assertRaisesRegex(native.ns.NamespaceProofError,'root_descendants_unknown'):
             lease.import_stage(stage,rows)
         self.assertTrue(stage.closed);self.assertTrue(lease.uncertain)
         before=list(lease.ops.calls)
@@ -135,7 +137,7 @@ class NativeInstallationTests(unittest.TestCase):
 
     def test_failed_removal_readback_never_resumes_cleanup(self):
         lease,rows=self.lease([row()]);stage=self.stage(rows)
-        with patch.object(native,'inventory',return_value={'rows':rows}):lease.import_stage(stage,rows)
+        with patch.object(native,'inventory',return_value={'rows':rows}),patch.object(native,'execution_inventory',return_value={'rows':{r['path']:r for r in rows}}):lease.import_stage(stage,rows)
         with patch.object(lease.ops,'absent',return_value=False),self.assertRaises(native.ns.NamespaceProofError):lease.close()
         before=list(lease.ops.calls)
         with self.assertRaises(native.ns.NamespaceProofError):lease.close()
@@ -177,12 +179,10 @@ class NativeInstallationTests(unittest.TestCase):
 
     def test_expiry_before_import_write_closes_stage_without_quarantine(self):
         lease,rows=self.lease([row()]);stage=self.stage(rows)
-        verify=lease.verify;calls=[0]
-        def expire_at_second_verify(*a,**k):
-            calls[0]+=1
-            if calls[0]==2:lease.deadline=time.monotonic()-1
-            return verify(*a,**k)
-        with patch.object(lease,'verify',side_effect=expire_at_second_verify),self.assertRaises(install.WorkExpired):
+        ensure=lease._ensure_directories
+        def expire_before_batch(*a,**k):
+            ensure(*a,**k);lease.deadline=time.monotonic()-1
+        with patch.object(lease,'_ensure_directories',side_effect=expire_before_batch),self.assertRaises(install.WorkExpired):
             lease.import_stage(stage,rows)
         self.assertTrue(stage.closed);self.assertIsNone(lease.active_stage);self.assertFalse(lease.uncertain)
         lease.close();self.assertTrue(lease.closed)
@@ -244,3 +244,24 @@ class NativeInstallationTests(unittest.TestCase):
             boot._collect_native_client(('fixture',),cwd='/',operation_deadline=time.monotonic()+1,cleanup_deadline=time.monotonic()+1)
         self.assertIs(raised.exception,error);self.assertIn('bootstrap_client_cleanup_failed',error.__notes__)
         process.stdin.close.assert_called_once();process.stdout.close.assert_called_once();process.stderr.close.assert_called_once()
+
+    def test_stream_selection_decoded_once_but_manifest_and_bytes_rechecked(self):
+        stage=self.stage([row()]);selected=row()
+        with patch.object(native,'inventory',return_value={'rows':[selected]}) as old,patch.object(native,'execution_inventory',return_value={'rows':{selected['path']:selected}}) as full:
+            for _ in range(2):
+                with stage.verified_stream(selected) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
+            self.assertEqual((old.call_count,full.call_count),(1,1))
+            self.assertIsInstance(stage._stream_selection,frozenset)
+            with self.assertRaisesRegex(native.ns.NamespaceProofError,'unselected'):
+                with stage.verified_stream(dict(selected,sha256='f'*64)):pass
+
+    def test_stream_cached_selection_refuses_changed_manifest_before_or_after_read(self):
+        stage=self.stage([row()]);selected=row()
+        with patch.object(native,'inventory',return_value={'rows':[selected]}),patch.object(native,'execution_inventory',return_value={'rows':{selected['path']:selected}}):
+            with stage.verified_stream(selected) as chunks:b''.join(chunks)
+            import io
+            with patch.object(Path,'open',return_value=io.BytesIO(b'changed')),self.assertRaisesRegex(native.ns.NamespaceProofError,'manifest_drift'):
+                with stage.verified_stream(selected):pass
+            context=stage.verified_stream(selected);chunks=context.__enter__();b''.join(chunks)
+            with patch.object(Path,'open',return_value=io.BytesIO(b'changed')),self.assertRaisesRegex(native.ns.NamespaceProofError,'manifest_drift'):
+                context.__exit__(None,None,None)

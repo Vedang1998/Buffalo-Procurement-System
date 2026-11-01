@@ -192,7 +192,9 @@ class NativeRouteTests(unittest.TestCase):
         parent=Path(self.enterContext(tempfile.TemporaryDirectory()));key=b'synthetic public key';(parent/'ubuntu-archive-keyring.gpg').write_bytes(key)
         manifest=native.installation_manifest();manifest['trust_root']=dict(manifest['trust_root'],bytes=len(key),sha256=hashlib.sha256(key).hexdigest())
         status=b'[GNUPG:] VALIDSIG '+manifest['trust_root']['signer'].encode()+b' fixture\n'
-        with patch.object(native,'installation_manifest',return_value=manifest),patch('hosted_synthetic_runtime.read_native',return_value=(b'fixture tool',0o555)),patch.object(route.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=status,stderr=b'')) as command:
+        original_open=route._artifact_fd
+        def fixture_artifact(*args):return original_open(parent/'ubuntu-archive-keyring.gpg',manifest['trust_root']['sha256'],len(key),time.monotonic()+60)
+        with patch.object(route,'verify_index_records',return_value={'scope':'SIGNATURE_COMPONENT_FIXTURE'}),patch.object(route,'_artifact_fd',side_effect=fixture_artifact),patch.object(native,'installation_manifest',return_value=manifest),patch('hosted_synthetic_runtime.read_native',return_value=(b'fixture tool',0o555)),patch.object(route.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=status,stderr=b'')) as command:
             result=route.verify_publisher_metadata(parent,time.monotonic()+60)
         self.assertEqual(command.call_count,2);self.assertFalse(result['installation_authority'])
         self.assertIn('NOT_SIGNED_BUILD_ATTESTATION',result['python'])

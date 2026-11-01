@@ -14,5 +14,13 @@
   "internal_reproductions": "oct29-m1-baseline-memory.json and oct29-m1-baseline-deciding-gate.json; not Claude evidence",
   "actual_report_requested_once": true,
   "live_approval": "NOT_ESTABLISHED",
-  "later_descendants": "NOT_REVIEWED"
+  "later_descendants": "NOT_REVIEWED",
+  "nov1_owner_attribution_reconciliation": {
+    "source": "external-review-de4eda5-owner-report.md",
+    "tool": "Claude Code container 2.1.312",
+    "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+    "configured_and_served_model": "claude-opus-5-5",
+    "effort": "high",
+    "scope": "Owner supplied same-session mapping; original logs not newly reproduced"
+  }
 }

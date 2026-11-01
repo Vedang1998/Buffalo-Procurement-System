@@ -303,3 +303,43 @@ class NativeMeasurementTests(unittest.TestCase):
         finally:
             native._ACTIVE_OBSERVATION.reset(obs);native._ACTIVE_VIEW.reset(token)
         self.assertIsNone(native.active_view())
+
+    def ready_observer(self,c):
+        o=object.__new__(measurement.MeasurementObserver);o.consumer=c;o.ready=False;o.unit=c.unit
+        o.lifecycle_deadline=c.request.deadline;o.work_acknowledged=False
+        frame={'nonce':c.request.nonce,'commit':BINDING.commit,'tree':BINDING.tree,'unit':c.unit,
+            'view_sha256':c.digest,'pid':123,'start':456,'ready_mappings_sha256':'a'*64}
+        manager={'ActiveState':'activating','ControlGroup':measurement.outer.service_path(c.unit),'MainPID':'123','InvocationID':'e'*32}
+        self.enterContext(patch.object(measurement.outer,'_manager',return_value=manager))
+        self.enterContext(patch.object(measurement.outer,'_directory',return_value=Mock()))
+        self.enterContext(patch.object(measurement.outer,'_actor',return_value=(Mock(),None,None)))
+        self.enterContext(patch.object(measurement,'observe_process_view',return_value={'mount_namespace':(7,8),'mappings_sha256':'a'*64}))
+        self.enterContext(patch.object(o,'sample'))
+        return o,frame
+
+    def test_parent_ready_digest_equality_required_before_ack(self):
+        c=self.consumer();o,frame=self.ready_observer(c)
+        for value in ('b'*64,None,True):
+            with self.subTest(value=value),self.assertRaisesRegex(ns.NamespaceProofError,'ready_mapping_digest'):
+                o.bind_ready(dict(frame,ready_mappings_sha256=value))
+            self.assertFalse(o.ready);self.assertFalse(o.work_acknowledged)
+        ack=o.bind_ready(frame)
+        self.assertEqual(ack,measurement.outer._PREFIX+native._canonical({'ack':c.request.nonce})+b'\n')
+        self.assertEqual(o.ready_mappings_sha256,'a'*64);self.assertTrue(o.ready)
+
+    def test_result_cannot_substitute_ready_digest_but_final_may_differ(self):
+        c=self.consumer();self.final_context(c);receipt=self.receipt(c)
+        ready=native._ACTIVE_OBSERVATION.get()['ready']
+        with patch.object(native,'_mapping_observation',return_value=dict(ready,mappings_sha256='b'*64)):
+            result=native.bind_measurement_result(c.request,BINDING,receipt)
+        o=object.__new__(measurement.MeasurementObserver);c.observer=o;o.consumer=c;o.ready=True;o.work_acknowledged=True
+        o.ready_actor=(123,456);o.mount_namespace=(7,8);o.ready_mappings_sha256='a'*64
+        o.observed_view_binding_sha256=result['observed_view_binding_sha256']
+        expected={p:r['sha256'] for p,r in native.execution_inventory()['rows'].items()}
+        expected.update({p:hashlib.sha256(data).hexdigest() for p,data in pg._FIXED.items()})
+        result['memory_readiness']={'interpreter':native.PYTHON,'generation':c.request.nonce,'native_inventory_sha256':native._digest(expected)}
+        with patch.object(pg,'_validate_memory_result'):
+            measurement.validate_result(result,c)
+            result['mapping_observation']['ready_mappings_sha256']='c'*64
+            with self.assertRaisesRegex(ns.NamespaceProofError,'final_mapping_binding'):
+                measurement.validate_result(result,c)

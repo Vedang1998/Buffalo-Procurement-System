@@ -449,12 +449,12 @@
       "credential_release": "WITHHELD"
     }
   ],
-  "latest_received_external_review": "external-review-34e8-owner-report.json",
+  "latest_received_external_review": "external-review-de4eda5.json",
   "remediation_findings": [
     {
       "id": "B1",
       "severity": "P1",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
       "description": "Non-root dereference of root-owned PID1 namespace links gives EACCES before reservation; raw PermissionError; hermetic tests missing",
@@ -464,12 +464,17 @@
       ],
       "current_validation": "42 preflight tests; target direct EACCES observed; native privileged stat NOT_RUN",
       "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-      "evidence": "oct29-b2-evidence.json"
+      "evidence": "oct29-b2-evidence.json",
+      "closure": {
+        "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+        "source": "external-review-de4eda5-owner-report.md same-session reconciliation",
+        "scope": "Exact finding accepted at e5e8; N10 collision retry only, shared deadline separate; later deltas require review"
+      }
     },
     {
       "id": "B2",
       "severity": "P1",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
       "description": "Composed PG phase exceeds unchanged80MiB bound before cgroup/enrollment; account already provisioned",
@@ -482,7 +487,12 @@
       "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
       "evidence": "oct29-b2-evidence.json",
       "change_control": "b2-budget-change-control.json",
-      "owner_decision": "APPROVED2026-10-29_PG_PHASE_ONLY128MiB"
+      "owner_decision": "APPROVED2026-10-29_PG_PHASE_ONLY128MiB",
+      "closure": {
+        "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+        "source": "external-review-de4eda5-owner-report.md same-session reconciliation",
+        "scope": "Exact finding accepted at e5e8; N10 collision retry only, shared deadline separate; later deltas require review"
+      }
     },
     {
       "id": "N7",
@@ -520,7 +530,7 @@
     {
       "id": "N8",
       "severity": "P2",
-      "status": "REPAIRED_PENDING_REVIEW",
+      "status": "VERIFIED_CLOSED",
       "reviewed_commit": "d863bc7d52cdcb34bbe0a532ddd0235cfa40e3ea",
       "review_source": "external-review-d863bc7d.json",
       "description": "Target may contain vfat /boot/efi and autofs/binfmt_misc beneath /proc; current allowlist likely refuses",
@@ -529,7 +539,12 @@
       ],
       "current_validation": "42 preflight regressions; same-job fixed mount readback/closure at3cbb2d3; native ownership scan NOT_RUN",
       "candidate": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-      "evidence": "oct29-b2-evidence.json"
+      "evidence": "oct29-b2-evidence.json",
+      "closure": {
+        "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
+        "source": "external-review-de4eda5-owner-report.md same-session reconciliation",
+        "scope": "Exact finding accepted at e5e8; N10 collision retry only, shared deadline separate; later deltas require review"
+      }
     },
     {
       "id": "N9",
@@ -561,9 +576,8 @@
       "evidence": "oct29-b2-evidence.json",
       "closure": {
         "commit": "e5e8a337476b7e0ffa678627e84c2b5ce82a744a",
-        "tree": "c73e1dbb9d57e59792b9fb449575b07033244476",
-        "source": "external-review-e5e8-owner-summary.json",
-        "scope": "Owner explicitly reports accepted typed collision-retry logic only; full reviewer text/attribution not available"
+        "source": "external-review-de4eda5-owner-report.md same-session reconciliation",
+        "scope": "Exact finding accepted at e5e8; N10 collision retry only, shared deadline separate; later deltas require review"
       },
       "descendant_change_impact": {
         "candidate": "652842794f02f9d41f05d61097a7332a20e3f3b2",
@@ -763,13 +777,13 @@
     "reviewed_commit": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
     "reviewed_tree": "5d300467117ce3e577c72c92068a13970aa1826f",
     "tool": "Claude Code container 2.1.314",
-    "session": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
-    "model": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
-    "effort": "NOT_SUPPLIED_IN_AVAILABLE_OWNER_REPORT",
+    "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+    "model": "claude-opus-5-5",
+    "effort": "high",
     "attribution_scope": "Owner supplied; no callable Claude channel or new account/session inspection",
     "report_received": true,
     "verbatim_full_review": "The available owner message supplies the dispositions and remediation requirements below; no additional reviewer prose is fabricated.",
-    "commands_results_limitations": "Exact reviewer commands, execution counts and environment limitations were not included in the available owner message. They are not inherited from earlier reviews or writer tests. A single clarification is pending.",
+    "commands_results_limitations": "Original exact34e8 command transcript not reproduced here; new report supplies same-session mapping and attribution. No clarification pending for attribution.",
     "accepted_at_reviewed_commit": {
       "M1": "CLOSED within reviewer stated scope",
       "N7": "CLOSED within reviewer stated scope",
@@ -805,7 +819,8 @@
     "historical_dispositions": "Preserved at existing exact reviewed commits in findings.json. No unprovided expanded mapping is invented.",
     "later_descendants": "REQUIRE_TARGETED_DELTA_REVIEW",
     "privileged_activation": "DISABLED",
-    "credential_release": "DISABLED"
+    "credential_release": "DISABLED",
+    "attribution_reconciled_by": "external-review-de4eda5-owner-report.md; previous missing-attribution note superseded"
   },
   "oct31_h123_delta": {
     "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
@@ -814,13 +829,19 @@
       {
         "id": "H1",
         "severity": "P1",
-        "status": "REPAIRED_PENDING_REVIEW",
+        "status": "VERIFIED_CLOSED",
         "code": [
           "hosted_native_installation_manifest.json",
           "hosted_synthetic_native_inputs.py:require_complete_inventory/execution_inventory",
           "hosted_synthetic_runtime.py:capture_runtime/_mapped_file_kind"
         ],
-        "target_private_view": "NOT_RUN"
+        "target_private_view": "NOT_RUN",
+        "closure": {
+          "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+          "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+          "scope": "CLOSED_STATIC_GRAPH_ONLY",
+          "source": "external-review-de4eda5.json"
+        }
       },
       {
         "id": "H2",
@@ -831,12 +852,18 @@
           "hosted_synthetic_native_measurement.py:validate_result"
         ],
         "scope": "READY/final snapshots, not continuous lifetime",
-        "target_capture": "NOT_RUN"
+        "target_capture": "NOT_RUN",
+        "reviewer_disposition": {
+          "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+          "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+          "status": "REPAIRED",
+          "remaining": "P3 parent READY mapping digest equality; live target still NOT_RUN"
+        }
       },
       {
         "id": "H3",
         "severity": "P2",
-        "status": "REPAIRED_PENDING_REVIEW",
+        "status": "VERIFIED_CLOSED",
         "code": [
           "hosted_synthetic_native_installation.py:InstallationLease.close/_NativeOps",
           "hosted_synthetic_native_measurement.py:MeasurementObserver._cleanup_window",
@@ -845,7 +872,13 @@
         ],
         "cleanup_seconds": 5,
         "shared_work_seconds": 60,
-        "target_lifecycle": "NOT_RUN"
+        "target_lifecycle": "NOT_RUN",
+        "closure": {
+          "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+          "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+          "scope": "CLOSED_CODE_ONLY_TIMING_UNPROVEN",
+          "source": "external-review-de4eda5.json"
+        }
       },
       {
         "id": "H4",
@@ -863,7 +896,7 @@
     "route": "hosted_synthetic_native_route.installation_measurement_entry -> closed installation gate -> _run -> artifact materialization -> InstallationLease -> NativeConsumer/measure -> NativePhaseReadiness -> AccountLease -> native service -> exact consumer drain -> installation.close",
     "installation_authority": false,
     "activation": "DISABLED",
-    "independent_review": "PENDING",
+    "independent_review": "RECEIVED_REQUEST_CHANGES_AT_EXACT_de4eda5",
     "internal_codex": "Targeted read-only code-path analysis only; not independent Claude review",
     "candidate_commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
     "candidate_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
@@ -874,7 +907,7 @@
     "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
     "candidate": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
     "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
-    "status": "REVIEW_PENDING",
+    "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
     "scope": "H1-H3; fixed manifest/provenance; exact dormant connected route; affected prior closures; bounded installation decision readiness",
     "no_live_installation": true
   },
@@ -886,6 +919,13 @@
       "evidence_tree": "44177adcde660cc0b8d194df7b0934eb109a952a",
       "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
       "owner_explicit_freeze": true
+    },
+    {
+      "implementation": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+      "implementation_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+      "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+      "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
+      "previous_exact_targets_preserved": true
     }
   ],
   "historical_candidates": [
@@ -900,5 +940,77 @@
       "combined_capture": "NOT_TARGET_MEASURED",
       "full_authoritative": "NOT_RUN"
     }
-  ]
+  ],
+  "owner_received_de4eda5_report": {
+    "classification": "OWNER_SUPPLIED_EXTERNAL_CLAUDE_REVIEW",
+    "report": "external-review-de4eda5-owner-report.md",
+    "reviewed_commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "reviewed_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+    "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
+    "verdict": "REQUEST_CHANGES",
+    "tool": "Claude Code container 2.1.316",
+    "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+    "configured_and_served_model": "claude-opus-5-5",
+    "effort": "high",
+    "attribution": "Owner-supplied; no fresh account inspection and no callable Claude tool",
+    "tests": {
+      "focused": {
+        "executed": 1201,
+        "passed": 1201,
+        "operator_uid": 65534,
+        "log": "/tmp/claude-0/-home-user-Buffalo-Procurement-System/0f1b2919-2af2-576d-8608-bd347e8aa4f0/scratchpad/de4e-focused1201-uid65534.txt",
+        "sha256_prefix_only": "aba2f948",
+        "full_log_not_available_to_writer": true
+      }
+    },
+    "limitations": [
+      "No target host/systemd/installation/protected view/selected toolcache interpreter",
+      "No native-route memory/lifetime/PG/browser/full-suite execution"
+    ],
+    "prohibited_attempts": {
+      "reported": "sudo -n true 20 times as sandbox root; second timing attempt permission-blocked",
+      "contrary_to_readonly_instruction": true,
+      "excluded_from_acceptance_evidence": true,
+      "future_review": "No sudo, including no-op commands"
+    },
+    "dispositions": {
+      "H1": "CLOSED_STATIC_GRAPH_ONLY",
+      "H2": "REPAIRED_READY_DIGEST_P3_REMAINS",
+      "H3": "CLOSED_CODE_ONLY_TIMING_UNPROVEN",
+      "T1": "OPEN_BLOCKING_P1",
+      "P1-PROV": "OPEN_P2_BEFORE_INSTALLATION_DECISION",
+      "M1_N7": "HISTORICAL_34e8_CLOSURES_PRESERVED_M1_NO_REGRESSION"
+    },
+    "installation_authority": false
+  },
+  "nov1_remediation": {
+    "baseline": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "status": "IMPLEMENTED_PENDING_FROZEN_VALIDATION_AND_CLAUDE",
+    "T1": {
+      "severity": "P1",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "native_calls_before": 12784,
+      "native_calls_after": 1547,
+      "cleanup_calls": 114,
+      "scope": "Full832-file manifest actual lease control flow; synthetic native transport; target60s/5s proof NOT_RUN"
+    },
+    "P1-PROV": {
+      "severity": "P2",
+      "status": "OPEN",
+      "implemented": "Signed release to exact index to exact record to complete artifact bytes to member/output; missing index refuses before effects",
+      "blockers": [
+        "Exact noble-updates8e3c832a index not recovered",
+        "66 artifacts175344809B only disposable cache; no authorized durable destination"
+      ]
+    },
+    "READY_DIGEST": {
+      "status": "REPAIRED_PENDING_REVIEW",
+      "scope": "Parent independently parsed canonical READY digest equals child READY and returned readiness claim; final snapshot may differ; not continuous lifetime"
+    },
+    "M1": "MANDATORY_BEFORE_ACCOUNT_UNCHANGED",
+    "limits": "UNCHANGED",
+    "installation": "DISABLED",
+    "privileged_activation": "DISABLED",
+    "credential_release": "DISABLED"
+  }
 }

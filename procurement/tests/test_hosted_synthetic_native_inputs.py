@@ -107,7 +107,7 @@ class NativeInputTests(unittest.TestCase):
     def test_loader_logical_name_can_materialize_a_different_authenticated_member(self):
         stage=self.stage();selected=dict(row(),artifact_member='lib/libpq.so.5.16',path='/usr/lib/libpq.so.5')
         stage.materialize_tar(archive(name=selected['artifact_member']),[selected])
-        with patch.object(native,'inventory',return_value={'rows':[selected]}):
+        with patch.object(native,'inventory',return_value={'rows':[selected]}),patch.object(native,'execution_inventory',return_value={'rows':{selected['path']:selected}}):
             with stage.verified_stream(selected) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
         self.assertEqual((stage.path/'usr/lib/libpq.so.5').stat().st_mode&0o777,0o444)
         self.assertFalse((stage.path/'usr/lib/libpq.so.5.16').exists())
@@ -169,7 +169,7 @@ class NativeInputTests(unittest.TestCase):
 
     def test_streamed_import_rechecks_bytes_and_rejects_partial_consumption(self):
         stage=self.stage();stage.materialize_tar(archive(),[row()])
-        with patch.object(native,'inventory',return_value={'rows':[row()]}):
+        with patch.object(native,'inventory',return_value={'rows':[row()]}),patch.object(native,'execution_inventory',return_value={'rows':{row()['path']:row()}}):
             with stage.verified_stream(row()) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
             with self.assertRaisesRegex(ns.NamespaceProofError,'not_fully_consumed'):
                 with stage.verified_stream(row()):pass

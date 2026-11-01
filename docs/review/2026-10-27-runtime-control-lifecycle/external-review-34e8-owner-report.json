@@ -45,5 +45,13 @@
   "historical_dispositions": "Preserved at existing exact reviewed commits in findings.json. No unprovided expanded mapping is invented.",
   "later_descendants": "REQUIRE_TARGETED_DELTA_REVIEW",
   "privileged_activation": "DISABLED",
-  "credential_release": "DISABLED"
+  "credential_release": "DISABLED",
+  "nov1_owner_attribution_reconciliation": {
+    "source": "external-review-de4eda5-owner-report.md",
+    "tool": "Claude Code container 2.1.314",
+    "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+    "configured_and_served_model": "claude-opus-5-5",
+    "effort": "high",
+    "scope": "Owner supplied same-session mapping; original logs not newly reproduced"
+  }
 }

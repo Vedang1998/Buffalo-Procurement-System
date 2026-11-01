@@ -102,9 +102,9 @@ def observe_process_view(consumer,pid,start):
         and exe==consumer.installation.owned['view'+native.PYTHON]
         and ns._process(pid)['start']==start,'native_child_interpreter_or_namespace_refused')
     raw=consumer.installation.ops.read_maps(pid)
-    native.validate_loaded_mappings(raw,consumer.request)
+    mappings=native.validate_loaded_mappings(raw,consumer.request)
     native.require(ns._process(pid)['start']==start)
-    return namespace[:2]
+    return {'mount_namespace':namespace[:2],'mappings_sha256':native._digest(mappings)}
 
 
 class MeasurementObserver:
@@ -159,7 +159,7 @@ class MeasurementObserver:
 
     def bind_ready(self,frame):
         c=self.consumer;verify_consumer(c)
-        native.require(not self.ready and type(frame) is dict and set(frame)=={'nonce','commit','tree','unit','view_sha256','pid','start'}
+        native.require(not self.ready and type(frame) is dict and set(frame)=={'nonce','commit','tree','unit','view_sha256','pid','start','ready_mappings_sha256'}
             and (frame['nonce'],frame['commit'],frame['tree'],frame['unit'],frame['view_sha256'])==
                 (c.request.nonce,c.binding.commit,c.binding.tree,c.unit,c.digest),'native_measurement_ready_refused')
         manager=outer._manager(self.unit,service=True,deadline=self.lifecycle_deadline)
@@ -168,7 +168,11 @@ class MeasurementObserver:
             and manager['MainPID']==str(frame['pid']),'native_measurement_manager_refused')
         self.service_invocation=manager['InvocationID'];self.service=outer._directory('/sys/fs/cgroup'+path,uid=0)
         self.actor,_,_=outer._actor(frame['pid'],frame['start'],c.uid,c.gid,path,'supervisor')
-        self.mount_namespace=observe_process_view(c,frame['pid'],frame['start'])
+        observed=observe_process_view(c,frame['pid'],frame['start'])
+        self.mount_namespace=observed['mount_namespace']
+        self.ready_mappings_sha256=observed['mappings_sha256']
+        native.require(type(frame['ready_mappings_sha256']) is str
+            and frame['ready_mappings_sha256']==self.ready_mappings_sha256,'native_ready_mapping_digest_refused')
         self.observed_view_binding_sha256=native._digest({'mount_namespace':list(self.mount_namespace),'backing':c.request.backing})
         self.ready_actor=(frame['pid'],frame['start']);self.sample();self.ready=True
         return outer._PREFIX+native._canonical({'ack':c.request.nonce})+b'\n'
@@ -271,6 +275,7 @@ def validate_result(result,consumer):
         and m['source_sha256']==native._digest({'commit':consumer.binding.commit,'tree':consumer.binding.tree,'files':consumer.binding.files})
         and m['backing_sha256']==native._digest(consumer.request.backing)
         and all(type(m[k]) is str and re.fullmatch('[0-9a-f]{64}',m[k]) for k in ('mappings_sha256','ready_mappings_sha256'))
+        and m['ready_mappings_sha256']==observer.ready_mappings_sha256
         and m['scope']=='READY_AND_FINAL_SNAPSHOTS_NOT_CONTINUOUS_LIFETIME','native_final_mapping_binding_refused')
     _validate_memory_result(result['memory_readiness'],consumer.binding)
     from hosted_synthetic_postgres_runtime import _FIXED
@@ -355,7 +360,8 @@ def child_main(arguments=None):
         with native.protected_view(request,binding):
             process=ns._process(os.getpid())
             frame={'nonce':request.nonce,'commit':binding.commit,'tree':binding.tree,'unit':args[1],
-                'view_sha256':hashlib.sha256(raw).hexdigest(),'pid':os.getpid(),'start':process['start']}
+                'view_sha256':hashlib.sha256(raw).hexdigest(),'pid':os.getpid(),'start':process['start'],
+                'ready_mappings_sha256':native._ACTIVE_OBSERVATION.get()['ready']['mappings_sha256']}
             native.require(stat.S_ISFIFO(os.fstat(0).st_mode) and stat.S_ISFIFO(os.fstat(1).st_mode))
             output=outer._PREFIX+native._canonical(frame)+b'\n';native.require(len(output)<=4096)
             native.require(os.write(1,output)==len(output))

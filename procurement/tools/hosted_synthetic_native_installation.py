@@ -52,7 +52,9 @@ def _path(root,relative=''):
 
 
 def _command(program,*args,remaining=None):
-    native.require(program in _PROGRAMS)
+    native.require(program in _PROGRAMS and len(args)<=70
+        and all(type(a) is str and '\0' not in a for a in args)
+        and sum(len(a.encode('utf-8'))+1 for a in args)<=32768,'native_command_arguments_refused')
     # Native timeout plus kill grace must fit the same outer cleanup deadline.
     if remaining is None:kill='2s';work='15s'
     else:
@@ -211,7 +213,10 @@ class InstallationLease:
         self.binding=binding;self.manifest=native.INSTALLATION_MANIFEST_SHA256;self.rows=native.execution_inventory()['rows']
         self.ops=_NativeOps(deadline);self.owned={};self.closed=False;self.uncertain=False
         self.pending=False;self.cleanup_deadline=None;self.installed=False;self.consumers=[];self.view_requests={};self.active_stage=None;self.total=0
-        try:self._mkdir('');self._mkdir('view');return self
+        try:
+            self._mkdir('');self._mkdir('view')
+            self._ensure_directories(list(self.rows.values()))
+            return self
         except BaseException as error:
             if not isinstance(error,WorkExpired) or self.pending:self.uncertain=True
             error.native_installation_lease=self  # Retain exact ownership; never delete ambiguous objects.
@@ -249,13 +254,32 @@ class InstallationLease:
         except BaseException:self.uncertain=True;raise
 
     def _refresh_directories(self,changed):
-        names={str(p) if str(p)!='.' else '' for p in Path(changed).parents}
-        for name in names:
-            if name not in self.owned:continue
-            old=self.owned[name]
-            if not stat.S_ISDIR(old[2]):continue
-            new=self.ops.observe(_path(self.root,name))
-            native.require(new[:5]==old[:5],'native_install_parent_replaced');self.owned[name]=new
+        self._refresh_parent_batch([changed])
+
+    def _check_named(self,names):
+        ordered=sorted(set(names))
+        native.require(ordered and all(n in self.owned for n in ordered))
+        native.require(self.ops.observe_many([_path(self.root,n) for n in ordered])==
+            [self.owned[n] for n in ordered],'native_install_owned_identity_changed')
+
+    def _ensure_directories(self,rows):
+        missing={str(p) for r in rows for p in Path('view'+r['path']).parents
+            if str(p)!='.' and str(p) not in self.owned}
+        for depth in sorted({n.count('/') for n in missing}):
+            level=sorted(n for n in missing if n.count('/')==depth)
+            for offset in range(0,len(level),64):
+                names=level[offset:offset+64];_work_deadline(self.deadline)
+                parents={str(Path(n).parent) for n in names}|{''}
+                self._check_named(parents);self.pending=True
+                # No -p: every parent is already owned, every destination new.
+                self.ops.run('mkdir','--mode=0700','--',*[_path(self.root,n) for n in names])
+                observed=self.ops.observe_many([_path(self.root,n) for n in names])
+                native.require(len(observed)==len(names))
+                for name,info in zip(names,observed):
+                    native.require(name not in self.owned and stat.S_ISDIR(info[2])
+                        and stat.S_IMODE(info[2])==0o700 and info[3:5]==(0,0),'native_directory_batch_refused')
+                    self.owned[name]=info
+                self._refresh_parent_batch(names);self.pending=False
 
     @_sticky
     def import_stage(self,stage,rows):
@@ -264,20 +288,38 @@ class InstallationLease:
         native.require(len({r['artifact_sha256'] for r in rows})==1,'native_install_artifact_group_refused')
         self.active_stage=stage
         try:
-            for row in rows:
-                name='view'+row['path'];native.require(name not in self.owned)
-                for parent in reversed(Path(name).parents):
-                    if str(parent)!='.':self._mkdir(str(parent))
-                self.verify();self.pending=True
-                with stage.verified_stream(row) as chunks:self.ops.stream(_path(self.root,name),row,chunks)
-                raw=self.ops.run('sha256sum','--',_path(self.root,name))
-                native.require(raw==(row['sha256']+'  '+_path(self.root,name)+'\n').encode(),'native_install_hash_refused')
-                self.ops.run('chmod',row['mode'],'--',_path(self.root,name))
-                info=self.ops.observe(_path(self.root,name))
-                native.require(stat.S_ISREG(info[2]) and stat.S_IMODE(info[2])==int(row['mode'],8)
-                    and info[3:]==(0,0,1,row['bytes']),'native_install_file_identity_refused')
-                self.owned[name]=info;self.total+=row['bytes'];self.pending=False
-                self._refresh_directories(name)
+            self._ensure_directories(rows)
+            for offset in range(0,len(rows),64):
+                batch=rows[offset:offset+64];_work_deadline(self.deadline)
+                names=['view'+r['path'] for r in batch];paths=[_path(self.root,n) for n in names]
+                native.require(len(set(names))==len(names) and all(n not in self.owned for n in names))
+                ancestors={''}|{str(p) for n in names for p in Path(n).parents if str(p)!='.'}
+                self._check_named(ancestors);self.pending=True
+                # Parent tree is root-owned0700, inaccessible to unprivileged
+                # actors. Every dd remains exclusive/no-follow. No batch is
+                # acknowledged until every output and inode has matched.
+                for row,path in zip(batch,paths):
+                    _work_deadline(self.deadline)
+                    with stage.verified_stream(row) as chunks:self.ops.stream(path,row,chunks)
+                before=self.ops.observe_many(paths)
+                native.require(len(before)==len(batch))
+                for row,info in zip(batch,before):
+                    native.require(stat.S_ISREG(info[2]) and info[3:]==(0,0,1,row['bytes'])
+                        and stat.S_IMODE(info[2])&0o7000==0,'native_install_file_identity_refused')
+                raw=self.ops.run('sha256sum','--',*paths)
+                expected=''.join(r['sha256']+'  '+path+'\n' for r,path in zip(batch,paths)).encode()
+                native.require(raw==expected,'native_install_hash_refused')
+                for mode in sorted({r['mode'] for r in batch}):
+                    self.ops.run('chmod',mode,'--',*[path for r,path in zip(batch,paths) if r['mode']==mode])
+                observed=self.ops.observe_many(paths)
+                native.require(len(observed)==len(batch))
+                for name,row,old,info in zip(names,batch,before,observed):
+                    native.require(info[:2]==old[:2] and stat.S_ISREG(info[2])
+                        and stat.S_IMODE(info[2])==int(row['mode'],8) and info[3:]==(0,0,1,row['bytes']),
+                        'native_install_file_identity_refused')
+                for name,row,info in zip(names,batch,observed):
+                    self.owned[name]=info;self.total+=row['bytes']
+                self._refresh_parent_batch(names);self.pending=False
             stage.close();self.active_stage=None
         except BaseException as error:
             if not isinstance(error,WorkExpired) or self.pending:self.uncertain=True
@@ -293,12 +335,18 @@ class InstallationLease:
         self.verify(all_objects=True);_source_binding(self.binding,self.deadline);native.require(self.active_stage is None)
         native.require({n[4:] for n,v in self.owned.items() if stat.S_ISREG(v[2])}==set(self.rows)
             and self.total==sum(r['bytes'] for r in self.rows.values()),'native_install_population_refused')
-        for name in sorted(self.owned,key=lambda n:-n.count('/')):
-            if not name or not stat.S_ISDIR(self.owned[name][2]):continue
-            self.pending=True;self.ops.run('chmod','0555','--',_path(self.root,name))
-            new=self.ops.observe(_path(self.root,name));old=self.owned[name]
-            native.require(new[:2]==old[:2] and stat.S_IMODE(new[2])==0o555 and new[3:5]==(0,0))
-            self.owned[name]=new;self.pending=False
+        directories=sorted(n for n in self.owned if n and stat.S_ISDIR(self.owned[n][2]))
+        for offset in range(0,len(directories),64):
+            names=directories[offset:offset+64];_work_deadline(self.deadline)
+            paths=[_path(self.root,n) for n in names];self._check_named(names)
+            self.pending=True;self.ops.run('chmod','0555','--',*paths)
+            observed=self.ops.observe_many(paths);native.require(len(observed)==len(names))
+            for name,new in zip(names,observed):
+                old=self.owned[name]
+                native.require(new[:2]==old[:2] and stat.S_ISDIR(new[2])
+                    and stat.S_IMODE(new[2])==0o555 and new[3:]==old[3:],'native_directory_mode_batch_refused')
+                self.owned[name]=new
+            self.pending=False
         # Keep the backing top0700. Private mounts expose selected read-only
         # objects; unrelated unprivileged processes cannot traverse this lease.
         self.verify();native.require(stat.S_IMODE(self.owned[''][2])==0o700)
@@ -351,7 +399,9 @@ class InstallationLease:
         native.require(self.cleanup_deadline is not None and time.monotonic()<self.cleanup_deadline,'native_install_cleanup_timeout')
 
     def _refresh_parent_batch(self,names):
-        parents={str(p) if str(p)!='.' else '' for name in names for p in Path(name).parents}&set(self.owned)
+        # Only immediate parents change size/link count. Higher ancestors must
+        # retain their exact snapshots; refreshing them would hide drift.
+        parents={str(Path(name).parent) if str(Path(name).parent)!='.' else '' for name in names if name}&set(self.owned)
         ordered=sorted(parents)
         if not ordered:return
         current=self.ops.observe_many([_path(self.root,n) for n in ordered])

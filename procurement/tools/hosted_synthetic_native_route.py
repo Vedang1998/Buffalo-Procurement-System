@@ -11,6 +11,8 @@ import fcntl
 import gzip
 import hashlib
 import io
+import lzma
+import re
 import os
 from pathlib import Path
 import selectors
@@ -84,6 +86,107 @@ def _sealed_metadata(raw):
         if fd is not None:os.close(fd)
 
 
+def _release_index_binding(raw,index):
+    """Only called after signature verification; parse the signed SHA256 section."""
+    native.require(type(raw) is bytes and len(raw)<=2*1024**2)
+    target=(index['component']+'/binary-amd64/Packages.xz').encode()
+    active=False;sections=0;found=[]
+    for line in raw.splitlines():
+        if line==b'SHA256:':active=True;sections+=1;continue
+        if active and not line.startswith(b' '):active=False
+        if active:
+            fields=line.split();native.require(len(fields)==3,'native_release_index_schema_refused')
+            if fields[2]==target:found.append(fields)
+    native.require(sections==1 and found==[[index['sha256'].encode(),str(index['bytes']).encode(),target]],
+        'native_release_index_binding_refused')
+
+
+def _index_records(fd,index,deadline):
+    """Bounded incremental XZ, including the publisher's empty second stream."""
+    native.require(type(index['uncompressed_bytes']) is int and 0<index['uncompressed_bytes']<=64*1024**2)
+    decoder=lzma.LZMADecompressor(memlimit=64*1024**2)
+    pending=b'';offset=0;produced=0;digest=hashlib.sha256();carry=b'';streams=1
+    try:
+        while True:
+            _check(deadline)
+            if decoder.eof:
+                carry=decoder.unused_data
+                if not carry and offset<index['bytes']:
+                    carry=os.pread(fd,min(65536,index['bytes']-offset),offset);offset+=len(carry)
+                if not carry:break
+                # Stream padding is bounded and only allowed at the final end.
+                if not any(carry):
+                    native.require(len(carry)%4==0 and offset==index['bytes'],'native_index_padding_refused');break
+                streams+=1;native.require(streams<=4,'native_index_stream_bound')
+                decoder=lzma.LZMADecompressor(memlimit=64*1024**2)
+            if decoder.needs_input:
+                if carry:raw=carry;carry=b''
+                else:
+                    raw=os.pread(fd,min(65536,index['bytes']-offset),offset);offset+=len(raw)
+                native.require(raw,'native_index_truncated')
+            else:raw=b''
+            chunk=decoder.decompress(raw,max_length=65536);produced+=len(chunk)
+            native.require(produced<=index['uncompressed_bytes'],'native_index_expansion_refused')
+            digest.update(chunk);pending+=chunk
+            while b'\n\n' in pending:
+                record,pending=pending.split(b'\n\n',1)
+                native.require(0<len(record)<=256*1024,'native_index_record_bound')
+                yield record+b'\n'
+            native.require(len(pending)<=256*1024,'native_index_record_bound')
+        native.require(offset==index['bytes'] and pending in (b'',b'\n')
+            and produced==index['uncompressed_bytes'] and digest.hexdigest()==index['uncompressed_sha256'],
+            'native_index_terminal_refused')
+    except lzma.LZMAError:raise native.ns.NamespaceProofError('native_index_compression_refused') from None
+
+
+def _package_fields(raw):
+    native.require(type(raw) is bytes and 0<len(raw)<=256*1024 and b'\r' not in raw,'native_package_record_bound')
+    try:lines=raw.decode('utf-8').splitlines()
+    except UnicodeError:raise native.ns.NamespaceProofError('native_package_encoding_refused') from None
+    result={};last=None
+    for line in lines:
+        if line.startswith((' ','\t')):
+            native.require(last is not None and last not in ('Package','Version','Architecture','Filename','SHA256','Size'),
+                'native_package_identity_continuation_refused');continue
+        key,sep,value=line.partition(': ')
+        native.require(sep and re.fullmatch('[A-Za-z0-9-]+',key) and key not in result,
+            'native_package_field_refused')
+        result[key]=value;last=key
+    native.require(all(key in result for key in ('Package','Version','Architecture')),'native_package_identity_missing')
+    return result
+
+
+def verify_index_records(directory,index,artifacts,deadline):
+    """Every selected exact stanza, including duplicates, must be re-derived."""
+    expected={(a['package'],a['version'],a['architecture']):a for a in artifacts}
+    native.require(len(expected)==len(artifacts)>0 and all(a['index_sha256']==index['sha256'] for a in artifacts))
+    path=Path(directory)/(index['sha256']+'.Packages.xz')
+    try:fd=_artifact_fd(path,index['sha256'],index['bytes'],deadline)
+    except FileNotFoundError:raise native.ns.NamespaceProofError('native_pinned_index_missing') from None
+    try:
+        before=native._metadata(os.fstat(fd));found={};count=0
+        for raw in _index_records(fd,index,deadline):
+            fields=_package_fields(raw);count+=1
+            key=tuple(fields[k] for k in ('Package','Version','Architecture'))
+            if key not in expected:continue
+            native.require(key not in found,'native_duplicate_package_record_refused')
+            artifact=expected[key]
+            filename=fields.get('Filename','')
+            native.require(re.fullmatch(r'pool/[A-Za-z0-9_./+~%\-]+\.deb',filename)
+                and '..' not in Path(filename).parts
+                and 'https://archive.ubuntu.com/ubuntu/'+filename==artifact['url']
+                and fields.get('SHA256')==artifact['artifact_sha256']
+                and fields.get('Size')==str(artifact['artifact_bytes'])
+                and hashlib.sha256(raw).hexdigest()==artifact['package_record_sha256'],
+                'native_package_record_binding_refused')
+            found[key]=artifact['artifact_sha256']
+        native.require(set(found)==set(expected),'native_exact_package_record_missing')
+        native.require(_verify_fd(fd,index['sha256'],index['bytes'],deadline)==before,'native_index_changed_during_parse')
+        return {'index_sha256':index['sha256'],'compressed_bytes':index['bytes'],
+            'uncompressed_bytes':index['uncompressed_bytes'],'parsed_records':count,'matched_artifacts':sorted(found.values())}
+    finally:os.close(fd)
+
+
 def verify_publisher_metadata(directory,deadline):
     """Pinned snapshot proposal, not owner acceptance or a signed Python build."""
     manifest=native.installation_manifest();inventory=native.require_complete_inventory()
@@ -94,7 +197,7 @@ def verify_publisher_metadata(directory,deadline):
     native.require(len(key)==anchor['bytes'] and hashlib.sha256(key).hexdigest()==anchor['sha256'])
     from hosted_synthetic_runtime import read_native
     tool,mode=read_native('/usr/bin/gpgv');native.require(mode==0o555)
-    signatures=[]
+    signatures=[];index_results=[]
     with _sealed_metadata(key) as keyfd:
         for suite in ('noble','noble-updates'):
             _check(deadline)
@@ -114,15 +217,26 @@ def verify_publisher_metadata(directory,deadline):
                 lines=[line.split() for line in result.stdout.splitlines() if line.startswith(b'[GNUPG:] VALIDSIG ')]
                 native.require(len(lines)==1 and len(lines[0])>=3 and lines[0][2].decode()==anchor['signer'],
                     'native_release_signer_refused')
+                indexes={a['packages_index']['sha256']:a['packages_index'] for a in records}
+                native.require(len(indexes)==1,'native_index_selection_refused')
+                index=next(iter(indexes.values()));_release_index_binding(raw,index)
+                index_results.append(verify_index_records(directory,index,records,deadline))
                 signatures.append({'suite':suite,'sha256':hashlib.sha256(raw).hexdigest(),'signer':anchor['signer']})
     python=next(a for a in inventory['artifacts'].values() if a['publisher']=='actions/python-versions')
     raw=(_EVIDENCE/'native-python-publisher-hashes.txt').read_bytes()
     native.require(len(raw)==python['publisher_hash_list']['bytes'] and hashlib.sha256(raw).hexdigest()==python['publisher_hash_list']['sha256']
         and [line.split() for line in raw.lower().splitlines() if len(line.split())==2 and line.split()[1]==Path(python['url']).name.encode()]==[[python['artifact_sha256'].encode(),Path(python['url']).name.encode()]],
         'native_python_publisher_digest_refused')
-    return {'snapshot_policy':manifest['proposed_snapshot_policy'],'signatures':signatures,'keyring_sha256':anchor['sha256'],
+    # Complete artifact bytes are checked BEFORE InstallationLease._create.
+    # Each is held/reverified again at materialization, then every member/output.
+    artifacts=[]
+    for digest,artifact in sorted(inventory['artifacts'].items()):
+        fd=_artifact_fd(Path(directory)/digest,digest,artifact['artifact_bytes'],deadline)
+        try:artifacts.append({'sha256':digest,'bytes':artifact['artifact_bytes']})
+        finally:os.close(fd)
+    return {'indexes':index_results,'artifacts':artifacts,'snapshot_policy':manifest['proposed_snapshot_policy'],'signatures':signatures,'keyring_sha256':anchor['sha256'],
         'keyring_protection':'HELD_FULLY_SEALED_READONLY_MEMFD','gpgv_sha256':hashlib.sha256(tool).hexdigest(),
-        'ubuntu':'SIGNED_RELEASE_INDEX_PACKAGE_CHAIN_PINNED_IN_SOURCE',
+        'ubuntu':'VERIFIED_RELEASE_EXACT_INDEX_EXACT_RECORD_COMPLETE_ARTIFACT_BYTES',
         'python':'PUBLISHER_HTTPS_GITHUB_DIGEST_NOT_SIGNED_BUILD_ATTESTATION','installation_authority':False}
 
 

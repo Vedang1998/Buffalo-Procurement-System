@@ -521,6 +521,23 @@ class Stage:
         require(verify_artifact_fd(descriptor,digest)==before,'native_artifact_changed_during_materialization')
         return dict(result,artifact_sha256=digest,publisher_verification='PINNED_PUBLISHER_DIGEST_NOT_BUILD_ATTESTATION')
 
+    def _stream_selection_check(self,row):
+        # Derived once per Stage, never caller-supplied. Every stream still
+        # verifies the complete pinned manifest bytes, including after reading.
+        # Caching decoding/graph work does not cache an observed file identity.
+        pins=((FILES[0],DIGESTS[0],2*1024**2),
+            ('hosted_native_proposed_inventory.json',PROPOSED_INVENTORY_SHA256,2*1024**2),
+            ('hosted_native_installation_manifest.json',INSTALLATION_MANIFEST_SHA256,65536))
+        for name,digest,bound in pins:
+            with Path(__file__).with_name(name).open('rb') as stream:raw=stream.read(bound+1)
+            require(len(raw)<=bound and hashlib.sha256(raw).hexdigest()==digest,
+                'native_stream_manifest_drift')
+        if not hasattr(self,'_stream_selection'):
+            self._stream_selection=frozenset(_canonical(r) for r in
+                [*inventory()['rows'],*execution_inventory()['rows'].values()])
+        require(type(self._stream_selection) is frozenset and _canonical(row) in self._stream_selection,
+            'native_stream_unselected')
+
     @contextmanager
     def verified_stream(self,row):
         """Native importer stdin from one exact held, hash-verified stage file.
@@ -528,7 +545,7 @@ class Stage:
         Root must never reopen this operator-owned pathname. Its newly written
         destination is separately hashed against the publisher-bound manifest.
         """
-        self.verify();require(row in inventory()['rows'] or row in execution_inventory()['rows'].values(),'native_stream_unselected')
+        self.verify();self._stream_selection_check(row)
         relative=row['path'].lstrip('/');matches=[x for x in self.owned if x[0]=='F' and x[1]==relative]
         require(len(matches)==1,'native_stream_missing')
         path=self.path/relative
@@ -554,6 +571,7 @@ class Stage:
             yield checked_chunks()
             require(complete[0],'native_stream_not_fully_consumed')
             require(_metadata(os.fstat(descriptor))==_metadata(before),'native_stream_content_changed')
+            self._stream_selection_check(row)
         finally:os.close(descriptor)
 
     def close(self):
