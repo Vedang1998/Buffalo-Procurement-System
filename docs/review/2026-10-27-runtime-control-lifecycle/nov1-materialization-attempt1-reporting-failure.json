@@ -1,0 +1,7 @@
+{
+  "status": "REPORTING_HARNESS_ERROR_NOT_COMPONENT_RESULT",
+  "error": "FileNotFoundError reading optional /proc/self/task/PID/children after component/cleanup loop, before JSON persistence",
+  "component_result_and_measurements": "NOT_RECORDED_PROCESS_EXITED",
+  "remaining_stage_parent_matches": [],
+  "retry_performed": false
+}

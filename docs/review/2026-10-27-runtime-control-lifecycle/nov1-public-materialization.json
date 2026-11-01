@@ -1,0 +1,4878 @@
+{
+  "archive_selected_members": 831,
+  "artifact_bytes": 175344809,
+  "artifacts": [
+    {
+      "artifact_bytes": 682164,
+      "digest": "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58",
+      "finished_at_seconds": 0.06624342600116506,
+      "materialize_seconds": 0.06370239899843,
+      "open_and_first_hash_seconds": 0.0005974519881419837,
+      "package": "libc-bin",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 416969,
+        "lifetime_regular_files": 13,
+        "members": 13,
+        "regular_bytes": 416969
+      },
+      "selected_logical_bytes": 416969,
+      "selected_regular_files": 13,
+      "stage_create_seconds": 4.0690996684134007e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.000456488982308656,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 52112,
+        "self_ru_maxrss_kib": 51948,
+        "self_system_seconds": 0.043607,
+        "self_user_seconds": 0.306759,
+        "waited_children_ru_maxrss_kib": 51948,
+        "waited_children_system_seconds": 0.003787,
+        "waited_children_user_seconds": 0.030803999999999998
+      },
+      "usage_before": {
+        "self_rss_current_kib": 49116,
+        "self_ru_maxrss_kib": 50880,
+        "self_system_seconds": 0.040172,
+        "self_user_seconds": 0.24931199999999998,
+        "waited_children_ru_maxrss_kib": 50880,
+        "waited_children_system_seconds": 0.002019,
+        "waited_children_user_seconds": 0.024322999999999997
+      },
+      "version": "2.39-0ubuntu8.9"
+    },
+    {
+      "artifact_bytes": 9490,
+      "digest": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+      "finished_at_seconds": 0.11856895399978384,
+      "materialize_seconds": 0.051656807016115636,
+      "open_and_first_hash_seconds": 4.035100573673844e-05,
+      "package": "libkeyutils1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 22600,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 22600
+      },
+      "selected_logical_bytes": 22600,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.7151021640747786e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.06638318800833076,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 52124,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.043607,
+        "self_user_seconds": 0.357044,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.003787,
+        "waited_children_user_seconds": 0.033442
+      },
+      "usage_before": {
+        "self_rss_current_kib": 52112,
+        "self_ru_maxrss_kib": 51948,
+        "self_system_seconds": 0.043607,
+        "self_user_seconds": 0.307036,
+        "waited_children_ru_maxrss_kib": 51948,
+        "waited_children_system_seconds": 0.003787,
+        "waited_children_user_seconds": 0.030803999999999998
+      },
+      "version": "1.6.3-3build1"
+    },
+    {
+      "artifact_bytes": 7204,
+      "digest": "0ac60a2cc034ccc4bf4e2f846f38110469d7ae43b47e808d67aafc538bc3695e",
+      "finished_at_seconds": 0.17137003899551928,
+      "materialize_seconds": 0.052205917018000036,
+      "open_and_first_hash_seconds": 3.188799018971622e-05,
+      "package": "libxss1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 14648,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 14648
+      },
+      "selected_logical_bytes": 14648,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 1.8427992472425103e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.1186651790048927,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 52124,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046437,
+        "self_user_seconds": 0.404974,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.003787,
+        "waited_children_user_seconds": 0.036261999999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 52124,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.043607,
+        "self_user_seconds": 0.357224,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.003787,
+        "waited_children_user_seconds": 0.033442
+      },
+      "version": "1:1.2.3-1build3"
+    },
+    {
+      "artifact_bytes": 142830,
+      "digest": "0d4a0187bcdbbe3e6a10bfa574100087d12052d0d0ef28614fd6210021c587b2",
+      "finished_at_seconds": 0.21963701298227534,
+      "materialize_seconds": 0.047348416002932936,
+      "open_and_first_hash_seconds": 0.00013205999857746065,
+      "package": "libgssapi-krb5-2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 338696,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 338696
+      },
+      "selected_logical_bytes": 338696,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.1682993974536657e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.17154847900383174,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 50440,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.449804,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.006516,
+        "waited_children_user_seconds": 0.037843
+      },
+      "usage_before": {
+        "self_rss_current_kib": 52124,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.405213,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.003787,
+        "waited_children_user_seconds": 0.036261999999999996
+      },
+      "version": "1.20.1-6ubuntu2.10"
+    },
+    {
+      "artifact_bytes": 34440,
+      "digest": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+      "finished_at_seconds": 0.26916897599585354,
+      "materialize_seconds": 0.048548708989983425,
+      "open_and_first_hash_seconds": 6.955501157790422e-05,
+      "package": "libgdbm6t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 71864,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 71864
+      },
+      "selected_logical_bytes": 71864,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00019974098540842533,
+      "stage_removed": true,
+      "started_at_seconds": 0.21973846599576063,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 50440,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.497502,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.008204,
+        "waited_children_user_seconds": 0.038773999999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 50440,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.450129,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.006516,
+        "waited_children_user_seconds": 0.037843
+      },
+      "version": "1.23-5.1build1"
+    },
+    {
+      "artifact_bytes": 68124,
+      "digest": "1d7f54e77f0455ab5e607cd5e78b576801d8efdc66115e02cf3c6e708d093667",
+      "finished_at_seconds": 0.31923155099502765,
+      "materialize_seconds": 0.04923684798995964,
+      "open_and_first_hash_seconds": 8.103201980702579e-05,
+      "package": "libpam0g",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 67888,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 67888
+      },
+      "selected_logical_bytes": 67888,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.3025000700727105e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.26946245998260565,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 52316,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.545484,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.008204,
+        "waited_children_user_seconds": 0.041472999999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 50440,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.497888,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.008204,
+        "waited_children_user_seconds": 0.038773999999999996
+      },
+      "version": "1.5.3-5ubuntu5.7"
+    },
+    {
+      "artifact_bytes": 535554,
+      "digest": "203d7657b5f54633fba1a9c9b784d556ef83c9f6787b3185ba55a88e07b865a3",
+      "finished_at_seconds": 0.3747929699893575,
+      "materialize_seconds": 0.05375223699957132,
+      "open_and_first_hash_seconds": 0.0007683699950575829,
+      "package": "libunistring5",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1755312,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1755312
+      },
+      "selected_logical_bytes": 1755312,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00011420200462453067,
+      "stage_removed": true,
+      "started_at_seconds": 0.31932908899034373,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54032,
+        "self_ru_maxrss_kib": 53940,
+        "self_system_seconds": 0.049921,
+        "self_user_seconds": 0.5917979999999999,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.008204,
+        "waited_children_user_seconds": 0.048882999999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 52316,
+        "self_ru_maxrss_kib": 53868,
+        "self_system_seconds": 0.046464,
+        "self_user_seconds": 0.5456949999999999,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.008204,
+        "waited_children_user_seconds": 0.041472999999999996
+      },
+      "version": "1.1-2build1.1"
+    },
+    {
+      "artifact_bytes": 1945300,
+      "digest": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "finished_at_seconds": 0.46188601400353946,
+      "materialize_seconds": 0.08410677401116118,
+      "open_and_first_hash_seconds": 0.0017955410003196448,
+      "package": "libssl3t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 6005912,
+        "lifetime_regular_files": 2,
+        "members": 2,
+        "regular_bytes": 6005912
+      },
+      "selected_logical_bytes": 6005912,
+      "selected_regular_files": 2,
+      "stage_create_seconds": 0.00017841902445070446,
+      "stage_removed": true,
+      "started_at_seconds": 0.37489104899577796,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.058332999999999996,
+        "self_user_seconds": 0.655855,
+        "waited_children_ru_maxrss_kib": 53940,
+        "waited_children_system_seconds": 0.015002999999999999,
+        "waited_children_user_seconds": 0.061435
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54032,
+        "self_ru_maxrss_kib": 53940,
+        "self_system_seconds": 0.049942999999999994,
+        "self_user_seconds": 0.5920569999999999,
+        "waited_children_ru_maxrss_kib": 53868,
+        "waited_children_system_seconds": 0.008204,
+        "waited_children_user_seconds": 0.048882999999999996
+      },
+      "version": "3.0.13-0ubuntu3.16"
+    },
+    {
+      "artifact_bytes": 30500,
+      "digest": "23c627c77c66552a658e62852f244f4946dc543898e0ec5428d5dc6bffde2d6a",
+      "finished_at_seconds": 0.5223425760050304,
+      "materialize_seconds": 0.059460307005792856,
+      "open_and_first_hash_seconds": 8.425701525993645e-05,
+      "package": "libcap2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 51536,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 51536
+      },
+      "selected_logical_bytes": 51536,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.6941008400171995e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.4621040339989122,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.058538,
+        "self_user_seconds": 0.712124,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.017823,
+        "waited_children_user_seconds": 0.06387999999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.058358999999999994,
+        "self_user_seconds": 0.656149,
+        "waited_children_ru_maxrss_kib": 53940,
+        "waited_children_system_seconds": 0.015002999999999999,
+        "waited_children_user_seconds": 0.061435
+      },
+      "version": "1:2.66-5ubuntu2.4"
+    },
+    {
+      "artifact_bytes": 81944,
+      "digest": "273f7cc95a68d927d7f71c3e78b7717a16a8d86e646a206bae7bf797150ae9db",
+      "finished_at_seconds": 0.5980757839861326,
+      "materialize_seconds": 0.07499353101593442,
+      "open_and_first_hash_seconds": 0.0001414440048392862,
+      "package": "libk5crypto3",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 178648,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 178648
+      },
+      "selected_logical_bytes": 178648,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 3.074700362049043e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.5224492469860706,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.06591,
+        "self_user_seconds": 0.7779159999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.020454999999999997,
+        "waited_children_user_seconds": 0.065021
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.058538,
+        "self_user_seconds": 0.7125619999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.017823,
+        "waited_children_user_seconds": 0.06387999999999999
+      },
+      "version": "1.20.1-6ubuntu2.10"
+    },
+    {
+      "artifact_bytes": 253460,
+      "digest": "285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d",
+      "finished_at_seconds": 0.6575272679910995,
+      "materialize_seconds": 0.057316369988257065,
+      "open_and_first_hash_seconds": 0.001344962016446516,
+      "package": "libgmp10",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 534896,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 534896
+      },
+      "selected_logical_bytes": 534896,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00014998699771240354,
+      "stage_removed": true,
+      "started_at_seconds": 0.5981756539840717,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.070256,
+        "self_user_seconds": 0.829919,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.020454999999999997,
+        "waited_children_user_seconds": 0.06920699999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.065925,
+        "self_user_seconds": 0.778094,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.020454999999999997,
+        "waited_children_user_seconds": 0.065021
+      },
+      "version": "2:6.3.0+dfsg-2ubuntu6.1"
+    },
+    {
+      "artifact_bytes": 436342,
+      "digest": "2da3fa28302cf007075e89cdc3aabe6973916afcd62c3884b86f67b77c73a5b4",
+      "finished_at_seconds": 0.7150090379873291,
+      "materialize_seconds": 0.05608932700124569,
+      "open_and_first_hash_seconds": 0.00036919800913892686,
+      "package": "libsystemd0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 910592,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 910592
+      },
+      "selected_logical_bytes": 910592,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.8022011974826455e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.6576273689861409,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.074569,
+        "self_user_seconds": 0.879216,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.072555
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.070271,
+        "self_user_seconds": 0.830098,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.020454999999999997,
+        "waited_children_user_seconds": 0.06920699999999999
+      },
+      "version": "255.4-1ubuntu8.18"
+    },
+    {
+      "artifact_bytes": 282136,
+      "digest": "2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447",
+      "finished_at_seconds": 0.7933579300006386,
+      "materialize_seconds": 0.07589885199558921,
+      "open_and_first_hash_seconds": 0.00026843498926609755,
+      "package": "tzdata",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 38585,
+        "lifetime_regular_files": 38,
+        "members": 38,
+        "regular_bytes": 38585
+      },
+      "selected_logical_bytes": 38585,
+      "selected_regular_files": 38,
+      "stage_create_seconds": 2.674100687727332e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.7151133749866858,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.079594,
+        "self_user_seconds": 0.9501769999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.077837
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.074585,
+        "self_user_seconds": 0.879405,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.072555
+      },
+      "version": "2026e-0ubuntu0.24.04.1"
+    },
+    {
+      "artifact_bytes": 63062,
+      "digest": "319331270d5cc52d5ebffe51c941d7b01b432bc402c2924b557209a64d4ecbad",
+      "finished_at_seconds": 0.8388104079931509,
+      "materialize_seconds": 0.044560151000041515,
+      "open_and_first_hash_seconds": 7.751700468361378e-05,
+      "package": "liblz4-1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 137440,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 137440
+      },
+      "selected_logical_bytes": 137440,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00015390198677778244,
+      "stage_removed": true,
+      "started_at_seconds": 0.7934685369837098,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 0.9925339999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.081623
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 0.950367,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.077837
+      },
+      "version": "1.9.4-1build1.1"
+    },
+    {
+      "artifact_bytes": 47082,
+      "digest": "326a55fce45a620f12b98baf581fb037eb0fcea1ab3969c54cf177f51be8abfe",
+      "finished_at_seconds": 0.8891022189927753,
+      "materialize_seconds": 0.049674478999804705,
+      "open_and_first_hash_seconds": 6.647099507972598e-05,
+      "package": "libaudit1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 133200,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 133200
+      },
+      "selected_logical_bytes": 133200,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.273402060382068e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.8389220460085198,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.040595,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.08547099999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 0.9927999999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.081623
+      },
+      "version": "1:3.1.2-2.1ubuntu0.1"
+    },
+    {
+      "artifact_bytes": 34562,
+      "digest": "36ee08b00b1ee5018b2fce02881b7d2d73c9b4e32990bde3388400d86c48126a",
+      "finished_at_seconds": 0.9388702150026802,
+      "materialize_seconds": 0.04894543398404494,
+      "open_and_first_hash_seconds": 5.783699452877045e-05,
+      "package": "libbz2-1.0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 78944,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 78944
+      },
+      "selected_logical_bytes": 78944,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.1222018403932452e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.8892581139807589,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.088559,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.024103,
+        "waited_children_user_seconds": 0.086118
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.040838,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.022248999999999998,
+        "waited_children_user_seconds": 0.08547099999999999
+      },
+      "version": "1.0.8-5.1ubuntu0.1"
+    },
+    {
+      "artifact_bytes": 63158,
+      "digest": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "finished_at_seconds": 0.9941793929901905,
+      "materialize_seconds": 0.05444323000847362,
+      "open_and_first_hash_seconds": 7.550398004241288e-05,
+      "package": "zlib1g",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 113000,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 113000
+      },
+      "selected_logical_bytes": 113000,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00021143900812603533,
+      "stage_removed": true,
+      "started_at_seconds": 0.9389682629844174,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.140793,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.087558
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.08874,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.024103,
+        "waited_children_user_seconds": 0.086118
+      },
+      "version": "1:1.3.dfsg-3.1ubuntu2.3"
+    },
+    {
+      "artifact_bytes": 151262,
+      "digest": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+      "finished_at_seconds": 1.0454347289924044,
+      "materialize_seconds": 0.05050892900908366,
+      "open_and_first_hash_seconds": 0.00014417798956856132,
+      "package": "libpq5",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 354488,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 354488
+      },
+      "selected_logical_bytes": 354488,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.2765016183257103e-05,
+      "stage_removed": true,
+      "started_at_seconds": 0.9943303010077216,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.1894339999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.091221
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.141031,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.087558
+      },
+      "version": "16.15-0ubuntu0.24.04.1"
+    },
+    {
+      "artifact_bytes": 30406,
+      "digest": "45783969a9ece9d7b7b733b8c60981584c53c6bc5ee3b42d295d2f80d1285679",
+      "finished_at_seconds": 1.0974830829945859,
+      "materialize_seconds": 0.051040391001151875,
+      "open_and_first_hash_seconds": 4.94639971293509e-05,
+      "package": "libxext6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 77512,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 77512
+      },
+      "selected_logical_bytes": 77512,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00015743699623271823,
+      "stage_removed": true,
+      "started_at_seconds": 1.0455322369816713,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.23932,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.09372899999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.189619,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.091221
+      },
+      "version": "2:1.3.4-1build2"
+    },
+    {
+      "artifact_bytes": 66242,
+      "digest": "46bfd10df095a23b65f58115de47a547c9a2d14627749bd0423ae78c14be77d3",
+      "finished_at_seconds": 1.1514493330032565,
+      "materialize_seconds": 0.05312367802252993,
+      "open_and_first_hash_seconds": 9.1398018412292e-05,
+      "package": "libidn2-0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 133192,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 133192
+      },
+      "selected_logical_bytes": 133192,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00020953701459802687,
+      "stage_removed": true,
+      "started_at_seconds": 1.097581691981759,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.086145,
+        "self_user_seconds": 1.284487,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.096921
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.07961,
+        "self_user_seconds": 1.23976,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.09372899999999999
+      },
+      "version": "2.3.7-2build1.1"
+    },
+    {
+      "artifact_bytes": 1301302,
+      "digest": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+      "finished_at_seconds": 1.2237393560062628,
+      "materialize_seconds": 0.069898210989777,
+      "open_and_first_hash_seconds": 0.001407584990374744,
+      "package": "postgresql-client-16",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 635248,
+        "lifetime_regular_files": 2,
+        "members": 2,
+        "regular_bytes": 635248
+      },
+      "selected_logical_bytes": 635248,
+      "selected_regular_files": 2,
+      "stage_create_seconds": 3.7065998185426e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.1515473609906621,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.09049299999999999,
+        "self_user_seconds": 1.345802,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.036764,
+        "waited_children_user_seconds": 0.09834599999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.086157,
+        "self_user_seconds": 1.2846579999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.026378,
+        "waited_children_user_seconds": 0.096921
+      },
+      "version": "16.15-0ubuntu0.24.04.1"
+    },
+    {
+      "artifact_bytes": 98940,
+      "digest": "494b8e672f722130c6bca6a7bc4cc31a43ca891a31d60d868bfdd699a3c20b13",
+      "finished_at_seconds": 1.2765345269872341,
+      "materialize_seconds": 0.051933790993643925,
+      "open_and_first_hash_seconds": 0.00010687101166695356,
+      "package": "libexpat1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 186624,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 186624
+      },
+      "selected_logical_bytes": 186624,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00016072200378403068,
+      "stage_removed": true,
+      "started_at_seconds": 1.2238360419869423,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.094778,
+        "self_user_seconds": 1.391978,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.036764,
+        "waited_children_user_seconds": 0.10141299999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.09050599999999999,
+        "self_user_seconds": 1.345986,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.036764,
+        "waited_children_user_seconds": 0.09834599999999999
+      },
+      "version": "2.6.1-2ubuntu0.6"
+    },
+    {
+      "artifact_bytes": 152856,
+      "digest": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+      "finished_at_seconds": 1.3264316779968794,
+      "materialize_seconds": 0.04918922099750489,
+      "open_and_first_hash_seconds": 0.0001428260002285242,
+      "package": "libreadline8t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 344096,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 344096
+      },
+      "selected_logical_bytes": 344096,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.0951993064954877e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.2766292610031087,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.099148,
+        "self_user_seconds": 1.434534,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.036764,
+        "waited_children_user_seconds": 0.105167
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.09479,
+        "self_user_seconds": 1.392147,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.036764,
+        "waited_children_user_seconds": 0.10141299999999999
+      },
+      "version": "8.2-4build1"
+    },
+    {
+      "artifact_bytes": 147816,
+      "digest": "579c9488755d1ddd70f66480cafd2f68776f68314d15d9cf4b5449d0de0fc968",
+      "finished_at_seconds": 1.3819991659838706,
+      "materialize_seconds": 0.05483832600293681,
+      "open_and_first_hash_seconds": 0.00013947099796496332,
+      "package": "libncursesw6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 262536,
+        "lifetime_regular_files": 2,
+        "members": 2,
+        "regular_bytes": 262536
+      },
+      "selected_logical_bytes": 262536,
+      "selected_regular_files": 2,
+      "stage_create_seconds": 4.3885986087843776e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.3265314780001063,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.099576,
+        "self_user_seconds": 1.4870489999999998,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.038374,
+        "waited_children_user_seconds": 0.10729999999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.09916,
+        "self_user_seconds": 1.434708,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.036764,
+        "waited_children_user_seconds": 0.105167
+      },
+      "version": "6.4+20240113-1ubuntu2.2"
+    },
+    {
+      "artifact_bytes": 127704,
+      "digest": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "finished_at_seconds": 1.4275879439956043,
+      "materialize_seconds": 0.044640275998972356,
+      "open_and_first_hash_seconds": 0.0001823150087147951,
+      "package": "liblzma5",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 202904,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 202904
+      },
+      "selected_logical_bytes": 202904,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.000147332000778988,
+      "stage_removed": true,
+      "started_at_seconds": 1.3820990759995766,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.099588,
+        "self_user_seconds": 1.530128,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.04034,
+        "waited_children_user_seconds": 0.108653
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.099588,
+        "self_user_seconds": 1.487225,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.038374,
+        "waited_children_user_seconds": 0.10729999999999999
+      },
+      "version": "5.6.1+really5.4.5-1ubuntu0.4"
+    },
+    {
+      "artifact_bytes": 347568,
+      "digest": "60b48c5a3233f1d8caba30d6573edc8e131911ab6d63adcd664f7cbe62708362",
+      "finished_at_seconds": 1.481001901003765,
+      "materialize_seconds": 0.05228234801325016,
+      "open_and_first_hash_seconds": 0.0004304399772081524,
+      "package": "libkrb5-3",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 823488,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 823488
+      },
+      "selected_logical_bytes": 823488,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00011988100595772266,
+      "stage_removed": true,
+      "started_at_seconds": 1.427684659982333,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.103642,
+        "self_user_seconds": 1.5743019999999999,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.044532999999999996,
+        "waited_children_user_seconds": 0.110952
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.099588,
+        "self_user_seconds": 1.530313,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.04034,
+        "waited_children_user_seconds": 0.108653
+      },
+      "version": "1.20.1-6ubuntu2.10"
+    },
+    {
+      "artifact_bytes": 24718,
+      "digest": "637e6a7744de08cd331a41f4efd0d24e6ea9064843dea9d1c6ca87bdb5f038a2",
+      "finished_at_seconds": 1.5300156319863163,
+      "materialize_seconds": 0.04829097000765614,
+      "open_and_first_hash_seconds": 7.775798439979553e-05,
+      "package": "libffi8",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 47672,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 47672
+      },
+      "selected_logical_bytes": 47672,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00015567499212920666,
+      "stage_removed": true,
+      "started_at_seconds": 1.4811021930072457,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.103655,
+        "self_user_seconds": 1.620382,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.047355,
+        "waited_children_user_seconds": 0.11162699999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.103655,
+        "self_user_seconds": 1.574487,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.044532999999999996,
+        "waited_children_user_seconds": 0.110952
+      },
+      "version": "3.4.6-1build1"
+    },
+    {
+      "artifact_bytes": 181636,
+      "digest": "6d97fbc1972633083f08f51ccab433606c97bbceb897c631c66495117ca3406f",
+      "finished_at_seconds": 1.579033949994482,
+      "materialize_seconds": 0.04801002499880269,
+      "open_and_first_hash_seconds": 0.0003360580012667924,
+      "package": "libnettle8t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 342280,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 342280
+      },
+      "selected_logical_bytes": 342280,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 3.408201155252755e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.5301122579840012,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.107572,
+        "self_user_seconds": 1.6625299999999998,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.049719,
+        "waited_children_user_seconds": 0.11324899999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.103655,
+        "self_user_seconds": 1.620563,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.047355,
+        "waited_children_user_seconds": 0.11162699999999999
+      },
+      "version": "3.9.1-2.2build1.1"
+    },
+    {
+      "artifact_bytes": 330730,
+      "digest": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+      "finished_at_seconds": 1.6315499799966346,
+      "materialize_seconds": 0.05131919198902324,
+      "open_and_first_hash_seconds": 0.00039251300040632486,
+      "package": "libbrotli1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 193152,
+        "lifetime_regular_files": 2,
+        "members": 2,
+        "regular_bytes": 193152
+      },
+      "selected_logical_bytes": 193152,
+      "selected_regular_files": 2,
+      "stage_create_seconds": 0.0001440869818907231,
+      "stage_removed": true,
+      "started_at_seconds": 1.5791312269866467,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.107583,
+        "self_user_seconds": 1.711449,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.049719,
+        "waited_children_user_seconds": 0.118388
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.107583,
+        "self_user_seconds": 1.662704,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.049719,
+        "waited_children_user_seconds": 0.11324899999999999
+      },
+      "version": "1.1.0-2build2"
+    },
+    {
+      "artifact_bytes": 987614,
+      "digest": "7534eb825f6317514d747ce53b4d6c23bf24df1dc1785f9599610ece5515e685",
+      "finished_at_seconds": 1.698092553007882,
+      "materialize_seconds": 0.06500156500260346,
+      "open_and_first_hash_seconds": 0.0007944999961182475,
+      "package": "libtcl8.6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1753856,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1753856
+      },
+      "selected_logical_bytes": 1753856,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.0001601319818291813,
+      "stage_removed": true,
+      "started_at_seconds": 1.6316491900070105,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.111873,
+        "self_user_seconds": 1.767,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.051488,
+        "waited_children_user_seconds": 0.128044
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.107583,
+        "self_user_seconds": 1.711641,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.049719,
+        "waited_children_user_seconds": 0.118388
+      },
+      "version": "8.6.14+dfsg-1build1"
+    },
+    {
+      "artifact_bytes": 22982,
+      "digest": "7ab24d3057dabf86db8f771ad6e43f073ed86b6b950d6e8ba22cb9fe6707bbc9",
+      "finished_at_seconds": 1.7427720589912497,
+      "materialize_seconds": 0.04399401100818068,
+      "open_and_first_hash_seconds": 0.00015817899839021266,
+      "package": "libcom-err2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 18504,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 18504
+      },
+      "selected_logical_bytes": 18504,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 3.331000334583223e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.6981886779831257,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.11578899999999999,
+        "self_user_seconds": 1.805998,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.051488,
+        "waited_children_user_seconds": 0.130404
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.111885,
+        "self_user_seconds": 1.76718,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.051488,
+        "waited_children_user_seconds": 0.128044
+      },
+      "version": "1.47.0-2.4~exp1ubuntu4.1"
+    },
+    {
+      "artifact_bytes": 36596,
+      "digest": "7e2992d3a79fc05514dc5966558ee9c66a7214a47edf2a36017b9e2777528665",
+      "finished_at_seconds": 1.7909384800004773,
+      "materialize_seconds": 0.04745214298600331,
+      "open_and_first_hash_seconds": 5.480198888108134e-05,
+      "package": "libuuid1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 35032,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 35032
+      },
+      "selected_logical_bytes": 35032,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00017916099750436842,
+      "stage_removed": true,
+      "started_at_seconds": 1.7428689549851697,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.119781,
+        "self_user_seconds": 1.847864,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.051488,
+        "waited_children_user_seconds": 0.133239
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.115799,
+        "self_user_seconds": 1.806166,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.051488,
+        "waited_children_user_seconds": 0.130404
+      },
+      "version": "2.39.3-9ubuntu6.6"
+    },
+    {
+      "artifact_bytes": 197620,
+      "digest": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+      "finished_at_seconds": 1.8396417110052425,
+      "materialize_seconds": 0.04733556599239819,
+      "open_and_first_hash_seconds": 0.00020606099860742688,
+      "package": "libldap2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 432288,
+        "lifetime_regular_files": 2,
+        "members": 2,
+        "regular_bytes": 432288
+      },
+      "selected_logical_bytes": 432288,
+      "selected_regular_files": 2,
+      "stage_create_seconds": 0.00014186400221660733,
+      "stage_removed": true,
+      "started_at_seconds": 1.7910331529856194,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.119792,
+        "self_user_seconds": 1.893289,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.0538,
+        "waited_children_user_seconds": 0.135072
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.119792,
+        "self_user_seconds": 1.848031,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.051488,
+        "waited_children_user_seconds": 0.133239
+      },
+      "version": "2.6.10+dfsg-0ubuntu0.24.04.1"
+    },
+    {
+      "artifact_bytes": 188998,
+      "digest": "863d6abb089b2820ceba98e6b18f06eaacc55f9b05827001e7b4021a9a7b246c",
+      "finished_at_seconds": 1.8920142389833927,
+      "materialize_seconds": 0.05127778500900604,
+      "open_and_first_hash_seconds": 0.00020290602697059512,
+      "package": "libpng16-16t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 223304,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 223304
+      },
+      "selected_logical_bytes": 223304,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.7722009690478444e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.8399713989929296,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120082,
+        "self_user_seconds": 1.942367,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.05619,
+        "waited_children_user_seconds": 0.136403
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.119792,
+        "self_user_seconds": 1.89371,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.0538,
+        "waited_children_user_seconds": 0.135072
+      },
+      "version": "1.6.43-5ubuntu0.7"
+    },
+    {
+      "artifact_bytes": 402610,
+      "digest": "8c6d3bac5a6197fa2f48b2d56f04f3ffecaa7082eeab91b0939f97a40adc88a6",
+      "finished_at_seconds": 1.9421892690006644,
+      "materialize_seconds": 0.049083662015618756,
+      "open_and_first_hash_seconds": 0.00034243802656419575,
+      "package": "libfreetype6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 833608,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 833608
+      },
+      "selected_logical_bytes": 833608,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.6399997295811772e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.8921110259834677,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 1.988467,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.138261
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 1.942638,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.05619,
+        "waited_children_user_seconds": 0.136403
+      },
+      "version": "2.13.2+dfsg-1ubuntu0.2"
+    },
+    {
+      "artifact_bytes": 653072,
+      "digest": "9102f73477081a9a57994c80587ca9760341f644ed51bdfa46f2248083d418b3",
+      "finished_at_seconds": 1.9934991229965817,
+      "materialize_seconds": 0.0499460439896211,
+      "open_and_first_hash_seconds": 0.0005123229930177331,
+      "package": "libx11-6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1302184,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1302184
+      },
+      "selected_logical_bytes": 1302184,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.0001989399897865951,
+      "stage_removed": true,
+      "started_at_seconds": 1.942346235999139,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 2.033937,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.14535499999999998
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 1.988708,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.138261
+      },
+      "version": "2:1.8.7-1ubuntu0.1"
+    },
+    {
+      "artifact_bytes": 34942,
+      "digest": "9224ede3246a82a845ea97652ecfae57f88e8d8f520d8a186f9157167574fb34",
+      "finished_at_seconds": 2.04255878800177,
+      "materialize_seconds": 0.04831725399708375,
+      "open_and_first_hash_seconds": 5.4181989980861545e-05,
+      "package": "libkrb5support0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 47904,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 47904
+      },
+      "selected_logical_bytes": 47904,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.0511011825874448e-05,
+      "stage_removed": true,
+      "started_at_seconds": 1.9935959489957895,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 2.079386,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.14926499999999998
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 2.034127,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.14535499999999998
+      },
+      "version": "1.20.1-6ubuntu2.10"
+    },
+    {
+      "artifact_bytes": 70092,
+      "digest": "93654ee8180a73a0363f25c51dc673d67cbabcbecd164187b8a2deb54d007aef",
+      "finished_at_seconds": 2.0896593899815343,
+      "materialize_seconds": 0.0462287150148768,
+      "open_and_first_hash_seconds": 8.307601092383265e-05,
+      "package": "libgpg-error0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 149760,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 149760
+      },
+      "selected_logical_bytes": 149760,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.245398354716599e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.0426522089983337,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 2.123298,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.153193
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 2.079629,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.14926499999999998
+      },
+      "version": "1.47-3build2.1"
+    },
+    {
+      "artifact_bytes": 536494,
+      "digest": "957b9eeaa83cf6f2d5d5d76dbb8aa31d3297e6781d8a02fa08dcc897ae650a0b",
+      "finished_at_seconds": 2.143762952007819,
+      "materialize_seconds": 0.05296369097777642,
+      "open_and_first_hash_seconds": 0.0004971910093445331,
+      "package": "libgcrypt20",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1345072,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1345072
+      },
+      "selected_logical_bytes": 1345072,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 3.033599932678044e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.0898086149827577,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.123648,
+        "self_user_seconds": 2.169237,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.063966,
+        "waited_children_user_seconds": 0.153772
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.120099,
+        "self_user_seconds": 2.123634,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.058744,
+        "waited_children_user_seconds": 0.153193
+      },
+      "version": "1.10.3-2ubuntu0.2"
+    },
+    {
+      "artifact_bytes": 138572,
+      "digest": "a2bc05cfef021fdb84285036f98eda5ebec3c4b7a378f5aa2bdba5c4d3d8d586",
+      "finished_at_seconds": 2.1922251299838535,
+      "materialize_seconds": 0.04764422299922444,
+      "open_and_first_hash_seconds": 0.000239962013438344,
+      "package": "libfontconfig1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 325712,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 325712
+      },
+      "selected_logical_bytes": 325712,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 7.218899554573e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.1438583770068362,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.12365799999999999,
+        "self_user_seconds": 2.214696,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06547599999999999,
+        "waited_children_user_seconds": 0.15616
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.12365799999999999,
+        "self_user_seconds": 2.169413,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.063966,
+        "waited_children_user_seconds": 0.153772
+      },
+      "version": "2.15.0-1.1ubuntu2"
+    },
+    {
+      "artifact_bytes": 792064,
+      "digest": "a51f8de7829211db961a31f02158058ad1a95f92ac6d0a5dff6350e2821c54c0",
+      "finished_at_seconds": 2.256616173981456,
+      "materialize_seconds": 0.06301313298172317,
+      "open_and_first_hash_seconds": 0.0007083899981807917,
+      "package": "libstdc++6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 2592224,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 2592224
+      },
+      "selected_logical_bytes": 2592224,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 3.174800076521933e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.192320554982871,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13184099999999999,
+        "self_user_seconds": 2.26249,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.162634
+      },
+      "usage_before": {
+        "self_rss_current_kib": 54128,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.12365799999999999,
+        "self_user_seconds": 2.214897,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06547599999999999,
+        "waited_children_user_seconds": 0.15616
+      },
+      "version": "14.2.0-4ubuntu2~24.04.1"
+    },
+    {
+      "artifact_bytes": 198548,
+      "digest": "a9b5f7e9d49ba9060e1c933567046fbc6feab6096799cbf550b7214dc9b0f49b",
+      "finished_at_seconds": 2.307950324990088,
+      "materialize_seconds": 0.0504659189900849,
+      "open_and_first_hash_seconds": 0.0001777989964466542,
+      "package": "libhogweed6t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 288920,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 288920
+      },
+      "selected_logical_bytes": 288920,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00019223001436330378,
+      "stage_removed": true,
+      "started_at_seconds": 2.2567141719919164,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.131882,
+        "self_user_seconds": 2.310914,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.166343
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.131852,
+        "self_user_seconds": 2.262674,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.162634
+      },
+      "version": "3.9.1-2.2build1.1"
+    },
+    {
+      "artifact_bytes": 78392,
+      "digest": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "finished_at_seconds": 2.3558835739968345,
+      "materialize_seconds": 0.04732055397471413,
+      "open_and_first_hash_seconds": 8.70720250532031e-05,
+      "package": "libgcc-s1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 183024,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 183024
+      },
+      "selected_logical_bytes": 183024,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 4.636001540347934e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.308045277983183,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.35653,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.169409
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.311083,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.166343
+      },
+      "version": "14.2.0-4ubuntu2~24.04.1"
+    },
+    {
+      "artifact_bytes": 701602,
+      "digest": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
+      "finished_at_seconds": 2.4128100239904597,
+      "materialize_seconds": 0.05556941099348478,
+      "open_and_first_hash_seconds": 0.000673247006488964,
+      "package": "libsqlite3-0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1468440,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1468440
+      },
+      "selected_logical_bytes": 1468440,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 3.3279997296631336e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.3559817619971,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.407382,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.176805
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.356711,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.169409
+      },
+      "version": "3.45.1-1ubuntu2.8"
+    },
+    {
+      "artifact_bytes": 45280,
+      "digest": "b4f4f3255c0b8773b260c61cbe20ee7c63799cfc0e4e389fa58375dd480b093a",
+      "finished_at_seconds": 2.459395277983276,
+      "materialize_seconds": 0.045950825995532796,
+      "open_and_first_hash_seconds": 6.134301656857133e-05,
+      "package": "libxft2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 105944,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 105944
+      },
+      "selected_logical_bytes": 105944,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.032102202065289e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.4129105460015126,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.451971,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.179501
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.407578,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.176805
+      },
+      "version": "2.3.6-1build1"
+    },
+    {
+      "artifact_bytes": 108086,
+      "digest": "b67a6df2bdab61d273eabebd208bb6a3fb12618a390a067e1ee305a409ff03d9",
+      "finished_at_seconds": 2.5054058439855,
+      "materialize_seconds": 0.04500554801779799,
+      "open_and_first_hash_seconds": 0.00011240999447181821,
+      "package": "libtinfo6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 208328,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 208328
+      },
+      "selected_logical_bytes": 208328,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00025284101138822734,
+      "stage_removed": true,
+      "started_at_seconds": 2.459491352987243,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.495828,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.18074099999999999
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.4521509999999997,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.06922,
+        "waited_children_user_seconds": 0.179501
+      },
+      "version": "6.4+20240113-1ubuntu2.2"
+    },
+    {
+      "artifact_bytes": 1002902,
+      "digest": "b8944756260c5ea6b7fac019745f931f905aa7a4df0763676b1b25c911b692e2",
+      "finished_at_seconds": 2.5621118109847885,
+      "materialize_seconds": 0.054878919007023796,
+      "open_and_first_hash_seconds": 0.0008986679895315319,
+      "package": "libgnutls30t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 2065824,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 2065824
+      },
+      "selected_logical_bytes": 2065824,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00021685799583792686,
+      "stage_removed": true,
+      "started_at_seconds": 2.5055043720058165,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58476,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.135766,
+        "self_user_seconds": 2.5427939999999998,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.18848399999999998
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58136,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13189199999999998,
+        "self_user_seconds": 2.496011,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.18074099999999999
+      },
+      "version": "3.8.3-1.1ubuntu3.6"
+    },
+    {
+      "artifact_bytes": 10254,
+      "digest": "bcd336fce11ce2a45f34d0f95e6980af22529f22147e8f98c156e5cee8ee42bb",
+      "finished_at_seconds": 2.6093555690022185,
+      "materialize_seconds": 0.046598683984484524,
+      "open_and_first_hash_seconds": 4.333502147346735e-05,
+      "package": "libxdmcp6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 26776,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 26776
+      },
+      "selected_logical_bytes": 26776,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.2783991880714893e-05,
+      "stage_removed": true,
+      "started_at_seconds": 2.562242187996162,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 58476,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.135817,
+        "self_user_seconds": 2.588444,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.190553
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58476,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.13577699999999998,
+        "self_user_seconds": 2.5430099999999998,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.18848399999999998
+      },
+      "version": "1:1.1.3-0ubuntu6"
+    },
+    {
+      "artifact_bytes": 129234019,
+      "digest": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "finished_at_seconds": 4.737677736993646,
+      "materialize_seconds": 1.988565530977212,
+      "open_and_first_hash_seconds": 0.09821778899640776,
+      "package": "actions/python-versions",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 59636822,
+        "lifetime_regular_files": 646,
+        "members": 646,
+        "regular_bytes": 59636822
+      },
+      "selected_logical_bytes": 59636822,
+      "selected_regular_files": 646,
+      "stage_create_seconds": 0.00028166500851511955,
+      "stage_removed": true,
+      "started_at_seconds": 2.6097867199860048,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 70352,
+        "self_ru_maxrss_kib": 125848,
+        "self_system_seconds": 0.30281199999999997,
+        "self_user_seconds": 4.549639,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.190553
+      },
+      "usage_before": {
+        "self_rss_current_kib": 58476,
+        "self_ru_maxrss_kib": 64356,
+        "self_system_seconds": 0.135842,
+        "self_user_seconds": 2.588934,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.190553
+      },
+      "version": "3.13.5"
+    },
+    {
+      "artifact_bytes": 763592,
+      "digest": "c5a065f85c1e6f605741e365e40cad71c3ceb0e85e2791400bd35b8896e12ad1",
+      "finished_at_seconds": 4.8084058910026215,
+      "materialize_seconds": 0.06883251198451035,
+      "open_and_first_hash_seconds": 0.0009068200015462935,
+      "package": "libxml2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1967424,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1967424
+      },
+      "selected_logical_bytes": 1967424,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00016937599866650999,
+      "stage_removed": true,
+      "started_at_seconds": 4.737793060980039,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 68360,
+        "self_ru_maxrss_kib": 125848,
+        "self_system_seconds": 0.313994,
+        "self_user_seconds": 4.602977,
+        "waited_children_ru_maxrss_kib": 125848,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.197951
+      },
+      "usage_before": {
+        "self_rss_current_kib": 70352,
+        "self_ru_maxrss_kib": 125848,
+        "self_system_seconds": 0.302827,
+        "self_user_seconds": 4.549867,
+        "waited_children_ru_maxrss_kib": 64356,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.190553
+      },
+      "version": "2.9.14+dfsg-1.3ubuntu3.10"
+    },
+    {
+      "artifact_bytes": 778878,
+      "digest": "c5edb6c79c91a9f4c25cf0ad68c3341467a6604cb97789b2ac36c6d3de352725",
+      "finished_at_seconds": 4.870588661986403,
+      "materialize_seconds": 0.06070809398079291,
+      "open_and_first_hash_seconds": 0.0006123950006440282,
+      "package": "libtk8.6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1518728,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1518728
+      },
+      "selected_logical_bytes": 1518728,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00019694800721481442,
+      "stage_removed": true,
+      "started_at_seconds": 4.8085049809888005,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 68360,
+        "self_ru_maxrss_kib": 125848,
+        "self_system_seconds": 0.317589,
+        "self_user_seconds": 4.655425,
+        "waited_children_ru_maxrss_kib": 125848,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.20671199999999998
+      },
+      "usage_before": {
+        "self_rss_current_kib": 68360,
+        "self_ru_maxrss_kib": 125848,
+        "self_system_seconds": 0.314007,
+        "self_user_seconds": 4.603174,
+        "waited_children_ru_maxrss_kib": 125848,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.197951
+      },
+      "version": "8.6.14-1build1"
+    },
+    {
+      "artifact_bytes": 10860078,
+      "digest": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+      "finished_at_seconds": 5.111457866994897,
+      "materialize_seconds": 0.22958543099230155,
+      "open_and_first_hash_seconds": 0.00907815300161019,
+      "package": "libicu74",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 36391032,
+        "lifetime_regular_files": 3,
+        "members": 3,
+        "regular_bytes": 36391032
+      },
+      "selected_logical_bytes": 36391032,
+      "selected_regular_files": 3,
+      "stage_create_seconds": 0.00017926099826581776,
+      "stage_removed": true,
+      "started_at_seconds": 4.870739670004696,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 68692,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.374067,
+        "self_user_seconds": 4.760962,
+        "waited_children_ru_maxrss_kib": 125848,
+        "waited_children_system_seconds": 0.108592,
+        "waited_children_user_seconds": 0.256911
+      },
+      "usage_before": {
+        "self_rss_current_kib": 68360,
+        "self_ru_maxrss_kib": 125848,
+        "self_system_seconds": 0.31760499999999997,
+        "self_user_seconds": 4.655657,
+        "waited_children_ru_maxrss_kib": 125848,
+        "waited_children_system_seconds": 0.07099699999999999,
+        "waited_children_user_seconds": 0.20671199999999998
+      },
+      "version": "74.2-1ubuntu3.1"
+    },
+    {
+      "artifact_bytes": 15180,
+      "digest": "cf1e9437ac7ddf6539dbe87b68858cbdef84d78c6aac243ab3b6e564a52ed930",
+      "finished_at_seconds": 5.162999238003977,
+      "materialize_seconds": 0.050666160008404404,
+      "open_and_first_hash_seconds": 5.044601857662201e-05,
+      "package": "libcap-ng0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 26848,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 26848
+      },
+      "selected_logical_bytes": 26848,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.0002335019817110151,
+      "stage_removed": true,
+      "started_at_seconds": 5.111639782000566,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 68692,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.374088,
+        "self_user_seconds": 4.810462,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.108592,
+        "waited_children_user_seconds": 0.259488
+      },
+      "usage_before": {
+        "self_rss_current_kib": 68692,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.374088,
+        "self_user_seconds": 4.761239,
+        "waited_children_ru_maxrss_kib": 125848,
+        "waited_children_system_seconds": 0.108592,
+        "waited_children_user_seconds": 0.256911
+      },
+      "version": "0.8.4-2build2"
+    },
+    {
+      "artifact_bytes": 15610426,
+      "digest": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+      "finished_at_seconds": 5.413929651986109,
+      "materialize_seconds": 0.23394194900174625,
+      "open_and_first_hash_seconds": 0.012723723979433998,
+      "package": "postgresql-16",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 15320537,
+        "lifetime_regular_files": 60,
+        "members": 60,
+        "regular_bytes": 15320537
+      },
+      "selected_logical_bytes": 15320537,
+      "selected_regular_files": 60,
+      "stage_create_seconds": 6.631002179346979e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.163101423007902,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410611,
+        "self_user_seconds": 4.961733,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.143213,
+        "waited_children_user_seconds": 0.33260799999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 68692,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.374088,
+        "self_user_seconds": 4.810648,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.108592,
+        "waited_children_user_seconds": 0.259488
+      },
+      "version": "16.15-0ubuntu0.24.04.1"
+    },
+    {
+      "artifact_bytes": 19016,
+      "digest": "d70bd831aebe8d4834b5dd2ed98df26dd6bd27f1042c47543bd7f66df1ae22ea",
+      "finished_at_seconds": 5.461569000995951,
+      "materialize_seconds": 0.04705438599921763,
+      "open_and_first_hash_seconds": 5.681600305251777e-05,
+      "package": "libxrender1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 43600,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 43600
+      },
+      "selected_logical_bytes": 43600,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.5027984520420432e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.414029221981764,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410636,
+        "self_user_seconds": 5.007643,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.14529599999999998,
+        "waited_children_user_seconds": 0.33335899999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410636,
+        "self_user_seconds": 4.962037,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.143213,
+        "waited_children_user_seconds": 0.33260799999999996
+      },
+      "version": "1:0.9.10-1.1build1"
+    },
+    {
+      "artifact_bytes": 299472,
+      "digest": "dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727",
+      "finished_at_seconds": 5.514589445985621,
+      "materialize_seconds": 0.05190726401633583,
+      "open_and_first_hash_seconds": 0.0002622059837449342,
+      "package": "libzstd1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 755864,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 755864
+      },
+      "selected_logical_bytes": 755864,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.00028204600675962865,
+      "stage_removed": true,
+      "started_at_seconds": 5.461666166986106,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410636,
+        "self_user_seconds": 5.056476,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.147584,
+        "waited_children_user_seconds": 0.33633599999999997
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410636,
+        "self_user_seconds": 5.007823,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.14529599999999998,
+        "waited_children_user_seconds": 0.33335899999999996
+      },
+      "version": "1.5.5+dfsg2-2build1.1"
+    },
+    {
+      "artifact_bytes": 47730,
+      "digest": "e1c6611d11ad7398326f1bf028afc34c3b14c51d917a3426b966ed4b9687fa58",
+      "finished_at_seconds": 5.561554376006825,
+      "materialize_seconds": 0.046400287974392995,
+      "open_and_first_hash_seconds": 6.058102007955313e-05,
+      "package": "libxcb1",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 162392,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 162392
+      },
+      "selected_logical_bytes": 162392,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 1.9830011297017336e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.514690858981339,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410655,
+        "self_user_seconds": 5.100789,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.149732,
+        "waited_children_user_seconds": 0.337459
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410636,
+        "self_user_seconds": 5.05667,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.147584,
+        "waited_children_user_seconds": 0.33633599999999997
+      },
+      "version": "1.15-1ubuntu2"
+    },
+    {
+      "artifact_bytes": 7160,
+      "digest": "e40d29f1d1a62393bacaedebe0da3d9006084152a9f7e5e029293f08ce1c5c80",
+      "finished_at_seconds": 5.610781052004313,
+      "materialize_seconds": 0.04866959498031065,
+      "open_and_first_hash_seconds": 3.316998481750488e-05,
+      "package": "libxau6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 18696,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 18696
+      },
+      "selected_logical_bytes": 18696,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.0320992916822433e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.561652393982513,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410668,
+        "self_user_seconds": 5.148027,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.15175,
+        "waited_children_user_seconds": 0.338008
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410668,
+        "self_user_seconds": 5.100957,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.149732,
+        "waited_children_user_seconds": 0.337459
+      },
+      "version": "1:1.0.9-1build6"
+    },
+    {
+      "artifact_bytes": 26976,
+      "digest": "e5ba01d3c41f256aaf57ec59aa0554857162e3e7f97cdfbff1ed2c0e8d720ee7",
+      "finished_at_seconds": 5.664802418992622,
+      "materialize_seconds": 0.05280033199233003,
+      "open_and_first_hash_seconds": 5.3310010116547346e-05,
+      "package": "libmd0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 55536,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 55536
+      },
+      "selected_logical_bytes": 55536,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 0.0004723530146293342,
+      "stage_removed": true,
+      "started_at_seconds": 5.6109019849973265,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.411018,
+        "self_user_seconds": 5.19901,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.15175,
+        "waited_children_user_seconds": 0.34124699999999997
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.410668,
+        "self_user_seconds": 5.148235,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.15175,
+        "waited_children_user_seconds": 0.338008
+      },
+      "version": "1.1.0-2build1.1"
+    },
+    {
+      "artifact_bytes": 297270,
+      "digest": "e7c58aeac19d89f5f1492dfaa52b8623bcd56edc40983f5243ad56d94f477bf2",
+      "finished_at_seconds": 5.723832422983833,
+      "materialize_seconds": 0.058052718988619745,
+      "open_and_first_hash_seconds": 0.0002925109874922782,
+      "package": "libp11-kit0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 1714008,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 1714008
+      },
+      "selected_logical_bytes": 1714008,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.7892005164176226e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.664904442994157,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.411263,
+        "self_user_seconds": 5.253449,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.34501899999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.411039,
+        "self_user_seconds": 5.199278,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.15175,
+        "waited_children_user_seconds": 0.34124699999999997
+      },
+      "version": "0.25.3-4ubuntu2.2"
+    },
+    {
+      "artifact_bytes": 89836,
+      "digest": "e97728d8deaa51300255f0572bbd68b9549e0894a184c056dc420fc4e0ba0781",
+      "finished_at_seconds": 5.773028463008814,
+      "materialize_seconds": 0.04865995000000112,
+      "open_and_first_hash_seconds": 9.122700430452824e-05,
+      "package": "dash",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 129784,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 129784
+      },
+      "selected_logical_bytes": 129784,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.168200444430113e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.723936409980524,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41134,
+        "self_user_seconds": 5.299745,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.348416
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.411278,
+        "self_user_seconds": 5.253638,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.34501899999999996
+      },
+      "version": "0.5.12-6ubuntu5"
+    },
+    {
+      "artifact_bytes": 53194,
+      "digest": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+      "finished_at_seconds": 5.823888965998776,
+      "materialize_seconds": 0.05015422700671479,
+      "open_and_first_hash_seconds": 0.00017220998415723443,
+      "package": "libsasl2-2",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 101200,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 101200
+      },
+      "selected_logical_bytes": 101200,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.468700404278934e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.773129554989282,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.348572,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.351084
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.299917,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.348416
+      },
+      "version": "2.1.28+dfsg1-5ubuntu3.1"
+    },
+    {
+      "artifact_bytes": 41238,
+      "digest": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+      "finished_at_seconds": 5.87213267799234,
+      "materialize_seconds": 0.0475466389907524,
+      "open_and_first_hash_seconds": 6.1022990848869085e-05,
+      "package": "libbsd0",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 80888,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 80888
+      },
+      "selected_logical_bytes": 80888,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.124198363162577e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.8239874450082425,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.39438,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.353914
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.348754,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.351084
+      },
+      "version": "0.12.1-1build1.1"
+    },
+    {
+      "artifact_bytes": 44468,
+      "digest": "f82c9ad142f952ea523bda5bfca7bb0802af3a50b8c0f0dd9ec18cdfa104bde7",
+      "finished_at_seconds": 5.925374396989355,
+      "materialize_seconds": 0.05230468398076482,
+      "open_and_first_hash_seconds": 0.00022595099289901555,
+      "package": "libtasn1-6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 88216,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 88216
+      },
+      "selected_logical_bytes": 88216,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.787201083265245e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.872262503980892,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.44558,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.356611
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.394598,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.353914
+      },
+      "version": "4.19.0-3ubuntu0.24.04.2"
+    },
+    {
+      "artifact_bytes": 6710,
+      "digest": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+      "finished_at_seconds": 5.983081785001559,
+      "materialize_seconds": 0.05708314501680434,
+      "open_and_first_hash_seconds": 3.71570058632642e-05,
+      "package": "libgdbm-compat4t64",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 14328,
+        "lifetime_regular_files": 1,
+        "members": 1,
+        "regular_bytes": 14328
+      },
+      "selected_logical_bytes": 14328,
+      "selected_regular_files": 1,
+      "stage_create_seconds": 2.2783991880714893e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.925475900003221,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.415336,
+        "self_user_seconds": 5.495656,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.157502,
+        "waited_children_user_seconds": 0.357259
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41135299999999997,
+        "self_user_seconds": 5.445781,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.153921,
+        "waited_children_user_seconds": 0.356611
+      },
+      "version": "1.23-5.1build1"
+    },
+    {
+      "artifact_bytes": 3264314,
+      "digest": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "finished_at_seconds": 6.087305144988932,
+      "materialize_seconds": 0.09961767500499263,
+      "open_and_first_hash_seconds": 0.002968693006550893,
+      "package": "libc6",
+      "result": {
+        "execution_authority": false,
+        "lifetime_regular_bytes": 3660644,
+        "lifetime_regular_files": 7,
+        "members": 6,
+        "regular_bytes": 3660644
+      },
+      "selected_logical_bytes": 3660644,
+      "selected_regular_files": 7,
+      "stage_create_seconds": 7.745699258521199e-05,
+      "stage_removed": true,
+      "started_at_seconds": 5.983225521980785,
+      "status": "MATERIALIZED_COMPONENT",
+      "usage_after": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.41936599999999996,
+        "self_user_seconds": 5.576957,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.172152,
+        "waited_children_user_seconds": 0.37251799999999996
+      },
+      "usage_before": {
+        "self_rss_current_kib": 85212,
+        "self_ru_maxrss_kib": 128760,
+        "self_system_seconds": 0.415352,
+        "self_user_seconds": 5.495874,
+        "waited_children_ru_maxrss_kib": 128760,
+        "waited_children_system_seconds": 0.157502,
+        "waited_children_user_seconds": 0.357259
+      },
+      "version": "2.39-0ubuntu8.9"
+    }
+  ],
+  "artifacts_attempted": 66,
+  "artifacts_expected": 66,
+  "deadline_extended": false,
+  "descriptor_identity_equal": true,
+  "direct_child_observation": "NOT_SUPPORTED_PROC_CHILDREN",
+  "elapsed_including_owned_cleanup_seconds": 6.087341148988344,
+  "failure": null,
+  "fd_after": {
+    "0": [
+      31,
+      9,
+      8630,
+      "/dev/null"
+    ],
+    "1": [
+      12,
+      347813,
+      4480,
+      "pipe:[347813]"
+    ],
+    "2": [
+      12,
+      347814,
+      4480,
+      "pipe:[347814]"
+    ]
+  },
+  "fd_before": {
+    "0": [
+      31,
+      9,
+      8630,
+      "/dev/null"
+    ],
+    "1": [
+      12,
+      347813,
+      4480,
+      "pipe:[347813]"
+    ],
+    "2": [
+      12,
+      347814,
+      4480,
+      "pipe:[347814]"
+    ]
+  },
+  "hash_calls": 198,
+  "head": "ebc60a254ad7a89db8fb77a6775b7aa13d369a87",
+  "host": {
+    "kernel": "6.18.57",
+    "machine": "x86_64",
+    "os_release": "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.6\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n",
+    "python": "3.13.5",
+    "system": "Linux"
+  },
+  "operator_uid": 1000,
+  "owned_direct_children_remaining": null,
+  "owned_stage_parent_removed": true,
+  "rss_interpretation": "Linux KiB high-water reports: self max includes imports and this component; children max is largest waited-for child RSS, not sum or simultaneous process-group peak. Neither includes a measured cgroup/page-cache charge; do not add these into whole-service usage.",
+  "scope": "Exact public-artifact hashing/extraction/unprivileged staging/cleanup component only; NOT publisher-metadata revalidation, native installation, memory readiness, cgroup/target, capture/adoption or execution proof",
+  "selected_files": 832,
+  "selected_logical_bytes": 149567173,
+  "shared_work_budget_seconds": 60,
+  "source_changed": {},
+  "source_hashes_after": {
+    "procurement/tools/apply_schema.py": "8aab8db273303e772f5fa114f02b58708f51ccdb7cb1011c2d3252a98a25640f",
+    "procurement/tools/audit_local_purchasing_browser.py": "8116a0f41b70c783589026eeea6b0f9e80673d882c3e8fc202137a8bde63f5ad",
+    "procurement/tools/audit_multivendor_purchasing_browser.py": "888cc44beba206ad127eb7e17cb21d8b78a12c34df060f956ea9d28f3c4b9a1f",
+    "procurement/tools/audit_private_research_browser.py": "3a988d2cec0e1b8ff7966d99ef12460ce39b0afb7f0195087a062a341c14cdff",
+    "procurement/tools/audit_staging_purchasing_browser.py": "ce106b21b789980886cbadff90e422a7c4b118734c996790c181d754c61c6a86",
+    "procurement/tools/audit_supplier_review_browser.py": "2afdc86b8ddfb3f1c7de5b16743ee6dfd0249caa51b40c1652026b1884a1506d",
+    "procurement/tools/backup_synthetic_staging.py": "83f59c96b48ba6508efe773c48bc15b201accce5b4f40cebf72f4bd89f4b2793",
+    "procurement/tools/build_private_research_intake.py": "ba393416dd681e36f3629331b8be945efa3542de88df2ef4203b149b98f83929",
+    "procurement/tools/build_private_research_workspace.py": "a48c7c87d64ed72d2c67ac53023ccc028e10c44e916a51cda85c5f6ce754da49",
+    "procurement/tools/build_private_v2_research.py": "3d1548ce0dc380dd39f6f12da76c247111208a20f9665d8959f5c7f72bdfb192",
+    "procurement/tools/build_private_v3_corrected_research.py": "1e3de58d9049eb0743672ee69e36c1afbdc1ef7eaa9f6c6560c82712e4677917",
+    "procurement/tools/build_private_v3_research.py": "b6eaf56a8039d6a19dc51e75f9fff48943642e2ad2382d80171a604f413b06fe",
+    "procurement/tools/capture_inventory_snapshot.py": "fcb4434642b9c2ce8700411b775307cee762326f9ee9e59662e8103ed2c4ba6d",
+    "procurement/tools/diagnose_count_discrepancy.py": "5949aae4b05d70114ed104cd09095a9a3db84442afffeba3a3606e017e9bb016",
+    "procurement/tools/export_v0_1_seed.py": "c9ab26fc461a3bfb504aebff9669ff40f2f36d006e9240161bb3ab530e4bfc0d",
+    "procurement/tools/hosted_native_inputs.json": "2c75d0d2f3adf65cfbc5f76e4479e0a4a6697aaee32e1971442981846192a521",
+    "procurement/tools/hosted_native_installation_manifest.json": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070",
+    "procurement/tools/hosted_native_proposed_inventory.json": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+    "procurement/tools/hosted_native_runpath.json": "ac4fb80664ff012a4625cee81f8627e27dba045f35a5fabfb84cfbfb069d31c1",
+    "procurement/tools/hosted_synthetic_account_preflight.py": "dec48ea13a32d83c6d6f927386b99391b2929692b9703e2c58bf52753a65b6cf",
+    "procurement/tools/hosted_synthetic_application_runtime.py": "2f3e4384a129446773e3f2d050c0da0f667fa30bc24ac454183c473f5c05e686",
+    "procurement/tools/hosted_synthetic_artifacts.py": "73413e90babb5af4510888d0f7b9350e10a80208f3e67fcbe0979029f712bf87",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "0365e04a7aae08ae8a4e9b6441ba46b5f15204c0f19e510e1518157152cc1c3e",
+    "procurement/tools/hosted_synthetic_capability.py": "87029c47d468032308562298af829ff297fc64c382ac49028672606da27f633b",
+    "procurement/tools/hosted_synthetic_cgroup.py": "afb4853db1324453c804c79695b60b115f238ca3442ad0225c9505256d27b2da",
+    "procurement/tools/hosted_synthetic_host.py": "622a2213d398f87eb7c26de1ae3f0ff9a899029fc8138c079088041a44705e24",
+    "procurement/tools/hosted_synthetic_identity.py": "a0755d11836d3df174991555ee0c00f9f2342efbd3aade354047aeb125b2d2cf",
+    "procurement/tools/hosted_synthetic_launcher.py": "05b6a26804710e29fff73045d06a77fe64576af517d5bd25a63eb0c37f2513f7",
+    "procurement/tools/hosted_synthetic_lifecycle.py": "ea3c7ca75ab7f40e5f62358313ffd016fb1cee2da09092e055051b8cfcc5e289",
+    "procurement/tools/hosted_synthetic_namespace.py": "88f4d807426720140cac3cbc014a4a535232a8864c55b6d7e163a2dae17adfe2",
+    "procurement/tools/hosted_synthetic_namespace_prerequisite.py": "2dca4cbdc69f5ab39913e8ca06a34051ca1363979b0ac846e9537c8ca714c4b9",
+    "procurement/tools/hosted_synthetic_native_core.py": "de2f4ff2ebd4f194f91c81623de03d0f3e6f39c974a48ae6cdd2fde87afe1390",
+    "procurement/tools/hosted_synthetic_native_inputs.py": "0aa417cc46bb9c8d28edc69628b5d0c03ac886389265ed6f2a9711524df551c1",
+    "procurement/tools/hosted_synthetic_native_installation.py": "b6516daecfdcbbe11e74bbbd1760053b3b67d3ca6102fd64178c353f69ec2028",
+    "procurement/tools/hosted_synthetic_native_measurement.py": "40b63418972c76dd6ddb78a1065094800b0a397873f96c634eff1c2f2637b229",
+    "procurement/tools/hosted_synthetic_native_observation.py": "67f6c9bf5deda9537d750f3ea3e88089d750dd14879bdae2ca80092ffec18ab5",
+    "procurement/tools/hosted_synthetic_native_route.py": "df0d94e5f2cfdb50c53c65dc34575e69952de4d68a38360b2327bee07614ba7a",
+    "procurement/tools/hosted_synthetic_observer.py": "14cfd93cd2ce7d15eb99ba8e27a6d2dcd3ee5dd01467a2c68a4165319cba2ebd",
+    "procurement/tools/hosted_synthetic_packet_authority.py": "88bfe4897c5aa18533b0f3e676f56d0fc987e073fd95a7ee88ee39a10ccb8b39",
+    "procurement/tools/hosted_synthetic_packet_controls.py": "09f1cfe4496cd708c3842df152cc768756abe6d7262aa3de0a29412bcc1a0ba5",
+    "procurement/tools/hosted_synthetic_packet_evidence.py": "c13a9eadd0b36232d782aa0b7a7abc854c4bd866bbd425c25745ebaeda774e89",
+    "procurement/tools/hosted_synthetic_packet_forecast.py": "772231a23f12eb1d5449f2b5d98d980de8c1b40c35f8b279f9a8797e2ef0c384",
+    "procurement/tools/hosted_synthetic_pid1_regression.py": "f4a9fdf257d2a18e1961933a04654ffbd9d124cccbb218816b8cbcb76e72c596",
+    "procurement/tools/hosted_synthetic_postgres_identity.py": "fd971ff43cdd485626f7342d8b2d0f18ff19a782d74e6f676f103a226437032a",
+    "procurement/tools/hosted_synthetic_postgres_image.py": "fdc3e8363264e479e2091a2c859e3135a22fbf0ece33a815f42441b9b8fd9749",
+    "procurement/tools/hosted_synthetic_postgres_runtime.py": "8d5d3c71db81a1009b37c343245ab2a642de6601fd520c99252923e3c60d8289",
+    "procurement/tools/hosted_synthetic_postgres_version.py": "392b57a13bcae1bd5b9688cf10390dcc249b82d60f928484d3adf5dbcaa9f87a",
+    "procurement/tools/hosted_synthetic_projection.py": "a7dd7716851985c0897e6ed9c7e40e2ddff0a146e1b8a65ab143c0afe100d64b",
+    "procurement/tools/hosted_synthetic_quarantine.py": "8748eccbec32e64b1440474c211f8ab3558856d65ba22fa2bcaf0970bda9c3e0",
+    "procurement/tools/hosted_synthetic_recovery_inputs.py": "295ec80b05f2ec63b1e7caa02841adc3f124ed484e4067452c3af698aae5919c",
+    "procurement/tools/hosted_synthetic_recovery_snapshot.py": "e48246bb8cabb3056686e7576efdca89f808748fc65ceff87107004873c8055e",
+    "procurement/tools/hosted_synthetic_recovery_storage.py": "c6f79465c6a63423d99f161a4f59c89c707520aa17a727b81f1376dc9bae7e00",
+    "procurement/tools/hosted_synthetic_recovery_toc.py": "8f5ca1e73315279fd58cae11c526910c6418bc96f50cde414da20c513ecdfe33",
+    "procurement/tools/hosted_synthetic_restart_evidence.py": "71b014661f3525c895ff47c087d5924e34899a1b7e759130230342d025ce4263",
+    "procurement/tools/hosted_synthetic_runtime.py": "7d4388499fd98bff2bdbe84148369795be31ee1dbc4fae18e9cbcfa8af9fb77b",
+    "procurement/tools/hosted_synthetic_runtime_regression.py": "03f1d0c24e9bfe6d551cfe6fdb9b369a4f3bf2ef5d4c9c79eeb21d720d67be7b",
+    "procurement/tools/hosted_synthetic_source.py": "14a7ad505e3d0b59c1f07989a0ee4c9f2a58b5f75d2fad285094bed0ce4fca25",
+    "procurement/tools/hosted_synthetic_user_service.py": "fdac10910fcd344d0205324d87ac306cd241e6bb3240210c6d3e49eb421e213a",
+    "procurement/tools/hosted_synthetic_wheels.py": "4808a61e942dc0692272ff693bdbb8fa533183751c2ab2d6d29eed6f4ba800dd",
+    "procurement/tools/hosted_synthetic_worker.py": "5a87e70e386f52c54f68e9cda7a6594a69ab3e82a82179ee820937a74be38137",
+    "procurement/tools/import_seed_csv.py": "456ed301fa3b84e21af89703348012b5b7c960824144cdb3be90fe4ea319aac1",
+    "procurement/tools/initialize_synthetic_demo.py": "861e8ebde61fc1182a9273fb58f4ae5c2b0856cf6078ffaa950ca57f70acb6d7",
+    "procurement/tools/local_purchasing_candidate.py": "288bb89a0a9b15fca86a852a0989c403b02e83706da1ed5276f4de39d9da2641",
+    "procurement/tools/migrate_v0_1_sqlite.py": "f3a3dd1098274be165bbb386c001f47625e9679037289405ec83ee0b739d56c2",
+    "procurement/tools/persist_phase4_identity_manifest.py": "f75380326e666aecab9881341a3339b2a53d3a77e7aa54ebb989b8e00eea5a14",
+    "procurement/tools/persist_phase4_terminal_disposition.py": "e271e33d5ff186a60ed4745c6c71cf9dddc63643a5cedba24fa427e8872b5e71",
+    "procurement/tools/provision_synthetic_staging.py": "0eebe0e3931a5f46bfe9e1add15d9d8931ef67b3e2a78a74efb3202bbb37ba74",
+    "procurement/tools/reconcile_phase4_published_production.py": "5e2871649ac11b0a65a44124e7f4b8cf541d971d912b6f5e38314ec6e4fa34d2",
+    "procurement/tools/review_supplier_mapping_package.py": "307e0c3d15251e6e4899f1ec4c5bc8076128f08ab66320f5039f7a8fcc4c8b05",
+    "procurement/tools/run_identity_investigation.py": "66574af53f52113e53f93aa3ac00428c8f0ecb41437a1dbe6f2e62d0a2491de7",
+    "procurement/tools/run_local_staging_acceptance.py": "e2d459e55b6ce07c8fa438dbcf8799f2daf837ad0d8ad6400aa5009b83d3822c",
+    "procurement/tools/run_local_staging_browser_worker.py": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+    "procurement/tools/run_seed_import.py": "8a997dd302ffc8f9d1da0badab82c9188cc7b78894a486deb92285083b209550",
+    "procurement/tools/run_tests.py": "836244a10c38ddd05976646e61fda941b39c7f3d4ce355c703e4d62f7b2d789f",
+    "procurement/tools/serve_private_research.py": "4fe73d70a21ff89002c00ef4d9679ed9185d5eeb6c9854aa8211715691859c91",
+    "procurement/tools/transfer_synthetic_staging.py": "ae37598fae36be114a44bc00d0e629aa860c42986bba42986f7a90b875446521",
+    "procurement/tools/validate_seed.py": "3f4e125e0078051961f2d2d83511cec921d99dfa570ec69db2f4ec8749f29032",
+    "procurement/tools/verify_seed_import.py": "801559e87b3a667dcada237e81e0fb24f01c6d112b3517f1be1a1fe159cbfe00"
+  },
+  "source_hashes_before": {
+    "procurement/tools/apply_schema.py": "8aab8db273303e772f5fa114f02b58708f51ccdb7cb1011c2d3252a98a25640f",
+    "procurement/tools/audit_local_purchasing_browser.py": "8116a0f41b70c783589026eeea6b0f9e80673d882c3e8fc202137a8bde63f5ad",
+    "procurement/tools/audit_multivendor_purchasing_browser.py": "888cc44beba206ad127eb7e17cb21d8b78a12c34df060f956ea9d28f3c4b9a1f",
+    "procurement/tools/audit_private_research_browser.py": "3a988d2cec0e1b8ff7966d99ef12460ce39b0afb7f0195087a062a341c14cdff",
+    "procurement/tools/audit_staging_purchasing_browser.py": "ce106b21b789980886cbadff90e422a7c4b118734c996790c181d754c61c6a86",
+    "procurement/tools/audit_supplier_review_browser.py": "2afdc86b8ddfb3f1c7de5b16743ee6dfd0249caa51b40c1652026b1884a1506d",
+    "procurement/tools/backup_synthetic_staging.py": "83f59c96b48ba6508efe773c48bc15b201accce5b4f40cebf72f4bd89f4b2793",
+    "procurement/tools/build_private_research_intake.py": "ba393416dd681e36f3629331b8be945efa3542de88df2ef4203b149b98f83929",
+    "procurement/tools/build_private_research_workspace.py": "a48c7c87d64ed72d2c67ac53023ccc028e10c44e916a51cda85c5f6ce754da49",
+    "procurement/tools/build_private_v2_research.py": "3d1548ce0dc380dd39f6f12da76c247111208a20f9665d8959f5c7f72bdfb192",
+    "procurement/tools/build_private_v3_corrected_research.py": "1e3de58d9049eb0743672ee69e36c1afbdc1ef7eaa9f6c6560c82712e4677917",
+    "procurement/tools/build_private_v3_research.py": "b6eaf56a8039d6a19dc51e75f9fff48943642e2ad2382d80171a604f413b06fe",
+    "procurement/tools/capture_inventory_snapshot.py": "fcb4434642b9c2ce8700411b775307cee762326f9ee9e59662e8103ed2c4ba6d",
+    "procurement/tools/diagnose_count_discrepancy.py": "5949aae4b05d70114ed104cd09095a9a3db84442afffeba3a3606e017e9bb016",
+    "procurement/tools/export_v0_1_seed.py": "c9ab26fc461a3bfb504aebff9669ff40f2f36d006e9240161bb3ab530e4bfc0d",
+    "procurement/tools/hosted_native_inputs.json": "2c75d0d2f3adf65cfbc5f76e4479e0a4a6697aaee32e1971442981846192a521",
+    "procurement/tools/hosted_native_installation_manifest.json": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070",
+    "procurement/tools/hosted_native_proposed_inventory.json": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc",
+    "procurement/tools/hosted_native_runpath.json": "ac4fb80664ff012a4625cee81f8627e27dba045f35a5fabfb84cfbfb069d31c1",
+    "procurement/tools/hosted_synthetic_account_preflight.py": "dec48ea13a32d83c6d6f927386b99391b2929692b9703e2c58bf52753a65b6cf",
+    "procurement/tools/hosted_synthetic_application_runtime.py": "2f3e4384a129446773e3f2d050c0da0f667fa30bc24ac454183c473f5c05e686",
+    "procurement/tools/hosted_synthetic_artifacts.py": "73413e90babb5af4510888d0f7b9350e10a80208f3e67fcbe0979029f712bf87",
+    "procurement/tools/hosted_synthetic_bootstrap.py": "0365e04a7aae08ae8a4e9b6441ba46b5f15204c0f19e510e1518157152cc1c3e",
+    "procurement/tools/hosted_synthetic_capability.py": "87029c47d468032308562298af829ff297fc64c382ac49028672606da27f633b",
+    "procurement/tools/hosted_synthetic_cgroup.py": "afb4853db1324453c804c79695b60b115f238ca3442ad0225c9505256d27b2da",
+    "procurement/tools/hosted_synthetic_host.py": "622a2213d398f87eb7c26de1ae3f0ff9a899029fc8138c079088041a44705e24",
+    "procurement/tools/hosted_synthetic_identity.py": "a0755d11836d3df174991555ee0c00f9f2342efbd3aade354047aeb125b2d2cf",
+    "procurement/tools/hosted_synthetic_launcher.py": "05b6a26804710e29fff73045d06a77fe64576af517d5bd25a63eb0c37f2513f7",
+    "procurement/tools/hosted_synthetic_lifecycle.py": "ea3c7ca75ab7f40e5f62358313ffd016fb1cee2da09092e055051b8cfcc5e289",
+    "procurement/tools/hosted_synthetic_namespace.py": "88f4d807426720140cac3cbc014a4a535232a8864c55b6d7e163a2dae17adfe2",
+    "procurement/tools/hosted_synthetic_namespace_prerequisite.py": "2dca4cbdc69f5ab39913e8ca06a34051ca1363979b0ac846e9537c8ca714c4b9",
+    "procurement/tools/hosted_synthetic_native_core.py": "de2f4ff2ebd4f194f91c81623de03d0f3e6f39c974a48ae6cdd2fde87afe1390",
+    "procurement/tools/hosted_synthetic_native_inputs.py": "0aa417cc46bb9c8d28edc69628b5d0c03ac886389265ed6f2a9711524df551c1",
+    "procurement/tools/hosted_synthetic_native_installation.py": "b6516daecfdcbbe11e74bbbd1760053b3b67d3ca6102fd64178c353f69ec2028",
+    "procurement/tools/hosted_synthetic_native_measurement.py": "40b63418972c76dd6ddb78a1065094800b0a397873f96c634eff1c2f2637b229",
+    "procurement/tools/hosted_synthetic_native_observation.py": "67f6c9bf5deda9537d750f3ea3e88089d750dd14879bdae2ca80092ffec18ab5",
+    "procurement/tools/hosted_synthetic_native_route.py": "df0d94e5f2cfdb50c53c65dc34575e69952de4d68a38360b2327bee07614ba7a",
+    "procurement/tools/hosted_synthetic_observer.py": "14cfd93cd2ce7d15eb99ba8e27a6d2dcd3ee5dd01467a2c68a4165319cba2ebd",
+    "procurement/tools/hosted_synthetic_packet_authority.py": "88bfe4897c5aa18533b0f3e676f56d0fc987e073fd95a7ee88ee39a10ccb8b39",
+    "procurement/tools/hosted_synthetic_packet_controls.py": "09f1cfe4496cd708c3842df152cc768756abe6d7262aa3de0a29412bcc1a0ba5",
+    "procurement/tools/hosted_synthetic_packet_evidence.py": "c13a9eadd0b36232d782aa0b7a7abc854c4bd866bbd425c25745ebaeda774e89",
+    "procurement/tools/hosted_synthetic_packet_forecast.py": "772231a23f12eb1d5449f2b5d98d980de8c1b40c35f8b279f9a8797e2ef0c384",
+    "procurement/tools/hosted_synthetic_pid1_regression.py": "f4a9fdf257d2a18e1961933a04654ffbd9d124cccbb218816b8cbcb76e72c596",
+    "procurement/tools/hosted_synthetic_postgres_identity.py": "fd971ff43cdd485626f7342d8b2d0f18ff19a782d74e6f676f103a226437032a",
+    "procurement/tools/hosted_synthetic_postgres_image.py": "fdc3e8363264e479e2091a2c859e3135a22fbf0ece33a815f42441b9b8fd9749",
+    "procurement/tools/hosted_synthetic_postgres_runtime.py": "8d5d3c71db81a1009b37c343245ab2a642de6601fd520c99252923e3c60d8289",
+    "procurement/tools/hosted_synthetic_postgres_version.py": "392b57a13bcae1bd5b9688cf10390dcc249b82d60f928484d3adf5dbcaa9f87a",
+    "procurement/tools/hosted_synthetic_projection.py": "a7dd7716851985c0897e6ed9c7e40e2ddff0a146e1b8a65ab143c0afe100d64b",
+    "procurement/tools/hosted_synthetic_quarantine.py": "8748eccbec32e64b1440474c211f8ab3558856d65ba22fa2bcaf0970bda9c3e0",
+    "procurement/tools/hosted_synthetic_recovery_inputs.py": "295ec80b05f2ec63b1e7caa02841adc3f124ed484e4067452c3af698aae5919c",
+    "procurement/tools/hosted_synthetic_recovery_snapshot.py": "e48246bb8cabb3056686e7576efdca89f808748fc65ceff87107004873c8055e",
+    "procurement/tools/hosted_synthetic_recovery_storage.py": "c6f79465c6a63423d99f161a4f59c89c707520aa17a727b81f1376dc9bae7e00",
+    "procurement/tools/hosted_synthetic_recovery_toc.py": "8f5ca1e73315279fd58cae11c526910c6418bc96f50cde414da20c513ecdfe33",
+    "procurement/tools/hosted_synthetic_restart_evidence.py": "71b014661f3525c895ff47c087d5924e34899a1b7e759130230342d025ce4263",
+    "procurement/tools/hosted_synthetic_runtime.py": "7d4388499fd98bff2bdbe84148369795be31ee1dbc4fae18e9cbcfa8af9fb77b",
+    "procurement/tools/hosted_synthetic_runtime_regression.py": "03f1d0c24e9bfe6d551cfe6fdb9b369a4f3bf2ef5d4c9c79eeb21d720d67be7b",
+    "procurement/tools/hosted_synthetic_source.py": "14a7ad505e3d0b59c1f07989a0ee4c9f2a58b5f75d2fad285094bed0ce4fca25",
+    "procurement/tools/hosted_synthetic_user_service.py": "fdac10910fcd344d0205324d87ac306cd241e6bb3240210c6d3e49eb421e213a",
+    "procurement/tools/hosted_synthetic_wheels.py": "4808a61e942dc0692272ff693bdbb8fa533183751c2ab2d6d29eed6f4ba800dd",
+    "procurement/tools/hosted_synthetic_worker.py": "5a87e70e386f52c54f68e9cda7a6594a69ab3e82a82179ee820937a74be38137",
+    "procurement/tools/import_seed_csv.py": "456ed301fa3b84e21af89703348012b5b7c960824144cdb3be90fe4ea319aac1",
+    "procurement/tools/initialize_synthetic_demo.py": "861e8ebde61fc1182a9273fb58f4ae5c2b0856cf6078ffaa950ca57f70acb6d7",
+    "procurement/tools/local_purchasing_candidate.py": "288bb89a0a9b15fca86a852a0989c403b02e83706da1ed5276f4de39d9da2641",
+    "procurement/tools/migrate_v0_1_sqlite.py": "f3a3dd1098274be165bbb386c001f47625e9679037289405ec83ee0b739d56c2",
+    "procurement/tools/persist_phase4_identity_manifest.py": "f75380326e666aecab9881341a3339b2a53d3a77e7aa54ebb989b8e00eea5a14",
+    "procurement/tools/persist_phase4_terminal_disposition.py": "e271e33d5ff186a60ed4745c6c71cf9dddc63643a5cedba24fa427e8872b5e71",
+    "procurement/tools/provision_synthetic_staging.py": "0eebe0e3931a5f46bfe9e1add15d9d8931ef67b3e2a78a74efb3202bbb37ba74",
+    "procurement/tools/reconcile_phase4_published_production.py": "5e2871649ac11b0a65a44124e7f4b8cf541d971d912b6f5e38314ec6e4fa34d2",
+    "procurement/tools/review_supplier_mapping_package.py": "307e0c3d15251e6e4899f1ec4c5bc8076128f08ab66320f5039f7a8fcc4c8b05",
+    "procurement/tools/run_identity_investigation.py": "66574af53f52113e53f93aa3ac00428c8f0ecb41437a1dbe6f2e62d0a2491de7",
+    "procurement/tools/run_local_staging_acceptance.py": "e2d459e55b6ce07c8fa438dbcf8799f2daf837ad0d8ad6400aa5009b83d3822c",
+    "procurement/tools/run_local_staging_browser_worker.py": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2",
+    "procurement/tools/run_seed_import.py": "8a997dd302ffc8f9d1da0badab82c9188cc7b78894a486deb92285083b209550",
+    "procurement/tools/run_tests.py": "836244a10c38ddd05976646e61fda941b39c7f3d4ce355c703e4d62f7b2d789f",
+    "procurement/tools/serve_private_research.py": "4fe73d70a21ff89002c00ef4d9679ed9185d5eeb6c9854aa8211715691859c91",
+    "procurement/tools/transfer_synthetic_staging.py": "ae37598fae36be114a44bc00d0e629aa860c42986bba42986f7a90b875446521",
+    "procurement/tools/validate_seed.py": "3f4e125e0078051961f2d2d83511cec921d99dfa570ec69db2f4ec8749f29032",
+    "procurement/tools/verify_seed_import.py": "801559e87b3a667dcada237e81e0fb24f01c6d112b3517f1be1a1fe159cbfe00"
+  },
+  "status": "PASS_COMPONENT_ONLY",
+  "timing_records": [
+    {
+      "artifact": "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58",
+      "error": null,
+      "seconds": 0.0005716139858122915,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58",
+      "error": null,
+      "seconds": 0.0008068989845924079,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58",
+      "error": null,
+      "seconds": 0.01077374498709105,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58",
+      "error": null,
+      "seconds": 0.0008377250051125884,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "066398a06ef1a218d4109461d4c636eafe83322ad19b179de9ef7af42b3fec58",
+      "error": null,
+      "seconds": 0.0012031270016450435,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+      "error": null,
+      "seconds": 2.3254979168996215e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+      "error": null,
+      "seconds": 4.834300489164889e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+      "error": null,
+      "seconds": 0.002166421996662393,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+      "error": null,
+      "seconds": 1.7436977941542864e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+      "error": null,
+      "seconds": 0.0002876940125133842,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "0ac60a2cc034ccc4bf4e2f846f38110469d7ae43b47e808d67aafc538bc3695e",
+      "error": null,
+      "seconds": 1.7996993847191334e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0ac60a2cc034ccc4bf4e2f846f38110469d7ae43b47e808d67aafc538bc3695e",
+      "error": null,
+      "seconds": 5.137801053933799e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0ac60a2cc034ccc4bf4e2f846f38110469d7ae43b47e808d67aafc538bc3695e",
+      "error": null,
+      "seconds": 0.0024488640192430466,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "0ac60a2cc034ccc4bf4e2f846f38110469d7ae43b47e808d67aafc538bc3695e",
+      "error": null,
+      "seconds": 1.7896993085741997e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0ac60a2cc034ccc4bf4e2f846f38110469d7ae43b47e808d67aafc538bc3695e",
+      "error": null,
+      "seconds": 0.00028807498165406287,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "0d4a0187bcdbbe3e6a10bfa574100087d12052d0d0ef28614fd6210021c587b2",
+      "error": null,
+      "seconds": 0.00011655598063953221,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0d4a0187bcdbbe3e6a10bfa574100087d12052d0d0ef28614fd6210021c587b2",
+      "error": null,
+      "seconds": 0.00014259599265642464,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0d4a0187bcdbbe3e6a10bfa574100087d12052d0d0ef28614fd6210021c587b2",
+      "error": null,
+      "seconds": 0.00350195899954997,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "0d4a0187bcdbbe3e6a10bfa574100087d12052d0d0ef28614fd6210021c587b2",
+      "error": null,
+      "seconds": 0.00013495399616658688,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "0d4a0187bcdbbe3e6a10bfa574100087d12052d0d0ef28614fd6210021c587b2",
+      "error": null,
+      "seconds": 0.00027321302331984043,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+      "error": null,
+      "seconds": 4.2454019421711564e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+      "error": null,
+      "seconds": 0.00014660198939964175,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+      "error": null,
+      "seconds": 0.002835231978679076,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+      "error": null,
+      "seconds": 3.4783006412908435e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+      "error": null,
+      "seconds": 0.00023115900694392622,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "1d7f54e77f0455ab5e607cd5e78b576801d8efdc66115e02cf3c6e708d093667",
+      "error": null,
+      "seconds": 6.315499194897711e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "1d7f54e77f0455ab5e607cd5e78b576801d8efdc66115e02cf3c6e708d093667",
+      "error": null,
+      "seconds": 8.666099165566266e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "1d7f54e77f0455ab5e607cd5e78b576801d8efdc66115e02cf3c6e708d093667",
+      "error": null,
+      "seconds": 0.002480625989846885,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "1d7f54e77f0455ab5e607cd5e78b576801d8efdc66115e02cf3c6e708d093667",
+      "error": null,
+      "seconds": 5.3019990446045995e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "1d7f54e77f0455ab5e607cd5e78b576801d8efdc66115e02cf3c6e708d093667",
+      "error": null,
+      "seconds": 0.00022462900960817933,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "203d7657b5f54633fba1a9c9b784d556ef83c9f6787b3185ba55a88e07b865a3",
+      "error": null,
+      "seconds": 0.0007504739915020764,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "203d7657b5f54633fba1a9c9b784d556ef83c9f6787b3185ba55a88e07b865a3",
+      "error": null,
+      "seconds": 0.0004610060132108629,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "203d7657b5f54633fba1a9c9b784d556ef83c9f6787b3185ba55a88e07b865a3",
+      "error": null,
+      "seconds": 0.00973869301378727,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "203d7657b5f54633fba1a9c9b784d556ef83c9f6787b3185ba55a88e07b865a3",
+      "error": null,
+      "seconds": 0.0005108820041641593,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "203d7657b5f54633fba1a9c9b784d556ef83c9f6787b3185ba55a88e07b865a3",
+      "error": null,
+      "seconds": 0.0005426090210676193,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "error": null,
+      "seconds": 0.0017780449998099357,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "error": null,
+      "seconds": 0.002428217005217448,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "error": null,
+      "seconds": 0.029298778012162074,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "error": null,
+      "seconds": 0.0018682010122574866,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "219f43b1cd836a4da550938db5fda93160d269d39a4edcf1f1ce698a470db797",
+      "error": null,
+      "seconds": 0.00071879499591887,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "23c627c77c66552a658e62852f244f4946dc543898e0ec5428d5dc6bffde2d6a",
+      "error": null,
+      "seconds": 6.576001760549843e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "23c627c77c66552a658e62852f244f4946dc543898e0ec5428d5dc6bffde2d6a",
+      "error": null,
+      "seconds": 0.0001322499883826822,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "23c627c77c66552a658e62852f244f4946dc543898e0ec5428d5dc6bffde2d6a",
+      "error": null,
+      "seconds": 0.0025958199985325336,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "23c627c77c66552a658e62852f244f4946dc543898e0ec5428d5dc6bffde2d6a",
+      "error": null,
+      "seconds": 3.670499427244067e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "23c627c77c66552a658e62852f244f4946dc543898e0ec5428d5dc6bffde2d6a",
+      "error": null,
+      "seconds": 0.0002390709996689111,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "273f7cc95a68d927d7f71c3e78b7717a16a8d86e646a206bae7bf797150ae9db",
+      "error": null,
+      "seconds": 0.00012250500731170177,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "273f7cc95a68d927d7f71c3e78b7717a16a8d86e646a206bae7bf797150ae9db",
+      "error": null,
+      "seconds": 0.00012643099762499332,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "273f7cc95a68d927d7f71c3e78b7717a16a8d86e646a206bae7bf797150ae9db",
+      "error": null,
+      "seconds": 0.0032378900214098394,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "273f7cc95a68d927d7f71c3e78b7717a16a8d86e646a206bae7bf797150ae9db",
+      "error": null,
+      "seconds": 6.806198507547379e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "273f7cc95a68d927d7f71c3e78b7717a16a8d86e646a206bae7bf797150ae9db",
+      "error": null,
+      "seconds": 0.0002702479832805693,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d",
+      "error": null,
+      "seconds": 0.0013248710019979626,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d",
+      "error": null,
+      "seconds": 0.00024973799008876085,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d",
+      "error": null,
+      "seconds": 0.0044186729937791824,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d",
+      "error": null,
+      "seconds": 0.00018073301180265844,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "285f8a505dfa8e1b33f357a9d8d3477ad35bf18c0b34771a6df4c25923f3ae0d",
+      "error": null,
+      "seconds": 0.0003346250159665942,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "2da3fa28302cf007075e89cdc3aabe6973916afcd62c3884b86f67b77c73a5b4",
+      "error": null,
+      "seconds": 0.0003459329891484231,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "2da3fa28302cf007075e89cdc3aabe6973916afcd62c3884b86f67b77c73a5b4",
+      "error": null,
+      "seconds": 0.0004776909772772342,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "2da3fa28302cf007075e89cdc3aabe6973916afcd62c3884b86f67b77c73a5b4",
+      "error": null,
+      "seconds": 0.005792507989099249,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "2da3fa28302cf007075e89cdc3aabe6973916afcd62c3884b86f67b77c73a5b4",
+      "error": null,
+      "seconds": 0.00031143100932240486,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "2da3fa28302cf007075e89cdc3aabe6973916afcd62c3884b86f67b77c73a5b4",
+      "error": null,
+      "seconds": 0.0006934670091141015,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447",
+      "error": null,
+      "seconds": 0.00025164999533444643,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447",
+      "error": null,
+      "seconds": 0.0005387940036598593,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447",
+      "error": null,
+      "seconds": 0.018975205981405452,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447",
+      "error": null,
+      "seconds": 0.00028083400684408844,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "2f6794a7f31753fc947d9ac02ff03ea46510f34864f9d132a93d7b105e3c4447",
+      "error": null,
+      "seconds": 0.0018777950026560575,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "319331270d5cc52d5ebffe51c941d7b01b432bc402c2924b557209a64d4ecbad",
+      "error": null,
+      "seconds": 6.166400271467865e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "319331270d5cc52d5ebffe51c941d7b01b432bc402c2924b557209a64d4ecbad",
+      "error": null,
+      "seconds": 8.39669955894351e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "319331270d5cc52d5ebffe51c941d7b01b432bc402c2924b557209a64d4ecbad",
+      "error": null,
+      "seconds": 0.0032047150016296655,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "319331270d5cc52d5ebffe51c941d7b01b432bc402c2924b557209a64d4ecbad",
+      "error": null,
+      "seconds": 0.00024818500969558954,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "319331270d5cc52d5ebffe51c941d7b01b432bc402c2924b557209a64d4ecbad",
+      "error": null,
+      "seconds": 0.0002482040144968778,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "326a55fce45a620f12b98baf581fb037eb0fcea1ab3969c54cf177f51be8abfe",
+      "error": null,
+      "seconds": 4.992500180378556e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "326a55fce45a620f12b98baf581fb037eb0fcea1ab3969c54cf177f51be8abfe",
+      "error": null,
+      "seconds": 0.0001460100174881518,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "326a55fce45a620f12b98baf581fb037eb0fcea1ab3969c54cf177f51be8abfe",
+      "error": null,
+      "seconds": 0.002882714004954323,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "326a55fce45a620f12b98baf581fb037eb0fcea1ab3969c54cf177f51be8abfe",
+      "error": null,
+      "seconds": 4.2244006181135774e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "326a55fce45a620f12b98baf581fb037eb0fcea1ab3969c54cf177f51be8abfe",
+      "error": null,
+      "seconds": 0.00024476999533362687,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "36ee08b00b1ee5018b2fce02881b7d2d73c9b4e32990bde3388400d86c48126a",
+      "error": null,
+      "seconds": 4.141198587603867e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "36ee08b00b1ee5018b2fce02881b7d2d73c9b4e32990bde3388400d86c48126a",
+      "error": null,
+      "seconds": 6.459798896685243e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "36ee08b00b1ee5018b2fce02881b7d2d73c9b4e32990bde3388400d86c48126a",
+      "error": null,
+      "seconds": 0.002765171986538917,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "36ee08b00b1ee5018b2fce02881b7d2d73c9b4e32990bde3388400d86c48126a",
+      "error": null,
+      "seconds": 6.343499990180135e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "36ee08b00b1ee5018b2fce02881b7d2d73c9b4e32990bde3388400d86c48126a",
+      "error": null,
+      "seconds": 0.00041866200626827776,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "error": null,
+      "seconds": 6.148198735900223e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "error": null,
+      "seconds": 0.0002511990023776889,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "error": null,
+      "seconds": 0.00331010899390094,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "error": null,
+      "seconds": 5.291000707075e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9",
+      "error": null,
+      "seconds": 0.0003200930077582598,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+      "error": null,
+      "seconds": 0.00012794398935511708,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+      "error": null,
+      "seconds": 0.00017835898324847221,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+      "error": null,
+      "seconds": 0.003696373023558408,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+      "error": null,
+      "seconds": 0.00011463300324976444,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "3f96dd36bcd7841172c1ead4965da20a193bb9ccf9a93a3f5a3ac7f56369dbb1",
+      "error": null,
+      "seconds": 0.00025688798632472754,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "45783969a9ece9d7b7b733b8c60981584c53c6bc5ee3b42d295d2f80d1285679",
+      "error": null,
+      "seconds": 3.495201235637069e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "45783969a9ece9d7b7b733b8c60981584c53c6bc5ee3b42d295d2f80d1285679",
+      "error": null,
+      "seconds": 6.138300523161888e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "45783969a9ece9d7b7b733b8c60981584c53c6bc5ee3b42d295d2f80d1285679",
+      "error": null,
+      "seconds": 0.003086811979301274,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "45783969a9ece9d7b7b733b8c60981584c53c6bc5ee3b42d295d2f80d1285679",
+      "error": null,
+      "seconds": 8.290499681606889e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "45783969a9ece9d7b7b733b8c60981584c53c6bc5ee3b42d295d2f80d1285679",
+      "error": null,
+      "seconds": 0.0002852309844456613,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "46bfd10df095a23b65f58115de47a547c9a2d14627749bd0423ae78c14be77d3",
+      "error": null,
+      "seconds": 7.408199599012733e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "46bfd10df095a23b65f58115de47a547c9a2d14627749bd0423ae78c14be77d3",
+      "error": null,
+      "seconds": 9.238001075573266e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "46bfd10df095a23b65f58115de47a547c9a2d14627749bd0423ae78c14be77d3",
+      "error": null,
+      "seconds": 0.00280917200143449,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "46bfd10df095a23b65f58115de47a547c9a2d14627749bd0423ae78c14be77d3",
+      "error": null,
+      "seconds": 5.395198240876198e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "46bfd10df095a23b65f58115de47a547c9a2d14627749bd0423ae78c14be77d3",
+      "error": null,
+      "seconds": 0.00026555100339464843,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+      "error": null,
+      "seconds": 0.0013917610049247742,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+      "error": null,
+      "seconds": 0.0013086760009173304,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+      "error": null,
+      "seconds": 0.02192794598522596,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+      "error": null,
+      "seconds": 0.001042454008711502,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "4796f72e1a7270ad8c17b1ecb025cd453f692b42c10aaf89f6b476da61761eac",
+      "error": null,
+      "seconds": 0.0006667870038654655,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "494b8e672f722130c6bca6a7bc4cc31a43ca891a31d60d868bfdd699a3c20b13",
+      "error": null,
+      "seconds": 9.105799836106598e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "494b8e672f722130c6bca6a7bc4cc31a43ca891a31d60d868bfdd699a3c20b13",
+      "error": null,
+      "seconds": 0.00011894997442141175,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "494b8e672f722130c6bca6a7bc4cc31a43ca891a31d60d868bfdd699a3c20b13",
+      "error": null,
+      "seconds": 0.003395378007553518,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "494b8e672f722130c6bca6a7bc4cc31a43ca891a31d60d868bfdd699a3c20b13",
+      "error": null,
+      "seconds": 7.524297689087689e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "494b8e672f722130c6bca6a7bc4cc31a43ca891a31d60d868bfdd699a3c20b13",
+      "error": null,
+      "seconds": 0.00033635800355114043,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+      "error": null,
+      "seconds": 0.00012833400978706777,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+      "error": null,
+      "seconds": 0.0001566960127092898,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+      "error": null,
+      "seconds": 0.003532294009346515,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+      "error": null,
+      "seconds": 0.00010829299571923912,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+      "error": null,
+      "seconds": 0.0002899479877669364,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "579c9488755d1ddd70f66480cafd2f68776f68314d15d9cf4b5449d0de0fc968",
+      "error": null,
+      "seconds": 0.00012461800361052155,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "579c9488755d1ddd70f66480cafd2f68776f68314d15d9cf4b5449d0de0fc968",
+      "error": null,
+      "seconds": 0.00028148500132374465,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "579c9488755d1ddd70f66480cafd2f68776f68314d15d9cf4b5449d0de0fc968",
+      "error": null,
+      "seconds": 0.003628148988354951,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "579c9488755d1ddd70f66480cafd2f68776f68314d15d9cf4b5449d0de0fc968",
+      "error": null,
+      "seconds": 0.00011137800174765289,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "579c9488755d1ddd70f66480cafd2f68776f68314d15d9cf4b5449d0de0fc968",
+      "error": null,
+      "seconds": 0.000283268018392846,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "error": null,
+      "seconds": 0.00016608100850135088,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "error": null,
+      "seconds": 0.00013197900261729956,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "error": null,
+      "seconds": 0.0029527689912356436,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "error": null,
+      "seconds": 0.00015791901387274265,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "5bcf5da2339331e21d3f42a831e82c61c54c6b2f29804010e8d59abd0ae52167",
+      "error": null,
+      "seconds": 0.000351310009136796,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "60b48c5a3233f1d8caba30d6573edc8e131911ab6d63adcd664f7cbe62708362",
+      "error": null,
+      "seconds": 0.00041178101673722267,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "60b48c5a3233f1d8caba30d6573edc8e131911ab6d63adcd664f7cbe62708362",
+      "error": null,
+      "seconds": 0.000325861998135224,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "60b48c5a3233f1d8caba30d6573edc8e131911ab6d63adcd664f7cbe62708362",
+      "error": null,
+      "seconds": 0.006649343005847186,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "60b48c5a3233f1d8caba30d6573edc8e131911ab6d63adcd664f7cbe62708362",
+      "error": null,
+      "seconds": 0.0002643390034791082,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "60b48c5a3233f1d8caba30d6573edc8e131911ab6d63adcd664f7cbe62708362",
+      "error": null,
+      "seconds": 0.0003058109723497182,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "637e6a7744de08cd331a41f4efd0d24e6ea9064843dea9d1c6ca87bdb5f038a2",
+      "error": null,
+      "seconds": 6.199299241416156e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "637e6a7744de08cd331a41f4efd0d24e6ea9064843dea9d1c6ca87bdb5f038a2",
+      "error": null,
+      "seconds": 5.614399560727179e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "637e6a7744de08cd331a41f4efd0d24e6ea9064843dea9d1c6ca87bdb5f038a2",
+      "error": null,
+      "seconds": 0.0023896289931144565,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "637e6a7744de08cd331a41f4efd0d24e6ea9064843dea9d1c6ca87bdb5f038a2",
+      "error": null,
+      "seconds": 2.5519024347886443e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "637e6a7744de08cd331a41f4efd0d24e6ea9064843dea9d1c6ca87bdb5f038a2",
+      "error": null,
+      "seconds": 0.00023113901261240244,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "6d97fbc1972633083f08f51ccab433606c97bbceb897c631c66495117ca3406f",
+      "error": null,
+      "seconds": 0.00032057397766038775,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "6d97fbc1972633083f08f51ccab433606c97bbceb897c631c66495117ca3406f",
+      "error": null,
+      "seconds": 0.000179952010512352,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "6d97fbc1972633083f08f51ccab433606c97bbceb897c631c66495117ca3406f",
+      "error": null,
+      "seconds": 0.003494036995107308,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "6d97fbc1972633083f08f51ccab433606c97bbceb897c631c66495117ca3406f",
+      "error": null,
+      "seconds": 0.00019133900059387088,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "6d97fbc1972633083f08f51ccab433606c97bbceb897c631c66495117ca3406f",
+      "error": null,
+      "seconds": 0.0003783120191656053,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+      "error": null,
+      "seconds": 0.00033533599344082177,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+      "error": null,
+      "seconds": 0.0003003739984706044,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+      "error": null,
+      "seconds": 0.005261436017462984,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+      "error": null,
+      "seconds": 0.0002304780064150691,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+      "error": null,
+      "seconds": 0.000394314993172884,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "7534eb825f6317514d747ce53b4d6c23bf24df1dc1785f9599610ece5515e685",
+      "error": null,
+      "seconds": 0.0007783450128044933,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7534eb825f6317514d747ce53b4d6c23bf24df1dc1785f9599610ece5515e685",
+      "error": null,
+      "seconds": 0.0007960219809319824,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7534eb825f6317514d747ce53b4d6c23bf24df1dc1785f9599610ece5515e685",
+      "error": null,
+      "seconds": 0.016917219996685162,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "7534eb825f6317514d747ce53b4d6c23bf24df1dc1785f9599610ece5515e685",
+      "error": null,
+      "seconds": 0.0008344799862243235,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7534eb825f6317514d747ce53b4d6c23bf24df1dc1785f9599610ece5515e685",
+      "error": null,
+      "seconds": 0.0003139339969493449,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "7ab24d3057dabf86db8f771ad6e43f073ed86b6b950d6e8ba22cb9fe6707bbc9",
+      "error": null,
+      "seconds": 0.0001415839942637831,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7ab24d3057dabf86db8f771ad6e43f073ed86b6b950d6e8ba22cb9fe6707bbc9",
+      "error": null,
+      "seconds": 5.403198883868754e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7ab24d3057dabf86db8f771ad6e43f073ed86b6b950d6e8ba22cb9fe6707bbc9",
+      "error": null,
+      "seconds": 0.002218681009253487,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "7ab24d3057dabf86db8f771ad6e43f073ed86b6b950d6e8ba22cb9fe6707bbc9",
+      "error": null,
+      "seconds": 2.3936008801683784e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7ab24d3057dabf86db8f771ad6e43f073ed86b6b950d6e8ba22cb9fe6707bbc9",
+      "error": null,
+      "seconds": 0.00021553499391302466,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "7e2992d3a79fc05514dc5966558ee9c66a7214a47edf2a36017b9e2777528665",
+      "error": null,
+      "seconds": 4.034099401906133e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7e2992d3a79fc05514dc5966558ee9c66a7214a47edf2a36017b9e2777528665",
+      "error": null,
+      "seconds": 6.697201752103865e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7e2992d3a79fc05514dc5966558ee9c66a7214a47edf2a36017b9e2777528665",
+      "error": null,
+      "seconds": 0.0025786040059756488,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "7e2992d3a79fc05514dc5966558ee9c66a7214a47edf2a36017b9e2777528665",
+      "error": null,
+      "seconds": 3.447200288064778e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7e2992d3a79fc05514dc5966558ee9c66a7214a47edf2a36017b9e2777528665",
+      "error": null,
+      "seconds": 0.00022741302382200956,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+      "error": null,
+      "seconds": 0.00019199997768737376,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+      "error": null,
+      "seconds": 0.00019091900321654975,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+      "error": null,
+      "seconds": 0.0045189340016804636,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+      "error": null,
+      "seconds": 0.0001398310123477131,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+      "error": null,
+      "seconds": 0.0007570330053567886,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "863d6abb089b2820ceba98e6b18f06eaacc55f9b05827001e7b4021a9a7b246c",
+      "error": null,
+      "seconds": 0.00018440900021232665,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "863d6abb089b2820ceba98e6b18f06eaacc55f9b05827001e7b4021a9a7b246c",
+      "error": null,
+      "seconds": 0.0002380700025241822,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "863d6abb089b2820ceba98e6b18f06eaacc55f9b05827001e7b4021a9a7b246c",
+      "error": null,
+      "seconds": 0.0030647889943793416,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "863d6abb089b2820ceba98e6b18f06eaacc55f9b05827001e7b4021a9a7b246c",
+      "error": null,
+      "seconds": 0.00013656599912792444,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "863d6abb089b2820ceba98e6b18f06eaacc55f9b05827001e7b4021a9a7b246c",
+      "error": null,
+      "seconds": 0.00024356800713576376,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "8c6d3bac5a6197fa2f48b2d56f04f3ffecaa7082eeab91b0939f97a40adc88a6",
+      "error": null,
+      "seconds": 0.0003179099876433611,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "8c6d3bac5a6197fa2f48b2d56f04f3ffecaa7082eeab91b0939f97a40adc88a6",
+      "error": null,
+      "seconds": 0.0003711210156325251,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "8c6d3bac5a6197fa2f48b2d56f04f3ffecaa7082eeab91b0939f97a40adc88a6",
+      "error": null,
+      "seconds": 0.005717289022868499,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "8c6d3bac5a6197fa2f48b2d56f04f3ffecaa7082eeab91b0939f97a40adc88a6",
+      "error": null,
+      "seconds": 0.0002956970129162073,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "8c6d3bac5a6197fa2f48b2d56f04f3ffecaa7082eeab91b0939f97a40adc88a6",
+      "error": null,
+      "seconds": 0.000254343991400674,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "9102f73477081a9a57994c80587ca9760341f644ed51bdfa46f2248083d418b3",
+      "error": null,
+      "seconds": 0.0004974209878128022,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "9102f73477081a9a57994c80587ca9760341f644ed51bdfa46f2248083d418b3",
+      "error": null,
+      "seconds": 0.0005606570048257709,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "9102f73477081a9a57994c80587ca9760341f644ed51bdfa46f2248083d418b3",
+      "error": null,
+      "seconds": 0.008553773019229993,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "9102f73477081a9a57994c80587ca9760341f644ed51bdfa46f2248083d418b3",
+      "error": null,
+      "seconds": 0.0004778510192409158,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "9102f73477081a9a57994c80587ca9760341f644ed51bdfa46f2248083d418b3",
+      "error": null,
+      "seconds": 0.00031567600672133267,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "9224ede3246a82a845ea97652ecfae57f88e8d8f520d8a186f9157167574fb34",
+      "error": null,
+      "seconds": 3.8707978092134e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "9224ede3246a82a845ea97652ecfae57f88e8d8f520d8a186f9157167574fb34",
+      "error": null,
+      "seconds": 6.286500138230622e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "9224ede3246a82a845ea97652ecfae57f88e8d8f520d8a186f9157167574fb34",
+      "error": null,
+      "seconds": 0.003789713984588161,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "9224ede3246a82a845ea97652ecfae57f88e8d8f520d8a186f9157167574fb34",
+      "error": null,
+      "seconds": 3.814700176008046e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "9224ede3246a82a845ea97652ecfae57f88e8d8f520d8a186f9157167574fb34",
+      "error": null,
+      "seconds": 0.0003493069962132722,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "93654ee8180a73a0363f25c51dc673d67cbabcbecd164187b8a2deb54d007aef",
+      "error": null,
+      "seconds": 6.775298970751464e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "93654ee8180a73a0363f25c51dc673d67cbabcbecd164187b8a2deb54d007aef",
+      "error": null,
+      "seconds": 9.185899398289621e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "93654ee8180a73a0363f25c51dc673d67cbabcbecd164187b8a2deb54d007aef",
+      "error": null,
+      "seconds": 0.003808702022070065,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "93654ee8180a73a0363f25c51dc673d67cbabcbecd164187b8a2deb54d007aef",
+      "error": null,
+      "seconds": 5.816799239255488e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "93654ee8180a73a0363f25c51dc673d67cbabcbecd164187b8a2deb54d007aef",
+      "error": null,
+      "seconds": 0.0003451209922786802,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "957b9eeaa83cf6f2d5d5d76dbb8aa31d3297e6781d8a02fa08dcc897ae650a0b",
+      "error": null,
+      "seconds": 0.000479434005683288,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "957b9eeaa83cf6f2d5d5d76dbb8aa31d3297e6781d8a02fa08dcc897ae650a0b",
+      "error": null,
+      "seconds": 0.00047015000018291175,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "957b9eeaa83cf6f2d5d5d76dbb8aa31d3297e6781d8a02fa08dcc897ae650a0b",
+      "error": null,
+      "seconds": 0.007391898019704968,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "957b9eeaa83cf6f2d5d5d76dbb8aa31d3297e6781d8a02fa08dcc897ae650a0b",
+      "error": null,
+      "seconds": 0.0003915819979738444,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "957b9eeaa83cf6f2d5d5d76dbb8aa31d3297e6781d8a02fa08dcc897ae650a0b",
+      "error": null,
+      "seconds": 0.000278000021353364,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "a2bc05cfef021fdb84285036f98eda5ebec3c4b7a378f5aa2bdba5c4d3d8d586",
+      "error": null,
+      "seconds": 0.00022420898312702775,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a2bc05cfef021fdb84285036f98eda5ebec3c4b7a378f5aa2bdba5c4d3d8d586",
+      "error": null,
+      "seconds": 0.00018292601453140378,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a2bc05cfef021fdb84285036f98eda5ebec3c4b7a378f5aa2bdba5c4d3d8d586",
+      "error": null,
+      "seconds": 0.0037047149962745607,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "a2bc05cfef021fdb84285036f98eda5ebec3c4b7a378f5aa2bdba5c4d3d8d586",
+      "error": null,
+      "seconds": 0.00010164300329051912,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a2bc05cfef021fdb84285036f98eda5ebec3c4b7a378f5aa2bdba5c4d3d8d586",
+      "error": null,
+      "seconds": 0.00023172900546342134,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "a51f8de7829211db961a31f02158058ad1a95f92ac6d0a5dff6350e2821c54c0",
+      "error": null,
+      "seconds": 0.0006916850106790662,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a51f8de7829211db961a31f02158058ad1a95f92ac6d0a5dff6350e2821c54c0",
+      "error": null,
+      "seconds": 0.0006825810123700649,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a51f8de7829211db961a31f02158058ad1a95f92ac6d0a5dff6350e2821c54c0",
+      "error": null,
+      "seconds": 0.013652577996253967,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "a51f8de7829211db961a31f02158058ad1a95f92ac6d0a5dff6350e2821c54c0",
+      "error": null,
+      "seconds": 0.0006206569960340858,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a51f8de7829211db961a31f02158058ad1a95f92ac6d0a5dff6350e2821c54c0",
+      "error": null,
+      "seconds": 0.000359452998964116,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "a9b5f7e9d49ba9060e1c933567046fbc6feab6096799cbf550b7214dc9b0f49b",
+      "error": null,
+      "seconds": 0.00016181400860659778,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a9b5f7e9d49ba9060e1c933567046fbc6feab6096799cbf550b7214dc9b0f49b",
+      "error": null,
+      "seconds": 0.0002475139917805791,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a9b5f7e9d49ba9060e1c933567046fbc6feab6096799cbf550b7214dc9b0f49b",
+      "error": null,
+      "seconds": 0.004274023987818509,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "a9b5f7e9d49ba9060e1c933567046fbc6feab6096799cbf550b7214dc9b0f49b",
+      "error": null,
+      "seconds": 0.00013923001824878156,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "a9b5f7e9d49ba9060e1c933567046fbc6feab6096799cbf550b7214dc9b0f49b",
+      "error": null,
+      "seconds": 0.00024044298334047198,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "error": null,
+      "seconds": 7.230899063870311e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "error": null,
+      "seconds": 0.00010234498768113554,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "error": null,
+      "seconds": 0.002957887016236782,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "error": null,
+      "seconds": 6.210399442352355e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "aa7fadbe33b78bcf99885318040601c550c208929565b179891d9a3cc2aa68cd",
+      "error": null,
+      "seconds": 0.00022928701946511865,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
+      "error": null,
+      "seconds": 0.0006577830063179135,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
+      "error": null,
+      "seconds": 0.0005784739914815873,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
+      "error": null,
+      "seconds": 0.008335147984325886,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
+      "error": null,
+      "seconds": 0.0005017469811718911,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b1190bb72359f5fcc47406aa46065eaf4f1ca208085c51224a52b04bedc0b4bb",
+      "error": null,
+      "seconds": 0.0003796739911194891,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "b4f4f3255c0b8773b260c61cbe20ee7c63799cfc0e4e389fa58375dd480b093a",
+      "error": null,
+      "seconds": 4.7290988732129335e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b4f4f3255c0b8773b260c61cbe20ee7c63799cfc0e4e389fa58375dd480b093a",
+      "error": null,
+      "seconds": 7.146797724999487e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b4f4f3255c0b8773b260c61cbe20ee7c63799cfc0e4e389fa58375dd480b093a",
+      "error": null,
+      "seconds": 0.0022990719880908728,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "b4f4f3255c0b8773b260c61cbe20ee7c63799cfc0e4e389fa58375dd480b093a",
+      "error": null,
+      "seconds": 4.1102000977844e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b4f4f3255c0b8773b260c61cbe20ee7c63799cfc0e4e389fa58375dd480b093a",
+      "error": null,
+      "seconds": 0.0002931930066552013,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "b67a6df2bdab61d273eabebd208bb6a3fb12618a390a067e1ee305a409ff03d9",
+      "error": null,
+      "seconds": 9.700600639916956e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b67a6df2bdab61d273eabebd208bb6a3fb12618a390a067e1ee305a409ff03d9",
+      "error": null,
+      "seconds": 0.00012934600817970932,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b67a6df2bdab61d273eabebd208bb6a3fb12618a390a067e1ee305a409ff03d9",
+      "error": null,
+      "seconds": 0.002821991976816207,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "b67a6df2bdab61d273eabebd208bb6a3fb12618a390a067e1ee305a409ff03d9",
+      "error": null,
+      "seconds": 7.812801050022244e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b67a6df2bdab61d273eabebd208bb6a3fb12618a390a067e1ee305a409ff03d9",
+      "error": null,
+      "seconds": 0.00038492100429721177,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "b8944756260c5ea6b7fac019745f931f905aa7a4df0763676b1b25c911b692e2",
+      "error": null,
+      "seconds": 0.0008837149944156408,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b8944756260c5ea6b7fac019745f931f905aa7a4df0763676b1b25c911b692e2",
+      "error": null,
+      "seconds": 0.0008281799964606762,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b8944756260c5ea6b7fac019745f931f905aa7a4df0763676b1b25c911b692e2",
+      "error": null,
+      "seconds": 0.00981772699742578,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "b8944756260c5ea6b7fac019745f931f905aa7a4df0763676b1b25c911b692e2",
+      "error": null,
+      "seconds": 0.0008433639886789024,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "b8944756260c5ea6b7fac019745f931f905aa7a4df0763676b1b25c911b692e2",
+      "error": null,
+      "seconds": 0.00038633402436971664,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "bcd336fce11ce2a45f34d0f95e6980af22529f22147e8f98c156e5cee8ee42bb",
+      "error": null,
+      "seconds": 2.2182997781783342e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "bcd336fce11ce2a45f34d0f95e6980af22529f22147e8f98c156e5cee8ee42bb",
+      "error": null,
+      "seconds": 4.2755011236295104e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "bcd336fce11ce2a45f34d0f95e6980af22529f22147e8f98c156e5cee8ee42bb",
+      "error": null,
+      "seconds": 0.001978798012714833,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "bcd336fce11ce2a45f34d0f95e6980af22529f22147e8f98c156e5cee8ee42bb",
+      "error": null,
+      "seconds": 1.5923986211419106e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "bcd336fce11ce2a45f34d0f95e6980af22529f22147e8f98c156e5cee8ee42bb",
+      "error": null,
+      "seconds": 0.00024114499683491886,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "error": null,
+      "seconds": 0.09819098797743209,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "error": null,
+      "seconds": 0.09770446401671506,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "error": null,
+      "seconds": 1.7447889710019808,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "error": null,
+      "seconds": 0.10241839999798685,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c12a003f80a8cb0df9fa15aee369ab5c9512976edff9405dded164e2c6922e1b",
+      "error": null,
+      "seconds": 0.04051868699025363,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "c5a065f85c1e6f605741e365e40cad71c3ceb0e85e2791400bd35b8896e12ad1",
+      "error": null,
+      "seconds": 0.0006801869894843549,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c5a065f85c1e6f605741e365e40cad71c3ceb0e85e2791400bd35b8896e12ad1",
+      "error": null,
+      "seconds": 0.0007034619920887053,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c5a065f85c1e6f605741e365e40cad71c3ceb0e85e2791400bd35b8896e12ad1",
+      "error": null,
+      "seconds": 0.009340755001176149,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "c5a065f85c1e6f605741e365e40cad71c3ceb0e85e2791400bd35b8896e12ad1",
+      "error": null,
+      "seconds": 0.0006539869937114418,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c5a065f85c1e6f605741e365e40cad71c3ceb0e85e2791400bd35b8896e12ad1",
+      "error": null,
+      "seconds": 0.00030019402038306,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "c5edb6c79c91a9f4c25cf0ad68c3341467a6604cb97789b2ac36c6d3de352725",
+      "error": null,
+      "seconds": 0.0005952390201855451,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c5edb6c79c91a9f4c25cf0ad68c3341467a6604cb97789b2ac36c6d3de352725",
+      "error": null,
+      "seconds": 0.0006296809879131615,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c5edb6c79c91a9f4c25cf0ad68c3341467a6604cb97789b2ac36c6d3de352725",
+      "error": null,
+      "seconds": 0.0116554610140156,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "c5edb6c79c91a9f4c25cf0ad68c3341467a6604cb97789b2ac36c6d3de352725",
+      "error": null,
+      "seconds": 0.0006425809988286346,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c5edb6c79c91a9f4c25cf0ad68c3341467a6604cb97789b2ac36c6d3de352725",
+      "error": null,
+      "seconds": 0.0003860429860651493,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+      "error": null,
+      "seconds": 0.009056801005499437,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+      "error": null,
+      "seconds": 0.00836331001482904,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+      "error": null,
+      "seconds": 0.1656552920176182,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+      "error": null,
+      "seconds": 0.008505342993885279,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+      "error": null,
+      "seconds": 0.0016554190078750253,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "cf1e9437ac7ddf6539dbe87b68858cbdef84d78c6aac243ab3b6e564a52ed930",
+      "error": null,
+      "seconds": 3.270001616328955e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "cf1e9437ac7ddf6539dbe87b68858cbdef84d78c6aac243ab3b6e564a52ed930",
+      "error": null,
+      "seconds": 5.364100798033178e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "cf1e9437ac7ddf6539dbe87b68858cbdef84d78c6aac243ab3b6e564a52ed930",
+      "error": null,
+      "seconds": 0.002570692013250664,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "cf1e9437ac7ddf6539dbe87b68858cbdef84d78c6aac243ab3b6e564a52ed930",
+      "error": null,
+      "seconds": 2.146197948604822e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "cf1e9437ac7ddf6539dbe87b68858cbdef84d78c6aac243ab3b6e564a52ed930",
+      "error": null,
+      "seconds": 0.00023509500897489488,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+      "error": null,
+      "seconds": 0.012703134008916095,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+      "error": null,
+      "seconds": 0.01206292599090375,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+      "error": null,
+      "seconds": 0.16364622800028883,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+      "error": null,
+      "seconds": 0.012183257000287995,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "d60ae76fb862cd4cca7bfdcdcdcc271c5e1d75f6b7915305ce2d962735a4b666",
+      "error": null,
+      "seconds": 0.0037728380120825022,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "d70bd831aebe8d4834b5dd2ed98df26dd6bd27f1042c47543bd7f66df1ae22ea",
+      "error": null,
+      "seconds": 3.2810028642416e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "d70bd831aebe8d4834b5dd2ed98df26dd6bd27f1042c47543bd7f66df1ae22ea",
+      "error": null,
+      "seconds": 0.00011385098332539201,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "d70bd831aebe8d4834b5dd2ed98df26dd6bd27f1042c47543bd7f66df1ae22ea",
+      "error": null,
+      "seconds": 0.0021086039778310806,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "d70bd831aebe8d4834b5dd2ed98df26dd6bd27f1042c47543bd7f66df1ae22ea",
+      "error": null,
+      "seconds": 2.5479006581008434e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "d70bd831aebe8d4834b5dd2ed98df26dd6bd27f1042c47543bd7f66df1ae22ea",
+      "error": null,
+      "seconds": 0.00022898599854670465,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727",
+      "error": null,
+      "seconds": 0.000246571988100186,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727",
+      "error": null,
+      "seconds": 0.000276837992714718,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727",
+      "error": null,
+      "seconds": 0.00629291299264878,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727",
+      "error": null,
+      "seconds": 0.0002129519998561591,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "dfcf25061e07aad7efd3f4f880ba5ad4d4d09ebe7fc8cc77ab6b8a161d6d4727",
+      "error": null,
+      "seconds": 0.00030444998992607,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "e1c6611d11ad7398326f1bf028afc34c3b14c51d917a3426b966ed4b9687fa58",
+      "error": null,
+      "seconds": 4.485700628720224e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e1c6611d11ad7398326f1bf028afc34c3b14c51d917a3426b966ed4b9687fa58",
+      "error": null,
+      "seconds": 6.791201303713024e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e1c6611d11ad7398326f1bf028afc34c3b14c51d917a3426b966ed4b9687fa58",
+      "error": null,
+      "seconds": 0.0027689110138453543,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "e1c6611d11ad7398326f1bf028afc34c3b14c51d917a3426b966ed4b9687fa58",
+      "error": null,
+      "seconds": 4.132199683226645e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e1c6611d11ad7398326f1bf028afc34c3b14c51d917a3426b966ed4b9687fa58",
+      "error": null,
+      "seconds": 0.0002261420013383031,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "e40d29f1d1a62393bacaedebe0da3d9006084152a9f7e5e029293f08ce1c5c80",
+      "error": null,
+      "seconds": 1.8048012861981988e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e40d29f1d1a62393bacaedebe0da3d9006084152a9f7e5e029293f08ce1c5c80",
+      "error": null,
+      "seconds": 4.592997720465064e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e40d29f1d1a62393bacaedebe0da3d9006084152a9f7e5e029293f08ce1c5c80",
+      "error": null,
+      "seconds": 0.0021133820118848234,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "e40d29f1d1a62393bacaedebe0da3d9006084152a9f7e5e029293f08ce1c5c80",
+      "error": null,
+      "seconds": 1.6645004507154226e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e40d29f1d1a62393bacaedebe0da3d9006084152a9f7e5e029293f08ce1c5c80",
+      "error": null,
+      "seconds": 0.000243287009652704,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "e5ba01d3c41f256aaf57ec59aa0554857162e3e7f97cdfbff1ed2c0e8d720ee7",
+      "error": null,
+      "seconds": 3.685601404868066e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e5ba01d3c41f256aaf57ec59aa0554857162e3e7f97cdfbff1ed2c0e8d720ee7",
+      "error": null,
+      "seconds": 6.543900235556066e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e5ba01d3c41f256aaf57ec59aa0554857162e3e7f97cdfbff1ed2c0e8d720ee7",
+      "error": null,
+      "seconds": 0.0026054350018966943,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "e5ba01d3c41f256aaf57ec59aa0554857162e3e7f97cdfbff1ed2c0e8d720ee7",
+      "error": null,
+      "seconds": 2.715099253691733e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e5ba01d3c41f256aaf57ec59aa0554857162e3e7f97cdfbff1ed2c0e8d720ee7",
+      "error": null,
+      "seconds": 0.00030688400147482753,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "e7c58aeac19d89f5f1492dfaa52b8623bcd56edc40983f5243ad56d94f477bf2",
+      "error": null,
+      "seconds": 0.00026969698956236243,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e7c58aeac19d89f5f1492dfaa52b8623bcd56edc40983f5243ad56d94f477bf2",
+      "error": null,
+      "seconds": 0.00026766498922370374,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e7c58aeac19d89f5f1492dfaa52b8623bcd56edc40983f5243ad56d94f477bf2",
+      "error": null,
+      "seconds": 0.007748200005153194,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "e7c58aeac19d89f5f1492dfaa52b8623bcd56edc40983f5243ad56d94f477bf2",
+      "error": null,
+      "seconds": 0.0002335529716219753,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e7c58aeac19d89f5f1492dfaa52b8623bcd56edc40983f5243ad56d94f477bf2",
+      "error": null,
+      "seconds": 0.0003067130164708942,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "e97728d8deaa51300255f0572bbd68b9549e0894a184c056dc420fc4e0ba0781",
+      "error": null,
+      "seconds": 7.550400914624333e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e97728d8deaa51300255f0572bbd68b9549e0894a184c056dc420fc4e0ba0781",
+      "error": null,
+      "seconds": 0.0001305270125158131,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e97728d8deaa51300255f0572bbd68b9549e0894a184c056dc420fc4e0ba0781",
+      "error": null,
+      "seconds": 0.0029642859881278127,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "e97728d8deaa51300255f0572bbd68b9549e0894a184c056dc420fc4e0ba0781",
+      "error": null,
+      "seconds": 7.777698920108378e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "e97728d8deaa51300255f0572bbd68b9549e0894a184c056dc420fc4e0ba0781",
+      "error": null,
+      "seconds": 0.0001594909990672022,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+      "error": null,
+      "seconds": 5.077701644040644e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+      "error": null,
+      "seconds": 6.995498551987112e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+      "error": null,
+      "seconds": 0.0026080690149683505,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+      "error": null,
+      "seconds": 4.5889028115198016e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+      "error": null,
+      "seconds": 0.00024199500330723822,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+      "error": null,
+      "seconds": 4.534900654107332e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+      "error": null,
+      "seconds": 6.752202170901e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+      "error": null,
+      "seconds": 0.002492494008038193,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+      "error": null,
+      "seconds": 3.903900505974889e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+      "error": null,
+      "seconds": 0.0003448509960435331,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "f82c9ad142f952ea523bda5bfca7bb0802af3a50b8c0f0dd9ec18cdfa104bde7",
+      "error": null,
+      "seconds": 4.6289991587400436e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "f82c9ad142f952ea523bda5bfca7bb0802af3a50b8c0f0dd9ec18cdfa104bde7",
+      "error": null,
+      "seconds": 7.611498585902154e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "f82c9ad142f952ea523bda5bfca7bb0802af3a50b8c0f0dd9ec18cdfa104bde7",
+      "error": null,
+      "seconds": 0.002586982009233907,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "f82c9ad142f952ea523bda5bfca7bb0802af3a50b8c0f0dd9ec18cdfa104bde7",
+      "error": null,
+      "seconds": 4.1082006646320224e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "f82c9ad142f952ea523bda5bfca7bb0802af3a50b8c0f0dd9ec18cdfa104bde7",
+      "error": null,
+      "seconds": 0.00029647702467627823,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+      "error": null,
+      "seconds": 2.157301059924066e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+      "error": null,
+      "seconds": 5.798702477477491e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+      "error": null,
+      "seconds": 0.0039285229868255556,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+      "error": null,
+      "seconds": 1.7305981600657105e-05,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+      "error": null,
+      "seconds": 0.0002905680157709867,
+      "stage": "owned_stage_cleanup"
+    },
+    {
+      "artifact": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "error": null,
+      "seconds": 0.002799987996695563,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "error": null,
+      "seconds": 0.002992558991536498,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "error": null,
+      "seconds": 0.03921256400644779,
+      "stage": "stream_extract_and_stage"
+    },
+    {
+      "artifact": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "error": null,
+      "seconds": 0.002908171998569742,
+      "stage": "complete_artifact_hash"
+    },
+    {
+      "artifact": "ff5557d99b51f761c4b7c92368b9cc45565eda17df9bf9eb4b134d09825008be",
+      "error": null,
+      "seconds": 0.001161464024335146,
+      "stage": "owned_stage_cleanup"
+    }
+  ],
+  "timing_totals_seconds": {
+    "complete_artifact_hash": 0.4186171118635684,
+    "owned_stage_cleanup": 0.0694868482532911,
+    "stream_extract_and_stage": 2.4567397710634395
+  },
+  "tree": "7ec1395c0936f6131ed4dc64a36c331c2dd29e1c",
+  "usage_after": {
+    "self_rss_current_kib": 85212,
+    "self_ru_maxrss_kib": 128760,
+    "self_system_seconds": 0.419379,
+    "self_user_seconds": 5.577131,
+    "waited_children_ru_maxrss_kib": 128760,
+    "waited_children_system_seconds": 0.172152,
+    "waited_children_user_seconds": 0.37251799999999996
+  },
+  "usage_before": {
+    "self_rss_current_kib": 49100,
+    "self_ru_maxrss_kib": 50880,
+    "self_system_seconds": 0.040075,
+    "self_user_seconds": 0.24871,
+    "waited_children_ru_maxrss_kib": 50880,
+    "waited_children_system_seconds": 0.002019,
+    "waited_children_user_seconds": 0.024322999999999997
+  }
+}

@@ -1,0 +1,253 @@
+{
+  "implementation_commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+  "implementation_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+  "baseline": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+  "raw_evidence": {
+    "external-review-de4eda5-owner-report.md": {
+      "bytes": 10007,
+      "sha256": "4400a2bc9a58cd566a94a3f32ef24fd47de49b8bd61ee6970d614f92ed8ebfe8"
+    },
+    "external-review-de4eda5.json": {
+      "bytes": 1748,
+      "sha256": "cb9d2026acec11f875d8f99382f7072d63ba4fbb7bb4ecec7111656a7d7a8172"
+    },
+    "noble-2a6a199e-Packages.xz": {
+      "bytes": 1401160,
+      "sha256": "2a6a199e1031a5c279cb346646d594993f35b1c03dd4a82aaa0323980dd92451"
+    },
+    "nov1-3ed8222-discovery.txt": {
+      "bytes": 323,
+      "sha256": "3f6318b6dea18c39f85f688f2ead760184edffaf746500e507dd1976d1238119"
+    },
+    "nov1-3ed8222-focused.txt": {
+      "bytes": 225666,
+      "sha256": "586f87c7297598ce1e11a946bf8d611919aff97c738168a840dae282514c75e8"
+    },
+    "nov1-3ed8222-full-static-accounting.json": {
+      "bytes": 12308,
+      "sha256": "87bc895e3110fc8c362332b89bd6c3859a46cbe3e3280ceca05f9b1662264890"
+    },
+    "nov1-3ed8222-inert.txt": {
+      "bytes": 95,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "nov1-3ed8222-isolated.txt": {
+      "bytes": 55835,
+      "sha256": "fce0341f0df58220d32a37b7498f7aaceed46394ef3d4ce753e72292b1d637c9"
+    },
+    "nov1-3ed8222-related.txt": {
+      "bytes": 17263,
+      "sha256": "4db9366d68931aeb81a4c3e4285d37ead8e2070bd0b102f39a62164b4faf7173"
+    },
+    "nov1-3ed8222-startup.txt": {
+      "bytes": 2041,
+      "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+    },
+    "nov1-7a106c1-related.txt": {
+      "bytes": 19660,
+      "sha256": "a95f073758fa4a90c1f1c367a70a46440412071cdeda176eae0c94f9f462f6ff"
+    },
+    "nov1-7a106c1-validation-with-global-contract-failure.json": {
+      "bytes": 1132,
+      "sha256": "0ddbefc413189ec7eeb23097587d99e49f0ec565d5ddd360680d726da014f473"
+    },
+    "nov1-artifact-retrieval.json": {
+      "bytes": 55762,
+      "sha256": "91b6ebd702d0256120eb088bbff8a6f10833d238fa53a28f54b3ca132c4711fd"
+    },
+    "nov1-baseline-counts.json": {
+      "bytes": 1738,
+      "sha256": "b2d5fcc3f8120fd453d78a7d84d3b9186585d16fc5a419e7ba4caf0fd0272bea"
+    },
+    "nov1-batch-first.txt": {
+      "bytes": 1990,
+      "sha256": "8233d62bbbefd6066a0f396216cb0545b65ba9df5961e4910ebd89acfa037fb3"
+    },
+    "nov1-batch-ready-first.txt": {
+      "bytes": 5590,
+      "sha256": "8143017c293d5b74f2a3014e60a5199d59fa7d34a2148e991255a9216013d455"
+    },
+    "nov1-batch-ready-second.txt": {
+      "bytes": 98,
+      "sha256": "51177607fc5d41144745ee6e6228d73123ced3cfd8f263089c3c6e5a4930977f"
+    },
+    "nov1-causal-final.txt": {
+      "bytes": 98,
+      "sha256": "61d5a8f45efda58fc05ba99fdaa4ddeaab105446664187ebd08b9263bd1d71fb"
+    },
+    "nov1-complete-static-accounting.py": {
+      "bytes": 10585,
+      "sha256": "891b82214bd0896ee24d1cb30f44f3626bc5087acbbf87ef63c71bc06c73c764"
+    },
+    "nov1-count-native-route.py": {
+      "bytes": 4119,
+      "sha256": "4267e2a900fb116ff58284368476e90eb8731dae69d0f157996ae2f77d50d321"
+    },
+    "nov1-final-command-counts.json": {
+      "bytes": 1847,
+      "sha256": "9ce6bfbd6d560f59679bc0fe853758f5e578315e88fcde3201248a2a11f4f694"
+    },
+    "nov1-final-noble-records.json": {
+      "bytes": 1820,
+      "sha256": "efe5700360ce9323a70116f598904275061e7368cb761b85d7c6376c56ab5cf4"
+    },
+    "nov1-frozen-validation.json": {
+      "bytes": 1199,
+      "sha256": "57281cbfb3043b3816651d2fba92bd0160b26457e0bae638633124e00db0e5d2"
+    },
+    "nov1-index-recovery.json": {
+      "bytes": 4501,
+      "sha256": "19d475b38eb0d1bf1391bf28a440ad8504b6ff413f789a2264da72433030e05a"
+    },
+    "nov1-material-publication.json": {
+      "bytes": 693,
+      "sha256": "02385f7a402aeb1492a5f6659211cb59de6569a1850d83a2e668bbeaac9ffb5a"
+    },
+    "nov1-materialization-attempt1-reporting-failure.json": {
+      "bytes": 333,
+      "sha256": "fa95e63abd43ca32b23d8b0e3206dfa7e7b89c65b2677eddfa58c622e0be451c"
+    },
+    "nov1-measure_public_materialization_7a106c1_optimized_streams.py": {
+      "bytes": 10505,
+      "sha256": "201cbe678fe213cb702e6d614bf77e74825b37bcb005284c0bc8c9f3bc5c6836"
+    },
+    "nov1-measure_public_materialization_with_streams.py": {
+      "bytes": 9777,
+      "sha256": "0b84488dec7dc32e620aa3f3ba73c91adeff06bdad3bdafda709176ce42ad5a6"
+    },
+    "nov1-measure_unprivileged_transport.py": {
+      "bytes": 1752,
+      "sha256": "98515c51291877cc9655e1997bf9e5896509b4542e9985dcd8e08c24c1f89ec9"
+    },
+    "nov1-measurement-source-equivalence.json": {
+      "bytes": 599,
+      "sha256": "7d7371954f727314a9737969948a31f2984392e5d2808524b52e3a03837236c8"
+    },
+    "nov1-native-installation-decision.json": {
+      "bytes": 990701,
+      "sha256": "f036e0a0330f83e21f4fa9be0886a9d29dec493012fbca681778da674d551bc5"
+    },
+    "nov1-provenance-first.txt": {
+      "bytes": 98,
+      "sha256": "ea9add8fdcc4174d635b3c641d9078ae1f1abeb0c3ca37738fc617644a6a1588"
+    },
+    "nov1-public-materialization-7a106c1-optimized-streams.json": {
+      "bytes": 210739,
+      "sha256": "5d53d795413cbe2b3fc755e2a4c9d6193b2d49fd9becf502f107d1a4be5459a0"
+    },
+    "nov1-public-materialization-tool-identities.json": {
+      "bytes": 2107,
+      "sha256": "30787f18ba0c230228a9e1bc901f3c805bca2ad721e272ef1460852f6eb3a261"
+    },
+    "nov1-public-materialization-with-streams.json": {
+      "bytes": 210086,
+      "sha256": "5278572c340ab8a8e573ee10591d3cb6bf19a827f59923f6a28780530f93faad"
+    },
+    "nov1-public-materialization.json": {
+      "bytes": 187387,
+      "sha256": "8810a4d187d7dcfeae252de9411b84f84151bba1f8c1cfd7b463eb8706884da6"
+    },
+    "nov1-selection-first.txt": {
+      "bytes": 9531,
+      "sha256": "06b5be051c3327c79c46d1b72de9527f1224a271bb6528a2dcb4a6d9117703c0"
+    },
+    "nov1-selection-second.txt": {
+      "bytes": 3857,
+      "sha256": "0e2832182f08b83885d17ee7efead5c8c0282051ca7c6e7ed0b798958cc00c2d"
+    },
+    "nov1-selection-third.txt": {
+      "bytes": 98,
+      "sha256": "308f28661d2fe382dc9314d0e071a5a1305411197bc89c6e4eb33b2ade992b7d"
+    },
+    "nov1-t1-provenance-candidate.md": {
+      "bytes": 14469,
+      "sha256": "98aab772dc902dd6bfd40a2fcc5dba61ed71a685d4ed0bd5ebeda4ea18943e66"
+    },
+    "nov1-unprivileged-transport.json": {
+      "bytes": 2440,
+      "sha256": "1d77264cb798d3aa2a1e0b51847ae94dddf3e453c544f321bbfdc56bceba83fa"
+    },
+    "nov1-validate-frozen.py": {
+      "bytes": 4152,
+      "sha256": "a9011506d396868d701eea47a5a8909e4a313aece78ad14656a7ca9f0c7178a1"
+    },
+    "nov1-verify-retained-noble.py": {
+      "bytes": 1394,
+      "sha256": "635cd46459d5ec8dcb651d94919c4e26cec63871d38451cac776952075d48295"
+    }
+  },
+  "validation": {
+    "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "results": {
+      "focused": {
+        "returncode": 0,
+        "seconds": 42.37650621801731,
+        "sha256": "586f87c7297598ce1e11a946bf8d611919aff97c738168a840dae282514c75e8"
+      },
+      "isolated": {
+        "returncode": 0,
+        "seconds": 9.1372420170228,
+        "sha256": "fce0341f0df58220d32a37b7498f7aaceed46394ef3d4ce753e72292b1d637c9"
+      },
+      "inert": {
+        "returncode": 78,
+        "seconds": 0.16424198099412024,
+        "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+      },
+      "discovery": {
+        "returncode": 0,
+        "seconds": 2.1195334830263164,
+        "sha256": "3f6318b6dea18c39f85f688f2ead760184edffaf746500e507dd1976d1238119"
+      },
+      "startup": {
+        "returncode": 0,
+        "seconds": 0.1142189440142829,
+        "sha256": "f1309b487418fecbb5b6c91baa019ad548c0450d673faabc6efe93f886105824"
+      },
+      "related": {
+        "returncode": 0,
+        "seconds": 6.932857260020683,
+        "sha256": "4db9366d68931aeb81a4c3e4285d37ead8e2070bd0b102f39a62164b4faf7173"
+      }
+    },
+    "related_disposable_clone_removed": true,
+    "clean_after": true
+  },
+  "material_publication": {
+    "published_commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "published_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "expected_previous_tip": "ebc60a254ad7a89db8fb77a6775b7aa13d369a87",
+    "push": "ORDINARY_SINGLE_BRANCH_NONFORCE",
+    "fresh_fetch_verified": true,
+    "secret_scan": {
+      "changed_files": 24,
+      "patterns": "private-key,GitHub token,AWS access-key,Shopify token; new commit email exact public noreply",
+      "findings": 0
+    },
+    "object_integrity": "PASS",
+    "protected_refs_before_after_equal": [
+      "f308ac666a2377f540e528bc873463daecc20cf8\trefs/heads/main",
+      "e25704e117a3c5bede843cac65ddfdeb7f30024f\trefs/pull/24/head"
+    ],
+    "worktree_clean": true
+  },
+  "counts": {
+    "focused": 1229,
+    "scrubbed": 292,
+    "related": 88,
+    "startup": 10,
+    "discovery": 2793,
+    "discovery_modules": 137,
+    "discovery_executed": 0,
+    "groups_overlap": true
+  },
+  "failed_evidence_preserved": "7a related86passed/2stale-global-count failures; preliminary synthetic-fixture/reporting failures retained",
+  "source_changed_scope": "tools/tests/workflow/evidence only; application source/lockfiles/canonicalPHASE_STATUS unchanged",
+  "target_execution": "NOT_RUN",
+  "independent_review": "PENDING_FROM_de4eda5",
+  "installation": "DISABLED",
+  "credential_release": "DISABLED",
+  "durable_artifacts": "NOT_ESTABLISHED",
+  "exact_updates_index": "NOT_RECOVERED"
+}

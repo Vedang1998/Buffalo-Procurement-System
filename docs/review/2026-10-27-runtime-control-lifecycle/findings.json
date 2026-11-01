@@ -408,11 +408,11 @@
     }
   ],
   "frozen_current_claude_target": {
-    "implementation": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
-    "implementation_tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
-    "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
-    "status": "TARGETED_DELTA_REVIEW_PENDING",
-    "previous_exact_targets_preserved": true
+    "implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "implementation_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "baseline": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+    "status": "TARGETED_DELTA_PREPARED_NOT_SENT_BY_TOOL",
+    "historical_targets_preserved": true
   },
   "descendants_outside_frozen_review": [
     {
@@ -638,11 +638,11 @@
     }
   ],
   "current_candidate": {
-    "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
-    "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
-    "evidence": "oct31-h123-evidence.json",
-    "status": "FROZEN_INSTALLATION_MEASUREMENT_CANDIDATE",
-    "independent_review": "PENDING",
+    "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "evidence": "nov1-t1-provenance-evidence.json",
+    "status": "FROZEN_PROVENANCE_AND_RETENTION_BLOCKED_INSTALLATION_CANDIDATE",
+    "independent_review": "PENDING_DELTA_FROM_de4eda5",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
     "combined_capture": "NOT_TARGET_MEASURED",
@@ -713,7 +713,7 @@
     }
   },
   "owner_received_e5e8_summary": "external-review-e5e8-owner-summary.json",
-  "review_status": "34e8_EXTERNAL_DISPOSITIONS_RECORDED; NEW_H123_DELTA_PENDING",
+  "review_status": "REQUEST_CHANGES_AT_de4eda5; CURRENT_DELTA_PENDING",
   "new_native_capacity_finding": {
     "identifier": "NATIVE-FIXED-INPUT-CAPACITY",
     "status": "OPEN",
@@ -939,6 +939,17 @@
       "credential_release": "WITHHELD",
       "combined_capture": "NOT_TARGET_MEASURED",
       "full_authoritative": "NOT_RUN"
+    },
+    {
+      "commit": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+      "tree": "87e35b1f4412c82c9a236801971a26157d3e6996",
+      "evidence": "oct31-h123-evidence.json",
+      "status": "FROZEN_INSTALLATION_MEASUREMENT_CANDIDATE",
+      "independent_review": "PENDING",
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD",
+      "combined_capture": "NOT_TARGET_MEASURED",
+      "full_authoritative": "NOT_RUN"
     }
   ],
   "owner_received_de4eda5_report": {
@@ -985,14 +996,17 @@
   },
   "nov1_remediation": {
     "baseline": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
-    "status": "IMPLEMENTED_PENDING_FROZEN_VALIDATION_AND_CLAUDE",
+    "status": "TESTED_PUBLISHED_REVIEW_PENDING_PROVENANCE_RETENTION_OPEN",
     "T1": {
       "severity": "P1",
       "status": "REPAIRED_PENDING_REVIEW",
       "native_calls_before": 12784,
       "native_calls_after": 1547,
       "cleanup_calls": 114,
-      "scope": "Full832-file manifest actual lease control flow; synthetic native transport; target60s/5s proof NOT_RUN"
+      "scope": "Full832-file manifest actual lease control flow; synthetic native transport; target60s/5s proof NOT_RUN",
+      "stream_selection": "Once per Stage decoding; exact three manifest byte digests checked before/after every stream; two held-file hash passes retained",
+      "component_seconds": 10.513302512001246,
+      "component_executed_commit": "7a106c16fb2fc44683d994d28e57198bc60dce37"
     },
     "P1-PROV": {
       "severity": "P2",
@@ -1011,6 +1025,11 @@
     "limits": "UNCHANGED",
     "installation": "DISABLED",
     "privileged_activation": "DISABLED",
-    "credential_release": "DISABLED"
+    "credential_release": "DISABLED",
+    "candidate": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "evidence": "nov1-t1-provenance-evidence.json",
+    "decision": "nov1-native-installation-decision.json",
+    "M1_N7_H3_impact": "Targeted delta review required for changed import/stage cleanup dependencies; historical closures remain at original commits; no writer closure"
   }
 }

@@ -1,3 +1,17 @@
+# Current November 1 T1 / provenance candidate
+
+Implementation `3ed8222244cbcac4b982a0116db566fe07839d16`, tree `3c51022c717f730d9d63d7042c4edc1db678ffc0`.
+[Consolidated delta packet](nov1-t1-provenance-candidate.md),
+[raw evidence manifest](nov1-t1-provenance-evidence.json),
+[complete proposed installation decision](nov1-native-installation-decision.json).
+Latest actual external verdict: REQUEST CHANGES at de4eda5; received full report
+and prohibited-sudo disclosure retained. New batching/provenance/READY-digest delta
+is tested and awaiting one Claude review. Exact updates index and durable66artifact
+retention remain OPEN. No installation, activation or credential release.
+All sections below are historical and do not override this current packet.
+
+---
+
 # Current October31 H1–H3 candidate
 
 Implementation `de4eda5fb6d7a8a586f415451dcb2ddc055536e4`, tree `87e35b1f4412c82c9a236801971a26157d3e6996`.

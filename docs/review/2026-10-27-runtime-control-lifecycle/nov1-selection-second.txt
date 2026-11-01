@@ -1,0 +1,48 @@
+======================================================================
+ERROR: test_loader_logical_name_can_materialize_a_different_authenticated_member (test_hosted_synthetic_native_inputs.NativeInputTests.test_loader_logical_name_can_materialize_a_different_authenticated_member)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 111, in test_loader_logical_name_can_materialize_a_different_authenticated_member
+    with stage.verified_stream(selected) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 548, in verified_stream
+    self.verify();self._stream_selection_check(row)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 537, in _stream_selection_check
+    [*inventory()['rows'],*execution_inventory()['rows'].values()])
+                           ~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 177, in execution_inventory
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 154, in require_complete_inventory
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'required_unresolved_external_sonames'
+
+======================================================================
+ERROR: test_streamed_import_rechecks_bytes_and_rejects_partial_consumption (test_hosted_synthetic_native_inputs.NativeInputTests.test_streamed_import_rechecks_bytes_and_rejects_partial_consumption)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_inputs.py", line 173, in test_streamed_import_rechecks_bytes_and_rejects_partial_consumption
+    with stage.verified_stream(row()) as chunks:self.assertEqual(b''.join(chunks),b'synthetic data')
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 548, in verified_stream
+    self.verify();self._stream_selection_check(row)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 537, in _stream_selection_check
+    [*inventory()['rows'],*execution_inventory()['rows'].values()])
+                           ~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 177, in execution_inventory
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 154, in require_complete_inventory
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'required_unresolved_external_sonames'
+
+----------------------------------------------------------------------
+Ran 93 tests in 0.764s
+
+FAILED (errors=2)

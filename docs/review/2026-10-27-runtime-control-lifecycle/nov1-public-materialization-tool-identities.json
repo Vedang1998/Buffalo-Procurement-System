@@ -1,0 +1,27 @@
+{
+  "authority_addendum": "No native installer, sudo, systemd, account, protected-view capture, PostgreSQL or downloaded executable was run. Publisher metadata signatures were not reverified by this component measurement.",
+  "dpkg_deb_version_observed_after_measurement": "Debian 'dpkg-deb' package archive backend version 1.22.22 (amd64).\nThis is free software; see the GNU General Public License version 2 or\nlater for copying conditions. There is NO warranty.\n",
+  "material_source_hashes_from_measurement": {
+    "procurement/tools/hosted_native_installation_manifest.json": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070",
+    "procurement/tools/hosted_synthetic_native_inputs.py": "0aa417cc46bb9c8d28edc69628b5d0c03ac886389265ed6f2a9711524df551c1",
+    "procurement/tools/hosted_synthetic_native_installation.py": "b6516daecfdcbbe11e74bbbd1760053b3b67d3ca6102fd64178c353f69ec2028",
+    "procurement/tools/hosted_synthetic_native_route.py": "df0d94e5f2cfdb50c53c65dc34575e69952de4d68a38360b2327bee07614ba7a"
+  },
+  "measurement_script_sha256": "da759f5a10e8b987eacbe5fd8f420091b36e3a41416b6d13f832fadffb0e4c05",
+  "memory_scope_addendum": "waited-child ru_maxrss can include inherited/pre-exec parent pages; it is not exec-only dpkg-deb/decompressor RSS and must not be added to parent high-water as a measured concurrent charge. No cgroup, memfd/page-cache or target service accounting was measured.",
+  "programs_observed_after_measurement": {
+    "/usr/bin/dpkg-deb": {
+      "bytes": 182816,
+      "mode": "0o755",
+      "owner_uid": 0,
+      "sha256": "5346e5fdfdc81d58bbc9d2a3de20ff3738dc479cdb04cc52b91503cbb13440eb"
+    },
+    "/usr/bin/python3.13": {
+      "bytes": 6832784,
+      "mode": "0o755",
+      "owner_uid": 0,
+      "sha256": "889c603f0d17cb54060951bcf4c4f9b8c9ebd9e52b392c70209bbb9755d797d9"
+    }
+  },
+  "timing_addendum": "stream_extract_and_stage measures the interleaved decode/tar-read/hash/materialize operation; extraction and stage writes were not independently separated. Complete-artifact hash timing includes three verified passes per artifact."
+}

@@ -1,0 +1,67 @@
+======================================================================
+ERROR: test_connected_full_manifest_m1_service_and_cleanup (test_hosted_synthetic_native_batch.NativeBatchTests.test_connected_full_manifest_m1_service_and_cleanup)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_batch.py", line 143, in test_connected_full_manifest_m1_service_and_cleanup
+    parent=self.connected();result=route._run(route_tests.ARGS,parent)
+                                   ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_route.py", line 401, in _run
+    if failure is not None:raise failure
+                           ^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_route.py", line 392, in _run
+    result=_select_and_execute(lease,binding,arguments,preflight)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_route.py", line 344, in _select_and_execute
+    consumer=measurement.reserve_consumer(lease,request,binding,'buffalo-hosted-'+str(uuid.uuid4())+'.service',
+        role='measurement',uid=os.geteuid(),gid=os.getegid())
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_measurement.py", line 44, in reserve_consumer
+    value.wire=native.view_wire(request,binding);value.digest=hashlib.sha256(value.wire).hexdigest()
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 829, in view_wire
+    require(type(request.backing) is dict and set(request.backing)==set(paths))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 52, in require
+    if not value:raise ns.NamespaceProofError(code)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceProofError: native_input_contract_refused
+native_installation_cleanup_unverified
+
+======================================================================
+ERROR: test_connected_full_manifest_memory_failure_and_cancellation_create_no_account (test_hosted_synthetic_native_batch.NativeBatchTests.test_connected_full_manifest_memory_failure_and_cancellation_create_no_account) (error='PhaseMemoryRefusal')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_batch.py", line 150, in test_connected_full_manifest_memory_failure_and_cancellation_create_no_account
+    with self.subTest(error=type(failure).__name__),self.assertRaises(type(failure)):route._run(route_tests.ARGS,parent)
+                                                                                     ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_route.py", line 401, in _run
+    if failure is not None:raise failure
+                           ^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_route.py", line 392, in _run
+    result=_select_and_execute(lease,binding,arguments,preflight)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_route.py", line 344, in _select_and_execute
+    consumer=measurement.reserve_consumer(lease,request,binding,'buffalo-hosted-'+str(uuid.uuid4())+'.service',
+        role='measurement',uid=os.geteuid(),gid=os.getegid())
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_measurement.py", line 44, in reserve_consumer
+    value.wire=native.view_wire(request,binding);value.digest=hashlib.sha256(value.wire).hexdigest()
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 829, in view_wire
+    require(type(request.backing) is dict and set(request.backing)==set(paths))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 52, in require
+    if not value:raise ns.NamespaceProofError(code)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceProofError: native_input_contract_refused
+native_installation_cleanup_unverified
+
+======================================================================
+FAIL: test_connected_full_manifest_memory_failure_and_cancellation_create_no_account (test_hosted_synthetic_native_batch.NativeBatchTests.test_connected_full_manifest_memory_failure_and_cancellation_create_no_account)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_batch.py", line 152, in test_connected_full_manifest_memory_failure_and_cancellation_create_no_account
+    self.assertTrue(self.leases[0].closed);self.assertFalse(self.leases[0].ops.nodes)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 39 tests in 1.807s
+
+FAILED (failures=1, errors=2)

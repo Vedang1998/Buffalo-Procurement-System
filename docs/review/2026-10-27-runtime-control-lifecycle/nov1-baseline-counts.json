@@ -1,0 +1,80 @@
+{
+  "artifacts": 66,
+  "counts": {
+    "cleanup": {
+      "find": 25,
+      "rm": 13,
+      "rmdir": 12,
+      "stat": 64
+    },
+    "create": {
+      "mkdir": 2,
+      "stat": 3
+    },
+    "finish": {
+      "chmod": 86,
+      "find": 1,
+      "stat": 102
+    },
+    "import": {
+      "chmod": 832,
+      "dd": 832,
+      "mkdir": 85,
+      "sha256sum": 832,
+      "stat": 9895
+    }
+  },
+  "details": {
+    "cleanup": {
+      "inventory": 25,
+      "observe:close": 1,
+      "observe_many:_objects": 15,
+      "observe_many:_refresh_parent_batch": 24,
+      "observe_many:close": 24,
+      "rm": 13,
+      "rmdir": 12,
+      "unprivileged_lstat_absence": 1
+    },
+    "create": {
+      "mkdir": 2,
+      "observe:_mkdir": 2,
+      "observe:_refresh_directories": 1
+    },
+    "finish": {
+      "chmod": 86,
+      "inventory": 1,
+      "observe:_objects": 1,
+      "observe:finish": 86,
+      "observe_many:_objects": 15
+    },
+    "import": {
+      "chmod": 832,
+      "mkdir": 85,
+      "observe:_mkdir": 85,
+      "observe:_objects": 898,
+      "observe:_refresh_directories": 8080,
+      "observe:import_stage": 832,
+      "sha256sum": 832,
+      "stream": 832
+    }
+  },
+  "files": 832,
+  "grand_total": 12784,
+  "head": "ebc60a254ad7a89db8fb77a6775b7aa13d369a87",
+  "scope": "Exact current InstallationLease control flow, synthetic transport and metadata, no file bytes/native privilege/consumer executions",
+  "snapshots": {
+    "closed": true,
+    "create_owned": 2,
+    "directories": 87,
+    "import_owned": 919,
+    "inventory_name_bytes": 64686,
+    "remaining_nodes": 0
+  },
+  "totals": {
+    "cleanup": 114,
+    "create": 5,
+    "finish": 189,
+    "import": 12476
+  },
+  "tree": "7ec1395c0936f6131ed4dc64a36c331c2dd29e1c"
+}

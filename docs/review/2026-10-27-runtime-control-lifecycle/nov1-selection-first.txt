@@ -1,0 +1,116 @@
+======================================================================
+ERROR: test_exact_import_retires_stage_keeps_backing_private_and_cleans_owned_files (test_hosted_synthetic_native_installation.NativeInstallationTests.test_exact_import_retires_stage_keeps_backing_private_and_cleans_owned_files)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_installation.py", line 65, in test_exact_import_retires_stage_keeps_backing_private_and_cleans_owned_files
+    with patch.object(native,'inventory',return_value={'rows':rows}):lease.import_stage(stage,rows)
+                                                                     ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 37, in guarded
+    try:return method(self,*args,**kwargs)
+               ~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 303, in import_stage
+    with stage.verified_stream(row) as chunks:self.ops.stream(path,row,chunks)
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 548, in verified_stream
+    self.verify();self._stream_selection_check(row)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 537, in _stream_selection_check
+    [*inventory()['rows'],*execution_inventory()['rows'].values()])
+                           ~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 177, in execution_inventory
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 154, in require_complete_inventory
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'required_unresolved_external_sonames'
+
+======================================================================
+ERROR: test_failed_removal_readback_never_resumes_cleanup (test_hosted_synthetic_native_installation.NativeInstallationTests.test_failed_removal_readback_never_resumes_cleanup)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_installation.py", line 140, in test_failed_removal_readback_never_resumes_cleanup
+    with patch.object(native,'inventory',return_value={'rows':rows}):lease.import_stage(stage,rows)
+                                                                     ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 37, in guarded
+    try:return method(self,*args,**kwargs)
+               ~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 303, in import_stage
+    with stage.verified_stream(row) as chunks:self.ops.stream(path,row,chunks)
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 548, in verified_stream
+    self.verify();self._stream_selection_check(row)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 537, in _stream_selection_check
+    [*inventory()['rows'],*execution_inventory()['rows'].values()])
+                           ~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 177, in execution_inventory
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 154, in require_complete_inventory
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'required_unresolved_external_sonames'
+
+======================================================================
+ERROR: test_lost_stream_ack_quarantines_and_never_claims_root_cleanup (test_hosted_synthetic_native_installation.NativeInstallationTests.test_lost_stream_ack_quarantines_and_never_claims_root_cleanup)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_installation.py", line 89, in test_lost_stream_ack_quarantines_and_never_claims_root_cleanup
+    lease.import_stage(stage,rows)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 37, in guarded
+    try:return method(self,*args,**kwargs)
+               ~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 303, in import_stage
+    with stage.verified_stream(row) as chunks:self.ops.stream(path,row,chunks)
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 548, in verified_stream
+    self.verify();self._stream_selection_check(row)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 537, in _stream_selection_check
+    [*inventory()['rows'],*execution_inventory()['rows'].values()])
+                           ~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 177, in execution_inventory
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 154, in require_complete_inventory
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'required_unresolved_external_sonames'
+
+======================================================================
+ERROR: test_sequential_artifact_stages_are_closed_before_next_import (test_hosted_synthetic_native_installation.NativeInstallationTests.test_sequential_artifact_stages_are_closed_before_next_import)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_installation.py", line 77, in test_sequential_artifact_stages_are_closed_before_next_import
+    with patch.object(native,'inventory',return_value={'rows':rows}):lease.import_stage(stage,[selected])
+                                                                     ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 37, in guarded
+    try:return method(self,*args,**kwargs)
+               ~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 303, in import_stage
+    with stage.verified_stream(row) as chunks:self.ops.stream(path,row,chunks)
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 548, in verified_stream
+    self.verify();self._stream_selection_check(row)
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 537, in _stream_selection_check
+    [*inventory()['rows'],*execution_inventory()['rows'].values()])
+                           ~~~~~~~~~~~~~~~~~~~^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 177, in execution_inventory
+    value=require_complete_inventory();rows=value['rows'];by_path={r['path']:r for r in rows}
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 154, in require_complete_inventory
+    require(set(previous['required_unresolved_external_sonames'])<=names,'native_soname_missing')
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'required_unresolved_external_sonames'
+
+----------------------------------------------------------------------
+Ran 27 tests in 0.111s
+
+FAILED (errors=4)

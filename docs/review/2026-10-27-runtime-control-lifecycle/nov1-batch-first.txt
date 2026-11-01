@@ -1,0 +1,27 @@
+======================================================================
+ERROR: test_expiry_before_import_write_closes_stage_without_quarantine (test_hosted_synthetic_native_installation.NativeInstallationTests.test_expiry_before_import_write_closes_stage_without_quarantine)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/Buffalo-Procurement-System/procurement/tests/test_hosted_synthetic_native_installation.py", line 188, in test_expiry_before_import_write_closes_stage_without_quarantine
+    lease.import_stage(stage,rows)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 37, in guarded
+    try:return method(self,*args,**kwargs)
+               ~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_installation.py", line 300, in import_stage
+    with stage.verified_stream(row) as chunks:self.ops.stream(path,row,chunks)
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 531, in verified_stream
+    self.verify();require(row in inventory()['rows'] or row in execution_inventory()['rows'].values(),'native_stream_unselected')
+                  ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/Buffalo-Procurement-System/procurement/tools/hosted_synthetic_native_inputs.py", line 52, in require
+    if not value:raise ns.NamespaceProofError(code)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hosted_synthetic_namespace.NamespaceProofError: native_stream_unselected
+
+----------------------------------------------------------------------
+Ran 42 tests in 0.206s
+
+FAILED (errors=1)

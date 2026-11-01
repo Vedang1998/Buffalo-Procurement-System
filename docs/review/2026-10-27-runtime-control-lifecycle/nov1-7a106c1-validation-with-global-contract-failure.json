@@ -1,0 +1,36 @@
+{
+  "commit": "7a106c16fb2fc44683d994d28e57198bc60dce37",
+  "tree": "edeba601d4df5c471744cefb56a6a03e43e23de4",
+  "results": {
+    "focused": {
+      "returncode": 0,
+      "seconds": 41.766300457995385,
+      "sha256": "479a34e38293e0539b2a85cdd965333aa1a076ea2f0fd6b96b06ca56aa94cf73"
+    },
+    "isolated": {
+      "returncode": 0,
+      "seconds": 8.540685421001399,
+      "sha256": "af9c14764b9c9333b0ab61301cf4eb9a8eb22675a6a9a07f8625f33946969414"
+    },
+    "inert": {
+      "returncode": 78,
+      "seconds": 0.1641797840129584,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "discovery": {
+      "returncode": 0,
+      "seconds": 2.1190015040047,
+      "sha256": "3f6318b6dea18c39f85f688f2ead760184edffaf746500e507dd1976d1238119"
+    },
+    "startup": {
+      "returncode": 0,
+      "seconds": 0.11406029801582918,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "related": {
+      "returncode": 1,
+      "seconds": 5.430790999002056,
+      "sha256": "a95f073758fa4a90c1f1c367a70a46440412071cdeda176eae0c94f9f462f6ff"
+    }
+  }
+}

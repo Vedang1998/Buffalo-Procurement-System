@@ -212,3 +212,14 @@ No task in this plan authorizes main/PR #24 mutation, a new PR, merge,
 Railway/public endpoint mutation, external application-database access,
 private research transfer, Shopify, real purchasing, supplier transmission,
 or Replit shutdown.
+
+
+### 2026-11-01 T1/provenance continuation checkpoint (no canonical milestone change)
+
+Candidate `3ed8222244cbcac4b982a0116db566fe07839d16` / tree `3c51022c717f730d9d63d7042c4edc1db678ffc0` follows the received de4eda5 Claude review.
+Full-manifest native calls12784→1547, cleanup114; source-bound tests and component
+measurements are in `docs/review/2026-10-27-runtime-control-lifecycle/nov1-t1-provenance-candidate.md`.
+The exact updates index and durable artifact retention remain missing, despite
+new fail-closed end-to-end provenance parsing. One targeted Claude delta and the
+single bounded installation decision remain required; installation/privilege/
+credentials stay disabled. No resource increase or acceptance closure inferred.

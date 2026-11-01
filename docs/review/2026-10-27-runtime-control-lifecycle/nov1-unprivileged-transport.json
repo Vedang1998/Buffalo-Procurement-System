@@ -1,0 +1,101 @@
+{
+  "argv_prefix": [
+    "/usr/bin/env",
+    "-i",
+    "PATH=/usr/bin:/bin",
+    "LC_ALL=C.UTF-8",
+    "/usr/bin/timeout",
+    "--signal=TERM",
+    "--kill-after=0.1s",
+    "0.25s",
+    "/usr/bin/stat",
+    "--printf=%d %i %f %u %g %h %s\\n",
+    "--"
+  ],
+  "elapsed_seconds": 0.1685633060114924,
+  "host": {
+    "kernel": "6.18.57",
+    "machine": "x86_64",
+    "os_release": "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.6\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n",
+    "python": "3.13.5",
+    "system": "Linux"
+  },
+  "iteration_limit": 50,
+  "measurements_ms": {
+    "batch64": {
+      "max": 4.049391,
+      "median": 3.523812,
+      "min": 2.430771,
+      "n": 25,
+      "samples": [
+        3.613342,
+        3.999965,
+        4.049391,
+        3.80752,
+        2.508178,
+        3.523812,
+        3.376129,
+        3.854381,
+        3.501428,
+        3.891687,
+        3.579726,
+        3.776994,
+        3.917516,
+        2.756382,
+        3.487717,
+        3.539625,
+        2.640087,
+        3.533036,
+        3.431442,
+        3.689672,
+        2.545815,
+        2.474397,
+        2.430771,
+        3.51305,
+        3.445343
+      ]
+    },
+    "single": {
+      "max": 3.683523,
+      "median": 3.437682,
+      "min": 2.364261,
+      "n": 25,
+      "samples": [
+        2.909104,
+        3.488098,
+        3.649081,
+        3.533396,
+        3.5033,
+        3.649231,
+        3.305291,
+        3.46353,
+        3.2515,
+        3.362107,
+        3.552855,
+        2.453805,
+        3.454737,
+        2.749031,
+        3.343098,
+        3.382138,
+        3.270739,
+        3.520847,
+        2.364261,
+        3.588148,
+        3.683523,
+        3.449534,
+        2.67524,
+        3.369449,
+        3.437682
+      ]
+    }
+  },
+  "operator_uid": 1000,
+  "runs": 50,
+  "sample_budget_seconds": 2,
+  "scope": "Current Codex Cloud unprivileged env/timeout/stat transport only, not sudo/account/systemd/artifact/target fit",
+  "tools": {
+    "/usr/bin/env": "eb1c64bbc9908afcdf8cb48524f17112d8dd76a249f80dee2f01da14747b3b6e",
+    "/usr/bin/stat": "128754b37ab743a539d889a91441c440f9b52df77f4e008b345ff221ce1daeaa",
+    "/usr/bin/timeout": "6ca1891dfc0b05d7680770c2884c0391b92467c7bb6500a5c84677e6481739f1"
+  }
+}
