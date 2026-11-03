@@ -192,15 +192,27 @@ class NativeRouteTests(unittest.TestCase):
         parent=Path(self.enterContext(tempfile.TemporaryDirectory()));key=b'synthetic public key';(parent/'ubuntu-archive-keyring.gpg').write_bytes(key)
         manifest=native.installation_manifest();manifest['trust_root']=dict(manifest['trust_root'],bytes=len(key),sha256=hashlib.sha256(key).hexdigest())
         status=b'[GNUPG:] VALIDSIG '+manifest['trust_root']['signer'].encode()+b' fixture\n'
+        inventory=native.require_complete_inventory();payloads={}
+        for suite in ('noble','noble-updates'):
+            records=[a for a in inventory['artifacts'].values() if a.get('suite')==suite]
+            index=records[0]['packages_index']
+            payload=(f"Origin: fixture\nSHA256:\n {index['sha256']} {index['bytes']} main/binary-amd64/Packages.xz\n").encode()
+            payloads[records[0]['signed_release']['signed_sha256']]=payload
+            for artifact in records:artifact['signed_release']['verified_release_sha256']=hashlib.sha256(payload).hexdigest()
+        def verified(argv,**kwargs):
+            # Synthetic emitted text; this mock does not claim crypto/target proof.
+            payload=payloads[hashlib.sha256(Path(argv[-1]).read_bytes()).hexdigest()]
+            return SimpleNamespace(returncode=0,stdout=payload,stderr=status)
         original_open=route._artifact_fd
         def fixture_artifact(*args):return original_open(parent/'ubuntu-archive-keyring.gpg',manifest['trust_root']['sha256'],len(key),time.monotonic()+60)
-        with patch.object(route,'verify_index_records',return_value={'scope':'SIGNATURE_COMPONENT_FIXTURE'}),patch.object(route,'_artifact_fd',side_effect=fixture_artifact),patch.object(native,'installation_manifest',return_value=manifest),patch('hosted_synthetic_runtime.read_native',return_value=(b'fixture tool',0o555)),patch.object(route.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=status,stderr=b'')) as command:
+        with patch.object(native,'require_complete_inventory',return_value=inventory),patch.object(route,'verify_index_records',return_value={'scope':'SIGNATURE_COMPONENT_FIXTURE'}),patch.object(route,'_artifact_fd',side_effect=fixture_artifact),patch.object(native,'installation_manifest',return_value=manifest),patch('hosted_synthetic_runtime.read_native',return_value=(b'fixture tool',0o555)),patch.object(route.subprocess,'run',side_effect=verified) as command:
             result=route.verify_publisher_metadata(parent,time.monotonic()+60)
         self.assertEqual(command.call_count,2);self.assertFalse(result['installation_authority'])
         self.assertIn('NOT_SIGNED_BUILD_ATTESTATION',result['python'])
         self.assertIn('OWNER_DECISION_PENDING',result['snapshot_policy'])
         for call in command.call_args_list:
             self.assertEqual(call.args[0][0],'/usr/bin/gpgv');self.assertEqual(len(call.kwargs['pass_fds']),2)
+            self.assertIn('--output',call.args[0]);self.assertEqual(call.args[0][call.args[0].index('--status-fd')+1],'2')
             for fd in call.kwargs['pass_fds']:
                 with self.assertRaises(OSError):os.fstat(fd)
 

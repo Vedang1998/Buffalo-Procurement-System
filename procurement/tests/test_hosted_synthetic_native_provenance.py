@@ -109,3 +109,80 @@ class NativeProvenanceTests(unittest.TestCase):
         with patch.object(route,'verify_publisher_metadata',side_effect=native.ns.NamespaceProofError('native_pinned_index_missing')),patch.object(install.InstallationLease,'_create') as create,self.assertRaisesRegex(native.ns.NamespaceProofError,'pinned_index_missing'):
             route._run(ARGS,parent)
         create.assert_not_called();fixture.create.assert_not_called()
+
+    def verified_result(self,payload,*,code=0,status=None):
+        signer='F6ECB3762474EDA9D21B7022871920D1991BC93C'
+        if status is None:status=b'gpgv: Good signature\n[GNUPG:] VALIDSIG '+signer.encode()+b' fixture\n'
+        return SimpleNamespace(returncode=code,stdout=payload,stderr=status),signer,hashlib.sha256(payload).hexdigest()
+
+    def test_verifier_emitted_signed_payload_has_exact_existing_identity(self):
+        root,index,_,_,_=self.fixture()
+        payload=(f"Origin: Ubuntu\nSHA256:\n {index['sha256']} {index['bytes']} main/binary-amd64/Packages.xz\n").encode()
+        result,signer,digest=self.verified_result(payload)
+        actual=route._verified_release_payload(result,signer,digest)
+        self.assertIs(actual,payload);route._release_index_binding(actual,index)
+
+    def test_wrong_empty_oversized_or_changed_emitted_payload_refuses(self):
+        result,signer,digest=self.verified_result(b'Origin: Ubuntu\n')
+        for payload in (b'',b'x'*(2*1024**2+1),b'Origin: Changed\n',None,'text'):
+            with self.subTest(size=None if payload is None else len(payload)),self.assertRaises(native.ns.NamespaceProofError):
+                route._verified_release_payload(SimpleNamespace(returncode=0,stdout=payload,stderr=result.stderr),signer,digest)
+
+    def test_wrong_duplicate_missing_or_contradictory_signature_refuses(self):
+        result,signer,digest=self.verified_result(b'payload')
+        for status in (b'',result.stderr.replace(signer.encode(),b'0'*40),result.stderr*2,
+                       result.stderr+b'[GNUPG:] BADSIG other\n',result.stderr+b'[GNUPG:] FAILURE verify 1\n',b'x'*4097):
+            with self.subTest(status=status[:50]),self.assertRaises(native.ns.NamespaceProofError):
+                route._verified_release_payload(SimpleNamespace(returncode=0,stdout=result.stdout,stderr=status),signer,digest)
+        result.returncode=1
+        with self.assertRaises(native.ns.NamespaceProofError):route._verified_release_payload(result,signer,digest)
+
+    def test_unsigned_outer_index_text_is_never_parsed_as_signed_content(self):
+        _,index,_,_,_=self.fixture();payload=b'Origin: Ubuntu\nSHA256:\n'
+        outer=payload+f" {index['sha256']} {index['bytes']} main/binary-amd64/Packages.xz\n".encode()
+        route._release_index_binding(outer,index)  # Apparent binding outside emitted text.
+        result,signer,digest=self.verified_result(payload)
+        with self.assertRaisesRegex(native.ns.NamespaceProofError,'index_binding'):
+            route._release_index_binding(route._verified_release_payload(result,signer,digest),index)
+
+    def metadata_fixture(self):
+        root=Path(self.enterContext(tempfile.TemporaryDirectory()));key=b'public fixture key';(root/'ubuntu-archive-keyring.gpg').write_bytes(key)
+        manifest=native.installation_manifest();manifest['trust_root']=dict(manifest['trust_root'],bytes=len(key),sha256=hashlib.sha256(key).hexdigest())
+        self.enterContext(patch.object(native,'installation_manifest',return_value=manifest))
+        self.enterContext(patch('hosted_synthetic_runtime.read_native',return_value=(b'fixture tool',0o555)))
+        inventory=native.require_complete_inventory();payloads={}
+        for suite in ('noble','noble-updates'):
+            records=[a for a in inventory['artifacts'].values() if a.get('suite')==suite]
+            index=records[0]['packages_index']
+            payload=(f"Origin: fixture\nSHA256:\n {index['sha256']} {index['bytes']} main/binary-amd64/Packages.xz\n").encode()
+            payloads[records[0]['signed_release']['signed_sha256']]=payload
+            for a in records:a['signed_release']['verified_release_sha256']=hashlib.sha256(payload).hexdigest()
+        self.enterContext(patch.object(native,'require_complete_inventory',return_value=inventory))
+        def result(argv,**kwargs):
+            payload=payloads[hashlib.sha256(Path(argv[-1]).read_bytes()).hexdigest()]
+            return self.verified_result(payload)[0]
+        command=self.enterContext(patch.object(route.subprocess,'run',side_effect=result))
+        return root,command
+
+    def test_raw_signature_digest_still_refuses_before_verifier_or_indexes(self):
+        root,command=self.metadata_fixture();inventory=native.require_complete_inventory()
+        for a in inventory['artifacts'].values():
+            if a.get('suite')=='noble':a['signed_release']['signed_sha256']='0'*64
+        with patch.object(native,'require_complete_inventory',return_value=inventory),patch.object(route,'verify_index_records') as index,self.assertRaisesRegex(native.ns.NamespaceProofError,'snapshot_refused'):
+            route.verify_publisher_metadata(root,time.monotonic()+60)
+        command.assert_not_called();index.assert_not_called()
+
+    def test_payload_selection_mismatch_or_signature_failure_prevents_index_and_installation(self):
+        for mismatch in (True,False):
+            root,command=self.metadata_fixture();inventory=native.require_complete_inventory()
+            if mismatch:
+                next(a for a in inventory['artifacts'].values() if a.get('suite')=='noble')['signed_release']['verified_release_sha256']='0'*64
+            else:command.side_effect=None;command.return_value=SimpleNamespace(returncode=1,stdout=b'Origin: Ubuntu\n',stderr=b'bad signature')
+            before=set(os.listdir('/proc/self/fd'))
+            with patch.object(native,'require_complete_inventory',return_value=inventory),patch.object(route,'verify_index_records') as index,patch.object(install.InstallationLease,'_create') as create,self.assertRaises(native.ns.NamespaceProofError):
+                route.verify_publisher_metadata(root,time.monotonic()+60)
+            index.assert_not_called();create.assert_not_called()
+            self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+            for call in command.call_args_list:
+                for fd in call.kwargs['pass_fds']:
+                    with self.assertRaises(OSError):os.fstat(fd)

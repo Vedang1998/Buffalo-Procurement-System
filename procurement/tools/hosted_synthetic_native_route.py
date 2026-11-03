@@ -101,6 +101,25 @@ def _release_index_binding(raw,index):
         'native_release_index_binding_refused')
 
 
+def _verified_release_payload(result,signer,expected_digest):
+    """Only verifier-emitted signed text may supply package-index bindings.
+
+    The raw armored bytes are pinned separately before invoking gpgv. No hand
+    stripping of armor, dash escaping or trailing unsigned data occurs here.
+    """
+    native.require(type(result.stdout) is bytes and 0<len(result.stdout)<=2*1024**2
+        and type(result.stderr) is bytes and len(result.stderr)<=4096 and result.returncode==0,
+        'native_release_signature_refused')
+    statuses=[line.split() for line in result.stderr.splitlines() if line.startswith(b'[GNUPG:] ')]
+    valid=[fields for fields in statuses if len(fields)>1 and fields[1]==b'VALIDSIG']
+    native.require(len(valid)==1 and len(valid[0])>=3 and valid[0][2]==signer.encode('ascii')
+        and not any(len(fields)>1 and fields[1] in (b'BADSIG',b'ERRSIG',b'NO_PUBKEY',b'FAILURE') for fields in statuses),
+        'native_release_signer_refused')
+    native.require(type(expected_digest) is str and re.fullmatch('[0-9a-f]{64}',expected_digest)
+        and hashlib.sha256(result.stdout).hexdigest()==expected_digest,'native_verified_release_payload_refused')
+    return result.stdout
+
+
 def _index_records(fd,index,deadline):
     """Bounded incremental XZ, including the publisher's empty second stream."""
     native.require(type(index['uncompressed_bytes']) is int and 0<index['uncompressed_bytes']<=64*1024**2)
@@ -209,19 +228,17 @@ def verify_publisher_metadata(directory,deadline):
             with _sealed_metadata(raw) as releasefd, _empty_directory('buffalo-gpgv-') as home:
                 remaining=deadline-time.monotonic();_check(deadline)
                 argv=('/usr/bin/gpgv','--homedir',home,'--keyring','/proc/self/fd/'+str(keyfd),
-                    '--status-fd','1','/proc/self/fd/'+str(releasefd))
+                    '--output','-','--status-fd','2','/proc/self/fd/'+str(releasefd))
                 result=subprocess.run(argv,env=boot._ENVIRONMENT,stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,stderr=subprocess.PIPE,pass_fds=(keyfd,releasefd),timeout=remaining,check=False)
-                native.require(result.returncode==0 and len(result.stdout)<=4096 and len(result.stderr)<=4096,
-                    'native_release_signature_refused')
-                lines=[line.split() for line in result.stdout.splitlines() if line.startswith(b'[GNUPG:] VALIDSIG ')]
-                native.require(len(lines)==1 and len(lines[0])>=3 and lines[0][2].decode()==anchor['signer'],
-                    'native_release_signer_refused')
+                payload_digests={a['signed_release']['verified_release_sha256'] for a in records}
+                native.require(len(payload_digests)==1,'native_release_payload_selection_refused')
+                payload=_verified_release_payload(result,anchor['signer'],next(iter(payload_digests)))
                 indexes={a['packages_index']['sha256']:a['packages_index'] for a in records}
                 native.require(len(indexes)==1,'native_index_selection_refused')
-                index=next(iter(indexes.values()));_release_index_binding(raw,index)
+                index=next(iter(indexes.values()));_release_index_binding(payload,index)
                 index_results.append(verify_index_records(directory,index,records,deadline))
-                signatures.append({'suite':suite,'sha256':hashlib.sha256(raw).hexdigest(),'signer':anchor['signer']})
+                signatures.append({'suite':suite,'sha256':hashlib.sha256(raw).hexdigest(),'signer':anchor['signer'],'verified_payload_sha256':hashlib.sha256(payload).hexdigest(),'verified_payload_bytes':len(payload)})
     python=next(a for a in inventory['artifacts'].values() if a['publisher']=='actions/python-versions')
     raw=(_EVIDENCE/'native-python-publisher-hashes.txt').read_bytes()
     native.require(len(raw)==python['publisher_hash_list']['bytes'] and hashlib.sha256(raw).hexdigest()==python['publisher_hash_list']['sha256']
