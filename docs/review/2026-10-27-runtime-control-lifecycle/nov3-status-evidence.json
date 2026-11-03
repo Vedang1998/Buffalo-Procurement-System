@@ -1,0 +1,186 @@
+{
+  "implementation": "fb2dc86a43330f13376369c59db815dd03eb4d70",
+  "tree": "4fd42f3c33ccd5abcb923239bbee6d2a02ae6373",
+  "reviewed_baseline": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+  "reviewed_baseline_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+  "classification": "SOURCE_BOUND_COMPONENT_VALIDATION_NOT_FULL_OR_INTEGRATED_ACCEPTANCE",
+  "files": [
+    {
+      "path": "external-review-216169bf-owner-report.md",
+      "bytes": 6522,
+      "sha256": "895202abcb54b2296cc5da9765b5da837e93893b083d775dbf79df70a12e0df8"
+    },
+    {
+      "path": "external-review-216169bf.json",
+      "bytes": 3175,
+      "sha256": "67c3b11ac5422b709a9ed12564f0f5c7cd98c1b85d265b6cf5a244b6a8d1fe28"
+    },
+    {
+      "path": "nov3-signature-status-candidate.md",
+      "bytes": 6772,
+      "sha256": "70b3d0532bfa441722fba3ac9b9c2899d5d1c545f914c665536aadbfe9ac222f"
+    },
+    {
+      "path": "nov3-status-before-status-reproduction.json",
+      "bytes": 460,
+      "sha256": "81644852099e89c3b819060d367f0e276f05509a39fc8e3db6bae32f4bc1e0f8"
+    },
+    {
+      "path": "nov3-status-causal.txt",
+      "bytes": 8844,
+      "sha256": "a7890f64f28ad4f05845be39423e1e04058c36f0563c381b8df1b8382682ce0d"
+    },
+    {
+      "path": "nov3-status-decision-readiness.json",
+      "bytes": 7357,
+      "sha256": "6fa91128b3f878abd35fe93fca22dea9ceb722a1d6f3ab0fd8f2311b3313b362"
+    },
+    {
+      "path": "nov3-status-fb2dc86-discovery.txt",
+      "bytes": 323,
+      "sha256": "779fc5d4525fa237eb517c584bddb9177d7d52fb4ca4ef0dd499e9c74889a660"
+    },
+    {
+      "path": "nov3-status-fb2dc86-focused.txt",
+      "bytes": 228681,
+      "sha256": "0cae5d1ee0b5b291f61d5fb5a68b1e60999faea3743913119dd4f8179598ddf7"
+    },
+    {
+      "path": "nov3-status-fb2dc86-full-static-accounting.json",
+      "bytes": 12308,
+      "sha256": "85b0303ade8c19b2976cefb21230d8ef5422abb7e074be89ddcb4732e369d925"
+    },
+    {
+      "path": "nov3-status-fb2dc86-inert.txt",
+      "bytes": 95,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    {
+      "path": "nov3-status-fb2dc86-isolated.txt",
+      "bytes": 58850,
+      "sha256": "59b9168445f03b48b55ddc5b9d06d9f84eff01106c49d4298d4e390c2c8f769f"
+    },
+    {
+      "path": "nov3-status-fb2dc86-related.txt",
+      "bytes": 17263,
+      "sha256": "2c2ef00e5d3af50371b8f52e43c3c9fbd921f174cefc9254879618d92158acf4"
+    },
+    {
+      "path": "nov3-status-fb2dc86-startup.txt",
+      "bytes": 2041,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    {
+      "path": "nov3-status-fetch-receipt.json",
+      "bytes": 492,
+      "sha256": "c91d24195cc42fcc915f54d134bcb7a8de3941846671306f4ba7a272732d2c70"
+    },
+    {
+      "path": "nov3-status-focused_modules.txt",
+      "bytes": 1612,
+      "sha256": "0e7fbfb581154257c1897a7c5bd61c64ae9fbfd6a1990d2d7e9548f8906eb681"
+    },
+    {
+      "path": "nov3-status-frozen-validation.json",
+      "bytes": 1202,
+      "sha256": "5cf8bb1417763cbec6e5e376dfe9d16e4ad4ba30a1a9e8e6bfdf8bc37251ca9c"
+    },
+    {
+      "path": "nov3-status-gpgv-2.4.7-receipt.json",
+      "bytes": 288,
+      "sha256": "f8c166d140dfd7de122226c6874c2302fe04ab08240892806c23c4d4ece7a16a"
+    },
+    {
+      "path": "nov3-status-key_status_semantics.txt",
+      "bytes": 1273,
+      "sha256": "64d0e11dc938f2771a28457459ff7292a7a3cead8613119ac214388e7248ecaf"
+    },
+    {
+      "path": "nov3-status-local-retention-check.py",
+      "bytes": 5089,
+      "sha256": "39b785fede6d974b20804c712edf43d1332cff948f883d226f9871fcabad44f0"
+    },
+    {
+      "path": "nov3-status-local-retention-verification.json",
+      "bytes": 43860,
+      "sha256": "2888072cc4a8d58c21b50a9656dddec9ce840f70453161193f1d1169af818aef"
+    },
+    {
+      "path": "nov3-status-material-publication.json",
+      "bytes": 559,
+      "sha256": "8f8b6e0438c70220042cd7524d89e0c4c88cb4dd4f81ca235dbe5de4388e0685"
+    },
+    {
+      "path": "nov3-status-original-noble-actual-gpg-status.txt",
+      "bytes": 964,
+      "sha256": "db5b895496593f3ede393dbece01b562168c8736ce7385b423e2fc49771f034f"
+    },
+    {
+      "path": "nov3-status-original-noble-updates-actual-gpg-status.txt",
+      "bytes": 964,
+      "sha256": "96f56f5540f9e150e94f0a7c4d503f349859094f28f9ae54a66932268730bb28"
+    },
+    {
+      "path": "nov3-status-replacement-noble-updates-actual-gpg-status.txt",
+      "bytes": 964,
+      "sha256": "76cf0c31cdbba53e72f657e9c2a3327d9a0406a513b278fba6a49ba5417fd775"
+    },
+    {
+      "path": "nov3-status-retained-release-verification.json",
+      "bytes": 8887,
+      "sha256": "86d31e55b47a5a39e2efdd39aa1e2b4661abf6b9e8f629ad0d2628b0ffb53fa6"
+    },
+    {
+      "path": "nov3-status-signature_result_fields.txt",
+      "bytes": 4771,
+      "sha256": "037db9257ed5ef26ed68923ea927d8eaf2dce0894d74f15545872d966ea264d0"
+    },
+    {
+      "path": "nov3-status-status-format-analysis.json",
+      "bytes": 1647,
+      "sha256": "5aec024ce3917c6ff132f5d7a73724d8ddbcc00de4785b03f59be5d931d7c853"
+    },
+    {
+      "path": "nov3-status-transfer-access.json",
+      "bytes": 3223,
+      "sha256": "725696eaa3b6e9e70549cd3162b59e90d513a18db64cbde093056d5b55e47599"
+    },
+    {
+      "path": "nov3-status-validate-frozen.py",
+      "bytes": 4161,
+      "sha256": "d88f84b1ef8d2cb66949af068c0a563b668b2298101b04d0943de9db74ce8402"
+    },
+    {
+      "path": "nov3-status-verify-retained-releases.py",
+      "bytes": 5190,
+      "sha256": "31475a3041a526e881e7a79b4c294a860d2bd1f0943e9a6b683978eacf1ebed0"
+    }
+  ],
+  "tested_groups": {
+    "focused": 1244,
+    "scrubbed": 307,
+    "related": 88,
+    "startup": 10,
+    "overlapping": true,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "discovery": {
+    "tests": 2808,
+    "modules": 137,
+    "executed": 0
+  },
+  "full_authoritative": "NOT_RUN",
+  "target_gpgv": "NOT_RUN_ABSENT",
+  "actual_expired_revoked_key_verification": "NOT_RUN",
+  "remote_retention": {
+    "objects": 0,
+    "bytes": 0,
+    "fresh_readback": "NOT_RUN_AUTH_BLOCKED"
+  },
+  "privileged_activation": "DISABLED",
+  "credentials": "WITHHELD",
+  "historical_before_reproduction": "nov3-status-before-status-reproduction.json",
+  "precommit_causal_test_log": "nov3-status-causal.txt; executed dirty immediately prior to frozen source; final source rerun in focused/isolated logs"
+}

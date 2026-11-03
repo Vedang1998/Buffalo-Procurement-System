@@ -1,0 +1,6 @@
+{
+  "url": "https://raw.githubusercontent.com/gpg/gnupg/gnupg-2.4.7/doc/gpgv.texi",
+  "bytes": 5450,
+  "sha256": "316fc076e8282b00dc54928a65a3d7487e39471f81c2853c9d8d1e7dd25d20bf",
+  "scope": "Pinned upstream2.4.7 documentation; not executed targetgpgv or current revocation freshness"
+}

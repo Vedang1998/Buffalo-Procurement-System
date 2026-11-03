@@ -1,0 +1,71 @@
+{
+  "classification": "ACTUAL_EXTERNAL_CLAUDE_REVIEW_OWNER_SUPPLIED",
+  "report": "external-review-216169bf-owner-report.md",
+  "report_sha256": "895202abcb54b2296cc5da9765b5da837e93893b083d775dbf79df70a12e0df8",
+  "format": "Full supplied report retained; plain-text list/table layout, no invented missing3ed prose",
+  "reviewer": {
+    "tool": "Claude Code",
+    "container": "2.1.317",
+    "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+    "configured_model": "claude-opus-5-5",
+    "served_model": "claude-opus-5-5",
+    "effort": "high",
+    "attribution_source": "OWNER_SUPPLIED_REPORT_NOT_FRESH_CLAUDE_ACCOUNT_INSPECTION"
+  },
+  "reviewed_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+  "reviewed_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+  "checkpoint": "9298b911d7a90edcd8aa54b37cdead5c1d12130e",
+  "checkpoint_tree": "9a798a5abe1e2e94eda7cc1ab6741ef93fad21dd",
+  "baseline": "3ed8222244cbcac4b982a0116db566fe07839d16",
+  "verdict": "SIGNED_PAYLOAD_ACCEPTED_WITH_NEW_SIGNATURE_STATUS_P2_OPEN; REPLACEMENT_METADATA_INDEPENDENTLY_VERIFIED; NO_INSTALLATION_AUTHORITY",
+  "dispositions": {
+    "signed_payload_P3": "ACCEPTED_AT_216169bf",
+    "signature_status_P2": "OPEN_AT_216169bf",
+    "replacement_metadata": "INDEPENDENTLY_VERIFIED_47_OF_47_EXACT_TUPLES_AND_STANZAS_NOT_ADOPTED",
+    "retention": "NOT_REVIEWED_PENDING",
+    "installation": "NOT_AUTHORIZED"
+  },
+  "carried_forward_3ed": {
+    "scope": "Same-session reviewer reconciliation supplied in this216report; not reconstructed original report",
+    "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "T1": "EXCESS_WORK_DEFECT_REPAIRED; FULL_ROUTE_TIMING_UNPROVEN",
+    "stage_cache": "CLOSED",
+    "parser": "CORRECT",
+    "H2_READY_digest": "CLOSED",
+    "P3": "READ_VERIFIED_PAYLOAD_INSTEAD_OF_RAW_ARMOR; ADDRESSED_AT_216169bf",
+    "find_inventory_margin": "ABOUT_850_BYTES",
+    "then_remaining": "EXACT8e3c_INDEX_AND_DURABLE_STORAGE_REQUIRED"
+  },
+  "reviewer_execution": {
+    "focused": {
+      "discovered": 1235,
+      "executed": 1235,
+      "passed": 1235,
+      "failures": 0,
+      "errors": 0,
+      "reported_result": "Ran1235,OK",
+      "uid": 65534,
+      "log": "/tmp/claude-0/-home-user-Buffalo-Procurement-System/0f1b2919-2af2-576d-8608-bd347e8aa4f0/scratchpad/2161-focused-uid65534.txt",
+      "log_hash": "NOT_SUPPLIED"
+    },
+    "real_gpgv": true,
+    "replacement_records": 47,
+    "index_records_parsed": 7047,
+    "public_GETs": 6,
+    "uploads": 0,
+    "sudo": false,
+    "installation": false,
+    "account_or_service": false,
+    "Railway": false,
+    "cleanup": "DISPOSABLE_FIXTURES_REMOVED_AS_REPORTED"
+  },
+  "limitations": [
+    "No target hosted execution, timing, memory, installation or resource proof",
+    "No remote retention/access proof",
+    "No current revocation freshness established by byte-pinned keyring",
+    "No adoption/installation/credential/purchasing authority",
+    "Later changed descendants require targeted delta review"
+  ],
+  "narrow_next_scope": "Signature-status repair and effect on previously accepted provenance only; no broad architecture/history review"
+}

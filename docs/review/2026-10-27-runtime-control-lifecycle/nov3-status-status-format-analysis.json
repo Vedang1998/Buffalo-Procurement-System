@@ -1,0 +1,58 @@
+{
+  "scope": "READ_ONLY_DOCUMENTATION_AND_EXISTING_RETAINED_OUTPUT_INSPECTION; NO_VERIFIER_RUN_THIS_SUBTASK",
+  "actual_local_tool": "gpg2.4.7",
+  "target_gpgv": "UNAVAILABLE_NOT_RUN",
+  "source_receipt": "fetch-receipt.json",
+  "excerpts": [
+    {
+      "file": "status_format.txt",
+      "sha256": "4037dfae9a3aa64003f5a1159f882f778fb8ea87884f8eacc863b1e25c1fc247",
+      "bytes": 937,
+      "source": "DETAILS-2.4.7",
+      "source_lines": [
+        417,
+        435
+      ]
+    },
+    {
+      "file": "signature_result_fields.txt",
+      "sha256": "037db9257ed5ef26ed68923ea927d8eaf2dce0894d74f15545872d966ea264d0",
+      "bytes": 4771,
+      "source": "DETAILS-2.4.7",
+      "source_lines": [
+        436,
+        524
+      ]
+    },
+    {
+      "file": "key_status_semantics.txt",
+      "sha256": "64d0e11dc938f2771a28457459ff7292a7a3cead8613119ac214388e7248ecaf",
+      "bytes": 1273,
+      "source": "DETAILS-2.4.7",
+      "source_lines": [
+        754,
+        781
+      ]
+    }
+  ],
+  "expected_fingerprint": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+  "documented_good_key_representations": [
+    "871920D1991BC93C",
+    "F6ECB3762474EDA9D21B7022871920D1991BC93C"
+  ],
+  "goodsig_username": "DISPLAY_ONLY_NOT_IDENTITY",
+  "mandatory_refusal_keywords": [
+    "BADSIG",
+    "ERRSIG",
+    "NO_PUBKEY",
+    "FAILURE",
+    "REVKEYSIG",
+    "KEYREVOKED",
+    "EXPKEYSIG",
+    "EXPSIG"
+  ],
+  "informational_keyexpired": "May describe unused subkeys; documented signing-key expiry signal is EXPKEYSIG",
+  "revocation_freshness": "ABSENCE_OF_NEGATIVE_STATUS_IS_NOT_CURRENT_REVOCATION_FRESHNESS",
+  "repository_edits": false,
+  "sudo": false
+}

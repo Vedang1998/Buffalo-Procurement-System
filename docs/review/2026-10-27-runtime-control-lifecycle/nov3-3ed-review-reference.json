@@ -1,15 +1,32 @@
 {
-  "classification": "OWNER_REFERENCE_TO_EXTERNAL_REVIEW_REPORT_TEXT_UNAVAILABLE",
-  "reviewed_implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
-  "reviewed_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
-  "reported_by_owner": "Complete Claude review referenced in November3 instruction",
-  "report_text": "NOT_IN_CURRENT_MESSAGE_OR_REPOSITORY_SHARED_EVIDENCE",
-  "verdict": "NOT_INFERRED",
-  "attribution": "NOT_INFERRED_FROM_PREVIOUS_REVIEW",
-  "finding_dispositions": "UNCHANGED_PENDING_EXACT_REPORT",
-  "known_owner_instruction": "Implement narrow signed-payload parsing improvement; no finding number/severity fabricated",
-  "clarification": "One request for missing complete review text; no new broad review requested",
-  "latest_complete_recorded_review": "external-review-de4eda5-owner-report.md",
-  "target_timing": "NOT_PROVEN",
-  "historical_closures_preserved": true
+  "classification": "RECONCILED_FROM_OWNER_SUPPLIED_SAME_SESSION_CLAUDE_REPORT",
+  "source": "external-review-216169bf.json",
+  "carried_forward_3ed": {
+    "scope": "Same-session reviewer reconciliation supplied in this216report; not reconstructed original report",
+    "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "T1": "EXCESS_WORK_DEFECT_REPAIRED; FULL_ROUTE_TIMING_UNPROVEN",
+    "stage_cache": "CLOSED",
+    "parser": "CORRECT",
+    "H2_READY_digest": "CLOSED",
+    "P3": "READ_VERIFIED_PAYLOAD_INSTEAD_OF_RAW_ARMOR; ADDRESSED_AT_216169bf",
+    "find_inventory_margin": "ABOUT_850_BYTES",
+    "then_remaining": "EXACT8e3c_INDEX_AND_DURABLE_STORAGE_REQUIRED"
+  },
+  "no_additional_old_review_requested": true,
+  "historical_reference_at_9298b911": {
+    "classification": "OWNER_REFERENCE_TO_EXTERNAL_REVIEW_REPORT_TEXT_UNAVAILABLE",
+    "reviewed_implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "reviewed_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "reported_by_owner": "Complete Claude review referenced in November3 instruction",
+    "report_text": "NOT_IN_CURRENT_MESSAGE_OR_REPOSITORY_SHARED_EVIDENCE",
+    "verdict": "NOT_INFERRED",
+    "attribution": "NOT_INFERRED_FROM_PREVIOUS_REVIEW",
+    "finding_dispositions": "UNCHANGED_PENDING_EXACT_REPORT",
+    "known_owner_instruction": "Implement narrow signed-payload parsing improvement; no finding number/severity fabricated",
+    "clarification": "One request for missing complete review text; no new broad review requested",
+    "latest_complete_recorded_review": "external-review-de4eda5-owner-report.md",
+    "target_timing": "NOT_PROVEN",
+    "historical_closures_preserved": true
+  }
 }

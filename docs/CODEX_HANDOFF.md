@@ -10,6 +10,43 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 
 ## Verified current state
 
+### 2026-11-03 strict signature-status repair; retention access boundary
+
+Published/tested implementation `fb2dc86a43330f13376369c59db815dd03eb4d70`, tree `4fd42f3c33ccd5abcb923239bbee6d2a02ae6373`;
+ordinary branch-only push and fresh fetch verified. Main/PR24 unchanged. Current
+packet: `docs/review/2026-10-27-runtime-control-lifecycle/nov3-signature-status-candidate.md`.
+Full owner-supplied Claude216169bf report retained; signed-payload parsing accepted,
+replacement metadata independently verified, and supplied3ed carry-forward mapping
+recorded. Older missing-report notes below are superseded; no repeated old review.
+
+Signature-status P2 repaired pending ONE narrow Claude recheck. Exactly one
+GOODSIG/VALIDSIG pair/full pinned signer, revoked/expired/malformed/mismatched
+refusals, benign info retained; raw/payload pins and pre-install cleanup unchanged.
+Source-bound1244focused,307scrubbed,88related,10startup passed; populations overlap.
+Discovery2808/137modules is not execution/full-suite PASS. Actual localgpg2.4.7
+verified three retained releases plus47replacement records; current targetgpgv
+NOT_RUN(absent), real expiry/revocation testing NOT_RUN, freshness not established.
+Full/native runtime and canonical workflow remain NOT_RUN/OPEN; limits/M1 unchanged.
+
+Same82-object179277768B package revalidated locally, unchanged manifestd8ce40daf…
+(full SHA in packet). Authenticated Railway/S3 transfer unavailable: no active login,
+usable connector/CLI/config/env context;0uploads/0remote verified bytes. No duplicate
+login or auth material created. Exact approved storage identity cannot yet be
+remotely authenticated; storage authority persists and must not be requested again.
+
+Exact next action: use an available supported trusted transfer context to verify
+exact approved IDs/prefix, conditionally retain/reuse82objects and freshly download
+all bytes in an isolated context. Obtain narrow Claude216169bf..fb2dc86 review;
+no callable Claude channel/no automatic review or resumption. Then present the
+single exact replacement-metadata adoption/native-installation decision from the
+existing complete packet. Do not silently adopt4292c6f6/5f4cbfd1 pins. No remaining
+independent code defect in this narrow delta is known; authentication, external
+review and later owner installation decision block dependent effects. Installation,
+activation, credential release and purchasing remain disabled. Application source,
+lockfiles and canonical PHASE_STATUS unchanged. Historical evidence below retains
+its original executed/reviewed scope and failed gates.
+
+
 ### 2026-11-03 signed-payload repair and verified replacement metadata
 
 Published implementation `216169bfe82a4275ac78fcb54a716d400fe564c8`, tree `26ac6ec1743769085ea556a2392098bf63496e0c`; ordinary branch-only push

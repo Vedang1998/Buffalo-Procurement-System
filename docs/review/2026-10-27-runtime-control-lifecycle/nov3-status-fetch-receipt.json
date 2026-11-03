@@ -1,0 +1,16 @@
+[
+  {
+    "name": "DETAILS-2.4.7",
+    "url": "https://raw.githubusercontent.com/gpg/gnupg/gnupg-2.4.7/doc/DETAILS",
+    "bytes": 75977,
+    "sha256": "83e51cf7dbe13dc4ad95c37785803de0c0d040b8e02151030f814182c826056c",
+    "status": "FETCHED"
+  },
+  {
+    "name": "DETAILS-current",
+    "url": "https://raw.githubusercontent.com/gpg/gnupg/master/doc/DETAILS",
+    "bytes": 82590,
+    "sha256": "4da1cf0e6b09c4b5ccc57814709f896e35787565efea3f52df858bf9153d9296",
+    "status": "FETCHED"
+  }
+]

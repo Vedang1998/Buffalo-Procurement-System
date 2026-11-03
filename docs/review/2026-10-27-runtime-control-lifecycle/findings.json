@@ -408,10 +408,12 @@
     }
   ],
   "frozen_current_claude_target": {
-    "implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
-    "implementation_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
-    "baseline": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
-    "status": "TARGETED_DELTA_PREPARED_NOT_SENT_BY_TOOL",
+    "implementation": "fb2dc86a43330f13376369c59db815dd03eb4d70",
+    "implementation_tree": "4fd42f3c33ccd5abcb923239bbee6d2a02ae6373",
+    "baseline": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "baseline_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "status": "NARROW_RECHECK_PREPARED_NOT_SENT_BY_TOOL",
+    "scope": "Signature-status repair and provenance impact only",
     "historical_targets_preserved": true
   },
   "descendants_outside_frozen_review": [
@@ -459,7 +461,7 @@
       "credential_release": "WITHHELD"
     }
   ],
-  "latest_received_external_review": "external-review-de4eda5.json",
+  "latest_received_external_review": "external-review-216169bf.json",
   "remediation_findings": [
     {
       "id": "B1",
@@ -645,14 +647,27 @@
       ],
       "evidence": "oct29-memory-native-evidence.json",
       "remaining": "Independent delta review and supported-target machine evidence; no writer closure"
+    },
+    {
+      "id": "SIGNATURE-STATUS",
+      "severity": "P2",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "reviewed_finding_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+      "review_source": "external-review-216169bf.json",
+      "original_disposition": "OPEN",
+      "repair_commit": "fb2dc86a43330f13376369c59db815dd03eb4d70",
+      "repair_tree": "4fd42f3c33ccd5abcb923239bbee6d2a02ae6373",
+      "code": "hosted_synthetic_native_route.py:_verified_release_payload",
+      "tests": "Nine added registered methods; all8 negatives both orders, exact GOODSIG/VALIDSIG pairing/schema, benign information, connected pre-install/account refusal and FD/home cleanup; real local gpg2.4.7 on3 retained releases",
+      "limitations": "Injected statuses are not real expired/revoked-key verification; targetgpgv NOT_RUN; no revocation freshness claim; no writer VERIFIED_CLOSED"
     }
   ],
   "current_candidate": {
-    "commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
-    "tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
-    "evidence": "nov3-retention-provenance-evidence.json",
-    "status": "PUBLISHED_SIGNED_PAYLOAD_REPAIR; VERIFIED_METADATA_REPLACEMENT_NOT_ADOPTED; RETENTION_ACCESS_BLOCKED",
-    "independent_review": "3ed_REPORT_TEXT_UNAVAILABLE_AND_NEW_DELTA_PENDING",
+    "commit": "fb2dc86a43330f13376369c59db815dd03eb4d70",
+    "tree": "4fd42f3c33ccd5abcb923239bbee6d2a02ae6373",
+    "evidence": "nov3-status-evidence.json",
+    "status": "PUBLISHED_TESTED_SIGNATURE_STATUS_REPAIR",
+    "independent_review": "NARROW_RECHECK_PENDING_NOT_CALLED_BY_TOOL",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
     "full_authoritative": "NOT_RUN"
@@ -722,7 +737,7 @@
     }
   },
   "owner_received_e5e8_summary": "external-review-e5e8-owner-summary.json",
-  "review_status": "OWNER_REFERENCED_3ed_REPORT_UNAVAILABLE; NO_NEW_CLOSURES; SIGNED_PAYLOAD_DELTA_PENDING",
+  "review_status": "216169bf_SIGNED_PAYLOAD_ACCEPTED; SIGNATURE_STATUS_P2_REPAIRED_PENDING_NARROW_REVIEW_AT_fb2dc86",
   "new_native_capacity_finding": {
     "identifier": "NATIVE-FIXED-INPUT-CAPACITY",
     "status": "OPEN",
@@ -935,6 +950,13 @@
       "baseline": "34e8f3ad16ef31e8ecafc2d915b76f16a9571b98",
       "status": "REVIEW_RECEIVED_REQUEST_CHANGES",
       "previous_exact_targets_preserved": true
+    },
+    {
+      "implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
+      "implementation_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+      "baseline": "de4eda5fb6d7a8a586f415451dcb2ddc055536e4",
+      "status": "TARGETED_DELTA_PREPARED_NOT_SENT_BY_TOOL",
+      "historical_targets_preserved": true
     }
   ],
   "historical_candidates": [
@@ -969,6 +991,16 @@
       "privileged_activation": "DISABLED",
       "credential_release": "WITHHELD",
       "combined_capture": "NOT_TARGET_MEASURED",
+      "full_authoritative": "NOT_RUN"
+    },
+    {
+      "commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+      "tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+      "evidence": "nov3-retention-provenance-evidence.json",
+      "status": "PUBLISHED_SIGNED_PAYLOAD_REPAIR; VERIFIED_METADATA_REPLACEMENT_NOT_ADOPTED; RETENTION_ACCESS_BLOCKED",
+      "independent_review": "3ed_REPORT_TEXT_UNAVAILABLE_AND_NEW_DELTA_PENDING",
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD",
       "full_authoritative": "NOT_RUN"
     }
   ],
@@ -1050,22 +1082,25 @@
     "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
     "evidence": "nov1-t1-provenance-evidence.json",
     "decision": "nov1-native-installation-decision.json",
-    "M1_N7_H3_impact": "Targeted delta review required for changed import/stage cleanup dependencies; historical closures remain at original commits; no writer closure"
+    "M1_N7_H3_impact": "Targeted delta review required for changed import/stage cleanup dependencies; historical closures remain at original commits; no writer closure",
+    "external_disposition_at_exact_candidate": {
+      "scope": "Same-session reviewer reconciliation supplied in this216report; not reconstructed original report",
+      "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+      "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+      "T1": "EXCESS_WORK_DEFECT_REPAIRED; FULL_ROUTE_TIMING_UNPROVEN",
+      "stage_cache": "CLOSED",
+      "parser": "CORRECT",
+      "H2_READY_digest": "CLOSED",
+      "P3": "READ_VERIFIED_PAYLOAD_INSTEAD_OF_RAW_ARMOR; ADDRESSED_AT_216169bf",
+      "find_inventory_margin": "ABOUT_850_BYTES",
+      "then_remaining": "EXACT8e3c_INDEX_AND_DURABLE_STORAGE_REQUIRED"
+    }
   },
   "nov3_review_reference": {
-    "classification": "OWNER_REFERENCE_TO_EXTERNAL_REVIEW_REPORT_TEXT_UNAVAILABLE",
-    "reviewed_implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
-    "reviewed_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
-    "reported_by_owner": "Complete Claude review referenced in November3 instruction",
-    "report_text": "NOT_IN_CURRENT_MESSAGE_OR_REPOSITORY_SHARED_EVIDENCE",
-    "verdict": "NOT_INFERRED",
-    "attribution": "NOT_INFERRED_FROM_PREVIOUS_REVIEW",
-    "finding_dispositions": "UNCHANGED_PENDING_EXACT_REPORT",
-    "known_owner_instruction": "Implement narrow signed-payload parsing improvement; no finding number/severity fabricated",
-    "clarification": "One request for missing complete review text; no new broad review requested",
-    "latest_complete_recorded_review": "external-review-de4eda5-owner-report.md",
-    "target_timing": "NOT_PROVEN",
-    "historical_closures_preserved": true
+    "reconciled": true,
+    "source": "external-review-216169bf.json:carried_forward_3ed",
+    "scope": "Supplied same-session3ed disposition reconciliation; no request for repeated old review or invented original prose",
+    "supersedes_missing_report_status": true
   },
   "nov3_continuation": {
     "candidate": "216169bfe82a4275ac78fcb54a716d400fe564c8",
@@ -1084,6 +1119,78 @@
     "work_cleanup_seconds": [
       60,
       5
-    ]
+    ],
+    "external_disposition_at_exact_candidate": "SIGNED_PAYLOAD_ACCEPTED; REPLACEMENT_METADATA_INDEPENDENTLY_VERIFIED; NEW_SIGNATURE_STATUS_P2_OPEN; see external-review-216169bf.json"
+  },
+  "owner_received_216169bf_report": {
+    "classification": "ACTUAL_EXTERNAL_CLAUDE_REVIEW_OWNER_SUPPLIED",
+    "report": "external-review-216169bf-owner-report.md",
+    "report_sha256": "895202abcb54b2296cc5da9765b5da837e93893b083d775dbf79df70a12e0df8",
+    "format": "Full supplied report retained; plain-text list/table layout, no invented missing3ed prose",
+    "reviewer": {
+      "tool": "Claude Code",
+      "container": "2.1.317",
+      "session": "session_01JyrJEUAi36GJ6AfNcmBBxV",
+      "configured_model": "claude-opus-5-5",
+      "served_model": "claude-opus-5-5",
+      "effort": "high",
+      "attribution_source": "OWNER_SUPPLIED_REPORT_NOT_FRESH_CLAUDE_ACCOUNT_INSPECTION"
+    },
+    "reviewed_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "reviewed_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "checkpoint": "9298b911d7a90edcd8aa54b37cdead5c1d12130e",
+    "checkpoint_tree": "9a798a5abe1e2e94eda7cc1ab6741ef93fad21dd",
+    "baseline": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "verdict": "SIGNED_PAYLOAD_ACCEPTED_WITH_NEW_SIGNATURE_STATUS_P2_OPEN; REPLACEMENT_METADATA_INDEPENDENTLY_VERIFIED; NO_INSTALLATION_AUTHORITY",
+    "dispositions": {
+      "signed_payload_P3": "ACCEPTED_AT_216169bf",
+      "signature_status_P2": "OPEN_AT_216169bf",
+      "replacement_metadata": "INDEPENDENTLY_VERIFIED_47_OF_47_EXACT_TUPLES_AND_STANZAS_NOT_ADOPTED",
+      "retention": "NOT_REVIEWED_PENDING",
+      "installation": "NOT_AUTHORIZED"
+    },
+    "carried_forward_3ed": {
+      "scope": "Same-session reviewer reconciliation supplied in this216report; not reconstructed original report",
+      "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+      "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+      "T1": "EXCESS_WORK_DEFECT_REPAIRED; FULL_ROUTE_TIMING_UNPROVEN",
+      "stage_cache": "CLOSED",
+      "parser": "CORRECT",
+      "H2_READY_digest": "CLOSED",
+      "P3": "READ_VERIFIED_PAYLOAD_INSTEAD_OF_RAW_ARMOR; ADDRESSED_AT_216169bf",
+      "find_inventory_margin": "ABOUT_850_BYTES",
+      "then_remaining": "EXACT8e3c_INDEX_AND_DURABLE_STORAGE_REQUIRED"
+    },
+    "reviewer_execution": {
+      "focused": {
+        "discovered": 1235,
+        "executed": 1235,
+        "passed": 1235,
+        "failures": 0,
+        "errors": 0,
+        "reported_result": "Ran1235,OK",
+        "uid": 65534,
+        "log": "/tmp/claude-0/-home-user-Buffalo-Procurement-System/0f1b2919-2af2-576d-8608-bd347e8aa4f0/scratchpad/2161-focused-uid65534.txt",
+        "log_hash": "NOT_SUPPLIED"
+      },
+      "real_gpgv": true,
+      "replacement_records": 47,
+      "index_records_parsed": 7047,
+      "public_GETs": 6,
+      "uploads": 0,
+      "sudo": false,
+      "installation": false,
+      "account_or_service": false,
+      "Railway": false,
+      "cleanup": "DISPOSABLE_FIXTURES_REMOVED_AS_REPORTED"
+    },
+    "limitations": [
+      "No target hosted execution, timing, memory, installation or resource proof",
+      "No remote retention/access proof",
+      "No current revocation freshness established by byte-pinned keyring",
+      "No adoption/installation/credential/purchasing authority",
+      "Later changed descendants require targeted delta review"
+    ],
+    "narrow_next_scope": "Signature-status repair and effect on previously accepted provenance only; no broad architecture/history review"
   }
 }

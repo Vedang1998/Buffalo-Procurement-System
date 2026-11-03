@@ -1,0 +1,28 @@
+754: 
+755: *** KEY_CONSIDERED <fpr> <flags>
+756:     Issued to explain the lookup of a key.  FPR is the hexified
+757:     fingerprint of the primary key.  The bit values for FLAGS are:
+758: 
+759:     - 1 :: The key has not been selected.
+760:     - 2 :: All subkeys of the key are expired or have been revoked.
+761: 
+762: *** KEYEXPIRED <expire-timestamp>
+763:     The key has expired.  expire-timestamp is the expiration time in
+764:     seconds since Epoch.  This status line is not very useful because
+765:     it will also be emitted for expired subkeys even if this subkey is
+766:     not used.  To check whether a key used to sign a message has
+767:     expired, the EXPKEYSIG status line is to be used.
+768: 
+769:     Note, that the TIMESTAMP may either be a number of seconds since
+770:     Epoch or an ISO 8601 string which can be detected by the presence
+771:     of the letter 'T'.
+772: 
+773: *** KEYREVOKED
+774:     The used key has been revoked by its owner.  No arguments yet.
+775: 
+776: *** NO_PUBKEY  <long keyid>
+777:     The public key is not available.  Note the arg should in general
+778:     not be used because it is better to take it from the ERRSIG
+779:     status line which is printed right before this one.
+780: 
+781: *** NO_SECKEY  <long keyid>

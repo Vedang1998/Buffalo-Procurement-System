@@ -1,0 +1,89 @@
+436: *** GOODSIG  <long_keyid_or_fpr>  <username>
+437:     The signature with the keyid is good.  For each signature only one
+438:     of the codes GOODSIG, BADSIG, EXPSIG, EXPKEYSIG, REVKEYSIG or
+439:     ERRSIG will be emitted.  In the past they were used as a marker
+440:     for a new signature; new code should use the NEWSIG status
+441:     instead.  The username is the primary one encoded in UTF-8 and %XX
+442:     escaped. The fingerprint may be used instead of the long keyid if
+443:     it is available.  This is the case with CMS and might eventually
+444:     also be available for OpenPGP.
+445: 
+446: *** EXPSIG  <long_keyid_or_fpr>  <username>
+447:     The signature with the keyid is good, but the signature is
+448:     expired. The username is the primary one encoded in UTF-8 and %XX
+449:     escaped. The fingerprint may be used instead of the long keyid if
+450:     it is available.  This is the case with CMS and might eventually
+451:     also be available for OpenPGP.
+452: 
+453: *** EXPKEYSIG  <long_keyid_or_fpr> <username>
+454:     The signature with the keyid is good, but the signature was made
+455:     by an expired key. The username is the primary one encoded in
+456:     UTF-8 and %XX escaped.  The fingerprint may be used instead of the
+457:     long keyid if it is available.  This is the case with CMS and
+458:     might eventually also be available for OpenPGP.
+459: 
+460: *** REVKEYSIG  <long_keyid_or_fpr>  <username>
+461:     The signature with the keyid is good, but the signature was made
+462:     by a revoked key. The username is the primary one encoded in UTF-8
+463:     and %XX escaped. The fingerprint may be used instead of the long
+464:     keyid if it is available.  This is the case with CMS and might
+465:     eventually also beñ available for OpenPGP.
+466: 
+467: *** BADSIG  <long_keyid_or_fpr>  <username>
+468:     The signature with the keyid has not been verified okay.  The
+469:     username is the primary one encoded in UTF-8 and %XX escaped. The
+470:     fingerprint may be used instead of the long keyid if it is
+471:     available.  This is the case with CMS and might eventually also be
+472:     available for OpenPGP.
+473: 
+474: *** ERRSIG  <keyid>  <pkalgo> <hashalgo> <sig_class> <time> <rc> <fpr>
+475:     It was not possible to check the signature.  This may be caused by
+476:     a missing public key or an unsupported algorithm.  A RC of 4
+477:     indicates unknown algorithm, a 9 indicates a missing public
+478:     key. The other fields give more information about this signature.
+479:     sig_class is a 2 byte hex-value.  The fingerprint may be used
+480:     instead of the long_keyid_or_fpr if it is available.  This is the
+481:     case with gpgsm and might eventually also be available for
+482:     OpenPGP.  The ERRSIG line has FPR filed which is only available
+483:     since 2.2.7; that FPR may either be missing or - if the signature
+484:     has no fingerprint as meta data.
+485: 
+486:     Note, that TIME may either be the number of seconds since Epoch or
+487:     an ISO 8601 string.  The latter can be detected by the presence of
+488:     the letter 'T'.
+489: 
+490: *** VALIDSIG <args>
+491: 
+492:     The args are:
+493: 
+494:     - <fingerprint_in_hex>
+495:     - <sig_creation_date>
+496:     - <sig-timestamp>
+497:     - <expire-timestamp>
+498:     - <sig-version>
+499:     - <reserved>
+500:     - <pubkey-algo>
+501:     - <hash-algo>
+502:     - <sig-class>
+503:     - [ <primary-key-fpr> ]
+504: 
+505:     This status indicates that the signature is cryptographically
+506:     valid. This is similar to GOODSIG, EXPSIG, EXPKEYSIG, or REVKEYSIG
+507:     (depending on the date and the state of the signature and signing
+508:     key) but has the fingerprint as the argument. Multiple status
+509:     lines (VALIDSIG and the other appropriate *SIG status) are emitted
+510:     for a valid signature.  All arguments here are on one long line.
+511:     sig-timestamp is the signature creation time in seconds after the
+512:     epoch. expire-timestamp is the signature expiration time in
+513:     seconds after the epoch (zero means "does not
+514:     expire"). sig-version, pubkey-algo, hash-algo, and sig-class (a
+515:     2-byte hex value) are all straight from the signature packet.
+516:     PRIMARY-KEY-FPR is the fingerprint of the primary key or identical
+517:     to the first argument.  This is useful to get back to the primary
+518:     key without running gpg again for this purpose.
+519: 
+520:     The primary-key-fpr parameter is used for OpenPGP and not
+521:     available for CMS signatures.  The sig-version as well as the sig
+522:     class is not defined for CMS and currently set to 0 and 00.
+523: 
+524:     Note, that *-TIMESTAMP may either be a number of seconds since

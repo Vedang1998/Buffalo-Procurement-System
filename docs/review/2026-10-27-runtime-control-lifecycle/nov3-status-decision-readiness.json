@@ -1,0 +1,131 @@
+{
+  "schema": "BUFFALO_SINGLE_INSTALLATION_DECISION_READINESS_UPDATE_V1",
+  "candidate": "fb2dc86a43330f13376369c59db815dd03eb4d70",
+  "tree": "4fd42f3c33ccd5abcb923239bbee6d2a02ae6373",
+  "status": "NOT_READY_AUTHENTICATED_RETENTION_AND_NARROW_REVIEW_PENDING",
+  "prior_complete_decision": "nov3-installation-decision-status.json",
+  "unchanged_complete_inventory": {
+    "record": "nov1-native-installation-decision.json",
+    "record_sha256": "f036e0a0330f83e21f4fa9be0886a9d29dec493012fbca681778da674d551bc5",
+    "implementation_manifest_sha256": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070",
+    "selected_files": 832,
+    "selected_artifacts": 66,
+    "artifact_bytes": 175344809,
+    "all_versions_file_hashes_aliases_modes_unchanged": true
+  },
+  "limits": {
+    "shared_work_seconds": 60,
+    "cleanup_seconds": 5,
+    "pg_phase_bytes": 167772160,
+    "diagnostic_application_pg_only_and_per_file_bytes": 83886080,
+    "stage_bytes": 134217728,
+    "entries": 3000,
+    "child_memory": 268435456,
+    "child_processes": 2,
+    "aggregate_service_memory": 536870912,
+    "aggregate_tasks": 64,
+    "namespace_seconds": 20
+  },
+  "full_composition": {
+    "evidence": "nov3-status-fb2dc86-full-static-accounting.json",
+    "phase": {
+      "regular_files": 886,
+      "entries_with_parents": 976,
+      "regular_bytes": 152247532,
+      "identity_bytes": 132158,
+      "sentinel_bytes": 341,
+      "canonical_codec_manifest_bytes": 317544,
+      "codec_header_bytes": 8,
+      "sealed_wire_bytes": 152565084,
+      "generic_codec_payload_limit_unchanged": 536870912,
+      "generic_codec_manifest_limit_unchanged": 4194304,
+      "cap_bytes": 167772160,
+      "headroom_bytes": 15524628,
+      "within_bytes_and_entries": true
+    },
+    "classification": "EXACT_INVENTORY_DERIVED_FILE_BYTES_AND_CANONICAL_IDENTITY_LENGTH_NOT_CAPTURE_OR_MEMORY_PROOF"
+  },
+  "trust_root": {
+    "bootstrap": "OFFICIAL_UBUNTU_PUBLISHER_HTTPS_NOT_LOCAL_OWNERTRUST",
+    "bytes": 3607,
+    "protection": "HELD_FULLY_SEALED_READONLY_MEMFD",
+    "sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C"
+  },
+  "python_assurance": "Exact CPython3.13.5 actions/python-versions3.13.5-15601068749 HTTPS publisher hash-list plus GitHub asset digest; signed build attestation NOT_ESTABLISHED",
+  "metadata_replacement": {
+    "record": "nov3-replacement-metadata-candidate.json",
+    "record_sha256": "00616dfb9a91157da8f05a4c98740bc2b0cb96908b5fac50864482a7ec9e485e",
+    "verified_tuples": 47,
+    "unchanged_complete_stanza_hashes": 47,
+    "candidate_signed_release": {
+      "signed_sha256": "5f4cbfd1daf09c5c6af3eeb67fe923b15010f28d9189b64995e2c0f68eec7b77",
+      "signed_bytes": 126125,
+      "verified_payload_sha256": "a79193f3fbeb3d71cd949a59de3e99b384e8e2b03d73538ed79a696b5aab2940",
+      "verified_payload_bytes": 125243,
+      "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+      "gpg_returncode": 0,
+      "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+      "keyring_bytes": 3607,
+      "keyring_source": "Exact owner-proposed publisher HTTPS pinned keyring; target trust-root comparison not newly performed",
+      "protected_inputs": "held readonly fully sealed memfds",
+      "tool": "/usr/bin/gpg",
+      "tool_version": "gpg (GnuPG) 2.4.7",
+      "tool_sha256": "7c9d2f9416aabcd10199e2984439f49612644a948279ac56bdf70d69c8958ddf",
+      "signature_math": "VERIFIED",
+      "installation_authority": false,
+      "temporary_gpg_home_removed": true,
+      "input_descriptors_closed": true
+    },
+    "candidate_index": {
+      "suite": "noble-updates",
+      "component": "main",
+      "sha256": "4292c6f61b84c8685c73f6db585fce9974f293a0e62fb070a4c7a2572e333996",
+      "bytes": 1407612,
+      "uncompressed_bytes": 7615549,
+      "uncompressed_sha256": "3047f3f8a2ed65735ad0821d8c4bb5f7afd1720737abff19d0c11d3064561d30",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/by-hash/SHA256/4292c6f61b84c8685c73f6db585fce9974f293a0e62fb070a4c7a2572e333996"
+    },
+    "accepted_original_index": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+    "adoption": "NOT_GRANTED",
+    "proposed_snapshot_policy": "BUFFALO_FIXED_PUBLISHER_SNAPSHOT_2026_11_03_METADATA_ONLY_V1_PENDING_OWNER_ADOPTION",
+    "permitted_proposed_delta": "Only47updates records index/release metadata and explicit snapshot reference; artifact/member/record hashes and all66versions unchanged"
+  },
+  "effects": {
+    "installation": "One fresh /run/buffalo-native-<32hex>/view tree; verified platform native mkdir/dd/sha256sum/chmod/stat/find/rm/rmdir only. No recursive root deletion. Unprivileged stage per artifact and dpkg-deb fsys-tarfile/gzip decode, no package installation or scripts.",
+    "measurement": "One exact private system-manager view/network-disabled unprivileged selected-Python child with externally bound PID/start, namespace, maps, backing, source and limits. No account creation before valid NativePhaseReadiness.",
+    "service": "Existing dedicated per-run non-login UID/GID, original-host ownership/IPC/source checks; same exact request/view/interpreter handoff; fixed PG --version only. No caller command, network, database startup, secret or browser.",
+    "cleanup": "Drain registered measurement/service consumers first; exact-owned inode/descendant checks; nonrecursive file batches<=64 and depth-group directories; foreign/pending/uncertain state retained. Temporary directory removal only when exact and empty."
+  },
+  "exact_entry": "procurement.tools.hosted_synthetic_native_route.installation_measurement_entry([repository,event,ref,commit],artifact_directory)",
+  "independent_review": "SIGNED_PAYLOAD_AND47TUPLES_ACCEPTED_AT216169bf; STATUS_REPAIR_REVIEW_PENDING_ATfb2dc86a43330f13376369c59db815dd03eb4d70",
+  "retention": {
+    "evidence": "nov3-status-transfer-access.json",
+    "manifest_sha256": "d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+    "objects": 82,
+    "bytes": 179277768,
+    "local_every_object_hash_size": "PASS",
+    "remote_objects": 0,
+    "remote_bytes": 0,
+    "fresh_isolated_download": "NOT_RUN",
+    "authority": "ALREADY_GRANTED_NO_REPEAT_STORAGE_APPROVAL"
+  },
+  "remaining_owner_policy_decisions": [
+    "Exact November3 metadata-only adoption and pinned-snapshot freshness",
+    "Previously proposed native trust-root/assurance and installation effects in one consolidated decision after evidence is complete"
+  ],
+  "signature_freshness": "No historical-expiry bypass, automatic keyring refresh or current revocation freshness claim. Pinned-snapshot policy still requires owner adoption. Gpgv documents no expired/revoked-key checking; contradictory statuses are refused if emitted.",
+  "activation": "DISABLED",
+  "metadata_adoption": "NOT_GRANTED",
+  "installation_authority": "NOT_GRANTED",
+  "credential_release": "DISABLED",
+  "target_measurements": {
+    "protected_selected_interpreter_READY_capture_final_maps": "NOT_RUN",
+    "native_pipeline_memory": "NOT_RUN",
+    "whole_service_memory": "NOT_RUN",
+    "fixed_postgres_execution": "NOT_RUN",
+    "real_installation_and_cleanup": "NOT_RUN"
+  },
+  "M1": "MANDATORY_BEFORE_ACCOUNT",
+  "not_installation_or_application_acceptance": true
+}

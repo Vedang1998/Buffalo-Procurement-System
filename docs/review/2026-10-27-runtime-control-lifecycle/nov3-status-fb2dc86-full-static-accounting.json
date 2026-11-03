@@ -1,0 +1,276 @@
+{
+  "source_commit": "fb2dc86a43330f13376369c59db815dd03eb4d70",
+  "source_tree": "4fd42f3c33ccd5abcb923239bbee6d2a02ae6373",
+  "classification": "EXACT_INVENTORY_DERIVED_FILE_BYTES_AND_CANONICAL_IDENTITY_LENGTH_NOT_CAPTURE_OR_MEMORY_PROOF",
+  "source_projection_contains_required_prospective_inventory": true,
+  "native_regular_bytes": 149567173,
+  "layout_renames": 59,
+  "source_projection_files": 47,
+  "source_projection_bytes": 2547573,
+  "fixed_generated_bytes": 287,
+  "generated_configuration": {
+    "/etc/passwd": {
+      "bytes": 86,
+      "sha256": "6e84bc520b03faf975f01c7c445d62ea015830b31966c38ffc4d23737f47f4bd"
+    },
+    "/etc/group": {
+      "bytes": 19,
+      "sha256": "291584c6cff419e2804407b1c7f381174446960ae5989d87bf7d9d35054b6819"
+    },
+    "/etc/nsswitch.conf": {
+      "bytes": 40,
+      "sha256": "616c92fe38aee6d2c529e6e44c58f35e400f26e92860e626fc054cc4345b6d40"
+    },
+    "/etc/hosts": {
+      "bytes": 34,
+      "sha256": "b69b2c741be48691edabe3771c644c70473ccd6aa8effd9f17cc07fa129917f9"
+    },
+    "/buffalo-runtime/openssl.cnf": {
+      "bytes": 108,
+      "sha256": "93287fac77cf8a320e25cb9fef49e4275e22f199da8ce426ca912404b256f876"
+    }
+  },
+  "source_rows": {
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_source.py": {
+      "bytes": 18524,
+      "sha256": "14a7ad505e3d0b59c1f07989a0ee4c9f2a58b5f75d2fad285094bed0ce4fca25"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_capability.py": {
+      "bytes": 17350,
+      "sha256": "87029c47d468032308562298af829ff297fc64c382ac49028672606da27f633b"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_namespace.py": {
+      "bytes": 61213,
+      "sha256": "88f4d807426720140cac3cbc014a4a535232a8864c55b6d7e163a2dae17adfe2"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_projection.py": {
+      "bytes": 14408,
+      "sha256": "a7dd7716851985c0897e6ed9c7e40e2ddff0a146e1b8a65ab143c0afe100d64b"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_cgroup.py": {
+      "bytes": 24120,
+      "sha256": "afb4853db1324453c804c79695b60b115f238ca3442ad0225c9505256d27b2da"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_host.py": {
+      "bytes": 9738,
+      "sha256": "622a2213d398f87eb7c26de1ae3f0ff9a899029fc8138c079088041a44705e24"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_user_service.py": {
+      "bytes": 6292,
+      "sha256": "fdac10910fcd344d0205324d87ac306cd241e6bb3240210c6d3e49eb421e213a"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_bootstrap.py": {
+      "bytes": 34457,
+      "sha256": "0365e04a7aae08ae8a4e9b6441ba46b5f15204c0f19e510e1518157152cc1c3e"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_launcher.py": {
+      "bytes": 6821,
+      "sha256": "05b6a26804710e29fff73045d06a77fe64576af517d5bd25a63eb0c37f2513f7"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_identity.py": {
+      "bytes": 30449,
+      "sha256": "a0755d11836d3df174991555ee0c00f9f2342efbd3aade354047aeb125b2d2cf"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_account_preflight.py": {
+      "bytes": 22738,
+      "sha256": "dec48ea13a32d83c6d6f927386b99391b2929692b9703e2c58bf52753a65b6cf"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_pid1_regression.py": {
+      "bytes": 22562,
+      "sha256": "f4a9fdf257d2a18e1961933a04654ffbd9d124cccbb218816b8cbcb76e72c596"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_runtime.py": {
+      "bytes": 41289,
+      "sha256": "7d4388499fd98bff2bdbe84148369795be31ee1dbc4fae18e9cbcfa8af9fb77b"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_inputs.py": {
+      "bytes": 53120,
+      "sha256": "720227cd42e0e5606fee1693cc4ea12db234a85c3536f385c0faa05969bb8da8"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_installation.py": {
+      "bytes": 23860,
+      "sha256": "b6516daecfdcbbe11e74bbbd1760053b3b67d3ca6102fd64178c353f69ec2028"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_measurement.py": {
+      "bytes": 25851,
+      "sha256": "40b63418972c76dd6ddb78a1065094800b0a397873f96c634eff1c2f2637b229"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_route.py": {
+      "bytes": 25888,
+      "sha256": "7c26cf59dd07fb57b96224fe2dc1a9f5344e72fe5e44fc7e8584fb60de3e6e3e"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_observation.py": {
+      "bytes": 9507,
+      "sha256": "67f6c9bf5deda9537d750f3ea3e88089d750dd14879bdae2ca80092ffec18ab5"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_native_inputs.json": {
+      "bytes": 320782,
+      "sha256": "2c75d0d2f3adf65cfbc5f76e4479e0a4a6697aaee32e1971442981846192a521"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_native_proposed_inventory.json": {
+      "bytes": 969351,
+      "sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_native_installation_manifest.json": {
+      "bytes": 2092,
+      "sha256": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_native_runpath.json": {
+      "bytes": 22225,
+      "sha256": "ac4fb80664ff012a4625cee81f8627e27dba045f35a5fabfb84cfbfb069d31c1"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_runtime.py": {
+      "bytes": 35855,
+      "sha256": "8d5d3c71db81a1009b37c343245ab2a642de6601fd520c99252923e3c60d8289"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_identity.py": {
+      "bytes": 8134,
+      "sha256": "fd971ff43cdd485626f7342d8b2d0f18ff19a782d74e6f676f103a226437032a"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_image.py": {
+      "bytes": 10801,
+      "sha256": "fdc3e8363264e479e2091a2c859e3135a22fbf0ece33a815f42441b9b8fd9749"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_version.py": {
+      "bytes": 24044,
+      "sha256": "392b57a13bcae1bd5b9688cf10390dcc249b82d60f928484d3adf5dbcaa9f87a"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_namespace_prerequisite.py": {
+      "bytes": 7958,
+      "sha256": "2dca4cbdc69f5ab39913e8ca06a34051ca1363979b0ac846e9537c8ca714c4b9"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_core.py": {
+      "bytes": 3093,
+      "sha256": "de2f4ff2ebd4f194f91c81623de03d0f3e6f39c974a48ae6cdd2fde87afe1390"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_wheels.py": {
+      "bytes": 10146,
+      "sha256": "4808a61e942dc0692272ff693bdbb8fa533183751c2ab2d6d29eed6f4ba800dd"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_application_runtime.py": {
+      "bytes": 7047,
+      "sha256": "2f3e4384a129446773e3f2d050c0da0f667fa30bc24ac454183c473f5c05e686"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_runtime_regression.py": {
+      "bytes": 27499,
+      "sha256": "03f1d0c24e9bfe6d551cfe6fdb9b369a4f3bf2ef5d4c9c79eeb21d720d67be7b"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_worker.py": {
+      "bytes": 10874,
+      "sha256": "5a87e70e386f52c54f68e9cda7a6594a69ab3e82a82179ee820937a74be38137"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_observer.py": {
+      "bytes": 30343,
+      "sha256": "14cfd93cd2ce7d15eb99ba8e27a6d2dcd3ee5dd01467a2c68a4165319cba2ebd"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_quarantine.py": {
+      "bytes": 8476,
+      "sha256": "8748eccbec32e64b1440474c211f8ab3558856d65ba22fa2bcaf0970bda9c3e0"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_lifecycle.py": {
+      "bytes": 13320,
+      "sha256": "ea3c7ca75ab7f40e5f62358313ffd016fb1cee2da09092e055051b8cfcc5e289"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_artifacts.py": {
+      "bytes": 13192,
+      "sha256": "73413e90babb5af4510888d0f7b9350e10a80208f3e67fcbe0979029f712bf87"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_controls.py": {
+      "bytes": 14042,
+      "sha256": "09f1cfe4496cd708c3842df152cc768756abe6d7262aa3de0a29412bcc1a0ba5"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_evidence.py": {
+      "bytes": 11380,
+      "sha256": "c13a9eadd0b36232d782aa0b7a7abc854c4bd866bbd425c25745ebaeda774e89"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_forecast.py": {
+      "bytes": 10492,
+      "sha256": "772231a23f12eb1d5449f2b5d98d980de8c1b40c35f8b279f9a8797e2ef0c384"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_authority.py": {
+      "bytes": 15780,
+      "sha256": "88bfe4897c5aa18533b0f3e676f56d0fc987e073fd95a7ee88ee39a10ccb8b39"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_restart_evidence.py": {
+      "bytes": 5424,
+      "sha256": "71b014661f3525c895ff47c087d5924e34899a1b7e759130230342d025ce4263"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_toc.py": {
+      "bytes": 17822,
+      "sha256": "8f5ca1e73315279fd58cae11c526910c6418bc96f50cde414da20c513ecdfe33"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_inputs.py": {
+      "bytes": 15266,
+      "sha256": "295ec80b05f2ec63b1e7caa02841adc3f124ed484e4067452c3af698aae5919c"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_storage.py": {
+      "bytes": 9954,
+      "sha256": "c6f79465c6a63423d99f161a4f59c89c707520aa17a727b81f1376dc9bae7e00"
+    },
+    "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_snapshot.py": {
+      "bytes": 7669,
+      "sha256": "e48246bb8cabb3056686e7576efdca89f808748fc65ceff87107004873c8055e"
+    },
+    "/opt/buffalo-hosted/procurement/tools/run_local_staging_acceptance.py": {
+      "bytes": 465661,
+      "sha256": "e2d459e55b6ce07c8fa438dbcf8799f2daf837ad0d8ad6400aa5009b83d3822c"
+    },
+    "/opt/buffalo-hosted/procurement/tools/run_local_staging_browser_worker.py": {
+      "bytes": 664,
+      "sha256": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2"
+    }
+  },
+  "results": {
+    "diagnostic": {
+      "regular_files": 732,
+      "entries_with_parents": 796,
+      "regular_bytes": 81648234,
+      "identity_bytes": 104982,
+      "sentinel_bytes": 341,
+      "canonical_codec_manifest_bytes": 264014,
+      "codec_header_bytes": 8,
+      "sealed_wire_bytes": 81912256,
+      "generic_codec_payload_limit_unchanged": 536870912,
+      "generic_codec_manifest_limit_unchanged": 4194304,
+      "cap_bytes": 83886080,
+      "headroom_bytes": 2237846,
+      "within_bytes_and_entries": true
+    },
+    "postgres": {
+      "regular_files": 165,
+      "entries_with_parents": 196,
+      "regular_bytes": 80524891,
+      "identity_bytes": 27668,
+      "sentinel_bytes": 341,
+      "canonical_codec_manifest_bytes": 58001,
+      "codec_header_bytes": 8,
+      "sealed_wire_bytes": 80582900,
+      "generic_codec_payload_limit_unchanged": 536870912,
+      "generic_codec_manifest_limit_unchanged": 4194304,
+      "cap_bytes": 83886080,
+      "headroom_bytes": 3361189,
+      "within_bytes_and_entries": true
+    },
+    "phase": {
+      "regular_files": 886,
+      "entries_with_parents": 976,
+      "regular_bytes": 152247532,
+      "identity_bytes": 132158,
+      "sentinel_bytes": 341,
+      "canonical_codec_manifest_bytes": 317544,
+      "codec_header_bytes": 8,
+      "sealed_wire_bytes": 152565084,
+      "generic_codec_payload_limit_unchanged": 536870912,
+      "generic_codec_manifest_limit_unchanged": 4194304,
+      "cap_bytes": 167772160,
+      "headroom_bytes": 15524628,
+      "within_bytes_and_entries": true
+    }
+  },
+  "identity_placeholder_scope": "Only fixed-length generation/input-bundle digest slots. No bundle digest/generation/execution is claimed. Canonical JSON length is invariant over valid hexadecimal values.",
+  "source_filter_correction": "Required proposed inventory included explicitly; if false above this is corrected-design accounting, not actual old capture output.",
+  "limits_changed": false,
+  "actual_capture": "NOT_RUN",
+  "memory_readiness": "NOT_PROVEN",
+  "execution_authority": false
+}

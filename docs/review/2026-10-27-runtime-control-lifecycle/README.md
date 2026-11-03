@@ -1,3 +1,18 @@
+# Current signature-status repair and retention boundary
+
+Implementation `fb2dc86a43330f13376369c59db815dd03eb4d70`, tree `4fd42f3c33ccd5abcb923239bbee6d2a02ae6373`.
+Use [the narrow review packet](nov3-signature-status-candidate.md),
+[received complete Claude report](external-review-216169bf-owner-report.md),
+[evidence manifest](nov3-status-evidence.json), and
+[consolidated decision readiness](nov3-status-decision-readiness.json).
+Signed payload and replacement metadata accepted at216169bf; new signature-status
+repair awaits its own narrow review. The3ed carried-forward dispositions are now
+supplied and reconciled.82objects179277768B intact locally; authenticated transfer
+unavailable,0remote objects verified. No duplicate login, metadata adoption,
+installation, activation or credential release. Earlier sections are historical.
+
+---
+
 # Current November3 retention/provenance continuation
 
 Implementation `216169bfe82a4275ac78fcb54a716d400fe564c8`, tree `26ac6ec1743769085ea556a2392098bf63496e0c`.
