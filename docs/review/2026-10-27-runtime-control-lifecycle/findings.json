@@ -447,6 +447,16 @@
       ],
       "privileged_activation": "DISABLED",
       "credential_release": "WITHHELD"
+    },
+    {
+      "material_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+      "material_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+      "baseline": "3ed8222244cbcac4b982a0116db566fe07839d16",
+      "scope": "Verifier-emitted signed payload bound to existing payload digest; six causal regressions; actual replacement metadata evidence and granted retention authority/access limitation",
+      "status": "REPAIRED_PENDING_REVIEW",
+      "frozen_3ed_target_preserved": true,
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD"
     }
   ],
   "latest_received_external_review": "external-review-de4eda5.json",
@@ -638,14 +648,13 @@
     }
   ],
   "current_candidate": {
-    "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
-    "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
-    "evidence": "nov1-t1-provenance-evidence.json",
-    "status": "FROZEN_PROVENANCE_AND_RETENTION_BLOCKED_INSTALLATION_CANDIDATE",
-    "independent_review": "PENDING_DELTA_FROM_de4eda5",
+    "commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "evidence": "nov3-retention-provenance-evidence.json",
+    "status": "PUBLISHED_SIGNED_PAYLOAD_REPAIR; VERIFIED_METADATA_REPLACEMENT_NOT_ADOPTED; RETENTION_ACCESS_BLOCKED",
+    "independent_review": "3ed_REPORT_TEXT_UNAVAILABLE_AND_NEW_DELTA_PENDING",
     "privileged_activation": "DISABLED",
     "credential_release": "WITHHELD",
-    "combined_capture": "NOT_TARGET_MEASURED",
     "full_authoritative": "NOT_RUN"
   },
   "prepared_combined_review_target": {
@@ -713,7 +722,7 @@
     }
   },
   "owner_received_e5e8_summary": "external-review-e5e8-owner-summary.json",
-  "review_status": "REQUEST_CHANGES_AT_de4eda5; CURRENT_DELTA_PENDING",
+  "review_status": "OWNER_REFERENCED_3ed_REPORT_UNAVAILABLE; NO_NEW_CLOSURES; SIGNED_PAYLOAD_DELTA_PENDING",
   "new_native_capacity_finding": {
     "identifier": "NATIVE-FIXED-INPUT-CAPACITY",
     "status": "OPEN",
@@ -950,6 +959,17 @@
       "credential_release": "WITHHELD",
       "combined_capture": "NOT_TARGET_MEASURED",
       "full_authoritative": "NOT_RUN"
+    },
+    {
+      "commit": "3ed8222244cbcac4b982a0116db566fe07839d16",
+      "tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+      "evidence": "nov1-t1-provenance-evidence.json",
+      "status": "FROZEN_PROVENANCE_AND_RETENTION_BLOCKED_INSTALLATION_CANDIDATE",
+      "independent_review": "PENDING_DELTA_FROM_de4eda5",
+      "privileged_activation": "DISABLED",
+      "credential_release": "WITHHELD",
+      "combined_capture": "NOT_TARGET_MEASURED",
+      "full_authoritative": "NOT_RUN"
     }
   ],
   "owner_received_de4eda5_report": {
@@ -1031,5 +1051,39 @@
     "evidence": "nov1-t1-provenance-evidence.json",
     "decision": "nov1-native-installation-decision.json",
     "M1_N7_H3_impact": "Targeted delta review required for changed import/stage cleanup dependencies; historical closures remain at original commits; no writer closure"
+  },
+  "nov3_review_reference": {
+    "classification": "OWNER_REFERENCE_TO_EXTERNAL_REVIEW_REPORT_TEXT_UNAVAILABLE",
+    "reviewed_implementation": "3ed8222244cbcac4b982a0116db566fe07839d16",
+    "reviewed_tree": "3c51022c717f730d9d63d7042c4edc1db678ffc0",
+    "reported_by_owner": "Complete Claude review referenced in November3 instruction",
+    "report_text": "NOT_IN_CURRENT_MESSAGE_OR_REPOSITORY_SHARED_EVIDENCE",
+    "verdict": "NOT_INFERRED",
+    "attribution": "NOT_INFERRED_FROM_PREVIOUS_REVIEW",
+    "finding_dispositions": "UNCHANGED_PENDING_EXACT_REPORT",
+    "known_owner_instruction": "Implement narrow signed-payload parsing improvement; no finding number/severity fabricated",
+    "clarification": "One request for missing complete review text; no new broad review requested",
+    "latest_complete_recorded_review": "external-review-de4eda5-owner-report.md",
+    "target_timing": "NOT_PROVEN",
+    "historical_closures_preserved": true
+  },
+  "nov3_continuation": {
+    "candidate": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "signed_payload": "IMPLEMENTED_TESTED_PENDING_REVIEW; raw signed hash and existing verified payload pin retained",
+    "provenance": "VERIFIED_ALL47_UNCHANGED_TUPLES_AND_STANZA_HASHES_IN_REAL_SIGNED_REPLACEMENT; ACCEPTED_PINS_UNCHANGED",
+    "retention_authority": "OWNER_GRANTED_EXACT_EXISTING_BUCKET_PREFIX_200MiB",
+    "retention_result": "0REMOTE_OBJECTS; AUTHENTICATED_TRANSFER_UNAVAILABLE",
+    "planned_objects": 82,
+    "planned_bytes": 179277768,
+    "remote_readback": "NOT_RUN",
+    "target_timing_memory": "NOT_PROVEN",
+    "evidence": "nov3-retention-provenance-evidence.json",
+    "decision": "nov3-installation-decision-status.json",
+    "M1_before_account": "UNCHANGED_MANDATORY",
+    "work_cleanup_seconds": [
+      60,
+      5
+    ]
   }
 }

@@ -1,0 +1,7 @@
+{
+  "url": "https://raw.githubusercontent.com/gpg/gnupg/master/doc/gpgv.texi",
+  "sha256": "48ef6858897511ba28d63ae00d03ba9ae2c8e44add9d81bd669bf4475c917c6c",
+  "bytes": 5567,
+  "scope": "Upstream maintained source documentation, not locally executed gpgv or binary publisher attestation",
+  "documented_output": "--output file / -o file; use - for stdout; get signed text from cleartext/binary signature"
+}

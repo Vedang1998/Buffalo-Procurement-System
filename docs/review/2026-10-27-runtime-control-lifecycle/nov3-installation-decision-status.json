@@ -1,0 +1,452 @@
+{
+  "schema": "BUFFALO_NATIVE_INSTALLATION_DECISION_CONTINUATION_V1",
+  "candidate_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+  "candidate_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+  "status": "NOT_READY_FOR_ACTIVATION",
+  "unchanged_complete_file_and_artifact_inventory": {
+    "record": "nov1-native-installation-decision.json",
+    "record_sha256": "f036e0a0330f83e21f4fa9be0886a9d29dec493012fbca681778da674d551bc5",
+    "implementation_manifest_sha256": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070",
+    "selected_files": 832,
+    "selected_artifacts": 66,
+    "artifact_bytes": 175344809,
+    "all_versions_file_hashes_aliases_modes_unchanged": true
+  },
+  "limits": {
+    "shared_work_seconds": 60,
+    "cleanup_seconds": 5,
+    "pg_phase_bytes": 167772160,
+    "diagnostic_application_pg_only_and_per_file_bytes": 83886080,
+    "stage_bytes": 134217728,
+    "entries": 3000,
+    "child_memory": 268435456,
+    "child_processes": 2,
+    "aggregate_service_memory": 536870912,
+    "aggregate_tasks": 64,
+    "namespace_seconds": 20
+  },
+  "full_composition": {
+    "source_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "source_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "classification": "EXACT_INVENTORY_DERIVED_FILE_BYTES_AND_CANONICAL_IDENTITY_LENGTH_NOT_CAPTURE_OR_MEMORY_PROOF",
+    "source_projection_contains_required_prospective_inventory": true,
+    "native_regular_bytes": 149567173,
+    "layout_renames": 59,
+    "source_projection_files": 47,
+    "source_projection_bytes": 2545838,
+    "fixed_generated_bytes": 287,
+    "generated_configuration": {
+      "/etc/passwd": {
+        "bytes": 86,
+        "sha256": "6e84bc520b03faf975f01c7c445d62ea015830b31966c38ffc4d23737f47f4bd"
+      },
+      "/etc/group": {
+        "bytes": 19,
+        "sha256": "291584c6cff419e2804407b1c7f381174446960ae5989d87bf7d9d35054b6819"
+      },
+      "/etc/nsswitch.conf": {
+        "bytes": 40,
+        "sha256": "616c92fe38aee6d2c529e6e44c58f35e400f26e92860e626fc054cc4345b6d40"
+      },
+      "/etc/hosts": {
+        "bytes": 34,
+        "sha256": "b69b2c741be48691edabe3771c644c70473ccd6aa8effd9f17cc07fa129917f9"
+      },
+      "/buffalo-runtime/openssl.cnf": {
+        "bytes": 108,
+        "sha256": "93287fac77cf8a320e25cb9fef49e4275e22f199da8ce426ca912404b256f876"
+      }
+    },
+    "source_rows": {
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_source.py": {
+        "bytes": 18524,
+        "sha256": "14a7ad505e3d0b59c1f07989a0ee4c9f2a58b5f75d2fad285094bed0ce4fca25"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_capability.py": {
+        "bytes": 17350,
+        "sha256": "87029c47d468032308562298af829ff297fc64c382ac49028672606da27f633b"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_namespace.py": {
+        "bytes": 61213,
+        "sha256": "88f4d807426720140cac3cbc014a4a535232a8864c55b6d7e163a2dae17adfe2"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_projection.py": {
+        "bytes": 14408,
+        "sha256": "a7dd7716851985c0897e6ed9c7e40e2ddff0a146e1b8a65ab143c0afe100d64b"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_cgroup.py": {
+        "bytes": 24120,
+        "sha256": "afb4853db1324453c804c79695b60b115f238ca3442ad0225c9505256d27b2da"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_host.py": {
+        "bytes": 9738,
+        "sha256": "622a2213d398f87eb7c26de1ae3f0ff9a899029fc8138c079088041a44705e24"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_user_service.py": {
+        "bytes": 6292,
+        "sha256": "fdac10910fcd344d0205324d87ac306cd241e6bb3240210c6d3e49eb421e213a"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_bootstrap.py": {
+        "bytes": 34457,
+        "sha256": "0365e04a7aae08ae8a4e9b6441ba46b5f15204c0f19e510e1518157152cc1c3e"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_launcher.py": {
+        "bytes": 6821,
+        "sha256": "05b6a26804710e29fff73045d06a77fe64576af517d5bd25a63eb0c37f2513f7"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_identity.py": {
+        "bytes": 30449,
+        "sha256": "a0755d11836d3df174991555ee0c00f9f2342efbd3aade354047aeb125b2d2cf"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_account_preflight.py": {
+        "bytes": 22738,
+        "sha256": "dec48ea13a32d83c6d6f927386b99391b2929692b9703e2c58bf52753a65b6cf"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_pid1_regression.py": {
+        "bytes": 22562,
+        "sha256": "f4a9fdf257d2a18e1961933a04654ffbd9d124cccbb218816b8cbcb76e72c596"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_runtime.py": {
+        "bytes": 41289,
+        "sha256": "7d4388499fd98bff2bdbe84148369795be31ee1dbc4fae18e9cbcfa8af9fb77b"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_inputs.py": {
+        "bytes": 53120,
+        "sha256": "720227cd42e0e5606fee1693cc4ea12db234a85c3536f385c0faa05969bb8da8"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_installation.py": {
+        "bytes": 23860,
+        "sha256": "b6516daecfdcbbe11e74bbbd1760053b3b67d3ca6102fd64178c353f69ec2028"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_measurement.py": {
+        "bytes": 25851,
+        "sha256": "40b63418972c76dd6ddb78a1065094800b0a397873f96c634eff1c2f2637b229"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_route.py": {
+        "bytes": 24153,
+        "sha256": "d93b251c20ab154235d2485154636aa7c217bbc6a3210b905ec55c85e5e97bcb"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_observation.py": {
+        "bytes": 9507,
+        "sha256": "67f6c9bf5deda9537d750f3ea3e88089d750dd14879bdae2ca80092ffec18ab5"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_native_inputs.json": {
+        "bytes": 320782,
+        "sha256": "2c75d0d2f3adf65cfbc5f76e4479e0a4a6697aaee32e1971442981846192a521"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_native_proposed_inventory.json": {
+        "bytes": 969351,
+        "sha256": "f392bb3d056b6b8bb33d71a555a282fd731283a05fde1d69057f20daae3fcdbc"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_native_installation_manifest.json": {
+        "bytes": 2092,
+        "sha256": "3923d1404aa5b780e4a026b33cca6570a1be0a7bcedded51c20da4dc8de4c070"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_native_runpath.json": {
+        "bytes": 22225,
+        "sha256": "ac4fb80664ff012a4625cee81f8627e27dba045f35a5fabfb84cfbfb069d31c1"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_runtime.py": {
+        "bytes": 35855,
+        "sha256": "8d5d3c71db81a1009b37c343245ab2a642de6601fd520c99252923e3c60d8289"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_identity.py": {
+        "bytes": 8134,
+        "sha256": "fd971ff43cdd485626f7342d8b2d0f18ff19a782d74e6f676f103a226437032a"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_image.py": {
+        "bytes": 10801,
+        "sha256": "fdc3e8363264e479e2091a2c859e3135a22fbf0ece33a815f42441b9b8fd9749"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_postgres_version.py": {
+        "bytes": 24044,
+        "sha256": "392b57a13bcae1bd5b9688cf10390dcc249b82d60f928484d3adf5dbcaa9f87a"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_namespace_prerequisite.py": {
+        "bytes": 7958,
+        "sha256": "2dca4cbdc69f5ab39913e8ca06a34051ca1363979b0ac846e9537c8ca714c4b9"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_native_core.py": {
+        "bytes": 3093,
+        "sha256": "de2f4ff2ebd4f194f91c81623de03d0f3e6f39c974a48ae6cdd2fde87afe1390"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_wheels.py": {
+        "bytes": 10146,
+        "sha256": "4808a61e942dc0692272ff693bdbb8fa533183751c2ab2d6d29eed6f4ba800dd"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_application_runtime.py": {
+        "bytes": 7047,
+        "sha256": "2f3e4384a129446773e3f2d050c0da0f667fa30bc24ac454183c473f5c05e686"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_runtime_regression.py": {
+        "bytes": 27499,
+        "sha256": "03f1d0c24e9bfe6d551cfe6fdb9b369a4f3bf2ef5d4c9c79eeb21d720d67be7b"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_worker.py": {
+        "bytes": 10874,
+        "sha256": "5a87e70e386f52c54f68e9cda7a6594a69ab3e82a82179ee820937a74be38137"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_observer.py": {
+        "bytes": 30343,
+        "sha256": "14cfd93cd2ce7d15eb99ba8e27a6d2dcd3ee5dd01467a2c68a4165319cba2ebd"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_quarantine.py": {
+        "bytes": 8476,
+        "sha256": "8748eccbec32e64b1440474c211f8ab3558856d65ba22fa2bcaf0970bda9c3e0"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_lifecycle.py": {
+        "bytes": 13320,
+        "sha256": "ea3c7ca75ab7f40e5f62358313ffd016fb1cee2da09092e055051b8cfcc5e289"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_artifacts.py": {
+        "bytes": 13192,
+        "sha256": "73413e90babb5af4510888d0f7b9350e10a80208f3e67fcbe0979029f712bf87"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_controls.py": {
+        "bytes": 14042,
+        "sha256": "09f1cfe4496cd708c3842df152cc768756abe6d7262aa3de0a29412bcc1a0ba5"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_evidence.py": {
+        "bytes": 11380,
+        "sha256": "c13a9eadd0b36232d782aa0b7a7abc854c4bd866bbd425c25745ebaeda774e89"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_forecast.py": {
+        "bytes": 10492,
+        "sha256": "772231a23f12eb1d5449f2b5d98d980de8c1b40c35f8b279f9a8797e2ef0c384"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_packet_authority.py": {
+        "bytes": 15780,
+        "sha256": "88bfe4897c5aa18533b0f3e676f56d0fc987e073fd95a7ee88ee39a10ccb8b39"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_restart_evidence.py": {
+        "bytes": 5424,
+        "sha256": "71b014661f3525c895ff47c087d5924e34899a1b7e759130230342d025ce4263"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_toc.py": {
+        "bytes": 17822,
+        "sha256": "8f5ca1e73315279fd58cae11c526910c6418bc96f50cde414da20c513ecdfe33"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_inputs.py": {
+        "bytes": 15266,
+        "sha256": "295ec80b05f2ec63b1e7caa02841adc3f124ed484e4067452c3af698aae5919c"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_storage.py": {
+        "bytes": 9954,
+        "sha256": "c6f79465c6a63423d99f161a4f59c89c707520aa17a727b81f1376dc9bae7e00"
+      },
+      "/opt/buffalo-hosted/procurement/tools/hosted_synthetic_recovery_snapshot.py": {
+        "bytes": 7669,
+        "sha256": "e48246bb8cabb3056686e7576efdca89f808748fc65ceff87107004873c8055e"
+      },
+      "/opt/buffalo-hosted/procurement/tools/run_local_staging_acceptance.py": {
+        "bytes": 465661,
+        "sha256": "e2d459e55b6ce07c8fa438dbcf8799f2daf837ad0d8ad6400aa5009b83d3822c"
+      },
+      "/opt/buffalo-hosted/procurement/tools/run_local_staging_browser_worker.py": {
+        "bytes": 664,
+        "sha256": "f719af79822a3c2caa6b39bf4fdcda5aa0f39ceeced8f246fbcd154781047ff2"
+      }
+    },
+    "results": {
+      "diagnostic": {
+        "regular_files": 732,
+        "entries_with_parents": 796,
+        "regular_bytes": 81646499,
+        "identity_bytes": 104982,
+        "sentinel_bytes": 341,
+        "canonical_codec_manifest_bytes": 264014,
+        "codec_header_bytes": 8,
+        "sealed_wire_bytes": 81910521,
+        "generic_codec_payload_limit_unchanged": 536870912,
+        "generic_codec_manifest_limit_unchanged": 4194304,
+        "cap_bytes": 83886080,
+        "headroom_bytes": 2239581,
+        "within_bytes_and_entries": true
+      },
+      "postgres": {
+        "regular_files": 165,
+        "entries_with_parents": 196,
+        "regular_bytes": 80524891,
+        "identity_bytes": 27668,
+        "sentinel_bytes": 341,
+        "canonical_codec_manifest_bytes": 58001,
+        "codec_header_bytes": 8,
+        "sealed_wire_bytes": 80582900,
+        "generic_codec_payload_limit_unchanged": 536870912,
+        "generic_codec_manifest_limit_unchanged": 4194304,
+        "cap_bytes": 83886080,
+        "headroom_bytes": 3361189,
+        "within_bytes_and_entries": true
+      },
+      "phase": {
+        "regular_files": 886,
+        "entries_with_parents": 976,
+        "regular_bytes": 152245797,
+        "identity_bytes": 132158,
+        "sentinel_bytes": 341,
+        "canonical_codec_manifest_bytes": 317544,
+        "codec_header_bytes": 8,
+        "sealed_wire_bytes": 152563349,
+        "generic_codec_payload_limit_unchanged": 536870912,
+        "generic_codec_manifest_limit_unchanged": 4194304,
+        "cap_bytes": 167772160,
+        "headroom_bytes": 15526363,
+        "within_bytes_and_entries": true
+      }
+    },
+    "identity_placeholder_scope": "Only fixed-length generation/input-bundle digest slots. No bundle digest/generation/execution is claimed. Canonical JSON length is invariant over valid hexadecimal values.",
+    "source_filter_correction": "Required proposed inventory included explicitly; if false above this is corrected-design accounting, not actual old capture output.",
+    "limits_changed": false,
+    "actual_capture": "NOT_RUN",
+    "memory_readiness": "NOT_PROVEN",
+    "execution_authority": false
+  },
+  "storage_authority": {
+    "classification": "OWNER_AUTHORIZED_BUCKET_OBJECT_RETENTION_ONLY",
+    "authorized_on": "2026-11-03",
+    "project": {
+      "name": "Buffalo Procurement Migration",
+      "id": "5bdb474a-4af8-4187-b1be-be45594a22b2"
+    },
+    "environment": {
+      "name": "production",
+      "id": "5d8f28f5-168c-4eb9-8eef-6c639ae4cf46"
+    },
+    "bucket": {
+      "name": "migration-private-artifacts",
+      "id": "9d7e0ef1-e776-401d-8629-c407da96e3f0"
+    },
+    "prefix": "native-runtime-evidence/",
+    "maximum_additional_stored_bytes": 209715200,
+    "charges": "Existing plan ordinary bucket usage authorized; no plan/spending-limit increase",
+    "retention": "Until separately authorized deletion; no lifecycle edits or recurring jobs",
+    "identity_evidence": "IDs match owner instruction and historical repository Railway design; not live authenticated identity verification",
+    "access_checks": {
+      "connected_railway_or_s3_tool": "UNAVAILABLE",
+      "railway_cli": "ABSENT",
+      "railway_local_auth_config": "ABSENT",
+      "rclone_local_auth_config": "ABSENT",
+      "provided_aws_config": "EMPTY_NO_SECTIONS",
+      "provided_aws_credentials_file": "EMPTY_NO_SECTIONS",
+      "railway_or_s3_endpoint_and_credentials_in_provided_environment": "ABSENT",
+      "secret_values_printed_or_requested": false
+    },
+    "access_status": "AUTHENTICATED_TRANSFER_UNAVAILABLE",
+    "remote_identity_verified": false,
+    "remote_prefix_inspected": false,
+    "remote_objects_written": 0,
+    "remote_bytes_written": 0,
+    "remote_readback": "NOT_RUN",
+    "object_lock_WORM": "NOT_VERIFIED_NOT_CLAIMED",
+    "credential_policy": "Use existing supported authenticated trusted-transfer context; never assume prefix-scoped permission; no secrets/signedURLs in logs/Git/snapshots and no credentials in acceptance launcher/workers",
+    "write_policy": "Verify exact project/environment/bucket and prefix before effect; conditional creation only; existing identical object independently downloaded/verified and reused; conflicting bytes refuse",
+    "fresh_download_policy": "New empty isolated directory, independent request context, no upload-cache reuse; complete size/SHA256 per object and manifest; clean exact local download resources after receipts",
+    "excluded": [
+      "accepted-source-transfer/",
+      "all other prefixes",
+      "services",
+      "databases",
+      "deployment",
+      "credential resets",
+      "public access",
+      "bucket lifecycle changes",
+      "new infrastructure",
+      "installation/runtime activation",
+      "credential release",
+      "Shopify/purchasing",
+      "main/PR24/merge"
+    ],
+    "next_supported_action": "Restore or provide an already-supported authenticated trusted-transfer context without sharing secrets in chat; existing object-retention authorization remains valid."
+  },
+  "transfer_package": {
+    "manifest_sha256": "d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+    "manifest_bytes": 20682,
+    "manifest_key": "native-runtime-evidence/sha256/d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+    "payload_objects": 81,
+    "payload_bytes": 179257086,
+    "total_with_manifest": 179277768,
+    "additional_storage_ceiling": 209715200,
+    "headroom_bytes": 30437432,
+    "verification": "LOCAL_EVERY_OBJECT_COMPLETE_READ_SHA256_SIZE_NO_SYMLINK_SINGLE_LINK_IDENTITY_STABLE",
+    "remote_verification": "NOT_RUN",
+    "remote_objects_written": 0,
+    "remote_bytes_written": 0,
+    "cache": "DISPOSABLE_NOT_DURABLE"
+  },
+  "metadata_replacement": {
+    "record": "nov3-replacement-metadata-candidate.json",
+    "record_sha256": "00616dfb9a91157da8f05a4c98740bc2b0cb96908b5fac50864482a7ec9e485e",
+    "verified_tuples": 47,
+    "unchanged_complete_stanza_hashes": 47,
+    "candidate_signed_release": {
+      "signed_sha256": "5f4cbfd1daf09c5c6af3eeb67fe923b15010f28d9189b64995e2c0f68eec7b77",
+      "signed_bytes": 126125,
+      "verified_payload_sha256": "a79193f3fbeb3d71cd949a59de3e99b384e8e2b03d73538ed79a696b5aab2940",
+      "verified_payload_bytes": 125243,
+      "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+      "gpg_returncode": 0,
+      "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+      "keyring_bytes": 3607,
+      "keyring_source": "Exact owner-proposed publisher HTTPS pinned keyring; target trust-root comparison not newly performed",
+      "protected_inputs": "held readonly fully sealed memfds",
+      "tool": "/usr/bin/gpg",
+      "tool_version": "gpg (GnuPG) 2.4.7",
+      "tool_sha256": "7c9d2f9416aabcd10199e2984439f49612644a948279ac56bdf70d69c8958ddf",
+      "signature_math": "VERIFIED",
+      "installation_authority": false,
+      "temporary_gpg_home_removed": true,
+      "input_descriptors_closed": true
+    },
+    "candidate_index": {
+      "suite": "noble-updates",
+      "component": "main",
+      "sha256": "4292c6f61b84c8685c73f6db585fce9974f293a0e62fb070a4c7a2572e333996",
+      "bytes": 1407612,
+      "uncompressed_bytes": 7615549,
+      "uncompressed_sha256": "3047f3f8a2ed65735ad0821d8c4bb5f7afd1720737abff19d0c11d3064561d30",
+      "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/main/binary-amd64/by-hash/SHA256/4292c6f61b84c8685c73f6db585fce9974f293a0e62fb070a4c7a2572e333996"
+    },
+    "accepted_original_index": "8e3c832aed4bc99e14b0e501f578cd95db6bae0e6a435d46f292048696852c25",
+    "adoption": "NOT_GRANTED",
+    "proposed_snapshot_policy": "BUFFALO_FIXED_PUBLISHER_SNAPSHOT_2026_11_03_METADATA_ONLY_V1_PENDING_OWNER_ADOPTION",
+    "permitted_proposed_delta": "Only47updates records index/release metadata and explicit snapshot reference; artifact/member/record hashes and all66versions unchanged"
+  },
+  "trust_root": {
+    "bootstrap": "OFFICIAL_UBUNTU_PUBLISHER_HTTPS_NOT_LOCAL_OWNERTRUST",
+    "bytes": 3607,
+    "protection": "HELD_FULLY_SEALED_READONLY_MEMFD",
+    "sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C"
+  },
+  "trust_root_policy_acceptance": "PRESERVED_PENDING_CONSOLIDATED_INSTALLATION_DECISION",
+  "python_assurance": "Exact CPython3.13.5 actions/python-versions3.13.5-15601068749 HTTPS publisher hash-list plus GitHub asset digest; signed build attestation NOT_ESTABLISHED",
+  "review": "3ed_REPORT_TEXT_UNAVAILABLE; NEW_SIGNED_PAYLOAD_DELTA_PENDING",
+  "exact_entry": "procurement.tools.hosted_synthetic_native_route.installation_measurement_entry([repository,event,ref,commit],artifact_directory)",
+  "effects": {
+    "installation": "One fresh /run/buffalo-native-<32hex>/view tree; verified platform native mkdir/dd/sha256sum/chmod/stat/find/rm/rmdir only. No recursive root deletion. Unprivileged stage per artifact and dpkg-deb fsys-tarfile/gzip decode, no package installation or scripts.",
+    "measurement": "One exact private system-manager view/network-disabled unprivileged selected-Python child with externally bound PID/start, namespace, maps, backing, source and limits. No account creation before valid NativePhaseReadiness.",
+    "service": "Existing dedicated per-run non-login UID/GID, original-host ownership/IPC/source checks; same exact request/view/interpreter handoff; fixed PG --version only. No caller command, network, database startup, secret or browser.",
+    "cleanup": "Drain registered measurement/service consumers first; exact-owned inode/descendant checks; nonrecursive file batches<=64 and depth-group directories; foreign/pending/uncertain state retained. Temporary directory removal only when exact and empty."
+  },
+  "activation": "DISABLED",
+  "owner_installation_decision": "NOT_GRANTED",
+  "credential_release": "DISABLED",
+  "missing_evidence": [
+    "Authenticated remote bucket identity/prefix verification",
+    "Conditional retention and fresh isolated bucket download for all82plannedobjects",
+    "Complete actual3ed Claude report and applicable new material delta review"
+  ],
+  "remaining_owner_policy_decisions": [
+    "Exact November3 metadata-only adoption and pinned-snapshot freshness",
+    "Previously proposed native trust-root/assurance and installation effects in one consolidated decision after evidence is complete"
+  ],
+  "target_measurements": {
+    "protected_selected_interpreter_READY_capture_final_maps": "NOT_RUN",
+    "native_pipeline_memory": "NOT_RUN",
+    "whole_service_memory": "NOT_RUN",
+    "fixed_postgres_execution": "NOT_RUN",
+    "real_installation_and_cleanup": "NOT_RUN"
+  },
+  "storage_permission_must_not_be_requested_again": true,
+  "installation_or_application_acceptance": false
+}

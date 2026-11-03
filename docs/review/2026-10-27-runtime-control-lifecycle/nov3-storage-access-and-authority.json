@@ -1,0 +1,57 @@
+{
+  "classification": "OWNER_AUTHORIZED_BUCKET_OBJECT_RETENTION_ONLY",
+  "authorized_on": "2026-11-03",
+  "project": {
+    "name": "Buffalo Procurement Migration",
+    "id": "5bdb474a-4af8-4187-b1be-be45594a22b2"
+  },
+  "environment": {
+    "name": "production",
+    "id": "5d8f28f5-168c-4eb9-8eef-6c639ae4cf46"
+  },
+  "bucket": {
+    "name": "migration-private-artifacts",
+    "id": "9d7e0ef1-e776-401d-8629-c407da96e3f0"
+  },
+  "prefix": "native-runtime-evidence/",
+  "maximum_additional_stored_bytes": 209715200,
+  "charges": "Existing plan ordinary bucket usage authorized; no plan/spending-limit increase",
+  "retention": "Until separately authorized deletion; no lifecycle edits or recurring jobs",
+  "identity_evidence": "IDs match owner instruction and historical repository Railway design; not live authenticated identity verification",
+  "access_checks": {
+    "connected_railway_or_s3_tool": "UNAVAILABLE",
+    "railway_cli": "ABSENT",
+    "railway_local_auth_config": "ABSENT",
+    "rclone_local_auth_config": "ABSENT",
+    "provided_aws_config": "EMPTY_NO_SECTIONS",
+    "provided_aws_credentials_file": "EMPTY_NO_SECTIONS",
+    "railway_or_s3_endpoint_and_credentials_in_provided_environment": "ABSENT",
+    "secret_values_printed_or_requested": false
+  },
+  "access_status": "AUTHENTICATED_TRANSFER_UNAVAILABLE",
+  "remote_identity_verified": false,
+  "remote_prefix_inspected": false,
+  "remote_objects_written": 0,
+  "remote_bytes_written": 0,
+  "remote_readback": "NOT_RUN",
+  "object_lock_WORM": "NOT_VERIFIED_NOT_CLAIMED",
+  "credential_policy": "Use existing supported authenticated trusted-transfer context; never assume prefix-scoped permission; no secrets/signedURLs in logs/Git/snapshots and no credentials in acceptance launcher/workers",
+  "write_policy": "Verify exact project/environment/bucket and prefix before effect; conditional creation only; existing identical object independently downloaded/verified and reused; conflicting bytes refuse",
+  "fresh_download_policy": "New empty isolated directory, independent request context, no upload-cache reuse; complete size/SHA256 per object and manifest; clean exact local download resources after receipts",
+  "excluded": [
+    "accepted-source-transfer/",
+    "all other prefixes",
+    "services",
+    "databases",
+    "deployment",
+    "credential resets",
+    "public access",
+    "bucket lifecycle changes",
+    "new infrastructure",
+    "installation/runtime activation",
+    "credential release",
+    "Shopify/purchasing",
+    "main/PR24/merge"
+  ],
+  "next_supported_action": "Restore or provide an already-supported authenticated trusted-transfer context without sharing secrets in chat; existing object-retention authorization remains valid."
+}

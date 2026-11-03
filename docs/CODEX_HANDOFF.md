@@ -1,6 +1,6 @@
 # Buffalo Procurement OS — Codex Handoff
 
-**Updated:** 2026-11-01 (UTC)
+**Updated:** 2026-11-03 (UTC)
 
 **Phase numbering:** This handoff follows `procurement/docs/authority/03_REPLIT_BUILD_EXECUTION_PROMPT_v2_1.md`: Phase 3 is catalog reconciliation and Phase 4 is historical ShopifyQL sales backfill/reconciliation.
 
@@ -9,6 +9,53 @@ This is an operational checkpoint, not a replacement for the canonical specifica
 **Operating process:** every coding/review/release session must follow `docs/PROJECT_GOVERNANCE.md`. At each meaningful milestone, this handoff must be refreshed with verified state, tests, readiness gates, material counts/control totals, open risks/decisions, Git reference, and exact next authorization boundary.
 
 ## Verified current state
+
+### 2026-11-03 signed-payload repair and verified replacement metadata
+
+Published implementation `216169bfe82a4275ac78fcb54a716d400fe564c8`, tree `26ac6ec1743769085ea556a2392098bf63496e0c`; ordinary branch-only push
+and fresh fetch verified, main/PR24 unchanged. Current packet:
+`docs/review/2026-10-27-runtime-control-lifecycle/nov3-retention-provenance-candidate.md`.
+Verifier now parses only gpgv-emitted signed bytes after raw/signature/signer and
+existing plaintext-digest checks. Six causal negatives/positives added; no accepted
+artifact/version/file or metadata pin changed. Source-bound1235focused,298scrubbed,
+88related and10startup passed; groups overlap. Discovery2799/137modules is not
+execution. Full authoritative/target runtime remain NOT_RUN. All limits unchanged;
+M1 before account mandatory. Static phase152245797B/976entries is not memory proof.
+
+Exact original8e3c updates index remains unavailable after bounded NEW snapshot
+path attempts. Actual replacement index4292c6f61b84c8685c73f6db585fce9974f293a0e62fb070a4c7a2572e333996
+is bound by signedRelease5f4cbfd1daf09c5c6af3eeb67fe923b15010f28d9189b64995e2c0f68eec7b77.
+Installed gpg2.4.7 and protected pinned public key verified signature and emitted
+payload. All47six-field tuples AND full stanza hashes match unchanged accepted
+records; all66artifact/file identities preserved. This is a real proposed metadata
+replacement, NOT adopted source pins or target gpgv/runtime execution.
+
+Owner explicitly authorized retention only in existing Railway project5bdb474a…,
+environment5d8f28f5…, bucket9d7e0ef1… /migration-private-artifacts under
+native-runtime-evidence/,200MiB maximum, ordinary existing-plan usage charges.
+Exact IDs/full restrictions are in nov3-storage-access-and-authority.json.
+No callable Railway/S3 connector, local Railway/rclone auth or populated provided
+AWS credentials exist. IDs match owner/historical records, not authenticated remote
+proof. **0objects uploaded; fresh bucket readback NOT_RUN.** No secrets requested,
+no unrelated prefix/service/database touched. All66public artifacts were recovered
+locally;82planned content-addressed objects including public metadata/manifests
+sum179277768B. Cache is disposable, not durable retention. No WORM claim.
+
+The owner references a complete Claude report for3ed8222, but the text/dispositions
+were not supplied or found in current evidence. One missing-text request is pending;
+no repeated broad review, attribution or closures invented. Historical closures
+remain exact-scoped. New signed-payload material needs targeted delta review.
+
+Exact next action: restore authenticated trusted transfer access (not new storage
+permission), verify exact IDs/prefix, conditionally retain the82object manifest,
+then independently download/hash/size every object from a fresh empty context and
+record cleanup. Obtain the missing3ed report and applicable narrow delta review.
+One eventual installation decision must explicitly adopt exact replacement metadata
+and snapshot/trust policies after evidence is complete. Installation, privileged
+runtime, credentials, browser, deployment and purchasing remain unauthorized.
+Independent currently executable provenance/code/tests complete; access/review/input
+gates remain. No automatic resumption or snapshot persistence claim. Application
+source, locks and canonical PHASE_STATUS unchanged.
 
 ### 2026-11-01 frozen T1/provenance candidate published and verified
 

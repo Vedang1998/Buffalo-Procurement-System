@@ -1,0 +1,15 @@
+{
+  "published_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+  "published_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+  "previous_tip": "00a428bb1cc1766c44112f7e94376407942927b5",
+  "fresh_fetch_verified": true,
+  "push": "ORDINARY_SINGLE_BRANCH_NONFORCE",
+  "secret_scan_changed_files": 8,
+  "secret_scan_findings": 0,
+  "object_integrity": "PASS",
+  "protected_refs_unchanged": [
+    "f308ac666a2377f540e528bc873463daecc20cf8\trefs/heads/main",
+    "e25704e117a3c5bede843cac65ddfdeb7f30024f\trefs/pull/24/head"
+  ],
+  "worktree_clean": true
+}

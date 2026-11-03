@@ -1,0 +1,226 @@
+{
+  "implementation_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+  "implementation_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+  "baseline": "3ed8222244cbcac4b982a0116db566fe07839d16",
+  "evidence": {
+    "nov3-216169b-discovery.txt": {
+      "bytes": 323,
+      "sha256": "ca5b3821fdd9c2a67e6f262d6aed792532219743cb93f3c570f0ab132d3a0de0"
+    },
+    "nov3-216169b-focused.txt": {
+      "bytes": 226908,
+      "sha256": "b378b545243cbc917c8391888829c4fcd04cafd785be1e38bac1f129ed4c543d"
+    },
+    "nov3-216169b-full-static-accounting.json": {
+      "bytes": 12308,
+      "sha256": "c30fa6ca44bd86e6e0daf2571f9bbb0b16c253b204fa5f574b24f8d58df7e9e7"
+    },
+    "nov3-216169b-inert.txt": {
+      "bytes": 95,
+      "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+    },
+    "nov3-216169b-isolated.txt": {
+      "bytes": 57077,
+      "sha256": "4cf011f1f476fb2ca927fce5828adfb0b6c9ae1da452e577c19bf06bd1fd1a66"
+    },
+    "nov3-216169b-related.txt": {
+      "bytes": 17263,
+      "sha256": "fb24c71b428215a702ddf3c542b954f48dc1467720f3ded602e5c46f9675869e"
+    },
+    "nov3-216169b-startup.txt": {
+      "bytes": 2041,
+      "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+    },
+    "nov3-3ed-review-reference.json": {
+      "bytes": 897,
+      "sha256": "c5b74db3167e26c8da024e2362d942af885af1ef7924b6c269362908237a3c49"
+    },
+    "nov3-artifact-recovery.json": {
+      "bytes": 47711,
+      "sha256": "7153240ff8f257112255e393a63e7cbee56a9e95653b5ae153c8cc44ce374753"
+    },
+    "nov3-candidate-index-fetch.json": {
+      "bytes": 322,
+      "sha256": "2fe0ca00359faebffb23e1d88b33c9b7b3bc94638b34f4481a1268a58e922b10"
+    },
+    "nov3-candidate-route-record-verification.json": {
+      "bytes": 3963,
+      "sha256": "d27a5b2c245470a5c96cf263bc7100f03440231bcb37eedfb6b0161e91d2da00"
+    },
+    "nov3-candidate-signature-verification.json": {
+      "bytes": 916,
+      "sha256": "f417f78b8c28e1cd196e3f743810af2639d6185b76e8571effcfefa0171134ed"
+    },
+    "nov3-complete-static-accounting.py": {
+      "bytes": 10585,
+      "sha256": "eafa1a4ff62f6bd7a07e6c6c45518ac97041cda077c108b53d3ed508ad233e20"
+    },
+    "nov3-dependency-install.txt": {
+      "bytes": 960,
+      "sha256": "fcdfd7a0950d4e713cc15265195e2bf563f8895d7532daf55fda21980b924bb6"
+    },
+    "nov3-existing-payload-verification.json": {
+      "bytes": 1396,
+      "sha256": "f998bc5baccaa49a722e86abe06d6398aab7f70adc187083f3e37f4c458afc5d"
+    },
+    "nov3-fetch-attempts.json": {
+      "bytes": 1530,
+      "sha256": "35bc138fe1aed3d005ffd2fc68780311d979c9952a922f7975bde35074bd1469"
+    },
+    "nov3-frozen-validation.json": {
+      "bytes": 1204,
+      "sha256": "627049de5a0dca49ee9c9a68c17e9606fe3ccb086e107a3b3c6c4554f328f035"
+    },
+    "nov3-gpgv-output-documentation.json": {
+      "bytes": 408,
+      "sha256": "c78bb4898021de0f5a99658742aa7859ec5c6ccb57b82d80845486d85f4a28b6"
+    },
+    "nov3-installation-decision-status.json": {
+      "bytes": 22584,
+      "sha256": "dc82ac9d0b44a23a2dd09c80cb397e9c428c0820bfdc8539b75297201ff05e73"
+    },
+    "nov3-material-publication.json": {
+      "bytes": 559,
+      "sha256": "a32dc93ceaeb04968558072611d308062b6fe65b1efcd4fb7c0bf1598c9eeb5b"
+    },
+    "nov3-original-release-signature-verification.json": {
+      "bytes": 1627,
+      "sha256": "d545b5b67ea08791fe78051e2a3f08f65be711916dfe34696dca08e84469940f"
+    },
+    "nov3-payload-first.txt": {
+      "bytes": 98,
+      "sha256": "f6aae09090df5cf75f23d2d7500a89e5a19a87099f451df554ed9d86ce8b4cf2"
+    },
+    "nov3-payload-second.txt": {
+      "bytes": 98,
+      "sha256": "236917235b30d40724e9aaf6a501ef7bbd5d6f307ff946221997ced69f39cc99"
+    },
+    "nov3-payload-third.txt": {
+      "bytes": 98,
+      "sha256": "39a4896bfd158e98d94673e79a1dcfd80f4174ad0d441f8587cd6d732909cdcf"
+    },
+    "nov3-replacement-metadata-candidate.json": {
+      "bytes": 30232,
+      "sha256": "00616dfb9a91157da8f05a4c98740bc2b0cb96908b5fac50864482a7ec9e485e"
+    },
+    "nov3-retention-manifest.py": {
+      "bytes": 5527,
+      "sha256": "b4f075957c133bb5cc8f8ffc0bd87b9a1dff46ade3ba3200dcf1394a90ed6e32"
+    },
+    "nov3-retention-package-receipt.json": {
+      "bytes": 638,
+      "sha256": "28fb1e827bb7f7e5b13f4f67aed7a162cfa026081b33af27030ce631295c74a0"
+    },
+    "nov3-retention-package.json": {
+      "bytes": 20682,
+      "sha256": "d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1"
+    },
+    "nov3-retention-provenance-candidate.md": {
+      "bytes": 10835,
+      "sha256": "32edde63f8f4d2daf4fb0cfb38625a00006156861932fa02e6a8dee1d8d39946"
+    },
+    "nov3-storage-access-and-authority.json": {
+      "bytes": 2732,
+      "sha256": "df6f152aab285387b506b6b62591db0defacfb62aa41f9b57931e16846da86d8"
+    },
+    "nov3-validate-frozen.py": {
+      "bytes": 4152,
+      "sha256": "6d7906627cc43b91e346d3bd65c7fdbd9c7b4c67ffbe1974cf74ed18c7e5a09c"
+    },
+    "nov3-verify-candidate-index.py": {
+      "bytes": 5089,
+      "sha256": "61ece5218d8a7af99b7d40055dc84f7aea451f8d64f23b275ffdfaa438f743ec"
+    },
+    "nov3-verify-candidate-route-records.py": {
+      "bytes": 1885,
+      "sha256": "7f6eb04daf4cb836434124ed9b50deb9c789b56b2332ac665786114dcd74d192"
+    },
+    "nov3-verify-original-releases.py": {
+      "bytes": 3462,
+      "sha256": "7088478c3ef730171ebb8affdd5e1930270ae79056df49358723cdf6fa22b714"
+    },
+    "nov3-verify-release.py": {
+      "bytes": 2949,
+      "sha256": "4a6af15d7107fcd8ca2a8f21a3bcb7fb880df11d729d88388734e1cbf73f5ccd"
+    }
+  },
+  "validation": {
+    "commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "results": {
+      "focused": {
+        "returncode": 0,
+        "seconds": 49.477750107002066,
+        "sha256": "b378b545243cbc917c8391888829c4fcd04cafd785be1e38bac1f129ed4c543d"
+      },
+      "isolated": {
+        "returncode": 0,
+        "seconds": 10.096458550000534,
+        "sha256": "4cf011f1f476fb2ca927fce5828adfb0b6c9ae1da452e577c19bf06bd1fd1a66"
+      },
+      "inert": {
+        "returncode": 78,
+        "seconds": 0.21478239999851212,
+        "sha256": "9d5515a91ef1f828d7c85ec8fcfef32fa08870c3a2c21859a7c99b9e7641e7bb"
+      },
+      "discovery": {
+        "returncode": 0,
+        "seconds": 2.7236085960030323,
+        "sha256": "ca5b3821fdd9c2a67e6f262d6aed792532219743cb93f3c570f0ab132d3a0de0"
+      },
+      "startup": {
+        "returncode": 0,
+        "seconds": 0.11417872000311036,
+        "sha256": "6f1aee17904511979dbbb3f1f548c5fb00c5a00c523f88644ec27d2cdd758ae7"
+      },
+      "related": {
+        "returncode": 0,
+        "seconds": 7.387037565000355,
+        "sha256": "fb24c71b428215a702ddf3c542b954f48dc1467720f3ded602e5c46f9675869e"
+      }
+    },
+    "related_disposable_clone_removed": true,
+    "clean_after": true
+  },
+  "publication": {
+    "published_commit": "216169bfe82a4275ac78fcb54a716d400fe564c8",
+    "published_tree": "26ac6ec1743769085ea556a2392098bf63496e0c",
+    "previous_tip": "00a428bb1cc1766c44112f7e94376407942927b5",
+    "fresh_fetch_verified": true,
+    "push": "ORDINARY_SINGLE_BRANCH_NONFORCE",
+    "secret_scan_changed_files": 8,
+    "secret_scan_findings": 0,
+    "object_integrity": "PASS",
+    "protected_refs_unchanged": [
+      "f308ac666a2377f540e528bc873463daecc20cf8\trefs/heads/main",
+      "e25704e117a3c5bede843cac65ddfdeb7f30024f\trefs/pull/24/head"
+    ],
+    "worktree_clean": true
+  },
+  "actual_retention": {
+    "remote_objects": 0,
+    "remote_bytes_verified": 0,
+    "fresh_readback": "NOT_RUN_AUTHENTICATION_UNAVAILABLE"
+  },
+  "local_planned_retention": {
+    "manifest_sha256": "d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+    "manifest_bytes": 20682,
+    "manifest_key": "native-runtime-evidence/sha256/d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+    "payload_objects": 81,
+    "payload_bytes": 179257086,
+    "total_with_manifest": 179277768,
+    "additional_storage_ceiling": 209715200,
+    "headroom_bytes": 30437432,
+    "verification": "LOCAL_EVERY_OBJECT_COMPLETE_READ_SHA256_SIZE_NO_SYMLINK_SINGLE_LINK_IDENTITY_STABLE",
+    "remote_verification": "NOT_RUN",
+    "remote_objects_written": 0,
+    "remote_bytes_written": 0,
+    "cache": "DISPOSABLE_NOT_DURABLE"
+  },
+  "provenance": "REAL_AUTHENTICATED_REPLACEMENT_ALL47_TUPLES_AND_STANZAS_MATCH_NOT_ADOPTED",
+  "claude": "REFERENCED3edREPORT_TEXT_UNAVAILABLE; NEW_DELTA_PENDING",
+  "target_timing_memory": "NOT_PROVEN",
+  "application_acceptance": false,
+  "installation": "DISABLED",
+  "credential_release": "DISABLED"
+}

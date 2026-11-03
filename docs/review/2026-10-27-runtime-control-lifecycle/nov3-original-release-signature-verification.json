@@ -1,0 +1,38 @@
+[
+  {
+    "suite": "noble",
+    "selected_artifacts": 18,
+    "signed_sha256": "cdb2f31d809f589719a53c6ad15f255b27569c4059542ada282aaa21b8e164b0",
+    "signed_bytes": 255850,
+    "verified_payload_sha256": "26758a13cecfaff9ff274d31ea9a4633674a999bd130c09f6ecd66a4b8071184",
+    "verified_payload_bytes": 254968,
+    "signature_math": "VERIFIED",
+    "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+    "all_record_pins_match": true,
+    "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "keyring_bytes": 3607,
+    "protected_inputs": "held readonly fully sealed memfds",
+    "gpg_returncode": 0,
+    "descriptor_inventory_equal": true,
+    "temporary_gpg_home_removed": true,
+    "scope": "Independent gpg2.4.7 extraction, not native-route gpgv target proof"
+  },
+  {
+    "suite": "noble-updates",
+    "selected_artifacts": 47,
+    "signed_sha256": "1af76bea40c6b8ddbc51a51046c5a3e7912c9611536e97afc673a4b1c39d1886",
+    "signed_bytes": 126125,
+    "verified_payload_sha256": "17ed1348ac084120c823fa5d81e848a96c67f4e6bf242cbaf6f05e1e3a3315c2",
+    "verified_payload_bytes": 125243,
+    "signature_math": "VERIFIED",
+    "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+    "all_record_pins_match": true,
+    "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "keyring_bytes": 3607,
+    "protected_inputs": "held readonly fully sealed memfds",
+    "gpg_returncode": 0,
+    "descriptor_inventory_equal": true,
+    "temporary_gpg_home_removed": true,
+    "scope": "Independent gpg2.4.7 extraction, not native-route gpgv target proof"
+  }
+]

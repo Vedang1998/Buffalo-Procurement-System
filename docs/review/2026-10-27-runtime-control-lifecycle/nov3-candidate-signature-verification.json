@@ -1,0 +1,19 @@
+{
+  "signed_sha256": "5f4cbfd1daf09c5c6af3eeb67fe923b15010f28d9189b64995e2c0f68eec7b77",
+  "signed_bytes": 126125,
+  "verified_payload_sha256": "a79193f3fbeb3d71cd949a59de3e99b384e8e2b03d73538ed79a696b5aab2940",
+  "verified_payload_bytes": 125243,
+  "signer": "F6ECB3762474EDA9D21B7022871920D1991BC93C",
+  "gpg_returncode": 0,
+  "keyring_sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+  "keyring_bytes": 3607,
+  "keyring_source": "Exact owner-proposed publisher HTTPS pinned keyring; target trust-root comparison not newly performed",
+  "protected_inputs": "held readonly fully sealed memfds",
+  "tool": "/usr/bin/gpg",
+  "tool_version": "gpg (GnuPG) 2.4.7",
+  "tool_sha256": "7c9d2f9416aabcd10199e2984439f49612644a948279ac56bdf70d69c8958ddf",
+  "signature_math": "VERIFIED",
+  "installation_authority": false,
+  "temporary_gpg_home_removed": true,
+  "input_descriptors_closed": true
+}

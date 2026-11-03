@@ -1,3 +1,19 @@
+# Current November3 retention/provenance continuation
+
+Implementation `216169bfe82a4275ac78fcb54a716d400fe564c8`, tree `26ac6ec1743769085ea556a2392098bf63496e0c`.
+[Continuation and exact next action](nov3-retention-provenance-candidate.md),
+[evidence manifest](nov3-retention-provenance-evidence.json),
+[consolidated installation-decision status](nov3-installation-decision-status.json).
+Actual remote retention:0objects; authenticated transfer unavailable. The owner
+has granted exact bucket/prefix retention authority, so no repeat storage approval
+is needed. A real signed metadata candidate proves all47unchanged tuples/stanzas;
+accepted pins remain unchanged. Installation/activation/credentials stay disabled.
+The complete3ed Claude report is referenced but not available here; no verdict or
+closures are invented. New signed-payload delta requires applicable review.
+Older sections below are historical and do not override this packet.
+
+---
+
 # Current November 1 T1 / provenance candidate
 
 Implementation `3ed8222244cbcac4b982a0116db566fe07839d16`, tree `3c51022c717f730d9d63d7042c4edc1db678ffc0`.

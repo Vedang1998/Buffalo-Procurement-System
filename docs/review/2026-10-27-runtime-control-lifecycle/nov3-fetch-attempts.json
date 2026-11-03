@@ -1,0 +1,44 @@
+[
+  {
+    "name": "snapshot-direct-1400-Packages.xz",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261029T140000Z/dists/noble-updates/main/binary-amd64/Packages.xz",
+    "byte_bound": 2097152,
+    "per_request_timeout_seconds": 15,
+    "status": "TRANSPORT_OR_BOUND_ERROR",
+    "error_class": "URLError",
+    "reason_class": "OSError",
+    "seconds": 0.02656482199745369
+  },
+  {
+    "name": "snapshot-direct-0000-Packages.xz",
+    "url": "https://snapshot.ubuntu.com/ubuntu/20261030T000000Z/dists/noble-updates/main/binary-amd64/Packages.xz",
+    "byte_bound": 2097152,
+    "per_request_timeout_seconds": 15,
+    "status": "TRANSPORT_OR_BOUND_ERROR",
+    "error_class": "URLError",
+    "reason_class": "OSError",
+    "seconds": 0.004073215000971686
+  },
+  {
+    "name": "candidate-noble-updates-InRelease",
+    "url": "https://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease",
+    "byte_bound": 2097152,
+    "per_request_timeout_seconds": 15,
+    "http_status": 200,
+    "bytes": 126125,
+    "sha256": "5f4cbfd1daf09c5c6af3eeb67fe923b15010f28d9189b64995e2c0f68eec7b77",
+    "status": "FETCHED",
+    "seconds": 0.895406882998941
+  },
+  {
+    "name": "ubuntu-archive-keyring.gpg",
+    "url": "https://archive.ubuntu.com/ubuntu/project/ubuntu-archive-keyring.gpg",
+    "byte_bound": 65536,
+    "per_request_timeout_seconds": 15,
+    "http_status": 200,
+    "bytes": 3607,
+    "sha256": "80a36b0a6de2f69f49d2df75ef473ccde121e9e190b9ea01d20a4f63778d5c31",
+    "status": "FETCHED",
+    "seconds": 0.25140837200160604
+  }
+]

@@ -223,3 +223,17 @@ The exact updates index and durable artifact retention remain missing, despite
 new fail-closed end-to-end provenance parsing. One targeted Claude delta and the
 single bounded installation decision remain required; installation/privilege/
 credentials stay disabled. No resource increase or acceptance closure inferred.
+
+
+### 2026-11-03 retained-input/provenance continuation (no canonical phase change)
+
+Candidate `216169bfe82a4275ac78fcb54a716d400fe564c8` /tree `26ac6ec1743769085ea556a2392098bf63496e0c` adds only verified-signed-payload parsing and
+six regressions. A real publisher-signed replacement proves47unchanged tuples and
+stanza hashes; accepted metadata pins remain unchanged. Existing Railway bucket
+object-retention authority is now granted at200MiB; authenticated access is absent,
+so0objects/fresh remote readback remainNOT_RUN. Exact82object179277768B package,
+receipts, missing3ed report status and single installation-decision prerequisites
+are in nov3-retention-provenance-candidate.md in the existing review package.
+No new installation/activation/credentials/production authority, limits or canonical
+milestone changes. Next action is already-authorized trusted conditional transfer
+and fresh readback once authentication is available, plus exact report/delta review.

@@ -1,0 +1,15 @@
+{
+  "manifest_sha256": "d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+  "manifest_bytes": 20682,
+  "manifest_key": "native-runtime-evidence/sha256/d8ce40daf1d41cc472aa78fb5dfaa6428887a1bd9d9249658badcebce57dfbe1",
+  "payload_objects": 81,
+  "payload_bytes": 179257086,
+  "total_with_manifest": 179277768,
+  "additional_storage_ceiling": 209715200,
+  "headroom_bytes": 30437432,
+  "verification": "LOCAL_EVERY_OBJECT_COMPLETE_READ_SHA256_SIZE_NO_SYMLINK_SINGLE_LINK_IDENTITY_STABLE",
+  "remote_verification": "NOT_RUN",
+  "remote_objects_written": 0,
+  "remote_bytes_written": 0,
+  "cache": "DISPOSABLE_NOT_DURABLE"
+}
