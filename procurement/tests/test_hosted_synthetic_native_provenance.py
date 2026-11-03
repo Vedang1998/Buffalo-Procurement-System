@@ -112,7 +112,9 @@ class NativeProvenanceTests(unittest.TestCase):
 
     def verified_result(self,payload,*,code=0,status=None):
         signer='F6ECB3762474EDA9D21B7022871920D1991BC93C'
-        if status is None:status=b'gpgv: Good signature\n[GNUPG:] VALIDSIG '+signer.encode()+b' fixture\n'
+        if status is None:
+            status=(b'gpgv: Good signature\n[GNUPG:] GOODSIG '+signer[-16:].encode()+b' fixture name\n'
+                b'[GNUPG:] VALIDSIG '+signer.encode()+b' 2024-04-25 1714057881 0 4 0 1 10 01 '+signer.encode()+b'\n')
         return SimpleNamespace(returncode=code,stdout=payload,stderr=status),signer,hashlib.sha256(payload).hexdigest()
 
     def test_verifier_emitted_signed_payload_has_exact_existing_identity(self):
@@ -186,3 +188,93 @@ class NativeProvenanceTests(unittest.TestCase):
             for call in command.call_args_list:
                 for fd in call.kwargs['pass_fds']:
                     with self.assertRaises(OSError):os.fstat(fd)
+
+    def test_each_negative_signature_status_refuses_in_either_order(self):
+        result,signer,digest=self.verified_result(b'payload')
+        for keyword in ('BADSIG','ERRSIG','NO_PUBKEY','FAILURE','REVKEYSIG','KEYREVOKED','EXPKEYSIG','EXPSIG'):
+            line=('[GNUPG:] '+keyword+' '+signer[-16:]+' fixture\n').encode()
+            for status in (line+result.stderr,result.stderr+line):
+                with self.subTest(keyword=keyword,first=status.startswith(line)),self.assertRaisesRegex(native.ns.NamespaceProofError,'signer_refused'):
+                    route._verified_release_payload(self.verified_result(b'payload',status=status)[0],signer,digest)
+
+    def test_missing_or_duplicate_good_and_valid_signature_each_refuses(self):
+        result,signer,digest=self.verified_result(b'payload');lines=result.stderr.splitlines(keepends=True)
+        for keyword in (b'GOODSIG',b'VALIDSIG'):
+            selected=next(line for line in lines if b' '+keyword+b' ' in line)
+            for status in (result.stderr.replace(selected,b''),result.stderr+selected):
+                with self.subTest(keyword=keyword,status=status),self.assertRaisesRegex(native.ns.NamespaceProofError,'signer_refused'):
+                    route._verified_release_payload(self.verified_result(b'payload',status=status)[0],signer,digest)
+
+    def test_documented_goodsig_long_id_and_full_fingerprint_match_signing_key(self):
+        result,signer,digest=self.verified_result(b'payload')
+        for key in (signer[-16:],signer,signer.lower()):
+            status=result.stderr.replace(signer[-16:].encode()+b' fixture',key.encode()+b' changed display name')
+            self.assertEqual(route._verified_release_payload(self.verified_result(b'payload',status=status)[0],signer,digest),b'payload')
+
+    def test_wrong_pair_or_short_key_is_not_authorized_by_display_name_or_primary_hint(self):
+        result,signer,digest=self.verified_result(b'payload')
+        for key in (signer[-8:],'0'*16,'0'*40):
+            status=result.stderr.replace(signer[-16:].encode()+b' fixture',key.encode()+b' '+signer.encode()+b' fixture')
+            with self.subTest(key=key),self.assertRaisesRegex(native.ns.NamespaceProofError,'signer_refused'):
+                route._verified_release_payload(self.verified_result(b'payload',status=status)[0],signer,digest)
+        # A pinned primary hint cannot authorize an unpinned signing subkey.
+        status=result.stderr.replace(b'VALIDSIG '+signer.encode(),b'VALIDSIG '+b'0'*40)
+        with self.assertRaisesRegex(native.ns.NamespaceProofError,'signer_refused'):
+            route._verified_release_payload(self.verified_result(b'payload',status=status)[0],signer,digest)
+
+    def test_malformed_goodsig_fields_refuse(self):
+        result,signer,digest=self.verified_result(b'payload');good=next(line for line in result.stderr.splitlines() if b' GOODSIG ' in line)
+        for line in (b'[GNUPG:] GOODSIG',b'[GNUPG:] GOODSIG '+signer[-16:].encode(),b'[GNUPG:] GOODSIG xyz fixture',b'[GNUPG:] GOODSIG '+b'0'*41+b' fixture'):
+            with self.subTest(line=line),self.assertRaises(native.ns.NamespaceProofError):
+                route._verified_release_payload(self.verified_result(b'payload',status=result.stderr.replace(good,line))[0],signer,digest)
+
+    def test_malformed_validsig_fields_refuse(self):
+        result,signer,digest=self.verified_result(b'payload');valid=next(line for line in result.stderr.splitlines() if b' VALIDSIG ' in line);fields=valid.split()
+        variants=[b' '.join(fields[:3]),valid+b' extra',b' '.join(fields[:-2])]
+        for index,value in ((2,b'nothex'),(3,b'notdate'),(3,b'2024-99-99'),(4,b'-1'),(4,b'20249999T999999'),(5,b'unknown'),(6,b'v4'),(7,b'none'),(8,b'x'),(9,b'x'),(10,b'1'),(11,b'badprimary')):
+            altered=list(fields);altered[index]=value;variants.append(b' '.join(altered))
+        for line in variants:
+            with self.subTest(line=line),self.assertRaises(native.ns.NamespaceProofError):
+                route._verified_release_payload(self.verified_result(b'payload',status=result.stderr.replace(valid,line))[0],signer,digest)
+
+    def test_malformed_status_marker_or_keyword_cannot_hide_negative(self):
+        result,signer,digest=self.verified_result(b'payload')
+        for line in (b'[GNUPG:]REVKEYSIG key',b'[GNUPG:]\tEXPSIG key',b'[GNUPG:]',b'[GNUPG:] bad-keyword'):
+            with self.subTest(line=line),self.assertRaises(native.ns.NamespaceProofError):
+                route._verified_release_payload(self.verified_result(b'payload',status=result.stderr+line+b'\n')[0],signer,digest)
+
+    def test_valid_pair_order_benign_information_and_documented_optional_fields(self):
+        result,signer,digest=self.verified_result(b'payload')
+        benign=(b'[GNUPG:] NEWSIG\n[GNUPG:] KEY_CONSIDERED '+signer.encode()+b' 0\n'
+            b'[GNUPG:] SIG_ID abc 2024-04-25 1714057881\n[GNUPG:] KEYEXPIRED 1\n'
+            b'[GNUPG:] TRUST_UNDEFINED 0 pgp\n[GNUPG:] PLAINTEXT 74 0 \n[GNUPG:] FUTURE_INFORMATION detail\n')
+        # KEYEXPIRED may concern an unused subkey; EXPKEYSIG is the refusal.
+        for status in (result.stderr,benign+result.stderr,b'\n'.join(reversed(result.stderr.splitlines()))+b'\n'+benign,
+                result.stderr.replace(b' '+signer.encode()+b'\n',b'\n'),
+                result.stderr.replace(b'1714057881 0',b'20240425T141121 0')):
+            self.assertEqual(route._verified_release_payload(self.verified_result(b'payload',status=status)[0],signer,digest),b'payload')
+
+    def test_status_refusal_in_connected_route_closes_metadata_before_any_install_or_account(self):
+        from test_hosted_synthetic_native_route import NativeRouteTests,ARGS
+        actual=route.verify_publisher_metadata
+        for keyword in ('REVKEYSIG','KEYREVOKED','EXPKEYSIG','EXPSIG','MISSING_GOODSIG','WRONG_PAIR'):
+            connected=NativeRouteTests();metadata=NativeProvenanceTests()
+            try:
+                root,command=metadata.metadata_fixture();inventory=native.require_complete_inventory();parent,_,_=connected.fixture();emit=command.side_effect
+                def injected(*args,**kwargs):
+                    result=emit(*args,**kwargs)
+                    if keyword=='MISSING_GOODSIG':result.stderr=b'\n'.join(line for line in result.stderr.splitlines() if b' GOODSIG ' not in line)+b'\n'
+                    elif keyword=='WRONG_PAIR':result.stderr=result.stderr.replace(b'GOODSIG 871920D1991BC93C',b'GOODSIG 0000000000000000')
+                    else:result.stderr+=('[GNUPG:] '+keyword+' fixture\n').encode()
+                    return result
+                command.side_effect=injected;before=set(os.listdir('/proc/self/fd'))
+                with self.subTest(keyword=keyword),patch.object(native,'require_complete_inventory',return_value=inventory),patch.object(route,'verify_publisher_metadata',side_effect=lambda directory,deadline:actual(root,deadline)),patch.object(route,'verify_index_records') as index,patch.object(install.InstallationLease,'_create') as create,self.assertRaisesRegex(native.ns.NamespaceProofError,'signer_refused'):
+                    route._run(ARGS,parent)
+                index.assert_not_called();create.assert_not_called();connected.create.assert_not_called();connected.service.assert_not_called()
+                self.assertEqual(set(os.listdir('/proc/self/fd')),before)
+                self.assertEqual(command.call_count,1)
+                for call in command.call_args_list:
+                    self.assertFalse(Path(call.args[0][call.args[0].index('--homedir')+1]).exists())
+                    for fd in call.kwargs['pass_fds']:
+                        with self.assertRaises(OSError):os.fstat(fd)
+            finally:connected.doCleanups();metadata.doCleanups()

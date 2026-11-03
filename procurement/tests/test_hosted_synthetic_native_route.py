@@ -191,7 +191,8 @@ class NativeRouteTests(unittest.TestCase):
     def test_fixed_publisher_verification_keeps_digest_and_signature_assurances_separate(self):
         parent=Path(self.enterContext(tempfile.TemporaryDirectory()));key=b'synthetic public key';(parent/'ubuntu-archive-keyring.gpg').write_bytes(key)
         manifest=native.installation_manifest();manifest['trust_root']=dict(manifest['trust_root'],bytes=len(key),sha256=hashlib.sha256(key).hexdigest())
-        status=b'[GNUPG:] VALIDSIG '+manifest['trust_root']['signer'].encode()+b' fixture\n'
+        signer=manifest['trust_root']['signer'].encode()
+        status=b'[GNUPG:] GOODSIG '+signer[-16:]+b' fixture name\n[GNUPG:] VALIDSIG '+signer+b' 2024-04-25 1714057881 0 4 0 1 10 01 '+signer+b'\n'
         inventory=native.require_complete_inventory();payloads={}
         for suite in ('noble','noble-updates'):
             records=[a for a in inventory['artifacts'].values() if a.get('suite')==suite]

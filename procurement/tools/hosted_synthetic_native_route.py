@@ -7,6 +7,7 @@ importer's native commands receive privilege. No downloads/install scripts here.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
+import datetime
 import fcntl
 import gzip
 import hashlib
@@ -110,11 +111,39 @@ def _verified_release_payload(result,signer,expected_digest):
     native.require(type(result.stdout) is bytes and 0<len(result.stdout)<=2*1024**2
         and type(result.stderr) is bytes and len(result.stderr)<=4096 and result.returncode==0,
         'native_release_signature_refused')
-    statuses=[line.split() for line in result.stderr.splitlines() if line.startswith(b'[GNUPG:] ')]
-    valid=[fields for fields in statuses if len(fields)>1 and fields[1]==b'VALIDSIG']
-    native.require(len(valid)==1 and len(valid[0])>=3 and valid[0][2]==signer.encode('ascii')
-        and not any(len(fields)>1 and fields[1] in (b'BADSIG',b'ERRSIG',b'NO_PUBKEY',b'FAILURE') for fields in statuses),
-        'native_release_signer_refused')
+    statuses=[]
+    for line in result.stderr.splitlines():
+        if not line.startswith(b'[GNUPG:]'):continue  # Native human diagnostics.
+        fields=line.split()
+        native.require(line.startswith(b'[GNUPG:] ') and len(fields)>=2
+            and re.fullmatch(rb'[A-Z][A-Z0-9_]*',fields[1]),'native_release_status_schema_refused')
+        statuses.append(fields)
+    negative={b'BADSIG',b'ERRSIG',b'NO_PUBKEY',b'FAILURE',b'REVKEYSIG',b'KEYREVOKED',b'EXPKEYSIG',b'EXPSIG'}
+    good=[f for f in statuses if f[1]==b'GOODSIG'];valid=[f for f in statuses if f[1]==b'VALIDSIG']
+    native.require(not any(f[1] in negative for f in statuses)
+        and len(good)==len(valid)==1,'native_release_signer_refused')
+    # GnuPG DETAILS: nine required VALIDSIG arguments, optional primary FPR.
+    # Authorization uses the full signing FPR, never a display name/primary hint.
+    v=valid[0];g=good[0];timestamp=rb'(?:[0-9]+|[0-9]{8}T[0-9]{6})'
+    native.require(type(signer) is str and re.fullmatch('[0-9A-F]{40}',signer)
+        and len(v) in (11,12) and re.fullmatch(rb'[0-9A-Fa-f]{40}',v[2])
+        and v[2].upper()==signer.encode('ascii')
+        and re.fullmatch(rb'[0-9]{4}-[0-9]{2}-[0-9]{2}',v[3])
+        and all(re.fullmatch(timestamp,v[i]) for i in (4,5))
+        and all(re.fullmatch(rb'[0-9]+',v[i]) for i in (6,7,8,9))
+        and re.fullmatch(rb'[0-9A-Fa-f]{2}',v[10])
+        and (len(v)==11 or re.fullmatch(rb'[0-9A-Fa-f]{40}',v[11]))
+        and len(g)>=4 and re.fullmatch(rb'(?:[0-9A-Fa-f]{16}|[0-9A-Fa-f]{40})',g[2])
+        and g[2].upper() in (v[2].upper(),v[2][-16:].upper()),'native_release_signer_refused')
+    try:
+        datetime.date.fromisoformat(v[3].decode('ascii'))
+        for field in (v[4],v[5]):
+            if b'T' in field:datetime.datetime.fromisoformat(field.decode('ascii'))
+    except ValueError:
+        raise native.ns.NamespaceProofError('native_release_signer_refused') from None
+    # These are schema checks, not a wall-clock expiry/freshness policy.
+    # Informational statuses remain allowed, including KEYEXPIRED for an unused
+    # subkey. EXPKEYSIG describes signing-key expiry. No key-freshness inference.
     native.require(type(expected_digest) is str and re.fullmatch('[0-9a-f]{64}',expected_digest)
         and hashlib.sha256(result.stdout).hexdigest()==expected_digest,'native_verified_release_payload_refused')
     return result.stdout

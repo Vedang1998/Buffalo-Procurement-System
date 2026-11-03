@@ -37,7 +37,7 @@ REQUIRED_MODULE_MINIMUMS = {
     "test_hosted_synthetic_native_installation.py": 27,
     "test_hosted_synthetic_native_measurement.py": 31,
     "test_hosted_synthetic_native_batch.py": 11,
-    "test_hosted_synthetic_native_provenance.py": 19,
+    "test_hosted_synthetic_native_provenance.py": 28,
     "test_hosted_synthetic_native_inputs.py": 49,
     "test_hosted_synthetic_source.py": 38,
     "test_hosted_synthetic_bootstrap.py": 37,
